@@ -44,7 +44,7 @@ public static class UserMappings
             NormalizedEmail = ui.NormalizedEmail,
             PasswordHash = ui.PasswordHash,
             SecurityStamp = ui.SecurityStamp,
-            PermissionLevel = (DataModels.PermissionLevel)(int)ui.WebUser.PermissionLevel,
+            PermissionLevel = (int)ui.WebUser.PermissionLevel,
             InvitedBy = ui.InvitedBy,
             IsActive = ui.IsActive,
             TotpSecret = ui.TotpSecret,

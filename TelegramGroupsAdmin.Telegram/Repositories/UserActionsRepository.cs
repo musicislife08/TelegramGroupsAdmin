@@ -5,7 +5,6 @@ using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
-using DataModels = TelegramGroupsAdmin.Data.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Repositories;
 
@@ -103,7 +102,7 @@ public class UserActionsRepository : IUserActionsRepository
         var entities = await context.UserActions
             .AsNoTracking()
             .Include(ua => ua.TargetUser)
-            .Where(ua => ua.ActionType == DataModels.UserActionType.Ban
+            .Where(ua => ua.ActionType == (int)UserActionType.Ban
                 && (ua.ExpiresAt == null || ua.ExpiresAt > now))
             .OrderByDescending(ua => ua.IssuedAt)
             .ToListAsync(cancellationToken);
@@ -145,7 +144,7 @@ public class UserActionsRepository : IUserActionsRepository
         var now = DateTimeOffset.UtcNow;
         var bansToExpire = await context.UserActions
             .Where(ua => ua.UserId == userId
-                && ua.ActionType == DataModels.UserActionType.Ban
+                && ua.ActionType == (int)UserActionType.Ban
                 && (ua.ExpiresAt == null || ua.ExpiresAt > now))
             .ToListAsync(cancellationToken);
 
@@ -176,7 +175,7 @@ public class UserActionsRepository : IUserActionsRepository
         var now = DateTimeOffset.UtcNow;
         var trustsToExpire = await context.UserActions
             .Where(ua => ua.UserId == userId
-                && ua.ActionType == DataModels.UserActionType.Trust
+                && ua.ActionType == (int)UserActionType.Trust
                 && (ua.ExpiresAt == null || ua.ExpiresAt > now))
             .ToListAsync(cancellationToken);
 
@@ -231,7 +230,7 @@ public class UserActionsRepository : IUserActionsRepository
 
         if (actionTypeFilter.HasValue)
         {
-            var dataActionType = (DataModels.UserActionType)(int)actionTypeFilter.Value;
+            var dataActionType = (int)actionTypeFilter.Value;
             query = query.Where(ua => ua.ActionType == dataActionType);
         }
 
@@ -299,7 +298,7 @@ public class UserActionsRepository : IUserActionsRepository
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var now = DateTimeOffset.UtcNow;
-        var dataActionType = (DataModels.UserActionType)(int)actionType;
+        var dataActionType = (int)actionType;
         var entities = await context.UserActions
             .AsNoTracking()
             .Include(ua => ua.TargetUser)
@@ -324,7 +323,7 @@ public class UserActionsRepository : IUserActionsRepository
 
         return await context.UserActions
             .CountAsync(a =>
-                a.ActionType == DataModels.UserActionType.Ban &&
+                a.ActionType == (int)UserActionType.Ban &&
                 a.IssuedAt >= todayStart,
                 cancellationToken);
     }

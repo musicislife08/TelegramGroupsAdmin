@@ -1,4 +1,5 @@
 using System.Text;
+using TelegramGroupsAdmin.Core.Utilities;
 
 namespace TelegramGroupsAdmin.Services.Notifications;
 
@@ -18,7 +19,7 @@ internal static class NotificationRenderer
     public static string ToTelegramHtml(NotificationPayload payload)
     {
         var sb = new StringBuilder();
-        sb.AppendLine($"<b>{EscapeHtml(payload.Subject)}</b>");
+        sb.AppendLine($"<b>{TelegramHtmlEncoder.Encode(payload.Subject)}</b>");
         sb.AppendLine();
         RenderBlocksTelegram(sb, payload.Blocks, indent: false);
         return sb.ToString().TrimEnd();
@@ -46,7 +47,7 @@ internal static class NotificationRenderer
 </head>
 <body>
     <div class=""container"">");
-        sb.AppendLine($"        <h2>{EscapeHtml(payload.Subject)}</h2>");
+        sb.AppendLine($"        <h2>{TelegramHtmlEncoder.Encode(payload.Subject)}</h2>");
         RenderBlocksEmail(sb, payload.Blocks);
         sb.AppendLine(@"        <div class=""footer"">
             <p>This is an automated notification from TelegramGroupsAdmin.</p>
@@ -80,22 +81,22 @@ internal static class NotificationRenderer
             switch (block)
             {
                 case TextBlock text:
-                    sb.AppendLine(EscapeHtml(text.Text));
+                    sb.AppendLine(TelegramHtmlEncoder.Encode(text.Text));
                     break;
 
                 case FieldList fieldList:
                     foreach (var field in fieldList.Fields)
                     {
                         var value = field.TelegramUserId.HasValue
-                            ? $"<a href=\"tg://user?id={field.TelegramUserId.Value}\">{EscapeHtml(field.Value)}</a>"
-                            : EscapeHtml(field.Value);
-                        sb.AppendLine($"<b>{EscapeHtml(field.Label)}:</b> {value}");
+                            ? $"<a href=\"tg://user?id={field.TelegramUserId.Value}\">{TelegramHtmlEncoder.Encode(field.Value)}</a>"
+                            : TelegramHtmlEncoder.Encode(field.Value);
+                        sb.AppendLine($"<b>{TelegramHtmlEncoder.Encode(field.Label)}:</b> {value}");
                     }
                     break;
 
                 case SectionBlock section:
                     sb.AppendLine();
-                    sb.AppendLine($"<b>{EscapeHtml(section.Header)}</b>");
+                    sb.AppendLine($"<b>{TelegramHtmlEncoder.Encode(section.Header)}</b>");
                     RenderBlocksTelegram(sb, section.Content, indent: true);
                     break;
             }
@@ -111,19 +112,19 @@ internal static class NotificationRenderer
             switch (block)
             {
                 case TextBlock text:
-                    sb.AppendLine($"        <p>{EscapeHtml(text.Text)}</p>");
+                    sb.AppendLine($"        <p>{TelegramHtmlEncoder.Encode(text.Text)}</p>");
                     break;
 
                 case FieldList fieldList:
                     foreach (var field in fieldList.Fields)
                     {
                         // tg://user links aren't clickable in email — render as plain text
-                        sb.AppendLine($"        <div class=\"field\"><span class=\"field-label\">{EscapeHtml(field.Label)}:</span> {EscapeHtml(field.Value)}</div>");
+                        sb.AppendLine($"        <div class=\"field\"><span class=\"field-label\">{TelegramHtmlEncoder.Encode(field.Label)}:</span> {TelegramHtmlEncoder.Encode(field.Value)}</div>");
                     }
                     break;
 
                 case SectionBlock section:
-                    sb.AppendLine($"        <h3>{EscapeHtml(section.Header)}</h3>");
+                    sb.AppendLine($"        <h3>{TelegramHtmlEncoder.Encode(section.Header)}</h3>");
                     RenderBlocksEmail(sb, section.Content);
                     break;
             }
@@ -158,10 +159,4 @@ internal static class NotificationRenderer
         }
     }
 
-    // ── Utilities ──
-
-    internal static string EscapeHtml(string? text) =>
-        string.IsNullOrEmpty(text)
-            ? string.Empty
-            : System.Net.WebUtility.HtmlEncode(text);
 }

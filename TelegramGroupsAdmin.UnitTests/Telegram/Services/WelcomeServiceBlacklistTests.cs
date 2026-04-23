@@ -13,6 +13,7 @@ using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
+using TelegramGroupsAdmin.Telegram.Services.Moderation.Handlers;
 using TelegramGroupsAdmin.Telegram.Services.UserApi;
 using TelegramGroupsAdmin.Telegram.Metrics;
 using TelegramGroupsAdmin.Telegram.Services.Welcome;
@@ -52,6 +53,8 @@ public class WelcomeServiceBlacklistTests
     private ITelegramSessionManager _sessionManager = null!;
     private IWelcomeAdmissionHandler _admissionHandler = null!;
     private IUsernameBlacklistService _usernameBlacklistService = null!;
+    private IWelcomeBypassResolver _bypassResolver = null!;
+    private IAuditHandler _auditHandler = null!;
 
     // TelegramPhotoService is concrete — built with mocked sub-dependencies.
     private TelegramPhotoService _photoService = null!;
@@ -109,6 +112,8 @@ public class WelcomeServiceBlacklistTests
         _sessionManager = Substitute.For<ITelegramSessionManager>();
         _admissionHandler = Substitute.For<IWelcomeAdmissionHandler>();
         _usernameBlacklistService = Substitute.For<IUsernameBlacklistService>();
+        _bypassResolver = Substitute.For<IWelcomeBypassResolver>();
+        _auditHandler = Substitute.For<IAuditHandler>();
 
         // Build TelegramPhotoService with mocked sub-dependencies so it never touches the real
         // file system. GetUserPhotoWithMetadataAsync calls IBotMediaService, which is mocked to
@@ -205,6 +210,8 @@ public class WelcomeServiceBlacklistTests
             _profileScanService,
             _sessionManager,
             _admissionHandler,
+            _bypassResolver,
+            _auditHandler,
             new WelcomeMetrics(),
             new ChatMetrics(Substitute.For<IChatCache>()),
             NullLogger<WelcomeService>.Instance);

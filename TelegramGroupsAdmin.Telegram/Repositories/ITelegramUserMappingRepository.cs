@@ -1,3 +1,4 @@
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Repositories;
@@ -39,7 +40,7 @@ public interface ITelegramUserMappingRepository
     /// Get permission level for a linked Telegram user (single query with JOIN)
     /// Returns null if not linked or user not found
     /// </summary>
-    Task<int?> GetPermissionLevelByTelegramIdAsync(long telegramId, CancellationToken cancellationToken = default);
+    Task<PermissionLevel?> GetPermissionLevelByTelegramIdAsync(long telegramId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Get all linked Telegram IDs for a batch of web user IDs in a single query.

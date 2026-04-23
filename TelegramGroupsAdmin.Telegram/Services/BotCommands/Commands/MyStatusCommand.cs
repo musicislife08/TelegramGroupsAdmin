@@ -1,5 +1,6 @@
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot;

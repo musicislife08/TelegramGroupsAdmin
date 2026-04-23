@@ -5,6 +5,7 @@ using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Models.Analytics;
 using TelegramGroupsAdmin.Repositories.Mappings;
 using DataModels = TelegramGroupsAdmin.Data.Models;
+using TelegramGroupsAdmin.Core.Models;
 
 namespace TelegramGroupsAdmin.Repositories;
 
@@ -102,8 +103,8 @@ public class AnalyticsRepository : IAnalyticsRepository
             where dr.DetectedAt >= startDate && dr.DetectedAt <= endDate
             where dr.IsSpam
             join ua in context.UserActions on dr.MessageId equals ua.MessageId
-            where ua.ActionType == Data.Models.UserActionType.Ban ||
-                  ua.ActionType == Data.Models.UserActionType.Warn
+            where ua.ActionType == (int)UserActionType.Ban ||
+                  ua.ActionType == (int)UserActionType.Warn
             where ua.IssuedAt >= dr.DetectedAt // Action after detection
             select new
             {

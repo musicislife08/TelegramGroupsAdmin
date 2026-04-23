@@ -1,7 +1,8 @@
-namespace TelegramGroupsAdmin.Data.Models;
+namespace TelegramGroupsAdmin.Core.Models;
 
 /// <summary>
-/// Moderation action types for user management (stored as INT in database)
+/// Moderation action types recorded in the user_actions audit table.
+/// Integer values are stable — persisted to the database.
 /// </summary>
 public enum UserActionType
 {
@@ -26,5 +27,10 @@ public enum UserActionType
     /// <summary>Restore user permissions to chat defaults (unmute)</summary>
     RestorePermissions = 9,
     /// <summary>Profile change detected (username, first name, or last name changed)</summary>
-    ProfileChange = 10
+    ProfileChange = 10,
+    /// <summary>
+    /// User auto-admitted past the welcome flow due to privileged status
+    /// (Telegram chat admin, linked web admin) or trusted status.
+    /// </summary>
+    WelcomeBypass = 11
 }

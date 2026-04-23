@@ -186,6 +186,87 @@
                     </MudExpansionPanels>
                 </MudItem>
 
+                @* Auto-admit Trusted Users Section *@
+                <MudItem xs="12">
+                    <MudDivider Class="my-2" />
+                    <MudText Typo="Typo.subtitle2" Class="mb-2">
+                        <MudIcon Icon="@Icons.Material.Filled.VerifiedUser" Size="Size.Small" Class="mr-1" />
+                        Auto-admit Trusted Users
+                    </MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary mb-3">
+                        When enabled, trusted users skip the welcome flow and all security checks.
+                        Linked web administrators (Owner, GlobalAdmin) and Telegram chat admins
+                        always bypass regardless of this toggle.
+                    </MudText>
+                </MudItem>
+
+                <MudItem xs="12">
+                    <MudExpansionPanels>
+                        <MudExpansionPanel Expanded="false">
+                            <TitleContent>
+                                <div class="d-flex align-center gap-2">
+                                    <MudSwitch @bind-Value="_config.TrustedBypass.Enabled"
+                                               Color="Color.Primary"
+                                               @onclick:stopPropagation="true" />
+                                    <MudText>Auto-admit Trusted Users</MudText>
+                                    <MudChip T="string" Size="Size.Small"
+                                             Color="@(_config.TrustedBypass.Enabled ? Color.Success : Color.Default)">
+                                        @(_config.TrustedBypass.Enabled ? "Enabled" : "Disabled")
+                                    </MudChip>
+                                </div>
+                            </TitleContent>
+                            <ChildContent>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary mb-3">
+                                    An auto-deleting announcement is posted in the chat each time a user is
+                                    bypassed — whether trusted, a linked web admin, or a chat admin — so other
+                                    admins know this user was auto-admitted.
+                                </MudText>
+                                <MudGrid>
+                                    <MudItem xs="12">
+                                        <MudText Typo="Typo.subtitle2" Class="mt-2 mb-1">Admin Bypass Announcement</MudText>
+                                        <MudTextField @bind-Value="_config.TrustedBypass.AnnouncementMessageAdmin"
+                                                      Label="Template (admin)"
+                                                      Lines="3"
+                                                      MaxLength="@TrustedBypassConfig.MaxAnnouncementTemplateLength"
+                                                      Counter="@TrustedBypassConfig.MaxAnnouncementTemplateLength"
+                                                      Variant="Variant.Filled"
+                                                      Disabled="!_config.TrustedBypass.Enabled"
+                                                      HelperText="@($"Optional variables: {TrustedBypassConfig.UsernameVariable}, {TrustedBypassConfig.ChatNameVariable}. Rendered message is subject to Telegram's 4096-byte limit.")" />
+                                        <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2 mb-1">Live Preview (In Chat):</MudText>
+                                        <TelegramMessagePreview PreviewText="@GetAdminBypassPreviewText(_config.TrustedBypass.AnnouncementMessageAdmin)"
+                                                                ShowUserCommand="false"
+                                                                ShowWarning="true" />
+                                    </MudItem>
+                                    <MudItem xs="12">
+                                        <MudText Typo="Typo.subtitle2" Class="mt-2 mb-1">Trusted User Announcement</MudText>
+                                        <MudTextField @bind-Value="_config.TrustedBypass.AnnouncementMessageTrusted"
+                                                      Label="Template (trusted)"
+                                                      Lines="3"
+                                                      MaxLength="@TrustedBypassConfig.MaxAnnouncementTemplateLength"
+                                                      Counter="@TrustedBypassConfig.MaxAnnouncementTemplateLength"
+                                                      Variant="Variant.Filled"
+                                                      Disabled="!_config.TrustedBypass.Enabled"
+                                                      HelperText="@($"Optional variables: {TrustedBypassConfig.UsernameVariable}, {TrustedBypassConfig.ChatNameVariable}. Rendered message is subject to Telegram's 4096-byte limit.")" />
+                                        <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2 mb-1">Live Preview (In Chat):</MudText>
+                                        <TelegramMessagePreview PreviewText="@GetTrustedBypassPreviewText(_config.TrustedBypass.AnnouncementMessageTrusted)"
+                                                                ShowUserCommand="false"
+                                                                ShowWarning="true" />
+                                    </MudItem>
+                                    <MudItem xs="12" md="4">
+                                        <MudNumericField T="int"
+                                                         @bind-Value="_config.TrustedBypass.AnnouncementTtlSeconds"
+                                                         Label="Auto-delete after (seconds)"
+                                                         Min="10"
+                                                         Max="300"
+                                                         Disabled="!_config.TrustedBypass.Enabled"
+                                                         HelperText="10-300 seconds" />
+                                    </MudItem>
+                                </MudGrid>
+                            </ChildContent>
+                        </MudExpansionPanel>
+                    </MudExpansionPanels>
+                </MudItem>
+
                 <MudItem xs="12">
                     <MudText Typo="Typo.subtitle2" GutterBottom="true">Welcome Mode</MudText>
                     <MudRadioGroup @bind-Value="_config.Mode" Disabled="!_config.Enabled">
@@ -470,16 +551,6 @@
         await LoadConfig();
     }
 
-    protected override Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (firstRender)
-        {
-            // No special initialization needed for now
-            // JS interop for cursor position will be called on-demand
-        }
-        return Task.CompletedTask;
-    }
-
     private async Task LoadConfig()
     {
         _loading = true;
@@ -509,6 +580,8 @@
                 _config.DenyButtonText = !string.IsNullOrEmpty(config.DenyButtonText)
                     ? config.DenyButtonText
                     : _config.DenyButtonText;
+                _config.TrustedBypass = config.TrustedBypass;
+                _config.JoinSecurity = config.JoinSecurity;
 
                 Snackbar.Add(
                     "Welcome system updated! Template structure has changed. Please review and save the new configuration.",
@@ -594,6 +667,34 @@
 
         return preview;
     }
+
+    /// <summary>
+    /// Preview helper for bypass announcement templates.
+    /// Substitutes only {username} and {chat_name} (TrustedBypassConfig's supported variables)
+    /// using caller-provided example values so the Admin and Trusted previews can differ.
+    /// </summary>
+    private static string GetBypassPreviewText(string? template, string exampleUsername)
+    {
+        if (string.IsNullOrEmpty(template)) return "(empty template)";
+
+        var preview = template
+            .Replace(TrustedBypassConfig.UsernameVariable, exampleUsername)
+            .Replace(TrustedBypassConfig.ChatNameVariable, "Example Chat");
+
+        var invalidVariablePattern = System.Text.RegularExpressions.Regex.Matches(preview, @"\{[^}]*\}");
+        if (invalidVariablePattern.Count > 0)
+        {
+            preview += "\n\n⚠️ Warning: Invalid variables remain in preview";
+        }
+
+        return preview;
+    }
+
+    private static string GetAdminBypassPreviewText(string? template)
+        => GetBypassPreviewText(template, "@example_admin");
+
+    private static string GetTrustedBypassPreviewText(string? template)
+        => GetBypassPreviewText(template, "@example_trusted");
 
     private async Task InsertVariable(string variable)
     {

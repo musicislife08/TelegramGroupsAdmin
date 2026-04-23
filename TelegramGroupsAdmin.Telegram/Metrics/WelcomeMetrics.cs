@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
+using TelegramGroupsAdmin.Telegram.Services.Welcome;
 
 namespace TelegramGroupsAdmin.Telegram.Metrics;
 
@@ -8,6 +9,17 @@ namespace TelegramGroupsAdmin.Telegram.Metrics;
 /// </summary>
 public sealed class WelcomeMetrics
 {
+    // Outcome labels for bypass-flow results.
+    // Private — callers use the typed RecordBypassOutcome method below.
+    private const string OutcomeBypassAdmin = "skipped_bypass_admin";
+    private const string OutcomeBypassTrusted = "skipped_bypass_trusted";
+
+    // Error messages for the impossible-to-reach switch arms.
+    private const string BypassOutcomeNoneUnreachable =
+        "RecordBypassOutcome must not be called with BypassDecision.None";
+
+    private readonly Meter _meter = new("TelegramGroupsAdmin.Welcome");
+
     private readonly Counter<long> _joinsTotal;
     private readonly Counter<long> _securityChecksTotal;
     private readonly Counter<long> _botJoinsTotal;
@@ -17,29 +29,27 @@ public sealed class WelcomeMetrics
 
     public WelcomeMetrics()
     {
-        var meter = new Meter("TelegramGroupsAdmin.Welcome");
-
-        _joinsTotal = meter.CreateCounter<long>(
+        _joinsTotal = _meter.CreateCounter<long>(
             "tga.welcome.joins_total",
             description: "Welcome flow outcomes by result");
 
-        _securityChecksTotal = meter.CreateCounter<long>(
+        _securityChecksTotal = _meter.CreateCounter<long>(
             "tga.welcome.security_checks_total",
             description: "Security checks by check type and result");
 
-        _botJoinsTotal = meter.CreateCounter<long>(
+        _botJoinsTotal = _meter.CreateCounter<long>(
             "tga.welcome.bot_joins_total",
             description: "Bot join outcomes by result");
 
-        _timeoutsTotal = meter.CreateCounter<long>(
+        _timeoutsTotal = _meter.CreateCounter<long>(
             "tga.welcome.timeouts_total",
             description: "Welcome timeouts");
 
-        _leavesTotal = meter.CreateCounter<long>(
+        _leavesTotal = _meter.CreateCounter<long>(
             "tga.welcome.leaves_total",
             description: "Users who left during welcome flow");
 
-        _duration = meter.CreateHistogram<double>(
+        _duration = _meter.CreateHistogram<double>(
             "tga.welcome.duration",
             unit: "ms",
             description: "Welcome flow duration by result");
@@ -49,6 +59,22 @@ public sealed class WelcomeMetrics
     {
         _joinsTotal.Add(1, new TagList { { "result", result } });
         _duration.Record(durationMs, new TagList { { "result", result } });
+    }
+
+    /// <summary>
+    /// Record a welcome bypass with the correct outcome label for the given decision.
+    /// Throws on None or unmapped decisions — the caller is responsible for guarding the None case upstream.
+    /// </summary>
+    public void RecordBypassOutcome(BypassDecision decision, double elapsedMs)
+    {
+        var outcome = decision switch
+        {
+            BypassDecision.Admin => OutcomeBypassAdmin,
+            BypassDecision.Trusted => OutcomeBypassTrusted,
+            BypassDecision.None => throw new InvalidOperationException(BypassOutcomeNoneUnreachable),
+            _ => throw new InvalidOperationException($"Unmapped bypass decision: {decision}"),
+        };
+        RecordWelcomeOutcome(outcome, elapsedMs);
     }
 
     public void RecordSecurityCheck(string check, string result)

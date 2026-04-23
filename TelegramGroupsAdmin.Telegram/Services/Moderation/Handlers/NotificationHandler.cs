@@ -127,7 +127,7 @@ public class NotificationHandler : INotificationHandler
     {
         var message = $"⚠️ <b>Warning Issued</b>\n\n" +
                       $"You have received a warning.\n\n" +
-                      $"<b>Reason:</b> {EscapeHtml(reason)}\n" +
+                      $"<b>Reason:</b> {TelegramHtmlEncoder.Encode(reason)}\n" +
                       $"<b>Total Warnings:</b> {warningCount}\n\n" +
                       $"Please review the group rules and avoid similar behavior in the future.\n\n" +
                       $"💡 Use /mystatus to check your current status.";
@@ -163,7 +163,7 @@ public class NotificationHandler : INotificationHandler
 
         // Build notification message
         var notificationMessage = $"⏱️ <b>You have been temporarily banned</b>\n\n" +
-                          $"<b>Reason:</b> {EscapeHtml(reason)}\n" +
+                          $"<b>Reason:</b> {TelegramHtmlEncoder.Encode(reason)}\n" +
                           $"<b>Duration:</b> {TimeSpanUtilities.FormatDuration(duration)}\n" +
                           $"<b>Expires:</b> {expiresAt:yyyy-MM-dd HH:mm} UTC\n\n" +
                           $"You will be automatically unbanned after this time.";
@@ -244,17 +244,6 @@ public class NotificationHandler : INotificationHandler
         return inviteLinks.Count > 0 ? string.Join("\n", inviteLinks) : string.Empty;
     }
 
-    /// <summary>
-    /// Escapes HTML special characters to prevent formatting issues in user-facing notifications.
-    /// Uses HTML mode for Telegram messages which is more standard and easier to escape correctly.
-    /// TODO: When rich formatting support is added (GitHub issue to be created), consider using
-    /// a proper sanitization library like HtmlSanitizer to allow safe user-provided HTML/Markdown.
-    /// </summary>
-    private static string EscapeHtml(string? text) =>
-        string.IsNullOrEmpty(text)
-            ? string.Empty
-            : System.Net.WebUtility.HtmlEncode(text);
-
     /// <inheritdoc />
     public async Task<NotificationResult> NotifyAdminsSpamBanAsync(
         MessageWithDetectionHistory enrichedMessage,
@@ -331,7 +320,7 @@ public class NotificationHandler : INotificationHandler
         try
         {
             // Build violation list
-            var violationList = string.Join("\n", violations.Select((v, i) => $"{i + 1}. {EscapeHtml(v)}"));
+            var violationList = string.Join("\n", violations.Select((v, i) => $"{i + 1}. {TelegramHtmlEncoder.Encode(v)}"));
 
             var message = $"⚠️ <b>Message Removed</b>\n\n" +
                           $"Your message was deleted due to security policy violations:\n\n" +

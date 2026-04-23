@@ -3229,7 +3229,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
                         {
                             t.HasCheckConstraint("CK_user_actions_exclusive_actor", "(web_user_id IS NOT NULL)::int + (telegram_user_id IS NOT NULL)::int + (system_identifier IS NOT NULL)::int = 1");
 
-                            t.HasCheckConstraint("CK_user_actions_message_chat_null_consistency", "(message_id IS NULL) = (chat_id IS NULL)");
+                            t.HasCheckConstraint("CK_user_actions_message_chat_null_consistency", "(message_id IS NULL) OR (chat_id IS NOT NULL)");
                         });
                 });
 

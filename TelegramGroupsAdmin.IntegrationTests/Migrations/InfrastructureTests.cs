@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
+using CoreModels = TelegramGroupsAdmin.Core.Models;
 
 namespace TelegramGroupsAdmin.IntegrationTests.Migrations;
 
@@ -64,7 +65,7 @@ public class InfrastructureTests
                 NormalizedEmail = "TEST1@TEST.COM",
                 PasswordHash = "hash",
                 SecurityStamp = Guid.NewGuid().ToString(),
-                PermissionLevel = Data.Models.PermissionLevel.Owner,
+                PermissionLevel = (int)CoreModels.PermissionLevel.Owner,
                 Status = Data.Models.UserStatus.Active,
                 CreatedAt = DateTimeOffset.UtcNow
             });
@@ -113,7 +114,7 @@ public class InfrastructureTests
                     NormalizedEmail = "DISPOSE@TEST.COM",
                     PasswordHash = "hash",
                     SecurityStamp = Guid.NewGuid().ToString(),
-                    PermissionLevel = Data.Models.PermissionLevel.Admin,
+                    PermissionLevel = (int)CoreModels.PermissionLevel.Admin,
                     Status = Data.Models.UserStatus.Active,
                     CreatedAt = DateTimeOffset.UtcNow
                 });
@@ -144,7 +145,7 @@ public class InfrastructureTests
                 NormalizedEmail = "RAW@TEST.COM",
                 PasswordHash = "hash",
                 SecurityStamp = Guid.NewGuid().ToString(),
-                PermissionLevel = Data.Models.PermissionLevel.Admin,
+                PermissionLevel = (int)CoreModels.PermissionLevel.Admin,
                 Status = Data.Models.UserStatus.Active,
                 CreatedAt = DateTimeOffset.UtcNow
             });

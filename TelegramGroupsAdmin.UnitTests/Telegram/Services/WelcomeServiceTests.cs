@@ -6,6 +6,7 @@ using global::Telegram.Bot.Types.ReplyMarkups;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Models.Welcome;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
+using TelegramGroupsAdmin.Core.JobPayloads;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Telegram.Models;
@@ -13,6 +14,7 @@ using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
+using TelegramGroupsAdmin.Telegram.Services.Moderation.Handlers;
 using TelegramGroupsAdmin.Telegram.Services.UserApi;
 using TelegramGroupsAdmin.Telegram.Metrics;
 using TelegramGroupsAdmin.Telegram.Services.Welcome;
@@ -54,6 +56,8 @@ public class WelcomeServiceTests
     private ITelegramSessionManager _sessionManager = null!;
     private IWelcomeAdmissionHandler _admissionHandler = null!;
     private IUsernameBlacklistService _usernameBlacklistService = null!;
+    private IWelcomeBypassResolver _bypassResolver = null!;
+    private IAuditHandler _auditHandler = null!;
 
     // TelegramPhotoService is concrete — built with mocked sub-dependencies.
     private TelegramPhotoService _photoService = null!;
@@ -110,6 +114,8 @@ public class WelcomeServiceTests
         _sessionManager = Substitute.For<ITelegramSessionManager>();
         _admissionHandler = Substitute.For<IWelcomeAdmissionHandler>();
         _usernameBlacklistService = Substitute.For<IUsernameBlacklistService>();
+        _bypassResolver = Substitute.For<IWelcomeBypassResolver>();
+        _auditHandler = Substitute.For<IAuditHandler>();
 
         // Build TelegramPhotoService with mocked sub-dependencies so it never touches the real
         // file system. GetUserPhotoWithMetadataAsync calls IBotMediaService, which is mocked to
@@ -191,6 +197,8 @@ public class WelcomeServiceTests
             _profileScanService,
             _sessionManager,
             _admissionHandler,
+            _bypassResolver,
+            _auditHandler,
             new WelcomeMetrics(),
             new ChatMetrics(Substitute.For<IChatCache>()),
             NullLogger<WelcomeService>.Instance);
@@ -207,19 +215,36 @@ public class WelcomeServiceTests
     /// <summary>
     /// Creates a ChatMemberUpdated representing a status transition.
     /// Defaults to the standard join scenario: Left → Member.
+    ///
+    /// Pass <paramref name="user"/> or <paramref name="chat"/> to supply a full object, or
+    /// use the individual-field overrides (<paramref name="userId"/>, <paramref name="username"/>,
+    /// <paramref name="firstName"/>, <paramref name="chatId"/>, <paramref name="chatTitle"/>) to
+    /// build an ad-hoc user/chat without constructing the objects at the call site.
+    /// Individual-field overrides are ignored when the corresponding object parameter is supplied.
     /// </summary>
     private static ChatMemberUpdated CreateJoinUpdate(
         User? user = null,
         Chat? chat = null,
         ChatMemberStatus oldStatus = ChatMemberStatus.Left,
-        ChatMemberStatus newStatus = ChatMemberStatus.Member)
+        ChatMemberStatus newStatus = ChatMemberStatus.Member,
+        long userId = TestUserId,
+        string? username = "alice_tg",
+        string firstName = "Alice",
+        long chatId = TestChatId,
+        string chatTitle = "Test Group")
     {
-        var resolvedUser = user ?? TestUser;
+        var resolvedUser = user ?? new User
+        {
+            Id = userId,
+            FirstName = firstName,
+            Username = username,
+            IsBot = false
+        };
         var resolvedChat = chat ?? new Chat
         {
-            Id = TestChatId,
+            Id = chatId,
             Type = ChatType.Supergroup,
-            Title = "Test Group"
+            Title = chatTitle
         };
 
         ChatMember oldMember = oldStatus switch
@@ -408,59 +433,47 @@ public class WelcomeServiceTests
 
     #endregion
 
-    #region Test 5: Admin joining — welcome flow is skipped entirely
+    #region Test 5: Admin/Owner joining — bypass path skips mute and security checks
 
     [Test]
-    public async Task HandleChatMemberUpdate_AdminJoining_SkipsWelcome()
+    public async Task HandleChatMemberUpdate_AdminJoining_BypassesWelcomeViaResolver()
     {
-        // Arrange — GetChatMemberAsync returns Administrator status
-        var adminUser = new User
-        {
-            Id = TestUserId,
-            FirstName = "Alice",
-            Username = "alice_tg",
-            IsBot = false
-        };
-
-        _userService
-            .GetChatMemberAsync(Arg.Any<long>(), Arg.Any<long>(), Arg.Any<CancellationToken>())
-            .Returns(new ChatMemberAdministrator { User = adminUser });
-
-        var update = CreateJoinUpdate(user: adminUser);
-
-        // Act
-        await _sut.HandleChatMemberUpdateAsync(update, CancellationToken.None);
-
-        // Assert — admin short-circuits before GetOrCreateAsync
-        await _telegramUserRepository.DidNotReceive().GetOrCreateAsync(
-            Arg.Any<UserIdentity>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
-
-        // No mute, no CAS check, no profile scan
-        await _moderationService.DidNotReceive().RestrictUserAsync(
-            Arg.Any<RestrictIntent>(), Arg.Any<CancellationToken>());
-
-        await _casCheckService.DidNotReceive().CheckUserAsync(
-            Arg.Any<UserIdentity>(), Arg.Any<TelegramGroupsAdmin.Configuration.Models.Welcome.CasConfig>(),
-            Arg.Any<CancellationToken>());
-    }
-
-    [Test]
-    public async Task HandleChatMemberUpdate_OwnerJoining_SkipsWelcome()
-    {
-        // Arrange — GetChatMemberAsync returns Creator (owner) status
-        _userService
-            .GetChatMemberAsync(Arg.Any<long>(), Arg.Any<long>(), Arg.Any<CancellationToken>())
-            .Returns(new ChatMemberOwner { User = TestUser });
+        // Arrange — resolver flags the user as a Telegram chat admin/creator
+        _bypassResolver
+            .ResolveAsync(Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<CancellationToken>())
+            .Returns(new BypassResolution(BypassDecision.Admin, "test-admin"));
 
         var update = CreateJoinUpdate();
 
         // Act
         await _sut.HandleChatMemberUpdateAsync(update, CancellationToken.None);
 
-        // Assert — creator also short-circuits before GetOrCreateAsync
-        await _telegramUserRepository.DidNotReceive().GetOrCreateAsync(
-            Arg.Any<UserIdentity>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
+        // Assert — bypass short-circuits before mute, CAS, and profile scan
+        await _moderationService.DidNotReceive().RestrictUserAsync(
+            Arg.Any<RestrictIntent>(), Arg.Any<CancellationToken>());
 
+        await _casCheckService.DidNotReceive().CheckUserAsync(
+            Arg.Any<UserIdentity>(), Arg.Any<TelegramGroupsAdmin.Configuration.Models.Welcome.CasConfig>(),
+            Arg.Any<CancellationToken>());
+
+        await _profileScanService.DidNotReceive().ScanUserProfileAsync(
+            Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task HandleChatMemberUpdate_OwnerJoining_BypassesWelcomeViaResolver()
+    {
+        // Arrange — resolver treats owner as ChatAdmin decision (Rule 1 covers both)
+        _bypassResolver
+            .ResolveAsync(Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<CancellationToken>())
+            .Returns(new BypassResolution(BypassDecision.Admin, "test-admin"));
+
+        var update = CreateJoinUpdate();
+
+        // Act
+        await _sut.HandleChatMemberUpdateAsync(update, CancellationToken.None);
+
+        // Assert — owner also short-circuits before mute
         await _moderationService.DidNotReceive().RestrictUserAsync(
             Arg.Any<RestrictIntent>(), Arg.Any<CancellationToken>());
     }
@@ -516,6 +529,480 @@ public class WelcomeServiceTests
             Assert.That(capturedIntent!.User.Id, Is.EqualTo(TestUserId));
             Assert.That(capturedIntent.Chat.Id, Is.EqualTo(TestChatId));
         }
+    }
+
+    #endregion
+
+    #region Bypass path (Step 2.5)
+
+    [Test]
+    public async Task HandleChatMemberUpdate_BypassChatAdmin_SkipsSecurityAndConsentFlow()
+    {
+        // Arrange — resolver decides ChatAdmin bypass
+        _bypassResolver
+            .ResolveAsync(Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<CancellationToken>())
+            .Returns(new BypassResolution(BypassDecision.Admin, "test-admin"));
+
+        var update = CreateJoinUpdate();
+
+        // Act
+        await _sut.HandleChatMemberUpdateAsync(update, CancellationToken.None);
+
+        // Assert — mute and security checks are skipped
+        await _moderationService.DidNotReceive().RestrictUserAsync(
+            Arg.Any<RestrictIntent>(), Arg.Any<CancellationToken>());
+
+        await _casCheckService.DidNotReceive().CheckUserAsync(
+            Arg.Any<UserIdentity>(), Arg.Any<TelegramGroupsAdmin.Configuration.Models.Welcome.CasConfig>(),
+            Arg.Any<CancellationToken>());
+
+        await _profileScanService.DidNotReceive().ScanUserProfileAsync(
+            Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<CancellationToken>());
+
+        // User activated and bypass audited
+        await _telegramUserRepository.Received(1).ActivateAsync(TestUserId, Arg.Any<CancellationToken>());
+        await _auditHandler.Received(1).LogWelcomeBypassAsync(
+            Arg.Any<UserIdentity>(),
+            Arg.Any<ChatIdentity>(),
+            BypassDecision.Admin,
+            Arg.Any<string>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task HandleChatMemberUpdate_BypassTrusted_PostsAnnouncementAndSchedulesDelete()
+    {
+        // Arrange — Trusted bypass, announcement configured with text + positive TTL
+        _bypassResolver
+            .ResolveAsync(Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<CancellationToken>())
+            .Returns(new BypassResolution(BypassDecision.Trusted, "Trusted user"));
+
+        var config = new WelcomeConfig
+        {
+            Enabled = true,
+            TrustedBypass = new TrustedBypassConfig
+            {
+                Enabled = true,
+                AnnouncementMessageTrusted = "hello {username}",
+                AnnouncementTtlSeconds = 30
+            }
+        };
+        _configService
+            .GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, Arg.Any<long>())
+            .Returns(config);
+
+        _messageService
+            .SendAndSaveMessageAsync(
+                Arg.Any<long>(), Arg.Any<string>(),
+                Arg.Any<ParseMode?>(),
+                Arg.Any<ReplyParameters?>(),
+                Arg.Any<InlineKeyboardMarkup?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new Message { Id = 5001, Chat = new Chat { Id = TestChatId } });
+
+        // Act
+        await _sut.HandleChatMemberUpdateAsync(CreateJoinUpdate(), CancellationToken.None);
+
+        // Assert — announcement sent as HTML containing the configured body
+        await _messageService.Received(1).SendAndSaveMessageAsync(
+            chatId: TestChatId,
+            text: Arg.Is<string>(s => s.Contains("hello")),
+            parseMode: ParseMode.Html,
+            replyParameters: Arg.Any<ReplyParameters?>(),
+            replyMarkup: Arg.Any<InlineKeyboardMarkup?>(),
+            cancellationToken: Arg.Any<CancellationToken>());
+
+        // And its auto-delete is scheduled
+        await _jobScheduler.Received(1).ScheduleJobAsync(
+            BackgroundJobNames.DeleteMessage,
+            Arg.Is<DeleteMessagePayload>(p => p.ChatId == TestChatId && p.MessageId == 5001),
+            Arg.Any<int>(),
+            Arg.Any<string?>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task HandleChatMemberUpdate_BypassTrusted_EmptyMessage_DoesNotPostAnnouncement()
+    {
+        // Arrange — Trusted bypass, announcement message is whitespace-only
+        _bypassResolver
+            .ResolveAsync(Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<CancellationToken>())
+            .Returns(new BypassResolution(BypassDecision.Trusted, "Trusted user"));
+
+        _configService
+            .GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, Arg.Any<long>())
+            .Returns(new WelcomeConfig
+            {
+                Enabled = true,
+                TrustedBypass = new TrustedBypassConfig
+                {
+                    Enabled = true,
+                    AnnouncementMessageTrusted = "  ",
+                    AnnouncementTtlSeconds = 30
+                }
+            });
+
+        // Act
+        await _sut.HandleChatMemberUpdateAsync(CreateJoinUpdate(), CancellationToken.None);
+
+        // Assert — no announcement posted, no delete scheduled
+        await _messageService.DidNotReceive().SendAndSaveMessageAsync(
+            Arg.Any<long>(), Arg.Any<string>(),
+            Arg.Any<ParseMode?>(),
+            Arg.Any<ReplyParameters?>(),
+            Arg.Any<InlineKeyboardMarkup?>(),
+            Arg.Any<CancellationToken>());
+
+        await _jobScheduler.DidNotReceive().ScheduleJobAsync(
+            Arg.Any<string>(),
+            Arg.Any<DeleteMessagePayload>(),
+            Arg.Any<int>(),
+            Arg.Any<string?>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task HandleChatMemberUpdate_BypassTrusted_ZeroTtl_PostsAnnouncementAndSchedulesImmediateDelete()
+    {
+        // Arrange — Trusted bypass, TTL is zero. New semantics: zero TTL means the
+        // announcement is still posted but the delete job fires immediately (ttl=0).
+        _bypassResolver
+            .ResolveAsync(Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<CancellationToken>())
+            .Returns(new BypassResolution(BypassDecision.Trusted, "Trusted user"));
+
+        _configService
+            .GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, Arg.Any<long>())
+            .Returns(new WelcomeConfig
+            {
+                Enabled = true,
+                TrustedBypass = new TrustedBypassConfig
+                {
+                    Enabled = true,
+                    AnnouncementMessageTrusted = "x",
+                    AnnouncementTtlSeconds = 0
+                }
+            });
+
+        _messageService
+            .SendAndSaveMessageAsync(
+                Arg.Any<long>(), Arg.Any<string>(),
+                Arg.Any<ParseMode?>(),
+                Arg.Any<ReplyParameters?>(),
+                Arg.Any<InlineKeyboardMarkup?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new Message { Id = 5002, Chat = new Chat { Id = TestChatId } });
+
+        // Act
+        await _sut.HandleChatMemberUpdateAsync(CreateJoinUpdate(), CancellationToken.None);
+
+        // Assert — announcement IS posted and delete IS scheduled at 0s delay.
+        await _messageService.Received(1).SendAndSaveMessageAsync(
+            chatId: TestChatId,
+            text: Arg.Any<string>(),
+            parseMode: ParseMode.Html,
+            replyParameters: Arg.Any<ReplyParameters?>(),
+            replyMarkup: Arg.Any<InlineKeyboardMarkup?>(),
+            cancellationToken: Arg.Any<CancellationToken>());
+
+        await _jobScheduler.Received(1).ScheduleJobAsync(
+            BackgroundJobNames.DeleteMessage,
+            Arg.Is<DeleteMessagePayload>(p => p.ChatId == TestChatId && p.MessageId == 5002),
+            0,
+            Arg.Any<string?>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task HandleChatMemberUpdate_BypassTrusted_ToggleDisabled_DoesNotPostAnnouncement()
+    {
+        // Arrange — Trusted bypass resolves, but the TrustedBypass toggle is OFF.
+        // The announcement must not fire regardless of template/TTL contents.
+        _bypassResolver
+            .ResolveAsync(Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<CancellationToken>())
+            .Returns(new BypassResolution(BypassDecision.Trusted, "Trusted user"));
+
+        _configService
+            .GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, Arg.Any<long>())
+            .Returns(new WelcomeConfig
+            {
+                Enabled = true,
+                TrustedBypass = new TrustedBypassConfig
+                {
+                    Enabled = false,
+                    AnnouncementMessageTrusted = "hello {username}",
+                    AnnouncementTtlSeconds = 30
+                }
+            });
+
+        // Act
+        await _sut.HandleChatMemberUpdateAsync(CreateJoinUpdate(), CancellationToken.None);
+
+        // Assert — toggle OFF → no announcement posted, no delete scheduled.
+        await _messageService.DidNotReceive().SendAndSaveMessageAsync(
+            Arg.Any<long>(), Arg.Any<string>(),
+            Arg.Any<ParseMode?>(),
+            Arg.Any<ReplyParameters?>(),
+            Arg.Any<InlineKeyboardMarkup?>(),
+            Arg.Any<CancellationToken>());
+
+        await _jobScheduler.DidNotReceive().ScheduleJobAsync(
+            Arg.Any<string>(),
+            Arg.Any<DeleteMessagePayload>(),
+            Arg.Any<int>(),
+            Arg.Any<string?>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task HandleChatMemberUpdate_PreBanned_BeatsBypass_BansAndReturns()
+    {
+        // Arrange — pre-banned user. Resolver should not be consulted at all.
+        _telegramUserRepository
+            .GetOrCreateAsync(Arg.Any<UserIdentity>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
+            .Returns(BannedTelegramUser);
+
+        // Act
+        await _sut.HandleChatMemberUpdateAsync(CreateJoinUpdate(), CancellationToken.None);
+
+        // Assert — resolver never called; ban is synced
+        await _bypassResolver.DidNotReceive().ResolveAsync(
+            Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<CancellationToken>());
+
+        await _moderationService.Received(1).SyncBanToChatAsync(
+            Arg.Any<SyncBanIntent>(), Arg.Any<CancellationToken>());
+
+        // And bypass is not audited
+        await _auditHandler.DidNotReceive().LogWelcomeBypassAsync(
+            Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<BypassDecision>(),
+            Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    #endregion
+
+    #region Bypass announcement substitution + HTML encoding (regression cover for Task 14 / CWE-79)
+
+    /// <summary>
+    /// Seeds WelcomeConfig with TrustedBypass enabled and the given templates,
+    /// overriding the default config stub from SetUp.
+    /// </summary>
+    private void SetupTrustedBypass(string adminTemplate, string trustedTemplate)
+    {
+        var config = new WelcomeConfig
+        {
+            MainWelcomeMessage = "welcome",
+            TrustedBypass =
+            {
+                Enabled = true,
+                AnnouncementMessageAdmin = adminTemplate,
+                AnnouncementMessageTrusted = trustedTemplate,
+                AnnouncementTtlSeconds = 30,
+            }
+        };
+        _configService.GetEffectiveAsync<WelcomeConfig>(
+            Arg.Any<ConfigType>(), Arg.Any<long>()).Returns(config);
+
+        // Return a non-null Message so the delete-schedule branch runs.
+        _messageService
+            .SendAndSaveMessageAsync(
+                Arg.Any<long>(), Arg.Any<string>(),
+                Arg.Any<ParseMode?>(),
+                Arg.Any<ReplyParameters?>(),
+                Arg.Any<InlineKeyboardMarkup?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new Message { Id = 9001, Chat = new Chat { Id = TestChatId } });
+    }
+
+    [Test]
+    public async Task PostBypassAnnouncement_Substitutes_Username_AsEncodedMention_Trusted()
+    {
+        // Arrange: trusted user with username "alice", templates use {username}
+        SetupTrustedBypass(
+            adminTemplate: TrustedBypassConfig.UsernameVariable + " arrived",
+            trustedTemplate: TrustedBypassConfig.UsernameVariable + " arrived");
+        _bypassResolver.ResolveAsync(Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<CancellationToken>())
+            .Returns(new BypassResolution(BypassDecision.Trusted, "Trusted user"));
+
+        await _sut.HandleChatMemberUpdateAsync(
+            CreateJoinUpdate(userId: 1L, username: "alice", firstName: "Alice"),
+            CancellationToken.None);
+
+        // @alice (username path fires; HTML encoding is a no-op for [A-Za-z0-9_] usernames
+        //  but the encoder is still on the path — the assertion confirms the @mention shape).
+        await _messageService.Received(1).SendAndSaveMessageAsync(
+            Arg.Any<long>(),
+            Arg.Is<string>(t => t.Contains("@alice") && t.Contains("arrived")),
+            Arg.Is<ParseMode?>(m => m == ParseMode.Html),
+            Arg.Any<ReplyParameters?>(),
+            Arg.Any<InlineKeyboardMarkup?>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task PostBypassAnnouncement_Substitutes_ChatName_Encoded()
+    {
+        // Arrange: trusted bypass with hostile chat title containing HTML
+        SetupTrustedBypass(
+            adminTemplate: "Joined " + TrustedBypassConfig.ChatNameVariable,
+            trustedTemplate: "Joined " + TrustedBypassConfig.ChatNameVariable);
+        _bypassResolver.ResolveAsync(Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<CancellationToken>())
+            .Returns(new BypassResolution(BypassDecision.Trusted, "Trusted user"));
+
+        var update = CreateJoinUpdate(chatId: 99L, chatTitle: "<b>pwn</b>");
+        await _sut.HandleChatMemberUpdateAsync(update, CancellationToken.None);
+
+        // Chat title must be HTML-encoded in the outgoing text
+        await _messageService.Received(1).SendAndSaveMessageAsync(
+            Arg.Any<long>(),
+            Arg.Is<string>(t => t.Contains("&lt;b&gt;pwn&lt;/b&gt;") && !t.Contains("<b>pwn</b>")),
+            Arg.Any<ParseMode?>(),
+            Arg.Any<ReplyParameters?>(),
+            Arg.Any<InlineKeyboardMarkup?>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task PostBypassAnnouncement_HostileFirstName_IsEncoded_InTextMention()
+    {
+        // Arrange: user with NO username, hostile first name — display-name path fires
+        SetupTrustedBypass(
+            adminTemplate: TrustedBypassConfig.UsernameVariable + " joined",
+            trustedTemplate: TrustedBypassConfig.UsernameVariable + " joined");
+        _bypassResolver.ResolveAsync(Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<CancellationToken>())
+            .Returns(new BypassResolution(BypassDecision.Trusted, "Trusted user"));
+
+        var update = CreateJoinUpdate(userId: 7L, username: null, firstName: "<b>FAKE ADMIN</b>");
+        await _sut.HandleChatMemberUpdateAsync(update, CancellationToken.None);
+
+        // The hostile first name must land encoded inside the text-mention anchor tag
+        await _messageService.Received(1).SendAndSaveMessageAsync(
+            Arg.Any<long>(),
+            Arg.Is<string>(t =>
+                t.Contains("&lt;b&gt;FAKE ADMIN&lt;/b&gt;") &&
+                !t.Contains("<b>FAKE ADMIN</b>")),
+            Arg.Any<ParseMode?>(),
+            Arg.Any<ReplyParameters?>(),
+            Arg.Any<InlineKeyboardMarkup?>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    #endregion
+
+    #region Consumer-side clamping (Task 19 regression anchors)
+
+    [Test]
+    public async Task PostBypassAnnouncement_OverLengthTemplate_TruncatesAndSendsTruncatedText()
+    {
+        // Arrange: template longer than MaxAnnouncementTemplateLength (3500 chars)
+        var longTemplate = new string('x', 5000);
+        SetupTrustedBypass(adminTemplate: longTemplate, trustedTemplate: longTemplate);
+        _bypassResolver.ResolveAsync(Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<CancellationToken>())
+            .Returns(new BypassResolution(BypassDecision.Trusted, "Trusted user"));
+
+        await _sut.HandleChatMemberUpdateAsync(CreateJoinUpdate(), CancellationToken.None);
+
+        // Text sent must not exceed the template cap.
+        // TODO: _logger warning assertion omitted — fixture uses NullLogger<WelcomeService>.Instance
+        //       (not a mocked ILogger). To assert the warning, refactor SetUp to inject a
+        //       Substitute.For<ILogger<WelcomeService>>() and pass it to the WelcomeService ctor.
+        await _messageService.Received(1).SendAndSaveMessageAsync(
+            Arg.Any<long>(),
+            Arg.Is<string>(t => t.Length <= TrustedBypassConfig.MaxAnnouncementTemplateLength),
+            Arg.Any<ParseMode?>(),
+            Arg.Any<ReplyParameters?>(),
+            Arg.Any<InlineKeyboardMarkup?>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task PostBypassAnnouncement_NegativeTtl_ClampsToZero()
+    {
+        // Arrange: TTL is negative; consumer-side Math.Max should clamp it to 0.
+        var config = new WelcomeConfig
+        {
+            MainWelcomeMessage = "welcome",
+            TrustedBypass =
+            {
+                Enabled = true,
+                AnnouncementMessageTrusted = "hello {username}",
+                AnnouncementMessageAdmin = "hello {username}",
+                AnnouncementTtlSeconds = -5,
+            }
+        };
+        _configService.GetEffectiveAsync<WelcomeConfig>(
+            Arg.Any<ConfigType>(), Arg.Any<long>()).Returns(config);
+
+        _messageService
+            .SendAndSaveMessageAsync(
+                Arg.Any<long>(), Arg.Any<string>(),
+                Arg.Any<ParseMode?>(),
+                Arg.Any<ReplyParameters?>(),
+                Arg.Any<InlineKeyboardMarkup?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new Message { Id = 9010, Chat = new Chat { Id = TestChatId } });
+
+        _bypassResolver.ResolveAsync(Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<CancellationToken>())
+            .Returns(new BypassResolution(BypassDecision.Trusted, "Trusted user"));
+
+        await _sut.HandleChatMemberUpdateAsync(CreateJoinUpdate(), CancellationToken.None);
+
+        // Delete-job must be scheduled with delaySeconds: 0 (clamped from -5).
+        await _jobScheduler.Received(1).ScheduleJobAsync(
+            BackgroundJobNames.DeleteMessage,
+            Arg.Any<DeleteMessagePayload>(),
+            0,
+            Arg.Any<string?>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task PostBypassAnnouncement_EmptyTemplate_SkipsSendAndSchedule()
+    {
+        // Arrange: both templates are empty strings — early-return guard fires.
+        SetupTrustedBypass(adminTemplate: "", trustedTemplate: "");
+        _bypassResolver.ResolveAsync(Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<CancellationToken>())
+            .Returns(new BypassResolution(BypassDecision.Trusted, "Trusted user"));
+
+        await _sut.HandleChatMemberUpdateAsync(CreateJoinUpdate(), CancellationToken.None);
+
+        await _messageService.DidNotReceive().SendAndSaveMessageAsync(
+            Arg.Any<long>(), Arg.Any<string>(),
+            Arg.Any<ParseMode?>(),
+            Arg.Any<ReplyParameters?>(),
+            Arg.Any<InlineKeyboardMarkup?>(),
+            Arg.Any<CancellationToken>());
+        await _jobScheduler.DidNotReceive().ScheduleJobAsync(
+            Arg.Any<string>(),
+            Arg.Any<DeleteMessagePayload>(),
+            Arg.Any<int>(),
+            Arg.Any<string?>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task PostBypassAnnouncement_EnabledFalse_SkipsAnnouncement_EvenOnAdminBypass()
+    {
+        // Arrange: TrustedBypass toggle is OFF; resolver returns Admin bypass.
+        // Announcement must be silenced regardless.
+        var config = new WelcomeConfig
+        {
+            MainWelcomeMessage = "welcome",
+            TrustedBypass = { Enabled = false },
+        };
+        _configService.GetEffectiveAsync<WelcomeConfig>(
+            Arg.Any<ConfigType>(), Arg.Any<long>()).Returns(config);
+
+        _bypassResolver.ResolveAsync(Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<CancellationToken>())
+            .Returns(new BypassResolution(BypassDecision.Admin, "Telegram chat admin (2 chats)"));
+
+        await _sut.HandleChatMemberUpdateAsync(CreateJoinUpdate(), CancellationToken.None);
+
+        // Announcement silenced when Enabled=false.
+        await _messageService.DidNotReceive().SendAndSaveMessageAsync(
+            Arg.Any<long>(), Arg.Any<string>(),
+            Arg.Any<ParseMode?>(),
+            Arg.Any<ReplyParameters?>(),
+            Arg.Any<InlineKeyboardMarkup?>(),
+            Arg.Any<CancellationToken>());
     }
 
     #endregion

@@ -1,5 +1,6 @@
 using TelegramGroupsAdmin.Data.Models;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
+using CoreModels = TelegramGroupsAdmin.Core.Models;
 
 namespace TelegramGroupsAdmin.IntegrationTests.Migrations;
 
@@ -45,7 +46,7 @@ public class CascadeBehaviorTests
                     NormalizedEmail = "ACTOR@TEST.COM",
                     PasswordHash = "hash",
                     SecurityStamp = Guid.NewGuid().ToString(),
-                    PermissionLevel = PermissionLevel.Admin,
+                    PermissionLevel = (int)CoreModels.PermissionLevel.Admin,
                     Status = UserStatus.Active,
                     CreatedAt = DateTimeOffset.UtcNow
                 },
@@ -56,7 +57,7 @@ public class CascadeBehaviorTests
                     NormalizedEmail = "TARGET@TEST.COM",
                     PasswordHash = "hash",
                     SecurityStamp = Guid.NewGuid().ToString(),
-                    PermissionLevel = PermissionLevel.Admin,
+                    PermissionLevel = (int)CoreModels.PermissionLevel.Admin,
                     Status = UserStatus.Active,
                     CreatedAt = DateTimeOffset.UtcNow
                 }

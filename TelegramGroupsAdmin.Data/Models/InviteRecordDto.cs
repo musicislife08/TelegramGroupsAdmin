@@ -28,7 +28,7 @@ public class InviteRecordDto
     public string? UsedBy { get; set; }
 
     [Column("permission_level")]
-    public PermissionLevel PermissionLevel { get; set; }
+    public int PermissionLevel { get; set; }
 
     [Column("status")]
     public InviteStatus Status { get; set; }

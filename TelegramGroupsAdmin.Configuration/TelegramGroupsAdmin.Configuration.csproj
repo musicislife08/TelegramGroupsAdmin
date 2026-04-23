@@ -15,5 +15,8 @@
   <ItemGroup>
     <ProjectReference Include="..\TelegramGroupsAdmin.Data\TelegramGroupsAdmin.Data.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="TelegramGroupsAdmin.UnitTests" />
+  </ItemGroup>
 
 </Project>

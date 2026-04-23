@@ -28,6 +28,7 @@ public class TestWelcomeConfigBuilder
     private WelcomeMode _mode = WelcomeMode.EntranceExam;
     private int _timeoutSeconds = 300;
     private ExamConfig? _examConfig;
+    private TrustedBypassConfig? _trustedBypassConfig;
 
     public TestWelcomeConfigBuilder(IServiceProvider services)
     {
@@ -147,6 +148,23 @@ public class TestWelcomeConfigBuilder
     }
 
     /// <summary>
+    /// Sets up trusted bypass configuration.
+    /// </summary>
+    public TestWelcomeConfigBuilder WithTrustedBypass(
+        bool enabled = true,
+        string? message = null,
+        int ttlSeconds = 30)
+    {
+        _trustedBypassConfig = new TrustedBypassConfig
+        {
+            Enabled = enabled,
+            AnnouncementMessageTrusted = message ?? "{username} bypassed.",
+            AnnouncementTtlSeconds = ttlSeconds,
+        };
+        return this;
+    }
+
+    /// <summary>
     /// Creates the default exam config with both MC and open-ended questions.
     /// </summary>
     private static ExamConfig CreateDefaultExamConfig()
@@ -191,7 +209,8 @@ public class TestWelcomeConfigBuilder
             AcceptButtonText = "Start Exam",
             DenyButtonText = "Leave",
             DmButtonText = "Take Exam",
-            ExamConfig = _examConfig
+            ExamConfig = _examConfig,
+            TrustedBypass = _trustedBypassConfig ?? new()
         };
 
         await configService.SaveAsync(ConfigType.Welcome, ChatIdentity.FromId(_chatId), welcomeConfig);

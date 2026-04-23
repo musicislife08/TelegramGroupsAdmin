@@ -50,7 +50,7 @@ public class InviteRepository : IInviteRepository
             CreatedBy = createdBy,
             CreatedAt = now,
             ExpiresAt = expiresAt,
-            PermissionLevel = (DataModels.PermissionLevel)permissionLevel,
+            PermissionLevel = permissionLevel,
             Status = DataModels.InviteStatus.Pending,
             ModifiedAt = null,
             UsedBy = null
