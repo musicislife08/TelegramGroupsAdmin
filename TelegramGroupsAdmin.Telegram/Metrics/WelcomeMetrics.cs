@@ -16,9 +16,9 @@ public sealed class WelcomeMetrics
 
     // Error messages for the impossible-to-reach switch arms.
     private const string BypassOutcomeNoneUnreachable =
-        "Reached outcome mapping with BypassDecision.None";
-    private const string BypassOutcomeUnmappedFormat =
-        "Unmapped bypass decision: {0}";
+        "RecordBypassOutcome must not be called with BypassDecision.None";
+
+    private readonly Meter _meter = new("TelegramGroupsAdmin.Welcome");
 
     private readonly Counter<long> _joinsTotal;
     private readonly Counter<long> _securityChecksTotal;
@@ -29,29 +29,27 @@ public sealed class WelcomeMetrics
 
     public WelcomeMetrics()
     {
-        var meter = new Meter("TelegramGroupsAdmin.Welcome");
-
-        _joinsTotal = meter.CreateCounter<long>(
+        _joinsTotal = _meter.CreateCounter<long>(
             "tga.welcome.joins_total",
             description: "Welcome flow outcomes by result");
 
-        _securityChecksTotal = meter.CreateCounter<long>(
+        _securityChecksTotal = _meter.CreateCounter<long>(
             "tga.welcome.security_checks_total",
             description: "Security checks by check type and result");
 
-        _botJoinsTotal = meter.CreateCounter<long>(
+        _botJoinsTotal = _meter.CreateCounter<long>(
             "tga.welcome.bot_joins_total",
             description: "Bot join outcomes by result");
 
-        _timeoutsTotal = meter.CreateCounter<long>(
+        _timeoutsTotal = _meter.CreateCounter<long>(
             "tga.welcome.timeouts_total",
             description: "Welcome timeouts");
 
-        _leavesTotal = meter.CreateCounter<long>(
+        _leavesTotal = _meter.CreateCounter<long>(
             "tga.welcome.leaves_total",
             description: "Users who left during welcome flow");
 
-        _duration = meter.CreateHistogram<double>(
+        _duration = _meter.CreateHistogram<double>(
             "tga.welcome.duration",
             unit: "ms",
             description: "Welcome flow duration by result");
@@ -74,8 +72,7 @@ public sealed class WelcomeMetrics
             BypassDecision.Admin => OutcomeBypassAdmin,
             BypassDecision.Trusted => OutcomeBypassTrusted,
             BypassDecision.None => throw new InvalidOperationException(BypassOutcomeNoneUnreachable),
-            _ => throw new InvalidOperationException(
-                string.Format(BypassOutcomeUnmappedFormat, decision)),
+            _ => throw new InvalidOperationException($"Unmapped bypass decision: {decision}"),
         };
         RecordWelcomeOutcome(outcome, elapsedMs);
     }
