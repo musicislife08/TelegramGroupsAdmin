@@ -215,19 +215,36 @@ public class WelcomeServiceTests
     /// <summary>
     /// Creates a ChatMemberUpdated representing a status transition.
     /// Defaults to the standard join scenario: Left → Member.
+    ///
+    /// Pass <paramref name="user"/> or <paramref name="chat"/> to supply a full object, or
+    /// use the individual-field overrides (<paramref name="userId"/>, <paramref name="username"/>,
+    /// <paramref name="firstName"/>, <paramref name="chatId"/>, <paramref name="chatTitle"/>) to
+    /// build an ad-hoc user/chat without constructing the objects at the call site.
+    /// Individual-field overrides are ignored when the corresponding object parameter is supplied.
     /// </summary>
     private static ChatMemberUpdated CreateJoinUpdate(
         User? user = null,
         Chat? chat = null,
         ChatMemberStatus oldStatus = ChatMemberStatus.Left,
-        ChatMemberStatus newStatus = ChatMemberStatus.Member)
+        ChatMemberStatus newStatus = ChatMemberStatus.Member,
+        long userId = TestUserId,
+        string? username = "alice_tg",
+        string firstName = "Alice",
+        long chatId = TestChatId,
+        string chatTitle = "Test Group")
     {
-        var resolvedUser = user ?? TestUser;
+        var resolvedUser = user ?? new User
+        {
+            Id = userId,
+            FirstName = firstName,
+            Username = username,
+            IsBot = false
+        };
         var resolvedChat = chat ?? new Chat
         {
-            Id = TestChatId,
+            Id = chatId,
             Type = ChatType.Supergroup,
-            Title = "Test Group"
+            Title = chatTitle
         };
 
         ChatMember oldMember = oldStatus switch
@@ -758,6 +775,114 @@ public class WelcomeServiceTests
         await _auditHandler.DidNotReceive().LogWelcomeBypassAsync(
             Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<BypassDecision>(),
             Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    #endregion
+
+    #region Bypass announcement substitution + HTML encoding (regression cover for Task 14 / CWE-79)
+
+    /// <summary>
+    /// Seeds WelcomeConfig with TrustedBypass enabled and the given templates,
+    /// overriding the default config stub from SetUp.
+    /// </summary>
+    private void SetupTrustedBypass(string adminTemplate, string trustedTemplate)
+    {
+        var config = new WelcomeConfig
+        {
+            MainWelcomeMessage = "welcome",
+            TrustedBypass =
+            {
+                Enabled = true,
+                AnnouncementMessageAdmin = adminTemplate,
+                AnnouncementMessageTrusted = trustedTemplate,
+                AnnouncementTtlSeconds = 30,
+            }
+        };
+        _configService.GetEffectiveAsync<WelcomeConfig>(
+            Arg.Any<ConfigType>(), Arg.Any<long>()).Returns(config);
+
+        // Return a non-null Message so the delete-schedule branch runs.
+        _messageService
+            .SendAndSaveMessageAsync(
+                Arg.Any<long>(), Arg.Any<string>(),
+                Arg.Any<ParseMode?>(),
+                Arg.Any<ReplyParameters?>(),
+                Arg.Any<InlineKeyboardMarkup?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new Message { Id = 9001, Chat = new Chat { Id = TestChatId } });
+    }
+
+    [Test]
+    public async Task PostBypassAnnouncement_Substitutes_Username_AsEncodedMention_Trusted()
+    {
+        // Arrange: trusted user with username "alice", templates use {username}
+        SetupTrustedBypass(
+            adminTemplate: TrustedBypassConfig.UsernameVariable + " arrived",
+            trustedTemplate: TrustedBypassConfig.UsernameVariable + " arrived");
+        _bypassResolver.ResolveAsync(Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<CancellationToken>())
+            .Returns(new BypassResolution(BypassDecision.Trusted, "Trusted user"));
+
+        await _sut.HandleChatMemberUpdateAsync(
+            CreateJoinUpdate(userId: 1L, username: "alice", firstName: "Alice"),
+            CancellationToken.None);
+
+        // @alice (username path fires; HTML encoding is a no-op for [A-Za-z0-9_] usernames
+        //  but the encoder is still on the path — the assertion confirms the @mention shape).
+        await _messageService.Received(1).SendAndSaveMessageAsync(
+            Arg.Any<long>(),
+            Arg.Is<string>(t => t.Contains("@alice") && t.Contains("arrived")),
+            Arg.Is<ParseMode?>(m => m == ParseMode.Html),
+            Arg.Any<ReplyParameters?>(),
+            Arg.Any<InlineKeyboardMarkup?>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task PostBypassAnnouncement_Substitutes_ChatName_Encoded()
+    {
+        // Arrange: trusted bypass with hostile chat title containing HTML
+        SetupTrustedBypass(
+            adminTemplate: "Joined " + TrustedBypassConfig.ChatNameVariable,
+            trustedTemplate: "Joined " + TrustedBypassConfig.ChatNameVariable);
+        _bypassResolver.ResolveAsync(Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<CancellationToken>())
+            .Returns(new BypassResolution(BypassDecision.Trusted, "Trusted user"));
+
+        var update = CreateJoinUpdate(chatId: 99L, chatTitle: "<b>pwn</b>");
+        await _sut.HandleChatMemberUpdateAsync(update, CancellationToken.None);
+
+        // Chat title must be HTML-encoded in the outgoing text
+        await _messageService.Received(1).SendAndSaveMessageAsync(
+            Arg.Any<long>(),
+            Arg.Is<string>(t => t.Contains("&lt;b&gt;pwn&lt;/b&gt;") && !t.Contains("<b>pwn</b>")),
+            Arg.Any<ParseMode?>(),
+            Arg.Any<ReplyParameters?>(),
+            Arg.Any<InlineKeyboardMarkup?>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task PostBypassAnnouncement_HostileFirstName_IsEncoded_InTextMention()
+    {
+        // Arrange: user with NO username, hostile first name — display-name path fires
+        SetupTrustedBypass(
+            adminTemplate: TrustedBypassConfig.UsernameVariable + " joined",
+            trustedTemplate: TrustedBypassConfig.UsernameVariable + " joined");
+        _bypassResolver.ResolveAsync(Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<CancellationToken>())
+            .Returns(new BypassResolution(BypassDecision.Trusted, "Trusted user"));
+
+        var update = CreateJoinUpdate(userId: 7L, username: null, firstName: "<b>FAKE ADMIN</b>");
+        await _sut.HandleChatMemberUpdateAsync(update, CancellationToken.None);
+
+        // The hostile first name must land encoded inside the text-mention anchor tag
+        await _messageService.Received(1).SendAndSaveMessageAsync(
+            Arg.Any<long>(),
+            Arg.Is<string>(t =>
+                t.Contains("&lt;b&gt;FAKE ADMIN&lt;/b&gt;") &&
+                !t.Contains("<b>FAKE ADMIN</b>")),
+            Arg.Any<ParseMode?>(),
+            Arg.Any<ReplyParameters?>(),
+            Arg.Any<InlineKeyboardMarkup?>(),
+            Arg.Any<CancellationToken>());
     }
 
     #endregion
