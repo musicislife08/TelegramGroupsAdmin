@@ -548,6 +548,7 @@ public class WelcomeServiceTests
             Arg.Any<UserIdentity>(),
             Arg.Any<ChatIdentity>(),
             BypassDecision.Admin,
+            Arg.Any<string>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -697,7 +698,7 @@ public class WelcomeServiceTests
         // And bypass is not audited
         await _auditHandler.DidNotReceive().LogWelcomeBypassAsync(
             Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<BypassDecision>(),
-            Arg.Any<CancellationToken>());
+            Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     #endregion

@@ -62,6 +62,7 @@ public class WelcomeFlowBypassIntegrationTests
     private IAuditHandler? _auditHandler;
     private IConfigService? _configService;
     private ITelegramUserRepository? _telegramUserRepository;
+    private IChatAdminsRepository? _chatAdminsRepository;
 
     // ── mocks ─────────────────────────────────────────────────────────────────
     private IBotUserService? _mockBotUserService;
@@ -105,6 +106,7 @@ public class WelcomeFlowBypassIntegrationTests
         services.AddScoped<ITelegramUserRepository, TelegramUserRepository>();
         services.AddScoped<ITelegramUserMappingRepository, TelegramUserMappingRepository>();
         services.AddScoped<IUserActionsRepository, UserActionsRepository>();
+        services.AddScoped<IChatAdminsRepository, ChatAdminsRepository>();
 
         // ConfigService + its dependencies — required so the resolver can read the
         // TrustedBypass.Enabled toggle via IConfigService.GetEffectiveAsync.
@@ -133,6 +135,7 @@ public class WelcomeFlowBypassIntegrationTests
         _auditHandler = scope.ServiceProvider.GetRequiredService<IAuditHandler>();
         _configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
         _telegramUserRepository = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
+        _chatAdminsRepository = scope.ServiceProvider.GetRequiredService<IChatAdminsRepository>();
     }
 
     [TearDown]
@@ -152,12 +155,10 @@ public class WelcomeFlowBypassIntegrationTests
     [Test]
     public async Task ChatAdminJoin_WritesAuditRow_NoWelcomeResponse()
     {
-        // Arrange — simulate the Telegram API reporting this user as an Administrator.
+        // Arrange — seed a chat_admins row so the resolver's DB-backed chat-admin rule fires.
         // We use TrustedUserTelegramId (100002) because it has no web mapping, so the
         // only rule that can match is the chat-admin rule.
-        _mockBotUserService!
-            .GetChatMemberAsync(TestChatId, TrustedUserTelegramId, Arg.Any<CancellationToken>())
-            .Returns(BuildAdministratorChatMember(TrustedUserTelegramId));
+        await _chatAdminsRepository!.UpsertAsync(TestChatId, TrustedUserTelegramId, isCreator: false, CancellationToken.None);
 
         var user = UserIdentity.FromId(TrustedUserTelegramId);
         var chat = ChatIdentity.FromId(TestChatId);
@@ -165,13 +166,14 @@ public class WelcomeFlowBypassIntegrationTests
         // Act — resolver classifies the join, then audit handler logs the decision.
         var resolution = await _bypassResolver!.ResolveAsync(user, chat, CancellationToken.None);
         var decision = resolution.Decision;
-        await _auditHandler!.LogWelcomeBypassAsync(user, chat, decision, CancellationToken.None);
+        await _auditHandler!.LogWelcomeBypassAsync(
+            user, chat, decision, resolution.ReasonDetail ?? string.Empty, CancellationToken.None);
 
         // Assert — the decision was Admin and a matching user_actions row exists.
         Assert.That(decision, Is.EqualTo(BypassDecision.Admin));
         await AssertBypassAuditRowAsync(
             TrustedUserTelegramId,
-            expectedReason: "Admin identified (Telegram chat admin or linked web admin)");
+            expectedReason: "Telegram chat admin (1 chats)");
         await AssertNoWelcomeResponseAsync(TrustedUserTelegramId);
     }
 
@@ -191,13 +193,14 @@ public class WelcomeFlowBypassIntegrationTests
         // Act
         var resolution = await _bypassResolver!.ResolveAsync(user, chat, CancellationToken.None);
         var decision = resolution.Decision;
-        await _auditHandler!.LogWelcomeBypassAsync(user, chat, decision, CancellationToken.None);
+        await _auditHandler!.LogWelcomeBypassAsync(
+            user, chat, decision, resolution.ReasonDetail ?? string.Empty, CancellationToken.None);
 
         // Assert
         Assert.That(decision, Is.EqualTo(BypassDecision.Admin));
         await AssertBypassAuditRowAsync(
             LinkedOwnerTelegramUserId,
-            expectedReason: "Admin identified (Telegram chat admin or linked web admin)");
+            expectedReason: "Linked web admin (Owner)");
         await AssertNoWelcomeResponseAsync(LinkedOwnerTelegramUserId);
     }
 
@@ -230,13 +233,14 @@ public class WelcomeFlowBypassIntegrationTests
         // Act
         var resolution = await _bypassResolver!.ResolveAsync(user, chat, CancellationToken.None);
         var decision = resolution.Decision;
-        await _auditHandler!.LogWelcomeBypassAsync(user, chat, decision, CancellationToken.None);
+        await _auditHandler!.LogWelcomeBypassAsync(
+            user, chat, decision, resolution.ReasonDetail ?? string.Empty, CancellationToken.None);
 
         // Assert
         Assert.That(decision, Is.EqualTo(BypassDecision.Trusted));
         await AssertBypassAuditRowAsync(
             TrustedUserTelegramId,
-            expectedReason: "Trusted user, bypass enabled");
+            expectedReason: "Trusted user");
         await AssertNoWelcomeResponseAsync(TrustedUserTelegramId);
     }
 

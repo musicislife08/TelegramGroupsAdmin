@@ -175,7 +175,8 @@ public class WelcomeService(
                 await auditHandler.LogWelcomeBypassAsync(
                     UserIdentity.From(user),
                     ChatIdentity.From(chatMemberUpdate.Chat),
-                    bypassDecision,
+                    bypassResolution.Decision,
+                    bypassResolution.ReasonDetail ?? string.Empty,
                     cancellationToken);
                 await PostBypassAnnouncementIfConfiguredAsync(
                     chatMemberUpdate.Chat, user, config, cancellationToken);

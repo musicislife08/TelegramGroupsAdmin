@@ -52,5 +52,6 @@ public interface IAuditHandler
         UserIdentity user,
         ChatIdentity chat,
         BypassDecision decision,
+        string reasonDetail,
         CancellationToken cancellationToken = default);
 }

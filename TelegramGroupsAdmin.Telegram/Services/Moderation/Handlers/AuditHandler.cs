@@ -14,11 +14,6 @@ namespace TelegramGroupsAdmin.Telegram.Services.Moderation.Handlers;
 /// </summary>
 public class AuditHandler : IAuditHandler
 {
-    // Bypass reason strings - only emitted from this class.
-    private const string BypassReasonAdmin   = "Admin identified (Telegram chat admin or linked web admin)";
-    private const string BypassReasonTrusted   = "Trusted user, bypass enabled";
-    private const string BypassReasonFallback  = "Bypass";
-
     private readonly IUserActionsRepository _userActionsRepository;
     private readonly ILogger<AuditHandler> _logger;
 
@@ -128,21 +123,15 @@ public class AuditHandler : IAuditHandler
         UserIdentity user,
         ChatIdentity chat,
         BypassDecision decision,
+        string reasonDetail,
         CancellationToken cancellationToken = default)
     {
-        var reason = decision switch
-        {
-            BypassDecision.Admin   => BypassReasonAdmin,
-            BypassDecision.Trusted   => BypassReasonTrusted,
-            _                        => BypassReasonFallback,
-        };
-
-        var record = CreateRecord(user.Id, UserActionType.WelcomeBypass, Actor.WelcomeBypass, reason, chatId: chat.Id);
+        var record = CreateRecord(user.Id, UserActionType.WelcomeBypass, Actor.WelcomeBypass, reasonDetail, chatId: chat.Id);
         await _userActionsRepository.InsertAsync(record, cancellationToken);
 
         _logger.LogDebug(
-            "Recorded {ActionType} action for {User} in {Chat} (decision: {Decision})",
-            UserActionType.WelcomeBypass, user.ToLogDebug(), chat.ToLogDebug(), decision);
+            "Recorded {ActionType} action for {User} in {Chat} (decision: {Decision}, reason: {Reason})",
+            UserActionType.WelcomeBypass, user.ToLogDebug(), chat.ToLogDebug(), decision, reasonDetail);
     }
 
     private static UserActionRecord CreateRecord(

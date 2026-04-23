@@ -43,8 +43,9 @@ public class AuditHandlerTests
     }
 
     [Test]
-    public async Task LogWelcomeBypassAsync_Admin_WritesExpectedRow()
+    public async Task LogWelcomeBypassAsync_AdminDecision_PersistsCallerSuppliedReason()
     {
+        const string expectedReason = "Telegram chat admin (3 chats)";
         UserActionRecord? captured = null;
         _userActionsRepo.InsertAsync(Arg.Do<UserActionRecord>(r => captured = r), Arg.Any<CancellationToken>())
             .Returns(1L);
@@ -53,6 +54,7 @@ public class AuditHandlerTests
             UserIdentity.FromId(100),
             ChatIdentity.FromId(-200),
             BypassDecision.Admin,
+            expectedReason,
             CancellationToken.None);
 
         Assert.That(captured, Is.Not.Null);
@@ -62,13 +64,13 @@ public class AuditHandlerTests
             "Bypass audit rows record the chat where the join occurred.");
         Assert.That(captured.MessageId, Is.Null,
             "Bypass has no specific message context.");
-        Assert.That(captured.Reason, Is.EqualTo("Admin identified (Telegram chat admin or linked web admin)"));
+        Assert.That(captured.Reason, Is.EqualTo(expectedReason));
     }
 
-
     [Test]
-    public async Task LogWelcomeBypassAsync_Trusted_WritesExpectedRow()
+    public async Task LogWelcomeBypassAsync_TrustedDecision_PersistsCallerSuppliedReason()
     {
+        const string expectedReason = "Trusted user";
         UserActionRecord? captured = null;
         _userActionsRepo.InsertAsync(Arg.Do<UserActionRecord>(r => captured = r), Arg.Any<CancellationToken>())
             .Returns(1L);
@@ -77,9 +79,31 @@ public class AuditHandlerTests
             UserIdentity.FromId(100),
             ChatIdentity.FromId(-200),
             BypassDecision.Trusted,
+            expectedReason,
             CancellationToken.None);
 
-        Assert.That(captured!.Reason, Is.EqualTo("Trusted user, bypass enabled"));
+        Assert.That(captured!.ActionType, Is.EqualTo(UserActionType.WelcomeBypass));
+        Assert.That(captured.ChatId, Is.EqualTo(-200));
+        Assert.That(captured.MessageId, Is.Null);
+        Assert.That(captured.Reason, Is.EqualTo(expectedReason));
+    }
+
+    [Test]
+    public async Task LogWelcomeBypassAsync_WebAdminReason_PersistsVerbatim()
+    {
+        const string expectedReason = "Linked web admin (GlobalAdmin)";
+        UserActionRecord? captured = null;
+        _userActionsRepo.InsertAsync(Arg.Do<UserActionRecord>(r => captured = r), Arg.Any<CancellationToken>())
+            .Returns(1L);
+
+        await _handler.LogWelcomeBypassAsync(
+            UserIdentity.FromId(100),
+            ChatIdentity.FromId(-200),
+            BypassDecision.Admin,
+            expectedReason,
+            CancellationToken.None);
+
+        Assert.That(captured!.Reason, Is.EqualTo(expectedReason));
     }
 
     [Test]
