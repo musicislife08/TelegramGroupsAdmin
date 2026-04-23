@@ -129,7 +129,7 @@ public sealed class NotificationService : INotificationService
         if (reporterAsUser != null)
             builder.WithField("Reported by", reporterAsUser);
         else
-            builder.WithField("Reported by", "System (automated)");
+            builder.WithField("Reported by", isAutomated ? "System (automated)" : reporterName ?? "Unknown");
 
         builder
             .WithSection("Message", s => s.WithText(messagePreview))
