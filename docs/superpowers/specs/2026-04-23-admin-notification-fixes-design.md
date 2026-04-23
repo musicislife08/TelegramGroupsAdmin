@@ -193,18 +193,35 @@ that include emoji or non-BMP characters (display names may contain these).
 Per the tdlib documentation, only `User.Id` is required for `text_mention`.
 To improve display fallback on clients, we also populate `FirstName`,
 `LastName`, `Username`, and `IsBot = false`. `UserIdentity` already carries
-these fields — extend `NotificationPayloadBuilder.WithField(...)` to accept
-an optional `UserIdentity` alongside the existing `telegramUserId: long?`
-overload (internally converted) so call sites can pass through names without
-re-plumbing.
+these fields, so we route linked mentions through a new `UserIdentity`
+overload and drop the existing nullable `telegramUserId` parameter on the
+string overload — a field is either plain text or a linked user mention,
+never a string with an optional ID hanging off it.
 
-Preferred signature:
+Final signatures:
 
 ```csharp
+public NotificationPayloadBuilder WithField(string label, string value);
 public NotificationPayloadBuilder WithField(string label, UserIdentity user);
-public NotificationPayloadBuilder WithField(string label, string value,
-    long? telegramUserId = null);  // existing — still used for non-user fields
+public NotificationPayloadBuilder WithFieldIf(bool condition, string label, string? value);
+public NotificationPayloadBuilder WithFieldIf(bool condition, string label, UserIdentity? user);
 ```
+
+Call sites in `NotificationService.cs` update like:
+
+```csharp
+// Before
+.WithField("User", user.DisplayName, telegramUserId: user.Id)
+.WithField("Chat", chat.ChatName ?? chat.Id.ToString())
+
+// After
+.WithField("User", user)
+.WithField("Chat", chat.ChatName ?? chat.Id.ToString())
+```
+
+The `Field` record on `NotificationPayload` loses `TelegramUserId: long?` in
+favor of `User: UserIdentity?` — the renderer reads the latter when deciding
+whether to emit a `TextMention` entity.
 
 #### Send-path plumbing
 
