@@ -164,10 +164,11 @@ public class WelcomeService(
 
             // Step 2.5: Unified privileged/trusted bypass (chat admin, web admin, or trusted user).
             // Short-circuits BEFORE mute (Step 3) — bypassed users are never muted.
-            var bypassDecision = await bypassResolver.ResolveAsync(
+            var bypassResolution = await bypassResolver.ResolveAsync(
                 UserIdentity.From(user),
                 ChatIdentity.From(chatMemberUpdate.Chat),
                 cancellationToken);
+            var bypassDecision = bypassResolution.Decision;
             if (bypassDecision != BypassDecision.None)
             {
                 await telegramUserRepository.ActivateAsync(user.Id, cancellationToken);

@@ -1,71 +1,77 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Models.Welcome;
 using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Telegram.Repositories;
-using TelegramGroupsAdmin.Telegram.Services.Bot;
 
 namespace TelegramGroupsAdmin.Telegram.Services.Welcome;
 
 /// <summary>
-/// Evaluates the three bypass rules in priority order: Telegram chat admin,
-/// linked web admin, trusted user (toggle-gated). Returns the first match.
-/// Singleton via <see cref="IServiceScopeFactory"/> for scoped-service access.
+/// Evaluates the three bypass rules in priority order: Telegram chat admin (any tracked chat),
+/// linked web admin (GlobalAdmin/Owner), trusted user (toggle-gated). Returns the first match
+/// as a <see cref="BypassResolution"/> that carries both the decision and a human-readable
+/// reason string suitable for audit persistence. Singleton via <see cref="IServiceScopeFactory"/>
+/// for scoped-service access.
 /// </summary>
 public sealed class WelcomeBypassResolver(
     IServiceScopeFactory scopeFactory,
     ILogger<WelcomeBypassResolver> logger) : IWelcomeBypassResolver
 {
     // Log format strings live here because they are only used by this class.
-    private const string LogFormatAdmin =
-        "Welcome bypass: {User} in {Chat} - admin identified (Telegram chat admin or linked web admin)";
-    private const string LogFormatTrusted =
-        "Welcome bypass: {User} in {Chat} - trusted user, bypass enabled";
+    // Split per rule so each bypass path has its own forensic log entry.
+    private const string AdminBypassChatAdminFormat =
+        "Bypass: {User} is chat admin in {AdminChatCount} tracked chats (joining {Chat})";
+    private const string AdminBypassWebAdminFormat =
+        "Bypass: {User} is linked web admin ({Level}) (joining {Chat})";
+    private const string TrustedBypassFormat =
+        "Bypass: {User} is trusted, per-chat toggle enabled (joining {Chat})";
 
-    public async Task<BypassDecision> ResolveAsync(
+    public async Task<BypassResolution> ResolveAsync(
         UserIdentity user, ChatIdentity chat, CancellationToken cancellationToken)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
         var sp = scope.ServiceProvider;
 
-        // Rule 1: Telegram chat admin / creator (always on)
-        var userService = sp.GetRequiredService<IBotUserService>();
-        var chatMember = await userService.GetChatMemberAsync(chat.Id, user.Id, cancellationToken);
-        if (chatMember.Status is ChatMemberStatus.Administrator or ChatMemberStatus.Creator)
+        // Rule 1: Telegram chat admin (creator or administrator) in any tracked chat.
+        var chatAdminsRepo = sp.GetRequiredService<IChatAdminsRepository>();
+        var adminChats = await chatAdminsRepo.GetAdminChatsAsync(user.Id, cancellationToken);
+        if (adminChats.Count > 0)
         {
-            logger.LogInformation(LogFormatAdmin, user.ToLogInfo(), chat.ToLogInfo());
-            return BypassDecision.Admin;
+            logger.LogDebug(AdminBypassChatAdminFormat,
+                user.ToLogDebug(), adminChats.Count, chat.ToLogDebug());
+            return new BypassResolution(
+                BypassDecision.Admin,
+                $"Telegram chat admin ({adminChats.Count} chats)");
         }
 
-        // Rule 2: Linked web admin (always on)
+        // Rule 1 (cont.): Linked web admin at GlobalAdmin or Owner permission level.
         var mappingRepo = sp.GetRequiredService<ITelegramUserMappingRepository>();
         var permissionLevel = await mappingRepo.GetPermissionLevelByTelegramIdAsync(user.Id, cancellationToken);
         if (permissionLevel >= PermissionLevel.GlobalAdmin)
         {
-            logger.LogInformation(LogFormatAdmin, user.ToLogInfo(), chat.ToLogInfo());
-            return BypassDecision.Admin;
+            logger.LogDebug(AdminBypassWebAdminFormat,
+                user.ToLogDebug(), permissionLevel, chat.ToLogDebug());
+            return new BypassResolution(
+                BypassDecision.Admin,
+                $"Linked web admin ({permissionLevel})");
         }
 
-        // Rule 3: Trusted user (toggle-gated)
+        // Rule 2: Trusted user (toggle-gated).
         var configService = sp.GetRequiredService<IConfigService>();
-        var config = await configService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, chat.Id)
-                     ?? new WelcomeConfig();
-        if (!config.TrustedBypass.Enabled)
+        var config = await configService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, chat.Id);
+        if (config?.TrustedBypass.Enabled == true)
         {
-            return BypassDecision.None;
+            var userRepo = sp.GetRequiredService<ITelegramUserRepository>();
+            if (await userRepo.IsTrustedAsync(user.Id, cancellationToken))
+            {
+                logger.LogDebug(TrustedBypassFormat, user.ToLogDebug(), chat.ToLogDebug());
+                return new BypassResolution(BypassDecision.Trusted, "Trusted user");
+            }
         }
 
-        var userRepo = sp.GetRequiredService<ITelegramUserRepository>();
-        if (await userRepo.IsTrustedAsync(user.Id, cancellationToken))
-        {
-            logger.LogInformation(LogFormatTrusted, user.ToLogInfo(), chat.ToLogInfo());
-            return BypassDecision.Trusted;
-        }
-
-        return BypassDecision.None;
+        return BypassResolution.None();
     }
 }

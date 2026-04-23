@@ -424,7 +424,7 @@ public class WelcomeServiceTests
         // Arrange — resolver flags the user as a Telegram chat admin/creator
         _bypassResolver
             .ResolveAsync(Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<CancellationToken>())
-            .Returns(BypassDecision.Admin);
+            .Returns(new BypassResolution(BypassDecision.Admin, "test-admin"));
 
         var update = CreateJoinUpdate();
 
@@ -449,7 +449,7 @@ public class WelcomeServiceTests
         // Arrange — resolver treats owner as ChatAdmin decision (Rule 1 covers both)
         _bypassResolver
             .ResolveAsync(Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<CancellationToken>())
-            .Returns(BypassDecision.Admin);
+            .Returns(new BypassResolution(BypassDecision.Admin, "test-admin"));
 
         var update = CreateJoinUpdate();
 
@@ -524,7 +524,7 @@ public class WelcomeServiceTests
         // Arrange — resolver decides ChatAdmin bypass
         _bypassResolver
             .ResolveAsync(Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<CancellationToken>())
-            .Returns(BypassDecision.Admin);
+            .Returns(new BypassResolution(BypassDecision.Admin, "test-admin"));
 
         var update = CreateJoinUpdate();
 
@@ -557,7 +557,7 @@ public class WelcomeServiceTests
         // Arrange — Trusted bypass, announcement configured with text + positive TTL
         _bypassResolver
             .ResolveAsync(Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<CancellationToken>())
-            .Returns(BypassDecision.Trusted);
+            .Returns(new BypassResolution(BypassDecision.Trusted, "Trusted user"));
 
         var config = new WelcomeConfig
         {
@@ -609,7 +609,7 @@ public class WelcomeServiceTests
         // Arrange — Trusted bypass, announcement message is whitespace-only
         _bypassResolver
             .ResolveAsync(Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<CancellationToken>())
-            .Returns(BypassDecision.Trusted);
+            .Returns(new BypassResolution(BypassDecision.Trusted, "Trusted user"));
 
         _configService
             .GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, Arg.Any<long>())
@@ -649,7 +649,7 @@ public class WelcomeServiceTests
         // Arrange — Trusted bypass, TTL is zero (disables announcement)
         _bypassResolver
             .ResolveAsync(Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<CancellationToken>())
-            .Returns(BypassDecision.Trusted);
+            .Returns(new BypassResolution(BypassDecision.Trusted, "Trusted user"));
 
         _configService
             .GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, Arg.Any<long>())

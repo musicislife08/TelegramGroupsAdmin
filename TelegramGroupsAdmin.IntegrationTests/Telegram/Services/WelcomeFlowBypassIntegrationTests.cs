@@ -163,7 +163,8 @@ public class WelcomeFlowBypassIntegrationTests
         var chat = ChatIdentity.FromId(TestChatId);
 
         // Act — resolver classifies the join, then audit handler logs the decision.
-        var decision = await _bypassResolver!.ResolveAsync(user, chat, CancellationToken.None);
+        var resolution = await _bypassResolver!.ResolveAsync(user, chat, CancellationToken.None);
+        var decision = resolution.Decision;
         await _auditHandler!.LogWelcomeBypassAsync(user, chat, decision, CancellationToken.None);
 
         // Assert — the decision was Admin and a matching user_actions row exists.
@@ -188,7 +189,8 @@ public class WelcomeFlowBypassIntegrationTests
         var chat = ChatIdentity.FromId(TestChatId);
 
         // Act
-        var decision = await _bypassResolver!.ResolveAsync(user, chat, CancellationToken.None);
+        var resolution = await _bypassResolver!.ResolveAsync(user, chat, CancellationToken.None);
+        var decision = resolution.Decision;
         await _auditHandler!.LogWelcomeBypassAsync(user, chat, decision, CancellationToken.None);
 
         // Assert
@@ -226,7 +228,8 @@ public class WelcomeFlowBypassIntegrationTests
         var chat = ChatIdentity.FromId(TestChatId);
 
         // Act
-        var decision = await _bypassResolver!.ResolveAsync(user, chat, CancellationToken.None);
+        var resolution = await _bypassResolver!.ResolveAsync(user, chat, CancellationToken.None);
+        var decision = resolution.Decision;
         await _auditHandler!.LogWelcomeBypassAsync(user, chat, decision, CancellationToken.None);
 
         // Assert
