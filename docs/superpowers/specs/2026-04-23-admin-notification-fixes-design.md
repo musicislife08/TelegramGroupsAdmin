@@ -198,25 +198,30 @@ overload and drop the existing nullable `telegramUserId` parameter on the
 string overload — a field is either plain text or a linked user mention,
 never a string with an optional ID hanging off it.
 
-Final signatures:
+Final signatures — two overloads, both skip-on-null:
 
 ```csharp
-public NotificationPayloadBuilder WithField(string label, string value);
-public NotificationPayloadBuilder WithField(string label, UserIdentity user);
-public NotificationPayloadBuilder WithFieldIf(bool condition, string label, string? value);
-public NotificationPayloadBuilder WithFieldIf(bool condition, string label, UserIdentity? user);
+public NotificationPayloadBuilder WithField(string label, string? value);
+public NotificationPayloadBuilder WithField(string label, UserIdentity? user);
 ```
 
-Call sites in `NotificationService.cs` update like:
+`WithFieldIf(bool, ...)` is dropped — callers use null to signal skip. For the
+rare bool-guarded case (`messageDeleted` in spam-ban notifications), a
+ternary-to-null is cleaner:
 
 ```csharp
 // Before
 .WithField("User", user.DisplayName, telegramUserId: user.Id)
 .WithField("Chat", chat.ChatName ?? chat.Id.ToString())
+.WithFieldIf(detectionReason != null, "Reason", detectionReason)
+.WithFieldIf(messageDeleted, "Message deleted", $"ID: {messageId}")
 
 // After
 .WithField("User", user)
 .WithField("Chat", chat.ChatName ?? chat.Id.ToString())
+.WithField("Reason", detectionReason)                    // skips if null
+.WithField("Message deleted",
+    messageDeleted ? $"ID: {messageId}" : null)          // ternary-to-null
 ```
 
 The `Field` record on `NotificationPayload` loses `TelegramUserId: long?` in
