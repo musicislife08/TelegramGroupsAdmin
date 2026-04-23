@@ -638,7 +638,10 @@ public class WelcomeService(
         CancellationToken cancellationToken)
     {
         // Toggle gates the entire feature — admin can kill all announcements without
-        // blanking templates.
+        // blanking templates. Re-checked here (resolver already read it once) as a
+        // best-effort guard: if an admin flipped the toggle between resolve and announce,
+        // the bypass decision is already committed (audit row written, user admitted) —
+        // skipping the announcement is graceful degradation, not a correctness bug.
         if (!config.TrustedBypass.Enabled)
         {
             return;
