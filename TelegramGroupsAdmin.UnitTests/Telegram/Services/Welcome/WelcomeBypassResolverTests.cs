@@ -84,7 +84,7 @@ public class WelcomeBypassResolverTests
     {
         StubChatMember(ChatMemberStatus.Member);
         _mappingRepo.GetPermissionLevelByTelegramIdAsync(TestUserId, Arg.Any<CancellationToken>())
-            .Returns((int?)PermissionLevel.Owner);
+            .Returns((PermissionLevel?)PermissionLevel.Owner);
 
         var decision = await _resolver.ResolveAsync(TestUser(), TestChat(), CancellationToken.None);
 
@@ -96,7 +96,7 @@ public class WelcomeBypassResolverTests
     {
         StubChatMember(ChatMemberStatus.Member);
         _mappingRepo.GetPermissionLevelByTelegramIdAsync(TestUserId, Arg.Any<CancellationToken>())
-            .Returns((int?)PermissionLevel.GlobalAdmin);
+            .Returns((PermissionLevel?)PermissionLevel.GlobalAdmin);
 
         var decision = await _resolver.ResolveAsync(TestUser(), TestChat(), CancellationToken.None);
 
@@ -108,7 +108,7 @@ public class WelcomeBypassResolverTests
     {
         StubChatMember(ChatMemberStatus.Member);
         _mappingRepo.GetPermissionLevelByTelegramIdAsync(TestUserId, Arg.Any<CancellationToken>())
-            .Returns((int?)PermissionLevel.Admin);
+            .Returns((PermissionLevel?)PermissionLevel.Admin);
         _configService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, TestChatId)
             .Returns(new WelcomeConfig { TrustedBypass = new TrustedBypassConfig { Enabled = false } });
         _userRepo.IsTrustedAsync(TestUserId, Arg.Any<CancellationToken>()).Returns(false);
@@ -123,7 +123,7 @@ public class WelcomeBypassResolverTests
     {
         StubChatMember(ChatMemberStatus.Member);
         _mappingRepo.GetPermissionLevelByTelegramIdAsync(TestUserId, Arg.Any<CancellationToken>())
-            .Returns((int?)null);
+            .Returns((PermissionLevel?)null);
         _configService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, TestChatId)
             .Returns(new WelcomeConfig { TrustedBypass = new TrustedBypassConfig { Enabled = true } });
         _userRepo.IsTrustedAsync(TestUserId, Arg.Any<CancellationToken>()).Returns(true);
@@ -138,7 +138,7 @@ public class WelcomeBypassResolverTests
     {
         StubChatMember(ChatMemberStatus.Member);
         _mappingRepo.GetPermissionLevelByTelegramIdAsync(TestUserId, Arg.Any<CancellationToken>())
-            .Returns((int?)null);
+            .Returns((PermissionLevel?)null);
         _configService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, TestChatId)
             .Returns(new WelcomeConfig { TrustedBypass = new TrustedBypassConfig { Enabled = false } });
         _userRepo.IsTrustedAsync(TestUserId, Arg.Any<CancellationToken>()).Returns(true);
@@ -153,7 +153,7 @@ public class WelcomeBypassResolverTests
     {
         StubChatMember(ChatMemberStatus.Member);
         _mappingRepo.GetPermissionLevelByTelegramIdAsync(TestUserId, Arg.Any<CancellationToken>())
-            .Returns((int?)null);
+            .Returns((PermissionLevel?)null);
         _configService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, TestChatId)
             .Returns(new WelcomeConfig { TrustedBypass = new TrustedBypassConfig { Enabled = true } });
         _userRepo.IsTrustedAsync(TestUserId, Arg.Any<CancellationToken>()).Returns(false);
@@ -168,7 +168,7 @@ public class WelcomeBypassResolverTests
     {
         StubChatMember(ChatMemberStatus.Member);
         _mappingRepo.GetPermissionLevelByTelegramIdAsync(TestUserId, Arg.Any<CancellationToken>())
-            .Returns((int?)null);
+            .Returns((PermissionLevel?)null);
         _configService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, TestChatId)
             .Returns((WelcomeConfig?)null);
         _userRepo.IsTrustedAsync(TestUserId, Arg.Any<CancellationToken>()).Returns(true);

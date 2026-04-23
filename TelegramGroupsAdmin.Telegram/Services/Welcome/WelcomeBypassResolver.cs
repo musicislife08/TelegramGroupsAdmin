@@ -46,7 +46,7 @@ public sealed class WelcomeBypassResolver(
         // Rule 2: Linked web admin (always on)
         var mappingRepo = sp.GetRequiredService<ITelegramUserMappingRepository>();
         var permissionLevel = await mappingRepo.GetPermissionLevelByTelegramIdAsync(user.Id, cancellationToken);
-        if (permissionLevel is (int)PermissionLevel.GlobalAdmin or (int)PermissionLevel.Owner)
+        if (permissionLevel >= PermissionLevel.GlobalAdmin)
         {
             logger.LogInformation(LogFormatWebAdmin, user.ToLogInfo(), chat.ToLogInfo(), permissionLevel);
             return BypassDecision.WebAdmin;

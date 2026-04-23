@@ -47,7 +47,7 @@ public static class InviteMappings
             CreatedAt = ui.CreatedAt,
             ExpiresAt = ui.ExpiresAt,
             UsedBy = ui.UsedBy,
-            PermissionLevel = (DataModels.PermissionLevel)(int)ui.PermissionLevel,
+            PermissionLevel = (int)ui.PermissionLevel,
             Status = (DataModels.InviteStatus)(int)ui.Status,
             ModifiedAt = ui.ModifiedAt
         };

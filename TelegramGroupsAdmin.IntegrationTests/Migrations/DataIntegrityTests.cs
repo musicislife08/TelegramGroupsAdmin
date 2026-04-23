@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using TelegramGroupsAdmin.Data.Models;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
+using CoreModels = TelegramGroupsAdmin.Core.Models;
 
 namespace TelegramGroupsAdmin.IntegrationTests.Migrations;
 
@@ -89,7 +90,7 @@ public class DataIntegrityTests
                 NormalizedEmail = "USER@TEST.COM",
                 PasswordHash = "hash",
                 SecurityStamp = Guid.NewGuid().ToString(),
-                PermissionLevel = PermissionLevel.Admin,
+                PermissionLevel = (int)CoreModels.PermissionLevel.Admin,
                 Status = UserStatus.Active,
                 CreatedAt = DateTimeOffset.UtcNow
             });
@@ -107,7 +108,7 @@ public class DataIntegrityTests
                 NormalizedEmail = "USER@TEST.COM",  // Duplicate normalized!
                 PasswordHash = "hash",
                 SecurityStamp = Guid.NewGuid().ToString(),
-                PermissionLevel = PermissionLevel.Admin,
+                PermissionLevel = (int)CoreModels.PermissionLevel.Admin,
                 Status = UserStatus.Active,
                 CreatedAt = DateTimeOffset.UtcNow
             });
@@ -491,7 +492,7 @@ public class DataIntegrityTests
                 NormalizedEmail = "PUSH@TEST.COM",
                 PasswordHash = "hash",
                 SecurityStamp = Guid.NewGuid().ToString(),
-                PermissionLevel = PermissionLevel.Admin,
+                PermissionLevel = (int)CoreModels.PermissionLevel.Admin,
                 Status = UserStatus.Active,
                 CreatedAt = DateTimeOffset.UtcNow
             });
@@ -568,7 +569,7 @@ public class DataIntegrityTests
                 NormalizedEmail = "NOTIFY@TEST.COM",
                 PasswordHash = "hash",
                 SecurityStamp = Guid.NewGuid().ToString(),
-                PermissionLevel = PermissionLevel.Admin,
+                PermissionLevel = (int)CoreModels.PermissionLevel.Admin,
                 Status = UserStatus.Active,
                 CreatedAt = DateTimeOffset.UtcNow
             });

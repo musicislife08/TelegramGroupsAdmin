@@ -1,3 +1,4 @@
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
 
@@ -45,7 +46,7 @@ public class SequenceIntegrityTests
                 NormalizedEmail = "TEST1@TEST.COM",
                 PasswordHash = "hash",
                 SecurityStamp = Guid.NewGuid().ToString(),
-                PermissionLevel = Data.Models.PermissionLevel.Owner,
+                PermissionLevel = (int)PermissionLevel.Owner,
                 Status = Data.Models.UserStatus.Active,
                 CreatedAt = DateTimeOffset.UtcNow
             });

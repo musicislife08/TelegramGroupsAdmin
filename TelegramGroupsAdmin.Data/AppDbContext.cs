@@ -840,14 +840,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .Property(i => i.Status)
             .HasConversion<int>();
 
-        modelBuilder.Entity<InviteRecordDto>()
-            .Property(i => i.PermissionLevel)
-            .HasConversion<int>();
-
-        modelBuilder.Entity<UserRecordDto>()
-            .Property(u => u.PermissionLevel)
-            .HasConversion<int>();
-
         modelBuilder.Entity<ManagedChatRecordDto>()
             .Property(mc => mc.BotStatus)
             .HasConversion<int>();
