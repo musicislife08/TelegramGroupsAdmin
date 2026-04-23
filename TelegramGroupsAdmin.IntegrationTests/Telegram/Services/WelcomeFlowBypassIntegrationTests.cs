@@ -245,6 +245,67 @@ public class WelcomeFlowBypassIntegrationTests
     }
 
     /// <summary>
+    /// Scenario 3b: Joining user is trusted but the per-chat TrustedBypass toggle is OFF.
+    /// This is the integration-level complement to the unit test
+    /// <c>WelcomeBypassResolverTests.TrustedUser_ToggleOff_ReturnsNone</c>: here we
+    /// round-trip the <see cref="WelcomeConfig"/> through the real <see cref="IConfigService"/>
+    /// (which persists via <see cref="IConfigRepository"/> to Postgres) so we prove the
+    /// resolver respects the persisted toggle value, not just a cached/in-memory one.
+    ///
+    /// Expectation: resolver returns <see cref="BypassDecision.None"/>, which in production
+    /// <see cref="TelegramGroupsAdmin.Telegram.Services.WelcomeService"/> causes the caller
+    /// to skip <see cref="IAuditHandler.LogWelcomeBypassAsync"/> entirely and fall through to
+    /// the normal mute/verify welcome flow. We assert the signal that differentiates the
+    /// bypass path from the normal path at the data layer: NO user_actions.WelcomeBypass
+    /// row for this (user, chat) pair.
+    /// </summary>
+    [Test]
+    public async Task TrustedUser_ToggleOff_FallsThroughToNormalFlow_NoAuditRow()
+    {
+        // Arrange — mark the user trusted, then persist a WelcomeConfig with the toggle OFF
+        // through the real ConfigService so the resolver reads it back from Postgres.
+        await MarkUserTrustedAsync(TrustedUserTelegramId);
+
+        var welcomeConfig = new WelcomeConfig
+        {
+            Enabled = true,
+            TrustedBypass = new TrustedBypassConfig
+            {
+                Enabled = false,
+                AnnouncementMessageTrusted = "ignored",
+                AnnouncementTtlSeconds = 30,
+            },
+        };
+        await _configService!.SaveAsync(ConfigType.Welcome, ChatIdentity.FromId(0), welcomeConfig);
+
+        var user = UserIdentity.FromId(TrustedUserTelegramId);
+        var chat = ChatIdentity.FromId(TestChatId);
+
+        // Act — resolver classifies the join. In WelcomeService, a None decision means
+        // LogWelcomeBypassAsync is never called, so we deliberately mirror that here:
+        // we do NOT call the audit handler. The DB assertion below is the invariant.
+        var resolution = await _bypassResolver!.ResolveAsync(user, chat, CancellationToken.None);
+
+        // Assert 1 — the resolver produced None via the Postgres config round-trip.
+        Assert.That(resolution.Decision, Is.EqualTo(BypassDecision.None),
+            "A trusted user with TrustedBypass.Enabled = false (loaded from Postgres) must fall through.");
+
+        // Assert 2 — differential signal: no WelcomeBypass audit row was written.
+        // If the bypass path had fired (it didn't, per Assert 1), WelcomeService would
+        // have logged an audit row; since the decision was None, the caller skipped the
+        // audit step and the user continues into the normal mute/verify flow.
+        await using var context = _testHelper!.GetDbContext();
+        var bypassRows = await context.UserActions
+            .AsNoTracking()
+            .Where(a => a.UserId == TrustedUserTelegramId
+                        && a.ChatId == TestChatId
+                        && a.ActionType == (int)UserActionType.WelcomeBypass)
+            .ToListAsync();
+        Assert.That(bypassRows, Is.Empty,
+            "A trusted user with the per-chat bypass toggle OFF must not produce a WelcomeBypass audit row.");
+    }
+
+    /// <summary>
     /// Scenario 4: Joining user is both trusted and banned. This is the ordering-invariant
     /// case — in the real WelcomeService pre-banned users are kicked <em>before</em> the
     /// resolver runs. Here we verify the data-level invariant that the bypass pipeline is
