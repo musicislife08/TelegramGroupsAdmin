@@ -76,7 +76,8 @@ public class DataCleanupJob : IJob
 
         var messageRetention = TimeSpanUtilities.ParseDurationOrDefault(settings.MessageRetention, DataCleanupSettings.DefaultMessageRetention);
         var reportRetention = TimeSpanUtilities.ParseDurationOrDefault(settings.ReportRetention, DataCleanupSettings.DefaultReportRetention);
-        var contextRetention = TimeSpanUtilities.ParseDurationOrDefault(settings.CallbackContextRetention, DataCleanupSettings.DefaultShortRetention);
+        // Callback context cleanup is now orphan-based; retention value kept only for log formatting until Task 7 reworks the signature.
+        var contextRetention = DataCleanupSettings.DefaultShortRetention;
         var notificationRetention = TimeSpanUtilities.ParseDurationOrDefault(settings.WebNotificationRetention, DataCleanupSettings.DefaultShortRetention);
         var fileScanRetention = TimeSpanUtilities.ParseDurationOrDefault(settings.FileScanResultRetention, DataCleanupSettings.DefaultFileScanResultRetention);
 

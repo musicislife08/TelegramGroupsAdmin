@@ -116,7 +116,6 @@ public class BackgroundJobConfigPersistenceTests
         {
             MessageRetention = "60d",
             ReportRetention = "120d",
-            CallbackContextRetention = "14d",
             WebNotificationRetention = "30d"
         };
 
@@ -129,7 +128,6 @@ public class BackgroundJobConfigPersistenceTests
         {
             Assert.That(reloaded!.DataCleanup!.MessageRetention, Is.EqualTo("60d"));
             Assert.That(reloaded.DataCleanup.ReportRetention, Is.EqualTo("120d"));
-            Assert.That(reloaded.DataCleanup.CallbackContextRetention, Is.EqualTo("14d"));
             Assert.That(reloaded.DataCleanup.WebNotificationRetention, Is.EqualTo("30d"));
         }
     }
