@@ -565,7 +565,7 @@ public class WelcomeServiceTests
             TrustedBypass = new TrustedBypassConfig
             {
                 Enabled = true,
-                AnnouncementMessage = "hello {username}",
+                AnnouncementMessageTrusted = "hello {username}",
                 AnnouncementTtlSeconds = 30
             }
         };
@@ -619,7 +619,7 @@ public class WelcomeServiceTests
                 TrustedBypass = new TrustedBypassConfig
                 {
                     Enabled = true,
-                    AnnouncementMessage = "  ",
+                    AnnouncementMessageTrusted = "  ",
                     AnnouncementTtlSeconds = 30
                 }
             });
@@ -659,7 +659,7 @@ public class WelcomeServiceTests
                 TrustedBypass = new TrustedBypassConfig
                 {
                     Enabled = true,
-                    AnnouncementMessage = "x",
+                    AnnouncementMessageTrusted = "x",
                     AnnouncementTtlSeconds = 0
                 }
             });

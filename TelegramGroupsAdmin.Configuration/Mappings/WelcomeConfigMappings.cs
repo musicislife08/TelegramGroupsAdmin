@@ -33,12 +33,9 @@ public static class WelcomeConfigMappings
                 : new TrustedBypassConfig
                 {
                     Enabled = data.TrustedBypass.Enabled,
-                    AnnouncementMessage = string.IsNullOrEmpty(data.TrustedBypass.AnnouncementMessage)
-                        ? TrustedBypassConfig.DefaultAnnouncementMessage
-                        : data.TrustedBypass.AnnouncementMessage,
-                    AnnouncementTtlSeconds = data.TrustedBypass.AnnouncementTtlSeconds <= 0
-                        ? TrustedBypassConfig.DefaultAnnouncementTtlSeconds
-                        : data.TrustedBypass.AnnouncementTtlSeconds,
+                    AnnouncementMessageAdmin = data.TrustedBypass.AnnouncementMessageAdmin ?? string.Empty,
+                    AnnouncementMessageTrusted = data.TrustedBypass.AnnouncementMessageTrusted ?? string.Empty,
+                    AnnouncementTtlSeconds = data.TrustedBypass.AnnouncementTtlSeconds,
                 }
         };
     }
@@ -61,7 +58,8 @@ public static class WelcomeConfigMappings
             TrustedBypass = new TrustedBypassConfigData
             {
                 Enabled = model.TrustedBypass.Enabled,
-                AnnouncementMessage = model.TrustedBypass.AnnouncementMessage,
+                AnnouncementMessageAdmin = model.TrustedBypass.AnnouncementMessageAdmin,
+                AnnouncementMessageTrusted = model.TrustedBypass.AnnouncementMessageTrusted,
                 AnnouncementTtlSeconds = model.TrustedBypass.AnnouncementTtlSeconds,
             }
         };

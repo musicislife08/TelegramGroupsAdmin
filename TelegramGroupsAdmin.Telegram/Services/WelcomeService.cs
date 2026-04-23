@@ -629,7 +629,7 @@ public class WelcomeService(
         WelcomeConfig config,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(config.TrustedBypass.AnnouncementMessage))
+        if (string.IsNullOrWhiteSpace(config.TrustedBypass.AnnouncementMessageTrusted))
         {
             return;
         }
@@ -638,7 +638,7 @@ public class WelcomeService(
             return;
         }
 
-        var text = config.TrustedBypass.AnnouncementMessage
+        var text = config.TrustedBypass.AnnouncementMessageTrusted
             .Replace(TrustedBypassConfig.UsernameVariable, TelegramDisplayName.FormatMention(user))
             .Replace(TrustedBypassConfig.ChatNameVariable, chat.Title ?? string.Empty);
 

@@ -158,7 +158,7 @@ public class TestWelcomeConfigBuilder
         _trustedBypassConfig = new TrustedBypassConfig
         {
             Enabled = enabled,
-            AnnouncementMessage = message ?? "{username} bypassed.",
+            AnnouncementMessageTrusted = message ?? "{username} bypassed.",
             AnnouncementTtlSeconds = ttlSeconds,
         };
         return this;

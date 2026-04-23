@@ -19,38 +19,59 @@ public class WelcomeConfigMappingsTests
     }
 
     [Test]
-    public void ToModel_NullTrustedBypass_YieldsDefaults()
+    public void ToModel_PopulatesBothTemplateFields()
     {
         var data = new WelcomeConfigData
         {
-            TrustedBypass = null,
+            MainWelcomeMessage = "hi",
+            TrustedBypass = new TrustedBypassConfigData
+            {
+                Enabled = true,
+                AnnouncementMessageAdmin = "admin msg {username}",
+                AnnouncementMessageTrusted = "trusted msg {username}",
+                AnnouncementTtlSeconds = 45,
+            }
         };
-
         var model = data.ToModel();
-
-        Assert.That(model.TrustedBypass, Is.Not.Null);
-        Assert.That(model.TrustedBypass.Enabled, Is.False);
-        Assert.That(model.TrustedBypass.AnnouncementMessage, Is.EqualTo(TrustedBypassConfig.DefaultAnnouncementMessage));
+        Assert.Multiple(() =>
+        {
+            Assert.That(model.TrustedBypass.Enabled, Is.True);
+            Assert.That(model.TrustedBypass.AnnouncementMessageAdmin, Is.EqualTo("admin msg {username}"));
+            Assert.That(model.TrustedBypass.AnnouncementMessageTrusted, Is.EqualTo("trusted msg {username}"));
+            Assert.That(model.TrustedBypass.AnnouncementTtlSeconds, Is.EqualTo(45));
+        });
     }
 
     [Test]
-    public void ToDto_ThenToModel_RoundTripsTrustedBypass()
+    public void ToModel_NullTrustedBypass_ReturnsDefaults()
     {
-        var original = new WelcomeConfig
+        var data = new WelcomeConfigData { MainWelcomeMessage = "hi", TrustedBypass = null };
+        var model = data.ToModel();
+        Assert.That(model.TrustedBypass.Enabled, Is.False);
+    }
+
+    [Test]
+    public void ToData_RoundtripsBothTemplateFields()
+    {
+        var model = new WelcomeConfig
         {
-            TrustedBypass = new TrustedBypassConfig
+            MainWelcomeMessage = "hi",
+            TrustedBypass =
             {
                 Enabled = true,
-                AnnouncementMessage = "hello {username}",
-                AnnouncementTtlSeconds = 42,
+                AnnouncementMessageAdmin = "a {username}",
+                AnnouncementMessageTrusted = "t {username}",
+                AnnouncementTtlSeconds = 60,
             }
         };
-
-        var dto = original.ToData();
-        var roundTripped = dto.ToModel();
-
-        Assert.That(roundTripped.TrustedBypass.Enabled, Is.True);
-        Assert.That(roundTripped.TrustedBypass.AnnouncementMessage, Is.EqualTo("hello {username}"));
-        Assert.That(roundTripped.TrustedBypass.AnnouncementTtlSeconds, Is.EqualTo(42));
+        var data = model.ToData();
+        Assert.Multiple(() =>
+        {
+            Assert.That(data.TrustedBypass, Is.Not.Null);
+            Assert.That(data.TrustedBypass!.Enabled, Is.True);
+            Assert.That(data.TrustedBypass.AnnouncementMessageAdmin, Is.EqualTo("a {username}"));
+            Assert.That(data.TrustedBypass.AnnouncementMessageTrusted, Is.EqualTo("t {username}"));
+            Assert.That(data.TrustedBypass.AnnouncementTtlSeconds, Is.EqualTo(60));
+        });
     }
 }

@@ -530,7 +530,7 @@ public class WelcomeSystemConfigTests : WelcomeSystemConfigTestContext
                 TrustedBypass = new TrustedBypassConfig
                 {
                     Enabled = true,
-                    AnnouncementMessage = "custom message",
+                    AnnouncementMessageTrusted = "custom message",
                     AnnouncementTtlSeconds = 45,
                 }
             });
@@ -549,7 +549,7 @@ public class WelcomeSystemConfigTests : WelcomeSystemConfigTestContext
         // Assert
         Assert.That(captured, Is.Not.Null, "SaveAsync was not called");
         Assert.That(captured!.TrustedBypass.Enabled, Is.True);
-        Assert.That(captured.TrustedBypass.AnnouncementMessage, Is.EqualTo("custom message"));
+        Assert.That(captured.TrustedBypass.AnnouncementMessageTrusted, Is.EqualTo("custom message"));
         Assert.That(captured.TrustedBypass.AnnouncementTtlSeconds, Is.EqualTo(45));
     }
 

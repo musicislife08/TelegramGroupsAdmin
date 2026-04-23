@@ -216,7 +216,7 @@ public class WelcomeFlowBypassIntegrationTests
             TrustedBypass = new TrustedBypassConfig
             {
                 Enabled = true,
-                AnnouncementMessage = "{username} welcomed automatically - trusted user",
+                AnnouncementMessageTrusted = "{username} welcomed automatically - trusted user",
                 AnnouncementTtlSeconds = 30,
             },
         };
@@ -258,7 +258,7 @@ public class WelcomeFlowBypassIntegrationTests
             TrustedBypass = new TrustedBypassConfig
             {
                 Enabled = true,
-                AnnouncementMessage = "ignored",
+                AnnouncementMessageTrusted = "ignored",
                 AnnouncementTtlSeconds = 30,
             },
         };

@@ -1,4 +1,3 @@
-using System.Text.Json;
 using NUnit.Framework;
 using TelegramGroupsAdmin.Configuration.Models.Welcome;
 
@@ -8,48 +7,29 @@ namespace TelegramGroupsAdmin.UnitTests.Configuration;
 public class TrustedBypassConfigTests
 {
     [Test]
-    public void DefaultConstruction_ProducesExpectedDefaults()
-    {
-        var config = new TrustedBypassConfig();
-
-        Assert.That(config.Enabled, Is.False);
-        Assert.That(config.AnnouncementMessage, Is.EqualTo(TrustedBypassConfig.DefaultAnnouncementMessage));
-        Assert.That(config.AnnouncementTtlSeconds, Is.EqualTo(TrustedBypassConfig.DefaultAnnouncementTtlSeconds));
-    }
+    public void Defaults_Enabled_IsFalse()
+        => Assert.That(new TrustedBypassConfig().Enabled, Is.False);
 
     [Test]
-    public void DefaultAnnouncementMessage_ContainsUsernameVariable()
-    {
-        Assert.That(TrustedBypassConfig.DefaultAnnouncementMessage,
+    public void Defaults_AdminTemplate_ReferencesUsernameVariable()
+        => Assert.That(new TrustedBypassConfig().AnnouncementMessageAdmin,
             Does.Contain(TrustedBypassConfig.UsernameVariable));
+
+    [Test]
+    public void Defaults_TrustedTemplate_ReferencesUsernameVariable()
+        => Assert.That(new TrustedBypassConfig().AnnouncementMessageTrusted,
+            Does.Contain(TrustedBypassConfig.UsernameVariable));
+
+    [Test]
+    public void Constants_Match_Spec()
+    {
+        Assert.That(TrustedBypassConfig.MinAnnouncementTtlSeconds, Is.EqualTo(0));
+        Assert.That(TrustedBypassConfig.MaxAnnouncementTemplateLength, Is.EqualTo(3500));
+        Assert.That(TrustedBypassConfig.UsernameVariable, Is.EqualTo("{username}"));
+        Assert.That(TrustedBypassConfig.ChatNameVariable, Is.EqualTo("{chat_name}"));
     }
 
     [Test]
-    public void JsonRoundTrip_PreservesDefaults()
-    {
-        var original = new TrustedBypassConfig();
-        var json = JsonSerializer.Serialize(original);
-        var roundTripped = JsonSerializer.Deserialize<TrustedBypassConfig>(json)!;
-
-        Assert.That(roundTripped.Enabled, Is.EqualTo(original.Enabled));
-        Assert.That(roundTripped.AnnouncementMessage, Is.EqualTo(original.AnnouncementMessage));
-        Assert.That(roundTripped.AnnouncementTtlSeconds, Is.EqualTo(original.AnnouncementTtlSeconds));
-    }
-
-    [Test]
-    public void JsonRoundTrip_PreservesCustomValues()
-    {
-        var original = new TrustedBypassConfig
-        {
-            Enabled = true,
-            AnnouncementMessage = "custom {username}",
-            AnnouncementTtlSeconds = 45,
-        };
-        var json = JsonSerializer.Serialize(original);
-        var roundTripped = JsonSerializer.Deserialize<TrustedBypassConfig>(json)!;
-
-        Assert.That(roundTripped.Enabled, Is.True);
-        Assert.That(roundTripped.AnnouncementMessage, Is.EqualTo("custom {username}"));
-        Assert.That(roundTripped.AnnouncementTtlSeconds, Is.EqualTo(45));
-    }
+    public void Defaults_AnnouncementTtlSeconds_Is30()
+        => Assert.That(new TrustedBypassConfig().AnnouncementTtlSeconds, Is.EqualTo(30));
 }
