@@ -483,17 +483,51 @@ public class WelcomeSystemConfigTests : WelcomeSystemConfigTestContext
     [Test]
     public void TrustedBypassPanel_Renders_WhenConfigLoaded()
     {
-        // Arrange
+        // Arrange - use WelcomeConfig.Default so MainWelcomeMessage is non-empty and
+        // the panel is rendered via the "load as-is" path.
         ConfigService.GetAsync<WelcomeConfig>(Arg.Any<ConfigType>(), Arg.Any<long>())
-            .Returns(new WelcomeConfig());
+            .Returns(WelcomeConfig.Default);
 
         // Act
         var cut = Render<WelcomeSystemConfig>();
 
-        // Assert
+        // Assert - new verb-led panel title
         cut.WaitForAssertion(() =>
         {
-            Assert.That(cut.Markup, Does.Contain("Trusted User Bypass"));
+            Assert.That(cut.Markup, Does.Contain("Auto-admit Trusted Users"));
+        });
+    }
+
+    [Test]
+    public void TrustedBypassPanel_RendersBothTemplateFieldsAndPreviews_WhenEnabled()
+    {
+        // Arrange - enable bypass so both Admin + Trusted template fields + previews
+        // are present (fields are enabled; previews always render).
+        ConfigService.GetAsync<WelcomeConfig>(Arg.Any<ConfigType>(), Arg.Any<long>())
+            .Returns(new WelcomeConfig
+            {
+                MainWelcomeMessage = "Welcome {username}!",
+                TrustedBypass = new TrustedBypassConfig
+                {
+                    Enabled = true,
+                    AnnouncementMessageAdmin = "admin template {username}",
+                    AnnouncementMessageTrusted = "trusted template {username}",
+                }
+            });
+
+        // Act
+        var cut = Render<WelcomeSystemConfig>();
+
+        // Assert - both section headers + labels are rendered, and the preview
+        // component substitutes the distinct example usernames.
+        cut.WaitForAssertion(() =>
+        {
+            Assert.That(cut.Markup, Does.Contain("Admin Bypass Announcement"));
+            Assert.That(cut.Markup, Does.Contain("Trusted User Announcement"));
+            Assert.That(cut.Markup, Does.Contain("Template (admin)"));
+            Assert.That(cut.Markup, Does.Contain("Template (trusted)"));
+            Assert.That(cut.Markup, Does.Contain("@example_admin"));
+            Assert.That(cut.Markup, Does.Contain("@example_trusted"));
         });
     }
 
@@ -530,7 +564,8 @@ public class WelcomeSystemConfigTests : WelcomeSystemConfigTestContext
                 TrustedBypass = new TrustedBypassConfig
                 {
                     Enabled = true,
-                    AnnouncementMessageTrusted = "custom message",
+                    AnnouncementMessageAdmin = "admin custom",
+                    AnnouncementMessageTrusted = "trusted custom",
                     AnnouncementTtlSeconds = 45,
                 }
             });
@@ -549,8 +584,61 @@ public class WelcomeSystemConfigTests : WelcomeSystemConfigTestContext
         // Assert
         Assert.That(captured, Is.Not.Null, "SaveAsync was not called");
         Assert.That(captured!.TrustedBypass.Enabled, Is.True);
-        Assert.That(captured.TrustedBypass.AnnouncementMessageTrusted, Is.EqualTo("custom message"));
+        Assert.That(captured.TrustedBypass.AnnouncementMessageAdmin, Is.EqualTo("admin custom"));
+        Assert.That(captured.TrustedBypass.AnnouncementMessageTrusted, Is.EqualTo("trusted custom"));
         Assert.That(captured.TrustedBypass.AnnouncementTtlSeconds, Is.EqualTo(45));
+    }
+
+    [Test]
+    public async Task LoadConfig_MigrationBranch_PreservesTrustedBypassAndJoinSecurity()
+    {
+        // Arrange: legacy-format config (empty MainWelcomeMessage triggers migration branch)
+        // with admin-configured TrustedBypass and a JoinSecurity sub-setting. The migration
+        // branch previously reset both to defaults; Task 15's fix preserves them.
+        var legacyConfig = new WelcomeConfig
+        {
+            MainWelcomeMessage = string.Empty, // triggers migration branch
+            TrustedBypass = new TrustedBypassConfig
+            {
+                Enabled = true,
+                AnnouncementMessageAdmin = "legacy admin template",
+                AnnouncementMessageTrusted = "legacy trusted template",
+                AnnouncementTtlSeconds = 60,
+            },
+            JoinSecurity = new JoinSecurityConfig
+            {
+                Cas = { Enabled = true },
+            },
+        };
+        ConfigService.GetAsync<WelcomeConfig>(Arg.Any<ConfigType>(), Arg.Any<long>())
+            .Returns(legacyConfig);
+
+        var cut = Render<WelcomeSystemConfig>();
+
+        // Capture the config saved back so we can inspect the component's _config state.
+        WelcomeConfig? captured = null;
+        ConfigService.SaveAsync<WelcomeConfig>(
+            Arg.Any<ConfigType>(), Arg.Any<ChatIdentity>(), Arg.Do<WelcomeConfig>(c => captured = c))
+            .Returns(Task.CompletedTask);
+
+        // Act - trigger Save so we can read the preserved config via the captured arg.
+        await cut.InvokeAsync(() => cut.Instance.SaveConfiguration());
+
+        // Assert - migration branch should NOT reset TrustedBypass or JoinSecurity.
+        Assert.That(captured, Is.Not.Null, "SaveAsync was not called");
+        Assert.Multiple(() =>
+        {
+            Assert.That(captured!.TrustedBypass.Enabled, Is.True,
+                "Migration branch should preserve TrustedBypass.Enabled");
+            Assert.That(captured.TrustedBypass.AnnouncementMessageAdmin, Is.EqualTo("legacy admin template"),
+                "Migration branch should preserve TrustedBypass.AnnouncementMessageAdmin");
+            Assert.That(captured.TrustedBypass.AnnouncementMessageTrusted, Is.EqualTo("legacy trusted template"),
+                "Migration branch should preserve TrustedBypass.AnnouncementMessageTrusted");
+            Assert.That(captured.TrustedBypass.AnnouncementTtlSeconds, Is.EqualTo(60),
+                "Migration branch should preserve TrustedBypass.AnnouncementTtlSeconds");
+            Assert.That(captured.JoinSecurity.Cas.Enabled, Is.True,
+                "Migration branch should preserve JoinSecurity settings");
+        });
     }
 
     #endregion
