@@ -48,51 +48,52 @@ public class NotificationPayloadBuilderTests
         Assert.That(fieldList.Fields, Has.Count.EqualTo(1));
         Assert.That(fieldList.Fields[0].Label, Is.EqualTo("Name"));
         Assert.That(fieldList.Fields[0].Value, Is.EqualTo("Alice"));
-        Assert.That(fieldList.Fields[0].TelegramUserId, Is.Null);
+        Assert.That(fieldList.Fields[0].User, Is.Null);
     }
 
     [Test]
-    public void WithField_TelegramUserId_SetsOnField()
+    public void WithField_UserIdentity_StoresFieldWithEmbeddedUser()
     {
+        var user = new UserIdentity(
+            Id: 12345,
+            FirstName: "Alice",
+            LastName: "Smith",
+            Username: "alice_s");
+
+        var payload = NotificationPayloadBuilder.Create("Alert")
+            .WithField("User", user)
+            .Build();
+
+        var field = payload.Blocks
+            .OfType<FieldList>()
+            .Single()
+            .Fields
+            .Single();
+
+        Assert.That(field.Label, Is.EqualTo("User"));
+        Assert.That(field.Value, Is.EqualTo(user.DisplayName));
+        Assert.That(field.User, Is.SameAs(user));
+    }
+
+    [Test]
+    public void WithField_UserIdentity_RoundTripsAllIdentityFields()
+    {
+        var user = new UserIdentity(
+            Id: 987654321,
+            FirstName: "Bob",
+            LastName: "Jones",
+            Username: "bobj");
+
         var payload = NotificationPayloadBuilder.Create("Subject")
-            .WithField("User", "SpammerBob", telegramUserId: 12345)
+            .WithField("User", user)
             .Build();
 
         var field = ((FieldList)payload.Blocks[0]).Fields[0];
-        Assert.That(field.TelegramUserId, Is.EqualTo(12345));
-    }
-
-    [Test]
-    public void WithFieldIf_ConditionTrue_AddsField()
-    {
-        var payload = NotificationPayloadBuilder.Create("Subject")
-            .WithFieldIf(true, "Reason", "Spam detected")
-            .Build();
-
-        Assert.That(payload.Blocks, Has.Count.EqualTo(1));
-        var field = ((FieldList)payload.Blocks[0]).Fields[0];
-        Assert.That(field.Label, Is.EqualTo("Reason"));
-        Assert.That(field.Value, Is.EqualTo("Spam detected"));
-    }
-
-    [Test]
-    public void WithFieldIf_ConditionFalse_DoesNotAddBlock()
-    {
-        var payload = NotificationPayloadBuilder.Create("Subject")
-            .WithFieldIf(false, "Reason", "Spam detected")
-            .Build();
-
-        Assert.That(payload.Blocks, Is.Empty);
-    }
-
-    [Test]
-    public void WithFieldIf_ConditionTrue_NullValue_DoesNotAddBlock()
-    {
-        var payload = NotificationPayloadBuilder.Create("Subject")
-            .WithFieldIf(true, "Reason", null)
-            .Build();
-
-        Assert.That(payload.Blocks, Is.Empty);
+        Assert.That(field.User, Is.Not.Null);
+        Assert.That(field.User!.Id, Is.EqualTo(987654321));
+        Assert.That(field.User.FirstName, Is.EqualTo("Bob"));
+        Assert.That(field.User.LastName, Is.EqualTo("Jones"));
+        Assert.That(field.User.Username, Is.EqualTo("bobj"));
     }
 
     [Test]
@@ -112,20 +113,6 @@ public class NotificationPayloadBuilderTests
         Assert.That(section.Content, Has.Count.EqualTo(2));
         Assert.That(section.Content[0], Is.InstanceOf<FieldList>());
         Assert.That(section.Content[1], Is.InstanceOf<TextBlock>());
-    }
-
-    [Test]
-    public void WithSection_WithFieldIf_ConditionalsWorkInsideSection()
-    {
-        var payload = NotificationPayloadBuilder.Create("Subject")
-            .WithSection("Details", s => s
-                .WithFieldIf(true, "Visible", "yes")
-                .WithFieldIf(false, "Hidden", "no"))
-            .Build();
-
-        var section = (SectionBlock)payload.Blocks[0];
-        Assert.That(section.Content, Has.Count.EqualTo(1));
-        Assert.That(((FieldList)section.Content[0]).Fields[0].Label, Is.EqualTo("Visible"));
     }
 
     [Test]
@@ -149,16 +136,6 @@ public class NotificationPayloadBuilderTests
     }
 
     [Test]
-    public void WithPhoto_NullPath_SetsNull()
-    {
-        var payload = NotificationPayloadBuilder.Create("Subject")
-            .WithPhoto(null)
-            .Build();
-
-        Assert.That(payload.PhotoPath, Is.Null);
-    }
-
-    [Test]
     public void WithKeyboard_SetsKeyboardContext()
     {
         var keyboard = new ActionKeyboardContext(EntityId: 42, ChatId: 100, UserId: 200, KeyboardType: ReportType.ContentReport);
@@ -175,8 +152,10 @@ public class NotificationPayloadBuilderTests
     [Test]
     public void Build_ComplexPayload_PreservesBlockOrder()
     {
+        var user = new UserIdentity(Id: 111, FirstName: "Alice", LastName: null, Username: null);
+
         var payload = NotificationPayloadBuilder.Create("Spam Banned")
-            .WithField("User", "Alice", telegramUserId: 111)
+            .WithField("User", user)
             .WithText("Banned from all managed chats")
             .WithSection("Detection", s => s
                 .WithField("Confidence", "95%"))
@@ -189,6 +168,7 @@ public class NotificationPayloadBuilderTests
         Assert.That(payload.Blocks[1], Is.InstanceOf<TextBlock>());
         Assert.That(payload.Blocks[2], Is.InstanceOf<SectionBlock>());
         Assert.That(payload.Blocks[3], Is.InstanceOf<FieldList>());
+        Assert.That(((FieldList)payload.Blocks[0]).Fields[0].User?.Id, Is.EqualTo(111));
         Assert.That(payload.PhotoPath, Is.EqualTo("/data/media/spam.jpg"));
     }
 
