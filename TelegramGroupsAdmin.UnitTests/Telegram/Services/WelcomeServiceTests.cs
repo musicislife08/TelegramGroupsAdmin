@@ -645,9 +645,10 @@ public class WelcomeServiceTests
     }
 
     [Test]
-    public async Task HandleChatMemberUpdate_BypassTrusted_ZeroTtl_DoesNotPostAnnouncement()
+    public async Task HandleChatMemberUpdate_BypassTrusted_ZeroTtl_PostsAnnouncementAndSchedulesImmediateDelete()
     {
-        // Arrange — Trusted bypass, TTL is zero (disables announcement)
+        // Arrange — Trusted bypass, TTL is zero. New semantics: zero TTL means the
+        // announcement is still posted but the delete job fires immediately (ttl=0).
         _bypassResolver
             .ResolveAsync(Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<CancellationToken>())
             .Returns(new BypassResolution(BypassDecision.Trusted, "Trusted user"));
@@ -665,15 +666,73 @@ public class WelcomeServiceTests
                 }
             });
 
+        _messageService
+            .SendAndSaveMessageAsync(
+                Arg.Any<long>(), Arg.Any<string>(),
+                Arg.Any<ParseMode?>(),
+                Arg.Any<ReplyParameters?>(),
+                Arg.Any<InlineKeyboardMarkup?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new Message { Id = 5002, Chat = new Chat { Id = TestChatId } });
+
         // Act
         await _sut.HandleChatMemberUpdateAsync(CreateJoinUpdate(), CancellationToken.None);
 
-        // Assert — no announcement posted
+        // Assert — announcement IS posted and delete IS scheduled at 0s delay.
+        await _messageService.Received(1).SendAndSaveMessageAsync(
+            chatId: TestChatId,
+            text: Arg.Any<string>(),
+            parseMode: ParseMode.Html,
+            replyParameters: Arg.Any<ReplyParameters?>(),
+            replyMarkup: Arg.Any<InlineKeyboardMarkup?>(),
+            cancellationToken: Arg.Any<CancellationToken>());
+
+        await _jobScheduler.Received(1).ScheduleJobAsync(
+            BackgroundJobNames.DeleteMessage,
+            Arg.Is<DeleteMessagePayload>(p => p.ChatId == TestChatId && p.MessageId == 5002),
+            0,
+            Arg.Any<string?>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task HandleChatMemberUpdate_BypassTrusted_ToggleDisabled_DoesNotPostAnnouncement()
+    {
+        // Arrange — Trusted bypass resolves, but the TrustedBypass toggle is OFF.
+        // The announcement must not fire regardless of template/TTL contents.
+        _bypassResolver
+            .ResolveAsync(Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<CancellationToken>())
+            .Returns(new BypassResolution(BypassDecision.Trusted, "Trusted user"));
+
+        _configService
+            .GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, Arg.Any<long>())
+            .Returns(new WelcomeConfig
+            {
+                Enabled = true,
+                TrustedBypass = new TrustedBypassConfig
+                {
+                    Enabled = false,
+                    AnnouncementMessageTrusted = "hello {username}",
+                    AnnouncementTtlSeconds = 30
+                }
+            });
+
+        // Act
+        await _sut.HandleChatMemberUpdateAsync(CreateJoinUpdate(), CancellationToken.None);
+
+        // Assert — toggle OFF → no announcement posted, no delete scheduled.
         await _messageService.DidNotReceive().SendAndSaveMessageAsync(
             Arg.Any<long>(), Arg.Any<string>(),
             Arg.Any<ParseMode?>(),
             Arg.Any<ReplyParameters?>(),
             Arg.Any<InlineKeyboardMarkup?>(),
+            Arg.Any<CancellationToken>());
+
+        await _jobScheduler.DidNotReceive().ScheduleJobAsync(
+            Arg.Any<string>(),
+            Arg.Any<DeleteMessagePayload>(),
+            Arg.Any<int>(),
+            Arg.Any<string?>(),
             Arg.Any<CancellationToken>());
     }
 

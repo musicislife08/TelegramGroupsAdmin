@@ -179,7 +179,7 @@ public class WelcomeService(
                     bypassResolution.ReasonDetail ?? string.Empty,
                     cancellationToken);
                 await PostBypassAnnouncementIfConfiguredAsync(
-                    chatMemberUpdate.Chat, user, config, cancellationToken);
+                    chatMemberUpdate.Chat, user, config, bypassDecision, cancellationToken);
 
                 welcomeMetrics.RecordBypassOutcome(
                     bypassDecision,
@@ -621,28 +621,71 @@ public class WelcomeService(
     }
 
     /// <summary>
-    /// Post the trusted-bypass announcement message in chat and schedule its auto-deletion.
-    /// No-op when the announcement message is blank or the TTL is not positive — those are
-    /// the configured "disable announcement" signals.
+    /// Post the per-decision trusted-bypass announcement message in chat and schedule its
+    /// auto-deletion. No-op when the TrustedBypass toggle is disabled or the per-decision
+    /// template is blank — those are the configured "disable announcement" signals.
+    ///
+    /// Security: the user-controlled <c>{username}</c> and <c>{chat_name}</c> substitutions
+    /// are HTML-encoded via <see cref="TelegramHtmlEncoder"/> before interpolation into the
+    /// ParseMode.Html message body. This closes CWE-79 (stored HTML injection) where a
+    /// crafted first/last name or chat title could inject markup into the rendered message.
     /// </summary>
     private async Task PostBypassAnnouncementIfConfiguredAsync(
         Chat chat,
         User user,
         WelcomeConfig config,
+        BypassDecision decision,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(config.TrustedBypass.AnnouncementMessageTrusted))
-        {
-            return;
-        }
-        if (config.TrustedBypass.AnnouncementTtlSeconds <= 0)
+        // Toggle gates the entire feature — admin can kill all announcements without
+        // blanking templates.
+        if (!config.TrustedBypass.Enabled)
         {
             return;
         }
 
-        var text = config.TrustedBypass.AnnouncementMessageTrusted
-            .Replace(TrustedBypassConfig.UsernameVariable, TelegramDisplayName.FormatMention(user))
-            .Replace(TrustedBypassConfig.ChatNameVariable, chat.Title ?? string.Empty);
+        // Per-decision template lookup. Empty template → this decision opts out
+        // (admin-only silent, or trusted-only silent, or both).
+        var template = decision switch
+        {
+            BypassDecision.Admin => config.TrustedBypass.AnnouncementMessageAdmin,
+            BypassDecision.Trusted => config.TrustedBypass.AnnouncementMessageTrusted,
+            _ => null,
+        };
+        if (string.IsNullOrWhiteSpace(template))
+        {
+            return;
+        }
+
+        // Consumer-side clamp: config write-path validators should already reject
+        // over-limit templates, but we also truncate here to keep us under Telegram's
+        // wire limit in the face of bad config writes or migration gaps.
+        if (template.Length > TrustedBypassConfig.MaxAnnouncementTemplateLength)
+        {
+            logger.LogWarning(
+                "TrustedBypass {Decision} template exceeds {Max} chars (was {Actual}); truncating. Chat: {Chat}",
+                decision,
+                TrustedBypassConfig.MaxAnnouncementTemplateLength,
+                template.Length,
+                chat.ToLogInfo());
+            template = template[..TrustedBypassConfig.MaxAnnouncementTemplateLength];
+        }
+
+        // Floor TTL at the configured minimum (0). TTL=0 means "schedule delete
+        // immediately"; we still post + schedule, we do not short-circuit.
+        var ttl = Math.Max(
+            TrustedBypassConfig.MinAnnouncementTtlSeconds,
+            config.TrustedBypass.AnnouncementTtlSeconds);
+
+        // HTML-encode user-controlled substitutions before splicing them into the
+        // ParseMode.Html message (fixes CWE-79).
+        var mention = !string.IsNullOrWhiteSpace(user.Username)
+            ? $"@{TelegramHtmlEncoder.Encode(user.Username)}"
+            : $"<a href=\"tg://user?id={user.Id}\">{TelegramHtmlEncoder.Encode(TelegramDisplayName.Format(user))}</a>";
+
+        var text = template
+            .Replace(TrustedBypassConfig.UsernameVariable, mention)
+            .Replace(TrustedBypassConfig.ChatNameVariable, TelegramHtmlEncoder.Encode(chat.Title));
 
         var announcement = await messageService.SendAndSaveMessageAsync(
             chatId: chat.Id,
@@ -658,7 +701,7 @@ public class WelcomeService(
         await jobScheduler.ScheduleJobAsync(
             BackgroundJobNames.DeleteMessage,
             deletePayload,
-            delaySeconds: config.TrustedBypass.AnnouncementTtlSeconds,
+            delaySeconds: ttl,
             deduplicationKey: None,
             cancellationToken);
     }
