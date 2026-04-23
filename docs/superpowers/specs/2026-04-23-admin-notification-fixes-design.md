@@ -198,31 +198,44 @@ overload and drop the existing nullable `telegramUserId` parameter on the
 string overload — a field is either plain text or a linked user mention,
 never a string with an optional ID hanging off it.
 
-Final signatures — two overloads, both skip-on-null:
+Final signatures — non-nullable, no conditional logic inside the builder:
 
 ```csharp
-public NotificationPayloadBuilder WithField(string label, string? value);
-public NotificationPayloadBuilder WithField(string label, UserIdentity? user);
+public NotificationPayloadBuilder WithField(string label, string value);
+public NotificationPayloadBuilder WithField(string label, UserIdentity user);
 ```
 
-`WithFieldIf(bool, ...)` is dropped — callers use null to signal skip. For the
-rare bool-guarded case (`messageDeleted` in spam-ban notifications), a
-ternary-to-null is cleaner:
+`WithFieldIf(bool, ...)` is dropped. The builder is a bag of "add this"
+operations — it doesn't decide whether to add; the caller does. When a field
+is conditional, the caller branches imperatively before calling:
 
 ```csharp
-// Before
+// Before (existing code)
 .WithField("User", user.DisplayName, telegramUserId: user.Id)
 .WithField("Chat", chat.ChatName ?? chat.Id.ToString())
 .WithFieldIf(detectionReason != null, "Reason", detectionReason)
 .WithFieldIf(messageDeleted, "Message deleted", $"ID: {messageId}")
 
 // After
-.WithField("User", user)
-.WithField("Chat", chat.ChatName ?? chat.Id.ToString())
-.WithField("Reason", detectionReason)                    // skips if null
-.WithField("Message deleted",
-    messageDeleted ? $"ID: {messageId}" : null)          // ternary-to-null
+var builder = NotificationPayloadBuilder.Create("Spam Banned")
+    .WithField("User", user)
+    .WithField("Chat", chat.ChatName ?? chat.Id.ToString());
+
+if (detectionReason is not null)
+    builder.WithField("Reason", detectionReason);
+
+if (messageDeleted)
+    builder.WithField("Message deleted", $"ID: {messageId}");
+
+var payload = builder.Build();
 ```
+
+Slightly more code, but each method has one job and conditional logic lives
+where the context exists.
+
+The same principle applies to `WithFieldIf` inside `SectionBuilder` (the
+nested builder passed to `WithSection`) — drop it, use `if` inside the
+configure lambda.
 
 The `Field` record on `NotificationPayload` loses `TelegramUserId: long?` in
 favor of `User: UserIdentity?` — the renderer reads the latter when deciding
