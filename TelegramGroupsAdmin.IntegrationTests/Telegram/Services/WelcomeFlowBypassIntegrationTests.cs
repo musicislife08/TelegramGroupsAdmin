@@ -11,6 +11,7 @@ using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Data;
+using TelegramGroupsAdmin.Data.Models;
 using TelegramGroupsAdmin.IntegrationTests.TestData;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
 using TelegramGroupsAdmin.Telegram.Repositories;
@@ -155,9 +156,23 @@ public class WelcomeFlowBypassIntegrationTests
     [Test]
     public async Task ChatAdminJoin_WritesAuditRow_NoWelcomeResponse()
     {
-        // Arrange — seed a chat_admins row so the resolver's DB-backed chat-admin rule fires.
+        // Arrange — seed the parent managed_chats row first to satisfy the chat_admins FK,
+        // then seed the chat_admins row so the resolver's DB-backed chat-admin rule fires.
         // We use TrustedUserTelegramId (100002) because it has no web mapping, so the
         // only rule that can match is the chat-admin rule.
+        await using (var context = _testHelper!.GetDbContext())
+        {
+            context.ManagedChats.Add(new ManagedChatRecordDto
+            {
+                ChatId = TestChatId,
+                ChatName = "Test Chat",
+                ChatType = ManagedChatType.Supergroup,
+                AddedAt = DateTimeOffset.UtcNow,
+                IsActive = true,
+            });
+            await context.SaveChangesAsync();
+        }
+
         await _chatAdminsRepository!.UpsertAsync(TestChatId, TrustedUserTelegramId, isCreator: false, CancellationToken.None);
 
         var user = UserIdentity.FromId(TrustedUserTelegramId);
