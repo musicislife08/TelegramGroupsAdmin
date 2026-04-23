@@ -551,7 +551,7 @@ public class WelcomeService(
             );
 
             var jobId = await jobScheduler.ScheduleJobAsync(
-                "WelcomeTimeout",
+                BackgroundJobNames.WelcomeTimeout,
                 payload,
                 delaySeconds: config.TimeoutSeconds,
                 deduplicationKey: None,
@@ -791,7 +791,7 @@ public class WelcomeService(
             );
 
             await jobScheduler.ScheduleJobAsync(
-                "DeleteMessage",
+                BackgroundJobNames.DeleteMessage,
                 deletePayload,
                 delaySeconds: 10,
                 deduplicationKey: None,
