@@ -41,14 +41,13 @@ public class ExamHandlerTests
         _handler = new ExamHandler(
             _mockReportsRepo,
             _mockExamFlowService,
-            _mockCallbackContextRepo,
             NullLogger<ExamHandler>.Instance);
     }
 
     #region ApproveAsync Tests
 
     [Test]
-    public async Task ApproveAsync_Success_ReturnsSuccessAndCleansUp()
+    public async Task ApproveAsync_Success_ReturnsSuccessAndDoesNotDeleteCallbackContextsByReportId()
     {
         var exam = CreateTestExam();
         _mockReportsRepo.GetExamFailureAsync(TestExamId, Arg.Any<CancellationToken>())
@@ -64,8 +63,8 @@ public class ExamHandlerTests
         Assert.That(result.ActionName, Is.EqualTo("Approve"));
         Assert.That(result.Message, Does.Contain("permissions restored"));
 
-        await _mockCallbackContextRepo.Received(1)
-            .DeleteByReportIdAsync(TestExamId, Arg.Any<CancellationToken>());
+        await _mockCallbackContextRepo.DidNotReceive()
+            .DeleteByReportIdAsync(Arg.Any<long>(), Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -117,7 +116,7 @@ public class ExamHandlerTests
     #region DenyAsync Tests
 
     [Test]
-    public async Task DenyAsync_Success_ReturnsSuccess()
+    public async Task DenyAsync_Success_ReturnsSuccessAndDoesNotDeleteCallbackContextsByReportId()
     {
         var exam = CreateTestExam();
         _mockReportsRepo.GetExamFailureAsync(TestExamId, Arg.Any<CancellationToken>())
@@ -132,6 +131,9 @@ public class ExamHandlerTests
         Assert.That(result.Success, Is.True);
         Assert.That(result.ActionName, Is.EqualTo("Deny"));
         Assert.That(result.Message, Does.Contain("kicked"));
+
+        await _mockCallbackContextRepo.DidNotReceive()
+            .DeleteByReportIdAsync(Arg.Any<long>(), Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -169,7 +171,7 @@ public class ExamHandlerTests
     #region DenyAndBanAsync Tests
 
     [Test]
-    public async Task DenyAndBanAsync_Success_ReturnsSuccess()
+    public async Task DenyAndBanAsync_Success_ReturnsSuccessAndDoesNotDeleteCallbackContextsByReportId()
     {
         var exam = CreateTestExam();
         _mockReportsRepo.GetExamFailureAsync(TestExamId, Arg.Any<CancellationToken>())
@@ -184,6 +186,9 @@ public class ExamHandlerTests
         Assert.That(result.Success, Is.True);
         Assert.That(result.ActionName, Is.EqualTo("DenyAndBan"));
         Assert.That(result.Message, Does.Contain("banned"));
+
+        await _mockCallbackContextRepo.DidNotReceive()
+            .DeleteByReportIdAsync(Arg.Any<long>(), Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -300,44 +305,6 @@ public class ExamHandlerTests
         Assert.That(result.Success, Is.False);
         Assert.That(result.Message, Does.Contain("Already handled"));
         Assert.That(result.IsAlreadyHandled, Is.True);
-    }
-
-    #endregion
-
-    #region Cleanup Tests
-
-    [Test]
-    public async Task DenyAsync_Success_CleansUpCallbackContext()
-    {
-        var exam = CreateTestExam();
-        _mockReportsRepo.GetExamFailureAsync(TestExamId, Arg.Any<CancellationToken>())
-            .Returns(exam);
-        _mockExamFlowService.DenyExamFailureAsync(
-                Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(),
-                Arg.Any<Actor>(), Arg.Any<CancellationToken>())
-            .Returns(new ModerationResult { Success = true });
-
-        await _handler.DenyAsync(TestExamId, TestExecutor, CancellationToken.None);
-
-        await _mockCallbackContextRepo.Received(1)
-            .DeleteByReportIdAsync(TestExamId, Arg.Any<CancellationToken>());
-    }
-
-    [Test]
-    public async Task DenyAndBanAsync_Success_CleansUpCallbackContext()
-    {
-        var exam = CreateTestExam();
-        _mockReportsRepo.GetExamFailureAsync(TestExamId, Arg.Any<CancellationToken>())
-            .Returns(exam);
-        _mockExamFlowService.DenyAndBanExamFailureAsync(
-                Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(),
-                Arg.Any<Actor>(), Arg.Any<CancellationToken>())
-            .Returns(new ModerationResult { Success = true });
-
-        await _handler.DenyAndBanAsync(TestExamId, TestExecutor, CancellationToken.None);
-
-        await _mockCallbackContextRepo.Received(1)
-            .DeleteByReportIdAsync(TestExamId, Arg.Any<CancellationToken>());
     }
 
     #endregion
