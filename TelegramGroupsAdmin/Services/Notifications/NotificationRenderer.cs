@@ -87,8 +87,8 @@ internal static class NotificationRenderer
                 case FieldList fieldList:
                     foreach (var field in fieldList.Fields)
                     {
-                        var value = field.TelegramUserId.HasValue
-                            ? $"<a href=\"tg://user?id={field.TelegramUserId.Value}\">{TelegramHtmlEncoder.Encode(field.Value)}</a>"
+                        var value = field.User is { } user
+                            ? $"<a href=\"tg://user?id={user.Id}\">{TelegramHtmlEncoder.Encode(field.Value)}</a>"
                             : TelegramHtmlEncoder.Encode(field.Value);
                         sb.AppendLine($"<b>{TelegramHtmlEncoder.Encode(field.Label)}:</b> {value}");
                     }

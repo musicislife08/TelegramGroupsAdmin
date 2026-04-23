@@ -76,21 +76,32 @@ public sealed class NotificationService : INotificationService
         var title = bannedBy?.GetDisplayText() is { } name
             ? $"Spam Banned by {name}" : "Spam Auto-Banned";
 
-        var payload = NotificationPayloadBuilder.Create(title)
-            .WithField("User", user.DisplayName, telegramUserId: user.Id)
+        var builder = NotificationPayloadBuilder.Create(title)
+            .WithField("User", user)
             .WithField("Chat", chat.ChatName ?? chat.Id.ToString())
             .WithSection("Message", s => s
                 .WithText(messagePreview ?? "[No text]"))
-            .WithSection("Detection", s => s
-                .WithField("Net Score", $"{netScore:F2}")
-                .WithField("Score", $"{score:F2}")
-                .WithFieldIf(detectionReason != null, "Reason", detectionReason))
-            .WithSection("Action Taken", s => s
-                .WithField("Banned from", $"{chatsAffected} managed chats")
-                .WithFieldIf(messageDeleted, "Message deleted", $"ID: {messageId}"))
-            .WithPhoto(photoPath)
-            .WithVideo(videoPath)
-            .Build();
+            .WithSection("Detection", s =>
+            {
+                s.WithField("Net Score", $"{netScore:F2}");
+                s.WithField("Score", $"{score:F2}");
+                if (detectionReason != null)
+                    s.WithField("Reason", detectionReason);
+            })
+            .WithSection("Action Taken", s =>
+            {
+                s.WithField("Banned from", $"{chatsAffected} managed chats");
+                if (messageDeleted)
+                    s.WithField("Message deleted", $"ID: {messageId}");
+            });
+
+        if (photoPath != null)
+            builder.WithPhoto(photoPath);
+
+        if (videoPath != null)
+            builder.WithVideo(videoPath);
+
+        var payload = builder.Build();
 
         return SendToChatAudienceAsync(chat, NotificationEventType.UserBanned, payload, ct);
     }
@@ -107,17 +118,27 @@ public sealed class NotificationService : INotificationService
         ReportType reportType,
         CancellationToken ct = default)
     {
-        var reporterDisplay = isAutomated ? "System (automated)" : reporterName ?? "Unknown";
+        var reporterAsUser = !isAutomated && reporterUserId.HasValue
+            ? new UserIdentity(reporterUserId.Value, FirstName: null, LastName: null, Username: reporterName)
+            : null;
 
-        var payload = NotificationPayloadBuilder.Create("Message Reported")
+        var builder = NotificationPayloadBuilder.Create("Message Reported")
             .WithField("Chat", chat.ChatName ?? chat.Id.ToString())
-            .WithField("Reported user", reportedUser.DisplayName, telegramUserId: reportedUser.Id)
-            .WithField("Reported by", reporterDisplay, telegramUserId: isAutomated ? null : reporterUserId)
-            .WithSection("Message", s => s
-                .WithText(messagePreview))
-            .WithPhoto(photoPath)
-            .WithKeyboard(new ActionKeyboardContext(reportId, chat.Id, reportedUser.Id, reportType))
-            .Build();
+            .WithField("Reported user", reportedUser);
+
+        if (reporterAsUser != null)
+            builder.WithField("Reported by", reporterAsUser);
+        else
+            builder.WithField("Reported by", "System (automated)");
+
+        builder
+            .WithSection("Message", s => s.WithText(messagePreview))
+            .WithKeyboard(new ActionKeyboardContext(reportId, chat.Id, reportedUser.Id, reportType));
+
+        if (photoPath != null)
+            builder.WithPhoto(photoPath);
+
+        var payload = builder.Build();
 
         return SendToChatAudienceAsync(chat, NotificationEventType.MessageReported, payload, ct);
     }
@@ -132,12 +153,15 @@ public sealed class NotificationService : INotificationService
         CancellationToken ct = default)
     {
         var payload = NotificationPayloadBuilder.Create("Profile Scan Alert")
-            .WithField("User", user.DisplayName, telegramUserId: user.Id)
+            .WithField("User", user)
             .WithField("Chat", chat.ChatName ?? chat.Id.ToString())
-            .WithSection("Analysis", s => s
-                .WithField("Score", $"{score:F1}")
-                .WithField("Signals", signals)
-                .WithFieldIf(aiReason != null, "AI Reasoning", aiReason))
+            .WithSection("Analysis", s =>
+            {
+                s.WithField("Score", $"{score:F1}");
+                s.WithField("Signals", signals);
+                if (aiReason != null)
+                    s.WithField("AI Reasoning", aiReason);
+            })
             .WithKeyboard(new ActionKeyboardContext(reportId, chat.Id, user.Id, ReportType.ProfileScanAlert))
             .Build();
 
@@ -158,15 +182,19 @@ public sealed class NotificationService : INotificationService
         CancellationToken ct = default)
     {
         var payload = NotificationPayloadBuilder.Create("Entrance Exam Review Required")
-            .WithField("User", user.DisplayName, telegramUserId: user.Id)
+            .WithField("User", user)
             .WithField("Chat", chat.ChatName ?? chat.Id.ToString())
-            .WithSection("Results", s => s
-                .WithField("Answered", $"{mcCorrectCount}/{mcTotal} correct")
-                .WithField("Score", $"{mcScore}% (Required: {mcPassingThreshold}%)"))
-            .WithSection("Open-Ended Response", s => s
-                .WithFieldIf(openEndedQuestion != null, "Question", openEndedQuestion)
-                .WithFieldIf(openEndedAnswer != null, "Answer", openEndedAnswer)
-                .WithFieldIf(aiReasoning != null, "AI Reasoning", aiReasoning))
+            .WithSection("Results", s =>
+            {
+                s.WithField("Answered", $"{mcCorrectCount}/{mcTotal} correct");
+                s.WithField("Score", $"{mcScore}% (Required: {mcPassingThreshold}%)");
+            })
+            .WithSection("Open-Ended Response", s =>
+            {
+                if (openEndedQuestion != null) s.WithField("Question", openEndedQuestion);
+                if (openEndedAnswer != null) s.WithField("Answer", openEndedAnswer);
+                if (aiReasoning != null) s.WithField("AI Reasoning", aiReasoning);
+            })
             .WithKeyboard(new ActionKeyboardContext(examFailureId, chat.Id, user.Id, ReportType.ExamFailure))
             .Build();
 
@@ -181,13 +209,15 @@ public sealed class NotificationService : INotificationService
         CancellationToken ct = default)
     {
         var payload = NotificationPayloadBuilder.Create($"User Banned: {user.DisplayName}")
-            .WithField("User", user.DisplayName, telegramUserId: user.Id)
+            .WithField("User", user)
             .WithText(chat != null
                 ? $"Banned from {chat.ChatName ?? chat.Id.ToString()}"
                 : "Banned globally")
-            .WithSection("Details", s => s
-                .WithField("Reason", reason ?? "No reason provided")
-                .WithField("Banned by", executor.GetDisplayText()))
+            .WithSection("Details", s =>
+            {
+                s.WithField("Reason", reason ?? "No reason provided");
+                s.WithField("Banned by", executor.GetDisplayText());
+            })
             .Build();
 
         return SendToChatAudienceAsync(chat, NotificationEventType.UserBanned, payload, ct);
@@ -200,7 +230,7 @@ public sealed class NotificationService : INotificationService
         CancellationToken ct = default)
     {
         var payload = NotificationPayloadBuilder.Create("Malware Detected")
-            .WithField("User", user.DisplayName, telegramUserId: user.Id)
+            .WithField("User", user)
             .WithField("Chat", chat.ChatName ?? chat.Id.ToString())
             .WithSection("Details", s => s
                 .WithText(malwareDetails))
@@ -220,7 +250,7 @@ public sealed class NotificationService : INotificationService
         var role = isCreator ? "creator" : "admin";
 
         var payload = NotificationPayloadBuilder.Create($"Admin {action}: {user.DisplayName}")
-            .WithField("User", user.DisplayName, telegramUserId: user.Id)
+            .WithField("User", user)
             .WithField("Chat", chat.ChatName ?? chat.Id.ToString())
             .WithField("Action", $"{action} as {role}")
             .Build();
