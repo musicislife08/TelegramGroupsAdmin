@@ -54,7 +54,6 @@ public class ProfileScanHandlerTests
             _mockModerationService,
             _mockWelcomeRepo,
             _mockAdmissionHandler,
-            _mockCallbackContextRepo,
             NullLogger<ProfileScanHandler>.Instance);
     }
 
@@ -454,7 +453,7 @@ public class ProfileScanHandlerTests
     #region Cleanup Tests
 
     [Test]
-    public async Task BanAsync_Success_CleansUpCallbackContext()
+    public async Task BanAsync_Success_DoesNotDeleteCallbackContextsByReportId()
     {
         var alert = CreateTestAlert();
         _mockReportsRepo.GetProfileScanAlertAsync(TestAlertId, Arg.Any<CancellationToken>())
@@ -462,14 +461,15 @@ public class ProfileScanHandlerTests
         _mockModerationService.BanUserAsync(Arg.Any<BanIntent>(), Arg.Any<CancellationToken>())
             .Returns(new ModerationResult { Success = true, ChatsAffected = 1 });
 
-        await _handler.BanAsync(TestAlertId, TestExecutor, CancellationToken.None);
+        var result = await _handler.BanAsync(TestAlertId, TestExecutor, CancellationToken.None);
 
-        await _mockCallbackContextRepo.Received(1)
-            .DeleteByReportIdAsync(TestAlertId, Arg.Any<CancellationToken>());
+        Assert.That(result.Success, Is.True);
+        await _mockCallbackContextRepo.DidNotReceive()
+            .DeleteByReportIdAsync(Arg.Any<long>(), Arg.Any<CancellationToken>());
     }
 
     [Test]
-    public async Task KickAsync_Success_CleansUpCallbackContext()
+    public async Task KickAsync_Success_DoesNotDeleteCallbackContextsByReportId()
     {
         var alert = CreateTestAlert();
         _mockReportsRepo.GetProfileScanAlertAsync(TestAlertId, Arg.Any<CancellationToken>())
@@ -477,14 +477,15 @@ public class ProfileScanHandlerTests
         _mockModerationService.KickUserFromChatAsync(Arg.Any<KickIntent>(), Arg.Any<CancellationToken>())
             .Returns(new ModerationResult { Success = true });
 
-        await _handler.KickAsync(TestAlertId, TestExecutor, CancellationToken.None);
+        var result = await _handler.KickAsync(TestAlertId, TestExecutor, CancellationToken.None);
 
-        await _mockCallbackContextRepo.Received(1)
-            .DeleteByReportIdAsync(TestAlertId, Arg.Any<CancellationToken>());
+        Assert.That(result.Success, Is.True);
+        await _mockCallbackContextRepo.DidNotReceive()
+            .DeleteByReportIdAsync(Arg.Any<long>(), Arg.Any<CancellationToken>());
     }
 
     [Test]
-    public async Task AllowAsync_Success_CleansUpCallbackContext()
+    public async Task AllowAsync_Success_DoesNotDeleteCallbackContextsByReportId()
     {
         var alert = CreateTestAlert();
         _mockReportsRepo.GetProfileScanAlertAsync(TestAlertId, Arg.Any<CancellationToken>())
@@ -496,10 +497,11 @@ public class ProfileScanHandlerTests
                 Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(AdmissionResult.Admitted);
 
-        await _handler.AllowAsync(TestAlertId, TestExecutor, CancellationToken.None);
+        var result = await _handler.AllowAsync(TestAlertId, TestExecutor, CancellationToken.None);
 
-        await _mockCallbackContextRepo.Received(1)
-            .DeleteByReportIdAsync(TestAlertId, Arg.Any<CancellationToken>());
+        Assert.That(result.Success, Is.True);
+        await _mockCallbackContextRepo.DidNotReceive()
+            .DeleteByReportIdAsync(Arg.Any<long>(), Arg.Any<CancellationToken>());
     }
 
     #endregion

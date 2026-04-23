@@ -20,7 +20,6 @@ internal sealed class ProfileScanHandler(
     IBotModerationService moderationService,
     IWelcomeResponsesRepository welcomeResponsesRepository,
     IWelcomeAdmissionHandler welcomeAdmissionHandler,
-    IReportCallbackContextRepository callbackContextRepo,
     ILogger<ProfileScanHandler> logger) : IProfileScanHandler
 {
     public async Task<ReviewActionResult> BanAsync(long alertId, Actor executor, CancellationToken cancellationToken)
@@ -61,7 +60,6 @@ internal sealed class ProfileScanHandler(
             alertId, alert.User.ToLogInfo(), executor.DisplayName);
 
         await CleanupSiblingAlertsAsync(alert, "Ban", cancellationToken);
-        await callbackContextRepo.DeleteByReportIdAsync(alertId, cancellationToken);
 
         return new ReviewActionResult(true,
             $"User banned from {result.ChatsAffected} chat(s)",
@@ -113,7 +111,6 @@ internal sealed class ProfileScanHandler(
             alertId, alert.User.ToLogInfo(), executor.DisplayName);
 
         await CleanupSiblingAlertsAsync(alert, "Kick", cancellationToken);
-        await callbackContextRepo.DeleteByReportIdAsync(alertId, cancellationToken);
 
         var message = alert.Chat.Id == 0
             ? "Alert resolved (no chat to kick from)"
@@ -170,7 +167,6 @@ internal sealed class ProfileScanHandler(
         if (statusResult != null) return statusResult;
 
         await CleanupSiblingAlertsAsync(alert, "Allow", cancellationToken);
-        await callbackContextRepo.DeleteByReportIdAsync(alertId, cancellationToken);
 
         return new ReviewActionResult(true, message, ActionName: "Allow");
     }
