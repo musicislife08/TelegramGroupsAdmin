@@ -93,7 +93,10 @@ public class AuditHandler : IAuditHandler
     {
         var record = CreateRecord(user.Id, UserActionType.Mute, executor, reason, chatId: chat?.Id);
         await _userActionsRepository.InsertAsync(record, cancellationToken);
-        LogRecorded(UserActionType.Mute, user, executor);
+
+        _logger.LogDebug(
+            "Recorded {ActionType} action for {User} in {Chat} by {Executor}",
+            UserActionType.Mute, user.ToLogDebug(), chat.ToLogDebug(), executor.GetDisplayText());
     }
 
     /// <inheritdoc />
