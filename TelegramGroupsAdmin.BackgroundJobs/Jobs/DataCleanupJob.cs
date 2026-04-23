@@ -184,7 +184,7 @@ public class DataCleanupJob : IJob
     private async Task<long> CleanupCallbackContextsAsync(IServiceProvider sp, TimeSpan retention, CancellationToken cancellationToken)
     {
         var callbackContextRepo = sp.GetRequiredService<IReportCallbackContextRepository>();
-        var contextsDeleted = await callbackContextRepo.DeleteExpiredAsync(retention, cancellationToken);
+        var contextsDeleted = await callbackContextRepo.DeleteOrphanedAsync(cancellationToken);
 
         if (contextsDeleted > 0)
         {
