@@ -64,7 +64,22 @@
                 }
 
                 <MudText Typo="Typo.caption" Color="Color.Secondary">
-                    <b>Reported by:</b> @GetReporterDisplay()
+                    <b>Reported by:</b>
+                    @if (Report.ReportedByUserId == null && Report.WebUserId == null)
+                    {
+                        @(Report.ReportedByUserName ?? "System")
+                    }
+                    else if (Report.ReportedByUserId != null)
+                    {
+                        <UserDetailLink UserId="@Report.ReportedByUserId.Value" Typo="Typo.caption">
+                            @(Report.ReportedByUserName ?? "Unknown")
+                        </UserDetailLink>
+                        @:(ID: @Report.ReportedByUserId)
+                    }
+                    else
+                    {
+                        @($"{Report.ReportedByUserName ?? "Web Admin"} (Web User)")
+                    }
                 </MudText>
             </MudStack>
         }
@@ -234,28 +249,4 @@
             _message.Chat.ChatName);
     }
 
-    private string GetReporterDisplay()
-    {
-        // System-generated report (auto-detection)
-        if (Report.ReportedByUserId == null && Report.WebUserId == null)
-        {
-            // Return the system identifier without showing "()"
-            return Report.ReportedByUserName ?? "System";
-        }
-
-        // Telegram user report
-        if (Report.ReportedByUserId != null)
-        {
-            var username = Report.ReportedByUserName ?? "Unknown";
-            return $"{username} (ID: {Report.ReportedByUserId})";
-        }
-
-        // Web user report
-        if (Report.WebUserId != null)
-        {
-            return $"{Report.ReportedByUserName ?? "Web Admin"} (Web User)";
-        }
-
-        return "Unknown";
-    }
 }
