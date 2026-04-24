@@ -107,6 +107,7 @@ public class BotDmServiceTests
             Arg.Any<global::Telegram.Bot.Types.Enums.ParseMode?>(),
             Arg.Any<ReplyParameters?>(),
             Arg.Any<global::Telegram.Bot.Types.ReplyMarkups.InlineKeyboardMarkup?>(),
+            Arg.Any<IReadOnlyList<global::Telegram.Bot.Types.MessageEntity>?>(),
             Arg.Any<CancellationToken>()
         ).Returns(TelegramTestFactory.CreateMessage(messageId: 999, chatId: TestUserId));
 
@@ -138,6 +139,7 @@ public class BotDmServiceTests
             Arg.Any<global::Telegram.Bot.Types.Enums.ParseMode?>(),
             Arg.Any<ReplyParameters?>(),
             Arg.Any<global::Telegram.Bot.Types.ReplyMarkups.InlineKeyboardMarkup?>(),
+            Arg.Any<IReadOnlyList<global::Telegram.Bot.Types.MessageEntity>?>(),
             Arg.Any<CancellationToken>()
         ).ThrowsAsync(new ApiRequestException("Forbidden", 403));
 
@@ -167,6 +169,7 @@ public class BotDmServiceTests
             Arg.Any<global::Telegram.Bot.Types.Enums.ParseMode?>(),
             Arg.Any<ReplyParameters?>(),
             Arg.Any<global::Telegram.Bot.Types.ReplyMarkups.InlineKeyboardMarkup?>(),
+            Arg.Any<IReadOnlyList<global::Telegram.Bot.Types.MessageEntity>?>(),
             Arg.Any<CancellationToken>()
         ).ThrowsAsync(new ApiRequestException("Forbidden", 403));
 
@@ -176,6 +179,7 @@ public class BotDmServiceTests
             Arg.Any<global::Telegram.Bot.Types.Enums.ParseMode?>(),
             Arg.Any<ReplyParameters?>(),
             Arg.Any<global::Telegram.Bot.Types.ReplyMarkups.InlineKeyboardMarkup?>(),
+            Arg.Any<IReadOnlyList<global::Telegram.Bot.Types.MessageEntity>?>(),
             Arg.Any<CancellationToken>()
         ).Returns(TelegramTestFactory.CreateMessage(messageId: 888, chatId: TestChatId));
 
@@ -224,6 +228,7 @@ public class BotDmServiceTests
             Arg.Any<global::Telegram.Bot.Types.Enums.ParseMode?>(),
             Arg.Any<ReplyParameters?>(),
             Arg.Any<global::Telegram.Bot.Types.ReplyMarkups.InlineKeyboardMarkup?>(),
+            Arg.Any<IReadOnlyList<global::Telegram.Bot.Types.MessageEntity>?>(),
             Arg.Any<CancellationToken>()
         ).Returns(TelegramTestFactory.CreateMessage(messageId: 999, chatId: TestUserId));
 
@@ -255,6 +260,7 @@ public class BotDmServiceTests
             Arg.Any<global::Telegram.Bot.Types.Enums.ParseMode?>(),
             Arg.Any<ReplyParameters?>(),
             Arg.Any<global::Telegram.Bot.Types.ReplyMarkups.InlineKeyboardMarkup?>(),
+            Arg.Any<IReadOnlyList<global::Telegram.Bot.Types.MessageEntity>?>(),
             Arg.Any<CancellationToken>()
         ).ThrowsAsync(new ApiRequestException("Forbidden", 403));
 
@@ -306,6 +312,7 @@ public class BotDmServiceTests
             Arg.Any<global::Telegram.Bot.Types.Enums.ParseMode?>(),
             Arg.Any<ReplyParameters?>(),
             Arg.Any<global::Telegram.Bot.Types.ReplyMarkups.InlineKeyboardMarkup?>(),
+            Arg.Any<IReadOnlyList<global::Telegram.Bot.Types.MessageEntity>?>(),
             Arg.Any<CancellationToken>()
         ).Returns(TelegramTestFactory.CreateMessage(messageId: 777, chatId: TestUserId));
 
@@ -342,6 +349,7 @@ public class BotDmServiceTests
             Arg.Any<global::Telegram.Bot.Types.Enums.ParseMode?>(),
             Arg.Any<ReplyParameters?>(),
             Arg.Any<global::Telegram.Bot.Types.ReplyMarkups.InlineKeyboardMarkup?>(),
+            Arg.Any<IReadOnlyList<global::Telegram.Bot.Types.MessageEntity>?>(),
             Arg.Any<CancellationToken>()
         ).ThrowsAsync(new ApiRequestException("Forbidden", 403));
 
