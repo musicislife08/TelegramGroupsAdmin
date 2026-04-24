@@ -1,3 +1,6 @@
+using Telegram.Bot.Types;
+using Telegram.Bot.Types.Enums;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Services.Notifications;
 
 namespace TelegramGroupsAdmin.UnitTests.Services.Notifications;
@@ -5,125 +8,109 @@ namespace TelegramGroupsAdmin.UnitTests.Services.Notifications;
 [TestFixture]
 public class NotificationRendererTests
 {
-    #region ToTelegramHtml Tests
+    #region ToTelegramMessage Tests
 
     [Test]
-    public void ToTelegramHtml_SubjectOnly_RendersBoldSubject()
+    public void ToTelegramMessage_SubjectIsBoldOnFirstLine()
     {
-        var payload = NotificationPayloadBuilder.Create("Test Alert").Build();
+        var payload = NotificationPayloadBuilder.Create("Alert Title").Build();
 
-        var html = NotificationRenderer.ToTelegramHtml(payload);
+        var rendered = NotificationRenderer.ToTelegramMessage(payload);
 
-        Assert.That(html, Does.StartWith("<b>Test Alert</b>"));
+        Assert.That(rendered.Text, Does.StartWith("Alert Title"));
+        Assert.That(rendered.Entities, Has.Some.Matches<MessageEntity>(e =>
+            e.Type == MessageEntityType.Bold &&
+            e.Offset == 0 &&
+            e.Length == "Alert Title".Length));
     }
 
     [Test]
-    public void ToTelegramHtml_TextBlock_RendersEscapedText()
+    public void ToTelegramMessage_FieldWithoutUser_EmitsBoldLabelAndPlainValue()
     {
         var payload = NotificationPayloadBuilder.Create("Alert")
-            .WithText("User <script> injected & broke things")
+            .WithField("Chat", "MyGroup")
             .Build();
 
-        var html = NotificationRenderer.ToTelegramHtml(payload);
+        var rendered = NotificationRenderer.ToTelegramMessage(payload);
 
-        Assert.That(html, Does.Contain("User &lt;script&gt; injected &amp; broke things"));
+        // Label is bold
+        var labelEntity = rendered.Entities.FirstOrDefault(e =>
+            e.Type == MessageEntityType.Bold &&
+            rendered.Text.Substring(e.Offset, e.Length) == "Chat:");
+        Assert.That(labelEntity, Is.Not.Null);
+
+        // No TextMention anywhere
+        Assert.That(rendered.Entities, Has.None.Matches<MessageEntity>(e =>
+            e.Type == MessageEntityType.TextMention));
+
+        Assert.That(rendered.Text, Does.Contain("Chat: MyGroup"));
     }
 
     [Test]
-    public void ToTelegramHtml_Field_RendersBoldLabel()
+    public void ToTelegramMessage_FieldWithUser_EmitsTextMentionWithEmbeddedUser()
+    {
+        var user = new UserIdentity(
+            Id: 12345,
+            FirstName: "Alice",
+            LastName: "Smith",
+            Username: "alice_s");
+        var payload = NotificationPayloadBuilder.Create("Alert")
+            .WithField("User", user)
+            .Build();
+
+        var rendered = NotificationRenderer.ToTelegramMessage(payload);
+
+        var mention = rendered.Entities.FirstOrDefault(e =>
+            e.Type == MessageEntityType.TextMention);
+        Assert.That(mention, Is.Not.Null, "user field should produce TextMention");
+        Assert.That(mention!.User, Is.Not.Null);
+        Assert.That(mention.User!.Id, Is.EqualTo(12345));
+        Assert.That(mention.User.FirstName, Is.EqualTo("Alice"));
+        Assert.That(mention.User.LastName, Is.EqualTo("Smith"));
+        Assert.That(mention.User.Username, Is.EqualTo("alice_s"));
+
+        var span = rendered.Text.Substring(mention.Offset, mention.Length);
+        Assert.That(span, Is.EqualTo(user.DisplayName));
+    }
+
+    [Test]
+    public void ToTelegramMessage_SectionHeaderIsBold()
     {
         var payload = NotificationPayloadBuilder.Create("Alert")
-            .WithField("Confidence", "95%")
+            .WithSection("Analysis", s => s.WithField("Score", "1.0"))
             .Build();
 
-        var html = NotificationRenderer.ToTelegramHtml(payload);
+        var rendered = NotificationRenderer.ToTelegramMessage(payload);
 
-        Assert.That(html, Does.Contain("<b>Confidence:</b> 95%"));
+        var headerEntity = rendered.Entities.FirstOrDefault(e =>
+            e.Type == MessageEntityType.Bold &&
+            rendered.Text.Substring(e.Offset, e.Length) == "Analysis");
+        Assert.That(headerEntity, Is.Not.Null);
     }
 
     [Test]
-    public void ToTelegramHtml_FieldWithTelegramUserId_RendersTgUserLink()
+    public void ToTelegramMessage_EntityOffsetsMatchTextForNonBmpCharacters()
     {
+        // UserIdentity display name will include the emoji; offset/length must be correct
+        var user = new UserIdentity(Id: 1, FirstName: "\U0001F464User", LastName: null, Username: null);
         var payload = NotificationPayloadBuilder.Create("Alert")
-            .WithField("User", "SpammerBob", telegramUserId: 12345)
+            .WithField("User", user)
             .Build();
 
-        var html = NotificationRenderer.ToTelegramHtml(payload);
+        var rendered = NotificationRenderer.ToTelegramMessage(payload);
 
-        Assert.That(html, Does.Contain("<a href=\"tg://user?id=12345\">SpammerBob</a>"));
-        Assert.That(html, Does.Contain("<b>User:</b>"));
+        var mention = rendered.Entities.Single(e =>
+            e.Type == MessageEntityType.TextMention);
+        var span = rendered.Text.Substring(mention.Offset, mention.Length);
+        Assert.That(span, Is.EqualTo(user.DisplayName));
     }
 
     [Test]
-    public void ToTelegramHtml_FieldWithoutTelegramUserId_NoLink()
+    public void ToTelegramMessage_ComplexPayload_OrderPreserved()
     {
-        var payload = NotificationPayloadBuilder.Create("Alert")
-            .WithField("Chat", "Test Group")
-            .Build();
-
-        var html = NotificationRenderer.ToTelegramHtml(payload);
-
-        Assert.That(html, Does.Not.Contain("tg://user"));
-        Assert.That(html, Does.Contain("<b>Chat:</b> Test Group"));
-    }
-
-    [Test]
-    public void ToTelegramHtml_Section_RendersBoldHeaderAndContent()
-    {
-        var payload = NotificationPayloadBuilder.Create("Alert")
-            .WithSection("Detection", s => s
-                .WithField("Method", "OpenAI")
-                .WithText("High confidence detection"))
-            .Build();
-
-        var html = NotificationRenderer.ToTelegramHtml(payload);
-
-        Assert.That(html, Does.Contain("<b>Detection</b>"));
-        Assert.That(html, Does.Contain("<b>Method:</b> OpenAI"));
-        Assert.That(html, Does.Contain("High confidence detection"));
-    }
-
-    [Test]
-    public void ToTelegramHtml_HtmlSpecialCharsInSubject_AreEscaped()
-    {
-        var payload = NotificationPayloadBuilder.Create("Alert: <User> & \"Details\"").Build();
-
-        var html = NotificationRenderer.ToTelegramHtml(payload);
-
-        Assert.That(html, Does.Contain("Alert: &lt;User&gt; &amp; &quot;Details&quot;"));
-        Assert.That(html, Does.Not.Contain("<User>"));
-    }
-
-    [Test]
-    public void ToTelegramHtml_FieldValueWithSpecialChars_EscapesCorrectly()
-    {
-        var payload = NotificationPayloadBuilder.Create("Alert")
-            .WithField("Reason", "Contains <script>alert('xss')</script>")
-            .Build();
-
-        var html = NotificationRenderer.ToTelegramHtml(payload);
-
-        Assert.That(html, Does.Not.Contain("<script>"));
-        Assert.That(html, Does.Contain("&lt;script&gt;"));
-    }
-
-    [Test]
-    public void ToTelegramHtml_TgUserLink_EscapesDisplayName()
-    {
-        var payload = NotificationPayloadBuilder.Create("Alert")
-            .WithField("User", "<Evil> & Name", telegramUserId: 999)
-            .Build();
-
-        var html = NotificationRenderer.ToTelegramHtml(payload);
-
-        Assert.That(html, Does.Contain("<a href=\"tg://user?id=999\">&lt;Evil&gt; &amp; Name</a>"));
-    }
-
-    [Test]
-    public void ToTelegramHtml_ComplexPayload_OrderPreserved()
-    {
+        var alice = new UserIdentity(Id: 111, FirstName: "Alice", LastName: null, Username: null);
         var payload = NotificationPayloadBuilder.Create("Spam Banned")
-            .WithField("User", "Alice", telegramUserId: 111)
+            .WithField("User", alice)
             .WithField("Chat", "Test Group")
             .WithSection("Detection", s => s
                 .WithField("Confidence", "95%")
@@ -132,17 +119,18 @@ public class NotificationRendererTests
                 .WithText("Banned from 3 chats"))
             .Build();
 
-        var html = NotificationRenderer.ToTelegramHtml(payload);
+        var rendered = NotificationRenderer.ToTelegramMessage(payload);
 
         // Verify structural ordering
-        var userIdx = html.IndexOf("Alice", StringComparison.Ordinal);
-        var chatIdx = html.IndexOf("Test Group", StringComparison.Ordinal);
-        var detectionIdx = html.IndexOf("Detection", StringComparison.Ordinal);
-        var actionIdx = html.IndexOf("Action", StringComparison.Ordinal);
+        var userIdx = rendered.Text.IndexOf(alice.DisplayName, StringComparison.Ordinal);
+        var chatIdx = rendered.Text.IndexOf("Test Group", StringComparison.Ordinal);
+        var detectionIdx = rendered.Text.IndexOf("Detection", StringComparison.Ordinal);
+        var actionIdx = rendered.Text.IndexOf("Action", StringComparison.Ordinal);
 
-        Assert.That(userIdx, Is.LessThan(chatIdx));
-        Assert.That(chatIdx, Is.LessThan(detectionIdx));
-        Assert.That(detectionIdx, Is.LessThan(actionIdx));
+        Assert.That(userIdx, Is.GreaterThanOrEqualTo(0));
+        Assert.That(chatIdx, Is.GreaterThan(userIdx));
+        Assert.That(detectionIdx, Is.GreaterThan(chatIdx));
+        Assert.That(actionIdx, Is.GreaterThan(detectionIdx));
     }
 
     #endregion
@@ -200,10 +188,11 @@ public class NotificationRendererTests
     }
 
     [Test]
-    public void ToEmailHtml_FieldWithTelegramUserId_NoTgLink()
+    public void ToEmailHtml_FieldWithUser_NoTgLink()
     {
+        var user = new UserIdentity(Id: 12345, FirstName: "Alice", LastName: null, Username: null);
         var payload = NotificationPayloadBuilder.Create("Alert")
-            .WithField("User", "Alice", telegramUserId: 12345)
+            .WithField("User", user)
             .Build();
 
         var html = NotificationRenderer.ToEmailHtml(payload);
@@ -290,16 +279,18 @@ public class NotificationRendererTests
     }
 
     [Test]
-    public void ToPlainText_FieldWithTelegramUserId_NoLink()
+    public void ToPlainText_FieldWithUser_NoLink()
     {
+        var user = new UserIdentity(Id: 12345, FirstName: "Alice", LastName: null, Username: null);
         var payload = NotificationPayloadBuilder.Create("Alert")
-            .WithField("User", "Alice", telegramUserId: 12345)
+            .WithField("User", user)
             .Build();
 
         var text = NotificationRenderer.ToPlainText(payload);
 
         Assert.That(text, Does.Not.Contain("tg://user"));
-        Assert.That(text, Does.Contain("User: Alice"));
+        Assert.That(text, Does.Contain("User: "));
+        Assert.That(text, Does.Contain("Alice"));
     }
 
     [Test]

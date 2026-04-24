@@ -485,7 +485,9 @@ public sealed class NotificationService : INotificationService
                 return false;
             }
 
-            var htmlMessage = NotificationRenderer.ToTelegramHtml(payload);
+            // Task 19 will wire this to entity-based DM sending; for now use text path (unstyled)
+            var rendered = NotificationRenderer.ToTelegramMessage(payload);
+            var messageText = rendered.Text;
 
             // Build keyboard if payload has action context
             InlineKeyboardMarkup? keyboard = null;
@@ -503,11 +505,11 @@ public sealed class NotificationService : INotificationService
                 result = await _dmDeliveryService.SendDmWithMediaAndKeyboardAsync(
                     mapping.TelegramId,
                     "notification",
-                    htmlMessage,
+                    messageText,
                     photoPath: payload.PhotoPath,
                     videoPath: payload.VideoPath,
                     keyboard: keyboard,
-                    parseMode: ParseMode.Html,
+                    parseMode: ParseMode.None,
                     cancellationToken: ct);
             }
             else
@@ -515,8 +517,8 @@ public sealed class NotificationService : INotificationService
                 result = await _dmDeliveryService.SendDmWithQueueAsync(
                     mapping.TelegramId,
                     "notification",
-                    htmlMessage,
-                    parseMode: ParseMode.Html,
+                    messageText,
+                    parseMode: ParseMode.None,
                     cancellationToken: ct);
             }
 
@@ -546,7 +548,9 @@ public sealed class NotificationService : INotificationService
     {
         try
         {
-            var htmlMessage = NotificationRenderer.ToTelegramHtml(payload);
+            // Task 19 will wire this to entity-based DM sending; for now use text path (unstyled)
+            var rendered = NotificationRenderer.ToTelegramMessage(payload);
+            var messageText = rendered.Text;
 
             // Build keyboard if payload has action context
             InlineKeyboardMarkup? keyboard = null;
@@ -561,11 +565,11 @@ public sealed class NotificationService : INotificationService
                 await _dmDeliveryService.SendDmWithMediaAndKeyboardAsync(
                     telegramId,
                     "notification",
-                    htmlMessage,
+                    messageText,
                     photoPath: payload.PhotoPath,
                     videoPath: payload.VideoPath,
                     keyboard: keyboard,
-                    parseMode: ParseMode.Html,
+                    parseMode: ParseMode.None,
                     cancellationToken: ct);
             }
             else
@@ -573,8 +577,8 @@ public sealed class NotificationService : INotificationService
                 await _dmDeliveryService.SendDmWithQueueAsync(
                     telegramId,
                     "notification",
-                    htmlMessage,
-                    parseMode: ParseMode.Html,
+                    messageText,
+                    parseMode: ParseMode.None,
                     cancellationToken: ct);
             }
         }
