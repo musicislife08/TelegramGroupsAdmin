@@ -87,7 +87,7 @@ public interface IBotDmService
         string messageText,
         string? photoPath = null,
         string? videoPath = null,
-        global::Telegram.Bot.Types.ReplyMarkups.InlineKeyboardMarkup? keyboard = null,
+        InlineKeyboardMarkup? keyboard = null,
         ParseMode parseMode = ParseMode.MarkdownV2,
         CancellationToken cancellationToken = default);
 
@@ -95,22 +95,22 @@ public interface IBotDmService
     /// Edit a DM text message with optional inline keyboard change.
     /// Used for updating review notification DMs after admin action (removes buttons, shows result).
     /// </summary>
-    Task<global::Telegram.Bot.Types.Message> EditDmTextAsync(
+    Task<Message> EditDmTextAsync(
         long dmChatId,
         int messageId,
         string text,
-        global::Telegram.Bot.Types.ReplyMarkups.InlineKeyboardMarkup? replyMarkup = null,
+        InlineKeyboardMarkup? replyMarkup = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Edit a DM media message caption with optional inline keyboard change.
     /// Used for updating review notification DMs with photos/videos after admin action.
     /// </summary>
-    Task<global::Telegram.Bot.Types.Message> EditDmCaptionAsync(
+    Task<Message> EditDmCaptionAsync(
         long dmChatId,
         int messageId,
         string? caption,
-        global::Telegram.Bot.Types.ReplyMarkups.InlineKeyboardMarkup? replyMarkup = null,
+        InlineKeyboardMarkup? replyMarkup = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -135,7 +135,7 @@ public interface IBotDmService
     Task<DmDeliveryResult> SendDmWithKeyboardAsync(
         long telegramUserId,
         string messageText,
-        global::Telegram.Bot.Types.ReplyMarkups.InlineKeyboardMarkup keyboard,
+        InlineKeyboardMarkup keyboard,
         CancellationToken cancellationToken = default);
 
     /// <summary>

@@ -484,40 +484,7 @@ public sealed class NotificationService : INotificationService
                 return false;
             }
 
-            var rendered = NotificationRenderer.ToTelegramMessage(payload);
-
-            // Build keyboard if payload has action context
-            InlineKeyboardMarkup? keyboard = null;
-            if (payload.Keyboard is { } kb)
-            {
-                keyboard = await BuildReportActionKeyboardAsync(
-                    kb.EntityId, kb.ChatId, kb.UserId, kb.KeyboardType, ct);
-            }
-
-            DmDeliveryResult result;
-
-            // Use rich method if we have media or keyboard
-            if (keyboard != null || !string.IsNullOrWhiteSpace(payload.PhotoPath) || !string.IsNullOrWhiteSpace(payload.VideoPath))
-            {
-                result = await _dmDeliveryService.SendDmWithMediaAndKeyboardEntitiesAsync(
-                    mapping.TelegramId,
-                    "notification",
-                    rendered.Text,
-                    rendered.Entities,
-                    photoPath: payload.PhotoPath,
-                    videoPath: payload.VideoPath,
-                    keyboard: keyboard,
-                    cancellationToken: ct);
-            }
-            else
-            {
-                result = await _dmDeliveryService.SendDmWithEntitiesAsync(
-                    mapping.TelegramId,
-                    "notification",
-                    rendered.Text,
-                    rendered.Entities,
-                    cancellationToken: ct);
-            }
+            var result = await DispatchEntityDmAsync(mapping.TelegramId, payload, ct);
 
             if (result.DmSent)
             {
@@ -545,37 +512,7 @@ public sealed class NotificationService : INotificationService
     {
         try
         {
-            var rendered = NotificationRenderer.ToTelegramMessage(payload);
-
-            // Build keyboard if payload has action context
-            InlineKeyboardMarkup? keyboard = null;
-            if (payload.Keyboard is { } kb)
-            {
-                keyboard = await BuildReportActionKeyboardAsync(
-                    kb.EntityId, kb.ChatId, kb.UserId, kb.KeyboardType, ct);
-            }
-
-            if (keyboard != null || !string.IsNullOrWhiteSpace(payload.PhotoPath) || !string.IsNullOrWhiteSpace(payload.VideoPath))
-            {
-                await _dmDeliveryService.SendDmWithMediaAndKeyboardEntitiesAsync(
-                    telegramId,
-                    "notification",
-                    rendered.Text,
-                    rendered.Entities,
-                    photoPath: payload.PhotoPath,
-                    videoPath: payload.VideoPath,
-                    keyboard: keyboard,
-                    cancellationToken: ct);
-            }
-            else
-            {
-                await _dmDeliveryService.SendDmWithEntitiesAsync(
-                    telegramId,
-                    "notification",
-                    rendered.Text,
-                    rendered.Entities,
-                    cancellationToken: ct);
-            }
+            await DispatchEntityDmAsync(telegramId, payload, ct);
         }
         catch (Exception ex)
         {
@@ -583,6 +520,46 @@ public sealed class NotificationService : INotificationService
             // Any other error is unexpected but not worth failing the whole notification for.
             _logger.LogDebug(ex, "Failed to send DM to unlinked admin {TelegramId}", telegramId);
         }
+    }
+
+    /// <summary>
+    /// Render payload and dispatch via the appropriate entity-based DM overload.
+    /// Picks the media+keyboard variant when media or keyboard is present, otherwise the
+    /// text-only entities variant. Used by both the linked-web-user and unlinked-admin paths.
+    /// </summary>
+    private async Task<DmDeliveryResult> DispatchEntityDmAsync(
+        long telegramId,
+        NotificationPayload payload,
+        CancellationToken ct)
+    {
+        var rendered = NotificationRenderer.ToTelegramMessage(payload);
+
+        InlineKeyboardMarkup? keyboard = null;
+        if (payload.Keyboard is { } kb)
+        {
+            keyboard = await BuildReportActionKeyboardAsync(
+                kb.EntityId, kb.ChatId, kb.UserId, kb.KeyboardType, ct);
+        }
+
+        if (keyboard != null || !string.IsNullOrWhiteSpace(payload.PhotoPath) || !string.IsNullOrWhiteSpace(payload.VideoPath))
+        {
+            return await _dmDeliveryService.SendDmWithMediaAndKeyboardEntitiesAsync(
+                telegramId,
+                "notification",
+                rendered.Text,
+                rendered.Entities,
+                photoPath: payload.PhotoPath,
+                videoPath: payload.VideoPath,
+                keyboard: keyboard,
+                cancellationToken: ct);
+        }
+
+        return await _dmDeliveryService.SendDmWithEntitiesAsync(
+            telegramId,
+            "notification",
+            rendered.Text,
+            rendered.Entities,
+            cancellationToken: ct);
     }
 
     /// <summary>

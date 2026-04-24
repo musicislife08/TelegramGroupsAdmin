@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using Telegram.Bot.Exceptions;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
+using Telegram.Bot.Types.ReplyMarkups;
 using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.JobPayloads;
@@ -105,92 +106,25 @@ public class BotDmService(
         }
     }
 
-    public async Task<DmDeliveryResult> SendDmWithQueueAsync(
+    public Task<DmDeliveryResult> SendDmWithQueueAsync(
         long telegramUserId,
         string notificationType,
         string messageText,
         ParseMode parseMode = ParseMode.MarkdownV2,
         CancellationToken cancellationToken = default)
     {
-        var user = await telegramUserRepository.GetByTelegramIdAsync(telegramUserId, cancellationToken);
-
-        try
-        {
-            // Attempt to send DM
-            await messageHandler.SendAsync(
+        return TrySendWithQueueAsync(
+            telegramUserId,
+            notificationType,
+            queuedText: messageText,
+            sendAction: () => messageHandler.SendAsync(
                 chatId: telegramUserId,
                 text: messageText,
                 parseMode: parseMode,
-                ct: cancellationToken);
-
-            logger.LogInformation(
-                "DM sent successfully to {User} (notification type: {NotificationType})",
-                user.ToLogInfo(telegramUserId),
-                notificationType);
-
-            // Update bot_dm_enabled flag to true (user can receive DMs)
-            await telegramUserRepository.EnableBotDmAsync(telegramUserId, cancellationToken);
-
-            return new DmDeliveryResult
-            {
-                DmSent = true,
-                FallbackUsed = false,
-                Failed = false
-            };
-        }
-        catch (ApiRequestException ex) when (ex.ErrorCode == 403)
-        {
-            // User has blocked the bot or hasn't started a DM - queue for later
-            logger.LogWarning(
-                "DM blocked for {User} - queueing {NotificationType} notification for later delivery",
-                user.ToLogDebug(telegramUserId),
-                notificationType);
-
-            // Update bot_dm_enabled flag to false and queue notification
-            await telegramUserRepository.DisableBotDmAsync(telegramUserId, cancellationToken);
-
-            // Queue notification for later delivery
-            await pendingNotificationsRepository.AddPendingNotificationAsync(
-                telegramUserId,
-                notificationType,
-                messageText,
-                cancellationToken: cancellationToken);
-
-            return new DmDeliveryResult
-            {
-                DmSent = false,
-                FallbackUsed = false,
-                Failed = true,
-                ErrorMessage = "User has not enabled DMs - notification queued for later delivery"
-            };
-        }
-        catch (Exception ex)
-        {
-            // Log network errors cleanly without stack traces
-            if (IsNetworkError(ex))
-            {
-                logger.LogWarning(
-                    "Failed to send DM to {User} - network unavailable (notification type: {NotificationType})",
-                    user.ToLogDebug(telegramUserId),
-                    notificationType);
-            }
-            else
-            {
-                logger.LogError(
-                    ex,
-                    "Failed to send DM to {User} (notification type: {NotificationType})",
-                    user.ToLogDebug(telegramUserId),
-                    notificationType);
-            }
-
-            return new DmDeliveryResult
-            {
-                DmSent = false,
-                FallbackUsed = false,
-                Failed = true,
-                ErrorMessage = ex.Message
-            };
-        }
+                ct: cancellationToken),
+            cancellationToken,
+            logStyle: DmLogStyle.Queue,
+            networkErrorAware: true);
     }
 
     /// <summary>
@@ -270,7 +204,7 @@ public class BotDmService(
         }
     }
 
-    public async Task<DmDeliveryResult> SendDmWithMediaAsync(
+    public Task<DmDeliveryResult> SendDmWithMediaAsync(
         long telegramUserId,
         string notificationType,
         string messageText,
@@ -278,208 +212,142 @@ public class BotDmService(
         string? videoPath = null,
         CancellationToken cancellationToken = default)
     {
-        var user = await telegramUserRepository.GetByTelegramIdAsync(telegramUserId, cancellationToken);
-
-        try
-        {
-            // Determine if we're sending with media
-            var hasMedia = !string.IsNullOrWhiteSpace(photoPath) || !string.IsNullOrWhiteSpace(videoPath);
-
-            if (hasMedia)
+        // Media variants log success internally (messages differ for photo/video/text paths).
+        // The helper therefore skips the default success log and delegates entirely to sendAction.
+        return TrySendWithQueueAsync(
+            telegramUserId,
+            notificationType,
+            queuedText: messageText,
+            sendAction: async () =>
             {
-                // Send with media (photo or video)
-                if (!string.IsNullOrWhiteSpace(photoPath) && File.Exists(photoPath))
-                {
-                    // Send photo with caption
-                    await using var photoStream = File.OpenRead(photoPath);
-                    await messageHandler.SendPhotoAsync(
-                        chatId: telegramUserId,
-                        photo: InputFile.FromStream(photoStream, Path.GetFileName(photoPath)),
-                        caption: messageText,
-                        parseMode: ParseMode.MarkdownV2,
-                        ct: cancellationToken);
+                var user = await telegramUserRepository.GetByTelegramIdAsync(telegramUserId, cancellationToken);
+                var hasMedia = !string.IsNullOrWhiteSpace(photoPath) || !string.IsNullOrWhiteSpace(videoPath);
 
-                    logger.LogInformation("DM with photo sent successfully to {User}", user.ToLogInfo(telegramUserId));
-                }
-                else if (!string.IsNullOrWhiteSpace(videoPath) && File.Exists(videoPath))
+                if (hasMedia)
                 {
-                    // Send video with caption
-                    await using var videoStream = File.OpenRead(videoPath);
-                    await messageHandler.SendVideoAsync(
-                        chatId: telegramUserId,
-                        video: InputFile.FromStream(videoStream, Path.GetFileName(videoPath)),
-                        caption: messageText,
-                        parseMode: ParseMode.MarkdownV2,
-                        ct: cancellationToken);
+                    if (!string.IsNullOrWhiteSpace(photoPath) && File.Exists(photoPath))
+                    {
+                        await using var photoStream = File.OpenRead(photoPath);
+                        await messageHandler.SendPhotoAsync(
+                            chatId: telegramUserId,
+                            photo: InputFile.FromStream(photoStream, Path.GetFileName(photoPath)),
+                            caption: messageText,
+                            parseMode: ParseMode.MarkdownV2,
+                            ct: cancellationToken);
 
-                    logger.LogInformation("DM with video sent successfully to {User}", user.ToLogInfo(telegramUserId));
+                        logger.LogInformation("DM with photo sent successfully to {User}", user.ToLogInfo(telegramUserId));
+                    }
+                    else if (!string.IsNullOrWhiteSpace(videoPath) && File.Exists(videoPath))
+                    {
+                        await using var videoStream = File.OpenRead(videoPath);
+                        await messageHandler.SendVideoAsync(
+                            chatId: telegramUserId,
+                            video: InputFile.FromStream(videoStream, Path.GetFileName(videoPath)),
+                            caption: messageText,
+                            parseMode: ParseMode.MarkdownV2,
+                            ct: cancellationToken);
+
+                        logger.LogInformation("DM with video sent successfully to {User}", user.ToLogInfo(telegramUserId));
+                    }
+                    else
+                    {
+                        // Media path provided but file doesn't exist - fallback to text only
+                        logger.LogWarning("Media file not found (photo: {PhotoPath}, video: {VideoPath}), sending text-only DM to {User}",
+                            photoPath, videoPath, user.ToLogDebug(telegramUserId));
+
+                        await messageHandler.SendAsync(
+                            chatId: telegramUserId,
+                            text: messageText,
+                            parseMode: ParseMode.MarkdownV2,
+                            ct: cancellationToken);
+                    }
                 }
                 else
                 {
-                    // Media path provided but file doesn't exist - fallback to text only
-                    logger.LogWarning("Media file not found (photo: {PhotoPath}, video: {VideoPath}), sending text-only DM to {User}",
-                        photoPath, videoPath, user.ToLogDebug(telegramUserId));
-
+                    // No media - send text only
                     await messageHandler.SendAsync(
                         chatId: telegramUserId,
                         text: messageText,
                         parseMode: ParseMode.MarkdownV2,
                         ct: cancellationToken);
+
+                    logger.LogInformation("DM sent successfully to {User}", user.ToLogInfo(telegramUserId));
                 }
-            }
-            else
-            {
-                // No media - send text only
-                await messageHandler.SendAsync(
-                    chatId: telegramUserId,
-                    text: messageText,
-                    parseMode: ParseMode.MarkdownV2,
-                    ct: cancellationToken);
-
-                logger.LogInformation("DM sent successfully to {User}", user.ToLogInfo(telegramUserId));
-            }
-
-            // Update bot_dm_enabled flag to true
-            await telegramUserRepository.EnableBotDmAsync(telegramUserId, cancellationToken);
-
-            return new DmDeliveryResult
-            {
-                DmSent = true,
-                FallbackUsed = false,
-                Failed = false
-            };
-        }
-        catch (ApiRequestException ex) when (ex.ErrorCode == 403)
-        {
-            // User has blocked the bot - update flag and queue notification
-            logger.LogInformation("{User} has blocked bot DMs (403), queuing notification", user.ToLogInfo(telegramUserId));
-
-            await telegramUserRepository.DisableBotDmAsync(telegramUserId, cancellationToken);
-
-            // Queue notification for later delivery
-            await pendingNotificationsRepository.AddPendingNotificationAsync(telegramUserId, notificationType, messageText, cancellationToken: cancellationToken);
-
-            return new DmDeliveryResult
-            {
-                DmSent = false,
-                FallbackUsed = false,
-                Failed = true,
-                ErrorMessage = "User has blocked bot DMs - notification queued for later delivery"
-            };
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Failed to send DM with media to {User}", user.ToLogDebug(telegramUserId));
-            return new DmDeliveryResult
-            {
-                DmSent = false,
-                FallbackUsed = false,
-                Failed = true,
-                ErrorMessage = ex.Message
-            };
-        }
+            },
+            cancellationToken,
+            logStyle: DmLogStyle.Media,
+            mediaErrorVariant: "media",
+            networkErrorAware: false);
     }
 
-    public async Task<DmDeliveryResult> SendDmWithMediaAndKeyboardAsync(
+    public Task<DmDeliveryResult> SendDmWithMediaAndKeyboardAsync(
         long telegramUserId,
         string notificationType,
         string messageText,
         string? photoPath = null,
         string? videoPath = null,
-        global::Telegram.Bot.Types.ReplyMarkups.InlineKeyboardMarkup? keyboard = null,
+        InlineKeyboardMarkup? keyboard = null,
         ParseMode parseMode = ParseMode.MarkdownV2,
         CancellationToken cancellationToken = default)
     {
-        var user = await telegramUserRepository.GetByTelegramIdAsync(telegramUserId, cancellationToken);
-
-        try
-        {
-            // Send with photo if available
-            if (!string.IsNullOrWhiteSpace(photoPath) && File.Exists(photoPath))
+        return TrySendWithQueueAsync(
+            telegramUserId,
+            notificationType,
+            queuedText: messageText,
+            sendAction: async () =>
             {
-                await using var photoStream = File.OpenRead(photoPath);
-                await messageHandler.SendPhotoAsync(
-                    chatId: telegramUserId,
-                    photo: InputFile.FromStream(photoStream, Path.GetFileName(photoPath)),
-                    caption: messageText,
-                    parseMode: parseMode,
-                    replyMarkup: keyboard,
-                    ct: cancellationToken);
+                var user = await telegramUserRepository.GetByTelegramIdAsync(telegramUserId, cancellationToken);
 
-                logger.LogInformation("DM with photo and keyboard sent successfully to {User}", user.ToLogInfo(telegramUserId));
-            }
-            else if (!string.IsNullOrWhiteSpace(videoPath) && File.Exists(videoPath))
-            {
-                await using var videoStream = File.OpenRead(videoPath);
-                await messageHandler.SendVideoAsync(
-                    chatId: telegramUserId,
-                    video: InputFile.FromStream(videoStream, Path.GetFileName(videoPath)),
-                    caption: messageText,
-                    parseMode: parseMode,
-                    replyMarkup: keyboard,
-                    ct: cancellationToken);
+                if (!string.IsNullOrWhiteSpace(photoPath) && File.Exists(photoPath))
+                {
+                    await using var photoStream = File.OpenRead(photoPath);
+                    await messageHandler.SendPhotoAsync(
+                        chatId: telegramUserId,
+                        photo: InputFile.FromStream(photoStream, Path.GetFileName(photoPath)),
+                        caption: messageText,
+                        parseMode: parseMode,
+                        replyMarkup: keyboard,
+                        ct: cancellationToken);
 
-                logger.LogInformation("DM with video and keyboard sent successfully to {User}", user.ToLogInfo(telegramUserId));
-            }
-            else
-            {
-                // Text-only with keyboard
-                await messageHandler.SendAsync(
-                    chatId: telegramUserId,
-                    text: messageText,
-                    parseMode: parseMode,
-                    replyMarkup: keyboard,
-                    ct: cancellationToken);
+                    logger.LogInformation("DM with photo and keyboard sent successfully to {User}", user.ToLogInfo(telegramUserId));
+                }
+                else if (!string.IsNullOrWhiteSpace(videoPath) && File.Exists(videoPath))
+                {
+                    await using var videoStream = File.OpenRead(videoPath);
+                    await messageHandler.SendVideoAsync(
+                        chatId: telegramUserId,
+                        video: InputFile.FromStream(videoStream, Path.GetFileName(videoPath)),
+                        caption: messageText,
+                        parseMode: parseMode,
+                        replyMarkup: keyboard,
+                        ct: cancellationToken);
 
-                logger.LogInformation("DM with keyboard sent successfully to {User}", user.ToLogInfo(telegramUserId));
-            }
+                    logger.LogInformation("DM with video and keyboard sent successfully to {User}", user.ToLogInfo(telegramUserId));
+                }
+                else
+                {
+                    // Text-only with keyboard
+                    await messageHandler.SendAsync(
+                        chatId: telegramUserId,
+                        text: messageText,
+                        parseMode: parseMode,
+                        replyMarkup: keyboard,
+                        ct: cancellationToken);
 
-            // Update bot_dm_enabled flag to true
-            await telegramUserRepository.EnableBotDmAsync(telegramUserId, cancellationToken);
-
-            return new DmDeliveryResult
-            {
-                DmSent = true,
-                FallbackUsed = false,
-                Failed = false
-            };
-        }
-        catch (ApiRequestException ex) when (ex.ErrorCode == 403)
-        {
-            // User has blocked the bot - update flag and queue notification (without buttons)
-            logger.LogInformation("{User} has blocked bot DMs (403), queuing notification", user.ToLogInfo(telegramUserId));
-
-            await telegramUserRepository.DisableBotDmAsync(telegramUserId, cancellationToken);
-
-            // Queue notification for later delivery (text only, no buttons)
-            await pendingNotificationsRepository.AddPendingNotificationAsync(telegramUserId, notificationType, messageText, cancellationToken: cancellationToken);
-
-            return new DmDeliveryResult
-            {
-                DmSent = false,
-                FallbackUsed = false,
-                Failed = true,
-                ErrorMessage = "User has blocked bot DMs - notification queued for later delivery"
-            };
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Failed to send DM with keyboard to {User}", user.ToLogDebug(telegramUserId));
-            return new DmDeliveryResult
-            {
-                DmSent = false,
-                FallbackUsed = false,
-                Failed = true,
-                ErrorMessage = ex.Message
-            };
-        }
+                    logger.LogInformation("DM with keyboard sent successfully to {User}", user.ToLogInfo(telegramUserId));
+                }
+            },
+            cancellationToken,
+            logStyle: DmLogStyle.Media,
+            mediaErrorVariant: "keyboard",
+            networkErrorAware: false);
     }
 
     public async Task<Message> EditDmTextAsync(
         long dmChatId,
         int messageId,
         string text,
-        global::Telegram.Bot.Types.ReplyMarkups.InlineKeyboardMarkup? replyMarkup = null,
+        InlineKeyboardMarkup? replyMarkup = null,
         CancellationToken cancellationToken = default)
     {
         var editedMessage = await messageHandler.EditTextAsync(
@@ -498,7 +366,7 @@ public class BotDmService(
         long dmChatId,
         int messageId,
         string? caption,
-        global::Telegram.Bot.Types.ReplyMarkups.InlineKeyboardMarkup? replyMarkup = null,
+        InlineKeyboardMarkup? replyMarkup = null,
         CancellationToken cancellationToken = default)
     {
         var editedMessage = await messageHandler.EditCaptionAsync(
@@ -528,7 +396,7 @@ public class BotDmService(
     public async Task<DmDeliveryResult> SendDmWithKeyboardAsync(
         long telegramUserId,
         string messageText,
-        global::Telegram.Bot.Types.ReplyMarkups.InlineKeyboardMarkup keyboard,
+        InlineKeyboardMarkup keyboard,
         CancellationToken cancellationToken = default)
     {
         var user = await telegramUserRepository.GetByTelegramIdAsync(telegramUserId, cancellationToken);
@@ -593,28 +461,152 @@ public class BotDmService(
     }
 
     /// <inheritdoc />
-    public async Task<DmDeliveryResult> SendDmWithEntitiesAsync(
+    public Task<DmDeliveryResult> SendDmWithEntitiesAsync(
         long telegramUserId,
         string notificationType,
         string text,
         IReadOnlyList<MessageEntity> entities,
         CancellationToken cancellationToken = default)
     {
-        var user = await telegramUserRepository.GetByTelegramIdAsync(telegramUserId, cancellationToken);
-
-        try
-        {
-            await messageHandler.SendAsync(
+        return TrySendWithQueueAsync(
+            telegramUserId,
+            notificationType,
+            queuedText: text,
+            sendAction: () => messageHandler.SendAsync(
                 chatId: telegramUserId,
                 text: text,
                 parseMode: null,
                 entities: entities,
-                ct: cancellationToken);
+                ct: cancellationToken),
+            cancellationToken,
+            logStyle: DmLogStyle.Queue,
+            networkErrorAware: true);
+    }
 
-            logger.LogInformation(
-                "DM sent successfully to {User} (notification type: {NotificationType})",
-                user.ToLogInfo(telegramUserId),
-                notificationType);
+    /// <inheritdoc />
+    public Task<DmDeliveryResult> SendDmWithMediaAndKeyboardEntitiesAsync(
+        long telegramUserId,
+        string notificationType,
+        string text,
+        IReadOnlyList<MessageEntity> entities,
+        string? photoPath = null,
+        string? videoPath = null,
+        InlineKeyboardMarkup? keyboard = null,
+        CancellationToken cancellationToken = default)
+    {
+        return TrySendWithQueueAsync(
+            telegramUserId,
+            notificationType,
+            queuedText: text,
+            sendAction: async () =>
+            {
+                var user = await telegramUserRepository.GetByTelegramIdAsync(telegramUserId, cancellationToken);
+
+                if (!string.IsNullOrWhiteSpace(photoPath) && File.Exists(photoPath))
+                {
+                    await using var photoStream = File.OpenRead(photoPath);
+                    await messageHandler.SendPhotoAsync(
+                        chatId: telegramUserId,
+                        photo: InputFile.FromStream(photoStream, Path.GetFileName(photoPath)),
+                        caption: text,
+                        parseMode: null,
+                        replyMarkup: keyboard,
+                        captionEntities: entities,
+                        ct: cancellationToken);
+
+                    logger.LogInformation(
+                        "DM with photo/entities/keyboard sent successfully to {User}",
+                        user.ToLogInfo(telegramUserId));
+                }
+                else if (!string.IsNullOrWhiteSpace(videoPath) && File.Exists(videoPath))
+                {
+                    await using var videoStream = File.OpenRead(videoPath);
+                    await messageHandler.SendVideoAsync(
+                        chatId: telegramUserId,
+                        video: InputFile.FromStream(videoStream, Path.GetFileName(videoPath)),
+                        caption: text,
+                        parseMode: null,
+                        replyMarkup: keyboard,
+                        captionEntities: entities,
+                        ct: cancellationToken);
+
+                    logger.LogInformation(
+                        "DM with video/entities/keyboard sent successfully to {User}",
+                        user.ToLogInfo(telegramUserId));
+                }
+                else
+                {
+                    await messageHandler.SendAsync(
+                        chatId: telegramUserId,
+                        text: text,
+                        parseMode: null,
+                        replyMarkup: keyboard,
+                        entities: entities,
+                        ct: cancellationToken);
+
+                    logger.LogInformation(
+                        "DM with entities/keyboard sent successfully to {User}",
+                        user.ToLogInfo(telegramUserId));
+                }
+            },
+            cancellationToken,
+            logStyle: DmLogStyle.Media,
+            mediaErrorVariant: "entities/media/keyboard",
+            networkErrorAware: false);
+    }
+
+    /// <summary>
+    /// Log style for <see cref="TrySendWithQueueAsync"/>.
+    /// Queue-style matches the parse-mode/entities text methods (info success + warning on 403 with
+    /// "queueing" verbiage + network-aware error). Media-style matches the media/keyboard variants
+    /// (success logged internally by the sendAction + info on 403 with "blocked bot DMs" verbiage
+    /// + custom error wording).
+    /// </summary>
+    private enum DmLogStyle
+    {
+        Queue,
+        Media
+    }
+
+    /// <summary>
+    /// Shared try/catch/403/queue skeleton for DM send methods.
+    /// Handles user lookup, success flag flip, 403 → queue, and generic error logging so each
+    /// public overload only has to supply the actual send action.
+    /// </summary>
+    /// <param name="sendAction">
+    /// Delegate that performs the actual Telegram API call. For Media-style callers, this delegate
+    /// is also responsible for logging the success message (since the message differs per path —
+    /// photo vs video vs text-only). For Queue-style callers, the helper logs a single generic
+    /// success message.
+    /// </param>
+    /// <param name="mediaErrorVariant">
+    /// Required when <paramref name="logStyle"/> is Media — the wording inserted into the generic
+    /// error log, e.g. "media" → "Failed to send DM with media to {User}".
+    /// </param>
+    private async Task<DmDeliveryResult> TrySendWithQueueAsync(
+        long telegramUserId,
+        string notificationType,
+        string queuedText,
+        Func<Task> sendAction,
+        CancellationToken cancellationToken,
+        DmLogStyle logStyle,
+        string? mediaErrorVariant = null,
+        bool networkErrorAware = false)
+    {
+        var user = await telegramUserRepository.GetByTelegramIdAsync(telegramUserId, cancellationToken);
+
+        try
+        {
+            await sendAction();
+
+            if (logStyle == DmLogStyle.Queue)
+            {
+                logger.LogInformation(
+                    "DM sent successfully to {User} (notification type: {NotificationType})",
+                    user.ToLogInfo(telegramUserId),
+                    notificationType);
+            }
+            // Media-style logs success inside sendAction (different message per photo/video/text path).
 
             await telegramUserRepository.EnableBotDmAsync(telegramUserId, cancellationToken);
 
@@ -627,17 +619,26 @@ public class BotDmService(
         }
         catch (ApiRequestException ex) when (ex.ErrorCode == 403)
         {
-            logger.LogWarning(
-                "DM blocked for {User} - queueing {NotificationType} notification for later delivery",
-                user.ToLogDebug(telegramUserId),
-                notificationType);
+            if (logStyle == DmLogStyle.Queue)
+            {
+                logger.LogWarning(
+                    "DM blocked for {User} - queueing {NotificationType} notification for later delivery",
+                    user.ToLogDebug(telegramUserId),
+                    notificationType);
+            }
+            else
+            {
+                logger.LogInformation(
+                    "{User} has blocked bot DMs (403), queuing notification",
+                    user.ToLogInfo(telegramUserId));
+            }
 
             await telegramUserRepository.DisableBotDmAsync(telegramUserId, cancellationToken);
 
             await pendingNotificationsRepository.AddPendingNotificationAsync(
                 telegramUserId,
                 notificationType,
-                text,
+                queuedText,
                 cancellationToken: cancellationToken);
 
             return new DmDeliveryResult
@@ -645,19 +646,21 @@ public class BotDmService(
                 DmSent = false,
                 FallbackUsed = false,
                 Failed = true,
-                ErrorMessage = "User has not enabled DMs - notification queued for later delivery"
+                ErrorMessage = logStyle == DmLogStyle.Queue
+                    ? "User has not enabled DMs - notification queued for later delivery"
+                    : "User has blocked bot DMs - notification queued for later delivery"
             };
         }
         catch (Exception ex)
         {
-            if (IsNetworkError(ex))
+            if (networkErrorAware && IsNetworkError(ex))
             {
                 logger.LogWarning(
                     "Failed to send DM to {User} - network unavailable (notification type: {NotificationType})",
                     user.ToLogDebug(telegramUserId),
                     notificationType);
             }
-            else
+            else if (logStyle == DmLogStyle.Queue)
             {
                 logger.LogError(
                     ex,
@@ -665,117 +668,26 @@ public class BotDmService(
                     user.ToLogDebug(telegramUserId),
                     notificationType);
             }
-
-            return new DmDeliveryResult
-            {
-                DmSent = false,
-                FallbackUsed = false,
-                Failed = true,
-                ErrorMessage = ex.Message
-            };
-        }
-    }
-
-    /// <inheritdoc />
-    public async Task<DmDeliveryResult> SendDmWithMediaAndKeyboardEntitiesAsync(
-        long telegramUserId,
-        string notificationType,
-        string text,
-        IReadOnlyList<MessageEntity> entities,
-        string? photoPath = null,
-        string? videoPath = null,
-        global::Telegram.Bot.Types.ReplyMarkups.InlineKeyboardMarkup? keyboard = null,
-        CancellationToken cancellationToken = default)
-    {
-        var user = await telegramUserRepository.GetByTelegramIdAsync(telegramUserId, cancellationToken);
-
-        try
-        {
-            if (!string.IsNullOrWhiteSpace(photoPath) && File.Exists(photoPath))
-            {
-                await using var photoStream = File.OpenRead(photoPath);
-                await messageHandler.SendPhotoAsync(
-                    chatId: telegramUserId,
-                    photo: InputFile.FromStream(photoStream, Path.GetFileName(photoPath)),
-                    caption: text,
-                    parseMode: null,
-                    replyMarkup: keyboard,
-                    captionEntities: entities,
-                    ct: cancellationToken);
-
-                logger.LogInformation(
-                    "DM with photo/entities/keyboard sent successfully to {User}",
-                    user.ToLogInfo(telegramUserId));
-            }
-            else if (!string.IsNullOrWhiteSpace(videoPath) && File.Exists(videoPath))
-            {
-                await using var videoStream = File.OpenRead(videoPath);
-                await messageHandler.SendVideoAsync(
-                    chatId: telegramUserId,
-                    video: InputFile.FromStream(videoStream, Path.GetFileName(videoPath)),
-                    caption: text,
-                    parseMode: null,
-                    replyMarkup: keyboard,
-                    captionEntities: entities,
-                    ct: cancellationToken);
-
-                logger.LogInformation(
-                    "DM with video/entities/keyboard sent successfully to {User}",
-                    user.ToLogInfo(telegramUserId));
-            }
             else
             {
-                await messageHandler.SendAsync(
-                    chatId: telegramUserId,
-                    text: text,
-                    parseMode: null,
-                    replyMarkup: keyboard,
-                    entities: entities,
-                    ct: cancellationToken);
-
-                logger.LogInformation(
-                    "DM with entities/keyboard sent successfully to {User}",
-                    user.ToLogInfo(telegramUserId));
+                // Preserve original literal error templates (one per media variant) so structured
+                // log consumers see the same template strings as before the refactor.
+                switch (mediaErrorVariant)
+                {
+                    case "media":
+                        logger.LogError(ex, "Failed to send DM with media to {User}", user.ToLogDebug(telegramUserId));
+                        break;
+                    case "keyboard":
+                        logger.LogError(ex, "Failed to send DM with keyboard to {User}", user.ToLogDebug(telegramUserId));
+                        break;
+                    case "entities/media/keyboard":
+                        logger.LogError(ex, "Failed to send DM with entities/media/keyboard to {User}", user.ToLogDebug(telegramUserId));
+                        break;
+                    default:
+                        logger.LogError(ex, "Failed to send DM to {User}", user.ToLogDebug(telegramUserId));
+                        break;
+                }
             }
-
-            await telegramUserRepository.EnableBotDmAsync(telegramUserId, cancellationToken);
-
-            return new DmDeliveryResult
-            {
-                DmSent = true,
-                FallbackUsed = false,
-                Failed = false
-            };
-        }
-        catch (ApiRequestException ex) when (ex.ErrorCode == 403)
-        {
-            logger.LogInformation(
-                "{User} has blocked bot DMs (403), queuing notification",
-                user.ToLogInfo(telegramUserId));
-
-            await telegramUserRepository.DisableBotDmAsync(telegramUserId, cancellationToken);
-
-            // Queue notification for later delivery (text only, no buttons/media/entities)
-            await pendingNotificationsRepository.AddPendingNotificationAsync(
-                telegramUserId,
-                notificationType,
-                text,
-                cancellationToken: cancellationToken);
-
-            return new DmDeliveryResult
-            {
-                DmSent = false,
-                FallbackUsed = false,
-                Failed = true,
-                ErrorMessage = "User has blocked bot DMs - notification queued for later delivery"
-            };
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(
-                ex,
-                "Failed to send DM with entities/media/keyboard to {User}",
-                user.ToLogDebug(telegramUserId));
 
             return new DmDeliveryResult
             {
