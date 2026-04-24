@@ -1,4 +1,3 @@
-using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
 using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
@@ -485,9 +484,7 @@ public sealed class NotificationService : INotificationService
                 return false;
             }
 
-            // Task 19 will wire this to entity-based DM sending; for now use text path (unstyled)
             var rendered = NotificationRenderer.ToTelegramMessage(payload);
-            var messageText = rendered.Text;
 
             // Build keyboard if payload has action context
             InlineKeyboardMarkup? keyboard = null;
@@ -502,23 +499,23 @@ public sealed class NotificationService : INotificationService
             // Use rich method if we have media or keyboard
             if (keyboard != null || !string.IsNullOrWhiteSpace(payload.PhotoPath) || !string.IsNullOrWhiteSpace(payload.VideoPath))
             {
-                result = await _dmDeliveryService.SendDmWithMediaAndKeyboardAsync(
+                result = await _dmDeliveryService.SendDmWithMediaAndKeyboardEntitiesAsync(
                     mapping.TelegramId,
                     "notification",
-                    messageText,
+                    rendered.Text,
+                    rendered.Entities,
                     photoPath: payload.PhotoPath,
                     videoPath: payload.VideoPath,
                     keyboard: keyboard,
-                    parseMode: ParseMode.None,
                     cancellationToken: ct);
             }
             else
             {
-                result = await _dmDeliveryService.SendDmWithQueueAsync(
+                result = await _dmDeliveryService.SendDmWithEntitiesAsync(
                     mapping.TelegramId,
                     "notification",
-                    messageText,
-                    parseMode: ParseMode.None,
+                    rendered.Text,
+                    rendered.Entities,
                     cancellationToken: ct);
             }
 
@@ -548,9 +545,7 @@ public sealed class NotificationService : INotificationService
     {
         try
         {
-            // Task 19 will wire this to entity-based DM sending; for now use text path (unstyled)
             var rendered = NotificationRenderer.ToTelegramMessage(payload);
-            var messageText = rendered.Text;
 
             // Build keyboard if payload has action context
             InlineKeyboardMarkup? keyboard = null;
@@ -562,23 +557,23 @@ public sealed class NotificationService : INotificationService
 
             if (keyboard != null || !string.IsNullOrWhiteSpace(payload.PhotoPath) || !string.IsNullOrWhiteSpace(payload.VideoPath))
             {
-                await _dmDeliveryService.SendDmWithMediaAndKeyboardAsync(
+                await _dmDeliveryService.SendDmWithMediaAndKeyboardEntitiesAsync(
                     telegramId,
                     "notification",
-                    messageText,
+                    rendered.Text,
+                    rendered.Entities,
                     photoPath: payload.PhotoPath,
                     videoPath: payload.VideoPath,
                     keyboard: keyboard,
-                    parseMode: ParseMode.None,
                     cancellationToken: ct);
             }
             else
             {
-                await _dmDeliveryService.SendDmWithQueueAsync(
+                await _dmDeliveryService.SendDmWithEntitiesAsync(
                     telegramId,
                     "notification",
-                    messageText,
-                    parseMode: ParseMode.None,
+                    rendered.Text,
+                    rendered.Entities,
                     cancellationToken: ct);
             }
         }
