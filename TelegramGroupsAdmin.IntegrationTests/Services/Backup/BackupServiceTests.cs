@@ -966,6 +966,25 @@ public class BackupServiceTests
             InlineKeyboardMarkup keyboard,
             CancellationToken cancellationToken = default)
             => Task.FromResult(SuccessResult);
+
+        public Task<DmDeliveryResult> SendDmWithEntitiesAsync(
+            long telegramUserId,
+            string notificationType,
+            string text,
+            IReadOnlyList<MessageEntity> entities,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult(SuccessResult);
+
+        public Task<DmDeliveryResult> SendDmWithMediaAndKeyboardEntitiesAsync(
+            long telegramUserId,
+            string notificationType,
+            string text,
+            IReadOnlyList<MessageEntity> entities,
+            string? photoPath = null,
+            string? videoPath = null,
+            InlineKeyboardMarkup? keyboard = null,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult(SuccessResult);
     }
 
     /// <summary>

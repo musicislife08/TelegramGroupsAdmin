@@ -1,4 +1,6 @@
+using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
+using Telegram.Bot.Types.ReplyMarkups;
 
 namespace TelegramGroupsAdmin.Telegram.Services.Bot;
 
@@ -134,5 +136,32 @@ public interface IBotDmService
         long telegramUserId,
         string messageText,
         global::Telegram.Bot.Types.ReplyMarkups.InlineKeyboardMarkup keyboard,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Attempt to send a DM using pre-rendered text + entities (no parse_mode).
+    /// For admin notifications that need text_mention entities so user mentions are
+    /// clickable even when the recipient has never interacted with the mentioned user.
+    /// If DM fails (403), queues the message for later delivery (text only; entities dropped).
+    /// </summary>
+    Task<DmDeliveryResult> SendDmWithEntitiesAsync(
+        long telegramUserId,
+        string notificationType,
+        string text,
+        IReadOnlyList<MessageEntity> entities,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Attempt to send a DM with media, entities, and optional inline keyboard (no parse_mode).
+    /// If DM fails (403), queues the text for later delivery (without media/buttons/entities).
+    /// </summary>
+    Task<DmDeliveryResult> SendDmWithMediaAndKeyboardEntitiesAsync(
+        long telegramUserId,
+        string notificationType,
+        string text,
+        IReadOnlyList<MessageEntity> entities,
+        string? photoPath = null,
+        string? videoPath = null,
+        InlineKeyboardMarkup? keyboard = null,
         CancellationToken cancellationToken = default);
 }
