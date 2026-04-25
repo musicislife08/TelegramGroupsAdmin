@@ -2,7 +2,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Configuration.Models;
 
-namespace TelegramGroupsAdmin.Core.Services.AI;
+namespace TelegramGroupsAdmin.AI.Services;
 
 /// <summary>
 /// AI-based translation service for detecting and translating foreign language content

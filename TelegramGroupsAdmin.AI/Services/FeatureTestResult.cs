@@ -1,4 +1,4 @@
-namespace TelegramGroupsAdmin.Core.Services.AI;
+namespace TelegramGroupsAdmin.AI.Services;
 
 /// <summary>
 /// Result of a feature test

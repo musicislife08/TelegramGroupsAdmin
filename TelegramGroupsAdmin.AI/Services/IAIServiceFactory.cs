@@ -1,6 +1,6 @@
 using TelegramGroupsAdmin.Configuration.Models;
 
-namespace TelegramGroupsAdmin.Core.Services.AI;
+namespace TelegramGroupsAdmin.AI.Services;
 
 /// <summary>
 /// Service for AI configuration management (used by Settings UI)

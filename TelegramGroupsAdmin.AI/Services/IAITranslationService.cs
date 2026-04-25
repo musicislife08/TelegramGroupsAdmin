@@ -1,4 +1,4 @@
-namespace TelegramGroupsAdmin.Core.Services.AI;
+namespace TelegramGroupsAdmin.AI.Services;
 
 /// <summary>
 /// Service for translating text using AI for language analysis

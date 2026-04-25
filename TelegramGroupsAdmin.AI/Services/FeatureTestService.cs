@@ -1,7 +1,8 @@
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Configuration.Models;
+using TelegramGroupsAdmin.Core;
 
-namespace TelegramGroupsAdmin.Core.Services.AI;
+namespace TelegramGroupsAdmin.AI.Services;
 
 /// <summary>
 /// Tests AI feature configurations by making actual API calls via IChatService

@@ -2,7 +2,6 @@ using Microsoft.Extensions.DependencyInjection;
 using TelegramGroupsAdmin.Core.Metrics;
 using TelegramGroupsAdmin.Core.Repositories;
 using TelegramGroupsAdmin.Core.Services;
-using TelegramGroupsAdmin.Core.Services.AI;
 using TelegramGroupsAdmin.Core.Utilities;
 
 namespace TelegramGroupsAdmin.Core.Extensions;
@@ -24,13 +23,6 @@ public static class ServiceCollectionExtensions
 
         // Unified configuration service (database-driven config with global/chat-specific merging)
         services.AddScoped<IConfigService, ConfigService>();
-
-        // AI services (Semantic Kernel multi-provider support)
-        // IChatService is Scoped (matches ISystemConfigRepository), kernel cache is static
-        services.AddScoped<IChatService, SemanticKernelChatService>();
-        services.AddScoped<IAIServiceFactory, AIServiceFactory>();
-        services.AddScoped<IAITranslationService, AITranslationService>();
-        services.AddScoped<IFeatureTestService, FeatureTestService>();
 
         return services;
     }

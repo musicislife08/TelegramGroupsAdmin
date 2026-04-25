@@ -6,9 +6,10 @@ using Microsoft.SemanticKernel.ChatCompletion;
 using Microsoft.SemanticKernel.Connectors.OpenAI;
 using TelegramGroupsAdmin.Configuration.Models;
 using TelegramGroupsAdmin.Configuration.Repositories;
+using TelegramGroupsAdmin.Core;
 using TelegramGroupsAdmin.Core.Metrics;
 
-namespace TelegramGroupsAdmin.Core.Services.AI;
+namespace TelegramGroupsAdmin.AI.Services;
 
 /// <summary>
 /// Implementation of IChatService using Microsoft Semantic Kernel

@@ -1,4 +1,4 @@
-namespace TelegramGroupsAdmin.Core.Services.AI;
+namespace TelegramGroupsAdmin.AI.Services;
 
 /// <summary>
 /// Represents an image to include in a multi-image vision completion request.

@@ -1,6 +1,6 @@
 using TelegramGroupsAdmin.Configuration.Models;
 
-namespace TelegramGroupsAdmin.Core.Services.AI;
+namespace TelegramGroupsAdmin.AI.Services;
 
 /// <summary>
 /// Generic interface for AI chat completions
