@@ -6,6 +6,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TelegramGroupsAdmin.Data", 
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TelegramGroupsAdmin.ContentDetection", "TelegramGroupsAdmin.ContentDetection\TelegramGroupsAdmin.ContentDetection.csproj", "{F24AFE5D-7603-4634-A7A3-C6F09773049C}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TelegramGroupsAdmin.AI", "TelegramGroupsAdmin.AI\TelegramGroupsAdmin.AI.csproj", "{D9F1A6B2-4E7C-4B5A-8C9E-1234567890AB}"
+EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TelegramGroupsAdmin.Configuration", "TelegramGroupsAdmin.Configuration\TelegramGroupsAdmin.Configuration.csproj", "{982F34D8-C0A5-4F2D-AAEC-272281DE4271}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TelegramGroupsAdmin.Telegram", "TelegramGroupsAdmin.Telegram\TelegramGroupsAdmin.Telegram.csproj", "{CB486FA5-248B-4FD9-AF0C-C2ECC5FA41A1}"
@@ -68,6 +70,18 @@ Global
 		{F24AFE5D-7603-4634-A7A3-C6F09773049C}.Release|x64.Build.0 = Release|Any CPU
 		{F24AFE5D-7603-4634-A7A3-C6F09773049C}.Release|x86.ActiveCfg = Release|Any CPU
 		{F24AFE5D-7603-4634-A7A3-C6F09773049C}.Release|x86.Build.0 = Release|Any CPU
+		{D9F1A6B2-4E7C-4B5A-8C9E-1234567890AB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D9F1A6B2-4E7C-4B5A-8C9E-1234567890AB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D9F1A6B2-4E7C-4B5A-8C9E-1234567890AB}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{D9F1A6B2-4E7C-4B5A-8C9E-1234567890AB}.Debug|x64.Build.0 = Debug|Any CPU
+		{D9F1A6B2-4E7C-4B5A-8C9E-1234567890AB}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{D9F1A6B2-4E7C-4B5A-8C9E-1234567890AB}.Debug|x86.Build.0 = Debug|Any CPU
+		{D9F1A6B2-4E7C-4B5A-8C9E-1234567890AB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D9F1A6B2-4E7C-4B5A-8C9E-1234567890AB}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D9F1A6B2-4E7C-4B5A-8C9E-1234567890AB}.Release|x64.ActiveCfg = Release|Any CPU
+		{D9F1A6B2-4E7C-4B5A-8C9E-1234567890AB}.Release|x64.Build.0 = Release|Any CPU
+		{D9F1A6B2-4E7C-4B5A-8C9E-1234567890AB}.Release|x86.ActiveCfg = Release|Any CPU
+		{D9F1A6B2-4E7C-4B5A-8C9E-1234567890AB}.Release|x86.Build.0 = Release|Any CPU
 		{982F34D8-C0A5-4F2D-AAEC-272281DE4271}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{982F34D8-C0A5-4F2D-AAEC-272281DE4271}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{982F34D8-C0A5-4F2D-AAEC-272281DE4271}.Debug|x64.ActiveCfg = Debug|Any CPU
