@@ -21,9 +21,6 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IAuditLogRepository, AuditLogRepository>();
         services.AddScoped<IAuditService, AuditService>();
 
-        // Unified configuration service (database-driven config with global/chat-specific merging)
-        services.AddScoped<IConfigService, ConfigService>();
-
         return services;
     }
 }

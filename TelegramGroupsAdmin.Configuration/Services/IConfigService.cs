@@ -1,8 +1,7 @@
-using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.Core.Models;
 
-namespace TelegramGroupsAdmin.Core.Services;
+namespace TelegramGroupsAdmin.Configuration.Services;
 
 /// <summary>
 /// Service for managing unified configuration storage

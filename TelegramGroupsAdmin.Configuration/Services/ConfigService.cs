@@ -2,14 +2,13 @@ using System.Text.Json;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
-using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
 using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Data.Constants;
 using TelegramGroupsAdmin.Data.Models;
 
-namespace TelegramGroupsAdmin.Core.Services;
+namespace TelegramGroupsAdmin.Configuration.Services;
 
 /// <summary>
 /// Service for managing unified configuration storage with automatic global/chat merging
