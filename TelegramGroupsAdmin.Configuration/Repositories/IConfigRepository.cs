@@ -10,12 +10,7 @@ namespace TelegramGroupsAdmin.Configuration.Repositories;
 /// </summary>
 public interface IConfigRepository
 {
-    ValueTask<string?> GetInviteLinkAsync(long chatId, CancellationToken cancellationToken = default);
-    Task SaveInviteLinkAsync(long chatId, string inviteLink, CancellationToken cancellationToken = default);
-    Task ClearInviteLinkAsync(long chatId, CancellationToken cancellationToken = default);
-    Task ClearAllInviteLinksAsync(CancellationToken cancellationToken = default);
-
-    // ---- New typed reads (no audit, no info logs) ----
+    // ---- Reads ----
     ValueTask<WelcomeConfig?> GetWelcomeAsync(long chatId, CancellationToken ct = default);
     ValueTask<WelcomeConfig?> GetEffectiveWelcomeAsync(long chatId, CancellationToken ct = default);
 
@@ -40,7 +35,12 @@ public interface IConfigRepository
     ValueTask<BanCelebrationConfig?> GetBanCelebrationAsync(long chatId, CancellationToken ct = default);
     ValueTask<BanCelebrationConfig?> GetEffectiveBanCelebrationAsync(long chatId, CancellationToken ct = default);
 
-    // ---- New typed mutations (ChatIdentity for log context) ----
+    ValueTask<string?> GetInviteLinkAsync(long chatId, CancellationToken ct = default);
+
+    // ---- Bot token (encrypted, no chat scope) ----
+    ValueTask<string?> GetBotTokenAsync(CancellationToken ct = default);
+
+    // ---- Mutations ----
     Task SaveWelcomeAsync(ChatIdentity chat, WelcomeConfig config, CancellationToken ct = default);
     Task DeleteWelcomeAsync(ChatIdentity chat, CancellationToken ct = default);
 
@@ -65,7 +65,9 @@ public interface IConfigRepository
     Task SaveBanCelebrationAsync(ChatIdentity chat, BanCelebrationConfig config, CancellationToken ct = default);
     Task DeleteBanCelebrationAsync(ChatIdentity chat, CancellationToken ct = default);
 
-    // ---- Bot token (encrypted, no chat scope) ----
-    ValueTask<string?> GetBotTokenAsync(CancellationToken ct = default);
     Task SaveBotTokenAsync(string botToken, CancellationToken ct = default);
+
+    Task SaveInviteLinkAsync(long chatId, string inviteLink, CancellationToken cancellationToken = default);
+    Task ClearInviteLinkAsync(long chatId, CancellationToken cancellationToken = default);
+    Task ClearAllInviteLinksAsync(CancellationToken cancellationToken = default);
 }
