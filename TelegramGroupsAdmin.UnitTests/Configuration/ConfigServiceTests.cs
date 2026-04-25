@@ -101,7 +101,7 @@ public class ConfigServiceTests
             AuditEventType.ConfigurationChanged,
             actor,
             Arg.Any<Actor?>(),
-            Arg.Any<string?>(),
+            Arg.Is<string>(v => v.Contains("Welcome")),
             Arg.Any<CancellationToken>());
     }
 
@@ -205,7 +205,7 @@ public class ConfigServiceTests
             AuditEventType.ConfigurationChanged,
             actor,
             target: null,
-            value: Arg.Is<string>(v => !v.Contains(secret)),
+            value: Arg.Is<string>(v => v == "TelegramBotToken" && !v.Contains(secret)),
             Arg.Any<CancellationToken>());
     }
 
