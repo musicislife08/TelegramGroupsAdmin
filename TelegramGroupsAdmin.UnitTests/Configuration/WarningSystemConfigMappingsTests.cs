@@ -33,4 +33,19 @@ public class WarningSystemConfigMappingsTests
             Assert.That(roundTripped.AutoBanReason, Is.EqualTo("Automatic ban after {count} warnings"));
         });
     }
+
+    [Test]
+    public void RoundTrip_FromModelDefault_PreservesAllFields()
+    {
+        var model = TelegramGroupsAdmin.Configuration.WarningSystemConfig.Default;
+        var json = JsonSerializer.Serialize(model.ToData(), JsonOptions);
+        var roundTripped = JsonSerializer.Deserialize<WarningSystemConfigData>(json, JsonOptions)!.ToModel();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(roundTripped.AutoBanEnabled, Is.EqualTo(model.AutoBanEnabled));
+            Assert.That(roundTripped.AutoBanThreshold, Is.EqualTo(model.AutoBanThreshold));
+            Assert.That(roundTripped.AutoBanReason, Is.EqualTo(model.AutoBanReason));
+        });
+    }
 }

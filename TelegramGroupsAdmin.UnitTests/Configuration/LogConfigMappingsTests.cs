@@ -47,6 +47,6 @@ public class LogConfigMappingsTests
     {
         var model = new LogConfig { DefaultLevel = LogLevel.Information };
         var data = model.ToData();
-        Assert.That(data.DefaultLevel, Is.EqualTo(2));
+        Assert.That(data.DefaultLevel, Is.EqualTo((int)LogLevel.Information));
     }
 }

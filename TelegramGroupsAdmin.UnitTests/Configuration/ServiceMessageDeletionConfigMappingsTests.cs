@@ -39,4 +39,20 @@ public class ServiceMessageDeletionConfigMappingsTests
             Assert.That(roundTripped.DeleteChatCreationMessages, Is.False);
         });
     }
+
+    [Test]
+    public void RoundTrip_DefaultValues_AllTrue()
+    {
+        var json = JsonSerializer.Serialize(new ServiceMessageDeletionConfigData(), JsonOptions);
+        var roundTripped = JsonSerializer.Deserialize<ServiceMessageDeletionConfigData>(json, JsonOptions)!.ToModel();
+        Assert.Multiple(() =>
+        {
+            Assert.That(roundTripped.DeleteJoinMessages, Is.True);
+            Assert.That(roundTripped.DeleteLeaveMessages, Is.True);
+            Assert.That(roundTripped.DeletePhotoChanges, Is.True);
+            Assert.That(roundTripped.DeleteTitleChanges, Is.True);
+            Assert.That(roundTripped.DeletePinNotifications, Is.True);
+            Assert.That(roundTripped.DeleteChatCreationMessages, Is.True);
+        });
+    }
 }

@@ -35,4 +35,19 @@ public class BanCelebrationConfigMappingsTests
             Assert.That(roundTripped.SendToBannedUser, Is.False);
         });
     }
+
+    [Test]
+    public void RoundTrip_DefaultDtoValues_PreservesPropertyInitializers()
+    {
+        var json = JsonSerializer.Serialize(new BanCelebrationConfigData(), JsonOptions);
+        var roundTripped = JsonSerializer.Deserialize<BanCelebrationConfigData>(json, JsonOptions)!.ToModel();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(roundTripped.Enabled, Is.False);
+            Assert.That(roundTripped.TriggerOnAutoBan, Is.True);
+            Assert.That(roundTripped.TriggerOnManualBan, Is.True);
+            Assert.That(roundTripped.SendToBannedUser, Is.True);
+        });
+    }
 }
