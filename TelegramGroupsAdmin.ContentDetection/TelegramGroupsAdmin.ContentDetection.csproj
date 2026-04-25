@@ -24,6 +24,7 @@
     <ProjectReference Include="..\TelegramGroupsAdmin.Data\TelegramGroupsAdmin.Data.csproj" />
     <ProjectReference Include="..\TelegramGroupsAdmin.Configuration\TelegramGroupsAdmin.Configuration.csproj" />
     <ProjectReference Include="..\TelegramGroupsAdmin.Core\TelegramGroupsAdmin.Core.csproj" />
+    <ProjectReference Include="..\TelegramGroupsAdmin.AI\TelegramGroupsAdmin.AI.csproj" />
   </ItemGroup>
 
 </Project>

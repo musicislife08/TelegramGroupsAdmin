@@ -1,5 +1,6 @@
 @using TelegramGroupsAdmin.Configuration
 @using TelegramGroupsAdmin.Core.Services
+@using TelegramGroupsAdmin.Configuration.Services
 @inject IConfigService ConfigService
 @inject ISnackbar Snackbar
 
@@ -116,6 +117,8 @@
 </MudPaper>
 
 @code {
+    [CascadingParameter] private WebUserIdentity? WebUser { get; set; }
+
     /// <summary>
     /// Chat identity for per-chat configuration. Use ChatIdentity.FromId(0) for global configuration.
     /// </summary>
@@ -142,8 +145,7 @@
         _loading = true;
         try
         {
-            var config = await ConfigService.GetAsync<ServiceMessageDeletionConfig>(
-                ConfigType.ServiceMessageDeletion, Chat.Id);
+            var config = await ConfigService.GetServiceMessageDeletionAsync(Chat.Id);
             _config = config ?? ServiceMessageDeletionConfig.Default;
         }
         catch (Exception ex)
@@ -172,7 +174,8 @@
         _saving = true;
         try
         {
-            await ConfigService.SaveAsync(ConfigType.ServiceMessageDeletion, Chat, _config);
+            var actor = WebUser!.ToActor();
+            await ConfigService.SaveServiceMessageDeletionAsync(Chat, _config, actor);
             var scope = Chat.Id != 0 ? $"for chat {Chat.DisplayName}" : "globally";
             Snackbar.Add($"Service message settings saved {scope}", Severity.Success);
 

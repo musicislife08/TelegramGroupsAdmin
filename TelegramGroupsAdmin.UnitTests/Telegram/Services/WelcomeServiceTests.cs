@@ -18,6 +18,7 @@ using TelegramGroupsAdmin.Telegram.Services.Moderation.Handlers;
 using TelegramGroupsAdmin.Telegram.Services.UserApi;
 using TelegramGroupsAdmin.Telegram.Metrics;
 using TelegramGroupsAdmin.Telegram.Services.Welcome;
+using TelegramGroupsAdmin.Configuration.Services;
 
 namespace TelegramGroupsAdmin.UnitTests.Telegram.Services;
 
@@ -134,7 +135,7 @@ public class WelcomeServiceTests
 
         // Config always returns WelcomeConfig.Default (enabled, ChatAcceptDeny mode)
         _configService
-            .GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, Arg.Any<long>())
+            .GetEffectiveWelcomeAsync(Arg.Any<long>())
             .Returns(WelcomeConfig.Default);
 
         // User is a regular member (not admin) by default
@@ -588,7 +589,7 @@ public class WelcomeServiceTests
             }
         };
         _configService
-            .GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, Arg.Any<long>())
+            .GetEffectiveWelcomeAsync(Arg.Any<long>())
             .Returns(config);
 
         _messageService
@@ -630,7 +631,7 @@ public class WelcomeServiceTests
             .Returns(new BypassResolution(BypassDecision.Trusted, "Trusted user"));
 
         _configService
-            .GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, Arg.Any<long>())
+            .GetEffectiveWelcomeAsync(Arg.Any<long>())
             .Returns(new WelcomeConfig
             {
                 Enabled = true,
@@ -671,7 +672,7 @@ public class WelcomeServiceTests
             .Returns(new BypassResolution(BypassDecision.Trusted, "Trusted user"));
 
         _configService
-            .GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, Arg.Any<long>())
+            .GetEffectiveWelcomeAsync(Arg.Any<long>())
             .Returns(new WelcomeConfig
             {
                 Enabled = true,
@@ -722,7 +723,7 @@ public class WelcomeServiceTests
             .Returns(new BypassResolution(BypassDecision.Trusted, "Trusted user"));
 
         _configService
-            .GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, Arg.Any<long>())
+            .GetEffectiveWelcomeAsync(Arg.Any<long>())
             .Returns(new WelcomeConfig
             {
                 Enabled = true,
@@ -798,8 +799,7 @@ public class WelcomeServiceTests
                 AnnouncementTtlSeconds = 30,
             }
         };
-        _configService.GetEffectiveAsync<WelcomeConfig>(
-            Arg.Any<ConfigType>(), Arg.Any<long>()).Returns(config);
+        _configService.GetEffectiveWelcomeAsync(Arg.Any<long>()).Returns(config);
 
         // Return a non-null Message so the delete-schedule branch runs.
         _messageService
@@ -928,8 +928,7 @@ public class WelcomeServiceTests
                 AnnouncementTtlSeconds = -5,
             }
         };
-        _configService.GetEffectiveAsync<WelcomeConfig>(
-            Arg.Any<ConfigType>(), Arg.Any<long>()).Returns(config);
+        _configService.GetEffectiveWelcomeAsync(Arg.Any<long>()).Returns(config);
 
         _messageService
             .SendAndSaveMessageAsync(
@@ -988,8 +987,7 @@ public class WelcomeServiceTests
             MainWelcomeMessage = "welcome",
             TrustedBypass = { Enabled = false },
         };
-        _configService.GetEffectiveAsync<WelcomeConfig>(
-            Arg.Any<ConfigType>(), Arg.Any<long>()).Returns(config);
+        _configService.GetEffectiveWelcomeAsync(Arg.Any<long>()).Returns(config);
 
         _bypassResolver.ResolveAsync(Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<CancellationToken>())
             .Returns(new BypassResolution(BypassDecision.Admin, "Telegram chat admin (2 chats)"));

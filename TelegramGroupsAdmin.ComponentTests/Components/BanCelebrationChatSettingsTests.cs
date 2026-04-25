@@ -6,6 +6,7 @@ using TelegramGroupsAdmin.Components.Shared.Settings;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
+using TelegramGroupsAdmin.Configuration.Services;
 
 namespace TelegramGroupsAdmin.ComponentTests.Components;
 
@@ -23,9 +24,7 @@ public class BanCelebrationChatSettingsTestContext : BunitContext
         ConfigService = Substitute.For<IConfigService>();
 
         // Configure default behavior - return default config
-        ConfigService.GetAsync<BanCelebrationConfig>(
-            ConfigType.BanCelebration,
-            Arg.Any<long>()).Returns(BanCelebrationConfig.Default);
+        ConfigService.GetBanCelebrationAsync(Arg.Any<long>()).Returns(BanCelebrationConfig.Default);
 
         // Register mocks
         Services.AddSingleton(ConfigService);
@@ -126,9 +125,7 @@ public class BanCelebrationChatSettingsTests : BanCelebrationChatSettingsTestCon
     public void EnableToggle_DefaultsToDisabled()
     {
         // Arrange
-        ConfigService.GetAsync<BanCelebrationConfig>(
-            ConfigType.BanCelebration,
-            Arg.Any<long>()).Returns(new BanCelebrationConfig { Enabled = false });
+        ConfigService.GetBanCelebrationAsync(Arg.Any<long>()).Returns(new BanCelebrationConfig { Enabled = false });
 
         // Act
         var cut = RenderComponent();
@@ -142,9 +139,7 @@ public class BanCelebrationChatSettingsTests : BanCelebrationChatSettingsTestCon
     public async Task EnableToggle_ShowsTriggersWhenEnabled()
     {
         // Arrange
-        ConfigService.GetAsync<BanCelebrationConfig>(
-            ConfigType.BanCelebration,
-            Arg.Any<long>()).Returns(new BanCelebrationConfig { Enabled = true });
+        ConfigService.GetBanCelebrationAsync(Arg.Any<long>()).Returns(new BanCelebrationConfig { Enabled = true });
 
         // Act
         var cut = RenderComponent();
@@ -166,9 +161,7 @@ public class BanCelebrationChatSettingsTests : BanCelebrationChatSettingsTestCon
     public async Task HasAutoBanTriggerCheckbox()
     {
         // Arrange
-        ConfigService.GetAsync<BanCelebrationConfig>(
-            ConfigType.BanCelebration,
-            Arg.Any<long>()).Returns(new BanCelebrationConfig { Enabled = true });
+        ConfigService.GetBanCelebrationAsync(Arg.Any<long>()).Returns(new BanCelebrationConfig { Enabled = true });
 
         // Act
         var cut = RenderComponent();
@@ -183,9 +176,7 @@ public class BanCelebrationChatSettingsTests : BanCelebrationChatSettingsTestCon
     public async Task HasManualBanTriggerCheckbox()
     {
         // Arrange
-        ConfigService.GetAsync<BanCelebrationConfig>(
-            ConfigType.BanCelebration,
-            Arg.Any<long>()).Returns(new BanCelebrationConfig { Enabled = true });
+        ConfigService.GetBanCelebrationAsync(Arg.Any<long>()).Returns(new BanCelebrationConfig { Enabled = true });
 
         // Act
         var cut = RenderComponent();
@@ -204,9 +195,7 @@ public class BanCelebrationChatSettingsTests : BanCelebrationChatSettingsTestCon
     public async Task HasSendToBannedUserToggle()
     {
         // Arrange
-        ConfigService.GetAsync<BanCelebrationConfig>(
-            ConfigType.BanCelebration,
-            Arg.Any<long>()).Returns(new BanCelebrationConfig { Enabled = true });
+        ConfigService.GetBanCelebrationAsync(Arg.Any<long>()).Returns(new BanCelebrationConfig { Enabled = true });
 
         // Act
         var cut = RenderComponent();
@@ -221,9 +210,7 @@ public class BanCelebrationChatSettingsTests : BanCelebrationChatSettingsTestCon
     public async Task DmToggle_HasHelperText()
     {
         // Arrange
-        ConfigService.GetAsync<BanCelebrationConfig>(
-            ConfigType.BanCelebration,
-            Arg.Any<long>()).Returns(new BanCelebrationConfig { Enabled = true });
+        ConfigService.GetBanCelebrationAsync(Arg.Any<long>()).Returns(new BanCelebrationConfig { Enabled = true });
 
         // Act
         var cut = RenderComponent();
@@ -286,18 +273,14 @@ public class BanCelebrationChatSettingsTests : BanCelebrationChatSettingsTestCon
         await Task.Delay(50);
 
         // Assert
-        await ConfigService.Received(1).GetAsync<BanCelebrationConfig>(
-            ConfigType.BanCelebration,
-            testChatId);
+        await ConfigService.Received(1).GetBanCelebrationAsync(testChatId);
     }
 
     [Test]
     public async Task HandlesConfigLoadError_Gracefully()
     {
         // Arrange
-        ConfigService.GetAsync<BanCelebrationConfig>(
-            ConfigType.BanCelebration,
-            Arg.Any<long>()).Returns<ValueTask<BanCelebrationConfig?>>(x => throw new Exception("Config load failed"));
+        ConfigService.GetBanCelebrationAsync(Arg.Any<long>()).Returns<ValueTask<BanCelebrationConfig?>>(x => throw new Exception("Config load failed"));
 
         // Act - Should not throw
         var cut = RenderComponent();
@@ -315,9 +298,7 @@ public class BanCelebrationChatSettingsTests : BanCelebrationChatSettingsTestCon
     public async Task HasDividers_WhenEnabled()
     {
         // Arrange
-        ConfigService.GetAsync<BanCelebrationConfig>(
-            ConfigType.BanCelebration,
-            Arg.Any<long>()).Returns(new BanCelebrationConfig { Enabled = true });
+        ConfigService.GetBanCelebrationAsync(Arg.Any<long>()).Returns(new BanCelebrationConfig { Enabled = true });
 
         // Act
         var cut = RenderComponent();
@@ -336,9 +317,7 @@ public class BanCelebrationChatSettingsTests : BanCelebrationChatSettingsTestCon
     public async Task HasTriggersHeader_WhenEnabled()
     {
         // Arrange
-        ConfigService.GetAsync<BanCelebrationConfig>(
-            ConfigType.BanCelebration,
-            Arg.Any<long>()).Returns(new BanCelebrationConfig { Enabled = true });
+        ConfigService.GetBanCelebrationAsync(Arg.Any<long>()).Returns(new BanCelebrationConfig { Enabled = true });
 
         // Act
         var cut = RenderComponent();
@@ -353,9 +332,7 @@ public class BanCelebrationChatSettingsTests : BanCelebrationChatSettingsTestCon
     public async Task HasDmHeader_WhenEnabled()
     {
         // Arrange
-        ConfigService.GetAsync<BanCelebrationConfig>(
-            ConfigType.BanCelebration,
-            Arg.Any<long>()).Returns(new BanCelebrationConfig { Enabled = true });
+        ConfigService.GetBanCelebrationAsync(Arg.Any<long>()).Returns(new BanCelebrationConfig { Enabled = true });
 
         // Act
         var cut = RenderComponent();

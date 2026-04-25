@@ -2,10 +2,12 @@
 @using TelegramGroupsAdmin.ContentDetection.Models
 @using TelegramGroupsAdmin.ContentDetection.Services.Blocklists
 @using Microsoft.AspNetCore.Components.Authorization
+@using TelegramGroupsAdmin.Configuration.Services
 @inject IBlocklistSubscriptionsRepository BlocklistRepo
 @inject IDomainFiltersRepository DomainFiltersRepo
 @inject IBlocklistSyncService BlocklistSync
 @inject IConfigService ConfigService
+@inject IContentDetectionConfigRepository ContentDetectionRepository
 @inject ISnackbar Snackbar
 @inject AuthenticationStateProvider AuthStateProvider
 @implements IDisposable
@@ -297,7 +299,7 @@
     {
         try
         {
-            _globalSpamConfig = await ConfigService.GetAsync<ContentDetectionConfig>(ConfigType.ContentDetection, 0)
+            _globalSpamConfig = await ContentDetectionRepository.GetGlobalConfigAsync()
                                 ?? new ContentDetectionConfig();
             _urlBlocklistConfig = _globalSpamConfig.UrlBlocklist;
         }
@@ -325,7 +327,7 @@
         try
         {
             _globalSpamConfig.UrlBlocklist = _urlBlocklistConfig;
-            await ConfigService.SaveAsync(ConfigType.ContentDetection, ChatIdentity.FromId(0), _globalSpamConfig);
+            await ContentDetectionRepository.UpdateGlobalConfigAsync(_globalSpamConfig);
             Snackbar.Add("URL blocklist configuration saved", Severity.Success);
         }
         catch (Exception ex)

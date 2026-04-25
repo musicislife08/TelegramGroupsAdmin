@@ -1,59 +1,74 @@
+using TelegramGroupsAdmin.Configuration.Models;
+using TelegramGroupsAdmin.Configuration.Models.Welcome;
 using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.Core.Models;
 
 namespace TelegramGroupsAdmin.Configuration.Services;
 
+// BanCelebrationConfig, ServiceMessageDeletionConfig, WarningSystemConfig live in
+// TelegramGroupsAdmin.Configuration root namespace (a parent of this one), so are accessible without an extra using.
+
 /// <summary>
-/// Service for managing unified configuration storage
-/// Supports global and per-chat configuration with automatic merging
+/// Typed configuration service. Reads use long chatId; mutations require ChatIdentity
+/// for log context plus an Actor for audit attribution.
 /// </summary>
 public interface IConfigService
 {
-    /// <summary>
-    /// Save a configuration value for a specific config type and chat.
-    /// Pass ChatIdentity.FromId(0) for global config.
-    /// </summary>
-    Task SaveAsync<T>(ConfigType configType, ChatIdentity chat, T config) where T : class;
+    // --- Reads ---
+    ValueTask<WelcomeConfig?> GetWelcomeAsync(long chatId, CancellationToken ct = default);
+    ValueTask<WelcomeConfig?> GetEffectiveWelcomeAsync(long chatId, CancellationToken ct = default);
 
-    /// <summary>
-    /// Get a configuration value for a specific config type and chat.
-    /// Returns the raw value without merging (null if not set).
-    /// </summary>
-    ValueTask<T?> GetAsync<T>(ConfigType configType, long chatId) where T : class;
+    ValueTask<LogConfig?> GetLogAsync(long chatId, CancellationToken ct = default);
+    ValueTask<LogConfig?> GetEffectiveLogAsync(long chatId, CancellationToken ct = default);
 
-    /// <summary>
-    /// Get effective configuration for a chat by merging global and chat-specific settings.
-    /// Chat-specific values override global values.
-    /// </summary>
-    ValueTask<T?> GetEffectiveAsync<T>(ConfigType configType, long chatId) where T : class;
+    ValueTask<BotProtectionConfig?> GetBotProtectionAsync(long chatId, CancellationToken ct = default);
+    ValueTask<BotProtectionConfig?> GetEffectiveBotProtectionAsync(long chatId, CancellationToken ct = default);
 
-    /// <summary>
-    /// Delete a configuration value for a specific config type and chat.
-    /// Pass ChatIdentity.FromId(0) for global config.
-    /// </summary>
-    Task DeleteAsync(ConfigType configType, ChatIdentity chat);
+    ValueTask<TelegramBotConfig?> GetTelegramBotAsync(long chatId, CancellationToken ct = default);
+    ValueTask<TelegramBotConfig?> GetEffectiveTelegramBotAsync(long chatId, CancellationToken ct = default);
 
-    /// <summary>
-    /// Get the encrypted Telegram bot token from database (global config only, chat_id = 0)
-    /// Returns decrypted token or null if not configured
-    /// </summary>
-    ValueTask<string?> GetTelegramBotTokenAsync();
+    ValueTask<ServiceMessageDeletionConfig?> GetServiceMessageDeletionAsync(long chatId, CancellationToken ct = default);
+    ValueTask<ServiceMessageDeletionConfig?> GetEffectiveServiceMessageDeletionAsync(long chatId, CancellationToken ct = default);
 
-    /// <summary>
-    /// Save the Telegram bot token to database (encrypted, global config only, chat_id = 0)
-    /// </summary>
-    Task SaveTelegramBotTokenAsync(string botToken);
+    ValueTask<WarningSystemConfig?> GetWarningSystemAsync(long chatId, CancellationToken ct = default);
+    ValueTask<WarningSystemConfig?> GetEffectiveWarningSystemAsync(long chatId, CancellationToken ct = default);
 
-    /// <summary>
-    /// Get all content detection chat configurations (for admin UI listing).
-    /// Returns metadata about which chats have custom configs.
-    /// </summary>
+    ValueTask<InviteCommandConfig?> GetInviteCommandAsync(long chatId, CancellationToken ct = default);
+    ValueTask<InviteCommandConfig?> GetEffectiveInviteCommandAsync(long chatId, CancellationToken ct = default);
+
+    ValueTask<BanCelebrationConfig?> GetBanCelebrationAsync(long chatId, CancellationToken ct = default);
+    ValueTask<BanCelebrationConfig?> GetEffectiveBanCelebrationAsync(long chatId, CancellationToken ct = default);
+
+    // --- Mutations ---
+    Task SaveWelcomeAsync(ChatIdentity chat, WelcomeConfig config, Actor initiator, CancellationToken ct = default);
+    Task DeleteWelcomeAsync(ChatIdentity chat, Actor initiator, CancellationToken ct = default);
+
+    Task SaveLogAsync(ChatIdentity chat, LogConfig config, Actor initiator, CancellationToken ct = default);
+    Task DeleteLogAsync(ChatIdentity chat, Actor initiator, CancellationToken ct = default);
+
+    Task SaveBotProtectionAsync(ChatIdentity chat, BotProtectionConfig config, Actor initiator, CancellationToken ct = default);
+    Task DeleteBotProtectionAsync(ChatIdentity chat, Actor initiator, CancellationToken ct = default);
+
+    Task SaveTelegramBotAsync(ChatIdentity chat, TelegramBotConfig config, Actor initiator, CancellationToken ct = default);
+    Task DeleteTelegramBotAsync(ChatIdentity chat, Actor initiator, CancellationToken ct = default);
+
+    Task SaveServiceMessageDeletionAsync(ChatIdentity chat, ServiceMessageDeletionConfig config, Actor initiator, CancellationToken ct = default);
+    Task DeleteServiceMessageDeletionAsync(ChatIdentity chat, Actor initiator, CancellationToken ct = default);
+
+    Task SaveWarningSystemAsync(ChatIdentity chat, WarningSystemConfig config, Actor initiator, CancellationToken ct = default);
+    Task DeleteWarningSystemAsync(ChatIdentity chat, Actor initiator, CancellationToken ct = default);
+
+    Task SaveInviteCommandAsync(ChatIdentity chat, InviteCommandConfig config, Actor initiator, CancellationToken ct = default);
+    Task DeleteInviteCommandAsync(ChatIdentity chat, Actor initiator, CancellationToken ct = default);
+
+    Task SaveBanCelebrationAsync(ChatIdentity chat, BanCelebrationConfig config, Actor initiator, CancellationToken ct = default);
+    Task DeleteBanCelebrationAsync(ChatIdentity chat, Actor initiator, CancellationToken ct = default);
+
+    // --- Bot token ---
+    ValueTask<string?> GetBotTokenAsync(CancellationToken ct = default);
+    Task SaveBotTokenAsync(string botToken, Actor initiator, CancellationToken ct = default);
+
+    // --- ContentDetection helpers (delegate to IContentDetectionConfigRepository, retained) ---
     Task<IEnumerable<ChatConfigInfo>> GetAllContentDetectionConfigsAsync(CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Get the names of content detection checks that have AlwaysRun=true for the given chat.
-    /// Uses optimized JSONB query to efficiently extract only critical check names.
-    /// Handles UseGlobal merging at the database level.
-    /// </summary>
     Task<HashSet<string>> GetCriticalCheckNamesAsync(long chatId, CancellationToken cancellationToken = default);
 }

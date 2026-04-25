@@ -1,4 +1,4 @@
-@inject IConfigService ConfigService
+@inject IContentDetectionConfigRepository ContentDetectionRepository
 @inject ISnackbar Snackbar
 
 <MudDialog>
@@ -110,7 +110,14 @@
 
             var config = component.GetConfig();
             var chat = Chat ?? ChatIdentity.FromId(0);
-            await ConfigService.SaveAsync(ConfigType.ContentDetection, chat, config);
+            if (chat.Id == 0)
+            {
+                await ContentDetectionRepository.UpdateGlobalConfigAsync(config);
+            }
+            else
+            {
+                await ContentDetectionRepository.UpdateChatConfigAsync(chat.Id, config);
+            }
             Snackbar.Add(chat.Id == 0 ? "Global configuration saved successfully" : "Chat configuration saved successfully", Severity.Success);
 
             MudDialog.Close(DialogResult.Ok(true));

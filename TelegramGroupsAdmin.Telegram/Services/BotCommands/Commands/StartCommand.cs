@@ -10,6 +10,7 @@ using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.Welcome;
+using TelegramGroupsAdmin.Configuration.Services;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
 
@@ -140,7 +141,7 @@ public class StartCommand : IBotCommand
         // Must create scope because StartCommand is scoped but IConfigService is also scoped
         using var scope = _serviceProvider.CreateScope();
         var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
-        var config = await configService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, chatId)
+        var config = await configService.GetEffectiveWelcomeAsync(chatId, cancellationToken)
                      ?? WelcomeConfig.Default;
 
         // Send main welcome message in DM
@@ -238,7 +239,7 @@ public class StartCommand : IBotCommand
         // Load welcome config from database (chat-specific or global fallback)
         using var scope = _serviceProvider.CreateScope();
         var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
-        var config = await configService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, examPayload.ChatId)
+        var config = await configService.GetEffectiveWelcomeAsync(examPayload.ChatId, cancellationToken)
                      ?? WelcomeConfig.Default;
 
         if (config.Mode != WelcomeMode.EntranceExam || config.ExamConfig == null)

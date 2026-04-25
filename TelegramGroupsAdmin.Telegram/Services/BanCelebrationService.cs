@@ -10,6 +10,7 @@ using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.Configuration.Services;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 
@@ -42,8 +43,7 @@ public class BanCelebrationService(
         try
         {
             // Get the effective config for this chat (merges global + chat-specific)
-            var config = await configService.GetEffectiveAsync<BanCelebrationConfig>(
-                ConfigType.BanCelebration, chat.Id);
+            var config = await configService.GetEffectiveBanCelebrationAsync(chat.Id, cancellationToken);
 
             // Use default config if none exists
             config ??= BanCelebrationConfig.Default;
@@ -275,7 +275,7 @@ public class BanCelebrationService(
         try
         {
             // Check if the chat has DM-based welcome mode (required for DM delivery)
-            var welcomeConfig = await configService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, chat.Id);
+            var welcomeConfig = await configService.GetEffectiveWelcomeAsync(chat.Id, cancellationToken);
             if (welcomeConfig == null || !welcomeConfig.Enabled)
             {
                 logger.LogDebug("Skipping DM to banned user: welcome system not enabled for chat {ChatId}", chat.Id);

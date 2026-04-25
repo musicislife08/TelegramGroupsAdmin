@@ -1,10 +1,12 @@
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
+using TelegramGroupsAdmin.Configuration.Repositories;
+using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.ContentDetection.Services;
 using TelegramGroupsAdmin.Core.Models;
-using TelegramGroupsAdmin.Core.Services.AI;
+using TelegramGroupsAdmin.AI.Services;
 using TelegramGroupsAdmin.Telegram.Constants;
 
 namespace TelegramGroupsAdmin.Telegram.Handlers;
@@ -18,18 +20,18 @@ namespace TelegramGroupsAdmin.Telegram.Handlers;
 /// </summary>
 public class TranslationHandler : ITranslationHandler
 {
-    private readonly IConfigService _configService;
+    private readonly IContentDetectionConfigRepository _contentDetectionConfigRepository;
     private readonly IAITranslationService _translationService;
     private readonly ILanguageDetectionService _languageDetectionService;
     private readonly ILogger<TranslationHandler> _logger;
 
     public TranslationHandler(
-        IConfigService configService,
+        IContentDetectionConfigRepository contentDetectionConfigRepository,
         IAITranslationService translationService,
         ILanguageDetectionService languageDetectionService,
         ILogger<TranslationHandler> logger)
     {
-        _configService = configService;
+        _contentDetectionConfigRepository = contentDetectionConfigRepository;
         _translationService = translationService;
         _languageDetectionService = languageDetectionService;
         _logger = logger;
@@ -51,9 +53,8 @@ public class TranslationHandler : ITranslationHandler
             return null;
         }
 
-        // Load translation configuration via ConfigService (single entry point for all config)
-        var spamConfig = await _configService.GetAsync<ContentDetectionConfig>(ConfigType.ContentDetection, 0)
-                        ?? new ContentDetectionConfig();
+        // Load translation configuration via ContentDetection repository (effective config for chat)
+        var spamConfig = await _contentDetectionConfigRepository.GetEffectiveConfigAsync(chatId, cancellationToken);
 
         // Check if translation is enabled and message meets minimum length
         if (!spamConfig.Translation.Enabled ||

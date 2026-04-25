@@ -4,6 +4,7 @@ using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
+using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
@@ -13,6 +14,7 @@ using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
 using TgUser = Telegram.Bot.Types.User;
 using UiModels = TelegramGroupsAdmin.Telegram.Models;
+using TelegramGroupsAdmin.Configuration.Services;
 
 namespace TelegramGroupsAdmin.UnitTests.Services;
 
@@ -24,7 +26,7 @@ public class UserAutoTrustServiceTests
 {
     private IDetectionResultsRepository _detectionResultsRepo = null!;
     private IUserActionsRepository _userActionsRepo = null!;
-    private IConfigService _configService = null!;
+    private IContentDetectionConfigRepository _contentDetectionConfigRepo = null!;
     private ITelegramUserRepository _userRepo = null!;
     private ILogger<UserAutoTrustService> _logger = null!;
     private UserAutoTrustService _service = null!;
@@ -37,14 +39,14 @@ public class UserAutoTrustServiceTests
     {
         _detectionResultsRepo = Substitute.For<IDetectionResultsRepository>();
         _userActionsRepo = Substitute.For<IUserActionsRepository>();
-        _configService = Substitute.For<IConfigService>();
+        _contentDetectionConfigRepo = Substitute.For<IContentDetectionConfigRepository>();
         _userRepo = Substitute.For<ITelegramUserRepository>();
         _logger = Substitute.For<ILogger<UserAutoTrustService>>();
 
         _service = new UserAutoTrustService(
             _detectionResultsRepo,
             _userActionsRepo,
-            _configService,
+            _contentDetectionConfigRepo,
             _userRepo,
             _logger);
     }
@@ -54,7 +56,7 @@ public class UserAutoTrustServiceTests
     {
         // Arrange
         var config = new ContentDetectionConfig { FirstMessageOnly = false };
-        _configService.GetEffectiveAsync<ContentDetectionConfig>(ConfigType.ContentDetection, TestChatId)
+        _contentDetectionConfigRepo.GetEffectiveConfigAsync(TestChatId)
             .Returns(config);
 
         // Act
@@ -70,7 +72,7 @@ public class UserAutoTrustServiceTests
     {
         // Arrange
         var config = new ContentDetectionConfig { FirstMessageOnly = true };
-        _configService.GetEffectiveAsync<ContentDetectionConfig>(ConfigType.ContentDetection, TestChatId)
+        _contentDetectionConfigRepo.GetEffectiveConfigAsync(TestChatId)
             .Returns(config);
         _userRepo.GetByIdAsync(TestUserId, Arg.Any<CancellationToken>())
             .Returns((UiModels.TelegramUser?)null);
@@ -93,7 +95,7 @@ public class UserAutoTrustServiceTests
             FirstMessagesCount = 3,
             AutoTrustMinMessageLength = 20
         };
-        _configService.GetEffectiveAsync<ContentDetectionConfig>(ConfigType.ContentDetection, TestChatId)
+        _contentDetectionConfigRepo.GetEffectiveConfigAsync(TestChatId)
             .Returns(config);
 
         var user = CreateTestUser(firstSeenHoursAgo: 1); // Only 1 hour old
@@ -120,7 +122,7 @@ public class UserAutoTrustServiceTests
             FirstMessagesCount = 3,
             AutoTrustMinMessageLength = 20
         };
-        _configService.GetEffectiveAsync<ContentDetectionConfig>(ConfigType.ContentDetection, TestChatId)
+        _contentDetectionConfigRepo.GetEffectiveConfigAsync(TestChatId)
             .Returns(config);
 
         var user = CreateTestUser(firstSeenHoursAgo: 48);
@@ -149,7 +151,7 @@ public class UserAutoTrustServiceTests
             FirstMessagesCount = 3,
             AutoTrustMinMessageLength = 20
         };
-        _configService.GetEffectiveAsync<ContentDetectionConfig>(ConfigType.ContentDetection, TestChatId)
+        _contentDetectionConfigRepo.GetEffectiveConfigAsync(TestChatId)
             .Returns(config);
 
         var user = CreateTestUser(firstSeenHoursAgo: 48);
@@ -184,7 +186,7 @@ public class UserAutoTrustServiceTests
             FirstMessagesCount = 3,
             AutoTrustMinMessageLength = 20
         };
-        _configService.GetEffectiveAsync<ContentDetectionConfig>(ConfigType.ContentDetection, TestChatId)
+        _contentDetectionConfigRepo.GetEffectiveConfigAsync(TestChatId)
             .Returns(config);
 
         var user = CreateTestUser(firstSeenHoursAgo: 0); // Brand new account

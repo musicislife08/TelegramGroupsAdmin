@@ -11,6 +11,7 @@ using TelegramGroupsAdmin.Configuration.Models.Welcome;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Constants;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Configuration.Services;
 
 namespace TelegramGroupsAdmin.ComponentTests.Components;
 
@@ -33,7 +34,7 @@ public abstract class ExamReviewCardTestContext : BunitContext
         ManagedChatsRepository = Substitute.For<IManagedChatsRepository>();
 
         // Configure default mock behavior
-        ConfigService.GetEffectiveAsync<WelcomeConfig>(Arg.Any<ConfigType>(), Arg.Any<long>())
+        ConfigService.GetEffectiveWelcomeAsync(Arg.Any<long>())
             .Returns(CreateDefaultWelcomeConfig());
 
         TelegramUserRepository.GetByTelegramIdAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())

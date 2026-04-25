@@ -9,7 +9,7 @@ using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Repositories;
 using TelegramGroupsAdmin.Core.Services;
-using TelegramGroupsAdmin.Core.Services.AI;
+using TelegramGroupsAdmin.AI.Services;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
@@ -18,6 +18,7 @@ using TelegramGroupsAdmin.Telegram.Metrics;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
 using TL;
+using TelegramGroupsAdmin.Configuration.Services;
 
 namespace TelegramGroupsAdmin.Telegram.Services.UserApi;
 
@@ -341,7 +342,7 @@ public sealed class ProfileScanService(
             isScam, isFake, isVerified);
 
         var configService = sp.GetRequiredService<IConfigService>();
-        var welcomeConfig = await configService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, chat.Id);
+        var welcomeConfig = await configService.GetEffectiveWelcomeAsync(chat.Id);
         var profileScanConfig = welcomeConfig?.JoinSecurity?.ProfileScan;
         var banThreshold = profileScanConfig?.BanThreshold ?? ProfileScanConfig.DefaultBanThreshold;
         var notifyThreshold = profileScanConfig?.NotifyThreshold ?? ProfileScanConfig.DefaultNotifyThreshold;
@@ -781,7 +782,7 @@ public sealed class ProfileScanService(
         CancellationToken ct)
     {
         var configService = sp.GetRequiredService<IConfigService>();
-        var welcomeConfig = await configService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, chat?.Id ?? 0);
+        var welcomeConfig = await configService.GetEffectiveWelcomeAsync(chat?.Id ?? 0);
         var profileScanConfig = welcomeConfig?.JoinSecurity?.ProfileScan;
         var banThreshold = profileScanConfig?.BanThreshold ?? ProfileScanConfig.DefaultBanThreshold;
         var notifyThreshold = profileScanConfig?.NotifyThreshold ?? ProfileScanConfig.DefaultNotifyThreshold;

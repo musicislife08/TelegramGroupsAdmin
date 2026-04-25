@@ -7,6 +7,8 @@ using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Data.Models;
 using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
+using TelegramGroupsAdmin.Configuration.Repositories;
+using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Repositories;
@@ -36,7 +38,7 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
     private readonly IReportsRepository _reportsRepository;
     private readonly IBotModerationService _moderationActionService;
     private readonly ITelegramBotClientFactory _botClientFactory;
-    private readonly IConfigService _configService;
+    private readonly IContentDetectionConfigRepository _contentDetectionConfigRepository;
     private readonly ILogger<ImpersonationDetectionService> _logger;
 
     // Name matching threshold (80% similar = possible impersonation)
@@ -55,7 +57,7 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
         IReportsRepository reportsRepository,
         IBotModerationService moderationActionService,
         ITelegramBotClientFactory botClientFactory,
-        IConfigService configService,
+        IContentDetectionConfigRepository contentDetectionConfigRepository,
         ILogger<ImpersonationDetectionService> logger)
     {
         _contextFactory = contextFactory;
@@ -67,7 +69,7 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
         _reportsRepository = reportsRepository;
         _moderationActionService = moderationActionService;
         _botClientFactory = botClientFactory;
-        _configService = configService;
+        _contentDetectionConfigRepository = contentDetectionConfigRepository;
         _logger = logger;
     }
 
@@ -94,8 +96,7 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
 
         // 3. Check message count (only check first N messages per chat)
         var messageCount = await _messageHistoryRepository.GetMessageCountAsync(userId, chatId);
-        var config = await _configService.GetEffectiveAsync<ContentDetectionConfig>(ConfigType.ContentDetection, chatId)
-                     ?? new ContentDetectionConfig();
+        var config = await _contentDetectionConfigRepository.GetEffectiveConfigAsync(chatId);
 
         var threshold = config.FirstMessagesCount;
         if (messageCount >= threshold)

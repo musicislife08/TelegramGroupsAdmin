@@ -19,6 +19,7 @@ using TelegramGroupsAdmin.Telegram.Metrics;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.BotCommands;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
+using TelegramGroupsAdmin.Configuration.Services;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 
@@ -196,8 +197,8 @@ public partial class MessageProcessingService(
         // Handle service messages (join/leave, photo changes, title changes, etc.)
         // Check per-chat config to determine if each type should be deleted
         var configService = messageScope.ServiceProvider.GetRequiredService<IConfigService>();
-        var deletionConfig = await configService.GetEffectiveAsync<ServiceMessageDeletionConfig>(
-            ConfigType.ServiceMessageDeletion, message.Chat.Id) ?? ServiceMessageDeletionConfig.Default;
+        var deletionConfig = await configService.GetEffectiveServiceMessageDeletionAsync(message.Chat.Id, cancellationToken)
+                             ?? ServiceMessageDeletionConfig.Default;
 
         if (ServiceMessageHelper.IsServiceMessage(message, deletionConfig, out var shouldDelete))
         {

@@ -5,6 +5,7 @@
 @using TelegramGroupsAdmin.Core.Services
 @using TelegramGroupsAdmin.Telegram.Extensions
 @using TelegramGroupsAdmin.Telegram.Models
+@using TelegramGroupsAdmin.Configuration.Services
 @inject IConfigService ConfigService
 @inject ISnackbar Snackbar
 @inject IJSRuntime JsRuntime
@@ -526,6 +527,8 @@
 </MudPaper>
 
 @code {
+    [CascadingParameter] private WebUserIdentity? WebUser { get; set; }
+
     /// <summary>
     /// Optional chat for per-chat configuration. If null, uses global configuration.
     /// </summary>
@@ -557,7 +560,7 @@
         try
         {
             // Normalize null to 0 for global config (SQL NULL comparison doesn't work with ==)
-            var config = await ConfigService.GetAsync<WelcomeConfig>(ConfigType.Welcome, Chat?.Identity.Id ?? 0);
+            var config = await ConfigService.GetWelcomeAsync(Chat?.Identity.Id ?? 0);
 
             if (config == null)
             {
@@ -619,7 +622,8 @@
         _saving = true;
         try
         {
-            await ConfigService.SaveAsync(ConfigType.Welcome, Chat?.Identity ?? ChatIdentity.FromId(0), _config);
+            var actor = WebUser!.ToActor();
+            await ConfigService.SaveWelcomeAsync(Chat?.Identity ?? ChatIdentity.FromId(0), _config, actor);
             Snackbar.Add($"Welcome configuration saved {(Chat != null ? $"for {Chat.Identity.ToLogInfo()}" : "globally")}", Severity.Success);
 
             // Invoke callback if provided

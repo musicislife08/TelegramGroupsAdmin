@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
+using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.JobPayloads;
@@ -9,6 +10,7 @@ using TelegramGroupsAdmin.Core.Models;
 using static TelegramGroupsAdmin.Core.BackgroundJobs.DeduplicationKeys;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Configuration.Services;
 
 namespace TelegramGroupsAdmin.Telegram.Handlers;
 
@@ -26,20 +28,20 @@ namespace TelegramGroupsAdmin.Telegram.Handlers;
 public class FileScanningHandler
 {
     private readonly IJobScheduler _jobScheduler;
-    private readonly IConfigService _configService;
+    private readonly IContentDetectionConfigRepository _contentDetectionConfigRepository;
     private readonly ITelegramUserRepository _userRepository;
     private readonly IChatAdminsRepository _chatAdminsRepository;
     private readonly ILogger<FileScanningHandler> _logger;
 
     public FileScanningHandler(
         IJobScheduler jobScheduler,
-        IConfigService configService,
+        IContentDetectionConfigRepository contentDetectionConfigRepository,
         ITelegramUserRepository userRepository,
         IChatAdminsRepository chatAdminsRepository,
         ILogger<FileScanningHandler> logger)
     {
         _jobScheduler = jobScheduler;
-        _configService = configService;
+        _contentDetectionConfigRepository = contentDetectionConfigRepository;
         _userRepository = userRepository;
         _chatAdminsRepository = chatAdminsRepository;
         _logger = logger;
@@ -63,7 +65,7 @@ public class FileScanningHandler
         }
 
         // Get effective content detection config for this chat
-        var config = await _configService.GetEffectiveAsync<ContentDetectionConfig>(ConfigType.ContentDetection, chatId);
+        var config = await _contentDetectionConfigRepository.GetEffectiveConfigAsync(chatId, cancellationToken);
 
         // If no config exists, use defaults (file scanning enabled with AlwaysRun=true)
         var fileScanningConfig = config?.FileScanning ?? new FileScanningDetectionConfig();

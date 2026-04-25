@@ -4,6 +4,7 @@ using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
+using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Extensions;
@@ -11,6 +12,7 @@ using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
+using TelegramGroupsAdmin.Configuration.Services;
 
 namespace TelegramGroupsAdmin.Telegram.Handlers;
 
@@ -46,10 +48,10 @@ public class LanguageWarningHandler
             if (translation == null)
                 return;
 
-            // Get configuration service - single entry point for all config access
+            // Get configuration services
             var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
-            var spamConfig = await configService.GetEffectiveAsync<ContentDetectionConfig>(ConfigType.ContentDetection, message.Chat.Id)
-                            ?? new ContentDetectionConfig();
+            var contentDetectionConfigRepository = scope.ServiceProvider.GetRequiredService<IContentDetectionConfigRepository>();
+            var spamConfig = await contentDetectionConfigRepository.GetEffectiveConfigAsync(message.Chat.Id, cancellationToken);
 
             // Check if language warnings are enabled
             if (!spamConfig.Translation.WarnNonEnglish)
@@ -69,7 +71,7 @@ public class LanguageWarningHandler
                 return;
 
             // Get warning system config for auto-ban threshold
-            var warningConfig = await configService.GetEffectiveAsync<WarningSystemConfig>(ConfigType.Moderation, message.Chat.Id)
+            var warningConfig = await configService.GetEffectiveWarningSystemAsync(message.Chat.Id, cancellationToken)
                                ?? WarningSystemConfig.Default;
 
             // REFACTOR-5: Get current warning count from source of truth (JSONB warnings on telegram_users)

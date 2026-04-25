@@ -16,6 +16,7 @@ using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.Welcome;
+using TelegramGroupsAdmin.Configuration.Services;
 
 namespace TelegramGroupsAdmin.IntegrationTests.Telegram.Services;
 
@@ -57,9 +58,7 @@ public class ExamFlowServiceTests
 
         // Configure mock config service to return valid exam config
         var defaultConfig = CreateValidExamConfig();
-        mockConfigService.GetEffectiveAsync<WelcomeConfig>(
-                Arg.Any<ConfigType>(),
-                Arg.Any<long>())
+        mockConfigService.GetEffectiveWelcomeAsync(Arg.Any<long>())
             .Returns(new ValueTask<WelcomeConfig?>(defaultConfig));
 
         // Create a real Message for mock returns

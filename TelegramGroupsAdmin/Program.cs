@@ -4,6 +4,7 @@ using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using Serilog;
 using TelegramGroupsAdmin;
+using TelegramGroupsAdmin.AI.Extensions;
 using TelegramGroupsAdmin.BackgroundJobs.Extensions;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Core.Extensions;
@@ -60,6 +61,9 @@ builder.Services.AddDataServices(connectionString);
 
 // Core services (audit, etc.)
 builder.Services.AddCoreServices();
+
+// AI services (chat completion, translation, feature factories)
+builder.Services.AddAIServices();
 
 // Register Serilog configuration service (will be configured after app.Build())
 SerilogDynamicConfiguration? serilogConfig = null;

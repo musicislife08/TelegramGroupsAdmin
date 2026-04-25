@@ -3,6 +3,7 @@ using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Configuration.Models.Welcome;
+using TelegramGroupsAdmin.Configuration.Services;
 
 namespace TelegramGroupsAdmin.E2ETests.Infrastructure;
 
@@ -213,6 +214,6 @@ public class TestWelcomeConfigBuilder
             TrustedBypass = _trustedBypassConfig ?? new()
         };
 
-        await configService.SaveAsync(ConfigType.Welcome, ChatIdentity.FromId(_chatId), welcomeConfig);
+        await configService.SaveWelcomeAsync(ChatIdentity.FromId(_chatId), welcomeConfig, Actor.SystemSeed);
     }
 }

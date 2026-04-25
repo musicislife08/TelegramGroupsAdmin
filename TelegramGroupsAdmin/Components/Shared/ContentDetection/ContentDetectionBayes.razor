@@ -1,5 +1,6 @@
 @implements IDetectionConfigComponent
 @inject IConfigService ConfigService
+@inject IContentDetectionConfigRepository ContentDetectionRepository
 @inject ISnackbar Snackbar
 
 <MudPaper Class="pa-4" Elevation="1">
@@ -71,7 +72,7 @@
         try
         {
             // Always load global config for comparison/fallback
-            _globalConfig = await ConfigService.GetAsync<ContentDetectionConfig>(ConfigType.ContentDetection, 0)
+            _globalConfig = await ContentDetectionRepository.GetGlobalConfigAsync()
                             ?? new ContentDetectionConfig();
 
             if (IsGlobalView)
@@ -82,7 +83,7 @@
             else
             {
                 // Load chat-specific config (which may have UseGlobal flags set)
-                var chatConfig = await ConfigService.GetAsync<ContentDetectionConfig>(ConfigType.ContentDetection, Chat!.Id);
+                var chatConfig = await ContentDetectionRepository.GetByChatIdAsync(Chat!.Id);
                 _config = chatConfig ?? new ContentDetectionConfig();
             }
         }

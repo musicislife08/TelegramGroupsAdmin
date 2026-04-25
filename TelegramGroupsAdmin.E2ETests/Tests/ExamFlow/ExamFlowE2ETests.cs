@@ -10,6 +10,7 @@ using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
+using TelegramGroupsAdmin.Configuration.Services;
 
 namespace TelegramGroupsAdmin.E2ETests.Tests.ExamFlow;
 
@@ -60,8 +61,7 @@ public class ExamFlowE2ETests : E2ETestBase
 
         // Get the exam config to know how many questions
         var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
-        var welcomeConfig = await configService.GetEffectiveAsync<WelcomeConfig>(
-            Configuration.ConfigType.Welcome, TestGroupChatId);
+        var welcomeConfig = await configService.GetEffectiveWelcomeAsync(TestGroupChatId);
         var examConfig = welcomeConfig!.ExamConfig!;
 
         // Start exam in DM (simulates user clicking deep link)
@@ -136,8 +136,7 @@ public class ExamFlowE2ETests : E2ETestBase
         var welcomeRepo = scope.ServiceProvider.GetRequiredService<IWelcomeResponsesRepository>();
 
         var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
-        var welcomeConfig = await configService.GetEffectiveAsync<WelcomeConfig>(
-            Configuration.ConfigType.Welcome, TestGroupChatId);
+        var welcomeConfig = await configService.GetEffectiveWelcomeAsync(TestGroupChatId);
         var examConfig = welcomeConfig!.ExamConfig!;
 
         // Start exam in DM
@@ -210,8 +209,7 @@ public class ExamFlowE2ETests : E2ETestBase
         var welcomeRepo = scope.ServiceProvider.GetRequiredService<IWelcomeResponsesRepository>();
 
         var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
-        var welcomeConfig = await configService.GetEffectiveAsync<WelcomeConfig>(
-            Configuration.ConfigType.Welcome, TestGroupChatId);
+        var welcomeConfig = await configService.GetEffectiveWelcomeAsync(TestGroupChatId);
         var examConfig = welcomeConfig!.ExamConfig!;
 
         // Start exam in DM

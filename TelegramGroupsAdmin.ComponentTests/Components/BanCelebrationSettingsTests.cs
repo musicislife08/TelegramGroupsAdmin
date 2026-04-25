@@ -8,6 +8,7 @@ using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
+using TelegramGroupsAdmin.Configuration.Services;
 
 namespace TelegramGroupsAdmin.ComponentTests.Components;
 
@@ -39,9 +40,7 @@ public class BanCelebrationSettingsTestContext : BunitContext
             Arg.Any<string>(),
             Arg.Any<int>(),
             Arg.Any<CancellationToken>()).Returns(true);
-        ConfigService.GetAsync<BanCelebrationConfig>(
-            ConfigType.BanCelebration,
-            Arg.Any<long>()).Returns(BanCelebrationConfig.Default);
+        ConfigService.GetBanCelebrationAsync(Arg.Any<long>()).Returns(BanCelebrationConfig.Default);
 
         // Register mocks
         Services.AddSingleton(GifRepository);
@@ -528,9 +527,7 @@ public class BanCelebrationSettingsTests : BanCelebrationSettingsTestContext
         await Task.Delay(50);
 
         // Assert - Should load config for chat_id=0 (global)
-        await ConfigService.Received(1).GetAsync<BanCelebrationConfig>(
-            ConfigType.BanCelebration,
-            0);
+        await ConfigService.Received(1).GetBanCelebrationAsync(0);
     }
 
     #endregion

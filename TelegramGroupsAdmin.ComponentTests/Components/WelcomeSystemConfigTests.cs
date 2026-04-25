@@ -4,6 +4,7 @@ using MudBlazor.Services;
 using NSubstitute;
 using TelegramGroupsAdmin.Components.Shared;
 using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Configuration.Models.Welcome;
 using TelegramGroupsAdmin.Telegram.Repositories;
@@ -26,7 +27,7 @@ public class WelcomeSystemConfigTestContext : BunitContext
         ConfigService = Substitute.For<IConfigService>();
 
         // Default config returns
-        ConfigService.GetAsync<WelcomeConfig>(Arg.Any<ConfigType>(), Arg.Any<long>())
+        ConfigService.GetWelcomeAsync(Arg.Any<long>())
             .Returns(WelcomeConfig.Default);
 
         // Register mocks
@@ -70,7 +71,7 @@ public class WelcomeSystemConfigTests : WelcomeSystemConfigTestContext
     public void Setup()
     {
         ConfigService.ClearReceivedCalls();
-        ConfigService.GetAsync<WelcomeConfig>(Arg.Any<ConfigType>(), Arg.Any<long>())
+        ConfigService.GetWelcomeAsync(Arg.Any<long>())
             .Returns(WelcomeConfig.Default);
     }
 
@@ -459,7 +460,7 @@ public class WelcomeSystemConfigTests : WelcomeSystemConfigTestContext
     public void ShowsErrorAlert_WhenConfigLoadFails()
     {
         // Arrange
-        ConfigService.GetAsync<WelcomeConfig>(Arg.Any<ConfigType>(), Arg.Any<long>())
+        ConfigService.GetWelcomeAsync(Arg.Any<long>())
             .Returns((WelcomeConfig?)null);
 
         // Note: Component sets _config to null on error, showing error alert
@@ -485,7 +486,7 @@ public class WelcomeSystemConfigTests : WelcomeSystemConfigTestContext
     {
         // Arrange - use WelcomeConfig.Default so MainWelcomeMessage is non-empty and
         // the panel is rendered via the "load as-is" path.
-        ConfigService.GetAsync<WelcomeConfig>(Arg.Any<ConfigType>(), Arg.Any<long>())
+        ConfigService.GetWelcomeAsync(Arg.Any<long>())
             .Returns(WelcomeConfig.Default);
 
         // Act
@@ -503,7 +504,7 @@ public class WelcomeSystemConfigTests : WelcomeSystemConfigTestContext
     {
         // Arrange - enable bypass so both Admin + Trusted template fields + previews
         // are present (fields are enabled; previews always render).
-        ConfigService.GetAsync<WelcomeConfig>(Arg.Any<ConfigType>(), Arg.Any<long>())
+        ConfigService.GetWelcomeAsync(Arg.Any<long>())
             .Returns(new WelcomeConfig
             {
                 MainWelcomeMessage = "Welcome {username}!",
@@ -535,7 +536,7 @@ public class WelcomeSystemConfigTests : WelcomeSystemConfigTestContext
     public void TrustedBypassPanel_FieldsDisabled_WhenToggleOff()
     {
         // Arrange - TrustedBypass.Enabled defaults to false
-        ConfigService.GetAsync<WelcomeConfig>(Arg.Any<ConfigType>(), Arg.Any<long>())
+        ConfigService.GetWelcomeAsync(Arg.Any<long>())
             .Returns(new WelcomeConfig
             {
                 TrustedBypass = new TrustedBypassConfig { Enabled = false }
@@ -557,7 +558,7 @@ public class WelcomeSystemConfigTests : WelcomeSystemConfigTestContext
     {
         // Arrange - MainWelcomeMessage must be non-empty so LoadConfig takes the "load as-is"
         // path and does not reset TrustedBypass to defaults.
-        ConfigService.GetAsync<WelcomeConfig>(Arg.Any<ConfigType>(), Arg.Any<long>())
+        ConfigService.GetWelcomeAsync(Arg.Any<long>())
             .Returns(new WelcomeConfig
             {
                 MainWelcomeMessage = "Welcome {username}!",
@@ -574,8 +575,8 @@ public class WelcomeSystemConfigTests : WelcomeSystemConfigTestContext
 
         // Capture the config passed to SaveAsync so we can assert its values
         WelcomeConfig? captured = null;
-        ConfigService.SaveAsync<WelcomeConfig>(
-            Arg.Any<ConfigType>(), Arg.Any<ChatIdentity>(), Arg.Do<WelcomeConfig>(c => captured = c))
+        ConfigService.SaveWelcomeAsync(
+            Arg.Any<ChatIdentity>(), Arg.Do<WelcomeConfig>(c => captured = c), Arg.Any<Actor>(), Arg.Any<CancellationToken>())
             .Returns(Task.CompletedTask);
 
         // Act
@@ -610,15 +611,15 @@ public class WelcomeSystemConfigTests : WelcomeSystemConfigTestContext
                 Cas = { Enabled = true },
             },
         };
-        ConfigService.GetAsync<WelcomeConfig>(Arg.Any<ConfigType>(), Arg.Any<long>())
+        ConfigService.GetWelcomeAsync(Arg.Any<long>())
             .Returns(legacyConfig);
 
         var cut = Render<WelcomeSystemConfig>();
 
         // Capture the config saved back so we can inspect the component's _config state.
         WelcomeConfig? captured = null;
-        ConfigService.SaveAsync<WelcomeConfig>(
-            Arg.Any<ConfigType>(), Arg.Any<ChatIdentity>(), Arg.Do<WelcomeConfig>(c => captured = c))
+        ConfigService.SaveWelcomeAsync(
+            Arg.Any<ChatIdentity>(), Arg.Do<WelcomeConfig>(c => captured = c), Arg.Any<Actor>(), Arg.Any<CancellationToken>())
             .Returns(Task.CompletedTask);
 
         // Act - trigger Save so we can read the preserved config via the captured arg.

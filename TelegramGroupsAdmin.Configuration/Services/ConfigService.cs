@@ -1,431 +1,314 @@
-using System.Text.Json;
-using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
-using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
+using TelegramGroupsAdmin.Configuration.Models;
+using TelegramGroupsAdmin.Configuration.Models.Welcome;
 using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.Core.Models;
-using TelegramGroupsAdmin.Data.Constants;
-using TelegramGroupsAdmin.Data.Models;
+using TelegramGroupsAdmin.Core.Services;
 
 namespace TelegramGroupsAdmin.Configuration.Services;
 
 /// <summary>
-/// Service for managing unified configuration storage with automatic global/chat merging
-/// PERF-CFG-1: Uses HybridCache for 95% query reduction with stampede protection
-/// Routes ConfigType.ContentDetection to IContentDetectionConfigRepository (separate table)
+/// Typed configuration service: caches reads via HybridCache, emits audit events
+/// on mutations, delegates all data-layer work (mapping, JSON, encryption, merge)
+/// to IConfigRepository.
 /// </summary>
 public class ConfigService(
-    IConfigRepository configRepository,
-    IContentDetectionConfigRepository contentDetectionConfigRepository,
+    IConfigRepository repository,
+    IContentDetectionConfigRepository contentDetectionRepository,
+    IAuditService auditService,
     HybridCache cache,
-    IDataProtectionProvider dataProtectionProvider,
     ILogger<ConfigService> logger) : IConfigService
 {
-    private static readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(15);
-    private static readonly HybridCacheEntryOptions CacheOptions = new() { Expiration = CacheDuration };
+    private static readonly HybridCacheEntryOptions CacheOptions = new() { Expiration = TimeSpan.FromMinutes(15) };
 
-    private static readonly JsonSerializerOptions JsonOptions = new()
+    // ============================================================================
+    // Welcome
+    // ============================================================================
+
+    public ValueTask<WelcomeConfig?> GetWelcomeAsync(long chatId, CancellationToken ct = default)
+        => cache.GetOrCreateAsync($"cfg_welcome_{chatId}",
+            async _ => await repository.GetWelcomeAsync(chatId, ct),
+            CacheOptions, cancellationToken: ct);
+
+    public ValueTask<WelcomeConfig?> GetEffectiveWelcomeAsync(long chatId, CancellationToken ct = default)
+        => cache.GetOrCreateAsync($"cfg_effective_welcome_{chatId}",
+            async _ => await repository.GetEffectiveWelcomeAsync(chatId, ct),
+            CacheOptions, tags: ["effective_welcome"], cancellationToken: ct);
+
+    public async Task SaveWelcomeAsync(ChatIdentity chat, WelcomeConfig config, Actor initiator, CancellationToken ct = default)
     {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        WriteIndented = false
-    };
-
-    public async Task SaveAsync<T>(ConfigType configType, ChatIdentity chat, T config) where T : class
-    {
-        ArgumentNullException.ThrowIfNull(config);
-
-        var chatId = chat.Id;
-        var scope = chatId == 0 ? "global" : chat.DisplayName;
-
-        // Route ContentDetection to separate repository
-        if (configType == ConfigType.ContentDetection)
-        {
-            if (config is not ContentDetectionConfig cdConfig)
-                throw new ArgumentException($"Expected ContentDetectionConfig but got {typeof(T).Name}", nameof(config));
-
-            if (chatId == 0)
-                await contentDetectionConfigRepository.UpdateGlobalConfigAsync(cdConfig);
-            else
-                await contentDetectionConfigRepository.UpdateChatConfigAsync(chatId, cdConfig);
-
-            logger.LogInformation("Configuration saved: {ConfigType} ({Scope})", configType, scope);
-
-            // Invalidate cache
-            await cache.RemoveAsync($"cfg_{configType}_{chatId}");
-            if (chatId != 0)
-                await cache.RemoveAsync($"cfg_effective_{configType}_{chatId}");
-            else
-                // Global config changed - invalidate all chat-specific effective caches via tag
-                await cache.RemoveByTagAsync($"effective_{configType}");
-            return;
-        }
-
-        var json = JsonSerializer.Serialize(config, JsonOptions);
-        var record = await configRepository.GetAsync(chatId);
-
-        if (record == null)
-        {
-            record = new ConfigRecordDto
-            {
-                ChatId = chatId
-                // CreatedAt will be set by database default (NOW())
-            };
-        }
-
-        // Set the appropriate config column based on config type
-        SetConfigColumn(record, configType, json);
-
-        await configRepository.UpsertAsync(record);
-
-        logger.LogInformation("Configuration saved: {ConfigType} ({Scope})", configType, scope);
-
-        // CRITICAL: Invalidate cache immediately for instant UI updates
-        var cacheKey = $"cfg_{configType}_{chatId}";
-        await cache.RemoveAsync(cacheKey);
-
-        // Also invalidate effective config cache if chat-specific
-        if (chatId != 0)
-        {
-            var effectiveCacheKey = $"cfg_effective_{configType}_{chatId}";
-            await cache.RemoveAsync(effectiveCacheKey);
-        }
-
-        // If updating global config, invalidate all chat-specific effective caches via tag
-        // (they fall back to global, so need to pick up new global values)
-        if (chatId == 0)
-        {
-            await cache.RemoveByTagAsync($"effective_{configType}");
-        }
+        await repository.SaveWelcomeAsync(chat, config, ct);
+        await EmitAuditAsync("Welcome", chat, initiator, ct);
+        await InvalidateAsync("welcome", chat.Id, ct);
+        logger.LogInformation("Welcome config saved for {Chat} by {Actor}", chat.DisplayName, initiator.DisplayName);
     }
 
-    public async ValueTask<T?> GetAsync<T>(ConfigType configType, long chatId) where T : class
+    public async Task DeleteWelcomeAsync(ChatIdentity chat, Actor initiator, CancellationToken ct = default)
     {
-        var cacheKey = $"cfg_{configType}_{chatId}";
-
-        // Route ContentDetection to separate repository
-        if (configType == ConfigType.ContentDetection)
-        {
-            // HybridCache provides stampede protection - only one caller fetches on miss
-            var cdConfig = await cache.GetOrCreateAsync(
-                cacheKey,
-                async _ =>
-                {
-                    if (chatId == 0)
-                        return await contentDetectionConfigRepository.GetGlobalConfigAsync();
-                    return await contentDetectionConfigRepository.GetByChatIdAsync(chatId);
-                },
-                CacheOptions);
-
-            return cdConfig as T;
-        }
-
-        // Regular configs - use GetOrCreateAsync for cache-aside with stampede protection
-        return await cache.GetOrCreateAsync(
-            cacheKey,
-            async _ =>
-            {
-                var record = await configRepository.GetAsync(chatId);
-                if (record == null)
-                    return null;
-
-                var json = GetConfigColumn(record, configType);
-                if (string.IsNullOrEmpty(json))
-                    return null;
-
-                return JsonSerializer.Deserialize<T>(json, JsonOptions);
-            },
-            CacheOptions);
+        await repository.DeleteWelcomeAsync(chat, ct);
+        await EmitAuditAsync("Welcome (deleted)", chat, initiator, ct);
+        await InvalidateAsync("welcome", chat.Id, ct);
+        logger.LogInformation("Welcome config deleted for {Chat} by {Actor}", chat.DisplayName, initiator.DisplayName);
     }
 
-    public async ValueTask<T?> GetEffectiveAsync<T>(ConfigType configType, long chatId) where T : class
+    // ============================================================================
+    // Log
+    // ============================================================================
+
+    public ValueTask<LogConfig?> GetLogAsync(long chatId, CancellationToken ct = default)
+        => cache.GetOrCreateAsync($"cfg_log_{chatId}",
+            async _ => await repository.GetLogAsync(chatId, ct),
+            CacheOptions, cancellationToken: ct);
+
+    public ValueTask<LogConfig?> GetEffectiveLogAsync(long chatId, CancellationToken ct = default)
+        => cache.GetOrCreateAsync($"cfg_effective_log_{chatId}",
+            async _ => await repository.GetEffectiveLogAsync(chatId, ct),
+            CacheOptions, tags: ["effective_log"], cancellationToken: ct);
+
+    public async Task SaveLogAsync(ChatIdentity chat, LogConfig config, Actor initiator, CancellationToken ct = default)
     {
-        // Route ContentDetection to separate repository (has its own merge logic)
-        if (configType == ConfigType.ContentDetection)
-        {
-            var cdCacheKey = $"cfg_effective_{configType}_{chatId}";
-            var cdConfig = await cache.GetOrCreateAsync(
-                cdCacheKey,
-                async _ => await contentDetectionConfigRepository.GetEffectiveConfigAsync(chatId),
-                CacheOptions,
-                tags: [$"effective_{configType}"]);
-
-            return cdConfig as T;
-        }
-
-        // If requesting global config, just return it directly (uses cached GetAsync)
-        if (chatId == 0)
-        {
-            return await GetAsync<T>(configType, 0);
-        }
-
-        // Cache the effective (merged) config with stampede protection
-        var effectiveCacheKey = $"cfg_effective_{configType}_{chatId}";
-
-        return await cache.GetOrCreateAsync(
-            effectiveCacheKey,
-            async _ =>
-            {
-                // Get both global and chat-specific configs (both use cached GetAsync)
-                var globalConfig = await GetAsync<T>(configType, 0);
-                var chatConfig = await GetAsync<T>(configType, chatId);
-
-                // If no chat-specific config, return global
-                if (chatConfig == null)
-                    return globalConfig;
-
-                // If no global config, return chat-specific
-                if (globalConfig == null)
-                    return chatConfig;
-
-                // Merge: chat-specific overrides global
-                return MergeConfigs(globalConfig, chatConfig);
-            },
-            CacheOptions,
-            tags: [$"effective_{configType}"]);
+        await repository.SaveLogAsync(chat, config, ct);
+        await EmitAuditAsync("Log", chat, initiator, ct);
+        await InvalidateAsync("log", chat.Id, ct);
+        logger.LogInformation("Log config saved for {Chat} by {Actor}", chat.DisplayName, initiator.DisplayName);
     }
 
-    public async Task DeleteAsync(ConfigType configType, ChatIdentity chat)
+    public async Task DeleteLogAsync(ChatIdentity chat, Actor initiator, CancellationToken ct = default)
     {
-        var chatId = chat.Id;
-        var scope = chatId == 0 ? "global" : chat.DisplayName;
-
-        // Route ContentDetection to separate repository
-        if (configType == ConfigType.ContentDetection)
-        {
-            if (chatId != 0)
-                await contentDetectionConfigRepository.DeleteChatConfigAsync(chatId);
-            // Note: Can't delete global config (chat_id=0), it's the fallback
-
-            logger.LogInformation("Configuration deleted: {ConfigType} ({Scope})", configType, scope);
-
-            await cache.RemoveAsync($"cfg_{configType}_{chatId}");
-            await cache.RemoveAsync($"cfg_effective_{configType}_{chatId}");
-            return;
-        }
-
-        var record = await configRepository.GetAsync(chatId);
-        if (record == null)
-        {
-            return;
-        }
-
-        // Clear the specific config column
-        SetConfigColumn(record, configType, null);
-
-        // If all config columns are null, delete the entire row
-        if (IsRecordEmpty(record))
-        {
-            await configRepository.DeleteAsync(chatId);
-        }
-        else
-        {
-            await configRepository.UpsertAsync(record);
-        }
-
-        logger.LogInformation("Configuration deleted: {ConfigType} ({Scope})", configType, scope);
-
-        // Invalidate cache after deletion
-        var cacheKey = $"cfg_{configType}_{chatId}";
-        await cache.RemoveAsync(cacheKey);
-
-        // Also invalidate effective config cache
-        if (chatId != 0)
-        {
-            var effectiveCacheKey = $"cfg_effective_{configType}_{chatId}";
-            await cache.RemoveAsync(effectiveCacheKey);
-        }
-        else
-        {
-            // Global config deleted - invalidate all chat-specific effective caches via tag
-            await cache.RemoveByTagAsync($"effective_{configType}");
-        }
+        await repository.DeleteLogAsync(chat, ct);
+        await EmitAuditAsync("Log (deleted)", chat, initiator, ct);
+        await InvalidateAsync("log", chat.Id, ct);
+        logger.LogInformation("Log config deleted for {Chat} by {Actor}", chat.DisplayName, initiator.DisplayName);
     }
 
-    /// <summary>
-    /// Get the encrypted Telegram bot token from database (global config only, chat_id = 0)
-    /// Returns decrypted token or null if not configured
-    /// </summary>
-    public async ValueTask<string?> GetTelegramBotTokenAsync()
+    // ============================================================================
+    // BotProtection
+    // ============================================================================
+
+    public ValueTask<BotProtectionConfig?> GetBotProtectionAsync(long chatId, CancellationToken ct = default)
+        => cache.GetOrCreateAsync($"cfg_bot_protection_{chatId}",
+            async _ => await repository.GetBotProtectionAsync(chatId, ct),
+            CacheOptions, cancellationToken: ct);
+
+    public ValueTask<BotProtectionConfig?> GetEffectiveBotProtectionAsync(long chatId, CancellationToken ct = default)
+        => cache.GetOrCreateAsync($"cfg_effective_bot_protection_{chatId}",
+            async _ => await repository.GetEffectiveBotProtectionAsync(chatId, ct),
+            CacheOptions, tags: ["effective_bot_protection"], cancellationToken: ct);
+
+    public async Task SaveBotProtectionAsync(ChatIdentity chat, BotProtectionConfig config, Actor initiator, CancellationToken ct = default)
     {
-        const string cacheKey = "cfg_telegram_bot_token";
-
-        return await cache.GetOrCreateAsync(
-            cacheKey,
-            async _ =>
-            {
-                // Load from database (global config, chat_id = 0)
-                var record = await configRepository.GetAsync(0);
-                if (record?.TelegramBotTokenEncrypted == null)
-                    return null;
-
-                try
-                {
-                    // Decrypt using Data Protection
-                    var protector = dataProtectionProvider.CreateProtector(DataProtectionPurposes.TelegramBotToken);
-                    return protector.Unprotect(record.TelegramBotTokenEncrypted);
-                }
-                catch (Exception)
-                {
-                    // Decryption failed (corrupted data or wrong key)
-                    return null;
-                }
-            },
-            CacheOptions);
+        await repository.SaveBotProtectionAsync(chat, config, ct);
+        await EmitAuditAsync("BotProtection", chat, initiator, ct);
+        await InvalidateAsync("bot_protection", chat.Id, ct);
+        logger.LogInformation("BotProtection config saved for {Chat} by {Actor}", chat.DisplayName, initiator.DisplayName);
     }
 
-    /// <summary>
-    /// Save the Telegram bot token to database (encrypted, global config only, chat_id = 0)
-    /// </summary>
-    public async Task SaveTelegramBotTokenAsync(string botToken)
+    public async Task DeleteBotProtectionAsync(ChatIdentity chat, Actor initiator, CancellationToken ct = default)
+    {
+        await repository.DeleteBotProtectionAsync(chat, ct);
+        await EmitAuditAsync("BotProtection (deleted)", chat, initiator, ct);
+        await InvalidateAsync("bot_protection", chat.Id, ct);
+        logger.LogInformation("BotProtection config deleted for {Chat} by {Actor}", chat.DisplayName, initiator.DisplayName);
+    }
+
+    // ============================================================================
+    // TelegramBot
+    // ============================================================================
+
+    public ValueTask<TelegramBotConfig?> GetTelegramBotAsync(long chatId, CancellationToken ct = default)
+        => cache.GetOrCreateAsync($"cfg_telegram_bot_{chatId}",
+            async _ => await repository.GetTelegramBotAsync(chatId, ct),
+            CacheOptions, cancellationToken: ct);
+
+    public ValueTask<TelegramBotConfig?> GetEffectiveTelegramBotAsync(long chatId, CancellationToken ct = default)
+        => cache.GetOrCreateAsync($"cfg_effective_telegram_bot_{chatId}",
+            async _ => await repository.GetEffectiveTelegramBotAsync(chatId, ct),
+            CacheOptions, tags: ["effective_telegram_bot"], cancellationToken: ct);
+
+    public async Task SaveTelegramBotAsync(ChatIdentity chat, TelegramBotConfig config, Actor initiator, CancellationToken ct = default)
+    {
+        await repository.SaveTelegramBotAsync(chat, config, ct);
+        await EmitAuditAsync("TelegramBot", chat, initiator, ct);
+        await InvalidateAsync("telegram_bot", chat.Id, ct);
+        logger.LogInformation("TelegramBot config saved for {Chat} by {Actor}", chat.DisplayName, initiator.DisplayName);
+    }
+
+    public async Task DeleteTelegramBotAsync(ChatIdentity chat, Actor initiator, CancellationToken ct = default)
+    {
+        await repository.DeleteTelegramBotAsync(chat, ct);
+        await EmitAuditAsync("TelegramBot (deleted)", chat, initiator, ct);
+        await InvalidateAsync("telegram_bot", chat.Id, ct);
+        logger.LogInformation("TelegramBot config deleted for {Chat} by {Actor}", chat.DisplayName, initiator.DisplayName);
+    }
+
+    // ============================================================================
+    // ServiceMessageDeletion
+    // ============================================================================
+
+    public ValueTask<ServiceMessageDeletionConfig?> GetServiceMessageDeletionAsync(long chatId, CancellationToken ct = default)
+        => cache.GetOrCreateAsync($"cfg_service_message_deletion_{chatId}",
+            async _ => await repository.GetServiceMessageDeletionAsync(chatId, ct),
+            CacheOptions, cancellationToken: ct);
+
+    public ValueTask<ServiceMessageDeletionConfig?> GetEffectiveServiceMessageDeletionAsync(long chatId, CancellationToken ct = default)
+        => cache.GetOrCreateAsync($"cfg_effective_service_message_deletion_{chatId}",
+            async _ => await repository.GetEffectiveServiceMessageDeletionAsync(chatId, ct),
+            CacheOptions, tags: ["effective_service_message_deletion"], cancellationToken: ct);
+
+    public async Task SaveServiceMessageDeletionAsync(ChatIdentity chat, ServiceMessageDeletionConfig config, Actor initiator, CancellationToken ct = default)
+    {
+        await repository.SaveServiceMessageDeletionAsync(chat, config, ct);
+        await EmitAuditAsync("ServiceMessageDeletion", chat, initiator, ct);
+        await InvalidateAsync("service_message_deletion", chat.Id, ct);
+        logger.LogInformation("ServiceMessageDeletion config saved for {Chat} by {Actor}", chat.DisplayName, initiator.DisplayName);
+    }
+
+    public async Task DeleteServiceMessageDeletionAsync(ChatIdentity chat, Actor initiator, CancellationToken ct = default)
+    {
+        await repository.DeleteServiceMessageDeletionAsync(chat, ct);
+        await EmitAuditAsync("ServiceMessageDeletion (deleted)", chat, initiator, ct);
+        await InvalidateAsync("service_message_deletion", chat.Id, ct);
+        logger.LogInformation("ServiceMessageDeletion config deleted for {Chat} by {Actor}", chat.DisplayName, initiator.DisplayName);
+    }
+
+    // ============================================================================
+    // WarningSystem
+    // ============================================================================
+
+    public ValueTask<WarningSystemConfig?> GetWarningSystemAsync(long chatId, CancellationToken ct = default)
+        => cache.GetOrCreateAsync($"cfg_warning_system_{chatId}",
+            async _ => await repository.GetWarningSystemAsync(chatId, ct),
+            CacheOptions, cancellationToken: ct);
+
+    public ValueTask<WarningSystemConfig?> GetEffectiveWarningSystemAsync(long chatId, CancellationToken ct = default)
+        => cache.GetOrCreateAsync($"cfg_effective_warning_system_{chatId}",
+            async _ => await repository.GetEffectiveWarningSystemAsync(chatId, ct),
+            CacheOptions, tags: ["effective_warning_system"], cancellationToken: ct);
+
+    public async Task SaveWarningSystemAsync(ChatIdentity chat, WarningSystemConfig config, Actor initiator, CancellationToken ct = default)
+    {
+        await repository.SaveWarningSystemAsync(chat, config, ct);
+        await EmitAuditAsync("WarningSystem", chat, initiator, ct);
+        await InvalidateAsync("warning_system", chat.Id, ct);
+        logger.LogInformation("WarningSystem config saved for {Chat} by {Actor}", chat.DisplayName, initiator.DisplayName);
+    }
+
+    public async Task DeleteWarningSystemAsync(ChatIdentity chat, Actor initiator, CancellationToken ct = default)
+    {
+        await repository.DeleteWarningSystemAsync(chat, ct);
+        await EmitAuditAsync("WarningSystem (deleted)", chat, initiator, ct);
+        await InvalidateAsync("warning_system", chat.Id, ct);
+        logger.LogInformation("WarningSystem config deleted for {Chat} by {Actor}", chat.DisplayName, initiator.DisplayName);
+    }
+
+    // ============================================================================
+    // InviteCommand
+    // ============================================================================
+
+    public ValueTask<InviteCommandConfig?> GetInviteCommandAsync(long chatId, CancellationToken ct = default)
+        => cache.GetOrCreateAsync($"cfg_invite_command_{chatId}",
+            async _ => await repository.GetInviteCommandAsync(chatId, ct),
+            CacheOptions, cancellationToken: ct);
+
+    public ValueTask<InviteCommandConfig?> GetEffectiveInviteCommandAsync(long chatId, CancellationToken ct = default)
+        => cache.GetOrCreateAsync($"cfg_effective_invite_command_{chatId}",
+            async _ => await repository.GetEffectiveInviteCommandAsync(chatId, ct),
+            CacheOptions, tags: ["effective_invite_command"], cancellationToken: ct);
+
+    public async Task SaveInviteCommandAsync(ChatIdentity chat, InviteCommandConfig config, Actor initiator, CancellationToken ct = default)
+    {
+        await repository.SaveInviteCommandAsync(chat, config, ct);
+        await EmitAuditAsync("InviteCommand", chat, initiator, ct);
+        await InvalidateAsync("invite_command", chat.Id, ct);
+        logger.LogInformation("InviteCommand config saved for {Chat} by {Actor}", chat.DisplayName, initiator.DisplayName);
+    }
+
+    public async Task DeleteInviteCommandAsync(ChatIdentity chat, Actor initiator, CancellationToken ct = default)
+    {
+        await repository.DeleteInviteCommandAsync(chat, ct);
+        await EmitAuditAsync("InviteCommand (deleted)", chat, initiator, ct);
+        await InvalidateAsync("invite_command", chat.Id, ct);
+        logger.LogInformation("InviteCommand config deleted for {Chat} by {Actor}", chat.DisplayName, initiator.DisplayName);
+    }
+
+    // ============================================================================
+    // BanCelebration
+    // ============================================================================
+
+    public ValueTask<BanCelebrationConfig?> GetBanCelebrationAsync(long chatId, CancellationToken ct = default)
+        => cache.GetOrCreateAsync($"cfg_ban_celebration_{chatId}",
+            async _ => await repository.GetBanCelebrationAsync(chatId, ct),
+            CacheOptions, cancellationToken: ct);
+
+    public ValueTask<BanCelebrationConfig?> GetEffectiveBanCelebrationAsync(long chatId, CancellationToken ct = default)
+        => cache.GetOrCreateAsync($"cfg_effective_ban_celebration_{chatId}",
+            async _ => await repository.GetEffectiveBanCelebrationAsync(chatId, ct),
+            CacheOptions, tags: ["effective_ban_celebration"], cancellationToken: ct);
+
+    public async Task SaveBanCelebrationAsync(ChatIdentity chat, BanCelebrationConfig config, Actor initiator, CancellationToken ct = default)
+    {
+        await repository.SaveBanCelebrationAsync(chat, config, ct);
+        await EmitAuditAsync("BanCelebration", chat, initiator, ct);
+        await InvalidateAsync("ban_celebration", chat.Id, ct);
+        logger.LogInformation("BanCelebration config saved for {Chat} by {Actor}", chat.DisplayName, initiator.DisplayName);
+    }
+
+    public async Task DeleteBanCelebrationAsync(ChatIdentity chat, Actor initiator, CancellationToken ct = default)
+    {
+        await repository.DeleteBanCelebrationAsync(chat, ct);
+        await EmitAuditAsync("BanCelebration (deleted)", chat, initiator, ct);
+        await InvalidateAsync("ban_celebration", chat.Id, ct);
+        logger.LogInformation("BanCelebration config deleted for {Chat} by {Actor}", chat.DisplayName, initiator.DisplayName);
+    }
+
+    // ============================================================================
+    // Bot token
+    // ============================================================================
+
+    public ValueTask<string?> GetBotTokenAsync(CancellationToken ct = default)
+        => cache.GetOrCreateAsync("cfg_bot_token",
+            async _ => await repository.GetBotTokenAsync(ct),
+            CacheOptions, cancellationToken: ct);
+
+    public async Task SaveBotTokenAsync(string botToken, Actor initiator, CancellationToken ct = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(botToken);
-
-        // Encrypt using Data Protection
-        var protector = dataProtectionProvider.CreateProtector(DataProtectionPurposes.TelegramBotToken);
-        var encryptedToken = protector.Protect(botToken);
-
-        // Get or create global config record (chat_id = 0)
-        var record = await configRepository.GetAsync(0);
-        if (record == null)
-        {
-            record = new ConfigRecordDto
-            {
-                ChatId = 0
-                // CreatedAt will be set by database default (NOW())
-            };
-        }
-
-        // Set encrypted token
-        record.TelegramBotTokenEncrypted = encryptedToken;
-
-        await configRepository.UpsertAsync(record);
-
-        // Invalidate cache
-        const string cacheKey = "cfg_telegram_bot_token";
-        await cache.RemoveAsync(cacheKey);
+        await repository.SaveBotTokenAsync(botToken, ct);
+        // Audit value MUST NOT contain plaintext token — only the config name.
+        await auditService.LogEventAsync(AuditEventType.ConfigurationChanged, initiator, target: null, value: "TelegramBotToken", ct);
+        await cache.RemoveAsync("cfg_bot_token", ct);
+        logger.LogInformation("Telegram bot token saved by {Actor}", initiator.DisplayName);
     }
 
-    /// <summary>
-    /// Get all content detection chat configurations (for admin UI listing).
-    /// Delegates to the ContentDetection repository since it's stored in separate table.
-    /// </summary>
-    public async Task<IEnumerable<ChatConfigInfo>> GetAllContentDetectionConfigsAsync(CancellationToken cancellationToken = default)
+    // ============================================================================
+    // ContentDetection helper delegates (retained)
+    // ============================================================================
+
+    public Task<IEnumerable<ChatConfigInfo>> GetAllContentDetectionConfigsAsync(CancellationToken cancellationToken = default)
+        => contentDetectionRepository.GetAllChatConfigsAsync(cancellationToken);
+
+    public Task<HashSet<string>> GetCriticalCheckNamesAsync(long chatId, CancellationToken cancellationToken = default)
+        => contentDetectionRepository.GetCriticalCheckNamesAsync(chatId, cancellationToken);
+
+    // ============================================================================
+    // Helpers
+    // ============================================================================
+
+    private Task EmitAuditAsync(string configName, ChatIdentity chat, Actor initiator, CancellationToken ct)
+        => auditService.LogEventAsync(
+            AuditEventType.ConfigurationChanged,
+            initiator,
+            target: null,
+            value: $"{configName} ({chat.DisplayName})",
+            ct);
+
+    private async Task InvalidateAsync(string keyPrefix, long chatId, CancellationToken ct)
     {
-        return await contentDetectionConfigRepository.GetAllChatConfigsAsync(cancellationToken);
-    }
-
-    /// <summary>
-    /// Get the names of content detection checks that have AlwaysRun=true for the given chat.
-    /// Uses optimized JSONB query to efficiently extract only critical check names.
-    /// </summary>
-    public async Task<HashSet<string>> GetCriticalCheckNamesAsync(long chatId, CancellationToken cancellationToken = default)
-    {
-        return await contentDetectionConfigRepository.GetCriticalCheckNamesAsync(chatId, cancellationToken);
-    }
-
-    private static void SetConfigColumn(ConfigRecordDto record, ConfigType configType, string? json)
-    {
-        switch (configType)
-        {
-            case ConfigType.ContentDetection:
-                // ContentDetection uses separate table via IContentDetectionConfigRepository
-                throw new InvalidOperationException(
-                    "ContentDetection config is stored in content_detection_configs table. " +
-                    "Use IContentDetectionConfigRepository instead of ConfigService.");
-            case ConfigType.Welcome:
-                record.WelcomeConfig = json;
-                break;
-            case ConfigType.Log:
-                record.LogConfig = json;
-                break;
-            case ConfigType.Moderation:
-                record.ModerationConfig = json;
-                break;
-            case ConfigType.UrlFilter:
-                record.BotProtectionConfig = json;
-                break;
-            case ConfigType.TelegramBot:
-                record.TelegramBotConfig = json;
-                break;
-            case ConfigType.ServiceMessageDeletion:
-                record.ServiceMessageDeletionConfig = json;
-                break;
-            case ConfigType.BanCelebration:
-                record.BanCelebrationConfig = json;
-                break;
-            default:
-                throw new ArgumentOutOfRangeException(nameof(configType), configType, "Unknown config type");
-        }
-    }
-
-    private static string? GetConfigColumn(ConfigRecordDto record, ConfigType configType)
-    {
-        return configType switch
-        {
-            ConfigType.ContentDetection => throw new InvalidOperationException(
-                "ContentDetection config is stored in content_detection_configs table. " +
-                "Use IContentDetectionConfigRepository instead of ConfigService."),
-            ConfigType.Welcome => record.WelcomeConfig,
-            ConfigType.Log => record.LogConfig,
-            ConfigType.Moderation => record.ModerationConfig,
-            ConfigType.UrlFilter => record.BotProtectionConfig,
-            ConfigType.TelegramBot => record.TelegramBotConfig,
-            ConfigType.ServiceMessageDeletion => record.ServiceMessageDeletionConfig,
-            ConfigType.BanCelebration => record.BanCelebrationConfig,
-            _ => throw new ArgumentOutOfRangeException(nameof(configType), configType, "Unknown config type")
-        };
-    }
-
-    // Cache PropertyInfo array for IsRecordEmpty - reflection cost paid once at startup
-    // Only string properties are config columns; Id and ChatId are long so already excluded
-    private static readonly System.Reflection.PropertyInfo[] ConfigStringProperties =
-        typeof(ConfigRecordDto)
-            .GetProperties()
-            .Where(p => p.PropertyType == typeof(string))
-            .ToArray();
-
-    /// <summary>
-    /// Checks if all config columns are empty (null or empty string).
-    /// Uses reflection to automatically include all string properties,
-    /// so new config columns don't require manual updates here.
-    /// </summary>
-    private static bool IsRecordEmpty(ConfigRecordDto record)
-    {
-        return ConfigStringProperties.All(p => string.IsNullOrEmpty((string?)p.GetValue(record)));
-    }
-
-    /// <summary>
-    /// Merge two configuration objects by serializing to JSON and merging at the property level
-    /// Chat-specific values override global values
-    /// </summary>
-    private static T MergeConfigs<T>(T globalConfig, T chatConfig) where T : class
-    {
-        // Serialize both configs to JSON objects
-        var globalJson = JsonSerializer.SerializeToDocument(globalConfig, JsonOptions);
-        var chatJson = JsonSerializer.SerializeToDocument(chatConfig, JsonOptions);
-
-        // Create a merged object by copying global, then overlaying chat-specific
-        var merged = new Dictionary<string, JsonElement>();
-
-        // Add all global properties
-        foreach (var property in globalJson.RootElement.EnumerateObject())
-        {
-            merged[property.Name] = property.Value;
-        }
-
-        // Override with chat-specific properties (only if not null/undefined)
-        foreach (var property in chatJson.RootElement.EnumerateObject())
-        {
-            if (property.Value.ValueKind != JsonValueKind.Null)
-            {
-                merged[property.Name] = property.Value;
-            }
-        }
-
-        // Serialize merged dictionary back to T
-        var mergedJson = JsonSerializer.Serialize(merged, JsonOptions);
-        return JsonSerializer.Deserialize<T>(mergedJson, JsonOptions)
-            ?? throw new InvalidOperationException($"Failed to deserialize merged config to {typeof(T).Name}");
+        await cache.RemoveAsync($"cfg_{keyPrefix}_{chatId}", ct);
+        if (chatId != 0)
+            await cache.RemoveAsync($"cfg_effective_{keyPrefix}_{chatId}", ct);
+        else
+            await cache.RemoveByTagAsync($"effective_{keyPrefix}", ct);
     }
 }
