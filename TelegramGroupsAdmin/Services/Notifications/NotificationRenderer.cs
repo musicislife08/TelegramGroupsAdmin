@@ -1,4 +1,7 @@
 using System.Text;
+using Telegram.Bot.Types;
+using Telegram.Bot.Types.Enums;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
 
 namespace TelegramGroupsAdmin.Services.Notifications;
@@ -6,28 +9,35 @@ namespace TelegramGroupsAdmin.Services.Notifications;
 /// <summary>
 /// Centralized multi-channel renderer for notification payloads.
 /// Renders the same content blocks differently per delivery channel:
-/// - Telegram HTML: bold headers, tg://user deep links, HTML entities
+/// - Telegram: bold/mention entities (parse_mode-free)
 /// - Email HTML: full CSS-styled layout with container and footer
 /// - Plain text: for web push notifications (no formatting)
 /// </summary>
 internal static class NotificationRenderer
 {
     /// <summary>
-    /// Render payload as Telegram HTML (ParseMode.Html).
-    /// Fields with TelegramUserId get clickable tg://user deep links.
+    /// Render payload as entity-based Telegram message.
+    /// Emits Bold entities for subject, field labels, and section headers;
+    /// TextMention entities with full User object for clickable user mentions.
+    /// No HTML — uses the entities parameter which is mutually exclusive with parse_mode.
     /// </summary>
-    public static string ToTelegramHtml(NotificationPayload payload)
+    public static TelegramMessage ToTelegramMessage(NotificationPayload payload)
     {
         var sb = new StringBuilder();
-        sb.AppendLine($"<b>{TelegramHtmlEncoder.Encode(payload.Subject)}</b>");
+        var entities = new List<MessageEntity>();
+
+        AppendBold(sb, entities, payload.Subject);
         sb.AppendLine();
-        RenderBlocksTelegram(sb, payload.Blocks, indent: false);
-        return sb.ToString().TrimEnd();
+        sb.AppendLine();
+
+        RenderBlocksTelegram(sb, entities, payload.Blocks);
+
+        return new TelegramMessage(sb.ToString().TrimEnd(), entities);
     }
 
     /// <summary>
     /// Render payload as full HTML email with CSS styling.
-    /// tg://user links render as plain text (not actionable in email clients).
+    /// Email clients don't resolve tg://user links, so user fields render as plain text.
     /// </summary>
     public static string ToEmailHtml(NotificationPayload payload)
     {
@@ -61,7 +71,7 @@ internal static class NotificationRenderer
 
     /// <summary>
     /// Render payload as plain text for web push notifications.
-    /// No formatting, TelegramUserId ignored.
+    /// No formatting, user mentions ignored.
     /// </summary>
     public static string ToPlainText(NotificationPayload payload)
     {
@@ -72,35 +82,73 @@ internal static class NotificationRenderer
         return sb.ToString().TrimEnd();
     }
 
-    // ── Telegram HTML rendering ──
+    // ── Telegram entity-based rendering ──
 
-    private static void RenderBlocksTelegram(StringBuilder sb, IReadOnlyList<ContentBlock> blocks, bool indent)
+    private static void RenderBlocksTelegram(
+        StringBuilder sb, List<MessageEntity> entities, IReadOnlyList<ContentBlock> blocks)
     {
         foreach (var block in blocks)
         {
             switch (block)
             {
                 case TextBlock text:
-                    sb.AppendLine(TelegramHtmlEncoder.Encode(text.Text));
+                    sb.AppendLine(text.Text);
                     break;
 
                 case FieldList fieldList:
                     foreach (var field in fieldList.Fields)
                     {
-                        var value = field.TelegramUserId.HasValue
-                            ? $"<a href=\"tg://user?id={field.TelegramUserId.Value}\">{TelegramHtmlEncoder.Encode(field.Value)}</a>"
-                            : TelegramHtmlEncoder.Encode(field.Value);
-                        sb.AppendLine($"<b>{TelegramHtmlEncoder.Encode(field.Label)}:</b> {value}");
+                        AppendBold(sb, entities, $"{field.Label}:");
+                        sb.Append(' ');
+                        if (field.User is { } u)
+                            AppendUserMention(sb, entities, field.Value, u);
+                        else
+                            sb.Append(field.Value);
+                        sb.AppendLine();
                     }
                     break;
 
                 case SectionBlock section:
                     sb.AppendLine();
-                    sb.AppendLine($"<b>{TelegramHtmlEncoder.Encode(section.Header)}</b>");
-                    RenderBlocksTelegram(sb, section.Content, indent: true);
+                    AppendBold(sb, entities, section.Header);
+                    sb.AppendLine();
+                    RenderBlocksTelegram(sb, entities, section.Content);
                     break;
             }
         }
+    }
+
+    private static void AppendBold(StringBuilder sb, List<MessageEntity> entities, string text)
+    {
+        var offset = sb.Length;
+        sb.Append(text);
+        entities.Add(new MessageEntity
+        {
+            Type = MessageEntityType.Bold,
+            Offset = offset,
+            Length = text.Length
+        });
+    }
+
+    private static void AppendUserMention(
+        StringBuilder sb, List<MessageEntity> entities, string displayText, UserIdentity user)
+    {
+        var offset = sb.Length;
+        sb.Append(displayText);
+        entities.Add(new MessageEntity
+        {
+            Type = MessageEntityType.TextMention,
+            Offset = offset,
+            Length = displayText.Length,
+            User = new User
+            {
+                Id = user.Id,
+                IsBot = false,
+                FirstName = user.FirstName ?? string.Empty,
+                LastName = user.LastName,
+                Username = user.Username
+            }
+        });
     }
 
     // ── Email HTML rendering ──
@@ -118,7 +166,7 @@ internal static class NotificationRenderer
                 case FieldList fieldList:
                     foreach (var field in fieldList.Fields)
                     {
-                        // tg://user links aren't clickable in email — render as plain text
+                        // User mentions aren't clickable in email — render as plain text
                         sb.AppendLine($"        <div class=\"field\"><span class=\"field-label\">{TelegramHtmlEncoder.Encode(field.Label)}:</span> {TelegramHtmlEncoder.Encode(field.Value)}</div>");
                     }
                     break;

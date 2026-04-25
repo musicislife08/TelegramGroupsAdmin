@@ -23,7 +23,6 @@ internal sealed class ContentReportHandler(
     IBotModerationService moderationService,
     IAuditService auditService,
     IBotMessageService botMessageService,
-    IReportCallbackContextRepository callbackContextRepo,
     ILogger<ContentReportHandler> logger) : IContentReportHandler
 {
     private sealed record ContentFetchData(Report Report, MessageRecord Message);
@@ -279,9 +278,6 @@ internal sealed class ContentReportHandler(
                 logger.LogDebug(ex, "Could not reply to reported message {MessageId} (may be deleted)", report.MessageId);
             }
         }
-
-        // Cleanup stale DM callback contexts
-        await callbackContextRepo.DeleteByReportIdAsync(report.Id, cancellationToken);
     }
 
 }

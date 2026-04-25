@@ -92,14 +92,14 @@ public class ExamFlowServiceTests
         // Mock DM service methods - exam questions are sent via DM
         var dmSuccessResult = new DmDeliveryResult { DmSent = true, MessageId = 1 };
         _mockDmService.SendDmWithKeyboardAsync(
-                Arg.Any<long>(),
+                Arg.Any<UserIdentity>(),
                 Arg.Any<string>(),
                 Arg.Any<InlineKeyboardMarkup>(),
                 Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(dmSuccessResult));
 
         _mockDmService.SendDmAsync(
-                Arg.Any<long>(),
+                Arg.Any<UserIdentity>(),
                 Arg.Any<string>(),
                 Arg.Any<long?>(),
                 Arg.Any<int?>(),

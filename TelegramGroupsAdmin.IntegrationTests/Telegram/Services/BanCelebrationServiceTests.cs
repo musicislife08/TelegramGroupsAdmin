@@ -424,7 +424,7 @@ public class BanCelebrationServiceTests
         await EnableDmWelcomeMode(TestChatId);
 
         _mockDmService!.SendDmWithMediaAsync(
-            Arg.Any<long>(), Arg.Any<string>(), Arg.Any<string>(),
+            Arg.Any<UserIdentity>(), Arg.Any<string>(), Arg.Any<string>(),
             Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>()
         ).Returns(new DmDeliveryResult { DmSent = true });
 
@@ -434,7 +434,7 @@ public class BanCelebrationServiceTests
 
         // Assert - DM delivery was attempted
         await _mockDmService!.Received(1).SendDmWithMediaAsync(
-            TestUserId, "ban_celebration", Arg.Any<string>(),
+            Arg.Is<UserIdentity>(u => u.Id == TestUserId), "ban_celebration", Arg.Any<string>(),
             Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }
 
@@ -451,7 +451,7 @@ public class BanCelebrationServiceTests
 
         // Assert - DM delivery was NOT attempted
         await _mockDmService!.DidNotReceive().SendDmWithMediaAsync(
-            Arg.Any<long>(), Arg.Any<string>(), Arg.Any<string>(),
+            Arg.Any<UserIdentity>(), Arg.Any<string>(), Arg.Any<string>(),
             Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }
 
@@ -469,7 +469,7 @@ public class BanCelebrationServiceTests
 
         // Assert - DM delivery was NOT attempted (no DM mode enabled)
         await _mockDmService!.DidNotReceive().SendDmWithMediaAsync(
-            Arg.Any<long>(), Arg.Any<string>(), Arg.Any<string>(),
+            Arg.Any<UserIdentity>(), Arg.Any<string>(), Arg.Any<string>(),
             Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }
 
@@ -482,7 +482,7 @@ public class BanCelebrationServiceTests
         await EnableDmWelcomeMode(TestChatId);
 
         _mockDmService!.SendDmWithMediaAsync(
-            Arg.Any<long>(), Arg.Any<string>(), Arg.Any<string>(),
+            Arg.Any<UserIdentity>(), Arg.Any<string>(), Arg.Any<string>(),
             Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>()
         ).Returns(new DmDeliveryResult { DmSent = false, Failed = true, ErrorMessage = "User blocked bot" });
 

@@ -22,7 +22,7 @@ public record DataCleanupSettings
     public static readonly TimeSpan DefaultReportRetention = TimeSpan.FromDays(30);
 
     /// <summary>
-    /// Fallback retention for callback contexts and notifications if parsing fails (7 days).
+    /// Fallback retention for notifications if parsing fails (7 days).
     /// </summary>
     public static readonly TimeSpan DefaultShortRetention = TimeSpan.FromDays(7);
 
@@ -47,11 +47,6 @@ public record DataCleanupSettings
     /// Pending reports are never deleted.
     /// </summary>
     public string ReportRetention { get; init; } = "30d";
-
-    /// <summary>
-    /// Retention period for DM callback button contexts (default: 7 days).
-    /// </summary>
-    public string CallbackContextRetention { get; init; } = "7d";
 
     /// <summary>
     /// Retention period for read web notifications (default: 7 days).

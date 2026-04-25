@@ -1,4 +1,3 @@
-using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
 using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
@@ -27,6 +26,7 @@ public sealed class NotificationService : INotificationService
     private readonly IBotDmService _dmDeliveryService;
     private readonly IWebPushNotificationService _webPushService;
     private readonly ITelegramUserMappingRepository _telegramMappingRepo;
+    private readonly ITelegramUserRepository _telegramUserRepo;
     private readonly IChatAdminsRepository _chatAdminsRepo;
     private readonly IUserRepository _userRepo;
     private readonly IReportCallbackContextRepository _callbackContextRepo;
@@ -38,6 +38,7 @@ public sealed class NotificationService : INotificationService
         IBotDmService dmDeliveryService,
         IWebPushNotificationService webPushService,
         ITelegramUserMappingRepository telegramMappingRepo,
+        ITelegramUserRepository telegramUserRepo,
         IChatAdminsRepository chatAdminsRepo,
         IUserRepository userRepo,
         IReportCallbackContextRepository callbackContextRepo,
@@ -48,6 +49,7 @@ public sealed class NotificationService : INotificationService
         _dmDeliveryService = dmDeliveryService;
         _webPushService = webPushService;
         _telegramMappingRepo = telegramMappingRepo;
+        _telegramUserRepo = telegramUserRepo;
         _chatAdminsRepo = chatAdminsRepo;
         _userRepo = userRepo;
         _callbackContextRepo = callbackContextRepo;
@@ -76,21 +78,32 @@ public sealed class NotificationService : INotificationService
         var title = bannedBy?.GetDisplayText() is { } name
             ? $"Spam Banned by {name}" : "Spam Auto-Banned";
 
-        var payload = NotificationPayloadBuilder.Create(title)
-            .WithField("User", user.DisplayName, telegramUserId: user.Id)
+        var builder = NotificationPayloadBuilder.Create(title)
+            .WithField("User", user)
             .WithField("Chat", chat.ChatName ?? chat.Id.ToString())
             .WithSection("Message", s => s
                 .WithText(messagePreview ?? "[No text]"))
-            .WithSection("Detection", s => s
-                .WithField("Net Score", $"{netScore:F2}")
-                .WithField("Score", $"{score:F2}")
-                .WithFieldIf(detectionReason != null, "Reason", detectionReason))
-            .WithSection("Action Taken", s => s
-                .WithField("Banned from", $"{chatsAffected} managed chats")
-                .WithFieldIf(messageDeleted, "Message deleted", $"ID: {messageId}"))
-            .WithPhoto(photoPath)
-            .WithVideo(videoPath)
-            .Build();
+            .WithSection("Detection", s =>
+            {
+                s.WithField("Net Score", $"{netScore:F2}");
+                s.WithField("Score", $"{score:F2}");
+                if (detectionReason != null)
+                    s.WithField("Reason", detectionReason);
+            })
+            .WithSection("Action Taken", s =>
+            {
+                s.WithField("Banned from", $"{chatsAffected} managed chats");
+                if (messageDeleted)
+                    s.WithField("Message deleted", $"ID: {messageId}");
+            });
+
+        if (photoPath != null)
+            builder.WithPhoto(photoPath);
+
+        if (videoPath != null)
+            builder.WithVideo(videoPath);
+
+        var payload = builder.Build();
 
         return SendToChatAudienceAsync(chat, NotificationEventType.UserBanned, payload, ct);
     }
@@ -98,26 +111,43 @@ public sealed class NotificationService : INotificationService
     public Task<Dictionary<string, bool>> SendReportNotificationAsync(
         ChatIdentity chat,
         UserIdentity reportedUser,
-        long? reporterUserId,
-        string? reporterName,
-        bool isAutomated,
+        Actor reporter,
         string messagePreview,
         string? photoPath,
         long reportId,
         ReportType reportType,
         CancellationToken ct = default)
     {
-        var reporterDisplay = isAutomated ? "System (automated)" : reporterName ?? "Unknown";
-
-        var payload = NotificationPayloadBuilder.Create("Message Reported")
+        var builder = NotificationPayloadBuilder.Create("Message Reported")
             .WithField("Chat", chat.ChatName ?? chat.Id.ToString())
-            .WithField("Reported user", reportedUser.DisplayName, telegramUserId: reportedUser.Id)
-            .WithField("Reported by", reporterDisplay, telegramUserId: isAutomated ? null : reporterUserId)
-            .WithSection("Message", s => s
-                .WithText(messagePreview))
-            .WithPhoto(photoPath)
-            .WithKeyboard(new ActionKeyboardContext(reportId, chat.Id, reportedUser.Id, reportType))
-            .Build();
+            .WithField("Reported user", reportedUser);
+
+        // Reporter rendering: TelegramUser → clickable TextMention via UserIdentity,
+        // System / WebUser / Unknown → plain text with the actor's display name.
+        // (TextMention only needs Actor.TelegramUserId for profile linking; the rendered
+        // text comes from the message body at the entity offset, so we seed FirstName
+        // with the actor's DisplayName.)
+        if (reporter.Type == ActorType.TelegramUser && reporter.TelegramUserId is { } telegramId)
+        {
+            builder.WithField("Reported by", new UserIdentity(
+                telegramId,
+                FirstName: reporter.DisplayName,
+                LastName: null,
+                Username: null));
+        }
+        else
+        {
+            builder.WithField("Reported by", reporter.GetDisplayText());
+        }
+
+        builder
+            .WithSection("Message", s => s.WithText(messagePreview))
+            .WithKeyboard(new ActionKeyboardContext(reportId, chat.Id, reportedUser.Id, reportType));
+
+        if (photoPath != null)
+            builder.WithPhoto(photoPath);
+
+        var payload = builder.Build();
 
         return SendToChatAudienceAsync(chat, NotificationEventType.MessageReported, payload, ct);
     }
@@ -132,12 +162,15 @@ public sealed class NotificationService : INotificationService
         CancellationToken ct = default)
     {
         var payload = NotificationPayloadBuilder.Create("Profile Scan Alert")
-            .WithField("User", user.DisplayName, telegramUserId: user.Id)
+            .WithField("User", user)
             .WithField("Chat", chat.ChatName ?? chat.Id.ToString())
-            .WithSection("Analysis", s => s
-                .WithField("Score", $"{score:F1}")
-                .WithField("Signals", signals)
-                .WithFieldIf(aiReason != null, "AI Reasoning", aiReason))
+            .WithSection("Analysis", s =>
+            {
+                s.WithField("Score", $"{score:F1}");
+                s.WithField("Signals", signals);
+                if (aiReason != null)
+                    s.WithField("AI Reasoning", aiReason);
+            })
             .WithKeyboard(new ActionKeyboardContext(reportId, chat.Id, user.Id, ReportType.ProfileScanAlert))
             .Build();
 
@@ -158,15 +191,19 @@ public sealed class NotificationService : INotificationService
         CancellationToken ct = default)
     {
         var payload = NotificationPayloadBuilder.Create("Entrance Exam Review Required")
-            .WithField("User", user.DisplayName, telegramUserId: user.Id)
+            .WithField("User", user)
             .WithField("Chat", chat.ChatName ?? chat.Id.ToString())
-            .WithSection("Results", s => s
-                .WithField("Answered", $"{mcCorrectCount}/{mcTotal} correct")
-                .WithField("Score", $"{mcScore}% (Required: {mcPassingThreshold}%)"))
-            .WithSection("Open-Ended Response", s => s
-                .WithFieldIf(openEndedQuestion != null, "Question", openEndedQuestion)
-                .WithFieldIf(openEndedAnswer != null, "Answer", openEndedAnswer)
-                .WithFieldIf(aiReasoning != null, "AI Reasoning", aiReasoning))
+            .WithSection("Results", s =>
+            {
+                s.WithField("Answered", $"{mcCorrectCount}/{mcTotal} correct");
+                s.WithField("Score", $"{mcScore}% (Required: {mcPassingThreshold}%)");
+            })
+            .WithSection("Open-Ended Response", s =>
+            {
+                if (openEndedQuestion != null) s.WithField("Question", openEndedQuestion);
+                if (openEndedAnswer != null) s.WithField("Answer", openEndedAnswer);
+                if (aiReasoning != null) s.WithField("AI Reasoning", aiReasoning);
+            })
             .WithKeyboard(new ActionKeyboardContext(examFailureId, chat.Id, user.Id, ReportType.ExamFailure))
             .Build();
 
@@ -181,13 +218,15 @@ public sealed class NotificationService : INotificationService
         CancellationToken ct = default)
     {
         var payload = NotificationPayloadBuilder.Create($"User Banned: {user.DisplayName}")
-            .WithField("User", user.DisplayName, telegramUserId: user.Id)
+            .WithField("User", user)
             .WithText(chat != null
                 ? $"Banned from {chat.ChatName ?? chat.Id.ToString()}"
                 : "Banned globally")
-            .WithSection("Details", s => s
-                .WithField("Reason", reason ?? "No reason provided")
-                .WithField("Banned by", executor.GetDisplayText()))
+            .WithSection("Details", s =>
+            {
+                s.WithField("Reason", reason ?? "No reason provided");
+                s.WithField("Banned by", executor.GetDisplayText());
+            })
             .Build();
 
         return SendToChatAudienceAsync(chat, NotificationEventType.UserBanned, payload, ct);
@@ -200,7 +239,7 @@ public sealed class NotificationService : INotificationService
         CancellationToken ct = default)
     {
         var payload = NotificationPayloadBuilder.Create("Malware Detected")
-            .WithField("User", user.DisplayName, telegramUserId: user.Id)
+            .WithField("User", user)
             .WithField("Chat", chat.ChatName ?? chat.Id.ToString())
             .WithSection("Details", s => s
                 .WithText(malwareDetails))
@@ -220,7 +259,7 @@ public sealed class NotificationService : INotificationService
         var role = isCreator ? "creator" : "admin";
 
         var payload = NotificationPayloadBuilder.Create($"Admin {action}: {user.DisplayName}")
-            .WithField("User", user.DisplayName, telegramUserId: user.Id)
+            .WithField("User", user)
             .WithField("Chat", chat.ChatName ?? chat.Id.ToString())
             .WithField("Action", $"{action} as {role}")
             .Build();
@@ -455,40 +494,7 @@ public sealed class NotificationService : INotificationService
                 return false;
             }
 
-            var htmlMessage = NotificationRenderer.ToTelegramHtml(payload);
-
-            // Build keyboard if payload has action context
-            InlineKeyboardMarkup? keyboard = null;
-            if (payload.Keyboard is { } kb)
-            {
-                keyboard = await BuildReportActionKeyboardAsync(
-                    kb.EntityId, kb.ChatId, kb.UserId, kb.KeyboardType, ct);
-            }
-
-            DmDeliveryResult result;
-
-            // Use rich method if we have media or keyboard
-            if (keyboard != null || !string.IsNullOrWhiteSpace(payload.PhotoPath) || !string.IsNullOrWhiteSpace(payload.VideoPath))
-            {
-                result = await _dmDeliveryService.SendDmWithMediaAndKeyboardAsync(
-                    mapping.TelegramId,
-                    "notification",
-                    htmlMessage,
-                    photoPath: payload.PhotoPath,
-                    videoPath: payload.VideoPath,
-                    keyboard: keyboard,
-                    parseMode: ParseMode.Html,
-                    cancellationToken: ct);
-            }
-            else
-            {
-                result = await _dmDeliveryService.SendDmWithQueueAsync(
-                    mapping.TelegramId,
-                    "notification",
-                    htmlMessage,
-                    parseMode: ParseMode.Html,
-                    cancellationToken: ct);
-            }
+            var result = await DispatchEntityDmAsync(mapping.TelegramId, payload, ct);
 
             if (result.DmSent)
             {
@@ -516,37 +522,7 @@ public sealed class NotificationService : INotificationService
     {
         try
         {
-            var htmlMessage = NotificationRenderer.ToTelegramHtml(payload);
-
-            // Build keyboard if payload has action context
-            InlineKeyboardMarkup? keyboard = null;
-            if (payload.Keyboard is { } kb)
-            {
-                keyboard = await BuildReportActionKeyboardAsync(
-                    kb.EntityId, kb.ChatId, kb.UserId, kb.KeyboardType, ct);
-            }
-
-            if (keyboard != null || !string.IsNullOrWhiteSpace(payload.PhotoPath) || !string.IsNullOrWhiteSpace(payload.VideoPath))
-            {
-                await _dmDeliveryService.SendDmWithMediaAndKeyboardAsync(
-                    telegramId,
-                    "notification",
-                    htmlMessage,
-                    photoPath: payload.PhotoPath,
-                    videoPath: payload.VideoPath,
-                    keyboard: keyboard,
-                    parseMode: ParseMode.Html,
-                    cancellationToken: ct);
-            }
-            else
-            {
-                await _dmDeliveryService.SendDmWithQueueAsync(
-                    telegramId,
-                    "notification",
-                    htmlMessage,
-                    parseMode: ParseMode.Html,
-                    cancellationToken: ct);
-            }
+            await DispatchEntityDmAsync(telegramId, payload, ct);
         }
         catch (Exception ex)
         {
@@ -554,6 +530,47 @@ public sealed class NotificationService : INotificationService
             // Any other error is unexpected but not worth failing the whole notification for.
             _logger.LogDebug(ex, "Failed to send DM to unlinked admin {TelegramId}", telegramId);
         }
+    }
+
+    /// <summary>
+    /// Render payload and dispatch via the appropriate entity-based DM overload.
+    /// Picks the media+keyboard variant when media or keyboard is present, otherwise the
+    /// text-only entities variant. Used by both the linked-web-user and unlinked-admin paths.
+    /// </summary>
+    private async Task<DmDeliveryResult> DispatchEntityDmAsync(
+        long telegramId,
+        NotificationPayload payload,
+        CancellationToken ct)
+    {
+        var rendered = NotificationRenderer.ToTelegramMessage(payload);
+        var recipient = await UserIdentity.FromAsync(telegramId, _telegramUserRepo, ct);
+
+        InlineKeyboardMarkup? keyboard = null;
+        if (payload.Keyboard is { } kb)
+        {
+            keyboard = await BuildReportActionKeyboardAsync(
+                kb.EntityId, kb.ChatId, kb.UserId, kb.KeyboardType, ct);
+        }
+
+        if (keyboard != null || !string.IsNullOrWhiteSpace(payload.PhotoPath) || !string.IsNullOrWhiteSpace(payload.VideoPath))
+        {
+            return await _dmDeliveryService.SendDmWithMediaAndKeyboardEntitiesAsync(
+                recipient,
+                "notification",
+                rendered.Text,
+                rendered.Entities,
+                photoPath: payload.PhotoPath,
+                videoPath: payload.VideoPath,
+                keyboard: keyboard,
+                cancellationToken: ct);
+        }
+
+        return await _dmDeliveryService.SendDmWithEntitiesAsync(
+            recipient,
+            "notification",
+            rendered.Text,
+            rendered.Entities,
+            cancellationToken: ct);
     }
 
     /// <summary>

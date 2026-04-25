@@ -3,7 +3,6 @@ using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Repositories;
 using TelegramGroupsAdmin.Telegram.Extensions;
-using TelegramGroupsAdmin.Telegram.Repositories;
 
 namespace TelegramGroupsAdmin.Telegram.Services.ReportActions;
 
@@ -14,7 +13,6 @@ namespace TelegramGroupsAdmin.Telegram.Services.ReportActions;
 internal sealed class ExamHandler(
     IReportsRepository reportsRepository,
     IExamFlowService examFlowService,
-    IReportCallbackContextRepository callbackContextRepo,
     ILogger<ExamHandler> logger) : IExamHandler
 {
     public async Task<ReviewActionResult> ApproveAsync(long examId, Actor executor, CancellationToken cancellationToken)
@@ -46,8 +44,6 @@ internal sealed class ExamHandler(
 
         logger.LogInformation("Exam review {ExamId}: User {User} approved by {Executor}, permissions restored",
             examId, exam.User.ToLogInfo(), executor.DisplayName);
-
-        await callbackContextRepo.DeleteByReportIdAsync(examId, cancellationToken);
 
         return new ReviewActionResult(true,
             "User approved - permissions restored, teaser deleted",
@@ -84,8 +80,6 @@ internal sealed class ExamHandler(
         logger.LogInformation("Exam review {ExamId}: User {User} denied (kicked) by {Executor}",
             examId, exam.User.ToLogInfo(), executor.DisplayName);
 
-        await callbackContextRepo.DeleteByReportIdAsync(examId, cancellationToken);
-
         return new ReviewActionResult(true,
             "User denied - kicked from chat, teaser deleted",
             ActionName: "Deny");
@@ -120,8 +114,6 @@ internal sealed class ExamHandler(
 
         logger.LogInformation("Exam review {ExamId}: User {User} denied and banned by {Executor}",
             examId, exam.User.ToLogInfo(), executor.DisplayName);
-
-        await callbackContextRepo.DeleteByReportIdAsync(examId, cancellationToken);
 
         return new ReviewActionResult(true,
             "User denied and banned, teaser deleted",

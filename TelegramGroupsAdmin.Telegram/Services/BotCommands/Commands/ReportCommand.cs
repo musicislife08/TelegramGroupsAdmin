@@ -82,10 +82,13 @@ public class ReportCommand(
             AdminNotes: null
         );
 
+        var reporterActor = Actor.FromTelegramUser(
+            reporter.Id, reporter.Username, reporter.FirstName, reporter.LastName);
+
         var result = await reportService.CreateReportAsync(
             report,
             reportedMessage,
-            isAutomated: false,
+            reporterActor,
             cancellationToken);
 
         logger.LogInformation(

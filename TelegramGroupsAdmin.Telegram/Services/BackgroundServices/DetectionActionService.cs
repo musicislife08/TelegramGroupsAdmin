@@ -150,7 +150,7 @@ public class DetectionActionService(
                 await reportService.CreateReportAsync(
                     borderlineReport,
                     message,
-                    isAutomated: true,
+                    Actor.AutoDetection,
                     cancellationToken);
                 pipelineMetrics.RecordModerationAction("report", "auto");
 

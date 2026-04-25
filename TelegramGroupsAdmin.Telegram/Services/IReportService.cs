@@ -14,12 +14,16 @@ public interface IReportService
     /// </summary>
     /// <param name="report">The report to create</param>
     /// <param name="originalMessage">The Telegram message being reported (for context in notifications)</param>
-    /// <param name="isAutomated">True if this is an automated detection, false if user-submitted</param>
+    /// <param name="reporter">
+    /// The actor submitting the report. Pass <see cref="Actor.AutoDetection"/> (or another
+    /// system actor such as <see cref="Actor.Cas"/>) for automated reports, or
+    /// <see cref="Actor.FromTelegramUser(long, string?, string?, string?)"/> for user-submitted reports.
+    /// </param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Result containing report ID and notification counts</returns>
     Task<ReportCreationResult> CreateReportAsync(
         Report report,
         Message originalMessage,
-        bool isAutomated,
+        Actor reporter,
         CancellationToken cancellationToken = default);
 }

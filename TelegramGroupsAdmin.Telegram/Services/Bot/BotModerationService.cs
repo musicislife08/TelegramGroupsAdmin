@@ -632,7 +632,7 @@ public class BotModerationService : IBotModerationService
                 return;
             }
 
-            await _reportService.CreateReportAsync(report, intent.TelegramMessage, isAutomated: true, cancellationToken);
+            await _reportService.CreateReportAsync(report, intent.TelegramMessage, Actor.FileScanner, cancellationToken);
         }, "Create malware report");
 
         // Step 4: Notify admins via system notification

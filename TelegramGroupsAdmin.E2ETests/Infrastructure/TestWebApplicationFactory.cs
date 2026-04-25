@@ -12,6 +12,7 @@ using Telegram.Bot.Types.ReplyMarkups;
 using TelegramGroupsAdmin.Configuration.Models;
 using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Services;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services.AI;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Services.Email;
@@ -111,12 +112,12 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
 
         // Configure SendDmAsync to return success
         _mockBotDmService.SendDmAsync(
-                Arg.Any<long>(), Arg.Any<string>(), Arg.Any<long?>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
+                Arg.Any<UserIdentity>(), Arg.Any<string>(), Arg.Any<long?>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns(new DmDeliveryResult { DmSent = true, Failed = false, MessageId = Random.Shared.Next(1, 100000) });
 
         // Configure SendDmWithKeyboardAsync to return success with message ID (used for exam questions)
         _mockBotDmService.SendDmWithKeyboardAsync(
-                Arg.Any<long>(), Arg.Any<string>(), Arg.Any<global::Telegram.Bot.Types.ReplyMarkups.InlineKeyboardMarkup>(), Arg.Any<CancellationToken>())
+                Arg.Any<UserIdentity>(), Arg.Any<string>(), Arg.Any<global::Telegram.Bot.Types.ReplyMarkups.InlineKeyboardMarkup>(), Arg.Any<CancellationToken>())
             .Returns(new DmDeliveryResult { DmSent = true, Failed = false, MessageId = Random.Shared.Next(1, 100000) });
 
         // Configure DeleteDmMessageAsync to succeed (used after answering exam questions)

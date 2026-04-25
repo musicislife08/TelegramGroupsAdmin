@@ -56,6 +56,7 @@ public interface ITelegramApiClient
         ParseMode? parseMode = null,
         ReplyParameters? replyParameters = null,
         InlineKeyboardMarkup? replyMarkup = null,
+        IReadOnlyList<MessageEntity>? entities = null,
         CancellationToken ct = default);
 
     /// <summary>Send a photo.</summary>
@@ -66,6 +67,7 @@ public interface ITelegramApiClient
         ParseMode? parseMode = null,
         ReplyParameters? replyParameters = null,
         InlineKeyboardMarkup? replyMarkup = null,
+        IReadOnlyList<MessageEntity>? captionEntities = null,
         CancellationToken ct = default);
 
     /// <summary>Send a video.</summary>
@@ -76,6 +78,7 @@ public interface ITelegramApiClient
         ParseMode? parseMode = null,
         ReplyParameters? replyParameters = null,
         InlineKeyboardMarkup? replyMarkup = null,
+        IReadOnlyList<MessageEntity>? captionEntities = null,
         CancellationToken ct = default);
 
     /// <summary>Send an animation (GIF).</summary>

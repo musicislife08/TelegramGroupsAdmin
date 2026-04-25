@@ -76,7 +76,6 @@ public class DataCleanupJob : IJob
 
         var messageRetention = TimeSpanUtilities.ParseDurationOrDefault(settings.MessageRetention, DataCleanupSettings.DefaultMessageRetention);
         var reportRetention = TimeSpanUtilities.ParseDurationOrDefault(settings.ReportRetention, DataCleanupSettings.DefaultReportRetention);
-        var contextRetention = TimeSpanUtilities.ParseDurationOrDefault(settings.CallbackContextRetention, DataCleanupSettings.DefaultShortRetention);
         var notificationRetention = TimeSpanUtilities.ParseDurationOrDefault(settings.WebNotificationRetention, DataCleanupSettings.DefaultShortRetention);
         var fileScanRetention = TimeSpanUtilities.ParseDurationOrDefault(settings.FileScanResultRetention, DataCleanupSettings.DefaultFileScanResultRetention);
 
@@ -90,8 +89,8 @@ public class DataCleanupJob : IJob
         // 2. Clean up old resolved reports
         totalDeleted += await CleanupReportsAsync(sp, reportRetention, cancellationToken);
 
-        // 3. Clean up expired DM callback contexts
-        totalDeleted += await CleanupCallbackContextsAsync(sp, contextRetention, cancellationToken);
+        // 3. Clean up orphaned DM callback contexts
+        totalDeleted += await CleanupCallbackContextsAsync(sp, cancellationToken);
 
         // 4. Clean up old read web notifications
         totalDeleted += await CleanupNotificationsAsync(sp, notificationRetention, cancellationToken);
@@ -181,17 +180,16 @@ public class DataCleanupJob : IJob
         return reportsDeleted;
     }
 
-    private async Task<long> CleanupCallbackContextsAsync(IServiceProvider sp, TimeSpan retention, CancellationToken cancellationToken)
+    private async Task<long> CleanupCallbackContextsAsync(IServiceProvider sp, CancellationToken cancellationToken)
     {
         var callbackContextRepo = sp.GetRequiredService<IReportCallbackContextRepository>();
-        var contextsDeleted = await callbackContextRepo.DeleteExpiredAsync(retention, cancellationToken);
+        var contextsDeleted = await callbackContextRepo.DeleteOrphanedAsync(cancellationToken);
 
         if (contextsDeleted > 0)
         {
             _logger.LogInformation(
-                "Callback context cleanup: {Count} expired contexts deleted (retention: {Retention})",
-                contextsDeleted,
-                TimeSpanUtilities.FormatDuration(retention));
+                "Callback context cleanup: {Count} orphaned contexts deleted (no matching report)",
+                contextsDeleted);
         }
 
         return contextsDeleted;

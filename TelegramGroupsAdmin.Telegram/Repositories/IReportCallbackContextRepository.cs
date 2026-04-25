@@ -37,9 +37,8 @@ public interface IReportCallbackContextRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Delete all expired callback contexts (cleanup job).
+    /// Delete all callback contexts whose associated report no longer exists.
+    /// Used by the data cleanup job — contexts live as long as their report does.
     /// </summary>
-    Task<int> DeleteExpiredAsync(
-        TimeSpan maxAge,
-        CancellationToken cancellationToken = default);
+    Task<int> DeleteOrphanedAsync(CancellationToken cancellationToken = default);
 }

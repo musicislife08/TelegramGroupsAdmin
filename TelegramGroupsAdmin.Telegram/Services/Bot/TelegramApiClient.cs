@@ -60,8 +60,9 @@ public class TelegramApiClient : ITelegramApiClient
         ParseMode? parseMode = null,
         ReplyParameters? replyParameters = null,
         InlineKeyboardMarkup? replyMarkup = null,
+        IReadOnlyList<MessageEntity>? entities = null,
         CancellationToken ct = default)
-        => _client.SendMessage(chatId, text, parseMode: parseMode ?? default, replyParameters: replyParameters, replyMarkup: replyMarkup, cancellationToken: ct);
+        => _client.SendMessage(chatId, text, parseMode: parseMode ?? default, replyParameters: replyParameters, replyMarkup: replyMarkup, entities: entities, cancellationToken: ct);
 
     public Task<Message> SendPhotoAsync(
         long chatId,
@@ -70,8 +71,9 @@ public class TelegramApiClient : ITelegramApiClient
         ParseMode? parseMode = null,
         ReplyParameters? replyParameters = null,
         InlineKeyboardMarkup? replyMarkup = null,
+        IReadOnlyList<MessageEntity>? captionEntities = null,
         CancellationToken ct = default)
-        => _client.SendPhoto(chatId, photo, caption: caption, parseMode: parseMode ?? default, replyParameters: replyParameters, replyMarkup: replyMarkup, cancellationToken: ct);
+        => _client.SendPhoto(chatId, photo, caption: caption, parseMode: parseMode ?? default, replyParameters: replyParameters, replyMarkup: replyMarkup, captionEntities: captionEntities, cancellationToken: ct);
 
     public Task<Message> SendVideoAsync(
         long chatId,
@@ -80,8 +82,9 @@ public class TelegramApiClient : ITelegramApiClient
         ParseMode? parseMode = null,
         ReplyParameters? replyParameters = null,
         InlineKeyboardMarkup? replyMarkup = null,
+        IReadOnlyList<MessageEntity>? captionEntities = null,
         CancellationToken ct = default)
-        => _client.SendVideo(chatId, video, caption: caption, parseMode: parseMode ?? default, replyParameters: replyParameters, replyMarkup: replyMarkup, cancellationToken: ct);
+        => _client.SendVideo(chatId, video, caption: caption, parseMode: parseMode ?? default, replyParameters: replyParameters, replyMarkup: replyMarkup, captionEntities: captionEntities, cancellationToken: ct);
 
     public Task<Message> SendAnimationAsync(
         long chatId,

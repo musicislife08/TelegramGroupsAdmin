@@ -1,3 +1,5 @@
+using TelegramGroupsAdmin.Core.Models;
+
 namespace TelegramGroupsAdmin.Services.Notifications;
 
 /// <summary>
@@ -13,15 +15,15 @@ internal sealed class SectionBuilder
         return this;
     }
 
-    public SectionBuilder WithField(string label, string value, long? telegramUserId = null)
+    public SectionBuilder WithField(string label, string value)
     {
-        _blocks.Add(new FieldList([new(label, value, telegramUserId)]));
+        _blocks.Add(new FieldList([new(label, value)]));
         return this;
     }
 
-    public SectionBuilder WithFieldIf(bool condition, string label, string? value, long? telegramUserId = null)
+    public SectionBuilder WithField(string label, UserIdentity user)
     {
-        if (condition && value != null) WithField(label, value, telegramUserId);
+        _blocks.Add(new FieldList([new(label, user.DisplayName, user)]));
         return this;
     }
 

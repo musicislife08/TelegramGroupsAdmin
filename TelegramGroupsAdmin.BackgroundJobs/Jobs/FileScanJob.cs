@@ -303,7 +303,7 @@ public class FileScanJob(
             // Try to send DM using IBotDmService with fallback to chat
             // IBotDmService handles the fallback automatically when fallbackChatId is provided
             var dmResult = await dmService.SendDmAsync(
-                payload.User.Id,
+                payload.User,
                 notificationText,
                 fallbackChatId: payload.Chat.Id, // Fallback to chat if DM fails
                 cancellationToken: cancellationToken);

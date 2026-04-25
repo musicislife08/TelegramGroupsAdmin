@@ -61,16 +61,12 @@ public class ReportCallbackContextRepository : IReportCallbackContextRepository
             .ExecuteDeleteAsync(cancellationToken);
     }
 
-    public async Task<int> DeleteExpiredAsync(
-        TimeSpan maxAge,
-        CancellationToken cancellationToken = default)
+    public async Task<int> DeleteOrphanedAsync(CancellationToken cancellationToken = default)
     {
         await using var dbContext = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
-        var cutoff = DateTimeOffset.UtcNow - maxAge;
-
         return await dbContext.ReportCallbackContexts
-            .Where(rcc => rcc.CreatedAt < cutoff)
+            .Where(rcc => !dbContext.Reports.Any(r => r.Id == rcc.ReportId))
             .ExecuteDeleteAsync(cancellationToken);
     }
 }

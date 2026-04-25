@@ -25,7 +25,7 @@ public class ReportService(
     public async Task<ReportCreationResult> CreateReportAsync(
         Report report,
         Message originalMessage,
-        bool isAutomated,
+        Actor reporter,
         CancellationToken cancellationToken = default)
     {
         // Guard: every report must have a known sender for moderation actions to work
@@ -36,26 +36,21 @@ public class ReportService(
             return new ReportCreationResult(0);
         }
 
+        var isAutomated = reporter.Type == ActorType.System;
+
         // 1. Insert report into database
         var reportId = await reportsRepository.InsertContentReportAsync(report, cancellationToken);
 
         reportMetrics.RecordReportCreated("content", isAutomated ? "auto" : "user");
 
         logger.LogInformation(
-            "Report {ReportId} created: ChatId={ChatId}, MessageId={MessageId}, IsAutomated={IsAutomated}, ReportedBy={ReportedBy}",
+            "Report {ReportId} created: ChatId={ChatId}, MessageId={MessageId}, Reporter={Reporter}",
             reportId,
             report.Chat.Id,
             report.MessageId,
-            isAutomated,
-            report.ReportedByUserName ?? "Auto-Detection");
+            reporter.GetDisplayText());
 
-        // 2. Log audit event
-        var actor = isAutomated
-            ? Actor.AutoDetection
-            : report.ReportedByUserId.HasValue
-                ? Actor.FromTelegramUser(report.ReportedByUserId.Value, report.ReportedByUserName)
-                : Actor.Unknown;
-
+        // 2. Log audit event — reporter actor is already built, pass directly
         var target = Actor.FromTelegramUser(
             originalMessage.From.Id,
             originalMessage.From.Username,
@@ -64,7 +59,7 @@ public class ReportService(
 
         await auditService.LogEventAsync(
             AuditEventType.ReportCreated,
-            actor,
+            reporter,
             target,
             value: $"Report #{reportId} for message {report.MessageId} in chat {report.Chat.Id}",
             cancellationToken: cancellationToken);
@@ -87,9 +82,7 @@ public class ReportService(
         _ = notificationService.SendReportNotificationAsync(
             chat: report.Chat,
             reportedUser: reportedUser,
-            reporterUserId: report.ReportedByUserId,
-            reporterName: report.ReportedByUserName,
-            isAutomated: isAutomated,
+            reporter: reporter,
             messagePreview: messagePreview,
             photoPath: photoPath,
             reportId: reportId,

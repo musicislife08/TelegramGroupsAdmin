@@ -82,8 +82,9 @@ public sealed class ReportCallbackService(
         // Update DM message to show result (removes buttons)
         await UpdateMessageWithResultAsync(callbackQuery, result.Message, dmService, cancellationToken);
 
-        // Delete callback context (the service handles report-level cleanup)
-        await callbackContextRepo.DeleteAsync(contextId, cancellationToken);
+        // Note: callback context is NOT deleted here. Orphan-based cleanup
+        // (DataCleanupJob) removes it when the underlying report is gone,
+        // avoiding a race where another admin is mid-click on the same context.
     }
 
     private async Task<ReviewActionResult> RouteToServiceAsync(

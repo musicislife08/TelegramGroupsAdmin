@@ -1208,7 +1208,7 @@ public class WelcomeService(
                 groupChat.ToLogDebug());
 
             // Send error to user in DM
-            await dmDeliveryService.SendDmAsync(user.Id, ErrorNoWelcomeRecord, cancellationToken: cancellationToken);
+            await dmDeliveryService.SendDmAsync(UserIdentity.From(user), ErrorNoWelcomeRecord, cancellationToken: cancellationToken);
             return;
         }
 
@@ -1246,7 +1246,7 @@ public class WelcomeService(
             var holdText = WelcomeMessageBuilder.FormatProfileHoldMessage(
                 TelegramDisplayName.FormatMention(user));
             await TryEditMessageAsync(groupChatId, welcomeResponse.WelcomeMessageId, holdText, cancellationToken);
-            await dmDeliveryService.SendDmAsync(user.Id,
+            await dmDeliveryService.SendDmAsync(UserIdentity.From(user),
                 "⏳ Your profile is under admin review. You'll be able to participate once approved.",
                 cancellationToken: cancellationToken);
 
@@ -1296,7 +1296,7 @@ public class WelcomeService(
             }
 
             var confirmationText = WelcomeMessageBuilder.FormatDmAcceptanceConfirmation(chatName);
-            await dmDeliveryService.SendDmAsync(user.Id, confirmationText, cancellationToken: cancellationToken);
+            await dmDeliveryService.SendDmAsync(UserIdentity.From(user), confirmationText, cancellationToken: cancellationToken);
         }
         catch (Exception ex)
         {
@@ -1321,7 +1321,7 @@ public class WelcomeService(
 
         // Delegate to DmDeliveryService with chat fallback and 30-second auto-delete
         var result = await dmDeliveryService.SendDmAsync(
-            telegramUserId: user.Id,
+            user: UserIdentity.From(user),
             messageText: dmText,
             fallbackChatId: chat.Id,
             autoDeleteSeconds: 30,
