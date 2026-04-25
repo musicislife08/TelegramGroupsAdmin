@@ -3,7 +3,7 @@ namespace TelegramGroupsAdmin.Configuration.Models;
 /// <summary>
 /// Configuration model for file scanning system (Phase 4.17)
 /// Supports two-tier architecture: local scanners (Tier 1) + cloud services (Tier 2)
-/// Stored in configs table with ConfigType.FileScanning
+/// Stored in configs table (file_scanning_config column)
 /// </summary>
 public class FileScanningConfig
 {

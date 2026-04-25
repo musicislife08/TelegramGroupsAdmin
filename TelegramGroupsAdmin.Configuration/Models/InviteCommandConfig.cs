@@ -2,7 +2,7 @@ namespace TelegramGroupsAdmin.Configuration.Models;
 
 /// <summary>
 /// Configuration for /invite command
-/// Stored in configs.moderation_config JSONB column (ConfigType.Moderation)
+/// Stored in configs.moderation_config JSONB column
 /// </summary>
 public class InviteCommandConfig
 {

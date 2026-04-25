@@ -158,10 +158,10 @@
                 };
 
                 // Check if this chat has custom configs
-                var configRecord = await ConfigRepository.GetAsync(chat.Identity.Id);
-                var hasWelcomeConfig = !string.IsNullOrEmpty(configRecord?.WelcomeConfig);
-                var hasServiceMsgConfig = !string.IsNullOrEmpty(configRecord?.ServiceMessageDeletionConfig);
-                var hasBanCelebrationConfig = !string.IsNullOrEmpty(configRecord?.BanCelebrationConfig);
+                var chatId = chat.Identity.Id;
+                var hasWelcomeConfig = await ConfigRepository.GetWelcomeAsync(chatId) is not null;
+                var hasServiceMsgConfig = await ConfigRepository.GetServiceMessageDeletionAsync(chatId) is not null;
+                var hasBanCelebrationConfig = await ConfigRepository.GetBanCelebrationAsync(chatId) is not null;
 
                 _chats.Add(new ManagedChatInfo
                 {

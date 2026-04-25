@@ -682,8 +682,7 @@
     {
         try
         {
-            var config = await ConfigRepository.GetByChatIdAsync(ChatInfo.Record.Identity.Id);
-            _cachedInviteLink = config?.InviteLink;
+            _cachedInviteLink = await ConfigRepository.GetInviteLinkAsync(ChatInfo.Record.Identity.Id);
         }
         catch (Exception ex)
         {

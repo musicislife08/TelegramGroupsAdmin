@@ -44,11 +44,11 @@ public class BotChatService(
         try
         {
             // Check database cache first (avoid Telegram API call if cached)
-            var cachedConfig = await configRepo.GetByChatIdAsync(chatId, ct);
-            if (cachedConfig?.InviteLink != null)
+            var cachedLink = await configRepo.GetInviteLinkAsync(chatId, ct);
+            if (cachedLink != null)
             {
                 logger.LogDebug("Using cached invite link for chat {ChatId}", chatId);
-                return cachedConfig.InviteLink;
+                return cachedLink;
             }
 
             // Not cached - fetch and cache
@@ -567,8 +567,8 @@ public class BotChatService(
                 chat.ToLogDebug(), currentLink);
 
             // Cache public group link too (username could change)
-            var cachedConfig = await configRepo.GetByChatIdAsync(chatId, ct);
-            if (cachedConfig?.InviteLink != currentLink)
+            var cachedLink = await configRepo.GetInviteLinkAsync(chatId, ct);
+            if (cachedLink != currentLink)
             {
                 await configRepo.SaveInviteLinkAsync(chatId, currentLink, ct);
                 logger.LogDebug("Cached public invite link for chat {ChatId}", chatId);
@@ -579,13 +579,13 @@ public class BotChatService(
 
         // Private group - check if we already have a cached link
         // ExportChatInviteLink GENERATES a new link (revokes old), so we must avoid calling it
-        var cachedConfigPrivate = await configRepo.GetByChatIdAsync(chatId, ct);
+        var cachedLinkPrivate = await configRepo.GetInviteLinkAsync(chatId, ct);
 
-        if (cachedConfigPrivate?.InviteLink != null)
+        if (cachedLinkPrivate != null)
         {
             // Use cached link - don't call ExportChatInviteLink (it would revoke this one)
             logger.LogDebug("Using existing cached invite link for private chat {ChatId}", chatId);
-            return cachedConfigPrivate.InviteLink;
+            return cachedLinkPrivate;
         }
 
         // No cached link - export the primary link (this WILL revoke any previous primary link)

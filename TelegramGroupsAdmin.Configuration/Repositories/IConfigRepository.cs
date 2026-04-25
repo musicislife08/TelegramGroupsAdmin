@@ -1,7 +1,6 @@
 using TelegramGroupsAdmin.Configuration.Models;
 using TelegramGroupsAdmin.Configuration.Models.Welcome;
 using TelegramGroupsAdmin.Core.Models;
-using TelegramGroupsAdmin.Data.Models;
 
 namespace TelegramGroupsAdmin.Configuration.Repositories;
 
@@ -11,11 +10,7 @@ namespace TelegramGroupsAdmin.Configuration.Repositories;
 /// </summary>
 public interface IConfigRepository
 {
-    // ---- Existing anemic methods (REMOVED in commit 7, kept for ConfigService compat) ----
-    Task<ConfigRecordDto?> GetAsync(long chatId, CancellationToken cancellationToken = default);
-    Task UpsertAsync(ConfigRecordDto config, CancellationToken cancellationToken = default);
-    Task DeleteAsync(long chatId, CancellationToken cancellationToken = default);
-    Task<ConfigRecordDto?> GetByChatIdAsync(long chatId, CancellationToken cancellationToken = default);
+    ValueTask<string?> GetInviteLinkAsync(long chatId, CancellationToken cancellationToken = default);
     Task SaveInviteLinkAsync(long chatId, string inviteLink, CancellationToken cancellationToken = default);
     Task ClearInviteLinkAsync(long chatId, CancellationToken cancellationToken = default);
     Task ClearAllInviteLinksAsync(CancellationToken cancellationToken = default);
