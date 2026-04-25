@@ -1,5 +1,6 @@
 bin/
 obj/
+.claude/
 # Workaround: dotnet-ef 10.0.2-10.0.3 creates literal backslash paths on macOS/Linux
 # See https://github.com/dotnet/efcore/issues/37506 — fixed in 10.0.4
 **/bin\\*
