@@ -26,6 +26,7 @@ public sealed class NotificationService : INotificationService
     private readonly IBotDmService _dmDeliveryService;
     private readonly IWebPushNotificationService _webPushService;
     private readonly ITelegramUserMappingRepository _telegramMappingRepo;
+    private readonly ITelegramUserRepository _telegramUserRepo;
     private readonly IChatAdminsRepository _chatAdminsRepo;
     private readonly IUserRepository _userRepo;
     private readonly IReportCallbackContextRepository _callbackContextRepo;
@@ -37,6 +38,7 @@ public sealed class NotificationService : INotificationService
         IBotDmService dmDeliveryService,
         IWebPushNotificationService webPushService,
         ITelegramUserMappingRepository telegramMappingRepo,
+        ITelegramUserRepository telegramUserRepo,
         IChatAdminsRepository chatAdminsRepo,
         IUserRepository userRepo,
         IReportCallbackContextRepository callbackContextRepo,
@@ -47,6 +49,7 @@ public sealed class NotificationService : INotificationService
         _dmDeliveryService = dmDeliveryService;
         _webPushService = webPushService;
         _telegramMappingRepo = telegramMappingRepo;
+        _telegramUserRepo = telegramUserRepo;
         _chatAdminsRepo = chatAdminsRepo;
         _userRepo = userRepo;
         _callbackContextRepo = callbackContextRepo;
@@ -108,27 +111,34 @@ public sealed class NotificationService : INotificationService
     public Task<Dictionary<string, bool>> SendReportNotificationAsync(
         ChatIdentity chat,
         UserIdentity reportedUser,
-        long? reporterUserId,
-        string? reporterName,
-        bool isAutomated,
+        Actor reporter,
         string messagePreview,
         string? photoPath,
         long reportId,
         ReportType reportType,
         CancellationToken ct = default)
     {
-        var reporterAsUser = !isAutomated && reporterUserId.HasValue
-            ? new UserIdentity(reporterUserId.Value, FirstName: null, LastName: null, Username: reporterName)
-            : null;
-
         var builder = NotificationPayloadBuilder.Create("Message Reported")
             .WithField("Chat", chat.ChatName ?? chat.Id.ToString())
             .WithField("Reported user", reportedUser);
 
-        if (reporterAsUser != null)
-            builder.WithField("Reported by", reporterAsUser);
+        // Reporter rendering: TelegramUser → clickable TextMention via UserIdentity,
+        // System / WebUser / Unknown → plain text with the actor's display name.
+        // (TextMention only needs Actor.TelegramUserId for profile linking; the rendered
+        // text comes from the message body at the entity offset, so we seed FirstName
+        // with the actor's DisplayName.)
+        if (reporter.Type == ActorType.TelegramUser && reporter.TelegramUserId is { } telegramId)
+        {
+            builder.WithField("Reported by", new UserIdentity(
+                telegramId,
+                FirstName: reporter.DisplayName,
+                LastName: null,
+                Username: null));
+        }
         else
-            builder.WithField("Reported by", isAutomated ? "System (automated)" : reporterName ?? "Unknown");
+        {
+            builder.WithField("Reported by", reporter.GetDisplayText());
+        }
 
         builder
             .WithSection("Message", s => s.WithText(messagePreview))
@@ -533,6 +543,7 @@ public sealed class NotificationService : INotificationService
         CancellationToken ct)
     {
         var rendered = NotificationRenderer.ToTelegramMessage(payload);
+        var recipient = await UserIdentity.FromAsync(telegramId, _telegramUserRepo, ct);
 
         InlineKeyboardMarkup? keyboard = null;
         if (payload.Keyboard is { } kb)
@@ -544,7 +555,7 @@ public sealed class NotificationService : INotificationService
         if (keyboard != null || !string.IsNullOrWhiteSpace(payload.PhotoPath) || !string.IsNullOrWhiteSpace(payload.VideoPath))
         {
             return await _dmDeliveryService.SendDmWithMediaAndKeyboardEntitiesAsync(
-                telegramId,
+                recipient,
                 "notification",
                 rendered.Text,
                 rendered.Entities,
@@ -555,7 +566,7 @@ public sealed class NotificationService : INotificationService
         }
 
         return await _dmDeliveryService.SendDmWithEntitiesAsync(
-            telegramId,
+            recipient,
             "notification",
             rendered.Text,
             rendered.Entities,

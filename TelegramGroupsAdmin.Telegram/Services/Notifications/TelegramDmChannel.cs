@@ -37,7 +37,7 @@ public class TelegramDmChannel : INotificationChannel
         // Delegate to DmDeliveryService with queue-on-failure behavior
         // NotificationHandler formats messages in HTML (<b>, EscapeHtml), so use Html parse mode
         var result = await _dmDeliveryService.SendDmWithQueueAsync(
-            telegramUserId,
+            Core.Models.UserIdentity.FromId(telegramUserId),
             notification.Type,
             notification.Message,
             ParseMode.Html,

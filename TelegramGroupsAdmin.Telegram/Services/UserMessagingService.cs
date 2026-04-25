@@ -47,7 +47,7 @@ public class UserMessagingService : IUserMessagingService
         {
             // Try DM via IBotDmService (no fallback - we'll handle mention fallback ourselves)
             var dmResult = await _dmService.SendDmAsync(
-                telegramUserId: userId,
+                user: user != null ? Core.Models.UserIdentity.From(user) : Core.Models.UserIdentity.FromId(userId),
                 messageText: messageText,
                 fallbackChatId: null,
                 cancellationToken: cancellationToken);
@@ -92,7 +92,7 @@ public class UserMessagingService : IUserMessagingService
             {
                 // Try DM via IBotDmService
                 var dmResult = await _dmService.SendDmAsync(
-                    telegramUserId: userId,
+                    user: user != null ? Core.Models.UserIdentity.From(user) : Core.Models.UserIdentity.FromId(userId),
                     messageText: messageText,
                     fallbackChatId: null,
                     cancellationToken: cancellationToken);

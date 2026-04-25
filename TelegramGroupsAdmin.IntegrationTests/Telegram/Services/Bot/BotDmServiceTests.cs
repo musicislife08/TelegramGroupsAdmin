@@ -7,6 +7,7 @@ using Telegram.Bot.Exceptions;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.JobPayloads;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
 using TelegramGroupsAdmin.Telegram.Repositories;
@@ -112,7 +113,7 @@ public class BotDmServiceTests
         ).Returns(TelegramTestFactory.CreateMessage(messageId: 999, chatId: TestUserId));
 
         // Act
-        var result = await _service!.SendDmAsync(TestUserId, "Test message");
+        var result = await _service!.SendDmAsync(UserIdentity.FromId(TestUserId), "Test message");
 
         // Assert
         using (Assert.EnterMultipleScope())
@@ -144,7 +145,7 @@ public class BotDmServiceTests
         ).ThrowsAsync(new ApiRequestException("Forbidden", 403));
 
         // Act
-        var result = await _service!.SendDmAsync(TestUserId, "Test message");
+        var result = await _service!.SendDmAsync(UserIdentity.FromId(TestUserId), "Test message");
 
         // Assert
         using (Assert.EnterMultipleScope())
@@ -188,7 +189,7 @@ public class BotDmServiceTests
 
         // Act
         var result = await _service!.SendDmAsync(
-            TestUserId,
+            UserIdentity.FromId(TestUserId),
             "Test message",
             fallbackChatId: TestChatId,
             autoDeleteSeconds: 30);
@@ -234,7 +235,7 @@ public class BotDmServiceTests
 
         // Act
         var result = await _service!.SendDmWithQueueAsync(
-            TestUserId,
+            UserIdentity.FromId(TestUserId),
             "test_notification",
             "Test message");
 
@@ -266,7 +267,7 @@ public class BotDmServiceTests
 
         // Act
         var result = await _service!.SendDmWithQueueAsync(
-            TestUserId,
+            UserIdentity.FromId(TestUserId),
             "report_resolved",
             "Your report was resolved!");
 
@@ -318,7 +319,7 @@ public class BotDmServiceTests
 
         // Act
         var result = await _service!.SendDmWithKeyboardAsync(
-            TestUserId,
+            UserIdentity.FromId(TestUserId),
             "Choose an option:",
             keyboard);
 
@@ -355,7 +356,7 @@ public class BotDmServiceTests
 
         // Act
         var result = await _service!.SendDmWithKeyboardAsync(
-            TestUserId,
+            UserIdentity.FromId(TestUserId),
             "Choose an option:",
             keyboard);
 

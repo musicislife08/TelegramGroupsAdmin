@@ -903,7 +903,7 @@ public class BackupServiceTests
         };
 
         public Task<DmDeliveryResult> SendDmAsync(
-            long telegramUserId,
+            UserIdentity user,
             string messageText,
             long? fallbackChatId = null,
             int? autoDeleteSeconds = null,
@@ -911,7 +911,7 @@ public class BackupServiceTests
             => Task.FromResult(SuccessResult);
 
         public Task<DmDeliveryResult> SendDmWithQueueAsync(
-            long telegramUserId,
+            UserIdentity user,
             string notificationType,
             string messageText,
             ParseMode parseMode = ParseMode.MarkdownV2,
@@ -919,7 +919,7 @@ public class BackupServiceTests
             => Task.FromResult(SuccessResult);
 
         public Task<DmDeliveryResult> SendDmWithMediaAsync(
-            long telegramUserId,
+            UserIdentity user,
             string notificationType,
             string messageText,
             string? photoPath = null,
@@ -928,7 +928,7 @@ public class BackupServiceTests
             => Task.FromResult(SuccessResult);
 
         public Task<DmDeliveryResult> SendDmWithMediaAndKeyboardAsync(
-            long telegramUserId,
+            UserIdentity user,
             string notificationType,
             string messageText,
             string? photoPath = null,
@@ -961,14 +961,14 @@ public class BackupServiceTests
             => Task.CompletedTask;
 
         public Task<DmDeliveryResult> SendDmWithKeyboardAsync(
-            long telegramUserId,
+            UserIdentity user,
             string messageText,
             InlineKeyboardMarkup keyboard,
             CancellationToken cancellationToken = default)
             => Task.FromResult(SuccessResult);
 
         public Task<DmDeliveryResult> SendDmWithEntitiesAsync(
-            long telegramUserId,
+            UserIdentity user,
             string notificationType,
             string text,
             IReadOnlyList<MessageEntity> entities,
@@ -976,7 +976,7 @@ public class BackupServiceTests
             => Task.FromResult(SuccessResult);
 
         public Task<DmDeliveryResult> SendDmWithMediaAndKeyboardEntitiesAsync(
-            long telegramUserId,
+            UserIdentity user,
             string notificationType,
             string text,
             IReadOnlyList<MessageEntity> entities,
@@ -1005,7 +1005,7 @@ public class BackupServiceTests
 
         // Typed methods (no-op for backup tests)
         public Task<Dictionary<string, bool>> SendSpamBanNotificationAsync(ChatIdentity chat, UserIdentity user, Actor? bannedBy, double netScore, double score, string? detectionReason, int chatsAffected, bool messageDeleted, int messageId, string? messagePreview, string? photoPath, string? videoPath, CancellationToken ct = default) => Task.FromResult(EmptyResults);
-        public Task<Dictionary<string, bool>> SendReportNotificationAsync(ChatIdentity chat, UserIdentity? reportedUser, long? reporterUserId, string? reporterName, bool isAutomated, string messagePreview, string? photoPath, long reportId, ReportType reportType, CancellationToken ct = default) => Task.FromResult(EmptyResults);
+        public Task<Dictionary<string, bool>> SendReportNotificationAsync(ChatIdentity chat, UserIdentity reportedUser, Actor reporter, string messagePreview, string? photoPath, long reportId, ReportType reportType, CancellationToken ct = default) => Task.FromResult(EmptyResults);
         public Task<Dictionary<string, bool>> SendProfileScanAlertAsync(ChatIdentity chat, UserIdentity user, decimal score, string signals, string? aiReason, long reportId, CancellationToken ct = default) => Task.FromResult(EmptyResults);
         public Task<Dictionary<string, bool>> SendExamFailureNotificationAsync(ChatIdentity chat, UserIdentity user, int mcCorrectCount, int mcTotal, int mcScore, int mcPassingThreshold, string? openEndedQuestion, string? openEndedAnswer, string? aiReasoning, long examFailureId, CancellationToken ct = default) => Task.FromResult(EmptyResults);
         public Task<Dictionary<string, bool>> SendBanNotificationAsync(UserIdentity user, Actor executor, string? reason, ChatIdentity? chat = null, CancellationToken ct = default) => Task.FromResult(EmptyResults);

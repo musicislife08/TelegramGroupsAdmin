@@ -26,6 +26,7 @@ public class NotificationServiceRoutingTests
     private IBotDmService _mockDmService = null!;
     private IWebPushNotificationService _mockWebPushService = null!;
     private ITelegramUserMappingRepository _mockTelegramMappingRepo = null!;
+    private ITelegramUserRepository _mockTelegramUserRepo = null!;
     private IChatAdminsRepository _mockChatAdminsRepo = null!;
     private IUserRepository _mockUserRepo = null!;
     private IReportCallbackContextRepository _mockCallbackContextRepo = null!;
@@ -41,6 +42,7 @@ public class NotificationServiceRoutingTests
         _mockDmService = Substitute.For<IBotDmService>();
         _mockWebPushService = Substitute.For<IWebPushNotificationService>();
         _mockTelegramMappingRepo = Substitute.For<ITelegramUserMappingRepository>();
+        _mockTelegramUserRepo = Substitute.For<ITelegramUserRepository>();
         _mockChatAdminsRepo = Substitute.For<IChatAdminsRepository>();
         _mockUserRepo = Substitute.For<IUserRepository>();
         _mockCallbackContextRepo = Substitute.For<IReportCallbackContextRepository>();
@@ -52,7 +54,7 @@ public class NotificationServiceRoutingTests
 
         // Default: DM delivery succeeds (prevents NRE from null DmDeliveryResult)
         _mockDmService.SendDmWithEntitiesAsync(
-                Arg.Any<long>(), Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<UserIdentity>(), Arg.Any<string>(), Arg.Any<string>(),
                 Arg.Any<IReadOnlyList<global::Telegram.Bot.Types.MessageEntity>>(),
                 Arg.Any<CancellationToken>())
             .Returns(new DmDeliveryResult { DmSent = true });
@@ -68,6 +70,7 @@ public class NotificationServiceRoutingTests
             _mockDmService,
             _mockWebPushService,
             _mockTelegramMappingRepo,
+            _mockTelegramUserRepo,
             _mockChatAdminsRepo,
             _mockUserRepo,
             _mockCallbackContextRepo,
@@ -196,7 +199,7 @@ public class NotificationServiceRoutingTests
 
         // Assert — DM sent to unlinked admin via SendDmWithEntitiesAsync (plain text, no media/keyboard)
         await _mockDmService.Received(1).SendDmWithEntitiesAsync(
-            555L,
+            Arg.Is<UserIdentity>(u => u.Id == 555L),
             Arg.Any<string>(),
             Arg.Any<string>(),
             Arg.Any<IReadOnlyList<global::Telegram.Bot.Types.MessageEntity>>(),
@@ -228,7 +231,7 @@ public class NotificationServiceRoutingTests
 
         // Assert — no DM sent to admin (already in pool 1 via web account)
         await _mockDmService.DidNotReceive().SendDmWithEntitiesAsync(
-            555L,
+            Arg.Is<UserIdentity>(u => u.Id == 555L),
             Arg.Any<string>(),
             Arg.Any<string>(),
             Arg.Any<IReadOnlyList<global::Telegram.Bot.Types.MessageEntity>>(),
@@ -255,7 +258,7 @@ public class NotificationServiceRoutingTests
 
         // Assert — no DM sent (bot DM not enabled)
         await _mockDmService.DidNotReceive().SendDmWithEntitiesAsync(
-            555L,
+            Arg.Is<UserIdentity>(u => u.Id == 555L),
             Arg.Any<string>(),
             Arg.Any<string>(),
             Arg.Any<IReadOnlyList<global::Telegram.Bot.Types.MessageEntity>>(),
@@ -288,7 +291,7 @@ public class NotificationServiceRoutingTests
 
         // Assert — no DM sent (deduped by Telegram ID from pool 1)
         await _mockDmService.DidNotReceive().SendDmWithEntitiesAsync(
-            555L,
+            Arg.Is<UserIdentity>(u => u.Id == 555L),
             Arg.Any<string>(),
             Arg.Any<string>(),
             Arg.Any<IReadOnlyList<global::Telegram.Bot.Types.MessageEntity>>(),

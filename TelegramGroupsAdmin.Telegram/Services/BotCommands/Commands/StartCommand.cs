@@ -304,7 +304,7 @@ public class StartCommand : IBotCommand
                 try
                 {
                     var result = await _dmService.SendDmAsync(
-                        telegramUserId: telegramUserId,
+                        user: Core.Models.UserIdentity.FromId(telegramUserId),
                         messageText: notification.MessageText,
                         cancellationToken: cancellationToken);
 

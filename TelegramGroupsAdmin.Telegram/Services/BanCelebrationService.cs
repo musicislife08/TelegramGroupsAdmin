@@ -319,7 +319,7 @@ public class BanCelebrationService(
             }
 
             var result = await dmDeliveryService.SendDmWithMediaAsync(
-                bannedUser.Id,
+                bannedUser,
                 "ban_celebration",
                 dmCaption,
                 photoPath,

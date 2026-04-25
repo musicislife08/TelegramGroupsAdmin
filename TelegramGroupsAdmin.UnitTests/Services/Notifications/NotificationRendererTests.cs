@@ -133,6 +133,52 @@ public class NotificationRendererTests
         Assert.That(actionIdx, Is.GreaterThan(detectionIdx));
     }
 
+    [Test]
+    public void ToTelegramMessage_ReporterFromTelegramActor_RendersClickableMention()
+    {
+        // NotificationService.SendReportNotificationAsync builds a UserIdentity from an Actor
+        // using Actor.DisplayName as the UserIdentity.FirstName so TelegramDisplayName.Format
+        // returns the actor's display name via the full-name branch. The rendered TextMention
+        // needs Actor.TelegramUserId for profile linking and the displayed text at the entity's
+        // offset/length window must equal the actor's display name.
+        var reporterActor = Actor.FromTelegramUser(54321L, "alice_a", "Alice", "Anderson");
+        var reporterAsIdentity = new UserIdentity(
+            reporterActor.TelegramUserId!.Value,
+            FirstName: reporterActor.DisplayName,
+            LastName: null,
+            Username: null);
+
+        var payload = NotificationPayloadBuilder.Create("Message Reported")
+            .WithField("Reported by", reporterAsIdentity)
+            .Build();
+
+        var rendered = NotificationRenderer.ToTelegramMessage(payload);
+
+        var mention = rendered.Entities.Single(e => e.Type == MessageEntityType.TextMention);
+        Assert.That(mention.User, Is.Not.Null);
+        Assert.That(mention.User!.Id, Is.EqualTo(54321L));
+
+        var span = rendered.Text.Substring(mention.Offset, mention.Length);
+        Assert.That(span, Is.EqualTo("Alice Anderson"), "mention text must equal actor display name");
+    }
+
+    [Test]
+    public void ToTelegramMessage_ReporterFromSystemActor_RendersPlainTextNotClickable()
+    {
+        // Automated reporter (Auto-Detection, CAS, etc.) should NOT render as a clickable mention.
+        // NotificationService calls builder.WithField("Reported by", actor.GetDisplayText()) for
+        // non-Telegram actor types, which produces a plain label+value field.
+        var payload = NotificationPayloadBuilder.Create("Message Reported")
+            .WithField("Reported by", Actor.AutoDetection.GetDisplayText())
+            .Build();
+
+        var rendered = NotificationRenderer.ToTelegramMessage(payload);
+
+        Assert.That(rendered.Text, Does.Contain("Auto-Detection"));
+        Assert.That(rendered.Entities, Has.None.Matches<MessageEntity>(e =>
+            e.Type == MessageEntityType.TextMention));
+    }
+
     #endregion
 
     #region ToEmailHtml Tests

@@ -1,6 +1,7 @@
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
+using TelegramGroupsAdmin.Core.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Services.Bot;
 
@@ -8,6 +9,10 @@ namespace TelegramGroupsAdmin.Telegram.Services.Bot;
 /// Centralized DM delivery service with consistent bot_dm_enabled tracking and fallback handling.
 /// Used by: NotificationSystem, WelcomeService, and any other feature that needs DM delivery.
 /// This service is in the Bot layer and can use IBotMessageHandler directly.
+///
+/// Callers pass a <see cref="UserIdentity"/> so the service never needs to fetch the user for
+/// logging — identity flows through from the call site (build via <c>UserIdentity.FromAsync</c>
+/// when only an ID is available).
 /// </summary>
 public interface IBotDmService
 {
@@ -15,14 +20,14 @@ public interface IBotDmService
     /// Attempt to send a DM to a user. Updates bot_dm_enabled flag automatically.
     /// If DM fails and fallbackChatId is provided, posts message in chat with optional auto-delete.
     /// </summary>
-    /// <param name="telegramUserId">Telegram user ID to send DM to</param>
+    /// <param name="user">Target user identity (used for logging; Id is the DM chat)</param>
     /// <param name="messageText">Message text to send</param>
     /// <param name="fallbackChatId">Optional chat ID to post fallback message if DM fails (403)</param>
     /// <param name="autoDeleteSeconds">Optional seconds to auto-delete fallback message (uses Quartz.NET)</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Result indicating success, fallback usage, or failure</returns>
     Task<DmDeliveryResult> SendDmAsync(
-        long telegramUserId,
+        UserIdentity user,
         string messageText,
         long? fallbackChatId = null,
         int? autoDeleteSeconds = null,
@@ -32,14 +37,8 @@ public interface IBotDmService
     /// Attempt to send a DM to a user. If DM fails (403), queues notification for later delivery.
     /// Updates bot_dm_enabled flag automatically.
     /// </summary>
-    /// <param name="telegramUserId">Telegram user ID to send DM to</param>
-    /// <param name="notificationType">Type of notification (e.g., "warning", "mystatus")</param>
-    /// <param name="messageText">Message text to send</param>
-    /// <param name="parseMode">Telegram parse mode (default: MarkdownV2). Use Html for HTML-formatted messages.</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Result indicating success or failure (queued notifications are considered failures)</returns>
     Task<DmDeliveryResult> SendDmWithQueueAsync(
-        long telegramUserId,
+        UserIdentity user,
         string notificationType,
         string messageText,
         ParseMode parseMode = ParseMode.MarkdownV2,
@@ -48,18 +47,9 @@ public interface IBotDmService
     /// <summary>
     /// Attempt to send a DM with optional media (photo or video) to a user.
     /// If DM fails (403), queues notification for later delivery.
-    /// Updates bot_dm_enabled flag automatically.
-    /// Phase 5.2: Enhanced spam notifications with media support
     /// </summary>
-    /// <param name="telegramUserId">Telegram user ID to send DM to</param>
-    /// <param name="notificationType">Type of notification (e.g., "spam_banned")</param>
-    /// <param name="messageText">Message text to send (or caption if media present)</param>
-    /// <param name="photoPath">Optional local path to photo file</param>
-    /// <param name="videoPath">Optional local path to video file</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Result indicating success or failure (queued notifications are considered failures)</returns>
     Task<DmDeliveryResult> SendDmWithMediaAsync(
-        long telegramUserId,
+        UserIdentity user,
         string notificationType,
         string messageText,
         string? photoPath = null,
@@ -69,20 +59,9 @@ public interface IBotDmService
     /// <summary>
     /// Attempt to send a DM with optional media and inline keyboard buttons.
     /// If DM fails (403), queues notification for later delivery (without buttons).
-    /// Updates bot_dm_enabled flag automatically.
-    /// Phase X: Report moderation DM support with action buttons
     /// </summary>
-    /// <param name="telegramUserId">Telegram user ID to send DM to</param>
-    /// <param name="notificationType">Type of notification (e.g., "report")</param>
-    /// <param name="messageText">Message text to send (or caption if media present)</param>
-    /// <param name="photoPath">Optional local path to photo file</param>
-    /// <param name="videoPath">Optional local path to video file</param>
-    /// <param name="keyboard">Optional inline keyboard markup with action buttons</param>
-    /// <param name="parseMode">Telegram parse mode (default: MarkdownV2). Use Html for HTML-formatted messages.</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Result indicating success or failure</returns>
     Task<DmDeliveryResult> SendDmWithMediaAndKeyboardAsync(
-        long telegramUserId,
+        UserIdentity user,
         string notificationType,
         string messageText,
         string? photoPath = null,
@@ -127,13 +106,8 @@ public interface IBotDmService
     /// Does NOT queue on failure (keyboards can't be queued).
     /// Used for exam questions with answer buttons.
     /// </summary>
-    /// <param name="telegramUserId">Telegram user ID to send DM to</param>
-    /// <param name="messageText">Message text to send</param>
-    /// <param name="keyboard">Inline keyboard markup with buttons</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Result indicating success or failure, with MessageId if successful</returns>
     Task<DmDeliveryResult> SendDmWithKeyboardAsync(
-        long telegramUserId,
+        UserIdentity user,
         string messageText,
         InlineKeyboardMarkup keyboard,
         CancellationToken cancellationToken = default);
@@ -145,7 +119,7 @@ public interface IBotDmService
     /// If DM fails (403), queues the message for later delivery (text only; entities dropped).
     /// </summary>
     Task<DmDeliveryResult> SendDmWithEntitiesAsync(
-        long telegramUserId,
+        UserIdentity user,
         string notificationType,
         string text,
         IReadOnlyList<MessageEntity> entities,
@@ -156,7 +130,7 @@ public interface IBotDmService
     /// If DM fails (403), queues the text for later delivery (without media/buttons/entities).
     /// </summary>
     Task<DmDeliveryResult> SendDmWithMediaAndKeyboardEntitiesAsync(
-        long telegramUserId,
+        UserIdentity user,
         string notificationType,
         string text,
         IReadOnlyList<MessageEntity> entities,

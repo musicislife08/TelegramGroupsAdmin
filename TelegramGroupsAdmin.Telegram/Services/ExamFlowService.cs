@@ -171,7 +171,7 @@ public class ExamFlowService : IExamFlowService
                         "User {User} already has active exam session in {Chat}, skipping duplicate creation",
                         user.ToLogInfo(), chat.ToLogInfo());
 
-                    await _dmService.SendDmAsync(dmChatId,
+                    await _dmService.SendDmAsync(UserIdentity.From(user),
                         "📝 You already have an active exam session. Please scroll up to find your current question.",
                         cancellationToken: cancellationToken);
 
@@ -194,7 +194,7 @@ public class ExamFlowService : IExamFlowService
             var chatName = chat.ChatName ?? "the group";
 
             var introText = WelcomeMessageBuilder.FormatExamIntro(config, username, chatName);
-            await _dmService.SendDmAsync(dmChatId, introText, cancellationToken: cancellationToken);
+            await _dmService.SendDmAsync(UserIdentity.From(user), introText, cancellationToken: cancellationToken);
 
             // Then send first question to DM
             int messageId;
@@ -571,7 +571,7 @@ public class ExamFlowService : IExamFlowService
 
         // Send pending message to user in DM
         await _dmService.SendDmAsync(
-            messageChatId,
+            UserIdentity.From(user),
             "⏳ Your answers are being reviewed by an admin. Please wait.",
             cancellationToken: cancellationToken);
 
@@ -608,7 +608,7 @@ public class ExamFlowService : IExamFlowService
         var keyboard = new InlineKeyboardMarkup(buttons);
 
         // Exam questions are always sent to DMs with keyboard
-        var result = await _dmService.SendDmWithKeyboardAsync(dmChatId, text, keyboard, cancellationToken);
+        var result = await _dmService.SendDmWithKeyboardAsync(UserIdentity.From(user), text, keyboard, cancellationToken);
         return result.MessageId ?? throw new InvalidOperationException("Failed to send exam question - no MessageId returned");
     }
 
@@ -622,7 +622,7 @@ public class ExamFlowService : IExamFlowService
         var text = ExamMessageBuilder.FormatOpenEndedQuestion(username, examConfig.OpenEndedQuestion!);
 
         // Exam questions are always sent to DMs (no keyboard for open-ended)
-        var result = await _dmService.SendDmAsync(dmChatId, text, cancellationToken: cancellationToken);
+        var result = await _dmService.SendDmAsync(UserIdentity.From(user), text, cancellationToken: cancellationToken);
         return result.MessageId ?? throw new InvalidOperationException("Failed to send exam question - no MessageId returned");
     }
 
@@ -768,7 +768,7 @@ public class ExamFlowService : IExamFlowService
             // Profile gate still pending — notify user exam passed but awaiting review
             try
             {
-                await _dmService.SendDmAsync(user.Id,
+                await _dmService.SendDmAsync(user,
                     $"✅ You've passed the entrance exam for {chatName}! ⏳ Your profile is under admin review — you'll be able to participate once approved.",
                     cancellationToken: cancellationToken);
             }
@@ -815,11 +815,11 @@ public class ExamFlowService : IExamFlowService
         {
             if (keyboard != null)
             {
-                await _dmService.SendDmWithKeyboardAsync(user.Id, messageText, keyboard, cancellationToken);
+                await _dmService.SendDmWithKeyboardAsync(user, messageText, keyboard, cancellationToken);
             }
             else
             {
-                await _dmService.SendDmAsync(user.Id, messageText, cancellationToken: cancellationToken);
+                await _dmService.SendDmAsync(user, messageText, cancellationToken: cancellationToken);
             }
         }
         catch (Exception ex)
@@ -945,7 +945,7 @@ public class ExamFlowService : IExamFlowService
         try
         {
             await _dmService.SendDmAsync(
-                user.Id, // DM chat ID = user ID
+                user,
                 notificationText,
                 cancellationToken: cancellationToken);
         }

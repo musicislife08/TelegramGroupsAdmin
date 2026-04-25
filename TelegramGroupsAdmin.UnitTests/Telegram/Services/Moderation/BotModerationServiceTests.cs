@@ -1619,11 +1619,11 @@ public class BotModerationServiceTests
                 Reason = malwareDetails
             });
 
-        // Assert - Report was created with isAutomated=true
+        // Assert - Report was created with the FileScanner system actor
         await _mockReportService.Received(1).CreateReportAsync(
             Arg.Is<Report>(r => r.MessageId == messageId && r.Chat.Id == chatId),
             telegramMessage,
-            true,
+            Arg.Is<Actor>(a => a.Type == ActorType.System && a.SystemIdentifier == SystemActorIds.FileScanner),
             Arg.Any<CancellationToken>());
     }
 
