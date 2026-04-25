@@ -87,6 +87,39 @@ public class ConfigRepositoryMergeTests
         Assert.That(merged.ExamConfig, Is.SameAs(chatExam), "chat ExamConfig wins atomically");
     }
 
+    [Test]
+    public void MergeWelcome_NestedTrustedBypass_ChatWholesaleReplacesGlobal()
+    {
+        // Documents the wholesale-replacement semantics: nested configs (JoinSecurity, TrustedBypass)
+        // are NOT field-by-field merged; the chat-level value wins entirely.
+        // Matches legacy ConfigService.MergeConfigs<T> reflection-based behavior.
+        var global = new WelcomeConfig
+        {
+            TrustedBypass = new TrustedBypassConfig
+            {
+                Enabled = true,
+                AnnouncementMessageAdmin = "global admin msg"
+            }
+        };
+        var chat = new WelcomeConfig
+        {
+            TrustedBypass = new TrustedBypassConfig
+            {
+                Enabled = false  // chat explicitly wants disabled, even though all other fields default
+            }
+        };
+
+        var merged = ConfigRepository.MergeWelcome(global, chat)!;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(merged.TrustedBypass.Enabled, Is.False, "chat wins entirely (no field merge)");
+            Assert.That(merged.TrustedBypass.AnnouncementMessageAdmin,
+                Is.EqualTo(TrustedBypassConfig.DefaultAnnouncementMessageAdmin),
+                "global's announcement message is silently dropped — wholesale replacement resets to default");
+        });
+    }
+
     // ============================================================================
     // Log
     // ============================================================================

@@ -249,13 +249,20 @@ public class ConfigRepository(
             Mode = chat.Mode != defaults.Mode ? chat.Mode : global.Mode,
             TimeoutSeconds = chat.TimeoutSeconds != defaults.TimeoutSeconds ? chat.TimeoutSeconds : global.TimeoutSeconds,
             MaxKicksBeforeBan = chat.MaxKicksBeforeBan != defaults.MaxKicksBeforeBan ? chat.MaxKicksBeforeBan : global.MaxKicksBeforeBan,
-            JoinSecurity = chat.JoinSecurity,
             MainWelcomeMessage = !string.IsNullOrEmpty(chat.MainWelcomeMessage) ? chat.MainWelcomeMessage : global.MainWelcomeMessage,
             DmChatTeaserMessage = !string.IsNullOrEmpty(chat.DmChatTeaserMessage) ? chat.DmChatTeaserMessage : global.DmChatTeaserMessage,
             AcceptButtonText = !string.IsNullOrEmpty(chat.AcceptButtonText) ? chat.AcceptButtonText : global.AcceptButtonText,
             DenyButtonText = !string.IsNullOrEmpty(chat.DenyButtonText) ? chat.DenyButtonText : global.DenyButtonText,
             DmButtonText = !string.IsNullOrEmpty(chat.DmButtonText) ? chat.DmButtonText : global.DmButtonText,
             ExamConfig = chat.ExamConfig ?? global.ExamConfig,
+            // Wholesale replacement (not field-by-field merge): JoinSecurity and TrustedBypass
+            // are non-nullable with `= new()` initializers, so they are always non-null on both
+            // sides. Assigning chat's value unconditionally matches the legacy
+            // ConfigService.MergeConfigs<T> reflection-based behavior, which would also
+            // wholesale-replace these nested objects because the serialized JSON always contains
+            // them. Future callers should be aware that a chat row with all-default nested
+            // config will silently override the global's nested settings.
+            JoinSecurity = chat.JoinSecurity,
             TrustedBypass = chat.TrustedBypass
         };
     }
@@ -820,8 +827,10 @@ public class ConfigRepository(
         var globalJson = rows.FirstOrDefault(r => r.ChatId == 0)?.ModerationConfig;
         var chatJson = chatId == 0 ? null : rows.FirstOrDefault(r => r.ChatId == chatId)?.ModerationConfig;
 
-        var globalModel = ParseModerationWrapper(globalJson).WarningSystem?.ToModel();
-        var chatModel = ParseModerationWrapper(chatJson).WarningSystem?.ToModel();
+        var globalWrapper = ParseModerationWrapper(globalJson);
+        var chatWrapper = ParseModerationWrapper(chatJson);
+        var globalModel = globalWrapper.WarningSystem?.ToModel();
+        var chatModel = chatWrapper.WarningSystem?.ToModel();
 
         return MergeWarningSystem(globalModel, chatModel);
     }
@@ -908,8 +917,10 @@ public class ConfigRepository(
         var globalJson = rows.FirstOrDefault(r => r.ChatId == 0)?.ModerationConfig;
         var chatJson = chatId == 0 ? null : rows.FirstOrDefault(r => r.ChatId == chatId)?.ModerationConfig;
 
-        var globalModel = ParseModerationWrapper(globalJson).InviteCommand?.ToModel();
-        var chatModel = ParseModerationWrapper(chatJson).InviteCommand?.ToModel();
+        var globalWrapper = ParseModerationWrapper(globalJson);
+        var chatWrapper = ParseModerationWrapper(chatJson);
+        var globalModel = globalWrapper.InviteCommand?.ToModel();
+        var chatModel = chatWrapper.InviteCommand?.ToModel();
 
         return MergeInviteCommand(globalModel, chatModel);
     }
