@@ -40,11 +40,11 @@ public interface IConfigService
     ValueTask<BanCelebrationConfig?> GetBanCelebrationAsync(long chatId, CancellationToken ct = default);
     ValueTask<BanCelebrationConfig?> GetEffectiveBanCelebrationAsync(long chatId, CancellationToken ct = default);
 
-    /// <summary>Get the per-chat or global ContentDetection config (chatId == 0 returns global).</summary>
+    /// <summary>Get the per-chat or global ContentDetection config. chatId == 0 returns the global config (always present); chatId > 0 returns the chat-specific override or null if none configured.</summary>
     ValueTask<ContentDetectionConfig?> GetContentDetectionAsync(long chatId, CancellationToken ct = default);
 
-    /// <summary>Get the effective ContentDetection config for a chat, with global fallback merged.</summary>
-    ValueTask<ContentDetectionConfig?> GetEffectiveContentDetectionAsync(long chatId, CancellationToken ct = default);
+    /// <summary>Get the effective ContentDetection config for a chat, with global fallback. Always returns a config — the global root is treated as a bootstrap invariant.</summary>
+    ValueTask<ContentDetectionConfig> GetEffectiveContentDetectionAsync(long chatId, CancellationToken ct = default);
 
     // --- Mutations ---
     Task SaveWelcomeAsync(ChatIdentity chat, WelcomeConfig config, Actor initiator, CancellationToken ct = default);

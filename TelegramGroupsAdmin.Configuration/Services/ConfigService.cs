@@ -269,14 +269,18 @@ public class ConfigService(
 
     public ValueTask<ContentDetectionConfig?> GetContentDetectionAsync(long chatId, CancellationToken ct = default)
         => cache.GetOrCreateAsync($"cfg_content_detection_{chatId}",
-            async factoryCt => chatId == 0
-                ? (ContentDetectionConfig?)await contentDetectionRepository.GetGlobalConfigAsync(factoryCt)
-                : await contentDetectionRepository.GetByChatIdAsync(chatId, factoryCt),
+            async factoryCt =>
+            {
+                ContentDetectionConfig? result = chatId == 0
+                    ? await contentDetectionRepository.GetGlobalConfigAsync(factoryCt)
+                    : await contentDetectionRepository.GetByChatIdAsync(chatId, factoryCt);
+                return result;
+            },
             CacheOptions, cancellationToken: ct);
 
-    public ValueTask<ContentDetectionConfig?> GetEffectiveContentDetectionAsync(long chatId, CancellationToken ct = default)
+    public ValueTask<ContentDetectionConfig> GetEffectiveContentDetectionAsync(long chatId, CancellationToken ct = default)
         => cache.GetOrCreateAsync($"cfg_effective_content_detection_{chatId}",
-            async factoryCt => (ContentDetectionConfig?)await contentDetectionRepository.GetEffectiveConfigAsync(chatId, factoryCt),
+            async factoryCt => await contentDetectionRepository.GetEffectiveConfigAsync(chatId, factoryCt),
             CacheOptions, tags: ["effective_content_detection"], cancellationToken: ct);
 
     public async Task SaveContentDetectionAsync(ChatIdentity chat, ContentDetectionConfig config, Actor initiator, CancellationToken ct = default)
