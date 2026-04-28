@@ -13,6 +13,7 @@ using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Repositories;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Data;
+using TelegramGroupsAdmin.IntegrationTests.TestData;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
 
 namespace TelegramGroupsAdmin.IntegrationTests.Configuration;
@@ -29,6 +30,9 @@ public class ConfigServiceIntegrationTests
     private IServiceProvider? _serviceProvider;
     private IConfigService? _sut;
     private IDbContextFactory<AppDbContext>? _contextFactory;
+
+    private static readonly Actor TestActor =
+        Actor.FromWebUser(GoldenDataset.Users.User1_Id, GoldenDataset.Users.User1_Email);
 
     [SetUp]
     public async Task SetUp()
@@ -60,6 +64,25 @@ public class ConfigServiceIntegrationTests
         services.AddScoped<IConfigService, ConfigService>();
 
         _serviceProvider = services.BuildServiceProvider();
+
+        var contextFactory = _serviceProvider.GetRequiredService<IDbContextFactory<AppDbContext>>();
+        var dataProtectionProvider = _serviceProvider.GetRequiredService<IDataProtectionProvider>();
+        await using (var context = await contextFactory.CreateDbContextAsync())
+        {
+            // Seed only the web_users table (minimal setup to satisfy FK constraint on audit_logs)
+            await context.Database.ExecuteSqlRawAsync(
+                """
+                INSERT INTO users (id, email, normalized_email, password_hash, security_stamp, permission_level, invited_by, is_active, totp_secret, totp_enabled, totp_setup_started_at, created_at, last_login_at, status, email_verified, "InvitedByUserId")
+                VALUES
+                ({0}, {1}, {2}, 'AQAAAAIAAYagAAAAEDummyHashForTestingOnly1234567890', 'TEST_SECURITY_STAMP', 2, NULL, TRUE, NULL, TRUE, NULL, NOW() - INTERVAL '14 days', NOW(), 1, TRUE, NULL)
+                """,
+                GoldenDataset.Users.User1_Id,
+                GoldenDataset.Users.User1_Email,
+                GoldenDataset.Users.User1_Email.ToUpperInvariant()
+            );
+            await context.SaveChangesAsync();
+        }
+
         _sut = _serviceProvider.GetRequiredService<IConfigService>();
         _contextFactory = _serviceProvider.GetRequiredService<IDbContextFactory<AppDbContext>>();
     }
@@ -88,7 +111,7 @@ public class ConfigServiceIntegrationTests
     {
         var chat = new ChatIdentity(7777, "Test Chat");
         var config = new WelcomeConfig { Enabled = true, MainWelcomeMessage = "hi" };
-        var actor = Actor.FromWebUser("integration-test-user", "u@example.com");
+        var actor = TestActor;
 
         var before = await CountAuditLogsAsync();
         await _sut!.SaveWelcomeAsync(chat, config, actor);
@@ -110,7 +133,7 @@ public class ConfigServiceIntegrationTests
     {
         var chat = new ChatIdentity(8888, "Celebration Chat");
         var config = new BanCelebrationConfig { Enabled = true };
-        var actor = Actor.FromWebUser("test-user", "u@example.com");
+        var actor = TestActor;
 
         var before = await CountAuditLogsAsync();
         await _sut!.SaveBanCelebrationAsync(chat, config, actor);
@@ -126,7 +149,7 @@ public class ConfigServiceIntegrationTests
     public async Task DeleteWelcomeAsync_AppendsAuditLogRow()
     {
         var chat = new ChatIdentity(9999, "Delete Test");
-        var actor = Actor.FromWebUser("test-user", "u@example.com");
+        var actor = TestActor;
 
         // First save so there's something to delete (and to skip past the save's audit row).
         await _sut!.SaveWelcomeAsync(chat, new WelcomeConfig(), actor);
@@ -145,7 +168,7 @@ public class ConfigServiceIntegrationTests
     public async Task SaveBotTokenAsync_AuditValueIsTokenName_NotPlaintext()
     {
         const string secret = "1234567890:VERY-SECRET-TOKEN";
-        var actor = Actor.FromWebUser("admin", "admin@example.com");
+        var actor = TestActor;
 
         var before = await CountAuditLogsAsync();
         await _sut!.SaveBotTokenAsync(secret, actor);
