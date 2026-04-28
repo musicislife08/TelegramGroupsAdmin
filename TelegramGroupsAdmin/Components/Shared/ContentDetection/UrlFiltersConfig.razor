@@ -1,7 +1,6 @@
 @using TelegramGroupsAdmin.ContentDetection.Repositories
 @using TelegramGroupsAdmin.ContentDetection.Models
 @using TelegramGroupsAdmin.ContentDetection.Services.Blocklists
-@using Microsoft.AspNetCore.Components.Authorization
 @using TelegramGroupsAdmin.Configuration.Services
 @inject IBlocklistSubscriptionsRepository BlocklistRepo
 @inject IDomainFiltersRepository DomainFiltersRepo
@@ -9,7 +8,6 @@
 @inject IConfigService ConfigService
 @inject IContentDetectionConfigRepository ContentDetectionRepository
 @inject ISnackbar Snackbar
-@inject AuthenticationStateProvider AuthStateProvider
 @implements IDisposable
 
 <MudGrid>
@@ -262,6 +260,8 @@
 }
 
 @code {
+    [CascadingParameter] private WebUserIdentity? WebUser { get; set; }
+
     [Parameter]
     public long ChatId { get; set; } // 0 = global, non-zero = chat-specific
 
@@ -327,7 +327,8 @@
         try
         {
             _globalSpamConfig.UrlBlocklist = _urlBlocklistConfig;
-            await ContentDetectionRepository.UpdateGlobalConfigAsync(_globalSpamConfig);
+            var actor = WebUser!.ToActor();
+            await ConfigService.SaveContentDetectionAsync(new ChatIdentity(0, "Global"), _globalSpamConfig, actor);
             Snackbar.Add("URL blocklist configuration saved", Severity.Success);
         }
         catch (Exception ex)
@@ -434,12 +435,7 @@
         _saving = true;
         try
         {
-            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
-            var userId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-            var userEmail = authState.User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
-            var actor = !string.IsNullOrEmpty(userId) && Guid.TryParse(userId, out _)
-                ? Actor.FromWebUser(userId, userEmail)
-                : Actor.FromSystem("unknown");
+            var actor = WebUser!.ToActor();
 
             if (mode == BlockMode.Hard)
             {
@@ -531,12 +527,7 @@
         _saving = true;
         try
         {
-            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
-            var userId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-            var userEmail = authState.User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
-            var actor = !string.IsNullOrEmpty(userId) && Guid.TryParse(userId, out _)
-                ? Actor.FromWebUser(userId, userEmail)
-                : Actor.FromSystem("unknown");
+            var actor = WebUser!.ToActor();
 
             await SaveManualDomainsAsync(_whitelistDomains, DomainFilterType.Whitelist, BlockMode.Disabled, actor);
             await BlocklistSync.RebuildCacheAsync(ChatId);

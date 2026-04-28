@@ -1,4 +1,4 @@
-@inject IContentDetectionConfigRepository ContentDetectionRepository
+@inject IConfigService ConfigService
 @inject ISnackbar Snackbar
 
 <MudDialog>
@@ -56,6 +56,8 @@
 </MudDialog>
 
 @code {
+    [CascadingParameter] private WebUserIdentity? WebUser { get; set; }
+
     [CascadingParameter]
     IMudDialogInstance MudDialog { get; set; } = null!;
 
@@ -108,16 +110,10 @@
                 return;
             }
 
+            var actor = WebUser!.ToActor();
             var config = component.GetConfig();
             var chat = Chat ?? ChatIdentity.FromId(0);
-            if (chat.Id == 0)
-            {
-                await ContentDetectionRepository.UpdateGlobalConfigAsync(config);
-            }
-            else
-            {
-                await ContentDetectionRepository.UpdateChatConfigAsync(chat.Id, config);
-            }
+            await ConfigService.SaveContentDetectionAsync(chat, config, actor);
             Snackbar.Add(chat.Id == 0 ? "Global configuration saved successfully" : "Chat configuration saved successfully", Severity.Success);
 
             MudDialog.Close(DialogResult.Ok(true));

@@ -6,6 +6,7 @@
 @using System.Security.Claims
 @using TelegramGroupsAdmin.Configuration.Services
 @inject IContentDetectionConfigRepository ContentDetectionRepository
+@inject IConfigService ConfigService
 @inject ISnackbar Snackbar
 @inject AuthenticationStateProvider AuthStateProvider
 
@@ -148,6 +149,8 @@
 </MudGrid>
 
 @code {
+    [CascadingParameter] private WebUserIdentity? WebUser { get; set; }
+
     private bool _loading = true;
     private bool _saving;
     private bool _canEdit;
@@ -252,7 +255,8 @@
             StateHasChanged();
 
             // Save the entire config (which now includes AlwaysRun in each sub-config)
-            await ContentDetectionRepository.UpdateGlobalConfigAsync(_config);
+            var actor = WebUser!.ToActor();
+            await ConfigService.SaveContentDetectionAsync(new ChatIdentity(0, "Global"), _config, actor);
 
             Snackbar.Add("Critical checks configuration saved successfully", Severity.Success);
         }

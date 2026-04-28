@@ -1,4 +1,5 @@
 @inject IContentDetectionConfigRepository ContentDetectionRepository
+@inject IConfigService ConfigService
 @inject ISnackbar Snackbar
 @inject NavigationManager Navigation
 @inject IDialogService DialogService
@@ -565,6 +566,8 @@
 </MudStack>
 
 @code {
+    [CascadingParameter] private WebUserIdentity? WebUser { get; set; }
+
     [Parameter]
     public ChatIdentity? Chat { get; set; }
 
@@ -598,15 +601,9 @@
         {
             _isSaving = true;
 
+            var actor = WebUser!.ToActor();
             var chat = Chat ?? ChatIdentity.FromId(0);
-            if (chat.Id == 0)
-            {
-                await ContentDetectionRepository.UpdateGlobalConfigAsync(_config);
-            }
-            else
-            {
-                await ContentDetectionRepository.UpdateChatConfigAsync(chat.Id, _config);
-            }
+            await ConfigService.SaveContentDetectionAsync(chat, _config, actor);
             Snackbar.Add(chat.Id == 0 ? "Global configuration saved successfully" : "Chat configuration saved successfully", Severity.Success);
         }
         catch (Exception ex)
