@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Npgsql;
 using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
 using TelegramGroupsAdmin.Configuration.Models.Welcome;
 using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.Configuration.Services;
@@ -169,6 +170,29 @@ public class ConfigServiceIntegrationTests
         {
             Assert.That(lastEntry!.Value, Is.EqualTo("TelegramBotToken"));
             Assert.That(lastEntry.Value, Does.Not.Contain(secret));
+        });
+    }
+
+    [Test]
+    public async Task SaveContentDetectionAsync_AppendsAuditLogRow()
+    {
+        var chat = new ChatIdentity(-1001234567890L, "Test Chat");
+        var config = new ContentDetectionConfig();
+        var actor = TestActor;
+
+        var before = await CountAuditLogsAsync();
+        await _sut!.SaveContentDetectionAsync(chat, config, actor);
+        var after = await CountAuditLogsAsync();
+
+        Assert.That(after, Is.EqualTo(before + 1));
+        var lastEntry = await GetLatestAuditLogAsync();
+        Assert.That(lastEntry, Is.Not.Null);
+        Assert.Multiple(() =>
+        {
+            Assert.That(lastEntry!.EventType, Is.EqualTo((Data.Models.AuditEventType)AuditEventType.ConfigurationChanged));
+            Assert.That(lastEntry.Value, Does.Contain("ContentDetection"));
+            Assert.That(lastEntry.Value, Does.Contain("Test Chat"));
+            Assert.That(lastEntry.ActorWebUserId, Is.EqualTo(GoldenDataset.Users.User1_Id));
         });
     }
 }
