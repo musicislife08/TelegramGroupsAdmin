@@ -66,21 +66,9 @@ public class ConfigServiceIntegrationTests
         _serviceProvider = services.BuildServiceProvider();
 
         var contextFactory = _serviceProvider.GetRequiredService<IDbContextFactory<AppDbContext>>();
-        var dataProtectionProvider = _serviceProvider.GetRequiredService<IDataProtectionProvider>();
         await using (var context = await contextFactory.CreateDbContextAsync())
         {
-            // Seed only the web_users table (minimal setup to satisfy FK constraint on audit_logs)
-            await context.Database.ExecuteSqlRawAsync(
-                """
-                INSERT INTO users (id, email, normalized_email, password_hash, security_stamp, permission_level, invited_by, is_active, totp_secret, totp_enabled, totp_setup_started_at, created_at, last_login_at, status, email_verified, "InvitedByUserId")
-                VALUES
-                ({0}, {1}, {2}, 'AQAAAAIAAYagAAAAEDummyHashForTestingOnly1234567890', 'TEST_SECURITY_STAMP', 2, NULL, TRUE, NULL, TRUE, NULL, NOW() - INTERVAL '14 days', NOW(), 1, TRUE, NULL)
-                """,
-                GoldenDataset.Users.User1_Id,
-                GoldenDataset.Users.User1_Email,
-                GoldenDataset.Users.User1_Email.ToUpperInvariant()
-            );
-            await context.SaveChangesAsync();
+            await GoldenDataset.SeedWebUsersOnlyAsync(context);
         }
 
         _sut = _serviceProvider.GetRequiredService<IConfigService>();
