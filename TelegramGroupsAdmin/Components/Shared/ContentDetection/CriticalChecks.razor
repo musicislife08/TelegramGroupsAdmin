@@ -1,14 +1,10 @@
 @using TelegramGroupsAdmin.Configuration
 @using TelegramGroupsAdmin.Configuration.Models.ContentDetection
 @using TelegramGroupsAdmin.Core.Services
-@using TelegramGroupsAdmin.Auth
-@using Microsoft.AspNetCore.Components.Authorization
-@using System.Security.Claims
 @using TelegramGroupsAdmin.Configuration.Services
 @inject IContentDetectionConfigRepository ContentDetectionRepository
 @inject IConfigService ConfigService
 @inject ISnackbar Snackbar
-@inject AuthenticationStateProvider AuthStateProvider
 
 <MudGrid>
     <MudItem xs="12">
@@ -161,15 +157,7 @@
 
     protected override async Task OnInitializedAsync()
     {
-        // Check if user is Admin or Owner (only they can modify critical checks)
-        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
-        var user = authState.User;
-        var permissionClaim = user.FindFirst(CustomClaimTypes.PermissionLevel);
-        var permissionLevel = permissionClaim != null && int.TryParse(permissionClaim.Value, out var level)
-            ? (PermissionLevel)level
-            : PermissionLevel.Admin;
-        _canEdit = permissionLevel >= PermissionLevel.GlobalAdmin;
-
+        _canEdit = WebUser?.IsGlobalAdminOrHigher ?? false;
         await LoadConfiguration();
     }
 
