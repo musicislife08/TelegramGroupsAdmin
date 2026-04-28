@@ -8,6 +8,7 @@ using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Models.Welcome;
 using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Repositories;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Services;
@@ -121,6 +122,8 @@ public class BanCelebrationServiceTests
         services.AddScoped<IContentDetectionConfigRepository, ContentDetectionConfigRepository>();
         services.AddHybridCache();
         services.AddDataProtection();
+        services.AddScoped<IAuditLogRepository, AuditLogRepository>();
+        services.AddScoped<IAuditService, AuditService>();
         services.AddScoped<IConfigService, ConfigService>();
 
         // Register mocked external services

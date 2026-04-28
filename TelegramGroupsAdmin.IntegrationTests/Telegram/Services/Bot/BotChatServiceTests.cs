@@ -86,6 +86,7 @@ public class BotChatServiceTests
         services.AddScoped<IChatAdminsRepository, ChatAdminsRepository>();
         services.AddScoped<ITelegramUserRepository, TelegramUserRepository>();
         services.AddScoped<IUserActionsRepository, UserActionsRepository>();
+        services.AddDataProtection();
         services.AddScoped<IConfigRepository, ConfigRepository>();
 
         // Register mocked external services

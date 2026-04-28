@@ -5,6 +5,7 @@ using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Services;
 using TelegramGroupsAdmin.Configuration.Repositories;
+using TelegramGroupsAdmin.Core.Repositories;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core;
 using TelegramGroupsAdmin.Core.Models;
@@ -70,6 +71,8 @@ public class SystemAccountBypassTests
         services.AddScoped<IContentDetectionConfigRepository, ContentDetectionConfigRepository>();
         services.AddHybridCache();
         services.AddDataProtection();
+        services.AddScoped<IAuditLogRepository, AuditLogRepository>();
+        services.AddScoped<IAuditService, AuditService>();
         services.AddScoped<IConfigService, ConfigService>();
 
         // Register a mock content detection engine that should NEVER be called for system accounts

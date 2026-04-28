@@ -9,6 +9,7 @@ using TelegramGroupsAdmin.Configuration.Models.Welcome;
 using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Repositories;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Data.Models;
@@ -116,6 +117,8 @@ public class WelcomeFlowBypassIntegrationTests
         services.AddScoped<IContentDetectionConfigRepository, ContentDetectionConfigRepository>();
         services.AddHybridCache();
         services.AddDataProtection();
+        services.AddScoped<IAuditLogRepository, AuditLogRepository>();
+        services.AddScoped<IAuditService, AuditService>();
         services.AddScoped<IConfigService, ConfigService>();
 
         // Telegram-API-sourced service is the only dependency we mock. See the
