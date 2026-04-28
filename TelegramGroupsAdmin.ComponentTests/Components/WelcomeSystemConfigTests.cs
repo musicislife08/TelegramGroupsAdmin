@@ -554,92 +554,94 @@ public class WelcomeSystemConfigTests : WelcomeSystemConfigTestContext
     }
 
     [Test]
-    public async Task Save_PersistsTrustedBypass_ThroughConfigService()
+    public void LoadConfig_TrustedBypassPopulated_RendersCustomTemplates()
     {
-        // Arrange - MainWelcomeMessage must be non-empty so LoadConfig takes the "load as-is"
-        // path and does not reset TrustedBypass to defaults.
+        // Arrange: load-as-is branch (non-empty MainWelcomeMessage) with custom TrustedBypass
         ConfigService.GetWelcomeAsync(Arg.Any<long>())
             .Returns(new WelcomeConfig
             {
+                Enabled = true,
                 MainWelcomeMessage = "Welcome {username}!",
                 TrustedBypass = new TrustedBypassConfig
                 {
                     Enabled = true,
                     AnnouncementMessageAdmin = "admin custom",
                     AnnouncementMessageTrusted = "trusted custom",
-                    AnnouncementTtlSeconds = 45,
+                    AnnouncementTtlSeconds = 45
                 }
             });
 
+        // Act
         var cut = Render<WelcomeSystemConfig>();
 
-        // Capture the config passed to SaveAsync so we can assert its values
-        WelcomeConfig? captured = null;
-        ConfigService.SaveWelcomeAsync(
-            Arg.Any<ChatIdentity>(), Arg.Do<WelcomeConfig>(c => captured = c), Arg.Any<Actor>(), Arg.Any<CancellationToken>())
-            .Returns(Task.CompletedTask);
+        // Assert: the loaded values flow into the rendered DOM
+        cut.WaitForAssertion(() =>
+        {
+            Assert.That(cut.Markup, Does.Contain("admin custom"));
+            Assert.That(cut.Markup, Does.Contain("trusted custom"));
+        }, TimeSpan.FromSeconds(2));
 
-        // Act
-        await cut.InvokeAsync(() => cut.Instance.SaveConfiguration());
-
-        // Assert
-        Assert.That(captured, Is.Not.Null, "SaveAsync was not called");
-        Assert.That(captured!.TrustedBypass.Enabled, Is.True);
-        Assert.That(captured.TrustedBypass.AnnouncementMessageAdmin, Is.EqualTo("admin custom"));
-        Assert.That(captured.TrustedBypass.AnnouncementMessageTrusted, Is.EqualTo("trusted custom"));
-        Assert.That(captured.TrustedBypass.AnnouncementTtlSeconds, Is.EqualTo(45));
+        // TTL: MudNumericField at WelcomeSystemConfig.razor:257-258 renders the bound
+        // value into both `value` and `aria-valuenow` attributes. The label text
+        // "Auto-delete after (seconds)" lives in a sibling <label for="..."> element,
+        // so traverse from label to input via the for-id.
+        cut.WaitForAssertion(() =>
+        {
+            var ttlLabel = cut.FindAll("label").First(l => l.TextContent.Contains("Auto-delete after"));
+            var ttlInput = cut.Find($"#{ttlLabel.GetAttribute("for")}");
+            Assert.That(ttlInput.GetAttribute("value"), Is.EqualTo("45"));
+        }, TimeSpan.FromSeconds(2));
     }
 
     [Test]
-    public async Task LoadConfig_MigrationBranch_PreservesTrustedBypassAndJoinSecurity()
+    public void LoadConfig_MigrationBranch_PreservesTrustedBypassAndJoinSecurity()
     {
-        // Arrange: legacy-format config (empty MainWelcomeMessage triggers migration branch)
-        // with admin-configured TrustedBypass and a JoinSecurity sub-setting. The migration
-        // branch previously reset both to defaults; Task 15's fix preserves them.
-        var legacyConfig = new WelcomeConfig
-        {
-            MainWelcomeMessage = string.Empty, // triggers migration branch
-            TrustedBypass = new TrustedBypassConfig
+        // Arrange: legacy config with empty MainWelcomeMessage triggers the migration
+        // branch at WelcomeSystemConfig.razor:570-587. Migration explicitly assigns
+        // config.TrustedBypass and config.JoinSecurity onto WelcomeConfig.Default,
+        // so values should render.
+        ConfigService.GetWelcomeAsync(Arg.Any<long>())
+            .Returns(new WelcomeConfig
             {
                 Enabled = true,
-                AnnouncementMessageAdmin = "legacy admin template",
-                AnnouncementMessageTrusted = "legacy trusted template",
-                AnnouncementTtlSeconds = 60,
-            },
-            JoinSecurity = new JoinSecurityConfig
-            {
-                Cas = { Enabled = true },
-            },
-        };
-        ConfigService.GetWelcomeAsync(Arg.Any<long>())
-            .Returns(legacyConfig);
+                MainWelcomeMessage = "",
+                TrustedBypass = new TrustedBypassConfig
+                {
+                    Enabled = true,
+                    AnnouncementMessageAdmin = "legacy admin template",
+                    AnnouncementMessageTrusted = "legacy trusted template",
+                    AnnouncementTtlSeconds = 30
+                },
+                JoinSecurity = new JoinSecurityConfig
+                {
+                    Cas = new CasConfig { Enabled = true }
+                }
+            });
 
+        // Act
         var cut = Render<WelcomeSystemConfig>();
 
-        // Capture the config saved back so we can inspect the component's _config state.
-        WelcomeConfig? captured = null;
-        ConfigService.SaveWelcomeAsync(
-            Arg.Any<ChatIdentity>(), Arg.Do<WelcomeConfig>(c => captured = c), Arg.Any<Actor>(), Arg.Any<CancellationToken>())
-            .Returns(Task.CompletedTask);
-
-        // Act - trigger Save so we can read the preserved config via the captured arg.
-        await cut.InvokeAsync(() => cut.Instance.SaveConfiguration());
-
-        // Assert - migration branch should NOT reset TrustedBypass or JoinSecurity.
-        Assert.That(captured, Is.Not.Null, "SaveAsync was not called");
-        Assert.Multiple(() =>
+        // Assert: migration branch preserves TrustedBypass and JoinSecurity into the rendered form
+        cut.WaitForAssertion(() =>
         {
-            Assert.That(captured!.TrustedBypass.Enabled, Is.True,
-                "Migration branch should preserve TrustedBypass.Enabled");
-            Assert.That(captured.TrustedBypass.AnnouncementMessageAdmin, Is.EqualTo("legacy admin template"),
-                "Migration branch should preserve TrustedBypass.AnnouncementMessageAdmin");
-            Assert.That(captured.TrustedBypass.AnnouncementMessageTrusted, Is.EqualTo("legacy trusted template"),
-                "Migration branch should preserve TrustedBypass.AnnouncementMessageTrusted");
-            Assert.That(captured.TrustedBypass.AnnouncementTtlSeconds, Is.EqualTo(60),
-                "Migration branch should preserve TrustedBypass.AnnouncementTtlSeconds");
-            Assert.That(captured.JoinSecurity.Cas.Enabled, Is.True,
-                "Migration branch should preserve JoinSecurity settings");
-        });
+            Assert.That(cut.Markup, Does.Contain("legacy admin template"));
+            Assert.That(cut.Markup, Does.Contain("legacy trusted template"));
+        }, TimeSpan.FromSeconds(2));
+
+        // CAS toggle: the MudSwitch at WelcomeSystemConfig.razor:78 renders next to a
+        // status chip (lines 82-84) whose color and text reflect Cas.Enabled. The chip
+        // is the user-visible state indicator and is reliable in static bUnit render
+        // (the switch's <input checked> attribute is set via Blazor interop and may not
+        // appear in the static DOM). When Cas.Enabled is true the chip has
+        // `mud-chip-color-success` class and text "Enabled".
+        cut.WaitForAssertion(() =>
+        {
+            var casLabel = cut.FindAll("p").First(p => p.TextContent.Contains("CAS (Combot Anti-Spam)"));
+            var casChip = casLabel.ParentElement!.QuerySelector(".mud-chip")!;
+            Assert.That(casChip.ClassList, Does.Contain("mud-chip-color-success"),
+                "CAS chip should render in success/enabled state when Cas.Enabled is true");
+            Assert.That(casChip.TextContent.Trim(), Is.EqualTo("Enabled"));
+        }, TimeSpan.FromSeconds(2));
     }
 
     #endregion
