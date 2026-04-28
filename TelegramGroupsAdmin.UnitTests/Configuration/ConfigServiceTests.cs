@@ -5,6 +5,7 @@ using NSubstitute;
 using NUnit.Framework;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Models;
+using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
 using TelegramGroupsAdmin.Configuration.Models.Welcome;
 using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.Configuration.Services;
@@ -216,6 +217,65 @@ public class ConfigServiceTests
 
         Assert.ThrowsAsync<ArgumentException>(async () =>
             await _sut.SaveBotTokenAsync(string.Empty, actor));
+    }
+
+    // ------------------------------------------------------------------
+    // ContentDetection
+    // ------------------------------------------------------------------
+
+    [Test]
+    public async Task SaveContentDetectionAsync_DelegatesAndEmitsAudit()
+    {
+        var chat = new ChatIdentity(-1001234567890L, "Test Chat");
+        var config = new ContentDetectionConfig();
+        var actor = Actor.FromSystem("test");
+
+        await _sut.SaveContentDetectionAsync(chat, config, actor);
+
+        // Verify the repo got the chat-specific update
+        await _cdRepo.Received(1).UpdateChatConfigAsync(chat.Id, config, Arg.Any<string?>(), Arg.Any<CancellationToken>());
+
+        // Verify audit was emitted with ContentDetection in the value and the chat display name
+        await _audit.Received(1).LogEventAsync(
+            AuditEventType.ConfigurationChanged,
+            actor,
+            target: null,
+            value: Arg.Is<string>(v => v.Contains("ContentDetection") && v.Contains(chat.DisplayName)),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task DeleteContentDetectionAsync_DelegatesAndEmitsAudit()
+    {
+        var chat = new ChatIdentity(-1001234567890L, "Test Chat");
+        var actor = Actor.FromSystem("test");
+
+        await _sut.DeleteContentDetectionAsync(chat, actor);
+
+        await _cdRepo.Received(1).DeleteChatConfigAsync(chat.Id, Arg.Any<CancellationToken>());
+
+        await _audit.Received(1).LogEventAsync(
+            AuditEventType.ConfigurationChanged,
+            actor,
+            target: null,
+            value: Arg.Is<string>(v => v.Contains("ContentDetection (deleted)") && v.Contains(chat.DisplayName)),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task SaveContentDetectionAsync_ChatIdZero_RoutesToGlobalUpdate()
+    {
+        var chat = new ChatIdentity(0, "Global");
+        var config = new ContentDetectionConfig();
+        var actor = Actor.FromSystem("test");
+
+        await _sut.SaveContentDetectionAsync(chat, config, actor);
+
+        // Global path
+        await _cdRepo.Received(1).UpdateGlobalConfigAsync(config, Arg.Any<string?>(), Arg.Any<CancellationToken>());
+
+        // Should NOT have called the chat-specific update
+        await _cdRepo.DidNotReceive().UpdateChatConfigAsync(Arg.Any<long>(), Arg.Any<ContentDetectionConfig>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }
 
     // ------------------------------------------------------------------
