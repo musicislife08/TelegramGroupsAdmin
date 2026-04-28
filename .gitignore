@@ -64,3 +64,6 @@ tmp/
 
 # Playwright test results
 **/TestResults/
+
+# Local test/build logs
+logs/
