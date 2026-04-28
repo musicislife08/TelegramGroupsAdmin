@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Configuration.Models;
+using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
 using TelegramGroupsAdmin.Configuration.Models.Welcome;
 using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.Core.Models;
@@ -260,6 +261,41 @@ public class ConfigService(
         await EmitAuditAsync("BanCelebration (deleted)", chat, initiator, ct);
         await InvalidateAsync("ban_celebration", chat.Id, ct);
         logger.LogInformation("BanCelebration config deleted for {Chat} by {Actor}", chat.DisplayName, initiator.DisplayName);
+    }
+
+    // ============================================================================
+    // ContentDetection
+    // ============================================================================
+
+    public ValueTask<ContentDetectionConfig?> GetContentDetectionAsync(long chatId, CancellationToken ct = default)
+        => cache.GetOrCreateAsync($"cfg_content_detection_{chatId}",
+            async factoryCt => chatId == 0
+                ? (ContentDetectionConfig?)await contentDetectionRepository.GetGlobalConfigAsync(factoryCt)
+                : await contentDetectionRepository.GetByChatIdAsync(chatId, factoryCt),
+            CacheOptions, cancellationToken: ct);
+
+    public ValueTask<ContentDetectionConfig?> GetEffectiveContentDetectionAsync(long chatId, CancellationToken ct = default)
+        => cache.GetOrCreateAsync($"cfg_effective_content_detection_{chatId}",
+            async factoryCt => (ContentDetectionConfig?)await contentDetectionRepository.GetEffectiveConfigAsync(chatId, factoryCt),
+            CacheOptions, tags: ["effective_content_detection"], cancellationToken: ct);
+
+    public async Task SaveContentDetectionAsync(ChatIdentity chat, ContentDetectionConfig config, Actor initiator, CancellationToken ct = default)
+    {
+        if (chat.Id == 0)
+            await contentDetectionRepository.UpdateGlobalConfigAsync(config, cancellationToken: ct);
+        else
+            await contentDetectionRepository.UpdateChatConfigAsync(chat.Id, config, cancellationToken: ct);
+        await EmitAuditAsync("ContentDetection", chat, initiator, ct);
+        await InvalidateAsync("content_detection", chat.Id, ct);
+        logger.LogInformation("ContentDetection config saved for {Chat} by {Actor}", chat.DisplayName, initiator.DisplayName);
+    }
+
+    public async Task DeleteContentDetectionAsync(ChatIdentity chat, Actor initiator, CancellationToken ct = default)
+    {
+        await contentDetectionRepository.DeleteChatConfigAsync(chat.Id, ct);
+        await EmitAuditAsync("ContentDetection (deleted)", chat, initiator, ct);
+        await InvalidateAsync("content_detection", chat.Id, ct);
+        logger.LogInformation("ContentDetection config deleted for {Chat} by {Actor}", chat.DisplayName, initiator.DisplayName);
     }
 
     // ============================================================================

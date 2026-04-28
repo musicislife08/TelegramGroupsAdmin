@@ -1,4 +1,5 @@
 using TelegramGroupsAdmin.Configuration.Models;
+using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
 using TelegramGroupsAdmin.Configuration.Models.Welcome;
 using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.Core.Models;
@@ -39,6 +40,12 @@ public interface IConfigService
     ValueTask<BanCelebrationConfig?> GetBanCelebrationAsync(long chatId, CancellationToken ct = default);
     ValueTask<BanCelebrationConfig?> GetEffectiveBanCelebrationAsync(long chatId, CancellationToken ct = default);
 
+    /// <summary>Get the per-chat or global ContentDetection config (chatId == 0 returns global).</summary>
+    ValueTask<ContentDetectionConfig?> GetContentDetectionAsync(long chatId, CancellationToken ct = default);
+
+    /// <summary>Get the effective ContentDetection config for a chat, with global fallback merged.</summary>
+    ValueTask<ContentDetectionConfig?> GetEffectiveContentDetectionAsync(long chatId, CancellationToken ct = default);
+
     // --- Mutations ---
     Task SaveWelcomeAsync(ChatIdentity chat, WelcomeConfig config, Actor initiator, CancellationToken ct = default);
     Task DeleteWelcomeAsync(ChatIdentity chat, Actor initiator, CancellationToken ct = default);
@@ -63,6 +70,12 @@ public interface IConfigService
 
     Task SaveBanCelebrationAsync(ChatIdentity chat, BanCelebrationConfig config, Actor initiator, CancellationToken ct = default);
     Task DeleteBanCelebrationAsync(ChatIdentity chat, Actor initiator, CancellationToken ct = default);
+
+    /// <summary>Save ContentDetection config (chat or global), emit audit, and invalidate cache.</summary>
+    Task SaveContentDetectionAsync(ChatIdentity chat, ContentDetectionConfig config, Actor initiator, CancellationToken ct = default);
+
+    /// <summary>Delete the per-chat ContentDetection config, emit audit, and invalidate cache.</summary>
+    Task DeleteContentDetectionAsync(ChatIdentity chat, Actor initiator, CancellationToken ct = default);
 
     // --- Bot token ---
     ValueTask<string?> GetBotTokenAsync(CancellationToken ct = default);
