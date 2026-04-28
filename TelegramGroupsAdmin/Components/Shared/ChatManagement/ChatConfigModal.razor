@@ -1,11 +1,9 @@
 @using TelegramGroupsAdmin.Services
-@using TelegramGroupsAdmin.ContentDetection.Repositories
 @using TelegramGroupsAdmin.Components.Shared.ContentDetection
 @using TelegramGroupsAdmin.Components.Shared.Settings
 @using TelegramGroupsAdmin.Configuration
 @using TelegramGroupsAdmin.Configuration.Services
 @inject ISnackbar Snackbar
-@inject IContentDetectionConfigRepository SpamConfigRepository
 @inject IChatAdminsRepository ChatAdminsRepository
 @inject ITelegramUserMappingRepository TelegramMappingsRepository
 @inject IUserManagementService UserManagementService
@@ -479,7 +477,8 @@
             // User switched from custom to global - delete custom config
             try
             {
-                await SpamConfigRepository.DeleteChatConfigAsync(ChatInfo.Record.Identity.Id);
+                var actor = WebUser!.ToActor();
+                await ConfigService.DeleteContentDetectionAsync(ChatInfo.Record.Identity, actor);
                 ChatInfo.HasCustomSpamConfig = false;
                 Snackbar.Add("Reverted to global spam detection configuration", Severity.Success);
             }
