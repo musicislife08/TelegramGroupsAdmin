@@ -537,7 +537,7 @@ public class InviteManagementDialogTests : InviteManagementDialogTestContext
     }
 
     [Test]
-    public void OwnerUser_CanManageAllInvites()
+    public async Task OwnerUser_CanManageAllInvites()
     {
         // Arrange - Owner user viewing invites at all permission levels
         var provider = RenderDialogProvider();
@@ -549,8 +549,13 @@ public class InviteManagementDialogTests : InviteManagementDialogTestContext
         };
         InviteService.GetAllInvitesAsync(Arg.Any<string>()).Returns(invites);
 
-        // Act
-        _ = OpenDialogAsync(PermissionLevel.Owner);
+        // Act — await the open so the dialog's OnInitializedAsync runs to completion
+        // before we poll. Other tests in this fixture use fire-and-forget, but they
+        // only assert on structural elements present on first render. This test
+        // asserts on async-loaded table content (3 rows × 2 buttons), which under
+        // heavy renderer-dispatcher load (full-suite parallelism) can queue past
+        // WaitForAssertion's 1s default timeout.
+        await OpenDialogAsync(PermissionLevel.Owner);
 
         // Assert - All buttons should be enabled
         provider.WaitForAssertion(() =>
