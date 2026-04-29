@@ -700,6 +700,17 @@ public class ConfigRepository(
     // WarningSystem (multiplexed in ModerationConfig column)
     // ============================================================================
 
+    // CONCURRENCY NOTE (issue #196): When this method is wired up to admin UI,
+    // the read-modify-write pattern below has a theoretical lost-update window
+    // for the multiplexed moderation_config JSONB column. Two concurrent admin
+    // saves to the same chat — one updating WarningSystem, the other updating
+    // InviteCommand — can race: both read the same baseline wrapper at t=0,
+    // each writes back its own slot, and the later commit silently drops the
+    // earlier sibling's update. Single-instance bot + per-circuit admin UI
+    // makes this rare in practice but not impossible. Mitigations when this
+    // matters: add a RowVersion/xmin concurrency token to ConfigRecordDto and
+    // retry on DbUpdateConcurrencyException, or wrap the read+write in a
+    // serializable transaction.
     public async Task SaveWarningSystemAsync(ChatIdentity chat, WarningSystemConfig config, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(config);
@@ -790,6 +801,17 @@ public class ConfigRepository(
     // InviteCommand (multiplexed in ModerationConfig column)
     // ============================================================================
 
+    // CONCURRENCY NOTE (issue #196): When this method is wired up to admin UI,
+    // the read-modify-write pattern below has a theoretical lost-update window
+    // for the multiplexed moderation_config JSONB column. Two concurrent admin
+    // saves to the same chat — one updating WarningSystem, the other updating
+    // InviteCommand — can race: both read the same baseline wrapper at t=0,
+    // each writes back its own slot, and the later commit silently drops the
+    // earlier sibling's update. Single-instance bot + per-circuit admin UI
+    // makes this rare in practice but not impossible. Mitigations when this
+    // matters: add a RowVersion/xmin concurrency token to ConfigRecordDto and
+    // retry on DbUpdateConcurrencyException, or wrap the read+write in a
+    // serializable transaction.
     public async Task SaveInviteCommandAsync(ChatIdentity chat, InviteCommandConfig config, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(config);
