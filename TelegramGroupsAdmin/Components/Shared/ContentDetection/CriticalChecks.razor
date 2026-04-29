@@ -2,7 +2,6 @@
 @using TelegramGroupsAdmin.Configuration.Models.ContentDetection
 @using TelegramGroupsAdmin.Core.Services
 @using TelegramGroupsAdmin.Configuration.Services
-@inject IContentDetectionConfigRepository ContentDetectionRepository
 @inject IConfigService ConfigService
 @inject ISnackbar Snackbar
 
@@ -169,7 +168,7 @@
             StateHasChanged();
 
             // Load global content detection config (chat_id = 0)
-            _config = await ContentDetectionRepository.GetEffectiveConfigAsync(0);
+            _config = await ConfigService.GetEffectiveContentDetectionAsync(0);
 
             // Build view models from config sub-configs
             _securityChecks =

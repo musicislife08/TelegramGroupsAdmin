@@ -6,7 +6,6 @@
 @inject IDomainFiltersRepository DomainFiltersRepo
 @inject IBlocklistSyncService BlocklistSync
 @inject IConfigService ConfigService
-@inject IContentDetectionConfigRepository ContentDetectionRepository
 @inject ISnackbar Snackbar
 @implements IDisposable
 
@@ -299,7 +298,7 @@
     {
         try
         {
-            _globalSpamConfig = await ContentDetectionRepository.GetGlobalConfigAsync()
+            _globalSpamConfig = await ConfigService.GetContentDetectionAsync(0)
                                 ?? new ContentDetectionConfig();
             _urlBlocklistConfig = _globalSpamConfig.UrlBlocklist;
         }

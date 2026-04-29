@@ -12,7 +12,7 @@
 @inject IJSRuntime JsRuntime
 @inject ILogger<ContentTester> Logger
 @inject IEnumerable<IContentCheckV2> ContentChecks
-@inject IContentDetectionConfigRepository ContentDetectionRepository
+@inject IConfigService ConfigService
 @implements IDisposable
 
 <MudPaper Class="pa-4" Elevation="0">
@@ -426,7 +426,7 @@
         _managedChats = (await ManagedChatsRepository.GetAllAsync(CancellationToken.None)).ToList();
 
         // Load content detection config for threshold display
-        _config = await ContentDetectionRepository.GetEffectiveConfigAsync(0);
+        _config = await ConfigService.GetEffectiveContentDetectionAsync(0);
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)

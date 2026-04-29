@@ -1,4 +1,3 @@
-@inject IContentDetectionConfigRepository ContentDetectionRepository
 @inject IConfigService ConfigService
 @inject ISnackbar Snackbar
 @inject NavigationManager Navigation
@@ -584,7 +583,7 @@
         try
         {
             var chatId = Chat?.Id ?? 0;
-            _config = await ContentDetectionRepository.GetEffectiveConfigAsync(chatId);
+            _config = await ConfigService.GetEffectiveContentDetectionAsync(chatId);
         }
         catch (Exception ex)
         {
