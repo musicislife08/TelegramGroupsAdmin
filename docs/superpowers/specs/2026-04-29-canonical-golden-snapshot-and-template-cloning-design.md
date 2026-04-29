@@ -261,20 +261,6 @@ public static partial class GoldenDataset
     // manually-loaded canonical state before the template infrastructure exists.
     // Not intended for production test setup.
     public static Task LoadCanonicalAsync(AppDbContext context, CancellationToken ct = default);
-
-    // Static row counts for each reducible slice of canonical. Kept in sync
-    // with canonical/*.sql by convention (any row-count change to a SQL
-    // fixture updates the corresponding constant in the same commit).
-    // Used by GoldenReducePlan for synchronous Keep* validation, and
-    // available to test authors for assertions.
-    public static class CanonicalCounts
-    {
-        public const int Spam            = /* set by canonical/12_training_labels.sql */;
-        public const int Ham             = /* set by canonical/12_training_labels.sql */;
-        public const int DetectionResults = /* set by canonical/10_detection_results.sql */;
-        public const int Messages        = /* set by canonical/07_messages.sql */;
-        public const int UserActions     = /* set by canonical/09_user_actions.sql */;
-    }
 }
 
 public sealed class GoldenReducePlan
@@ -432,20 +418,22 @@ GoldenReducePlan KeepUserActions(int count);       // user_actions
 
 ### Validation rules
 
-- All validation is **synchronous, at `Keep*` invocation time**, against
-  static `GoldenDataset.CanonicalCounts.*` constants (e.g.,
-  `CanonicalCounts.Spam = 100`, `CanonicalCounts.Ham = 100`,
-  `CanonicalCounts.UserActions = …`). These constants are introduced in
-  Phase 1 and are kept in sync with the SQL fixtures by convention (any
-  change to row counts in `canonical/*.sql` updates the corresponding
-  `CanonicalCounts` constant in the same commit).
-- `count >= 0`. Negative throws `ArgumentOutOfRangeException`.
-- `count <= GoldenDataset.CanonicalCounts.<Slice>`. `KeepSpam(200)` when the
-  constant is 100 throws with an explicit message:
-  `"KeepSpam(200) exceeds the canonical count of 100. Expand canonical/12_training_labels.sql instead of asking for more rows than canonical defines."`
+- `count >= 0`. Negative throws `ArgumentOutOfRangeException` synchronously
+  at `Keep*` invocation time (no DB knowledge required).
+- **No upper-bound validation against canonical row counts.** `Keep*` uses
+  natural `LIMIT` semantics: `KeepSpam(200)` against a canonical containing
+  100 spam rows keeps all 100 (the inner `SELECT … LIMIT 200` returns 100,
+  the outer `DELETE … NOT IN (...)` deletes zero rows). If a developer
+  passes a count larger than canonical actually contains, the test's own
+  assertions surface the mistake with a clearer error than a validation
+  exception would (`Expected: 200 / Actual: 100` at the assertion site is
+  more localized than an `[SetUp]` throw). Rationale: maintaining a static
+  canonical-count contract creates drift risk between SQL fixtures and
+  validation constants, and the footgun it would catch is rare and
+  self-diagnosing.
 - Calling the same `Keep*` twice is last-wins, no error.
-- Slices not mentioned retain full canonical content (the "default = canonical"
-  rule).
+- Slices not mentioned retain full canonical content (the "default =
+  canonical" rule).
 
 ### Execution semantics
 
@@ -493,8 +481,9 @@ Seven commits total. Each green and bisectable.
 - Add NUnit-style framework tests for `GoldenReducePlan` that load canonical
   via `MigrationTestHelper + LoadCanonicalAsync`, then exercise `KeepSpam`,
   `KeepHam`, `KeepMessages` (cascade), `KeepDetectionResults`, `KeepUserActions`,
-  the `count==0` case, the `count > canonical_count` validation error, and
-  last-wins semantics.
+  the `count==0` case, the `count > actual_canonical_rows` LIMIT-semantics
+  case (passes count > N, ends with N rows surviving), negative-count
+  validation, and last-wins semantics.
 - Old `Seed*Async` methods, old `00_base_*.sql` etc., old TRUNCATE+seed
   fixture path: all unchanged.
 - Build green; existing test suite still green.
@@ -592,9 +581,9 @@ hardcoded ID literals with `GoldenDataset.*` constants:
 ### Plan validation errors (synchronous, before `ApplyAsync`)
 
 - Negative count → `ArgumentOutOfRangeException` on the `Keep*` call.
-- Count exceeds canonical row count → `InvalidOperationException` with
-  message naming the affected slice and pointing at the SQL fixture to
-  expand.
+- No upper-bound validation. `Keep*` uses natural `LIMIT` semantics; passing
+  a count larger than canonical actually contains is a no-op for the excess
+  (see Reducer surface > Validation rules for rationale).
 
 ### Plan execution errors (during `ApplyAsync`)
 
@@ -637,8 +626,8 @@ final row counts and id ordering. Coverage:
 - `KeepMessages(0)` cascades through `message_edits`, `training_labels`,
   `detection_results`
 - Negative count throws `ArgumentOutOfRangeException`
-- `count > canonical_count` throws `InvalidOperationException` with the
-  expected message
+- `count > actual_canonical_rows` is a no-op for the excess (e.g.,
+  `KeepSpam(200)` against a fixture with 100 spam rows leaves 100 surviving)
 - Last-wins for repeated `Keep*` on same slice
 - `Keep*` calls in different orders produce identical final state
 - A single `ApplyAsync` exercising multiple reducers runs in one transaction
@@ -757,8 +746,6 @@ the template optimization on purpose.
 - [ ] `GoldenReducePlan` exists with 5 `Keep*` methods + `ApplyAsync`
 - [ ] `GoldenDataset.Reduce(AppDbContext)` exists
 - [ ] `GoldenDataset.LoadCanonicalAsync(AppDbContext, CancellationToken)` exists
-- [ ] `GoldenDataset.CanonicalCounts` static class exists with constants for
-      every reducible slice, matching the row counts in `canonical/*.sql`
 - [ ] `GoldenReducePlanTests.cs` exists with framework correctness coverage
 - [ ] All existing tests still pass on legacy `Seed*Async` path
 - [ ] `T0` baseline captured
