@@ -1,15 +1,13 @@
 @using TelegramGroupsAdmin.Services
-@using TelegramGroupsAdmin.ContentDetection.Repositories
 @using TelegramGroupsAdmin.Components.Shared.ContentDetection
 @using TelegramGroupsAdmin.Components.Shared.Settings
 @using TelegramGroupsAdmin.Configuration
+@using TelegramGroupsAdmin.Configuration.Services
 @inject ISnackbar Snackbar
-@inject IContentDetectionConfigRepository SpamConfigRepository
 @inject IChatAdminsRepository ChatAdminsRepository
 @inject ITelegramUserMappingRepository TelegramMappingsRepository
 @inject IUserManagementService UserManagementService
-@inject TelegramGroupsAdmin.Core.Services.IConfigService ConfigService
-@inject TelegramGroupsAdmin.Configuration.Repositories.IConfigRepository ConfigRepository
+@inject TelegramGroupsAdmin.Configuration.Services.IConfigService ConfigService
 
 <MudDialog>
     <DialogContent>
@@ -397,6 +395,7 @@
 
 @code {
     [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+    [CascadingParameter] private WebUserIdentity? WebUser { get; set; }
     [Parameter] public ManagedChatInfo ChatInfo { get; set; } = null!;
 
     private ChatHealthStatus? _healthStatus;
@@ -477,7 +476,8 @@
             // User switched from custom to global - delete custom config
             try
             {
-                await SpamConfigRepository.DeleteChatConfigAsync(ChatInfo.Record.Identity.Id);
+                var actor = WebUser!.ToActor();
+                await ConfigService.DeleteContentDetectionAsync(ChatInfo.Record.Identity, actor);
                 ChatInfo.HasCustomSpamConfig = false;
                 Snackbar.Add("Reverted to global spam detection configuration", Severity.Success);
             }
@@ -538,7 +538,8 @@
             if (!_useCustomWelcomeConfig && ChatInfo.HasCustomWelcomeConfig)
             {
                 // Delete custom config (revert to global)
-                await ConfigService.DeleteAsync(ConfigType.Welcome, ChatInfo.Record.Identity);
+                var actor = WebUser!.ToActor();
+                await ConfigService.DeleteWelcomeAsync(ChatInfo.Record.Identity, actor);
                 ChatInfo.HasCustomWelcomeConfig = false;
                 Snackbar.Add("Reverted to global welcome configuration", Severity.Success);
             }
@@ -598,7 +599,8 @@
             if (!_useCustomServiceMsgConfig && ChatInfo.HasCustomServiceMsgConfig)
             {
                 // Delete custom config (revert to global)
-                await ConfigService.DeleteAsync(ConfigType.ServiceMessageDeletion, ChatInfo.Record.Identity);
+                var actor = WebUser!.ToActor();
+                await ConfigService.DeleteServiceMessageDeletionAsync(ChatInfo.Record.Identity, actor);
                 ChatInfo.HasCustomServiceMsgConfig = false;
                 Snackbar.Add("Reverted to global service message deletion configuration", Severity.Success);
             }
@@ -658,7 +660,8 @@
             if (!_useCustomBanCelebrationConfig && ChatInfo.HasCustomBanCelebrationConfig)
             {
                 // Delete custom config (revert to global)
-                await ConfigService.DeleteAsync(ConfigType.BanCelebration, ChatInfo.Record.Identity);
+                var actor = WebUser!.ToActor();
+                await ConfigService.DeleteBanCelebrationAsync(ChatInfo.Record.Identity, actor);
                 ChatInfo.HasCustomBanCelebrationConfig = false;
                 Snackbar.Add("Reverted to global ban celebration configuration", Severity.Success);
             }
@@ -677,8 +680,7 @@
     {
         try
         {
-            var config = await ConfigRepository.GetByChatIdAsync(ChatInfo.Record.Identity.Id);
-            _cachedInviteLink = config?.InviteLink;
+            _cachedInviteLink = await ConfigService.GetInviteLinkAsync(ChatInfo.Record.Identity.Id);
         }
         catch (Exception ex)
         {
@@ -691,7 +693,7 @@
         _clearingLink = true;
         try
         {
-            await ConfigRepository.ClearInviteLinkAsync(ChatInfo.Record.Identity.Id);
+            await ConfigService.ClearInviteLinkAsync(ChatInfo.Record.Identity, WebUser!.ToActor());
             _cachedInviteLink = null;
             Snackbar.Add(
                 "Cleared cached invite link for this chat. The next health check will fetch a fresh link from Telegram.",

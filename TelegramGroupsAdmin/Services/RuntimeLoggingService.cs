@@ -1,5 +1,8 @@
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Models;
+using TelegramGroupsAdmin.Configuration.Services;
+using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Utilities;
 
 namespace TelegramGroupsAdmin.Services;
 
@@ -54,7 +57,7 @@ public class RuntimeLoggingService : IRuntimeLoggingService
         // Also check database for LastModified timestamp
         using var scope = _scopeFactory.CreateScope();
         var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
-        var dbConfig = await configService.GetAsync<LogConfig>(ConfigType.Log, chatId: 0);
+        var dbConfig = await configService.GetLogAsync(0);
 
         if (dbConfig != null)
         {
@@ -72,7 +75,8 @@ public class RuntimeLoggingService : IRuntimeLoggingService
         var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
 
         // Save to database (global config at chatId=0)
-        await configService.SaveAsync(ConfigType.Log, ChatIdentity.FromId(0), config);
+        var actor = Actor.FromSystem("runtime_logging");
+        await configService.SaveLogAsync(ChatIdentity.FromId(0), config, actor);
 
         // Apply immediately to ILoggerFactory
         ApplyLogLevels(config);
@@ -90,7 +94,8 @@ public class RuntimeLoggingService : IRuntimeLoggingService
 
         // Delete from database (global config, chatId = 0)
         // Normalize null to 0 for global config (SQL NULL comparison doesn't work with ==)
-        await configService.DeleteAsync(ConfigType.Log, ChatIdentity.FromId(0));
+        var actor = Actor.FromSystem("runtime_logging");
+        await configService.DeleteLogAsync(ChatIdentity.FromId(0), actor);
 
         // Get default config
         var defaultConfig = new LogConfig

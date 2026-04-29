@@ -9,6 +9,7 @@ using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
 using SpamLibRequest = TelegramGroupsAdmin.ContentDetection.Models.ContentCheckRequest;
+using TelegramGroupsAdmin.Configuration.Services;
 
 namespace TelegramGroupsAdmin.UnitTests.Telegram.Services;
 

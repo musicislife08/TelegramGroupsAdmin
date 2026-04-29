@@ -17,6 +17,7 @@ using TelegramGroupsAdmin.Telegram.Services.Moderation.Handlers;
 using TelegramGroupsAdmin.Telegram.Services.UserApi;
 using TelegramGroupsAdmin.Telegram.Metrics;
 using TelegramGroupsAdmin.Telegram.Services.Welcome;
+using TelegramGroupsAdmin.Configuration.Services;
 
 namespace TelegramGroupsAdmin.UnitTests.Telegram.Services;
 
@@ -132,7 +133,7 @@ public class WelcomeServiceBlacklistTests
 
         // Config always returns WelcomeConfig.Default (enabled, ChatAcceptDeny mode)
         _configService
-            .GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, Arg.Any<long>())
+            .GetEffectiveWelcomeAsync(Arg.Any<long>())
             .Returns(WelcomeConfig.Default);
 
         // User is a regular member (not admin) by default
@@ -396,7 +397,7 @@ public class WelcomeServiceBlacklistTests
         };
 
         _configService
-            .GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, Arg.Any<long>())
+            .GetEffectiveWelcomeAsync(Arg.Any<long>())
             .Returns(configWithBlacklistDisabled);
 
         var update = CreateJoinUpdate();

@@ -10,6 +10,7 @@ using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.JobPayloads;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Services;
+using TelegramGroupsAdmin.Configuration.Services;
 
 namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
 
@@ -76,7 +77,7 @@ public class ChatHealthCheckJob : IJob
         try
         {
             // Check if bot is enabled before running health checks
-            var botConfig = await _configService.GetAsync<TelegramBotConfig>(ConfigType.TelegramBot, 0)
+            var botConfig = await _configService.GetTelegramBotAsync()
                            ?? TelegramBotConfig.Default;
 
             if (!botConfig.BotEnabled)

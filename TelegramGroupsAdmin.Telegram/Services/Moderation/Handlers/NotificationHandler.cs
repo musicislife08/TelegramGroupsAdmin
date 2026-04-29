@@ -225,7 +225,7 @@ public class NotificationHandler : INotificationHandler
         {
             try
             {
-                var inviteLink = await _chatService.GetInviteLinkAsync(managedChat.Identity.Id, cancellationToken);
+                var inviteLink = await _chatService.GetInviteLinkAsync(managedChat.Identity, cancellationToken);
                 if (!string.IsNullOrEmpty(inviteLink))
                 {
                     // Use chat name from managed chat record, or fall back to chatId

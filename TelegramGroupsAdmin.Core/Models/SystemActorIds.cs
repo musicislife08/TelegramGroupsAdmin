@@ -26,4 +26,5 @@ public static class SystemActorIds
     public const string Bootstrap = "bootstrap";
     public const string ProfileDiffDetection = "profile_diff_detection";
     public const string WelcomeBypass = "welcome_bypass";
+    public const string BotChatService = "bot_chat_service";
 }

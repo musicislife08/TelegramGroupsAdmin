@@ -15,6 +15,7 @@ using TelegramGroupsAdmin.Telegram.Services.Moderation;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions.Results;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Handlers;
+using TelegramGroupsAdmin.Configuration.Services;
 
 namespace TelegramGroupsAdmin.UnitTests.Telegram.Services.Moderation;
 
@@ -265,8 +266,7 @@ public class BotModerationServiceTests
         _mockWarnHandler.WarnAsync(Arg.Any<UserIdentity>(), executor, Arg.Any<string>(), Arg.Any<long>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns(WarnResult.Succeeded(warningCount: 2)); // Below threshold
 
-        _mockConfigService.GetEffectiveAsync<WarningSystemConfig>(
-                ConfigType.Moderation, Arg.Any<long>())
+        _mockConfigService.GetEffectiveWarningSystemAsync(Arg.Any<long>())
             .Returns(new WarningSystemConfig { AutoBanEnabled = true, AutoBanThreshold = 3 });
 
         // Act
@@ -306,8 +306,7 @@ public class BotModerationServiceTests
         _mockWarnHandler.WarnAsync(Arg.Any<UserIdentity>(), executor, Arg.Any<string>(), Arg.Any<long>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns(WarnResult.Succeeded(warningCount: 3)); // Reaches threshold
 
-        _mockConfigService.GetEffectiveAsync<WarningSystemConfig>(
-                ConfigType.Moderation, Arg.Any<long>())
+        _mockConfigService.GetEffectiveWarningSystemAsync(Arg.Any<long>())
             .Returns(new WarningSystemConfig { AutoBanEnabled = true, AutoBanThreshold = 3 });
 
         _mockBanHandler.BanAsync(Arg.Any<UserIdentity>(), Arg.Any<Actor>(), Arg.Any<string>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
@@ -354,8 +353,7 @@ public class BotModerationServiceTests
         _mockWarnHandler.WarnAsync(Arg.Any<UserIdentity>(), executor, Arg.Any<string>(), Arg.Any<long>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns(WarnResult.Succeeded(warningCount: 5)); // Well above threshold
 
-        _mockConfigService.GetEffectiveAsync<WarningSystemConfig>(
-                ConfigType.Moderation, Arg.Any<long>())
+        _mockConfigService.GetEffectiveWarningSystemAsync(Arg.Any<long>())
             .Returns(new WarningSystemConfig { AutoBanEnabled = false, AutoBanThreshold = 3 });
 
         // Act
@@ -390,8 +388,7 @@ public class BotModerationServiceTests
         _mockWarnHandler.WarnAsync(Arg.Any<UserIdentity>(), executor, Arg.Any<string>(), Arg.Any<long>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns(WarnResult.Succeeded(warningCount: 1));
 
-        _mockConfigService.GetEffectiveAsync<WarningSystemConfig>(
-                ConfigType.Moderation, Arg.Any<long>())
+        _mockConfigService.GetEffectiveWarningSystemAsync(Arg.Any<long>())
             .Returns(WarningSystemConfig.Default);
 
         // Act
@@ -1058,8 +1055,7 @@ public class BotModerationServiceTests
         _mockWarnHandler.WarnAsync(Arg.Any<UserIdentity>(), executor, Arg.Any<string>(), Arg.Any<long>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns(WarnResult.Succeeded(warningCount: 1));
 
-        _mockConfigService.GetEffectiveAsync<WarningSystemConfig>(
-                ConfigType.Moderation, Arg.Any<long>())
+        _mockConfigService.GetEffectiveWarningSystemAsync(Arg.Any<long>())
             .Returns(WarningSystemConfig.Default);
 
         _mockNotificationHandler.NotifyUserWarningAsync(Arg.Any<UserIdentity>(), 1, Arg.Any<string>(), Arg.Any<CancellationToken>())
@@ -1097,8 +1093,7 @@ public class BotModerationServiceTests
         _mockWarnHandler.WarnAsync(Arg.Any<UserIdentity>(), executor, Arg.Any<string>(), Arg.Any<long>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns(WarnResult.Succeeded(warningCount: 3)); // Reaches threshold
 
-        _mockConfigService.GetEffectiveAsync<WarningSystemConfig>(
-                ConfigType.Moderation, Arg.Any<long>())
+        _mockConfigService.GetEffectiveWarningSystemAsync(Arg.Any<long>())
             .Returns(new WarningSystemConfig { AutoBanEnabled = true, AutoBanThreshold = 3 });
 
         _mockBanHandler.BanAsync(Arg.Any<UserIdentity>(), Arg.Any<Actor>(), Arg.Any<string>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
@@ -1410,8 +1405,7 @@ public class BotModerationServiceTests
         _mockWarnHandler.WarnAsync(Arg.Any<UserIdentity>(), executor, Arg.Any<string>(), Arg.Any<long>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns(WarnResult.Succeeded(warningCount: 1));
 
-        _mockConfigService.GetEffectiveAsync<WarningSystemConfig>(
-                ConfigType.Moderation, Arg.Any<long>())
+        _mockConfigService.GetEffectiveWarningSystemAsync(Arg.Any<long>())
             .Returns(WarningSystemConfig.Default);
 
         _mockAuditHandler.LogWarnAsync(Arg.Any<UserIdentity>(), executor, Arg.Any<string>(), Arg.Any<CancellationToken>())
@@ -1956,7 +1950,7 @@ public class BotModerationServiceTests
         // Arrange
         const long userId = 12345L;
 
-        _mockConfigService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, Arg.Any<long>())
+        _mockConfigService.GetEffectiveWelcomeAsync(Arg.Any<long>())
             .Returns(new WelcomeConfig { MaxKicksBeforeBan = 0 });
 
         _mockBanHandler.KickFromChatAsync(
@@ -1994,7 +1988,7 @@ public class BotModerationServiceTests
         // Arrange — GetEffectiveAsync returns null (no config stored for this chat)
         const long userId = 12345L;
 
-        _mockConfigService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, Arg.Any<long>())
+        _mockConfigService.GetEffectiveWelcomeAsync(Arg.Any<long>())
             .Returns((WelcomeConfig?)null);
 
         _mockBanHandler.KickFromChatAsync(
@@ -2027,7 +2021,7 @@ public class BotModerationServiceTests
         // Arrange — 0 prior kicks → 2^0 = 1 minute (distinguishes from "disabled" which uses DefaultKickDuration)
         const long userId = 12345L;
 
-        _mockConfigService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, Arg.Any<long>())
+        _mockConfigService.GetEffectiveWelcomeAsync(Arg.Any<long>())
             .Returns(new WelcomeConfig { MaxKicksBeforeBan = 3 });
 
         _mockTelegramUserRepository.GetKickCountAsync(userId, Arg.Any<CancellationToken>())
@@ -2070,7 +2064,7 @@ public class BotModerationServiceTests
         // Arrange — 1 prior kick → 2^1 = 2-minute duration
         const long userId = 12345L;
 
-        _mockConfigService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, Arg.Any<long>())
+        _mockConfigService.GetEffectiveWelcomeAsync(Arg.Any<long>())
             .Returns(new WelcomeConfig { MaxKicksBeforeBan = 3 });
 
         _mockTelegramUserRepository.GetKickCountAsync(userId, Arg.Any<CancellationToken>())
@@ -2113,7 +2107,7 @@ public class BotModerationServiceTests
         // Arrange — prior kicks == threshold, so next action is a permanent ban
         const long userId = 12345L;
 
-        _mockConfigService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, Arg.Any<long>())
+        _mockConfigService.GetEffectiveWelcomeAsync(Arg.Any<long>())
             .Returns(new WelcomeConfig { MaxKicksBeforeBan = 3 });
 
         _mockTelegramUserRepository.GetKickCountAsync(userId, Arg.Any<CancellationToken>())
@@ -2159,7 +2153,7 @@ public class BotModerationServiceTests
         // Arrange — prior kicks exceed threshold (e.g. 5 when threshold is 3)
         const long userId = 12345L;
 
-        _mockConfigService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, Arg.Any<long>())
+        _mockConfigService.GetEffectiveWelcomeAsync(Arg.Any<long>())
             .Returns(new WelcomeConfig { MaxKicksBeforeBan = 3 });
 
         _mockTelegramUserRepository.GetKickCountAsync(userId, Arg.Any<CancellationToken>())
@@ -2205,7 +2199,7 @@ public class BotModerationServiceTests
         // Arrange — escalation forwards Chat to BanIntent, which triggers ban celebration
         const long userId = 12345L;
 
-        _mockConfigService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, Arg.Any<long>())
+        _mockConfigService.GetEffectiveWelcomeAsync(Arg.Any<long>())
             .Returns(new WelcomeConfig { MaxKicksBeforeBan = 3 });
 
         _mockTelegramUserRepository.GetKickCountAsync(userId, Arg.Any<CancellationToken>())
@@ -2244,7 +2238,7 @@ public class BotModerationServiceTests
         // Arrange — verify the escalation reason communicates kick count and threshold
         const long userId = 12345L;
 
-        _mockConfigService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, Arg.Any<long>())
+        _mockConfigService.GetEffectiveWelcomeAsync(Arg.Any<long>())
             .Returns(new WelcomeConfig { MaxKicksBeforeBan = 3 });
 
         _mockTelegramUserRepository.GetKickCountAsync(userId, Arg.Any<CancellationToken>())
@@ -2288,7 +2282,7 @@ public class BotModerationServiceTests
         // Arrange — admin kicks should NOT revoke messages (preserve legitimate content)
         const long userId = 12345L;
 
-        _mockConfigService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, Arg.Any<long>())
+        _mockConfigService.GetEffectiveWelcomeAsync(Arg.Any<long>())
             .Returns(new WelcomeConfig { MaxKicksBeforeBan = 0 });
 
         _mockBanHandler.KickFromChatAsync(
@@ -2327,7 +2321,7 @@ public class BotModerationServiceTests
         // Arrange
         const long userId = 12345L;
 
-        _mockConfigService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, Arg.Any<long>())
+        _mockConfigService.GetEffectiveWelcomeAsync(Arg.Any<long>())
             .Returns(new WelcomeConfig { MaxKicksBeforeBan = 0 });
 
         _mockBanHandler.KickFromChatAsync(
@@ -2363,7 +2357,7 @@ public class BotModerationServiceTests
         // Arrange — successful kick must persist the new count so future kicks escalate
         const long userId = 12345L;
 
-        _mockConfigService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, Arg.Any<long>())
+        _mockConfigService.GetEffectiveWelcomeAsync(Arg.Any<long>())
             .Returns(new WelcomeConfig { MaxKicksBeforeBan = 0 });
 
         _mockBanHandler.KickFromChatAsync(
@@ -2394,7 +2388,7 @@ public class BotModerationServiceTests
         // Arrange — when we ban instead of kick, we must not also increment kick count
         const long userId = 12345L;
 
-        _mockConfigService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, Arg.Any<long>())
+        _mockConfigService.GetEffectiveWelcomeAsync(Arg.Any<long>())
             .Returns(new WelcomeConfig { MaxKicksBeforeBan = 3 });
 
         _mockTelegramUserRepository.GetKickCountAsync(userId, Arg.Any<CancellationToken>())
@@ -2430,7 +2424,7 @@ public class BotModerationServiceTests
         // Arrange — failed kick must not register against the user's escalation history
         const long userId = 12345L;
 
-        _mockConfigService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, Arg.Any<long>())
+        _mockConfigService.GetEffectiveWelcomeAsync(Arg.Any<long>())
             .Returns(new WelcomeConfig { MaxKicksBeforeBan = 0 });
 
         _mockBanHandler.KickFromChatAsync(

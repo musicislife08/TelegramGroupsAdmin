@@ -520,6 +520,17 @@ public static class GoldenDataset
     }
 
     /// <summary>
+    /// Seeds only the web_users table (4 users including User1=Owner).
+    /// Use for tests that need to satisfy the audit_log → users FK without
+    /// dragging in configs/messages/etc. (which would advance Postgres
+    /// sequences out-of-sync with hardcoded ids in the broader seed).
+    /// </summary>
+    public static async Task SeedWebUsersOnlyAsync(AppDbContext context)
+    {
+        await LoadSqlScriptAsync(context, "SQL.01_base_web_users.sql");
+    }
+
+    /// <summary>
     /// Seeds high-spam imbalanced ML training data (100 spam + 20 ham, 83.3% spam, 5:1 ratio).
     /// Use for testing ML classifier behavior with high spam ratio.
     /// </summary>

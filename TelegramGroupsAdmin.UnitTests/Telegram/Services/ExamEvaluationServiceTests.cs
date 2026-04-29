@@ -2,7 +2,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using TelegramGroupsAdmin.Configuration.Models;
-using TelegramGroupsAdmin.Core.Services.AI;
+using TelegramGroupsAdmin.AI.Services;
 using TelegramGroupsAdmin.Telegram.Services;
 
 namespace TelegramGroupsAdmin.UnitTests.Telegram.Services;

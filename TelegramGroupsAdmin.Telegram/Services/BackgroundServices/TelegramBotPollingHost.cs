@@ -10,6 +10,7 @@ using TelegramGroupsAdmin.Configuration.Models;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Telegram.Services.BotCommands;
 using TelegramGroupsAdmin.Telegram.Constants;
+using TelegramGroupsAdmin.Configuration.Services;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 
@@ -89,8 +90,7 @@ public class TelegramBotPollingHost(
         using (var scope = scopeFactory.CreateScope())
         {
             var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
-            // Load global bot config (chat_id = 0 for global config)
-            botConfig = await configService.GetAsync<TelegramBotConfig>(ConfigType.TelegramBot, 0)
+            botConfig = await configService.GetTelegramBotAsync(stoppingToken)
                        ?? TelegramBotConfig.Default;
         }
 

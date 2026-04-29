@@ -11,6 +11,7 @@ using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.Configuration.Services;
 
 namespace TelegramGroupsAdmin.UnitTests.Services;
 
@@ -57,8 +58,7 @@ public class BanCelebrationServiceTests
             TriggerOnManualBan = true,
             SendToBannedUser = false
         };
-        _mockConfigService.GetEffectiveAsync<BanCelebrationConfig>(
-            ConfigType.BanCelebration, Arg.Any<long>())
+        _mockConfigService.GetEffectiveBanCelebrationAsync(Arg.Any<long>())
             .Returns(defaultConfig);
 
         // Default user actions repository returns 0 bans
@@ -331,8 +331,7 @@ public class BanCelebrationServiceTests
     {
         // Arrange
         var disabledConfig = new BanCelebrationConfig { Enabled = false };
-        _mockConfigService.GetEffectiveAsync<BanCelebrationConfig>(
-            ConfigType.BanCelebration, Arg.Any<long>())
+        _mockConfigService.GetEffectiveBanCelebrationAsync(Arg.Any<long>())
             .Returns(disabledConfig);
 
         // Act
@@ -355,8 +354,7 @@ public class BanCelebrationServiceTests
             TriggerOnAutoBan = false,
             TriggerOnManualBan = true
         };
-        _mockConfigService.GetEffectiveAsync<BanCelebrationConfig>(
-            ConfigType.BanCelebration, Arg.Any<long>())
+        _mockConfigService.GetEffectiveBanCelebrationAsync(Arg.Any<long>())
             .Returns(config);
 
         // Act
@@ -376,8 +374,7 @@ public class BanCelebrationServiceTests
             TriggerOnAutoBan = true,
             TriggerOnManualBan = false
         };
-        _mockConfigService.GetEffectiveAsync<BanCelebrationConfig>(
-            ConfigType.BanCelebration, Arg.Any<long>())
+        _mockConfigService.GetEffectiveBanCelebrationAsync(Arg.Any<long>())
             .Returns(config);
 
         // Act
@@ -391,8 +388,7 @@ public class BanCelebrationServiceTests
     public async Task SendBanCelebration_WhenConfigIsNull_UsesDefaultConfigWhichIsDisabled()
     {
         // Arrange - Return null config (service falls back to BanCelebrationConfig.Default)
-        _mockConfigService.GetEffectiveAsync<BanCelebrationConfig>(
-            ConfigType.BanCelebration, Arg.Any<long>())
+        _mockConfigService.GetEffectiveBanCelebrationAsync(Arg.Any<long>())
             .Returns((BanCelebrationConfig?)null);
 
         // Act - Default config has Enabled=false (feature is opt-in)
@@ -634,8 +630,7 @@ public class BanCelebrationServiceTests
     public async Task SendBanCelebration_WhenExceptionOccurs_ReturnsFalseAndLogsWarning()
     {
         // Arrange
-        _mockConfigService.GetEffectiveAsync<BanCelebrationConfig>(
-            ConfigType.BanCelebration, Arg.Any<long>())
+        _mockConfigService.GetEffectiveBanCelebrationAsync(Arg.Any<long>())
             .ThrowsAsync(new InvalidOperationException("Database error"));
 
         // Act

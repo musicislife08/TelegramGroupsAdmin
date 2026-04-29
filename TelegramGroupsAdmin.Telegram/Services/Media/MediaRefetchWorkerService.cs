@@ -7,6 +7,7 @@ using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
+using TelegramGroupsAdmin.Configuration.Services;
 
 namespace TelegramGroupsAdmin.Telegram.Services.Media;
 
@@ -94,7 +95,7 @@ public class MediaRefetchWorkerService : BackgroundService
 
         // Check if bot is enabled before making Telegram API calls
         var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
-        var botConfig = await configService.GetAsync<TelegramBotConfig>(ConfigType.TelegramBot, 0)
+        var botConfig = await configService.GetTelegramBotAsync()
                         ?? TelegramBotConfig.Default;
 
         if (!botConfig.BotEnabled)
@@ -153,7 +154,7 @@ public class MediaRefetchWorkerService : BackgroundService
 
         // Check if bot is enabled before making Telegram API calls
         var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
-        var botConfig = await configService.GetAsync<TelegramBotConfig>(ConfigType.TelegramBot, 0)
+        var botConfig = await configService.GetTelegramBotAsync()
                         ?? TelegramBotConfig.Default;
 
         if (!botConfig.BotEnabled)

@@ -9,6 +9,7 @@ using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Services;
+using TelegramGroupsAdmin.Configuration.Services;
 
 namespace TelegramGroupsAdmin.ComponentTests.Components;
 
@@ -30,11 +31,11 @@ public class BotGeneralSettingsTestContext : BunitContext
         TelegramBotService = Substitute.For<ITelegramBotService>();
 
         // Default config returns
-        ConfigService.GetAsync<TelegramBotConfig>(Arg.Any<ConfigType>(), Arg.Any<long>())
+        ConfigService.GetTelegramBotAsync()
             .Returns(TelegramBotConfig.Default);
-        ConfigService.GetEffectiveAsync<BotProtectionConfig>(Arg.Any<ConfigType>(), Arg.Any<long>())
+        ConfigService.GetEffectiveBotProtectionAsync(Arg.Any<long>())
             .Returns(BotProtectionConfig.Default);
-        ConfigService.GetTelegramBotTokenAsync().Returns((string?)null);
+        ConfigService.GetBotTokenAsync().Returns((string?)null);
 
         // Register mocks
         Services.AddSingleton(ConfigService);
@@ -137,7 +138,7 @@ public class BotGeneralSettingsTests : BotGeneralSettingsTestContext
     public void ShowsBotTokenNotSetChip_WhenNoToken()
     {
         // Arrange
-        ConfigService.GetTelegramBotTokenAsync().Returns((string?)null);
+        ConfigService.GetBotTokenAsync().Returns((string?)null);
 
         // Act
         var cut = Render<BotGeneralSettings>();
@@ -153,7 +154,7 @@ public class BotGeneralSettingsTests : BotGeneralSettingsTestContext
     public void ShowsBotTokenConfiguredChip_WhenTokenExists()
     {
         // Arrange
-        ConfigService.GetTelegramBotTokenAsync().Returns("1234567890:ABCdefGHI");
+        ConfigService.GetBotTokenAsync().Returns("1234567890:ABCdefGHI");
 
         // Act
         var cut = Render<BotGeneralSettings>();

@@ -6,7 +6,7 @@ using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Services;
-using TelegramGroupsAdmin.Configuration.Repositories;
+using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
 using TelegramGroupsAdmin.Core.Models;
@@ -51,6 +51,7 @@ public class BotChatServiceTests
     private IChatCache _mockChatCache = null!;
     private IChatHealthCache _mockHealthCache = null!;
     private INotificationService _mockNotificationService = null!;
+    private IConfigService _mockConfigService = null!;
 
     [SetUp]
     public async Task SetUp()
@@ -64,6 +65,7 @@ public class BotChatServiceTests
         _mockChatCache = Substitute.For<IChatCache>();
         _mockHealthCache = Substitute.For<IChatHealthCache>();
         _mockNotificationService = Substitute.For<INotificationService>();
+        _mockConfigService = Substitute.For<IConfigService>();
 
         // Set up dependency injection
         var services = new ServiceCollection();
@@ -86,13 +88,13 @@ public class BotChatServiceTests
         services.AddScoped<IChatAdminsRepository, ChatAdminsRepository>();
         services.AddScoped<ITelegramUserRepository, TelegramUserRepository>();
         services.AddScoped<IUserActionsRepository, UserActionsRepository>();
-        services.AddScoped<IConfigRepository, ConfigRepository>();
 
         // Register mocked external services
         services.AddSingleton(_mockChatHandler);
         services.AddSingleton(_mockChatCache);
         services.AddSingleton(_mockHealthCache);
         services.AddSingleton(_mockNotificationService);
+        services.AddSingleton(_mockConfigService);
 
         // Register BotChatService
         services.AddScoped<IBotChatService, BotChatService>();

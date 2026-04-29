@@ -1,12 +1,9 @@
 @using TelegramGroupsAdmin.Configuration
 @using TelegramGroupsAdmin.Configuration.Models.ContentDetection
 @using TelegramGroupsAdmin.Core.Services
-@using TelegramGroupsAdmin.Auth
-@using Microsoft.AspNetCore.Components.Authorization
-@using System.Security.Claims
+@using TelegramGroupsAdmin.Configuration.Services
 @inject IConfigService ConfigService
 @inject ISnackbar Snackbar
-@inject AuthenticationStateProvider AuthStateProvider
 
 <MudGrid>
     <MudItem xs="12">
@@ -147,6 +144,8 @@
 </MudGrid>
 
 @code {
+    [CascadingParameter] private WebUserIdentity? WebUser { get; set; }
+
     private bool _loading = true;
     private bool _saving;
     private bool _canEdit;
@@ -157,15 +156,7 @@
 
     protected override async Task OnInitializedAsync()
     {
-        // Check if user is Admin or Owner (only they can modify critical checks)
-        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
-        var user = authState.User;
-        var permissionClaim = user.FindFirst(CustomClaimTypes.PermissionLevel);
-        var permissionLevel = permissionClaim != null && int.TryParse(permissionClaim.Value, out var level)
-            ? (PermissionLevel)level
-            : PermissionLevel.Admin;
-        _canEdit = permissionLevel >= PermissionLevel.GlobalAdmin;
-
+        _canEdit = WebUser?.IsGlobalAdminOrHigher ?? false;
         await LoadConfiguration();
     }
 
@@ -177,8 +168,7 @@
             StateHasChanged();
 
             // Load global content detection config (chat_id = 0)
-            _config = await ConfigService.GetEffectiveAsync<ContentDetectionConfig>(ConfigType.ContentDetection, 0)
-                      ?? new ContentDetectionConfig();
+            _config = await ConfigService.GetEffectiveContentDetectionAsync(0);
 
             // Build view models from config sub-configs
             _securityChecks =
@@ -252,7 +242,8 @@
             StateHasChanged();
 
             // Save the entire config (which now includes AlwaysRun in each sub-config)
-            await ConfigService.SaveAsync(ConfigType.ContentDetection, ChatIdentity.FromId(0), _config);
+            var actor = WebUser!.ToActor();
+            await ConfigService.SaveContentDetectionAsync(new ChatIdentity(0, "Global"), _config, actor);
 
             Snackbar.Add("Critical checks configuration saved successfully", Severity.Success);
         }

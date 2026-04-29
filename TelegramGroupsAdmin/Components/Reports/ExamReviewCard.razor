@@ -6,6 +6,7 @@
 @using TelegramGroupsAdmin.Core
 @using TelegramGroupsAdmin.Core.Utilities
 @using TelegramGroupsAdmin.Telegram.Constants
+@using TelegramGroupsAdmin.Configuration.Services
 
 @inject IConfigService ConfigService
 @inject ITelegramUserRepository TelegramUserRepository
@@ -294,7 +295,7 @@
         _user = await TelegramUserRepository.GetByTelegramIdAsync(ExamFailure.User.Id);
 
         // Load exam config for question details
-        var welcomeConfig = await ConfigService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, ExamFailure.Chat.Id);
+        var welcomeConfig = await ConfigService.GetEffectiveWelcomeAsync(ExamFailure.Chat.Id);
         _examConfig = welcomeConfig?.ExamConfig;
 
         // Calculate correct answers

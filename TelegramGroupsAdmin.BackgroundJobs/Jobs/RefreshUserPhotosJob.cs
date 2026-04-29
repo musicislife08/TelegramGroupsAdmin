@@ -11,6 +11,7 @@ using TelegramGroupsAdmin.Core.JobPayloads;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Media;
+using TelegramGroupsAdmin.Configuration.Services;
 
 namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
 
@@ -77,7 +78,7 @@ public class RefreshUserPhotosJob : IJob
 
                 // Check if bot is enabled before queueing work
                 var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
-                var botConfig = await configService.GetAsync<TelegramBotConfig>(ConfigType.TelegramBot, 0)
+                var botConfig = await configService.GetTelegramBotAsync()
                                 ?? TelegramBotConfig.Default;
 
                 if (!botConfig.BotEnabled)

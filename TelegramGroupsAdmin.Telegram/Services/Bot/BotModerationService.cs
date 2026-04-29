@@ -12,6 +12,7 @@ using TelegramGroupsAdmin.Telegram.Services.Bot.Handlers;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Handlers;
+using TelegramGroupsAdmin.Configuration.Services;
 
 namespace TelegramGroupsAdmin.Telegram.Services.Bot;
 
@@ -256,8 +257,8 @@ public class BotModerationService : IBotModerationService
         };
 
         // Business rule: Check warning threshold for auto-ban
-        var warningConfig = await _configService.GetEffectiveAsync<WarningSystemConfig>(
-            ConfigType.Moderation, intent.Chat.Id) ?? WarningSystemConfig.Default;
+        var warningConfig = await _configService.GetEffectiveWarningSystemAsync(intent.Chat.Id, cancellationToken)
+                            ?? WarningSystemConfig.Default;
 
         if (warningConfig.AutoBanEnabled &&
             warningConfig.AutoBanThreshold > 0 &&
@@ -523,8 +524,7 @@ public class BotModerationService : IBotModerationService
 
         // Check kick history for escalation
         var kickDuration = ModerationConstants.DefaultKickDuration;
-        var config = await _configService.GetEffectiveAsync<WelcomeConfig>(
-            ConfigType.Welcome, intent.Chat.Id);
+        var config = await _configService.GetEffectiveWelcomeAsync(intent.Chat.Id, cancellationToken);
         var maxKicks = config?.MaxKicksBeforeBan ?? ModerationConstants.DefaultMaxKicksBeforeBan;
 
         if (maxKicks > 0)

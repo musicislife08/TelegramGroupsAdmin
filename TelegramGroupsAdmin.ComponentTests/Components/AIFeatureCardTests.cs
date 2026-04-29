@@ -2,7 +2,7 @@ using Bunit;
 using NSubstitute;
 using TelegramGroupsAdmin.Components.Shared.ContentDetection;
 using TelegramGroupsAdmin.Configuration.Models;
-using TelegramGroupsAdmin.Core.Services.AI;
+using TelegramGroupsAdmin.AI.Services;
 
 namespace TelegramGroupsAdmin.ComponentTests.Components;
 

@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using TelegramGroupsAdmin.ContentDetection.ML;
-using TelegramGroupsAdmin.Core.Services.AI;
+using TelegramGroupsAdmin.AI.Services;
 using TelegramGroupsAdmin.Services.Auth;
 using TelegramGroupsAdmin.Services.Docs;
 using TelegramGroupsAdmin.Telegram.Services;

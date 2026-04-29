@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Core.Services;
+using TelegramGroupsAdmin.Configuration.Services;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 
@@ -40,7 +41,7 @@ public class TelegramConfigLoader : ITelegramConfigLoader
         var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
 
         // Load bot token (encrypted column)
-        var botToken = await configService.GetTelegramBotTokenAsync();
+        var botToken = await configService.GetBotTokenAsync();
         if (string.IsNullOrWhiteSpace(botToken))
         {
             _logger.LogError("Telegram bot token not configured in database");

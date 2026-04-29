@@ -7,12 +7,13 @@ using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.Core.Models;
-using TelegramGroupsAdmin.Core.Services.AI;
+using TelegramGroupsAdmin.AI.Services;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Services;
+using TelegramGroupsAdmin.Configuration.Services;
 
 namespace TelegramGroupsAdmin.Telegram.Handlers;
 
@@ -140,8 +141,7 @@ public class MessageEditProcessor
             return;
 
         var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
-        var spamConfig = await configService.GetEffectiveAsync<ContentDetectionConfig>(ConfigType.ContentDetection, editedMessage.Chat.Id)
-                        ?? new ContentDetectionConfig();
+        var spamConfig = await configService.GetEffectiveContentDetectionAsync(editedMessage.Chat.Id, cancellationToken);
 
         // Check if translation is enabled and message meets minimum length
         if (!spamConfig.Translation.Enabled || newText.Length < spamConfig.Translation.MinMessageLength)

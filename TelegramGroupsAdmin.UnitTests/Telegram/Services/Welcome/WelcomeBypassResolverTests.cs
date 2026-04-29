@@ -8,6 +8,7 @@ using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Welcome;
+using TelegramGroupsAdmin.Configuration.Services;
 
 namespace TelegramGroupsAdmin.UnitTests.Telegram.Services.Welcome;
 
@@ -105,7 +106,7 @@ public class WelcomeBypassResolverTests
             .Returns(new List<long>());
         _mappingRepo.GetPermissionLevelByTelegramIdAsync(UserId, Arg.Any<CancellationToken>())
             .Returns((PermissionLevel?)null);
-        _configService.GetEffectiveAsync<WelcomeConfig>(Arg.Any<ConfigType>(), Arg.Any<long>())
+        _configService.GetEffectiveWelcomeAsync(Arg.Any<long>())
             .Returns(new WelcomeConfig { TrustedBypass = { Enabled = true } });
         _userRepo.IsTrustedAsync(UserId, Arg.Any<CancellationToken>()).Returns(true);
 
@@ -125,7 +126,7 @@ public class WelcomeBypassResolverTests
             .Returns(new List<long>());
         _mappingRepo.GetPermissionLevelByTelegramIdAsync(UserId, Arg.Any<CancellationToken>())
             .Returns((PermissionLevel?)null);
-        _configService.GetEffectiveAsync<WelcomeConfig>(Arg.Any<ConfigType>(), Arg.Any<long>())
+        _configService.GetEffectiveWelcomeAsync(Arg.Any<long>())
             .Returns(new WelcomeConfig { TrustedBypass = { Enabled = false } });
         _userRepo.IsTrustedAsync(UserId, Arg.Any<CancellationToken>()).Returns(true);
 
@@ -145,7 +146,7 @@ public class WelcomeBypassResolverTests
             .Returns(new List<long>());
         _mappingRepo.GetPermissionLevelByTelegramIdAsync(UserId, Arg.Any<CancellationToken>())
             .Returns((PermissionLevel?)PermissionLevel.Admin); // lowest — not enough
-        _configService.GetEffectiveAsync<WelcomeConfig>(Arg.Any<ConfigType>(), Arg.Any<long>())
+        _configService.GetEffectiveWelcomeAsync(Arg.Any<long>())
             .Returns(new WelcomeConfig { TrustedBypass = { Enabled = true } });
         _userRepo.IsTrustedAsync(UserId, Arg.Any<CancellationToken>()).Returns(false);
 

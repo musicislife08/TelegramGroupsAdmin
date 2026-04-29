@@ -7,16 +7,18 @@ using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Models.Welcome;
 using TelegramGroupsAdmin.Configuration.Repositories;
+using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Repositories;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Services;
-using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.IntegrationTests.TestData;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.Configuration.Services;
 
 namespace TelegramGroupsAdmin.IntegrationTests.Telegram.Services;
 
@@ -120,6 +122,8 @@ public class BanCelebrationServiceTests
         services.AddScoped<IContentDetectionConfigRepository, ContentDetectionConfigRepository>();
         services.AddHybridCache();
         services.AddDataProtection();
+        services.AddScoped<IAuditLogRepository, AuditLogRepository>();
+        services.AddScoped<IAuditService, AuditService>();
         services.AddScoped<IConfigService, ConfigService>();
 
         // Register mocked external services
@@ -519,7 +523,7 @@ public class BanCelebrationServiceTests
             SendToBannedUser = sendToBannedUser
         };
 
-        await _configService!.SaveAsync(ConfigType.BanCelebration, ChatIdentity.FromId(chatId), config);
+        await _configService!.SaveBanCelebrationAsync(ChatIdentity.FromId(chatId), config, Actor.SystemSeed);
     }
 
     private async Task EnableDmWelcomeMode(long chatId)
@@ -536,7 +540,7 @@ public class BanCelebrationServiceTests
             DmButtonText = "Open DM"
         };
 
-        await _configService!.SaveAsync(ConfigType.Welcome, ChatIdentity.FromId(chatId), welcomeConfig);
+        await _configService!.SaveWelcomeAsync(ChatIdentity.FromId(chatId), welcomeConfig, Actor.SystemSeed);
     }
 
     private async Task SeedBanActions(int count)

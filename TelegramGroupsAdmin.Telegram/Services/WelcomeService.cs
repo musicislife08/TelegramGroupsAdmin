@@ -20,6 +20,7 @@ using TelegramGroupsAdmin.Telegram.Services.Moderation;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Handlers;
 using TelegramGroupsAdmin.Telegram.Services.UserApi;
 using TelegramGroupsAdmin.Telegram.Services.Welcome;
+using TelegramGroupsAdmin.Configuration.Services;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 
@@ -129,7 +130,7 @@ public class WelcomeService(
             chatMemberUpdate.Chat.ToLogInfo());
 
         // Load welcome config from database (chat-specific or global fallback)
-        var config = await configService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, chatMemberUpdate.Chat.Id)
+        var config = await configService.GetEffectiveWelcomeAsync(chatMemberUpdate.Chat.Id, cancellationToken)
                      ?? WelcomeConfig.Default;
 
         // Track message ID for cleanup on ban/security failure
@@ -788,7 +789,7 @@ public class WelcomeService(
                 case WelcomeCallbackType.Accept:
                 case WelcomeCallbackType.Deny:
                     // Load welcome config for chat-based callbacks
-                    var config = await configService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, chatId)
+                    var config = await configService.GetEffectiveWelcomeAsync(chatId, cancellationToken)
                                  ?? WelcomeConfig.Default;
 
                     if (parsedCallback.Type == WelcomeCallbackType.Accept)
@@ -1267,7 +1268,7 @@ public class WelcomeService(
             // For private chats (no username), try to get invite link
             if (chatDeepLink == null)
             {
-                chatDeepLink = await chatService.GetInviteLinkAsync(groupChat.Id, cancellationToken);
+                chatDeepLink = await chatService.GetInviteLinkAsync(ChatIdentity.From(groupChat), cancellationToken);
 
                 if (chatDeepLink != null)
                 {

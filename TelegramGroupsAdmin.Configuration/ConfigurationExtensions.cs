@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using TelegramGroupsAdmin.Configuration.Repositories;
+using TelegramGroupsAdmin.Configuration.Services;
 
 namespace TelegramGroupsAdmin.Configuration;
 
@@ -22,6 +23,9 @@ public static class ConfigurationExtensions
 
             // System configuration repository (API keys, service settings, per-chat config overrides)
             services.AddScoped<ISystemConfigRepository, SystemConfigRepository>();
+
+            // Unified configuration service (database-driven config with global/chat-specific merging)
+            services.AddScoped<IConfigService, ConfigService>();
 
             return services;
         }

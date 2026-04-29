@@ -9,6 +9,7 @@ using TelegramGroupsAdmin.Configuration.Models.Welcome;
 using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Repositories;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Data.Models;
@@ -18,6 +19,7 @@ using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Handlers;
 using TelegramGroupsAdmin.Telegram.Services.Welcome;
+using TelegramGroupsAdmin.Configuration.Services;
 
 namespace TelegramGroupsAdmin.IntegrationTests.Telegram.Services;
 
@@ -115,6 +117,8 @@ public class WelcomeFlowBypassIntegrationTests
         services.AddScoped<IContentDetectionConfigRepository, ContentDetectionConfigRepository>();
         services.AddHybridCache();
         services.AddDataProtection();
+        services.AddScoped<IAuditLogRepository, AuditLogRepository>();
+        services.AddScoped<IAuditService, AuditService>();
         services.AddScoped<IConfigService, ConfigService>();
 
         // Telegram-API-sourced service is the only dependency we mock. See the
@@ -240,7 +244,7 @@ public class WelcomeFlowBypassIntegrationTests
                 AnnouncementTtlSeconds = 30,
             },
         };
-        await _configService!.SaveAsync(ConfigType.Welcome, ChatIdentity.FromId(0), welcomeConfig);
+        await _configService!.SaveWelcomeAsync(ChatIdentity.FromId(0), welcomeConfig, Actor.SystemSeed);
 
         var user = UserIdentity.FromId(TrustedUserTelegramId);
         var chat = ChatIdentity.FromId(TestChatId);
@@ -291,7 +295,7 @@ public class WelcomeFlowBypassIntegrationTests
                 AnnouncementTtlSeconds = 30,
             },
         };
-        await _configService!.SaveAsync(ConfigType.Welcome, ChatIdentity.FromId(0), welcomeConfig);
+        await _configService!.SaveWelcomeAsync(ChatIdentity.FromId(0), welcomeConfig, Actor.SystemSeed);
 
         var user = UserIdentity.FromId(TrustedUserTelegramId);
         var chat = ChatIdentity.FromId(TestChatId);
@@ -345,7 +349,7 @@ public class WelcomeFlowBypassIntegrationTests
                 AnnouncementTtlSeconds = 30,
             },
         };
-        await _configService!.SaveAsync(ConfigType.Welcome, ChatIdentity.FromId(0), welcomeConfig);
+        await _configService!.SaveWelcomeAsync(ChatIdentity.FromId(0), welcomeConfig, Actor.SystemSeed);
 
         // Act — simulate WelcomeService's ordering: the pre-ban check short-circuits
         // before ResolveAsync is ever called. We therefore DO NOT call the resolver.

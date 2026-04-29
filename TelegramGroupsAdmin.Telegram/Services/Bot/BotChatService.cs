@@ -2,7 +2,7 @@ using Microsoft.Extensions.Logging;
 using Telegram.Bot.Exceptions;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
-using TelegramGroupsAdmin.Configuration.Repositories;
+using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Metrics;
 using TelegramGroupsAdmin.Core.Models;
@@ -23,7 +23,7 @@ public class BotChatService(
     IBotChatHandler chatHandler,
     IChatCache chatCache,
     IChatHealthCache healthCache,
-    IConfigRepository configRepo,
+    IConfigService configService,
     IManagedChatsRepository managedChatsRepo,
     IChatAdminsRepository chatAdminsRepo,
     ITelegramUserRepository userRepo,
@@ -39,44 +39,44 @@ public class BotChatService(
         return chat;
     }
 
-    public async Task<string?> GetInviteLinkAsync(long chatId, CancellationToken ct = default)
+    public async Task<string?> GetInviteLinkAsync(ChatIdentity chat, CancellationToken ct = default)
     {
         try
         {
             // Check database cache first (avoid Telegram API call if cached)
-            var cachedConfig = await configRepo.GetByChatIdAsync(chatId, ct);
-            if (cachedConfig?.InviteLink != null)
+            var cachedLink = await configService.GetInviteLinkAsync(chat.Id, ct);
+            if (cachedLink != null)
             {
-                logger.LogDebug("Using cached invite link for chat {ChatId}", chatId);
-                return cachedConfig.InviteLink;
+                logger.LogDebug("Using cached invite link for {Chat}", chat.ToLogDebug());
+                return cachedLink;
             }
 
             // Not cached - fetch and cache
-            return await FetchAndCacheInviteLinkAsync(chatId, ct);
+            return await FetchAndCacheInviteLinkAsync(chat, ct);
         }
         catch (Exception ex)
         {
             logger.LogWarning(
                 ex,
-                "Failed to get invite link for chat {ChatId}. Bot may lack admin permissions.",
-                chatId);
+                "Failed to get invite link for {Chat}. Bot may lack admin permissions.",
+                chat.ToLogDebug());
             return null;
         }
     }
 
-    public async Task<string?> RefreshInviteLinkAsync(long chatId, CancellationToken ct = default)
+    public async Task<string?> RefreshInviteLinkAsync(ChatIdentity chat, CancellationToken ct = default)
     {
         try
         {
-            logger.LogDebug("Refreshing invite link from Telegram for chat {ChatId}", chatId);
-            return await FetchAndCacheInviteLinkAsync(chatId, ct);
+            logger.LogDebug("Refreshing invite link from Telegram for {Chat}", chat.ToLogDebug());
+            return await FetchAndCacheInviteLinkAsync(chat, ct);
         }
         catch (Exception ex)
         {
             logger.LogWarning(
                 ex,
-                "Failed to refresh invite link for chat {ChatId}. Bot may lack admin permissions.",
-                chatId);
+                "Failed to refresh invite link for {Chat}. Bot may lack admin permissions.",
+                chat.ToLogDebug());
             return null;
         }
     }
@@ -553,25 +553,25 @@ public class BotChatService(
     /// Fetch current invite link from Telegram API and cache in database.
     /// Only updates cache if link has changed (reduces unnecessary writes).
     /// </summary>
-    private async Task<string?> FetchAndCacheInviteLinkAsync(long chatId, CancellationToken ct)
+    private async Task<string?> FetchAndCacheInviteLinkAsync(ChatIdentity chat, CancellationToken ct)
     {
-        var chat = await chatHandler.GetChatAsync(chatId, ct);
+        var sdkChat = await chatHandler.GetChatAsync(chat.Id, ct);
         apiMetrics.RecordTelegramApiCall("get_chat", success: true);
         string? currentLink;
 
         // Public group - use username link (e.g., https://t.me/groupname)
-        if (!string.IsNullOrEmpty(chat.Username))
+        if (!string.IsNullOrEmpty(sdkChat.Username))
         {
-            currentLink = $"https://t.me/{chat.Username}";
+            currentLink = $"https://t.me/{sdkChat.Username}";
             logger.LogDebug("Got public invite link for {Chat}: {Link}",
                 chat.ToLogDebug(), currentLink);
 
             // Cache public group link too (username could change)
-            var cachedConfig = await configRepo.GetByChatIdAsync(chatId, ct);
-            if (cachedConfig?.InviteLink != currentLink)
+            var cachedLink = await configService.GetInviteLinkAsync(chat.Id, ct);
+            if (cachedLink != currentLink)
             {
-                await configRepo.SaveInviteLinkAsync(chatId, currentLink, ct);
-                logger.LogDebug("Cached public invite link for chat {ChatId}", chatId);
+                await configService.SaveInviteLinkAsync(chat, currentLink, Actor.BotChatService, ct);
+                logger.LogDebug("Cached public invite link for {Chat}", chat.ToLogDebug());
             }
 
             return currentLink;
@@ -579,26 +579,26 @@ public class BotChatService(
 
         // Private group - check if we already have a cached link
         // ExportChatInviteLink GENERATES a new link (revokes old), so we must avoid calling it
-        var cachedConfigPrivate = await configRepo.GetByChatIdAsync(chatId, ct);
+        var cachedLinkPrivate = await configService.GetInviteLinkAsync(chat.Id, ct);
 
-        if (cachedConfigPrivate?.InviteLink != null)
+        if (cachedLinkPrivate != null)
         {
             // Use cached link - don't call ExportChatInviteLink (it would revoke this one)
-            logger.LogDebug("Using existing cached invite link for private chat {ChatId}", chatId);
-            return cachedConfigPrivate.InviteLink;
+            logger.LogDebug("Using existing cached invite link for private {Chat}", chat.ToLogDebug());
+            return cachedLinkPrivate;
         }
 
         // No cached link - export the primary link (this WILL revoke any previous primary link)
         // This should only happen on first setup
-        currentLink = await chatHandler.ExportChatInviteLinkAsync(chatId, ct);
+        currentLink = await chatHandler.ExportChatInviteLinkAsync(chat.Id, ct);
         apiMetrics.RecordTelegramApiCall("export_chat_invite_link", success: true);
         logger.LogWarning(
-            "Exported PRIMARY invite link for private chat {ChatId} - this revokes previous primary link! Link: {Link}",
-            chatId,
+            "Exported PRIMARY invite link for private {Chat} - this revokes previous primary link! Link: {Link}",
+            chat.ToLogDebug(),
             currentLink);
 
         // Cache it so we never call ExportChatInviteLink again for this chat
-        await configRepo.SaveInviteLinkAsync(chatId, currentLink, ct);
+        await configService.SaveInviteLinkAsync(chat, currentLink, Actor.BotChatService, ct);
         return currentLink;
     }
 

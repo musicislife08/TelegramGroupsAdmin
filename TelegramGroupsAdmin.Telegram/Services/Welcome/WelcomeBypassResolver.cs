@@ -6,6 +6,7 @@ using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Configuration.Services;
 
 namespace TelegramGroupsAdmin.Telegram.Services.Welcome;
 
@@ -61,7 +62,7 @@ public sealed class WelcomeBypassResolver(
 
         // Rule 2: Trusted user (toggle-gated).
         var configService = sp.GetRequiredService<IConfigService>();
-        var config = await configService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, chat.Id);
+        var config = await configService.GetEffectiveWelcomeAsync(chat.Id, cancellationToken);
         if (config?.TrustedBypass.Enabled == true)
         {
             var userRepo = sp.GetRequiredService<ITelegramUserRepository>();

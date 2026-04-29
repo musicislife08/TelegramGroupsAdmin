@@ -4,6 +4,7 @@
 @using TelegramGroupsAdmin.Core.Models
 @using TelegramGroupsAdmin.Core.Utilities
 @using TelegramGroupsAdmin.Telegram.Handlers
+@using TelegramGroupsAdmin.Configuration.Services
 @inject IContentCheckCoordinator ContentCheckCoordinator
 @inject IManagedChatsRepository ManagedChatsRepository
 @inject ITranslationHandler TranslationHandler
@@ -425,8 +426,7 @@
         _managedChats = (await ManagedChatsRepository.GetAllAsync(CancellationToken.None)).ToList();
 
         // Load content detection config for threshold display
-        _config = await ConfigService.GetEffectiveAsync<ContentDetectionConfig>(ConfigType.ContentDetection, 0)
-                  ?? new ContentDetectionConfig();
+        _config = await ConfigService.GetEffectiveContentDetectionAsync(0);
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)

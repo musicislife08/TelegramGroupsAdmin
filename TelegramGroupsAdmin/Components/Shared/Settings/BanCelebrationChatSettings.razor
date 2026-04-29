@@ -1,5 +1,6 @@
 @using TelegramGroupsAdmin.Configuration
 @using TelegramGroupsAdmin.Core.Services
+@using TelegramGroupsAdmin.Configuration.Services
 @inject IConfigService ConfigService
 @inject ISnackbar Snackbar
 
@@ -52,6 +53,8 @@
 </MudStack>
 
 @code {
+    [CascadingParameter] private WebUserIdentity? WebUser { get; set; }
+
     [Parameter] public ChatIdentity Chat { get; set; } = ChatIdentity.FromId(0);
     [Parameter] public EventCallback OnSaved { get; set; }
     [Parameter] public bool ShowLibraryHint { get; set; } = true;
@@ -67,7 +70,7 @@
     {
         try
         {
-            var config = await ConfigService.GetAsync<BanCelebrationConfig>(ConfigType.BanCelebration, Chat.Id);
+            var config = await ConfigService.GetBanCelebrationAsync(Chat.Id);
             _config = config ?? BanCelebrationConfig.Default;
         }
         catch (Exception ex)
@@ -80,7 +83,8 @@
     {
         try
         {
-            await ConfigService.SaveAsync(ConfigType.BanCelebration, Chat, _config);
+            var actor = WebUser!.ToActor();
+            await ConfigService.SaveBanCelebrationAsync(Chat, _config, actor);
             Snackbar.Add("Ban celebration configuration saved", Severity.Success);
             await OnSaved.InvokeAsync();
         }

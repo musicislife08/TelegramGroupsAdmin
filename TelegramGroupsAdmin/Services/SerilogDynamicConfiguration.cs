@@ -2,6 +2,7 @@ using Serilog.Core;
 using Serilog.Events;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Models;
+using TelegramGroupsAdmin.Configuration.Services;
 
 namespace TelegramGroupsAdmin.Services;
 
@@ -53,7 +54,7 @@ public class SerilogDynamicConfiguration
             var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
 
             // Load config from database (global config at chatId=0)
-            var config = await configService.GetAsync<LogConfig>(ConfigType.Log, chatId: 0);
+            var config = await configService.GetLogAsync(0);
 
             if (config != null)
             {

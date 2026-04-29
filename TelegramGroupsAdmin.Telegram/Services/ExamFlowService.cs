@@ -13,6 +13,7 @@ using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
 using TelegramGroupsAdmin.Telegram.Services.Welcome;
+using TelegramGroupsAdmin.Configuration.Services;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 
@@ -270,8 +271,8 @@ public class ExamFlowService : IExamFlowService
         }
 
         // Load config
-        var config = await configService.GetEffectiveAsync<WelcomeConfig>(
-            Configuration.ConfigType.Welcome, session.ChatId) ?? WelcomeConfig.Default;
+        var config = await configService.GetEffectiveWelcomeAsync(session.ChatId, cancellationToken)
+                     ?? WelcomeConfig.Default;
 
         if (config.ExamConfig == null)
         {
@@ -361,8 +362,8 @@ public class ExamFlowService : IExamFlowService
         }
 
         // Load config
-        var config = await configService.GetEffectiveAsync<WelcomeConfig>(
-            Configuration.ConfigType.Welcome, chatId) ?? WelcomeConfig.Default;
+        var config = await configService.GetEffectiveWelcomeAsync(chatId, cancellationToken)
+                     ?? WelcomeConfig.Default;
 
         if (config.ExamConfig == null || !config.ExamConfig.HasOpenEndedQuestion)
         {
@@ -410,8 +411,8 @@ public class ExamFlowService : IExamFlowService
             return null;
 
         // Load exam config to determine if awaiting open-ended
-        var config = await configService.GetEffectiveAsync<WelcomeConfig>(
-            Configuration.ConfigType.Welcome, session.ChatId) ?? WelcomeConfig.Default;
+        var config = await configService.GetEffectiveWelcomeAsync(session.ChatId, cancellationToken)
+                     ?? WelcomeConfig.Default;
 
         if (config.ExamConfig == null)
             return null;
@@ -799,7 +800,7 @@ public class ExamFlowService : IExamFlowService
         bool isManualApproval,
         CancellationToken cancellationToken)
     {
-        var chatDeepLink = await _chatService.GetInviteLinkAsync(chat.Id, cancellationToken);
+        var chatDeepLink = await _chatService.GetInviteLinkAsync(chat, cancellationToken);
 
         InlineKeyboardMarkup? keyboard = null;
         if (chatDeepLink != null)
