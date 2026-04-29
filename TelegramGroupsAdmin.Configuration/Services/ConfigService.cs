@@ -29,12 +29,12 @@ public class ConfigService(
 
     public ValueTask<WelcomeConfig?> GetWelcomeAsync(long chatId, CancellationToken ct = default)
         => cache.GetOrCreateAsync($"cfg_welcome_{chatId}",
-            async _ => await repository.GetWelcomeAsync(chatId, ct),
+            async factoryCt => await repository.GetWelcomeAsync(chatId, factoryCt),
             CacheOptions, cancellationToken: ct);
 
     public ValueTask<WelcomeConfig?> GetEffectiveWelcomeAsync(long chatId, CancellationToken ct = default)
         => cache.GetOrCreateAsync($"cfg_effective_welcome_{chatId}",
-            async _ => await repository.GetEffectiveWelcomeAsync(chatId, ct),
+            async factoryCt => await repository.GetEffectiveWelcomeAsync(chatId, factoryCt),
             CacheOptions, tags: ["effective_welcome"], cancellationToken: ct);
 
     public async Task SaveWelcomeAsync(ChatIdentity chat, WelcomeConfig config, Actor initiator, CancellationToken ct = default)
@@ -59,12 +59,12 @@ public class ConfigService(
 
     public ValueTask<LogConfig?> GetLogAsync(long chatId, CancellationToken ct = default)
         => cache.GetOrCreateAsync($"cfg_log_{chatId}",
-            async _ => await repository.GetLogAsync(chatId, ct),
+            async factoryCt => await repository.GetLogAsync(chatId, factoryCt),
             CacheOptions, cancellationToken: ct);
 
     public ValueTask<LogConfig?> GetEffectiveLogAsync(long chatId, CancellationToken ct = default)
         => cache.GetOrCreateAsync($"cfg_effective_log_{chatId}",
-            async _ => await repository.GetEffectiveLogAsync(chatId, ct),
+            async factoryCt => await repository.GetEffectiveLogAsync(chatId, factoryCt),
             CacheOptions, tags: ["effective_log"], cancellationToken: ct);
 
     public async Task SaveLogAsync(ChatIdentity chat, LogConfig config, Actor initiator, CancellationToken ct = default)
@@ -89,12 +89,12 @@ public class ConfigService(
 
     public ValueTask<BotProtectionConfig?> GetBotProtectionAsync(long chatId, CancellationToken ct = default)
         => cache.GetOrCreateAsync($"cfg_bot_protection_{chatId}",
-            async _ => await repository.GetBotProtectionAsync(chatId, ct),
+            async factoryCt => await repository.GetBotProtectionAsync(chatId, factoryCt),
             CacheOptions, cancellationToken: ct);
 
     public ValueTask<BotProtectionConfig?> GetEffectiveBotProtectionAsync(long chatId, CancellationToken ct = default)
         => cache.GetOrCreateAsync($"cfg_effective_bot_protection_{chatId}",
-            async _ => await repository.GetEffectiveBotProtectionAsync(chatId, ct),
+            async factoryCt => await repository.GetEffectiveBotProtectionAsync(chatId, factoryCt),
             CacheOptions, tags: ["effective_bot_protection"], cancellationToken: ct);
 
     public async Task SaveBotProtectionAsync(ChatIdentity chat, BotProtectionConfig config, Actor initiator, CancellationToken ct = default)
@@ -119,12 +119,12 @@ public class ConfigService(
 
     public ValueTask<TelegramBotConfig?> GetTelegramBotAsync(long chatId, CancellationToken ct = default)
         => cache.GetOrCreateAsync($"cfg_telegram_bot_{chatId}",
-            async _ => await repository.GetTelegramBotAsync(chatId, ct),
+            async factoryCt => await repository.GetTelegramBotAsync(chatId, factoryCt),
             CacheOptions, cancellationToken: ct);
 
     public ValueTask<TelegramBotConfig?> GetEffectiveTelegramBotAsync(long chatId, CancellationToken ct = default)
         => cache.GetOrCreateAsync($"cfg_effective_telegram_bot_{chatId}",
-            async _ => await repository.GetEffectiveTelegramBotAsync(chatId, ct),
+            async factoryCt => await repository.GetEffectiveTelegramBotAsync(chatId, factoryCt),
             CacheOptions, tags: ["effective_telegram_bot"], cancellationToken: ct);
 
     public async Task SaveTelegramBotAsync(ChatIdentity chat, TelegramBotConfig config, Actor initiator, CancellationToken ct = default)
@@ -149,12 +149,12 @@ public class ConfigService(
 
     public ValueTask<ServiceMessageDeletionConfig?> GetServiceMessageDeletionAsync(long chatId, CancellationToken ct = default)
         => cache.GetOrCreateAsync($"cfg_service_message_deletion_{chatId}",
-            async _ => await repository.GetServiceMessageDeletionAsync(chatId, ct),
+            async factoryCt => await repository.GetServiceMessageDeletionAsync(chatId, factoryCt),
             CacheOptions, cancellationToken: ct);
 
     public ValueTask<ServiceMessageDeletionConfig?> GetEffectiveServiceMessageDeletionAsync(long chatId, CancellationToken ct = default)
         => cache.GetOrCreateAsync($"cfg_effective_service_message_deletion_{chatId}",
-            async _ => await repository.GetEffectiveServiceMessageDeletionAsync(chatId, ct),
+            async factoryCt => await repository.GetEffectiveServiceMessageDeletionAsync(chatId, factoryCt),
             CacheOptions, tags: ["effective_service_message_deletion"], cancellationToken: ct);
 
     public async Task SaveServiceMessageDeletionAsync(ChatIdentity chat, ServiceMessageDeletionConfig config, Actor initiator, CancellationToken ct = default)
@@ -179,12 +179,12 @@ public class ConfigService(
 
     public ValueTask<WarningSystemConfig?> GetWarningSystemAsync(long chatId, CancellationToken ct = default)
         => cache.GetOrCreateAsync($"cfg_warning_system_{chatId}",
-            async _ => await repository.GetWarningSystemAsync(chatId, ct),
+            async factoryCt => await repository.GetWarningSystemAsync(chatId, factoryCt),
             CacheOptions, cancellationToken: ct);
 
     public ValueTask<WarningSystemConfig?> GetEffectiveWarningSystemAsync(long chatId, CancellationToken ct = default)
         => cache.GetOrCreateAsync($"cfg_effective_warning_system_{chatId}",
-            async _ => await repository.GetEffectiveWarningSystemAsync(chatId, ct),
+            async factoryCt => await repository.GetEffectiveWarningSystemAsync(chatId, factoryCt),
             CacheOptions, tags: ["effective_warning_system"], cancellationToken: ct);
 
     public async Task SaveWarningSystemAsync(ChatIdentity chat, WarningSystemConfig config, Actor initiator, CancellationToken ct = default)
@@ -209,12 +209,12 @@ public class ConfigService(
 
     public ValueTask<InviteCommandConfig?> GetInviteCommandAsync(long chatId, CancellationToken ct = default)
         => cache.GetOrCreateAsync($"cfg_invite_command_{chatId}",
-            async _ => await repository.GetInviteCommandAsync(chatId, ct),
+            async factoryCt => await repository.GetInviteCommandAsync(chatId, factoryCt),
             CacheOptions, cancellationToken: ct);
 
     public ValueTask<InviteCommandConfig?> GetEffectiveInviteCommandAsync(long chatId, CancellationToken ct = default)
         => cache.GetOrCreateAsync($"cfg_effective_invite_command_{chatId}",
-            async _ => await repository.GetEffectiveInviteCommandAsync(chatId, ct),
+            async factoryCt => await repository.GetEffectiveInviteCommandAsync(chatId, factoryCt),
             CacheOptions, tags: ["effective_invite_command"], cancellationToken: ct);
 
     public async Task SaveInviteCommandAsync(ChatIdentity chat, InviteCommandConfig config, Actor initiator, CancellationToken ct = default)
@@ -239,12 +239,12 @@ public class ConfigService(
 
     public ValueTask<BanCelebrationConfig?> GetBanCelebrationAsync(long chatId, CancellationToken ct = default)
         => cache.GetOrCreateAsync($"cfg_ban_celebration_{chatId}",
-            async _ => await repository.GetBanCelebrationAsync(chatId, ct),
+            async factoryCt => await repository.GetBanCelebrationAsync(chatId, factoryCt),
             CacheOptions, cancellationToken: ct);
 
     public ValueTask<BanCelebrationConfig?> GetEffectiveBanCelebrationAsync(long chatId, CancellationToken ct = default)
         => cache.GetOrCreateAsync($"cfg_effective_ban_celebration_{chatId}",
-            async _ => await repository.GetEffectiveBanCelebrationAsync(chatId, ct),
+            async factoryCt => await repository.GetEffectiveBanCelebrationAsync(chatId, factoryCt),
             CacheOptions, tags: ["effective_ban_celebration"], cancellationToken: ct);
 
     public async Task SaveBanCelebrationAsync(ChatIdentity chat, BanCelebrationConfig config, Actor initiator, CancellationToken ct = default)
@@ -308,7 +308,7 @@ public class ConfigService(
 
     public ValueTask<string?> GetBotTokenAsync(CancellationToken ct = default)
         => cache.GetOrCreateAsync("cfg_bot_token",
-            async _ => await repository.GetBotTokenAsync(ct),
+            async factoryCt => await repository.GetBotTokenAsync(factoryCt),
             CacheOptions, cancellationToken: ct);
 
     public async Task SaveBotTokenAsync(string botToken, Actor initiator, CancellationToken ct = default)
