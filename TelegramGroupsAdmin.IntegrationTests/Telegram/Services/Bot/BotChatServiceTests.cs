@@ -6,7 +6,6 @@ using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Services;
-using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
@@ -89,8 +88,6 @@ public class BotChatServiceTests
         services.AddScoped<IChatAdminsRepository, ChatAdminsRepository>();
         services.AddScoped<ITelegramUserRepository, TelegramUserRepository>();
         services.AddScoped<IUserActionsRepository, UserActionsRepository>();
-        services.AddDataProtection();
-        services.AddScoped<IConfigRepository, ConfigRepository>();
 
         // Register mocked external services
         services.AddSingleton(_mockChatHandler);
