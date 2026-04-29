@@ -564,4 +564,27 @@ public class ConfigRepositoryIntegrationTests
             Assert.That(retrievedIc!.DeleteResponseAfterSeconds, Is.EqualTo(45));
         });
     }
+
+    [Test]
+    public async Task DeleteInviteCommand_PreservesWarningSystemSibling()
+    {
+        var ic = new InviteCommandConfig { DeleteResponseAfterSeconds = 99 };
+        var ws = new WarningSystemConfig { AutoBanThreshold = 7, AutoBanReason = "preserve me" };
+
+        await _repo!.SaveWarningSystemAsync(TestChat, ws);
+        await _repo.SaveInviteCommandAsync(TestChat, ic);
+
+        await _repo.DeleteInviteCommandAsync(TestChat);
+
+        var retrievedWs = await _repo.GetWarningSystemAsync(TestChat.Id);
+        var retrievedIc = await _repo.GetInviteCommandAsync(TestChat.Id);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(retrievedWs, Is.Not.Null, "WarningSystem sibling preserved");
+            Assert.That(retrievedWs!.AutoBanThreshold, Is.EqualTo(7));
+            Assert.That(retrievedWs.AutoBanReason, Is.EqualTo("preserve me"));
+            Assert.That(retrievedIc, Is.Null, "InviteCommand deleted");
+        });
+    }
 }
