@@ -149,13 +149,13 @@ public class InviteManagementDialogTests : InviteManagementDialogTestContext
     }
 
     [Test]
-    public void HasCloseButton()
+    public async Task HasCloseButton()
     {
         // Arrange
         var provider = RenderDialogProvider();
 
         // Act
-        _ = OpenDialogAsync();
+        await OpenDialogAsync();
 
         // Assert
         provider.WaitForAssertion(() =>

@@ -437,7 +437,7 @@ public class ConfigRepositoryIntegrationTests
     // ========================================================================
 
     [Test]
-    public async Task GetEffective_BanCelebration_BothPresent_ChatOverrides()
+    public async Task GetEffective_BanCelebration_BothPresent_ChatScalarsWin()
     {
         var global = new BanCelebrationConfig
         {
@@ -448,12 +448,10 @@ public class ConfigRepositoryIntegrationTests
         };
         var chat = new BanCelebrationConfig
         {
-            // Default false → falls through to global true
+            // Each chat scalar wins outright, even at type default
             Enabled = false,
-            // Default true → falls through to global true
             TriggerOnAutoBan = true,
             TriggerOnManualBan = true,
-            // Override
             SendToBannedUser = false
         };
 
@@ -465,10 +463,10 @@ public class ConfigRepositoryIntegrationTests
         Assert.That(effective, Is.Not.Null);
         Assert.Multiple(() =>
         {
-            Assert.That(effective!.Enabled, Is.True, "global wins via default fall-through");
+            Assert.That(effective!.Enabled, Is.False, "chat scalar wins at type default");
             Assert.That(effective.TriggerOnAutoBan, Is.True);
             Assert.That(effective.TriggerOnManualBan, Is.True);
-            Assert.That(effective.SendToBannedUser, Is.False, "chat override wins");
+            Assert.That(effective.SendToBannedUser, Is.False);
         });
     }
 
