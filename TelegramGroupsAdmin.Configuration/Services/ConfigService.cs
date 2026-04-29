@@ -331,6 +331,34 @@ public class ConfigService(
     public Task<HashSet<string>> GetCriticalCheckNamesAsync(long chatId, CancellationToken cancellationToken = default)
         => contentDetectionRepository.GetCriticalCheckNamesAsync(chatId, cancellationToken);
 
+    public async Task<ChatConfigPresenceMap> GetChatConfigPresenceAsync(CancellationToken ct = default)
+    {
+        var contentDetectionTask = contentDetectionRepository.GetAllChatConfigsAsync(ct);
+        var multiplexedTask = repository.GetMultiplexedConfigPresenceAsync(ct);
+        await Task.WhenAll(contentDetectionTask, multiplexedTask);
+
+        var contentDetectionChatIds = contentDetectionTask.Result
+            .Where(c => c.ChatId != 0)
+            .Select(c => c.ChatId)
+            .ToHashSet();
+
+        var welcomeChatIds = new HashSet<long>();
+        var serviceMessageDeletionChatIds = new HashSet<long>();
+        var banCelebrationChatIds = new HashSet<long>();
+        foreach (var (chatId, flags) in multiplexedTask.Result)
+        {
+            if (flags.HasWelcome) welcomeChatIds.Add(chatId);
+            if (flags.HasServiceMessageDeletion) serviceMessageDeletionChatIds.Add(chatId);
+            if (flags.HasBanCelebration) banCelebrationChatIds.Add(chatId);
+        }
+
+        return new ChatConfigPresenceMap(
+            contentDetectionChatIds,
+            welcomeChatIds,
+            serviceMessageDeletionChatIds,
+            banCelebrationChatIds);
+    }
+
     // ============================================================================
     // Helpers
     // ============================================================================

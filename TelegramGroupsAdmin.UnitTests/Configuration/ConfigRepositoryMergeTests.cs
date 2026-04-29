@@ -8,9 +8,10 @@ namespace TelegramGroupsAdmin.UnitTests.Configuration;
 
 /// <summary>
 /// Per-config merge unit tests for ConfigRepository's internal Merge* methods.
-/// Each config gets the standard 4-test pattern (chat-null returns global, global-null
-/// returns chat, both-null returns null, chat-overrides-with-defaults-fall-through),
-/// with extra coverage where the config has multiple non-trivial fields.
+/// Contract under test: when a chat row exists, every non-nullable scalar field on the
+/// chat row wins outright — chat-explicit `false`/`0` is an override, not "no opinion."
+/// Strings fall back to global only when the chat field is empty (UI uses empty-string
+/// to express "inherit"). Nullable refs fall back when null.
 /// Internal methods are visible to this assembly via InternalsVisibleTo.
 /// </summary>
 [TestFixture]
@@ -41,7 +42,7 @@ public class ConfigRepositoryMergeTests
     }
 
     [Test]
-    public void MergeWelcome_ChatOverridesNonDefault_GlobalFallsThrough()
+    public void MergeWelcome_ChatRowOverridesScalars_StringsInheritWhenEmpty()
     {
         var global = new WelcomeConfig
         {
@@ -54,25 +55,25 @@ public class ConfigRepositoryMergeTests
         };
         var chat = new WelcomeConfig
         {
-            // Defaults — should fall through to global
+            // Scalars: chat row's value always wins, even at the type default
             Enabled = false,
-            MainWelcomeMessage = "",
             TimeoutSeconds = 0,
             MaxKicksBeforeBan = 0,
+            // Strings: empty inherits global; non-empty overrides
+            MainWelcomeMessage = "",
             AcceptButtonText = "",
-            // Overrides
             DenyButtonText = "Nope"
         };
         var merged = ConfigRepository.MergeWelcome(global, chat)!;
 
         Assert.Multiple(() =>
         {
-            Assert.That(merged.Enabled, Is.True, "Enabled defaulted in chat → global");
-            Assert.That(merged.MainWelcomeMessage, Is.EqualTo("global welcome"));
-            Assert.That(merged.TimeoutSeconds, Is.EqualTo(60));
-            Assert.That(merged.MaxKicksBeforeBan, Is.EqualTo(3));
+            Assert.That(merged.Enabled, Is.False, "chat scalar wins even at type default");
+            Assert.That(merged.TimeoutSeconds, Is.EqualTo(0));
+            Assert.That(merged.MaxKicksBeforeBan, Is.EqualTo(0));
+            Assert.That(merged.MainWelcomeMessage, Is.EqualTo("global welcome"), "empty string inherits global");
             Assert.That(merged.AcceptButtonText, Is.EqualTo("Accept"));
-            Assert.That(merged.DenyButtonText, Is.EqualTo("Nope"), "chat-set string overrides");
+            Assert.That(merged.DenyButtonText, Is.EqualTo("Nope"), "non-empty chat string overrides");
         });
     }
 
@@ -145,7 +146,7 @@ public class ConfigRepositoryMergeTests
     }
 
     [Test]
-    public void MergeLog_ChatOverridesNonDefault_GlobalFallsThrough()
+    public void MergeLog_ChatRowOverridesDefaultLevel_DictionariesUnion()
     {
         var global = new LogConfig
         {
@@ -154,7 +155,7 @@ public class ConfigRepositoryMergeTests
         };
         var chat = new LogConfig
         {
-            // Information is the default — should fall through to global's Warning
+            // Even though Information is the type default, an explicit chat row's value wins.
             DefaultLevel = LogLevel.Information,
             Overrides = new Dictionary<string, LogLevel> { ["TGA.Bar"] = LogLevel.Debug }
         };
@@ -162,8 +163,8 @@ public class ConfigRepositoryMergeTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(merged.DefaultLevel, Is.EqualTo(LogLevel.Warning), "default fell through");
-            Assert.That(merged.Overrides, Has.Count.EqualTo(2), "override dictionaries are merged");
+            Assert.That(merged.DefaultLevel, Is.EqualTo(LogLevel.Information), "chat scalar wins at type default");
+            Assert.That(merged.Overrides, Has.Count.EqualTo(2), "override dictionaries are unioned");
             Assert.That(merged.Overrides["TGA.Foo"], Is.EqualTo(LogLevel.Information));
             Assert.That(merged.Overrides["TGA.Bar"], Is.EqualTo(LogLevel.Debug));
         });
@@ -209,7 +210,7 @@ public class ConfigRepositoryMergeTests
     }
 
     [Test]
-    public void MergeBotProtection_ChatOverridesNonDefault_GlobalFallsThrough()
+    public void MergeBotProtection_ChatRowOverridesScalars_EmptyListInheritsGlobal()
     {
         var global = new BotProtectionConfig
         {
@@ -221,21 +222,21 @@ public class ConfigRepositoryMergeTests
         };
         var chat = new BotProtectionConfig
         {
-            // Defaults — fall through
+            // Scalars: chat row wins outright, even at type default
             Enabled = false,
             AutoBanBots = false,
             AllowAdminInvitedBots = false,
+            // List: empty chat list inherits the global list
             WhitelistedBots = [],
-            // Override
             LogBotEvents = true
         };
         var merged = ConfigRepository.MergeBotProtection(global, chat)!;
 
         Assert.Multiple(() =>
         {
-            Assert.That(merged.Enabled, Is.True);
-            Assert.That(merged.AutoBanBots, Is.True);
-            Assert.That(merged.AllowAdminInvitedBots, Is.True);
+            Assert.That(merged.Enabled, Is.False, "chat scalar wins at type default");
+            Assert.That(merged.AutoBanBots, Is.False);
+            Assert.That(merged.AllowAdminInvitedBots, Is.False);
             Assert.That(merged.WhitelistedBots, Has.Count.EqualTo(2), "empty chat list inherits global");
             Assert.That(merged.LogBotEvents, Is.True);
         });
@@ -275,12 +276,12 @@ public class ConfigRepositoryMergeTests
     }
 
     [Test]
-    public void MergeTelegramBot_ChatOverridesNonDefault_GlobalFallsThrough()
+    public void MergeTelegramBot_ChatRowOverridesScalar_EvenAtTypeDefault()
     {
         var global = new TelegramBotConfig { BotEnabled = true };
-        var chat = new TelegramBotConfig { BotEnabled = false }; // default — falls through
+        var chat = new TelegramBotConfig { BotEnabled = false }; // explicitly disable
         var merged = ConfigRepository.MergeTelegramBot(global, chat)!;
-        Assert.That(merged.BotEnabled, Is.True);
+        Assert.That(merged.BotEnabled, Is.False, "chat scalar wins even at type default");
     }
 
     // ============================================================================
@@ -308,9 +309,8 @@ public class ConfigRepositoryMergeTests
     }
 
     [Test]
-    public void MergeServiceMessageDeletion_ChatOverridesNonDefault_GlobalFallsThrough()
+    public void MergeServiceMessageDeletion_ChatRowOverridesAllScalars()
     {
-        // Defaults are all true. Chat sets a non-default (false) for one field.
         var global = new ServiceMessageDeletionConfig
         {
             DeleteJoinMessages = false,
@@ -322,12 +322,10 @@ public class ConfigRepositoryMergeTests
         };
         var chat = new ServiceMessageDeletionConfig
         {
-            // Default true on these → fall through
+            // Each chat scalar wins regardless of whether it equals the type default.
             DeleteJoinMessages = true,
             DeleteLeaveMessages = true,
-            // Override
             DeletePhotoChanges = false,
-            // Default true → fall through
             DeleteTitleChanges = true,
             DeletePinNotifications = true,
             DeleteChatCreationMessages = true
@@ -336,9 +334,9 @@ public class ConfigRepositoryMergeTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(merged.DeleteJoinMessages, Is.False, "global wins for default chat value");
-            Assert.That(merged.DeleteLeaveMessages, Is.False, "global wins");
-            Assert.That(merged.DeletePhotoChanges, Is.False, "chat override wins");
+            Assert.That(merged.DeleteJoinMessages, Is.True, "chat scalar wins");
+            Assert.That(merged.DeleteLeaveMessages, Is.True);
+            Assert.That(merged.DeletePhotoChanges, Is.False);
             Assert.That(merged.DeleteTitleChanges, Is.True);
             Assert.That(merged.DeletePinNotifications, Is.True);
             Assert.That(merged.DeleteChatCreationMessages, Is.True);
@@ -370,7 +368,7 @@ public class ConfigRepositoryMergeTests
     }
 
     [Test]
-    public void MergeWarningSystem_ChatOverridesNonDefault_GlobalFallsThrough()
+    public void MergeWarningSystem_ChatRowOverridesScalars_EmptyReasonInherits()
     {
         var global = new WarningSystemConfig
         {
@@ -380,18 +378,19 @@ public class ConfigRepositoryMergeTests
         };
         var chat = new WarningSystemConfig
         {
-            // Defaults — fall through
+            // Scalars: chat wins even at type default
             AutoBanEnabled = false,
             AutoBanThreshold = 0,
+            // String: empty inherits global
             AutoBanReason = ""
         };
         var merged = ConfigRepository.MergeWarningSystem(global, chat)!;
 
         Assert.Multiple(() =>
         {
-            Assert.That(merged.AutoBanEnabled, Is.True);
-            Assert.That(merged.AutoBanThreshold, Is.EqualTo(3));
-            Assert.That(merged.AutoBanReason, Is.EqualTo("global reason"));
+            Assert.That(merged.AutoBanEnabled, Is.False, "chat scalar wins at type default");
+            Assert.That(merged.AutoBanThreshold, Is.EqualTo(0));
+            Assert.That(merged.AutoBanReason, Is.EqualTo("global reason"), "empty string inherits global");
         });
     }
 
@@ -429,9 +428,8 @@ public class ConfigRepositoryMergeTests
     }
 
     [Test]
-    public void MergeInviteCommand_ChatOverridesNonDefault_GlobalFallsThrough()
+    public void MergeInviteCommand_ChatRowOverridesAllScalars()
     {
-        // Defaults: Enabled=true, DeleteCommandMessage=true, DeleteResponseAfterSeconds=30
         var global = new InviteCommandConfig
         {
             Enabled = false,
@@ -440,7 +438,7 @@ public class ConfigRepositoryMergeTests
         };
         var chat = new InviteCommandConfig
         {
-            // Defaults — fall through to global
+            // Even at type defaults, chat row wins outright.
             Enabled = true,
             DeleteCommandMessage = true,
             DeleteResponseAfterSeconds = 30
@@ -449,9 +447,9 @@ public class ConfigRepositoryMergeTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(merged.Enabled, Is.False, "global wins via default fall-through");
-            Assert.That(merged.DeleteCommandMessage, Is.False);
-            Assert.That(merged.DeleteResponseAfterSeconds, Is.EqualTo(60));
+            Assert.That(merged.Enabled, Is.True, "chat scalar wins at type default");
+            Assert.That(merged.DeleteCommandMessage, Is.True);
+            Assert.That(merged.DeleteResponseAfterSeconds, Is.EqualTo(30));
         });
     }
 
@@ -480,9 +478,8 @@ public class ConfigRepositoryMergeTests
     }
 
     [Test]
-    public void MergeBanCelebration_ChatOverridesNonDefault_GlobalFallsThrough()
+    public void MergeBanCelebration_ChatRowOverridesAllScalars()
     {
-        // Defaults: Enabled=false, TriggerOnAutoBan=true, TriggerOnManualBan=true, SendToBannedUser=true
         var global = new BanCelebrationConfig
         {
             Enabled = true,
@@ -492,21 +489,19 @@ public class ConfigRepositoryMergeTests
         };
         var chat = new BanCelebrationConfig
         {
-            // Default false → fall through to global true
+            // Each chat scalar wins outright — including type defaults.
             Enabled = false,
-            // Default true → fall through to global false
             TriggerOnAutoBan = true,
             TriggerOnManualBan = true,
-            // Override
             SendToBannedUser = false
         };
         var merged = ConfigRepository.MergeBanCelebration(global, chat)!;
 
         Assert.Multiple(() =>
         {
-            Assert.That(merged.Enabled, Is.True, "default chat false fell through to global true");
-            Assert.That(merged.TriggerOnAutoBan, Is.False, "default chat true fell through to global false");
-            Assert.That(merged.TriggerOnManualBan, Is.False);
+            Assert.That(merged.Enabled, Is.False, "chat scalar wins at type default");
+            Assert.That(merged.TriggerOnAutoBan, Is.True);
+            Assert.That(merged.TriggerOnManualBan, Is.True);
             Assert.That(merged.SendToBannedUser, Is.False);
         });
     }

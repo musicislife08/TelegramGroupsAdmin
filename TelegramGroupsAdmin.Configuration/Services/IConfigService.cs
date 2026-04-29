@@ -84,4 +84,12 @@ public interface IConfigService
     // --- ContentDetection helpers (delegate to IContentDetectionConfigRepository, retained) ---
     Task<IEnumerable<ChatConfigInfo>> GetAllContentDetectionConfigsAsync(CancellationToken cancellationToken = default);
     Task<HashSet<string>> GetCriticalCheckNamesAsync(long chatId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Bulk presence query for the admin chat-list page. Combines ContentDetection and
+    /// the multiplexed configs table into a single map of "which chats have any custom
+    /// configs of which type." Two SQL round-trips total (one per table), regardless of
+    /// chat count — fixes the previous N+1 pattern.
+    /// </summary>
+    Task<ChatConfigPresenceMap> GetChatConfigPresenceAsync(CancellationToken ct = default);
 }

@@ -7,7 +7,6 @@
 @inject IChatHealthCache ChatHealthCache
 @inject IManagedChatsRepository ManagedChatsRepository
 @inject TelegramGroupsAdmin.Configuration.Services.IConfigService ConfigService
-@inject TelegramGroupsAdmin.Configuration.Repositories.IConfigRepository ConfigRepository
 @inject ISnackbar Snackbar
 @attribute [Authorize]
 @implements IDisposable
@@ -138,12 +137,8 @@
                 WebUser.PermissionLevel,
                 includeDeleted: true);
 
-            // Check which chats have custom spam configs
-            var allConfigs = await ConfigService.GetAllContentDetectionConfigsAsync();
-            var customConfigChatIds = allConfigs
-                .Where(c => c.ChatId != 0)
-                .Select(c => c.ChatId)
-                .ToHashSet();
+            // Bulk-fetch presence flags once (2 SQL queries total) to avoid N+1 lookups per row.
+            var presence = await ConfigService.GetChatConfigPresenceAsync();
 
             _chats = [];
             foreach (var chat in chats)
@@ -156,20 +151,15 @@
                     IsReachable = true
                 };
 
-                // Check if this chat has custom configs
                 var chatId = chat.Identity.Id;
-                var hasWelcomeConfig = await ConfigRepository.GetWelcomeAsync(chatId) is not null;
-                var hasServiceMsgConfig = await ConfigRepository.GetServiceMessageDeletionAsync(chatId) is not null;
-                var hasBanCelebrationConfig = await ConfigRepository.GetBanCelebrationAsync(chatId) is not null;
-
                 _chats.Add(new ManagedChatInfo
                 {
                     Record = chat,
                     HealthStatus = health,
-                    HasCustomSpamConfig = customConfigChatIds.Contains(chat.Identity.Id),
-                    HasCustomWelcomeConfig = hasWelcomeConfig,
-                    HasCustomServiceMsgConfig = hasServiceMsgConfig,
-                    HasCustomBanCelebrationConfig = hasBanCelebrationConfig
+                    HasCustomSpamConfig = presence.ContentDetectionChatIds.Contains(chatId),
+                    HasCustomWelcomeConfig = presence.WelcomeChatIds.Contains(chatId),
+                    HasCustomServiceMsgConfig = presence.ServiceMessageDeletionChatIds.Contains(chatId),
+                    HasCustomBanCelebrationConfig = presence.BanCelebrationChatIds.Contains(chatId)
                 });
             }
         }

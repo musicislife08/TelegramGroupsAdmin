@@ -37,6 +37,13 @@ public interface IConfigRepository
 
     ValueTask<string?> GetInviteLinkAsync(long chatId, CancellationToken ct = default);
 
+    /// <summary>
+    /// Bulk projection: returns per-chat presence flags for the multiplexed configs table
+    /// columns (Welcome, ServiceMessageDeletion, BanCelebration). Single SQL round-trip.
+    /// Excludes the global row (ChatId == 0). Use to avoid N+1 lookups in admin UI.
+    /// </summary>
+    Task<IReadOnlyDictionary<long, ChatConfigPresenceFlags>> GetMultiplexedConfigPresenceAsync(CancellationToken ct = default);
+
     // ---- Bot token (encrypted, no chat scope) ----
     ValueTask<string?> GetBotTokenAsync(CancellationToken ct = default);
 

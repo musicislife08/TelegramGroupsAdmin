@@ -34,6 +34,26 @@ public class ConfigRepository(
             .FirstOrDefaultAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyDictionary<long, ChatConfigPresenceFlags>> GetMultiplexedConfigPresenceAsync(CancellationToken ct = default)
+    {
+        await using var context = await contextFactory.CreateDbContextAsync(ct);
+        var rows = await context.Configs
+            .AsNoTracking()
+            .Where(c => c.ChatId != 0)
+            .Select(c => new
+            {
+                c.ChatId,
+                HasWelcome = c.WelcomeConfig != null,
+                HasServiceMessageDeletion = c.ServiceMessageDeletionConfig != null,
+                HasBanCelebration = c.BanCelebrationConfig != null
+            })
+            .ToListAsync(ct);
+
+        return rows.ToDictionary(
+            r => r.ChatId,
+            r => new ChatConfigPresenceFlags(r.HasWelcome, r.HasServiceMessageDeletion, r.HasBanCelebration));
+    }
+
     public async Task SaveInviteLinkAsync(long chatId, string inviteLink, CancellationToken cancellationToken = default)
     {
         await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
@@ -174,31 +194,28 @@ public class ConfigRepository(
         }
     }
 
+    // Merge contract: when the chat row exists, every non-nullable scalar field on the chat
+    // row wins outright (a chat-explicit `false` or `0` is an *override*, not "no opinion").
+    // Strings fall back to the global only when the chat field is empty, since the UI uses
+    // empty-string to express "inherit." Nullable refs fall back when the chat field is null.
+    // Non-nullable nested refs (JoinSecurity, TrustedBypass) wholesale-replace.
     internal static WelcomeConfig? MergeWelcome(WelcomeConfig? global, WelcomeConfig? chat)
     {
         if (chat is null) return global;
         if (global is null) return chat;
 
-        var defaults = new WelcomeConfig();
         return new WelcomeConfig
         {
-            Enabled = chat.Enabled != defaults.Enabled ? chat.Enabled : global.Enabled,
-            Mode = chat.Mode != defaults.Mode ? chat.Mode : global.Mode,
-            TimeoutSeconds = chat.TimeoutSeconds != defaults.TimeoutSeconds ? chat.TimeoutSeconds : global.TimeoutSeconds,
-            MaxKicksBeforeBan = chat.MaxKicksBeforeBan != defaults.MaxKicksBeforeBan ? chat.MaxKicksBeforeBan : global.MaxKicksBeforeBan,
+            Enabled = chat.Enabled,
+            Mode = chat.Mode,
+            TimeoutSeconds = chat.TimeoutSeconds,
+            MaxKicksBeforeBan = chat.MaxKicksBeforeBan,
             MainWelcomeMessage = !string.IsNullOrEmpty(chat.MainWelcomeMessage) ? chat.MainWelcomeMessage : global.MainWelcomeMessage,
             DmChatTeaserMessage = !string.IsNullOrEmpty(chat.DmChatTeaserMessage) ? chat.DmChatTeaserMessage : global.DmChatTeaserMessage,
             AcceptButtonText = !string.IsNullOrEmpty(chat.AcceptButtonText) ? chat.AcceptButtonText : global.AcceptButtonText,
             DenyButtonText = !string.IsNullOrEmpty(chat.DenyButtonText) ? chat.DenyButtonText : global.DenyButtonText,
             DmButtonText = !string.IsNullOrEmpty(chat.DmButtonText) ? chat.DmButtonText : global.DmButtonText,
             ExamConfig = chat.ExamConfig ?? global.ExamConfig,
-            // Wholesale replacement (not field-by-field merge): JoinSecurity and TrustedBypass
-            // are non-nullable with `= new()` initializers, so they are always non-null on both
-            // sides. Assigning chat's value unconditionally matches the legacy
-            // ConfigService.MergeConfigs<T> reflection-based behavior, which would also
-            // wholesale-replace these nested objects because the serialized JSON always contains
-            // them. Future callers should be aware that a chat row with all-default nested
-            // config will silently override the global's nested settings.
             JoinSecurity = chat.JoinSecurity,
             TrustedBypass = chat.TrustedBypass
         };
@@ -291,7 +308,6 @@ public class ConfigRepository(
         if (chat is null) return global;
         if (global is null) return chat;
 
-        var defaults = new LogConfig();
         // Merge per-namespace overrides: start with global, layer chat on top.
         var mergedOverrides = new Dictionary<string, Microsoft.Extensions.Logging.LogLevel>(global.Overrides);
         foreach (var kv in chat.Overrides)
@@ -301,7 +317,7 @@ public class ConfigRepository(
 
         return new LogConfig
         {
-            DefaultLevel = chat.DefaultLevel != defaults.DefaultLevel ? chat.DefaultLevel : global.DefaultLevel,
+            DefaultLevel = chat.DefaultLevel,
             Overrides = mergedOverrides,
             LastModified = chat.LastModified > global.LastModified ? chat.LastModified : global.LastModified
         };
@@ -394,15 +410,14 @@ public class ConfigRepository(
         if (chat is null) return global;
         if (global is null) return chat;
 
-        var defaults = new BotProtectionConfig();
         return new BotProtectionConfig
         {
-            Enabled = chat.Enabled != defaults.Enabled ? chat.Enabled : global.Enabled,
-            AutoBanBots = chat.AutoBanBots != defaults.AutoBanBots ? chat.AutoBanBots : global.AutoBanBots,
-            AllowAdminInvitedBots = chat.AllowAdminInvitedBots != defaults.AllowAdminInvitedBots ? chat.AllowAdminInvitedBots : global.AllowAdminInvitedBots,
+            Enabled = chat.Enabled,
+            AutoBanBots = chat.AutoBanBots,
+            AllowAdminInvitedBots = chat.AllowAdminInvitedBots,
             // List override: chat list (if any) wins; otherwise inherit global's list.
             WhitelistedBots = chat.WhitelistedBots is { Count: > 0 } ? chat.WhitelistedBots : global.WhitelistedBots,
-            LogBotEvents = chat.LogBotEvents != defaults.LogBotEvents ? chat.LogBotEvents : global.LogBotEvents
+            LogBotEvents = chat.LogBotEvents
         };
     }
 
@@ -493,10 +508,9 @@ public class ConfigRepository(
         if (chat is null) return global;
         if (global is null) return chat;
 
-        var defaults = new TelegramBotConfig();
         return new TelegramBotConfig
         {
-            BotEnabled = chat.BotEnabled != defaults.BotEnabled ? chat.BotEnabled : global.BotEnabled
+            BotEnabled = chat.BotEnabled
         };
     }
 
@@ -587,15 +601,14 @@ public class ConfigRepository(
         if (chat is null) return global;
         if (global is null) return chat;
 
-        var defaults = new ServiceMessageDeletionConfig();
         return new ServiceMessageDeletionConfig
         {
-            DeleteJoinMessages = chat.DeleteJoinMessages != defaults.DeleteJoinMessages ? chat.DeleteJoinMessages : global.DeleteJoinMessages,
-            DeleteLeaveMessages = chat.DeleteLeaveMessages != defaults.DeleteLeaveMessages ? chat.DeleteLeaveMessages : global.DeleteLeaveMessages,
-            DeletePhotoChanges = chat.DeletePhotoChanges != defaults.DeletePhotoChanges ? chat.DeletePhotoChanges : global.DeletePhotoChanges,
-            DeleteTitleChanges = chat.DeleteTitleChanges != defaults.DeleteTitleChanges ? chat.DeleteTitleChanges : global.DeleteTitleChanges,
-            DeletePinNotifications = chat.DeletePinNotifications != defaults.DeletePinNotifications ? chat.DeletePinNotifications : global.DeletePinNotifications,
-            DeleteChatCreationMessages = chat.DeleteChatCreationMessages != defaults.DeleteChatCreationMessages ? chat.DeleteChatCreationMessages : global.DeleteChatCreationMessages
+            DeleteJoinMessages = chat.DeleteJoinMessages,
+            DeleteLeaveMessages = chat.DeleteLeaveMessages,
+            DeletePhotoChanges = chat.DeletePhotoChanges,
+            DeleteTitleChanges = chat.DeleteTitleChanges,
+            DeletePinNotifications = chat.DeletePinNotifications,
+            DeleteChatCreationMessages = chat.DeleteChatCreationMessages
         };
     }
 
@@ -686,13 +699,12 @@ public class ConfigRepository(
         if (chat is null) return global;
         if (global is null) return chat;
 
-        var defaults = new BanCelebrationConfig();
         return new BanCelebrationConfig
         {
-            Enabled = chat.Enabled != defaults.Enabled ? chat.Enabled : global.Enabled,
-            TriggerOnAutoBan = chat.TriggerOnAutoBan != defaults.TriggerOnAutoBan ? chat.TriggerOnAutoBan : global.TriggerOnAutoBan,
-            TriggerOnManualBan = chat.TriggerOnManualBan != defaults.TriggerOnManualBan ? chat.TriggerOnManualBan : global.TriggerOnManualBan,
-            SendToBannedUser = chat.SendToBannedUser != defaults.SendToBannedUser ? chat.SendToBannedUser : global.SendToBannedUser
+            Enabled = chat.Enabled,
+            TriggerOnAutoBan = chat.TriggerOnAutoBan,
+            TriggerOnManualBan = chat.TriggerOnManualBan,
+            SendToBannedUser = chat.SendToBannedUser
         };
     }
 
@@ -788,11 +800,10 @@ public class ConfigRepository(
         if (chat is null) return global;
         if (global is null) return chat;
 
-        var defaults = new WarningSystemConfig();
         return new WarningSystemConfig
         {
-            AutoBanEnabled = chat.AutoBanEnabled != defaults.AutoBanEnabled ? chat.AutoBanEnabled : global.AutoBanEnabled,
-            AutoBanThreshold = chat.AutoBanThreshold != defaults.AutoBanThreshold ? chat.AutoBanThreshold : global.AutoBanThreshold,
+            AutoBanEnabled = chat.AutoBanEnabled,
+            AutoBanThreshold = chat.AutoBanThreshold,
             AutoBanReason = !string.IsNullOrEmpty(chat.AutoBanReason) ? chat.AutoBanReason : global.AutoBanReason
         };
     }
@@ -889,12 +900,11 @@ public class ConfigRepository(
         if (chat is null) return global;
         if (global is null) return chat;
 
-        var defaults = new InviteCommandConfig();
         return new InviteCommandConfig
         {
-            Enabled = chat.Enabled != defaults.Enabled ? chat.Enabled : global.Enabled,
-            DeleteCommandMessage = chat.DeleteCommandMessage != defaults.DeleteCommandMessage ? chat.DeleteCommandMessage : global.DeleteCommandMessage,
-            DeleteResponseAfterSeconds = chat.DeleteResponseAfterSeconds != defaults.DeleteResponseAfterSeconds ? chat.DeleteResponseAfterSeconds : global.DeleteResponseAfterSeconds
+            Enabled = chat.Enabled,
+            DeleteCommandMessage = chat.DeleteCommandMessage,
+            DeleteResponseAfterSeconds = chat.DeleteResponseAfterSeconds
         };
     }
 
