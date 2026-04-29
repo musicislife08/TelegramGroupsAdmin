@@ -31,7 +31,7 @@ public class BotGeneralSettingsTestContext : BunitContext
         TelegramBotService = Substitute.For<ITelegramBotService>();
 
         // Default config returns
-        ConfigService.GetTelegramBotAsync(Arg.Any<long>())
+        ConfigService.GetTelegramBotAsync()
             .Returns(TelegramBotConfig.Default);
         ConfigService.GetEffectiveBotProtectionAsync(Arg.Any<long>())
             .Returns(BotProtectionConfig.Default);

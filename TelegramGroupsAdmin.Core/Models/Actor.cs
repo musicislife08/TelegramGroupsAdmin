@@ -57,6 +57,7 @@ public record Actor
     public static readonly Actor Bootstrap = FromSystem(SystemActorIds.Bootstrap);
     public static readonly Actor ProfileDiffDetection = FromSystem(SystemActorIds.ProfileDiffDetection);
     public static readonly Actor WelcomeBypass = FromSystem(SystemActorIds.WelcomeBypass);
+    public static readonly Actor BotChatService = FromSystem(SystemActorIds.BotChatService);
 
     /// <summary>
     /// Create actor from web user
@@ -117,6 +118,7 @@ public record Actor
             SystemActorIds.Bootstrap => "CLI Bootstrap",
             SystemActorIds.ProfileDiffDetection => "Profile Change Detection",
             SystemActorIds.WelcomeBypass => "Welcome Bypass",
+            SystemActorIds.BotChatService => "Bot Chat Service",
             _ => systemIdentifier
         };
 

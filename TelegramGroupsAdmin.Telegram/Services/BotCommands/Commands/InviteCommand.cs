@@ -5,7 +5,9 @@ using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Models;
 using TelegramGroupsAdmin.Configuration.Services;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
+using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 
@@ -72,7 +74,7 @@ public class InviteCommand : IBotCommand
         }
 
         // Get cached invite link (or fetch from Telegram if not cached)
-        var inviteLink = await chatService.GetInviteLinkAsync(chatId, cancellationToken);
+        var inviteLink = await chatService.GetInviteLinkAsync(ChatIdentity.From(message.Chat), cancellationToken);
 
         if (string.IsNullOrEmpty(inviteLink))
         {

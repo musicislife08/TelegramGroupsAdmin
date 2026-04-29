@@ -173,8 +173,8 @@ public class ConfigRepositoryIntegrationTests
     {
         var telegramBot = new TelegramBotConfig { BotEnabled = true };
 
-        await _repo!.SaveTelegramBotAsync(GlobalChat, telegramBot);
-        var retrieved = await _repo.GetTelegramBotAsync(GlobalChat.Id);
+        await _repo!.SaveTelegramBotAsync(telegramBot);
+        var retrieved = await _repo.GetTelegramBotAsync();
 
         Assert.That(retrieved, Is.Not.Null);
         Assert.That(retrieved!.BotEnabled, Is.True);
@@ -341,7 +341,7 @@ public class ConfigRepositoryIntegrationTests
     }
 
     [Test]
-    public async Task GetEffective_Welcome_BothPresent_ChatOverrides()
+    public async Task GetEffective_Welcome_BothPresent_ChatScalarsWin_StringsInheritWhenEmpty()
     {
         var global = new WelcomeConfig
         {
@@ -352,10 +352,10 @@ public class ConfigRepositoryIntegrationTests
         };
         var chat = new WelcomeConfig
         {
-            // Defaults: should fall through to global
+            // Scalars: chat row's value wins, even at type default
             Enabled = false,
             TimeoutSeconds = 0,
-            // Override
+            // Strings: empty inherits global; non-empty overrides
             MainWelcomeMessage = "chat-specific"
         };
 
@@ -367,10 +367,10 @@ public class ConfigRepositoryIntegrationTests
         Assert.That(effective, Is.Not.Null);
         Assert.Multiple(() =>
         {
-            Assert.That(effective!.Enabled, Is.True, "default fell through to global");
-            Assert.That(effective.MainWelcomeMessage, Is.EqualTo("chat-specific"), "chat override");
-            Assert.That(effective.TimeoutSeconds, Is.EqualTo(60));
-            Assert.That(effective.AcceptButtonText, Is.EqualTo("Accept"));
+            Assert.That(effective!.Enabled, Is.False, "chat scalar wins at type default");
+            Assert.That(effective.TimeoutSeconds, Is.EqualTo(0));
+            Assert.That(effective.MainWelcomeMessage, Is.EqualTo("chat-specific"), "non-empty chat string overrides");
+            Assert.That(effective.AcceptButtonText, Is.EqualTo("Accept"), "empty chat string inherits global");
         });
     }
 
@@ -401,7 +401,7 @@ public class ConfigRepositoryIntegrationTests
     }
 
     [Test]
-    public async Task GetEffective_WarningSystem_BothPresent_ChatOverrides()
+    public async Task GetEffective_WarningSystem_BothPresent_ChatScalarsWin_EmptyStringInherits()
     {
         var global = new WarningSystemConfig
         {
@@ -411,10 +411,10 @@ public class ConfigRepositoryIntegrationTests
         };
         var chat = new WarningSystemConfig
         {
-            // Defaults — fall through
+            // Scalars: chat row's value wins, even at type default
             AutoBanEnabled = false,
             AutoBanThreshold = 0,
-            // Override
+            // String: non-empty overrides
             AutoBanReason = "chat reason"
         };
 
@@ -426,8 +426,8 @@ public class ConfigRepositoryIntegrationTests
         Assert.That(effective, Is.Not.Null);
         Assert.Multiple(() =>
         {
-            Assert.That(effective!.AutoBanEnabled, Is.True);
-            Assert.That(effective.AutoBanThreshold, Is.EqualTo(3));
+            Assert.That(effective!.AutoBanEnabled, Is.False, "chat scalar wins at type default");
+            Assert.That(effective.AutoBanThreshold, Is.EqualTo(0));
             Assert.That(effective.AutoBanReason, Is.EqualTo("chat reason"));
         });
     }

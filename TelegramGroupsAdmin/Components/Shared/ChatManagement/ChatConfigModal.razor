@@ -8,7 +8,6 @@
 @inject ITelegramUserMappingRepository TelegramMappingsRepository
 @inject IUserManagementService UserManagementService
 @inject TelegramGroupsAdmin.Configuration.Services.IConfigService ConfigService
-@inject TelegramGroupsAdmin.Configuration.Repositories.IConfigRepository ConfigRepository
 
 <MudDialog>
     <DialogContent>
@@ -681,7 +680,7 @@
     {
         try
         {
-            _cachedInviteLink = await ConfigRepository.GetInviteLinkAsync(ChatInfo.Record.Identity.Id);
+            _cachedInviteLink = await ConfigService.GetInviteLinkAsync(ChatInfo.Record.Identity.Id);
         }
         catch (Exception ex)
         {
@@ -694,7 +693,7 @@
         _clearingLink = true;
         try
         {
-            await ConfigRepository.ClearInviteLinkAsync(ChatInfo.Record.Identity.Id);
+            await ConfigService.ClearInviteLinkAsync(ChatInfo.Record.Identity, WebUser!.ToActor());
             _cachedInviteLink = null;
             Snackbar.Add(
                 "Cleared cached invite link for this chat. The next health check will fetch a fresh link from Telegram.",

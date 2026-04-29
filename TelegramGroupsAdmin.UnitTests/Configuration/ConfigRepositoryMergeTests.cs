@@ -252,39 +252,6 @@ public class ConfigRepositoryMergeTests
     }
 
     // ============================================================================
-    // TelegramBot
-    // ============================================================================
-
-    [Test]
-    public void MergeTelegramBot_ChatNull_ReturnsGlobal()
-    {
-        var global = new TelegramBotConfig { BotEnabled = true };
-        Assert.That(ConfigRepository.MergeTelegramBot(global, null), Is.SameAs(global));
-    }
-
-    [Test]
-    public void MergeTelegramBot_GlobalNull_ReturnsChat()
-    {
-        var chat = new TelegramBotConfig { BotEnabled = true };
-        Assert.That(ConfigRepository.MergeTelegramBot(null, chat), Is.SameAs(chat));
-    }
-
-    [Test]
-    public void MergeTelegramBot_BothNull_ReturnsNull()
-    {
-        Assert.That(ConfigRepository.MergeTelegramBot(null, null), Is.Null);
-    }
-
-    [Test]
-    public void MergeTelegramBot_ChatRowOverridesScalar_EvenAtTypeDefault()
-    {
-        var global = new TelegramBotConfig { BotEnabled = true };
-        var chat = new TelegramBotConfig { BotEnabled = false }; // explicitly disable
-        var merged = ConfigRepository.MergeTelegramBot(global, chat)!;
-        Assert.That(merged.BotEnabled, Is.False, "chat scalar wins even at type default");
-    }
-
-    // ============================================================================
     // ServiceMessageDeletion
     // ============================================================================
 

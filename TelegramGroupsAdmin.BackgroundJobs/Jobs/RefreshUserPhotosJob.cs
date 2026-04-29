@@ -78,7 +78,7 @@ public class RefreshUserPhotosJob : IJob
 
                 // Check if bot is enabled before queueing work
                 var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
-                var botConfig = await configService.GetTelegramBotAsync(0)
+                var botConfig = await configService.GetTelegramBotAsync()
                                 ?? TelegramBotConfig.Default;
 
                 if (!botConfig.BotEnabled)

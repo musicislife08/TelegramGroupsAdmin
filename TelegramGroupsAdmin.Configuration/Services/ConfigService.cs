@@ -114,33 +114,28 @@ public class ConfigService(
     }
 
     // ============================================================================
-    // TelegramBot
+    // TelegramBot (global-only — bot is one Telegram connection per token, no chat scope)
     // ============================================================================
 
-    public ValueTask<TelegramBotConfig?> GetTelegramBotAsync(long chatId, CancellationToken ct = default)
-        => cache.GetOrCreateAsync($"cfg_telegram_bot_{chatId}",
-            async factoryCt => await repository.GetTelegramBotAsync(chatId, factoryCt),
+    public ValueTask<TelegramBotConfig?> GetTelegramBotAsync(CancellationToken ct = default)
+        => cache.GetOrCreateAsync("cfg_telegram_bot",
+            async factoryCt => await repository.GetTelegramBotAsync(factoryCt),
             CacheOptions, cancellationToken: ct);
 
-    public ValueTask<TelegramBotConfig?> GetEffectiveTelegramBotAsync(long chatId, CancellationToken ct = default)
-        => cache.GetOrCreateAsync($"cfg_effective_telegram_bot_{chatId}",
-            async factoryCt => await repository.GetEffectiveTelegramBotAsync(chatId, factoryCt),
-            CacheOptions, tags: ["effective_telegram_bot"], cancellationToken: ct);
-
-    public async Task SaveTelegramBotAsync(ChatIdentity chat, TelegramBotConfig config, Actor initiator, CancellationToken ct = default)
+    public async Task SaveTelegramBotAsync(TelegramBotConfig config, Actor initiator, CancellationToken ct = default)
     {
-        await repository.SaveTelegramBotAsync(chat, config, ct);
-        await EmitAuditAsync("TelegramBot", chat, initiator, ct);
-        await InvalidateAsync("telegram_bot", chat.Id, ct);
-        logger.LogInformation("TelegramBot config saved for {Chat} by {Actor}", chat.DisplayName, initiator.DisplayName);
+        await repository.SaveTelegramBotAsync(config, ct);
+        await auditService.LogEventAsync(AuditEventType.ConfigurationChanged, initiator, target: null, value: "TelegramBot", ct);
+        await cache.RemoveAsync("cfg_telegram_bot", ct);
+        logger.LogInformation("TelegramBot config saved by {Actor}", initiator.DisplayName);
     }
 
-    public async Task DeleteTelegramBotAsync(ChatIdentity chat, Actor initiator, CancellationToken ct = default)
+    public async Task DeleteTelegramBotAsync(Actor initiator, CancellationToken ct = default)
     {
-        await repository.DeleteTelegramBotAsync(chat, ct);
-        await EmitAuditAsync("TelegramBot (deleted)", chat, initiator, ct);
-        await InvalidateAsync("telegram_bot", chat.Id, ct);
-        logger.LogInformation("TelegramBot config deleted for {Chat} by {Actor}", chat.DisplayName, initiator.DisplayName);
+        await repository.DeleteTelegramBotAsync(ct);
+        await auditService.LogEventAsync(AuditEventType.ConfigurationChanged, initiator, target: null, value: "TelegramBot (deleted)", ct);
+        await cache.RemoveAsync("cfg_telegram_bot", ct);
+        logger.LogInformation("TelegramBot config deleted by {Actor}", initiator.DisplayName);
     }
 
     // ============================================================================
@@ -330,6 +325,45 @@ public class ConfigService(
 
     public Task<HashSet<string>> GetCriticalCheckNamesAsync(long chatId, CancellationToken cancellationToken = default)
         => contentDetectionRepository.GetCriticalCheckNamesAsync(chatId, cancellationToken);
+
+    // ============================================================================
+    // Invite link (cached per-chat, audited on mutation)
+    // ============================================================================
+
+    public ValueTask<string?> GetInviteLinkAsync(long chatId, CancellationToken ct = default)
+        => cache.GetOrCreateAsync($"cfg_invite_link_{chatId}",
+            async factoryCt => await repository.GetInviteLinkAsync(chatId, factoryCt),
+            CacheOptions, tags: ["invite_link"], cancellationToken: ct);
+
+    public async Task SaveInviteLinkAsync(ChatIdentity chat, string inviteLink, Actor initiator, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(inviteLink);
+        await repository.SaveInviteLinkAsync(chat.Id, inviteLink, ct);
+        await EmitAuditAsync("InviteLink", chat, initiator, ct);
+        await cache.RemoveAsync($"cfg_invite_link_{chat.Id}", ct);
+        logger.LogInformation("InviteLink saved for {Chat} by {Actor}", chat.DisplayName, initiator.DisplayName);
+    }
+
+    public async Task ClearInviteLinkAsync(ChatIdentity chat, Actor initiator, CancellationToken ct = default)
+    {
+        await repository.ClearInviteLinkAsync(chat.Id, ct);
+        await EmitAuditAsync("InviteLink (cleared)", chat, initiator, ct);
+        await cache.RemoveAsync($"cfg_invite_link_{chat.Id}", ct);
+        logger.LogInformation("InviteLink cleared for {Chat} by {Actor}", chat.DisplayName, initiator.DisplayName);
+    }
+
+    public async Task ClearAllInviteLinksAsync(Actor initiator, CancellationToken ct = default)
+    {
+        await repository.ClearAllInviteLinksAsync(ct);
+        await auditService.LogEventAsync(
+            AuditEventType.ConfigurationChanged,
+            initiator,
+            target: null,
+            value: "InviteLink (all chats cleared)",
+            ct);
+        await cache.RemoveByTagAsync("invite_link", ct);
+        logger.LogInformation("All InviteLinks cleared by {Actor}", initiator.DisplayName);
+    }
 
     public async Task<ChatConfigPresenceMap> GetChatConfigPresenceAsync(CancellationToken ct = default)
     {

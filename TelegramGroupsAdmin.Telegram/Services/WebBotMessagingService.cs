@@ -66,7 +66,7 @@ public class WebBotMessagingService : IWebBotMessagingService
             // Check 2: Bot must be enabled globally
             using var scope = _scopeFactory.CreateScope();
             var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
-            var botConfig = await configService.GetTelegramBotAsync(0, cancellationToken);
+            var botConfig = await configService.GetTelegramBotAsync(cancellationToken);
 
             if (botConfig?.BotEnabled != true)
             {

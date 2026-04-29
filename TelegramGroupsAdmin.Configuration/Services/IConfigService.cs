@@ -25,8 +25,7 @@ public interface IConfigService
     ValueTask<BotProtectionConfig?> GetBotProtectionAsync(long chatId, CancellationToken ct = default);
     ValueTask<BotProtectionConfig?> GetEffectiveBotProtectionAsync(long chatId, CancellationToken ct = default);
 
-    ValueTask<TelegramBotConfig?> GetTelegramBotAsync(long chatId, CancellationToken ct = default);
-    ValueTask<TelegramBotConfig?> GetEffectiveTelegramBotAsync(long chatId, CancellationToken ct = default);
+    ValueTask<TelegramBotConfig?> GetTelegramBotAsync(CancellationToken ct = default);
 
     ValueTask<ServiceMessageDeletionConfig?> GetServiceMessageDeletionAsync(long chatId, CancellationToken ct = default);
     ValueTask<ServiceMessageDeletionConfig?> GetEffectiveServiceMessageDeletionAsync(long chatId, CancellationToken ct = default);
@@ -56,8 +55,8 @@ public interface IConfigService
     Task SaveBotProtectionAsync(ChatIdentity chat, BotProtectionConfig config, Actor initiator, CancellationToken ct = default);
     Task DeleteBotProtectionAsync(ChatIdentity chat, Actor initiator, CancellationToken ct = default);
 
-    Task SaveTelegramBotAsync(ChatIdentity chat, TelegramBotConfig config, Actor initiator, CancellationToken ct = default);
-    Task DeleteTelegramBotAsync(ChatIdentity chat, Actor initiator, CancellationToken ct = default);
+    Task SaveTelegramBotAsync(TelegramBotConfig config, Actor initiator, CancellationToken ct = default);
+    Task DeleteTelegramBotAsync(Actor initiator, CancellationToken ct = default);
 
     Task SaveServiceMessageDeletionAsync(ChatIdentity chat, ServiceMessageDeletionConfig config, Actor initiator, CancellationToken ct = default);
     Task DeleteServiceMessageDeletionAsync(ChatIdentity chat, Actor initiator, CancellationToken ct = default);
@@ -80,6 +79,12 @@ public interface IConfigService
     // --- Bot token ---
     ValueTask<string?> GetBotTokenAsync(CancellationToken ct = default);
     Task SaveBotTokenAsync(string botToken, Actor initiator, CancellationToken ct = default);
+
+    // --- Invite link (per-chat cached value, audited on mutation) ---
+    ValueTask<string?> GetInviteLinkAsync(long chatId, CancellationToken ct = default);
+    Task SaveInviteLinkAsync(ChatIdentity chat, string inviteLink, Actor initiator, CancellationToken ct = default);
+    Task ClearInviteLinkAsync(ChatIdentity chat, Actor initiator, CancellationToken ct = default);
+    Task ClearAllInviteLinksAsync(Actor initiator, CancellationToken ct = default);
 
     // --- ContentDetection helpers (delegate to IContentDetectionConfigRepository, retained) ---
     Task<IEnumerable<ChatConfigInfo>> GetAllContentDetectionConfigsAsync(CancellationToken cancellationToken = default);

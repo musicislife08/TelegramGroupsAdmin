@@ -800,7 +800,7 @@ public class ExamFlowService : IExamFlowService
         bool isManualApproval,
         CancellationToken cancellationToken)
     {
-        var chatDeepLink = await _chatService.GetInviteLinkAsync(chat.Id, cancellationToken);
+        var chatDeepLink = await _chatService.GetInviteLinkAsync(chat, cancellationToken);
 
         InlineKeyboardMarkup? keyboard = null;
         if (chatDeepLink != null)

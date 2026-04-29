@@ -77,7 +77,7 @@ public class ChatHealthCheckJob : IJob
         try
         {
             // Check if bot is enabled before running health checks
-            var botConfig = await _configService.GetTelegramBotAsync(0)
+            var botConfig = await _configService.GetTelegramBotAsync()
                            ?? TelegramBotConfig.Default;
 
             if (!botConfig.BotEnabled)

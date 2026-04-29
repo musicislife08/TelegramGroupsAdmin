@@ -422,10 +422,10 @@ public class ConfigRepository(
     }
 
     // ============================================================================
-    // TelegramBot
+    // TelegramBot (global-only — bot is one Telegram connection per token, no chat scope)
     // ============================================================================
 
-    public async Task SaveTelegramBotAsync(ChatIdentity chat, TelegramBotConfig config, CancellationToken ct = default)
+    public async Task SaveTelegramBotAsync(TelegramBotConfig config, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(config);
 
@@ -434,62 +434,44 @@ public class ConfigRepository(
         var dto = config.ToData();
         var json = JsonSerializer.Serialize(dto, JsonOptions);
 
-        var record = await context.Configs.FirstOrDefaultAsync(c => c.ChatId == chat.Id, ct);
+        var record = await context.Configs.FirstOrDefaultAsync(c => c.ChatId == 0, ct);
         if (record is null)
         {
-            record = new ConfigRecordDto { ChatId = chat.Id };
+            record = new ConfigRecordDto { ChatId = 0 };
             await context.Configs.AddAsync(record, ct);
         }
         record.TelegramBotConfig = json;
         record.UpdatedAt = DateTimeOffset.UtcNow;
 
         await context.SaveChangesAsync(ct);
-        logger.LogInformation("Saved TelegramBot config for {Chat}", chat.DisplayName);
+        logger.LogInformation("Saved TelegramBot config (global)");
     }
 
-    public async ValueTask<TelegramBotConfig?> GetTelegramBotAsync(long chatId, CancellationToken ct = default)
+    public async ValueTask<TelegramBotConfig?> GetTelegramBotAsync(CancellationToken ct = default)
     {
         await using var context = await contextFactory.CreateDbContextAsync(ct);
         var json = await context.Configs
             .AsNoTracking()
-            .Where(c => c.ChatId == chatId)
+            .Where(c => c.ChatId == 0)
             .Select(c => c.TelegramBotConfig)
             .FirstOrDefaultAsync(ct);
 
-        return DeserializeTelegramBot(json, scope: $"chat {chatId}");
+        return DeserializeTelegramBot(json);
     }
 
-    public async Task DeleteTelegramBotAsync(ChatIdentity chat, CancellationToken ct = default)
+    public async Task DeleteTelegramBotAsync(CancellationToken ct = default)
     {
         await using var context = await contextFactory.CreateDbContextAsync(ct);
-        var record = await context.Configs.FirstOrDefaultAsync(c => c.ChatId == chat.Id, ct);
+        var record = await context.Configs.FirstOrDefaultAsync(c => c.ChatId == 0, ct);
         if (record is null) return;
 
         record.TelegramBotConfig = null;
         record.UpdatedAt = DateTimeOffset.UtcNow;
         await context.SaveChangesAsync(ct);
-        logger.LogInformation("Deleted TelegramBot config for {Chat}", chat.DisplayName);
+        logger.LogInformation("Deleted TelegramBot config (global)");
     }
 
-    public async ValueTask<TelegramBotConfig?> GetEffectiveTelegramBotAsync(long chatId, CancellationToken ct = default)
-    {
-        await using var context = await contextFactory.CreateDbContextAsync(ct);
-        var rows = await context.Configs
-            .AsNoTracking()
-            .Where(c => c.ChatId == 0 || c.ChatId == chatId)
-            .Select(c => new { c.ChatId, c.TelegramBotConfig })
-            .ToListAsync(ct);
-
-        var globalJson = rows.FirstOrDefault(r => r.ChatId == 0)?.TelegramBotConfig;
-        var chatJson = chatId == 0 ? null : rows.FirstOrDefault(r => r.ChatId == chatId)?.TelegramBotConfig;
-
-        var globalModel = DeserializeTelegramBot(globalJson, scope: "global");
-        var chatModel = DeserializeTelegramBot(chatJson, scope: $"chat {chatId}");
-
-        return MergeTelegramBot(globalModel, chatModel);
-    }
-
-    private TelegramBotConfig? DeserializeTelegramBot(string? json, string scope)
+    private TelegramBotConfig? DeserializeTelegramBot(string? json)
     {
         if (string.IsNullOrEmpty(json)) return null;
         try
@@ -498,20 +480,9 @@ public class ConfigRepository(
         }
         catch (JsonException ex)
         {
-            logger.LogError(ex, "Failed to deserialize TelegramBot config for {Scope}", scope);
+            logger.LogError(ex, "Failed to deserialize TelegramBot config (global)");
             return null;
         }
-    }
-
-    internal static TelegramBotConfig? MergeTelegramBot(TelegramBotConfig? global, TelegramBotConfig? chat)
-    {
-        if (chat is null) return global;
-        if (global is null) return chat;
-
-        return new TelegramBotConfig
-        {
-            BotEnabled = chat.BotEnabled
-        };
     }
 
     // ============================================================================

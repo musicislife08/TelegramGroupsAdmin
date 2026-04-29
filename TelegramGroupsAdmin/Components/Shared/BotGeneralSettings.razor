@@ -1,11 +1,9 @@
 @using TelegramGroupsAdmin.Configuration
 @using TelegramGroupsAdmin.Configuration.Models
 @using TelegramGroupsAdmin.Core.Services
-@using TelegramGroupsAdmin.Configuration.Repositories
 @using TelegramGroupsAdmin.Telegram.Services
 @using TelegramGroupsAdmin.Configuration.Services
 @inject IConfigService ConfigService
-@inject IConfigRepository ConfigRepository
 @inject ITelegramBotService BotService
 @inject ISnackbar Snackbar
 
@@ -265,7 +263,7 @@
         try
         {
             // Load global bot config (chat_id = 0 for global config)
-            _botConfig = await ConfigService.GetTelegramBotAsync(0)
+            _botConfig = await ConfigService.GetTelegramBotAsync()
                          ?? TelegramBotConfig.Default;
 
             // Load bot token (encrypted)
@@ -303,7 +301,7 @@
             }
 
             // Save as global config (chat_id = 0)
-            await ConfigService.SaveTelegramBotAsync(ChatIdentity.FromId(0), _botConfig, actor);
+            await ConfigService.SaveTelegramBotAsync(_botConfig, actor);
 
             // Notify bot service to check config and start/stop immediately
             BotService.NotifyConfigChange();
@@ -383,7 +381,7 @@
         _clearingLinks = true;
         try
         {
-            await ConfigRepository.ClearAllInviteLinksAsync();
+            await ConfigService.ClearAllInviteLinksAsync(WebUser!.ToActor());
 
             Snackbar.Add(
                 "Cleared all cached invite links. The next health check (within 1 minute) will fetch fresh links from Telegram.",

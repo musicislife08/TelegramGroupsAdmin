@@ -90,8 +90,7 @@ public class TelegramBotPollingHost(
         using (var scope = scopeFactory.CreateScope())
         {
             var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
-            // Load global bot config (chat_id = 0 for global config)
-            botConfig = await configService.GetTelegramBotAsync(0, stoppingToken)
+            botConfig = await configService.GetTelegramBotAsync(stoppingToken)
                        ?? TelegramBotConfig.Default;
         }
 

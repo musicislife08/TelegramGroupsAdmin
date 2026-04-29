@@ -411,7 +411,7 @@ public class ChatHealthRefreshOrchestrator(
         {
             // Refresh from Telegram API to validate and update if needed
             // This fetches the current primary link and only writes to DB if it changed
-            var inviteLink = await chatService.RefreshInviteLinkAsync(chat.Id, cancellationToken);
+            var inviteLink = await chatService.RefreshInviteLinkAsync(ChatIdentity.From(chat), cancellationToken);
 
             if (inviteLink != null)
             {

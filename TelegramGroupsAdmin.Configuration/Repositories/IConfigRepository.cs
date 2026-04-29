@@ -20,8 +20,7 @@ public interface IConfigRepository
     ValueTask<BotProtectionConfig?> GetBotProtectionAsync(long chatId, CancellationToken ct = default);
     ValueTask<BotProtectionConfig?> GetEffectiveBotProtectionAsync(long chatId, CancellationToken ct = default);
 
-    ValueTask<TelegramBotConfig?> GetTelegramBotAsync(long chatId, CancellationToken ct = default);
-    ValueTask<TelegramBotConfig?> GetEffectiveTelegramBotAsync(long chatId, CancellationToken ct = default);
+    ValueTask<TelegramBotConfig?> GetTelegramBotAsync(CancellationToken ct = default);
 
     ValueTask<ServiceMessageDeletionConfig?> GetServiceMessageDeletionAsync(long chatId, CancellationToken ct = default);
     ValueTask<ServiceMessageDeletionConfig?> GetEffectiveServiceMessageDeletionAsync(long chatId, CancellationToken ct = default);
@@ -57,8 +56,8 @@ public interface IConfigRepository
     Task SaveBotProtectionAsync(ChatIdentity chat, BotProtectionConfig config, CancellationToken ct = default);
     Task DeleteBotProtectionAsync(ChatIdentity chat, CancellationToken ct = default);
 
-    Task SaveTelegramBotAsync(ChatIdentity chat, TelegramBotConfig config, CancellationToken ct = default);
-    Task DeleteTelegramBotAsync(ChatIdentity chat, CancellationToken ct = default);
+    Task SaveTelegramBotAsync(TelegramBotConfig config, CancellationToken ct = default);
+    Task DeleteTelegramBotAsync(CancellationToken ct = default);
 
     Task SaveServiceMessageDeletionAsync(ChatIdentity chat, ServiceMessageDeletionConfig config, CancellationToken ct = default);
     Task DeleteServiceMessageDeletionAsync(ChatIdentity chat, CancellationToken ct = default);

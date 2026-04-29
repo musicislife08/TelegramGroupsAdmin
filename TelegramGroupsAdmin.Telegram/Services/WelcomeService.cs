@@ -1268,7 +1268,7 @@ public class WelcomeService(
             // For private chats (no username), try to get invite link
             if (chatDeepLink == null)
             {
-                chatDeepLink = await chatService.GetInviteLinkAsync(groupChat.Id, cancellationToken);
+                chatDeepLink = await chatService.GetInviteLinkAsync(ChatIdentity.From(groupChat), cancellationToken);
 
                 if (chatDeepLink != null)
                 {
