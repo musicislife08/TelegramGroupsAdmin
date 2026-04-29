@@ -1,13 +1,12 @@
 @page "/chats"
 @using TelegramGroupsAdmin.Components.Shared.ChatManagement
-@using TelegramGroupsAdmin.ContentDetection.Repositories
 @using TelegramGroupsAdmin.Telegram.Services
 @using TelegramGroupsAdmin.Telegram.Services.Bot
 @using TelegramGroupsAdmin.Core.Models
 @inject ITelegramBotService BotService
 @inject IChatHealthCache ChatHealthCache
 @inject IManagedChatsRepository ManagedChatsRepository
-@inject IContentDetectionConfigRepository SpamConfigRepository
+@inject TelegramGroupsAdmin.Configuration.Services.IConfigService ConfigService
 @inject TelegramGroupsAdmin.Configuration.Repositories.IConfigRepository ConfigRepository
 @inject ISnackbar Snackbar
 @attribute [Authorize]
@@ -140,7 +139,7 @@
                 includeDeleted: true);
 
             // Check which chats have custom spam configs
-            var allConfigs = await SpamConfigRepository.GetAllChatConfigsAsync();
+            var allConfigs = await ConfigService.GetAllContentDetectionConfigsAsync();
             var customConfigChatIds = allConfigs
                 .Where(c => c.ChatId != 0)
                 .Select(c => c.ChatId)
