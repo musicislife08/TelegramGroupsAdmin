@@ -7,7 +7,7 @@ using TelegramGroupsAdmin.Configuration.Models;
 using TelegramGroupsAdmin.ContentDetection.Abstractions;
 using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Models;
-using TelegramGroupsAdmin.Configuration.Repositories;
+using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Services;
 using TelegramGroupsAdmin.Core.Extensions;
@@ -30,7 +30,7 @@ public class ImageContentCheckV2(
     IChatService chatService,
     IImageTextExtractionService imageTextExtractionService,
     IServiceProvider serviceProvider,
-    IContentDetectionConfigRepository configRepository,
+    IConfigService configService,
     IPhotoHashService photoHashService,
     IImageTrainingSamplesRepository imageTrainingSamplesRepository) : IContentCheckV2
 {
@@ -70,7 +70,7 @@ public class ImageContentCheckV2(
         try
         {
             // Load config
-            var config = await configRepository.GetEffectiveConfigAsync(req.Chat.Id, req.CancellationToken);
+            var config = await configService.GetEffectiveContentDetectionAsync(req.Chat.Id, req.CancellationToken);
             var imageConfig = config.ImageSpam;
 
             // Extract OCR text early so it's available for all return paths (for AI veto passthrough)

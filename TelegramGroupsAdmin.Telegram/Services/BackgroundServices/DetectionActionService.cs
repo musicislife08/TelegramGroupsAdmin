@@ -3,7 +3,6 @@ using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
-using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Models;
@@ -37,8 +36,8 @@ public class DetectionActionService(
         try
         {
             using var scope = serviceProvider.CreateScope();
-            var contentDetectionConfigRepository = scope.ServiceProvider.GetRequiredService<IContentDetectionConfigRepository>();
-            return await contentDetectionConfigRepository.GetEffectiveConfigAsync(chat.Id);
+            var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
+            return await configService.GetEffectiveContentDetectionAsync(chat.Id);
         }
         catch (Exception ex)
         {

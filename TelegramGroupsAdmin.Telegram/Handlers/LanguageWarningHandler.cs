@@ -3,8 +3,6 @@ using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Configuration;
-using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
-using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Extensions;
@@ -50,8 +48,7 @@ public class LanguageWarningHandler
 
             // Get configuration services
             var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
-            var contentDetectionConfigRepository = scope.ServiceProvider.GetRequiredService<IContentDetectionConfigRepository>();
-            var spamConfig = await contentDetectionConfigRepository.GetEffectiveConfigAsync(message.Chat.Id, cancellationToken);
+            var spamConfig = await configService.GetEffectiveContentDetectionAsync(message.Chat.Id, cancellationToken);
 
             // Check if language warnings are enabled
             if (!spamConfig.Translation.WarnNonEnglish)

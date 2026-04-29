@@ -1,7 +1,6 @@
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
-using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.ContentDetection.Services;
@@ -20,18 +19,18 @@ namespace TelegramGroupsAdmin.Telegram.Handlers;
 /// </summary>
 public class TranslationHandler : ITranslationHandler
 {
-    private readonly IContentDetectionConfigRepository _contentDetectionConfigRepository;
+    private readonly IConfigService _configService;
     private readonly IAITranslationService _translationService;
     private readonly ILanguageDetectionService _languageDetectionService;
     private readonly ILogger<TranslationHandler> _logger;
 
     public TranslationHandler(
-        IContentDetectionConfigRepository contentDetectionConfigRepository,
+        IConfigService configService,
         IAITranslationService translationService,
         ILanguageDetectionService languageDetectionService,
         ILogger<TranslationHandler> logger)
     {
-        _contentDetectionConfigRepository = contentDetectionConfigRepository;
+        _configService = configService;
         _translationService = translationService;
         _languageDetectionService = languageDetectionService;
         _logger = logger;
@@ -53,8 +52,8 @@ public class TranslationHandler : ITranslationHandler
             return null;
         }
 
-        // Load translation configuration via ContentDetection repository (effective config for chat)
-        var spamConfig = await _contentDetectionConfigRepository.GetEffectiveConfigAsync(chatId, cancellationToken);
+        // Load translation configuration via IConfigService (effective config for chat)
+        var spamConfig = await _configService.GetEffectiveContentDetectionAsync(chatId, cancellationToken);
 
         // Check if translation is enabled and message meets minimum length
         if (!spamConfig.Translation.Enabled ||

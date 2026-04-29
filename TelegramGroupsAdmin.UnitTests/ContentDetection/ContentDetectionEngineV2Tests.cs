@@ -5,6 +5,7 @@ using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Models;
 using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
 using TelegramGroupsAdmin.Configuration.Repositories;
+using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.ContentDetection.Abstractions;
 using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Metrics;
@@ -24,7 +25,7 @@ namespace TelegramGroupsAdmin.UnitTests.ContentDetection;
 public class ContentDetectionEngineV2Tests
 {
     private ILogger<ContentDetectionEngineV2> _logger = null!;
-    private IContentDetectionConfigRepository _configRepository = null!;
+    private IConfigService _configService = null!;
     private ISystemConfigRepository _systemConfigRepo = null!;
     private IPromptVersionRepository _promptVersionRepo = null!;
     private IUrlPreFilterService _preFilterService = null!;
@@ -37,7 +38,7 @@ public class ContentDetectionEngineV2Tests
     public void SetUp()
     {
         _logger = Substitute.For<ILogger<ContentDetectionEngineV2>>();
-        _configRepository = Substitute.For<IContentDetectionConfigRepository>();
+        _configService = Substitute.For<IConfigService>();
         _systemConfigRepo = Substitute.For<ISystemConfigRepository>();
         _promptVersionRepo = Substitute.For<IPromptVersionRepository>();
         _preFilterService = Substitute.For<IUrlPreFilterService>();
@@ -49,8 +50,8 @@ public class ContentDetectionEngineV2Tests
             .Returns(new HardBlockResult(false, null, null));
 
         // Default: return a permissive config with all checks disabled, so tests can opt-in selectively
-        _configRepository
-            .GetEffectiveConfigAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
+        _configService
+            .GetEffectiveContentDetectionAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(BuildPermissiveConfig());
 
         // Default: AI infrastructure is disabled
@@ -137,8 +138,8 @@ public class ContentDetectionEngineV2Tests
         var config = BuildPermissiveConfig();
         config.StopWords.Enabled = true;
 
-        _configRepository
-            .GetEffectiveConfigAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
+        _configService
+            .GetEffectiveContentDetectionAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(config);
 
         var engine = BuildEngine([check]);
@@ -171,8 +172,8 @@ public class ContentDetectionEngineV2Tests
         config.StopWords.Enabled = true;
         config.Bayes.Enabled = true;
 
-        _configRepository
-            .GetEffectiveConfigAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
+        _configService
+            .GetEffectiveContentDetectionAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(config);
 
         var engine = BuildEngine([stopWordsCheck, bayesCheck]);
@@ -199,8 +200,8 @@ public class ContentDetectionEngineV2Tests
         config.StopWords.Enabled = true;
         config.Bayes.Enabled = true;
 
-        _configRepository
-            .GetEffectiveConfigAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
+        _configService
+            .GetEffectiveContentDetectionAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(config);
 
         var engine = BuildEngine([scoringCheck, abstainedCheck]);
@@ -229,8 +230,8 @@ public class ContentDetectionEngineV2Tests
         config.StopWords.Enabled = true;
         config.Bayes.Enabled = true;
 
-        _configRepository
-            .GetEffectiveConfigAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
+        _configService
+            .GetEffectiveContentDetectionAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(config);
 
         var engine = BuildEngine([check1, check2]);
@@ -266,8 +267,8 @@ public class ContentDetectionEngineV2Tests
         config.StopWords.Enabled = true;
         config.AIVeto.Enabled = true;
 
-        _configRepository
-            .GetEffectiveConfigAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
+        _configService
+            .GetEffectiveContentDetectionAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(config);
 
         SetupEnabledAIInfrastructure();
@@ -306,8 +307,8 @@ public class ContentDetectionEngineV2Tests
         config.StopWords.Enabled = true;
         config.AIVeto.Enabled = true;
 
-        _configRepository
-            .GetEffectiveConfigAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
+        _configService
+            .GetEffectiveContentDetectionAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(config);
 
         SetupEnabledAIInfrastructure();
@@ -340,8 +341,8 @@ public class ContentDetectionEngineV2Tests
         config.StopWords.Enabled = true;
         config.AIVeto.Enabled = true;
 
-        _configRepository
-            .GetEffectiveConfigAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
+        _configService
+            .GetEffectiveContentDetectionAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(config);
 
         SetupEnabledAIInfrastructure();
@@ -375,8 +376,8 @@ public class ContentDetectionEngineV2Tests
         config.StopWords.Enabled = true;
         config.AIVeto.Enabled = true;
 
-        _configRepository
-            .GetEffectiveConfigAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
+        _configService
+            .GetEffectiveContentDetectionAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(config);
 
         SetupEnabledAIInfrastructure();
@@ -413,8 +414,8 @@ public class ContentDetectionEngineV2Tests
         config.StopWords.Enabled = true;
         config.AIVeto.Enabled = true;
 
-        _configRepository
-            .GetEffectiveConfigAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
+        _configService
+            .GetEffectiveContentDetectionAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(config);
 
         SetupEnabledAIInfrastructure();
@@ -442,8 +443,8 @@ public class ContentDetectionEngineV2Tests
         config.StopWords.Enabled = true;
         config.AIVeto.Enabled = true;
 
-        _configRepository
-            .GetEffectiveConfigAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
+        _configService
+            .GetEffectiveContentDetectionAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(config);
 
         // AI infrastructure disabled (connection.Enabled = false)
@@ -471,8 +472,8 @@ public class ContentDetectionEngineV2Tests
         config.StopWords.Enabled = true;
         config.AIVeto.Enabled = false;  // Per-chat veto disabled
 
-        _configRepository
-            .GetEffectiveConfigAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
+        _configService
+            .GetEffectiveContentDetectionAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(config);
 
         SetupEnabledAIInfrastructure();
@@ -498,8 +499,8 @@ public class ContentDetectionEngineV2Tests
         config.StopWords.Enabled = true;
         config.AIVeto.Enabled = true;
 
-        _configRepository
-            .GetEffectiveConfigAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
+        _configService
+            .GetEffectiveContentDetectionAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(config);
 
         SetupEnabledAIInfrastructure();
@@ -538,8 +539,8 @@ public class ContentDetectionEngineV2Tests
         var config = BuildPermissiveConfig();
         config.StopWords.Enabled = true;
 
-        _configRepository
-            .GetEffectiveConfigAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
+        _configService
+            .GetEffectiveContentDetectionAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(config);
 
         var engine = BuildEngine([check]);
@@ -562,8 +563,8 @@ public class ContentDetectionEngineV2Tests
         var config = BuildPermissiveConfig();
         config.StopWords.Enabled = true;
 
-        _configRepository
-            .GetEffectiveConfigAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
+        _configService
+            .GetEffectiveContentDetectionAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(config);
 
         var engine = BuildEngine([check]);
@@ -593,8 +594,8 @@ public class ContentDetectionEngineV2Tests
         var config = BuildPermissiveConfig();
         config.StopWords.Enabled = false;  // explicitly disabled
 
-        _configRepository
-            .GetEffectiveConfigAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
+        _configService
+            .GetEffectiveContentDetectionAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(config);
 
         var engine = BuildEngine([check]);
@@ -620,8 +621,8 @@ public class ContentDetectionEngineV2Tests
         config.StopWords.Enabled = true;
         config.Bayes.Enabled = false;
 
-        _configRepository
-            .GetEffectiveConfigAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
+        _configService
+            .GetEffectiveContentDetectionAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(config);
 
         var engine = BuildEngine([enabledCheck, disabledCheck]);
@@ -657,8 +658,8 @@ public class ContentDetectionEngineV2Tests
         var config = BuildPermissiveConfig();
         config.ThreatIntel.Enabled = true;
 
-        _configRepository
-            .GetEffectiveConfigAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
+        _configService
+            .GetEffectiveContentDetectionAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(config);
 
         var engine = BuildEngine([check]);
@@ -682,8 +683,8 @@ public class ContentDetectionEngineV2Tests
         var config = BuildPermissiveConfig();
         config.ThreatIntel.Enabled = true;
 
-        _configRepository
-            .GetEffectiveConfigAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
+        _configService
+            .GetEffectiveContentDetectionAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(config);
 
         var engine = BuildEngine([check]);
@@ -706,8 +707,8 @@ public class ContentDetectionEngineV2Tests
         var config = BuildPermissiveConfig();
         config.ImageSpam.Enabled = true;
 
-        _configRepository
-            .GetEffectiveConfigAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
+        _configService
+            .GetEffectiveContentDetectionAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(config);
 
         var engine = BuildEngine([check]);
@@ -736,8 +737,8 @@ public class ContentDetectionEngineV2Tests
         var config = BuildPermissiveConfig();
         config.VideoSpam.Enabled = true;
 
-        _configRepository
-            .GetEffectiveConfigAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
+        _configService
+            .GetEffectiveContentDetectionAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(config);
 
         var engine = BuildEngine([check]);
@@ -766,8 +767,8 @@ public class ContentDetectionEngineV2Tests
         var config = BuildPermissiveConfig();
         config.ChannelReply.Enabled = true;
 
-        _configRepository
-            .GetEffectiveConfigAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
+        _configService
+            .GetEffectiveContentDetectionAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(config);
 
         var engine = BuildEngine([check]);
@@ -791,8 +792,8 @@ public class ContentDetectionEngineV2Tests
         var config = BuildPermissiveConfig();
         config.UrlBlocklist.Enabled = true;
 
-        _configRepository
-            .GetEffectiveConfigAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
+        _configService
+            .GetEffectiveContentDetectionAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(config);
 
         var engine = BuildEngine([check]);
@@ -817,8 +818,8 @@ public class ContentDetectionEngineV2Tests
         config.Spacing.Enabled = true;
         config.Spacing.AlwaysRun = true;
 
-        _configRepository
-            .GetEffectiveConfigAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
+        _configService
+            .GetEffectiveContentDetectionAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(config);
 
         var engine = BuildEngine([check]);
@@ -849,8 +850,8 @@ public class ContentDetectionEngineV2Tests
         config.Spacing.Enabled = true;
         config.Spacing.AlwaysRun = false;
 
-        _configRepository
-            .GetEffectiveConfigAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
+        _configService
+            .GetEffectiveContentDetectionAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(config);
 
         var engine = BuildEngine([check]);
@@ -880,8 +881,8 @@ public class ContentDetectionEngineV2Tests
         config.Spacing.Enabled = false;
         config.Spacing.AlwaysRun = true;
 
-        _configRepository
-            .GetEffectiveConfigAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
+        _configService
+            .GetEffectiveContentDetectionAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(config);
 
         var engine = BuildEngine([check]);
@@ -920,8 +921,8 @@ public class ContentDetectionEngineV2Tests
         config.StopWords.Enabled = true;
         config.Bayes.Enabled = true;
 
-        _configRepository
-            .GetEffectiveConfigAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
+        _configService
+            .GetEffectiveContentDetectionAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(config);
 
         var engine = BuildEngine([throwingCheck, healthyCheck]);
@@ -953,8 +954,8 @@ public class ContentDetectionEngineV2Tests
         var config = BuildPermissiveConfig();
         config.StopWords.Enabled = true;
 
-        _configRepository
-            .GetEffectiveConfigAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
+        _configService
+            .GetEffectiveContentDetectionAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(config);
 
         var engine = BuildEngine([throwingCheck]);
@@ -976,9 +977,9 @@ public class ContentDetectionEngineV2Tests
     public async Task CheckMessageAsync_ConfigRepositoryThrows_UsesDefaultConfig()
     {
         // Arrange - config repo throws, engine should fall back to default config
-        _configRepository
-            .GetEffectiveConfigAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromException<ContentDetectionConfig>(new InvalidOperationException("DB connection failed")));
+        _configService
+            .GetEffectiveContentDetectionAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
+            .Returns(ValueTask.FromException<ContentDetectionConfig>(new InvalidOperationException("DB connection failed")));
 
         var engine = BuildEngine([]);
         var request = BuildRequest("Message with no checks enabled by default");
@@ -1007,8 +1008,8 @@ public class ContentDetectionEngineV2Tests
         var config = BuildPermissiveConfig();
         config.StopWords.Enabled = true;
 
-        _configRepository
-            .GetEffectiveConfigAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
+        _configService
+            .GetEffectiveContentDetectionAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(config);
 
         var engine = BuildEngine([check]);
@@ -1030,8 +1031,8 @@ public class ContentDetectionEngineV2Tests
         var config = BuildPermissiveConfig();
         config.StopWords.Enabled = true;
 
-        _configRepository
-            .GetEffectiveConfigAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
+        _configService
+            .GetEffectiveContentDetectionAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(config);
 
         var engine = BuildEngine([check]);
@@ -1056,7 +1057,7 @@ public class ContentDetectionEngineV2Tests
     {
         return new ContentDetectionEngineV2(
             _logger,
-            _configRepository,
+            _configService,
             _systemConfigRepo,
             _promptVersionRepo,
             checks,

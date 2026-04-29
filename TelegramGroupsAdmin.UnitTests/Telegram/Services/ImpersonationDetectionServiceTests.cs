@@ -5,7 +5,6 @@ using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
-using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.Core.Repositories;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Data;
@@ -31,7 +30,7 @@ public class ImpersonationDetectionServiceTests
     private ITelegramUserRepository _mockTelegramUserRepo = null!;
     private IMessageHistoryRepository _mockMessageHistoryRepo = null!;
     private IReportsRepository _mockReportsRepo = null!;
-    private IContentDetectionConfigRepository _mockContentDetectionConfigRepo = null!;
+    private IConfigService _mockConfigService = null!;
     private ImpersonationDetectionService _service = null!;
 
     // Test constants
@@ -51,10 +50,10 @@ public class ImpersonationDetectionServiceTests
         _mockTelegramUserRepo = Substitute.For<ITelegramUserRepository>();
         _mockMessageHistoryRepo = Substitute.For<IMessageHistoryRepository>();
         _mockReportsRepo = Substitute.For<IReportsRepository>();
-        _mockContentDetectionConfigRepo = Substitute.For<IContentDetectionConfigRepository>();
+        _mockConfigService = Substitute.For<IConfigService>();
 
         // Default config: check first 5 messages
-        _mockContentDetectionConfigRepo.GetEffectiveConfigAsync(Arg.Any<long>())
+        _mockConfigService.GetEffectiveContentDetectionAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(new ContentDetectionConfig { FirstMessagesCount = 5 });
 
         // Note: Full service instantiation requires concrete dependencies that can't be mocked.
@@ -87,7 +86,7 @@ public class ImpersonationDetectionServiceTests
             _mockReportsRepo,
             null!, // ModerationActionService - not used by ShouldCheckUserAsync
             null!, // TelegramBotClientFactory - not used by ShouldCheckUserAsync
-            _mockContentDetectionConfigRepo,
+            _mockConfigService,
             mockLogger);
     }
 

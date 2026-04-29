@@ -4,6 +4,7 @@ using Microsoft.Extensions.Options;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Models;
 using TelegramGroupsAdmin.Configuration.Repositories;
+using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.ContentDetection.Abstractions;
 using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
 using TelegramGroupsAdmin.ContentDetection.Constants;
@@ -23,7 +24,7 @@ namespace TelegramGroupsAdmin.ContentDetection.Services;
 public partial class ContentDetectionEngineV2 : IContentDetectionEngine
 {
     private readonly ILogger<ContentDetectionEngineV2> _logger;
-    private readonly IContentDetectionConfigRepository _configRepository;
+    private readonly IConfigService _configService;
     private readonly ISystemConfigRepository _systemConfigRepo;
     private readonly IPromptVersionRepository _promptVersionRepo;
     private readonly IEnumerable<IContentCheckV2> _contentChecksV2;
@@ -36,7 +37,7 @@ public partial class ContentDetectionEngineV2 : IContentDetectionEngine
 
     public ContentDetectionEngineV2(
         ILogger<ContentDetectionEngineV2> logger,
-        IContentDetectionConfigRepository configRepository,
+        IConfigService configService,
         ISystemConfigRepository systemConfigRepo,
         IPromptVersionRepository promptVersionRepo,
         IEnumerable<IContentCheckV2> contentChecksV2,
@@ -45,7 +46,7 @@ public partial class ContentDetectionEngineV2 : IContentDetectionEngine
         DetectionMetrics detectionMetrics)
     {
         _logger = logger;
-        _configRepository = configRepository;
+        _configService = configService;
         _systemConfigRepo = systemConfigRepo;
         _promptVersionRepo = promptVersionRepo;
         _contentChecksV2 = contentChecksV2;
@@ -58,7 +59,7 @@ public partial class ContentDetectionEngineV2 : IContentDetectionEngine
     {
         try
         {
-            return await _configRepository.GetEffectiveConfigAsync(request.Chat.Id, cancellationToken);
+            return await _configService.GetEffectiveContentDetectionAsync(request.Chat.Id, cancellationToken);
         }
         catch (Exception ex)
         {

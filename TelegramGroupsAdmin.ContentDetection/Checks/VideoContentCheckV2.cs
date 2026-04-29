@@ -5,7 +5,7 @@ using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Configuration.Models;
 using TelegramGroupsAdmin.ContentDetection.Abstractions;
 using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
-using TelegramGroupsAdmin.Configuration.Repositories;
+using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
@@ -30,7 +30,7 @@ public class VideoContentCheckV2(
     IVideoFrameExtractionService frameExtractionService,
     IImageTextExtractionService imageTextExtractionService,
     IServiceProvider serviceProvider,
-    IContentDetectionConfigRepository configRepository,
+    IConfigService configService,
     IPhotoHashService photoHashService,
     IVideoTrainingSamplesRepository videoTrainingSamplesRepository) : IContentCheckV2
 {
@@ -102,7 +102,7 @@ public class VideoContentCheckV2(
             }
 
             // Load config
-            var config = await configRepository.GetEffectiveConfigAsync(req.Chat.Id, req.CancellationToken);
+            var config = await configService.GetEffectiveContentDetectionAsync(req.Chat.Id, req.CancellationToken);
             var videoConfig = config.VideoSpam;
 
             // Extract keyframes from video

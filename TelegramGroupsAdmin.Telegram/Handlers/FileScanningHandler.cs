@@ -1,8 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Configuration;
-using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
-using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.JobPayloads;
@@ -28,20 +26,20 @@ namespace TelegramGroupsAdmin.Telegram.Handlers;
 public class FileScanningHandler
 {
     private readonly IJobScheduler _jobScheduler;
-    private readonly IContentDetectionConfigRepository _contentDetectionConfigRepository;
+    private readonly IConfigService _configService;
     private readonly ITelegramUserRepository _userRepository;
     private readonly IChatAdminsRepository _chatAdminsRepository;
     private readonly ILogger<FileScanningHandler> _logger;
 
     public FileScanningHandler(
         IJobScheduler jobScheduler,
-        IContentDetectionConfigRepository contentDetectionConfigRepository,
+        IConfigService configService,
         ITelegramUserRepository userRepository,
         IChatAdminsRepository chatAdminsRepository,
         ILogger<FileScanningHandler> logger)
     {
         _jobScheduler = jobScheduler;
-        _contentDetectionConfigRepository = contentDetectionConfigRepository;
+        _configService = configService;
         _userRepository = userRepository;
         _chatAdminsRepository = chatAdminsRepository;
         _logger = logger;
@@ -65,10 +63,9 @@ public class FileScanningHandler
         }
 
         // Get effective content detection config for this chat
-        var config = await _contentDetectionConfigRepository.GetEffectiveConfigAsync(chatId, cancellationToken);
+        var config = await _configService.GetEffectiveContentDetectionAsync(chatId, cancellationToken);
 
-        // If no config exists, use defaults (file scanning enabled with AlwaysRun=true)
-        var fileScanningConfig = config?.FileScanning ?? new FileScanningDetectionConfig();
+        var fileScanningConfig = config.FileScanning;
 
         // Check if file scanning is enabled
         if (!fileScanningConfig.Enabled)
