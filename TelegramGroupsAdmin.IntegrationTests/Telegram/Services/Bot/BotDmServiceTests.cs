@@ -30,11 +30,17 @@ namespace TelegramGroupsAdmin.IntegrationTests.Telegram.Services.Bot;
 /// - Real PostgreSQL for user status tracking and pending notifications
 /// - Mocked IBotMessageHandler for API responses (success, 403, exceptions)
 /// - Mocked IJobScheduler for verifying job scheduling
+///
+/// Canonical anchors:
+/// - TestUserId: 9921676191756 (@unhelpfulgrab, "Squeak Degree"), bot_dm_enabled=false, is_banned=false, is_active=true
+/// - TestChatId: -100123456789 (synthetic, outside canonical range [-100099999999999, -100000000000000], seeded inline)
 /// </summary>
 [TestFixture]
 public class BotDmServiceTests
 {
-    private const long TestUserId = 12345L;
+    // Canonical anchor: @unhelpfulgrab, bot_dm_enabled=false, is_banned=false, is_active=true
+    private const long TestUserId = 9921676191756L;
+    // Synthetic chat ID — outside canonical range, seeded inline
     private const long TestChatId = -100123456789L;
     private const string TestChatName = "Test Group";
 
@@ -49,9 +55,9 @@ public class BotDmServiceTests
     [SetUp]
     public async Task SetUp()
     {
-        // Create unique test database with migrations applied
+        // Create unique test database from golden canonical template
         _testHelper = new MigrationTestHelper();
-        await _testHelper.CreateDatabaseAndApplyMigrationsAsync();
+        await _testHelper.CreateDatabaseFromGoldenTemplateAsync();
 
         // Set up mocks for external services
         _mockMessageHandler = Substitute.For<IBotMessageHandler>();
@@ -84,9 +90,6 @@ public class BotDmServiceTests
         _service = scope.ServiceProvider.GetRequiredService<IBotDmService>();
         _userRepository = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
         _pendingNotificationsRepository = scope.ServiceProvider.GetRequiredService<IPendingNotificationsRepository>();
-
-        // Seed test user
-        await SeedTestUser(TestUserId, botDmEnabled: false);
     }
 
     [TearDown]
@@ -397,28 +400,6 @@ public class BotDmServiceTests
     #endregion
 
     #region Helper Methods
-
-    private async Task SeedTestUser(long userId, bool botDmEnabled)
-    {
-        await using var context = _testHelper!.GetDbContext();
-
-        context.TelegramUsers.Add(new Data.Models.TelegramUserDto
-        {
-            TelegramUserId = userId,
-            FirstName = "TestUser",
-            Username = "testuser",
-            IsBot = false,
-            IsTrusted = false,
-            IsBanned = false,
-            BotDmEnabled = botDmEnabled,
-            FirstSeenAt = DateTimeOffset.UtcNow,
-            LastSeenAt = DateTimeOffset.UtcNow,
-            CreatedAt = DateTimeOffset.UtcNow,
-            UpdatedAt = DateTimeOffset.UtcNow
-        });
-
-        await context.SaveChangesAsync();
-    }
 
     private async Task SeedManagedChat(long chatId, string chatName)
     {
