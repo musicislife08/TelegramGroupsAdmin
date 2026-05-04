@@ -654,7 +654,7 @@ public static partial class GoldenDataset
         foreach (var fixture in fixtures)
         {
             ct.ThrowIfCancellationRequested();
-            await LoadSqlScriptAsync(context, fixture);
+            await LoadCanonicalSqlScriptAsync(context, fixture);
         }
 
         // Encrypted-column post-step: 04_configs.sql seeds the configs rows with all
@@ -672,16 +672,41 @@ public static partial class GoldenDataset
     }
 
     /// <summary>
+    /// Entry point for the subtractive Reduce builder. Returns a stage-1 plan bound
+    /// to the supplied context; no DB work runs until ApplyAsync is called. Each
+    /// invocation returns a fresh plan — plans are single-shot.
+    /// </summary>
+    public static GoldenReducePlanBuilder Reduce(AppDbContext context)
+        => new GoldenReducePlanBuilder(new GoldenReducePlanState(context));
+
+    /// <summary>
     /// Loads and executes an embedded SQL script from TestData directory.
+    /// LEGACY hand-written fixtures use the EF Core escape convention (doubled
+    /// braces — `{{` for literal `{`) because they're routed through
+    /// <c>context.Database.ExecuteSqlRawAsync</c>, which interprets bare `{n}` as a
+    /// parameter placeholder. Canonical SQL (pg_dump --column-inserts output) uses
+    /// real single-brace JSONB literals and must use
+    /// <see cref="LoadCanonicalSqlScriptAsync"/> instead.
     /// </summary>
     /// <param name="context">Database context</param>
     /// <param name="scriptPath">Relative path within TestData (e.g., "SQL.11_training_full.sql")</param>
     private static async Task LoadSqlScriptAsync(AppDbContext context, string scriptPath)
     {
-        // Use a raw NpgsqlCommand instead of context.Database.ExecuteSqlRawAsync so that
-        // JSONB literals containing `{...}` (heavy in pg_dump --column-inserts output) are
-        // not mis-parsed as `{n}` parameter placeholders by EF Core's formatter. Mirrors
-        // the same pattern in MigrationTestHelper.ExecuteSqlAsync.
+        await LoadSqlScriptAsync(scriptPath, sql => context.Database.ExecuteSqlRawAsync(sql));
+    }
+
+    /// <summary>
+    /// Loads and executes an embedded canonical SQL script via a raw <see cref="NpgsqlCommand"/>
+    /// that bypasses EF Core's <c>{n}</c> parameter parser. Required because canonical fixtures
+    /// (pg_dump --column-inserts output) carry single-brace JSONB literals like
+    /// <c>'{{"ChatId": -123, ...}}'</c> that ExecuteSqlRawAsync mis-parses as parameter
+    /// placeholders. Mirrors the pattern in
+    /// <see cref="TelegramGroupsAdmin.IntegrationTests.TestHelpers.MigrationTestHelper.ExecuteSqlAsync"/>.
+    /// Used only by <see cref="LoadCanonicalAsync"/>; legacy hand-written fixtures with the
+    /// EF doubled-brace escape convention must continue to use <see cref="LoadSqlScriptAsync(AppDbContext, string)"/>.
+    /// </summary>
+    private static async Task LoadCanonicalSqlScriptAsync(AppDbContext context, string scriptPath)
+    {
         await LoadSqlScriptAsync(scriptPath, async sql =>
         {
             await using var connection = new NpgsqlConnection(context.Database.GetConnectionString());

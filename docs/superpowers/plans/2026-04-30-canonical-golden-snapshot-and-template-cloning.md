@@ -1828,7 +1828,7 @@ Expected: 2 tests passed. Failures here usually mean: (a) embedded resource miss
 
 The two-stage builder is implemented bottom-up (child stage first, then parent stage that returns it). This makes Task 1.8's parent stage a clean compile.
 
-- [ ] **Step 1: Write the file**
+- [x] **Step 1: Write the file**
 
 Create `TelegramGroupsAdmin.IntegrationTests/TestData/ChildReducePlan.cs`:
 
@@ -2005,7 +2005,7 @@ internal sealed class GoldenReducePlanState
 
 **Imports:** add `using TelegramGroupsAdmin.Core.Models;` at the top of `ChildReducePlan.cs` so `TrainingLabel` resolves.
 
-- [ ] **Step 2: Build — expect compile error (GoldenReducePlanException missing)**
+- [x] **Step 2: Build — expect compile error (GoldenReducePlanException missing)**
 
 Run: `dotnet build TelegramGroupsAdmin.IntegrationTests 2>&1 | tail -5`
 
@@ -2016,7 +2016,7 @@ Expected: error CS0246 "GoldenReducePlanException could not be found."
 **Files:**
 - Create: `TelegramGroupsAdmin.IntegrationTests/TestData/GoldenReducePlanException.cs`
 
-- [ ] **Step 1: Write the file**
+- [x] **Step 1: Write the file**
 
 ```csharp
 namespace TelegramGroupsAdmin.IntegrationTests.TestData;
@@ -2039,7 +2039,7 @@ public sealed class GoldenReducePlanException : Exception
 }
 ```
 
-- [ ] **Step 2: Build — expect ChildReducePlan.cs to compile**
+- [x] **Step 2: Build — expect ChildReducePlan.cs to compile**
 
 Run: `dotnet build TelegramGroupsAdmin.IntegrationTests 2>&1 | tail -5`
 
@@ -2050,7 +2050,7 @@ Expected: Build still fails because nothing references `ChildReducePlan` yet —
 **Files:**
 - Create: `TelegramGroupsAdmin.IntegrationTests/TestData/GoldenReducePlanBuilder.cs`
 
-- [ ] **Step 1: Write the file**
+- [x] **Step 1: Write the file**
 
 ```csharp
 using TelegramGroupsAdmin.Data;
@@ -2112,7 +2112,7 @@ public sealed class GoldenReducePlanBuilder
 }
 ```
 
-- [ ] **Step 2: Build — expect success (no consumer yet)**
+- [x] **Step 2: Build — expect success (no consumer yet)**
 
 Run: `dotnet build TelegramGroupsAdmin.IntegrationTests 2>&1 | tail -5`
 
@@ -2123,7 +2123,7 @@ Expected: Build succeeded (the new types compile; no test references them yet).
 **Files:**
 - Modify: `TelegramGroupsAdmin.IntegrationTests/TestData/GoldenDataset.cs`
 
-- [ ] **Step 1: Add the factory method to GoldenDataset**
+- [x] **Step 1: Add the factory method to GoldenDataset**
 
 Add inside the partial class (alongside `LoadCanonicalAsync`):
 
@@ -2137,7 +2137,7 @@ Add inside the partial class (alongside `LoadCanonicalAsync`):
         => new GoldenReducePlanBuilder(new GoldenReducePlanState(context));
 ```
 
-- [ ] **Step 2: Build**
+- [x] **Step 2: Build**
 
 Run: `dotnet build TelegramGroupsAdmin.IntegrationTests 2>&1 | tail -5`
 
@@ -2150,7 +2150,7 @@ Expected: Build succeeded.
 
 These tests use `MigrationTestHelper.CreateDatabaseAndApplyMigrationsAsync()` + `LoadCanonicalAsync` to set up canonical against a freshly-migrated DB; Phase 2's template infrastructure is not yet in place.
 
-- [ ] **Step 1: Create the test file with the KeepSpam tests**
+- [x] **Step 1: Create the test file with the KeepSpam tests**
 
 ```csharp
 using Microsoft.EntityFrameworkCore;
@@ -2210,7 +2210,7 @@ public class GoldenReducePlanTests
 }
 ```
 
-- [ ] **Step 2: Run — expect PASS**
+- [x] **Step 2: Run — expect PASS**
 
 Run: `dotnet test TelegramGroupsAdmin.IntegrationTests --filter "FullyQualifiedName~GoldenReducePlanTests" --logger "console;verbosity=normal" 2>&1 | tail -15`
 
@@ -2218,7 +2218,7 @@ Expected: 2 tests passed. Failure mode: if `KeepSpam(5)` returns 0 ham, the slic
 
 ### Task 1.12: GoldenReducePlanTests — KeepHam symmetry
 
-- [ ] **Step 1: Add tests**
+- [x] **Step 1: Add tests**
 
 Append to `GoldenReducePlanTests.cs`:
 
@@ -2248,7 +2248,7 @@ Append to `GoldenReducePlanTests.cs`:
     }
 ```
 
-- [ ] **Step 2: Run — expect PASS**
+- [x] **Step 2: Run — expect PASS**
 
 Run: `dotnet test TelegramGroupsAdmin.IntegrationTests --filter "FullyQualifiedName~GoldenReducePlanTests.KeepHam" 2>&1 | tail -10`
 
@@ -2256,7 +2256,7 @@ Expected: 2 tests passed.
 
 ### Task 1.13: GoldenReducePlanTests — KeepDetectionResults & KeepUserActions
 
-- [ ] **Step 1: Add tests**
+- [x] **Step 1: Add tests**
 
 Append to `GoldenReducePlanTests.cs`:
 
@@ -2283,7 +2283,7 @@ Append to `GoldenReducePlanTests.cs`:
     }
 ```
 
-- [ ] **Step 2: Run — expect PASS**
+- [x] **Step 2: Run — expect PASS**
 
 Run: `dotnet test TelegramGroupsAdmin.IntegrationTests --filter "FullyQualifiedName~GoldenReducePlanTests" 2>&1 | tail -10`
 
@@ -2291,7 +2291,7 @@ Expected: 6 tests passed total.
 
 ### Task 1.14: GoldenReducePlanTests — KeepMessages cascade (Cascade FKs + SetNull on user_actions)
 
-- [ ] **Step 1: Add tests**
+- [x] **Step 1: Add tests**
 
 Append to `GoldenReducePlanTests.cs`:
 
@@ -2337,7 +2337,7 @@ Append to `GoldenReducePlanTests.cs`:
     }
 ```
 
-- [ ] **Step 2: Run — expect PASS**
+- [x] **Step 2: Run — expect PASS**
 
 Run: `dotnet test TelegramGroupsAdmin.IntegrationTests --filter "FullyQualifiedName~GoldenReducePlanTests.KeepMessages" 2>&1 | tail -10`
 
@@ -2345,7 +2345,7 @@ Expected: 2 tests passed.
 
 ### Task 1.15: GoldenReducePlanTests — Cascade narrowing + topological execution
 
-- [ ] **Step 1: Add tests**
+- [x] **Step 1: Add tests**
 
 Append to `GoldenReducePlanTests.cs`:
 
@@ -2388,7 +2388,7 @@ Append to `GoldenReducePlanTests.cs`:
     }
 ```
 
-- [ ] **Step 2: Run — expect PASS**
+- [x] **Step 2: Run — expect PASS**
 
 Run: `dotnet test TelegramGroupsAdmin.IntegrationTests --filter "FullyQualifiedName~GoldenReducePlanTests" 2>&1 | tail -10`
 
@@ -2396,7 +2396,7 @@ Expected: 11 tests passed total.
 
 ### Task 1.16: GoldenReducePlanTests — validation rules (LIMIT semantics, negative count, last-wins)
 
-- [ ] **Step 1: Add tests**
+- [x] **Step 1: Add tests**
 
 Append to `GoldenReducePlanTests.cs`:
 
@@ -2439,7 +2439,7 @@ Append to `GoldenReducePlanTests.cs`:
     }
 ```
 
-- [ ] **Step 2: Run — expect PASS**
+- [x] **Step 2: Run — expect PASS**
 
 Run: `dotnet test TelegramGroupsAdmin.IntegrationTests --filter "FullyQualifiedName~GoldenReducePlanTests" 2>&1 | tail -10`
 
@@ -2447,7 +2447,7 @@ Expected: 15 tests passed total.
 
 ### Task 1.17: Run the full suite to confirm no regressions
 
-- [ ] **Step 1: Run the full integration suite**
+- [x] **Step 1: Run the full integration suite**
 
 Run:
 ```bash
@@ -2458,7 +2458,7 @@ Expected: every pre-existing test still passes (Phase 1 added new infrastructure
 
 ### Task 1.18: Commit Phase 1
 
-- [ ] **Step 1: Stage and commit**
+- [x] **Step 1: Stage and commit**
 
 ```bash
 git add TelegramGroupsAdmin.IntegrationTests/TelegramGroupsAdmin.IntegrationTests.csproj \
