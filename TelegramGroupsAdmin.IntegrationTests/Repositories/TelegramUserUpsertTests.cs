@@ -1,9 +1,7 @@
-using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Data;
-using TelegramGroupsAdmin.IntegrationTests.TestData;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using UiModels = TelegramGroupsAdmin.Telegram.Models;
@@ -31,16 +29,9 @@ public class TelegramUserUpsertTests
     public async Task SetUp()
     {
         _testHelper = new MigrationTestHelper();
-        await _testHelper.CreateDatabaseAndApplyMigrationsAsync();
+        await _testHelper.CreateDatabaseFromGoldenTemplateAsync();
 
         var services = new ServiceCollection();
-
-        services.AddDataProtection()
-            .SetApplicationName("TelegramGroupsAdmin.Tests")
-            .PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(Path.GetTempPath(), $"test_keys_{Guid.NewGuid():N}")));
-
-        var dataSourceBuilder = new Npgsql.NpgsqlDataSourceBuilder(_testHelper.ConnectionString);
-        services.AddSingleton(dataSourceBuilder.Build());
 
         services.AddDbContextFactory<AppDbContext>((_, options) =>
         {
@@ -50,18 +41,11 @@ public class TelegramUserUpsertTests
         services.AddLogging(builder =>
         {
             builder.AddConsole().SetMinimumLevel(LogLevel.Warning);
-            builder.AddFilter("Microsoft.AspNetCore.DataProtection", LogLevel.Error);
         });
 
         services.AddScoped<ITelegramUserRepository, TelegramUserRepository>();
 
         _serviceProvider = services.BuildServiceProvider();
-
-        // Seed golden dataset for tests that use seeded user IDs
-        var dataProtectionProvider = _serviceProvider.GetRequiredService<IDataProtectionProvider>();
-        var contextFactory = _serviceProvider.GetRequiredService<IDbContextFactory<AppDbContext>>();
-        await using var context = await contextFactory.CreateDbContextAsync(cancellationToken: CancellationToken.None);
-        await GoldenDataset.SeedAsync(context, dataProtectionProvider);
     }
 
     [TearDown]
@@ -78,7 +62,8 @@ public class TelegramUserUpsertTests
     [Test]
     public async Task UpsertAsync_NewUser_CreatesRecord()
     {
-        const long newUserId = 999999L;
+        // INSERT path — 999999L is outside canonical range [9_000_000_000_000, 10_000_000_000_000)
+        const long newUserId = 999_999L;
         var user = BuildUser(
             telegramUserId: newUserId,
             username: "new_upsert_user",
@@ -105,7 +90,8 @@ public class TelegramUserUpsertTests
     [Test]
     public async Task UpsertAsync_ExistingUser_UpdatesFields()
     {
-        const long existingUserId = GoldenDataset.TelegramUsers.User1_TelegramUserId;
+        // UPDATE path — 9921676191756 is the top ham author (@unhelpfulgrab) in canonical
+        const long existingUserId = 9_921_676_191_756L;
         var updatedUser = BuildUser(
             telegramUserId: existingUserId,
             username: "updated_username",
@@ -133,7 +119,8 @@ public class TelegramUserUpsertTests
     [Test]
     public async Task UpsertAsync_ExistingUser_DoesNotOverwriteTrustOrDm()
     {
-        const long existingUserId = GoldenDataset.TelegramUsers.User1_TelegramUserId;
+        // UPDATE path — 9921676191756 is the top ham author (@unhelpfulgrab, "Squeak Degree") in canonical
+        const long existingUserId = 9_921_676_191_756L;
 
         // Directly set is_trusted and bot_dm_enabled via raw SQL to simulate admin-controlled state
         await _testHelper!.ExecuteSqlAsync(
@@ -142,9 +129,9 @@ public class TelegramUserUpsertTests
         // Upsert the same user — the ON CONFLICT clause must NOT overwrite these fields
         var user = BuildUser(
             telegramUserId: existingUserId,
-            username: GoldenDataset.TelegramUsers.User1_Username,
-            firstName: GoldenDataset.TelegramUsers.User1_FirstName,
-            lastName: GoldenDataset.TelegramUsers.User1_LastName);
+            username: "unhelpfulgrab",
+            firstName: "Squeak",
+            lastName: "Degree");
 
         await using var scope = _serviceProvider!.CreateAsyncScope();
         var repo = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
@@ -170,7 +157,8 @@ public class TelegramUserUpsertTests
     [Test]
     public async Task UpsertAsync_ConcurrentSameUser_ProducesOneRow()
     {
-        const long concurrentUserId = 888888L;
+        // INSERT path — 888888L is outside canonical range [9_000_000_000_000, 10_000_000_000_000)
+        const long concurrentUserId = 888_888L;
         var user = BuildUser(
             telegramUserId: concurrentUserId,
             username: "concurrent_user",
