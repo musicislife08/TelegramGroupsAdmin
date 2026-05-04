@@ -4,7 +4,6 @@ using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Repositories;
 using TelegramGroupsAdmin.Data;
-using TelegramGroupsAdmin.Data.Models;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
 
 namespace TelegramGroupsAdmin.IntegrationTests.ContentDetection.Repositories;
@@ -24,20 +23,22 @@ public class ProfileScanAlertMappingTests
     private IServiceProvider? _serviceProvider;
     private IServiceScope? _scope;
     private IReportsRepository? _repository;
-    private IDbContextFactory<AppDbContext>? _contextFactory;
 
-    private const long TestChatId = -1001234567890;
-    private const string TestChatName = "Test Group";
-    private const long TestUserId = 987654321;
-    private const string TestUserFirstName = "John";
-    private const string TestUserLastName = "Doe";
-    private const string TestUserUsername = "johndoe";
+    // Canonical anchor: MainChat
+    private const long MainChatId = -100026957614982L;
+    private const string MainChatName = "Main Community";
+
+    // Canonical anchor: profile-scan target (has profile_scan_results row 532, outcome=0)
+    private const long ProfileScanUserId = 9408530993787L;
+    private const string ProfileScanUserFirstName = "Anouk";
+    private const string ProfileScanUserLastName = "Vandenberghe";
+    private const string ProfileScanUserUsername = "AnoukVanDe";
 
     [SetUp]
     public async Task SetUp()
     {
         _testHelper = new MigrationTestHelper();
-        await _testHelper.CreateDatabaseAndApplyMigrationsAsync();
+        await _testHelper.CreateDatabaseFromGoldenTemplateAsync();
 
         var services = new ServiceCollection();
 
@@ -57,9 +58,6 @@ public class ProfileScanAlertMappingTests
 
         _scope = _serviceProvider.CreateScope();
         _repository = _scope.ServiceProvider.GetRequiredService<IReportsRepository>();
-        _contextFactory = _scope.ServiceProvider.GetRequiredService<IDbContextFactory<AppDbContext>>();
-
-        await SeedRequiredEntitiesAsync(TestChatId, TestChatName, TestUserId, TestUserFirstName, TestUserLastName, TestUserUsername);
     }
 
     [TearDown]
@@ -70,51 +68,9 @@ public class ProfileScanAlertMappingTests
         _testHelper?.Dispose();
     }
 
-    /// <summary>
-    /// Seeds the managed_chats and telegram_users rows that the enriched_reports view JOINs to.
-    /// The view LEFT JOINs managed_chats on chat_id and telegram_users on context->>'userId'.
-    /// Without these rows the view returns NULLs for chat_name and profile_* columns.
-    /// </summary>
-    private async Task SeedRequiredEntitiesAsync(
-        long chatId,
-        string chatName,
-        long userId,
-        string firstName,
-        string? lastName,
-        string? username)
-    {
-        await using var ctx = await _contextFactory!.CreateDbContextAsync(CancellationToken.None);
-
-        ctx.ManagedChats.Add(new ManagedChatRecordDto
-        {
-            ChatId = chatId,
-            ChatName = chatName,
-            ChatType = ManagedChatType.Supergroup,
-            BotStatus = BotChatStatus.Administrator,
-            IsAdmin = true,
-            IsActive = true,
-            IsDeleted = false,
-            AddedAt = DateTimeOffset.UtcNow
-        });
-
-        ctx.TelegramUsers.Add(new TelegramUserDto
-        {
-            TelegramUserId = userId,
-            FirstName = firstName,
-            LastName = lastName,
-            Username = username,
-            FirstSeenAt = DateTimeOffset.UtcNow,
-            LastSeenAt = DateTimeOffset.UtcNow,
-            CreatedAt = DateTimeOffset.UtcNow,
-            UpdatedAt = DateTimeOffset.UtcNow
-        });
-
-        await ctx.SaveChangesAsync(CancellationToken.None);
-    }
-
     private static ProfileScanAlertRecord CreateAlert(
-        long userId = TestUserId,
-        long chatId = TestChatId,
+        long userId = ProfileScanUserId,
+        long chatId = MainChatId,
         decimal score = 3.5m,
         ProfileScanOutcome outcome = ProfileScanOutcome.HeldForReview,
         string? aiReason = "Suspicious bio and channel",
@@ -178,14 +134,14 @@ public class ProfileScanAlertMappingTests
             Assert.That(retrieved.Id, Is.EqualTo(id));
 
             // User — ID comes from JSONB, name columns come from telegram_users JOIN
-            Assert.That(retrieved.User.Id, Is.EqualTo(TestUserId));
-            Assert.That(retrieved.User.FirstName, Is.EqualTo(TestUserFirstName));
-            Assert.That(retrieved.User.LastName, Is.EqualTo(TestUserLastName));
-            Assert.That(retrieved.User.Username, Is.EqualTo(TestUserUsername));
+            Assert.That(retrieved.User.Id, Is.EqualTo(ProfileScanUserId));
+            Assert.That(retrieved.User.FirstName, Is.EqualTo(ProfileScanUserFirstName));
+            Assert.That(retrieved.User.LastName, Is.EqualTo(ProfileScanUserLastName));
+            Assert.That(retrieved.User.Username, Is.EqualTo(ProfileScanUserUsername));
 
             // Chat — chat_name comes from managed_chats JOIN
-            Assert.That(retrieved.Chat.Id, Is.EqualTo(TestChatId));
-            Assert.That(retrieved.Chat.ChatName, Is.EqualTo(TestChatName));
+            Assert.That(retrieved.Chat.Id, Is.EqualTo(MainChatId));
+            Assert.That(retrieved.Chat.ChatName, Is.EqualTo(MainChatName));
 
             // JSONB scalar fields
             Assert.That(retrieved.Score, Is.EqualTo(4.25m));
@@ -223,8 +179,8 @@ public class ProfileScanAlertMappingTests
         // Arrange — only required fields, all nullable fields omitted / set to defaults
         var alert = new ProfileScanAlertRecord
         {
-            User = UserIdentity.FromId(TestUserId),
-            Chat = new ChatIdentity(TestChatId, TestChatName),
+            User = UserIdentity.FromId(ProfileScanUserId),
+            Chat = new ChatIdentity(MainChatId, MainChatName),
             Score = 1.0m,
             Outcome = ProfileScanOutcome.Clean,
             AiReason = null,
