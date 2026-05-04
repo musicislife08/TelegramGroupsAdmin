@@ -2524,7 +2524,7 @@ Files referenced in this phase:
 **Files:**
 - Create: `TelegramGroupsAdmin.IntegrationTests/TestHelpers/MigrationTestHelperTemplateTests.cs`
 
-- [ ] **Step 1: Write the test file**
+- [x] **Step 1: Write the test file**
 
 ```csharp
 using Microsoft.EntityFrameworkCore;
@@ -2587,7 +2587,7 @@ public class MigrationTestHelperTemplateTests
 
 **Imports:** add `using TelegramGroupsAdmin.Data.Constants;` to the top of `MigrationTestHelperTemplateTests.cs`.
 
-- [ ] **Step 2: Run — expect compile error (methods missing)**
+- [x] **Step 2: Run — expect compile error (methods missing)**
 
 Run: `dotnet test TelegramGroupsAdmin.IntegrationTests --filter "FullyQualifiedName~MigrationTestHelperTemplateTests" 2>&1 | tail -10`
 
@@ -2598,7 +2598,7 @@ Expected: build fails with "MigrationTestHelper does not contain a definition fo
 **Files:**
 - Modify: `TelegramGroupsAdmin.IntegrationTests/TestHelpers/MigrationTestHelper.cs`
 
-- [ ] **Step 1: Add a private helper for the admin connection with Pooling=false**
+- [x] **Step 1: Add a private helper for the admin connection with Pooling=false**
 
 Inside `MigrationTestHelper`, add:
 
@@ -2619,7 +2619,7 @@ Inside `MigrationTestHelper`, add:
     }
 ```
 
-- [ ] **Step 2: Add CreateDatabaseFromEmptyTemplateAsync**
+- [x] **Step 2: Add CreateDatabaseFromEmptyTemplateAsync**
 
 Inside `MigrationTestHelper`:
 
@@ -2641,7 +2641,7 @@ Inside `MigrationTestHelper`:
     }
 ```
 
-- [ ] **Step 3: Add CreateDatabaseFromGoldenTemplateAsync**
+- [x] **Step 3: Add CreateDatabaseFromGoldenTemplateAsync**
 
 ```csharp
     /// <summary>
@@ -2660,7 +2660,7 @@ Inside `MigrationTestHelper`:
     }
 ```
 
-- [ ] **Step 4: Build**
+- [x] **Step 4: Build**
 
 Run: `dotnet build TelegramGroupsAdmin.IntegrationTests 2>&1 | tail -5`
 
@@ -2671,7 +2671,7 @@ Expected: Build succeeded. Tests will still fail at runtime because templates ar
 **Files:**
 - Modify: `TelegramGroupsAdmin.IntegrationTests/Fixtures/PostgresFixture.cs`
 
-- [ ] **Step 1: Replace the body of GlobalSetup**
+- [x] **Step 1: Replace the body of GlobalSetup**
 
 Edit `PostgresFixture.cs`. Replace the existing `[OneTimeSetUp] public async Task GlobalSetup()` method with:
 
@@ -2784,7 +2784,7 @@ using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.IntegrationTests.TestData;
 ```
 
-- [ ] **Step 2: Run the template-clone tests**
+- [x] **Step 2: Run the template-clone tests**
 
 Run: `dotnet test TelegramGroupsAdmin.IntegrationTests --filter "FullyQualifiedName~MigrationTestHelperTemplateTests" --logger "console;verbosity=normal" 2>&1 | tail -20`
 
@@ -2794,7 +2794,7 @@ Expected: 3 tests passed. Failure modes:
 
 ### Task 2.4: Run the full suite to confirm legacy tests still work alongside templates
 
-- [ ] **Step 1: Run the full suite**
+- [x] **Step 1: Run the full suite**
 
 Run: `dotnet test TelegramGroupsAdmin.IntegrationTests --logger "console;verbosity=normal" 2>&1 | tail -10`
 
@@ -2802,7 +2802,7 @@ Expected: every existing test still passes. Templates exist in the container but
 
 ### Task 2.5: Commit Phase 2
 
-- [ ] **Step 1: Stage and commit**
+- [x] **Step 1: Stage and commit**
 
 ```bash
 git add TelegramGroupsAdmin.IntegrationTests/Fixtures/PostgresFixture.cs \
