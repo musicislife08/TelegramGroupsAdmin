@@ -1,11 +1,9 @@
-using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NUnit.Framework;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Data;
-using TelegramGroupsAdmin.Data.Models;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
@@ -28,20 +26,17 @@ public class UserActionsRepositoryConstraintTests
     private MigrationTestHelper? _testHelper;
     private IServiceProvider? _serviceProvider;
 
-    private const long TestUserId = 555111222L;
+    // Canonical anchor: @unhelpfulgrab — top ham author, exists in golden_template.
+    private const long TestUserId = 9921676191756L;
     private const long TestChatId = -1009988776655L;
 
     [SetUp]
     public async Task SetUp()
     {
         _testHelper = new MigrationTestHelper();
-        await _testHelper.CreateDatabaseAndApplyMigrationsAsync();
+        await _testHelper.CreateDatabaseFromGoldenTemplateAsync();
 
         var services = new ServiceCollection();
-
-        services.AddDataProtection()
-            .SetApplicationName("TelegramGroupsAdmin.Tests")
-            .PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(Path.GetTempPath(), $"test_keys_{Guid.NewGuid():N}")));
 
         var dataSourceBuilder = new Npgsql.NpgsqlDataSourceBuilder(_testHelper.ConnectionString);
         services.AddSingleton(dataSourceBuilder.Build());
@@ -54,14 +49,11 @@ public class UserActionsRepositoryConstraintTests
         services.AddLogging(builder =>
         {
             builder.AddConsole().SetMinimumLevel(LogLevel.Warning);
-            builder.AddFilter("Microsoft.AspNetCore.DataProtection", LogLevel.Error);
         });
 
         services.AddScoped<IUserActionsRepository, UserActionsRepository>();
 
         _serviceProvider = services.BuildServiceProvider();
-
-        await SeedTestUserAsync(TestUserId);
     }
 
     [TearDown]
@@ -69,33 +61,6 @@ public class UserActionsRepositoryConstraintTests
     {
         _testHelper?.Dispose();
         (_serviceProvider as IDisposable)?.Dispose();
-    }
-
-    /// <summary>
-    /// Seeds a minimal telegram_user row to satisfy the user_id FK constraint on user_actions.
-    /// </summary>
-    private async Task SeedTestUserAsync(long userId)
-    {
-        var contextFactory = _serviceProvider!.GetRequiredService<IDbContextFactory<AppDbContext>>();
-        await using var context = await contextFactory.CreateDbContextAsync();
-
-        var now = DateTimeOffset.UtcNow;
-        context.TelegramUsers.Add(new TelegramUserDto
-        {
-            TelegramUserId = userId,
-            Username = $"testuser_{userId}",
-            FirstName = "Test",
-            LastName = "User",
-            IsBot = false,
-            IsTrusted = false,
-            BotDmEnabled = false,
-            FirstSeenAt = now.AddDays(-1),
-            LastSeenAt = now,
-            CreatedAt = now,
-            UpdatedAt = now
-        });
-
-        await context.SaveChangesAsync();
     }
 
     /// <summary>
