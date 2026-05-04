@@ -991,4 +991,4 @@ INSERT INTO user_actions (id, user_id, action_type, message_id, web_user_id, tel
 INSERT INTO user_actions (id, user_id, action_type, message_id, web_user_id, telegram_user_id, system_identifier, issued_at, expires_at, reason, chat_id) VALUES (5173, 9922735795237, 2, NULL, NULL, NULL, 'welcome_flow', '2026-04-30 15:42:49.684237+00', NULL, 'Pending welcome verification', -100026957614982);
 INSERT INTO user_actions (id, user_id, action_type, message_id, web_user_id, telegram_user_id, system_identifier, issued_at, expires_at, reason, chat_id) VALUES (5174, 9922735795237, 8, NULL, NULL, NULL, 'welcome_flow', '2026-04-30 15:43:55.282687+00', NULL, 'Welcome timeout', -100026957614982);
 INSERT INTO user_actions (id, user_id, action_type, message_id, web_user_id, telegram_user_id, system_identifier, issued_at, expires_at, reason, chat_id) VALUES (5121, 9032620986755, 10, 223002, NULL, NULL, 'profile_diff_detection', '2026-04-29 03:31:17.460401+00', NULL, 'Username changed', -100026957614982);
-SELECT pg_catalog.setval('user_actions_id_seq', 1, false);
+SELECT pg_catalog.setval('user_actions_id_seq', 5183, true);

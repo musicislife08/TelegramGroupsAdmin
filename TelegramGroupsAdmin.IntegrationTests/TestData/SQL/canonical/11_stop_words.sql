@@ -15,4 +15,4 @@ INSERT INTO stop_words (id, word, enabled, added_date, web_user_id, telegram_use
 INSERT INTO stop_words (id, word, enabled, added_date, web_user_id, telegram_user_id, system_identifier, notes) VALUES (29, 'withdrawals', true, '2026-02-26 07:52:47.508774+00', NULL, NULL, 'ML Recommendation', 'Added via ML recommendation on 2026-02-26');
 INSERT INTO stop_words (id, word, enabled, added_date, web_user_id, telegram_user_id, system_identifier, notes) VALUES (30, 'trader', true, '2026-02-26 07:52:55.028704+00', NULL, NULL, 'ML Recommendation', 'Added via ML recommendation on 2026-02-26');
 INSERT INTO stop_words (id, word, enabled, added_date, web_user_id, telegram_user_id, system_identifier, notes) VALUES (31, 'trading', true, '2026-02-26 07:53:29.625255+00', NULL, NULL, 'ML Recommendation', 'Added via ML recommendation on 2026-02-26');
-SELECT pg_catalog.setval('stop_words_id_seq', 1, false);
+SELECT pg_catalog.setval('stop_words_id_seq', 31, true);

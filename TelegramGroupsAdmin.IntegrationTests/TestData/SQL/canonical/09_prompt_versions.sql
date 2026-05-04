@@ -15,4 +15,4 @@ INSERT INTO prompt_versions (id, chat_id, version, prompt_text, is_active, creat
 - Technical or work-related discussion that is conversational and not used to sell a service.
 - Fundraisers or requests for help that are clearly personal or community-based and do not use scam-style urgency or recruitment tactics.
 - Constructive criticism, jokes, moderation-related comments, or meta-discussion about the group itself.', true, '2025-10-15 00:00:00+00', 'canonical@example.com', NULL);
-SELECT pg_catalog.setval('prompt_versions_id_seq', 1, false);
+SELECT pg_catalog.setval('prompt_versions_id_seq', 1, true);

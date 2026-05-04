@@ -74,4 +74,4 @@ INSERT INTO ban_celebration_captions (id, text, dm_text, name, created_at) VALUE
 INSERT INTO ban_celebration_captions (id, text, dm_text, name, created_at) VALUES (72, '🔴 **I''M SORRY {username}, I''M AFRAID I CAN''T LET YOU DO THAT.**', '🔴 I''m sorry, I''m afraid I can''t let you stay.', 'HAL 9000 - Can''t Do That', '2026-02-25 04:47:51.657038+00');
 INSERT INTO ban_celebration_captions (id, text, dm_text, name, created_at) VALUES (73, '⚖️  **I AM THE LAW!** {username} sentenced to permanent ban!', '⚖️  You have been sentenced!', 'Judge Dredd - I Am The Law', '2026-02-25 04:50:17.591155+00');
 INSERT INTO ban_celebration_captions (id, text, dm_text, name, created_at) VALUES (74, '👨‍⚖️**GUILTY! THE SENTENCE IS BAN!** {username} remanded to the iso-cubes!', '👨‍⚖️Guilty! Remanded to the iso-cubes!', 'Judge Dredd - Guilty', '2026-02-25 04:50:42.084228+00');
-SELECT pg_catalog.setval('ban_celebration_captions_id_seq', 1, false);
+SELECT pg_catalog.setval('ban_celebration_captions_id_seq', 74, true);

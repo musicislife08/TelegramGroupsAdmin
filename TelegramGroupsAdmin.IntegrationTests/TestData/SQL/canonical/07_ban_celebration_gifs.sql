@@ -90,4 +90,4 @@ INSERT INTO ban_celebration_gifs (id, file_path, file_id, name, created_at, thum
 INSERT INTO ban_celebration_gifs (id, file_path, file_id, name, created_at, thumbnail_path, photo_hash) VALUES (116, 'ban-gifs/116.gif', NULL, 'kill it with fire', '2026-03-21 05:17:57.957735+00', 'ban-gifs/116_thumb.png', '\x000784c4ff1f1f5f');
 INSERT INTO ban_celebration_gifs (id, file_path, file_id, name, created_at, thumbnail_path, photo_hash) VALUES (117, 'ban-gifs/117.gif', 'CgACAgEAAx0ETzmWXQABA2BfacpPk0_S9KfHTrV2b8Ntx39ZP_cAArcGAALYllFGL4KSE3L1RdY6BA', 'close but no cigar', '2026-03-21 05:19:38.285294+00', 'ban-gifs/117_thumb.png', '\xf091d99ebf27054d');
 INSERT INTO ban_celebration_gifs (id, file_path, file_id, name, created_at, thumbnail_path, photo_hash) VALUES (118, 'ban-gifs/118.gif', NULL, 'Mars Attacks1', '2026-04-30 19:12:29.940886+00', 'ban-gifs/118_thumb.png', '\xfff3f3f3f3c3c0c1');
-SELECT pg_catalog.setval('ban_celebration_gifs_id_seq', 1, false);
+SELECT pg_catalog.setval('ban_celebration_gifs_id_seq', 118, true);

@@ -101,4 +101,4 @@ Sharing just in case.
 [Important]
 It only works if it’s an active wallet that has traded recently.
 Since there’s a daily limited number of people, it’s probably better to do it quickly.', 'korean', NULL, '2026-01-07 20:38:00.435448+00', NULL, -100026957614982);
-SELECT pg_catalog.setval('message_translations_id_seq', 1, false);
+SELECT pg_catalog.setval('message_translations_id_seq', 94, true);

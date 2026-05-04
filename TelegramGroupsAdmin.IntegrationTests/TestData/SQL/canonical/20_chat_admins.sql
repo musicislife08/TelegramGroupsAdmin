@@ -102,4 +102,4 @@ INSERT INTO chat_admins (id, chat_id, telegram_id, is_creator, promoted_at, last
 INSERT INTO chat_admins (id, chat_id, telegram_id, is_creator, promoted_at, last_verified_at, is_active) VALUES (110, -100003785594462, 9449924420837, false, '2026-02-12 11:29:52.641584+00', '2026-04-30 20:00:04.88168+00', true);
 INSERT INTO chat_admins (id, chat_id, telegram_id, is_creator, promoted_at, last_verified_at, is_active) VALUES (111, -100003785594462, 9187417286258, false, '2026-02-12 11:29:52.669244+00', '2026-04-30 20:00:04.950635+00', true);
 INSERT INTO chat_admins (id, chat_id, telegram_id, is_creator, promoted_at, last_verified_at, is_active) VALUES (112, -100003785594462, 9742468412405, false, '2026-02-12 16:33:35.196786+00', '2026-04-30 20:00:04.74565+00', true);
-SELECT pg_catalog.setval('chat_admins_id_seq', 1, false);
+SELECT pg_catalog.setval('chat_admins_id_seq', 112, true);
