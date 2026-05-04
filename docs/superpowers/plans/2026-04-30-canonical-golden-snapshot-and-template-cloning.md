@@ -22,7 +22,7 @@
 |-------|----------------|--------------|
 | Pre-1a | ✅ (no commit) Second-pass strict-rule audit — done 2026-04-30 | n/a |
 | Pre-1b | ✅ (no commit) Canonical bootstrap from local DB — done 2026-05-01 | n/a |
-| Pre-1c | (no commit) Author `IntegrationTests/CLAUDE.md` cheat sheet (dataset guide + scenario recipes) | n/a |
+| Pre-1c | ✅ (no commit) Author `IntegrationTests/CLAUDE.md` cheat sheet — done 2026-05-03 | n/a |
 | 1 | `feat(test): add canonical SQL fixtures + GoldenReducePlan builder + SharedDataProtectionProvider` | yes |
 | 2 | `feat(test): add template DB infrastructure to MigrationTestHelper (#463)` | yes |
 | 3A | `refactor(test): migrate canonical-consumer tests to template clone + Reduce` | yes |
@@ -1187,9 +1187,9 @@ The seven concrete bugs uncovered during bootstrap data exploration are now docu
 
 ---
 
-## Pre-Phase 1c: Author `IntegrationTests/CLAUDE.md` cheat sheet (no commit)
+## Pre-Phase 1c: Author `IntegrationTests/CLAUDE.md` cheat sheet (no commit) — ✅ COMPLETE
 
-> **Status:** Designed 2026-05-01. Single deliverable: `TelegramGroupsAdmin.IntegrationTests/CLAUDE.md`, a two-part cheat sheet that Claude Code auto-loads whenever a test author works inside the integration test project. Folds into the Phase 1 commit (no separate commit).
+> **Status:** Authored 2026-05-03. `TelegramGroupsAdmin.IntegrationTests/CLAUDE.md` (259 lines) on disk, untracked. C1 audit output at `tmp/canonical-bootstrap/cheatsheet-audit.md` (gitignored). Folds into the Phase 1 commit. Surfaced 2 known canonical gaps for Phase 3A consumers: SimHash dedup messages 95001..95022 and ban-celebration `{bancount}` synthetic anchor rows are NOT in canonical (Pre-1b extensions #1 and #4 missed); test rewrites should either extend canonical or seed inline.
 
 > **Why this is its own pre-phase:** the canonical dataset is dense (35 tables, ~3,200 rows, rotated IDs, sanitized usernames). Without a discovery surface, every test-rewrite session in Phase 3A/3B re-pays the cost of finding "which user is the spammer with name-history?" Producing this once, here, amortizes that cost across all downstream phases.
 
@@ -1233,7 +1233,7 @@ The bootstrap has already pinned these synthetic / canonical-fixture IDs. They M
 
 This audit drives Part 2's scenario list. It identifies every place current tests pin to a specific row (by id, email, predicate, or magic constant), so Part 2 can pre-bake recipes for those access patterns.
 
-- [ ] **Step 1: Run the lookup-pattern grep sweep**
+- [x] **Step 1: Run the lookup-pattern grep sweep**
 
 Run each of these against `TelegramGroupsAdmin.IntegrationTests/` (exclude `bin/`, `obj/`, `TestResults/`). Use the Grep tool, not raw `grep`/`rg`:
 
@@ -1247,7 +1247,7 @@ Run each of these against `TelegramGroupsAdmin.IntegrationTests/` (exclude `bin/
 | `\.First\(\)\|\.FirstOrDefault\(\)\|\.OrderBy\([^)]+\)\.First` | Implicit anchor selection | Fragile lookups that should become locked-id scenarios |
 | `GoldenDataset\.\w+_Id` | Existing `GoldenDataset` constant references | Already-canonical anchors — do NOT duplicate as scenarios |
 
-- [ ] **Step 2: Capture the audit output**
+- [x] **Step 2: Capture the audit output**
 
 Write findings to `tmp/canonical-bootstrap/cheatsheet-audit.md` with this structure:
 
@@ -1270,13 +1270,13 @@ Write findings to `tmp/canonical-bootstrap/cheatsheet-audit.md` with this struct
 - <scenario name> — covers <which lookups from above>
 ```
 
-- [ ] **Step 3: Extract per-table row counts from canonical SQL**
+- [x] **Step 3: Extract per-table row counts from canonical SQL**
 
 For each file in `TelegramGroupsAdmin.IntegrationTests/TestData/SQL/canonical/*.sql`, run `grep -c '^INSERT INTO' <file>` (Bash tool, parallel calls OK) to produce a 35-row count table. Keep this output handy — it goes into Part 1 verbatim.
 
 ### Task C2: Write Part 1 (dataset orientation) of `CLAUDE.md`
 
-- [ ] **Step 1: Create `TelegramGroupsAdmin.IntegrationTests/CLAUDE.md` with the Part 1 skeleton**
+- [x] **Step 1: Create `TelegramGroupsAdmin.IntegrationTests/CLAUDE.md` with the Part 1 skeleton**
 
 Use exactly this section structure (do not invent additional sections — Part 1 is intentionally lean):
 
@@ -1337,13 +1337,13 @@ Origin: prod DB snapshot from 2026-04-30. Bootstrap pipeline (full detail in `do
 For column-level details, read the per-table SQL file directly (`head -1` shows the INSERT column list, then read a row or two). Do not transcribe column lists into this document.
 ```
 
-- [ ] **Step 2: Fill in the table counts from C1 Step 3 output**
+- [x] **Step 2: Fill in the table counts from C1 Step 3 output**
 
 Replace every `<count>` placeholder with the actual `grep -c '^INSERT INTO'` result. Replace every `<note>` placeholder with one of: a concise one-liner (≤8 words), or the cell stays empty. Drop the parenthetical instructional sentence after filling.
 
 ### Task C3: Write Part 2 (scenario recipes with locked IDs) of `CLAUDE.md`
 
-- [ ] **Step 1: Append the Part 2 skeleton to `CLAUDE.md`**
+- [x] **Step 1: Append the Part 2 skeleton to `CLAUDE.md`**
 
 Use exactly this section structure:
 
@@ -1414,23 +1414,23 @@ Recipe format: a heading, the anchor id(s), a one-line description, and "use whe
 - `chat_id = 0` is a preserved sentinel (rotation skipped via CASE WHEN guard).
 ```
 
-- [ ] **Step 2: Resolve every `(Populate from …)` placeholder**
+- [x] **Step 2: Resolve every `(Populate from …)` placeholder**
 
 For each placeholder block, look up the actual canonical id by querying the SQL file (or the loaded database if convenient). Replace the placeholder with concrete recipes following the format demonstrated in the Web users section: heading, locked id, one-line description, "use when" line.
 
 The audit output from Task C1 tells you which scenarios real tests need — drive recipe selection from that list. Add at most 1–2 exploratory scenarios per category beyond what the audit requires.
 
-- [ ] **Step 3: Verify every locked id resolves to an actual canonical row**
+- [x] **Step 3: Verify every locked id resolves to an actual canonical row**
 
 For each id in Part 2, grep the corresponding SQL file. Every id must appear; missing ids are a recipe bug.
 
 ### Task C4: Self-review and stage for Phase 1 commit
 
-- [ ] **Step 1: Read the finished `CLAUDE.md` end-to-end with fresh eyes**
+- [x] **Step 1: Read the finished `CLAUDE.md` end-to-end with fresh eyes**
 
 Verify: Part 1 has no example data rows, Part 2 has no unresolved placeholders, every Part 2 id was verified in Task C3 Step 3, and the doc length is short enough to scan in under a minute (rough target: under 250 lines).
 
-- [ ] **Step 2: Confirm the file lands in the Phase 1 commit**
+- [x] **Step 2: Confirm the file lands in the Phase 1 commit**
 
 Cross-check that Phase 1's "Files referenced in this phase" list includes `TelegramGroupsAdmin.IntegrationTests/CLAUDE.md` (it should, after this rewrite). Do NOT `git add` here — Pre-Phase 1c produces no commit; the file rides in alongside the canonical SQL files in the Phase 1 commit.
 
