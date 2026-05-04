@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -32,14 +33,29 @@ namespace TelegramGroupsAdmin.IntegrationTests.Telegram.Services.Bot;
 /// - Real PostgreSQL for managed chats, chat admins, and user records
 /// - Mocked IBotChatHandler for API responses
 /// - Mocked caches (IChatCache, IChatHealthCache) for in-memory state
+///
+/// Canonical anchors:
+/// - MainChat: chat_id = -100026957614982 ("Main Community"), is_admin=true, is_active=true
+/// - WorkshopAlumni: chat_id = -100059667856554 ("Workshop Alumni"), 5 admins
+/// - WorkshopAlumni admin: telegram_id = 9742468412405
+/// - Synthetic chats (outside canonical range): -100123456789, -100111111111, -100222222222
+/// - Synthetic users (outside canonical range): 12345, 987654321
 /// </summary>
 [TestFixture]
 public class BotChatServiceTests
 {
-    private const long TestChatId = -100123456789L;
-    private const string TestChatName = "Test Group";
-    private const long TestUserId = 12345L;
+    // Synthetic chat/user IDs — outside canonical range [-100099999999999, -100000000000000] / [9_000_000_000_000, 10_000_000_000_000)
+    private const long SyntheticChatId = -100123456789L;
+    private const string SyntheticChatName = "Test Group";
+    private const long SyntheticUserId = 12345L;
     private const long TestBotId = 987654321L;
+
+    // Canonical anchors
+    private const long MainChatId = -100026957614982L;
+    private const string MainChatName = "Main Community";
+    private const long WorkshopAlumniChatId = -100059667856554L;
+    private const string WorkshopAlumniChatName = "Workshop Alumni";
+    private const long WorkshopAlumniAdminId = 9742468412405L;
 
     private MigrationTestHelper? _testHelper;
     private IServiceProvider? _serviceProvider;
@@ -56,21 +72,19 @@ public class BotChatServiceTests
     [SetUp]
     public async Task SetUp()
     {
-        // Create unique test database with migrations applied
         _testHelper = new MigrationTestHelper();
-        await _testHelper.CreateDatabaseAndApplyMigrationsAsync();
+        await _testHelper.CreateDatabaseFromGoldenTemplateAsync();
 
-        // Set up mocks for external services
         _mockChatHandler = Substitute.For<IBotChatHandler>();
         _mockChatCache = Substitute.For<IChatCache>();
         _mockHealthCache = Substitute.For<IChatHealthCache>();
         _mockNotificationService = Substitute.For<INotificationService>();
         _mockConfigService = Substitute.For<IConfigService>();
 
-        // Set up dependency injection
         var services = new ServiceCollection();
 
-        // Add NpgsqlDataSource
+        services.AddSingleton<IDataProtectionProvider>(PostgresFixture.SharedDataProtectionProvider);
+
         var dataSourceBuilder = new Npgsql.NpgsqlDataSourceBuilder(_testHelper.ConnectionString);
         services.AddSingleton(dataSourceBuilder.Build());
 
@@ -80,23 +94,19 @@ public class BotChatServiceTests
         services.AddLogging(builder =>
             builder.AddConsole().SetMinimumLevel(LogLevel.Warning));
 
-        // Register Core services
         services.AddCoreServices();
 
-        // Register repositories (real implementations)
         services.AddScoped<IManagedChatsRepository, ManagedChatsRepository>();
         services.AddScoped<IChatAdminsRepository, ChatAdminsRepository>();
         services.AddScoped<ITelegramUserRepository, TelegramUserRepository>();
         services.AddScoped<IUserActionsRepository, UserActionsRepository>();
 
-        // Register mocked external services
         services.AddSingleton(_mockChatHandler);
         services.AddSingleton(_mockChatCache);
         services.AddSingleton(_mockHealthCache);
         services.AddSingleton(_mockNotificationService);
         services.AddSingleton(_mockConfigService);
 
-        // Register BotChatService
         services.AddScoped<IBotChatService, BotChatService>();
 
         _serviceProvider = services.BuildServiceProvider();
@@ -120,10 +130,10 @@ public class BotChatServiceTests
     [Test]
     public async Task HandleBotMembershipUpdateAsync_BotAddedAsAdmin_CreatesManagedChatRecord()
     {
-        // Arrange
+        // Arrange — SyntheticChatId is outside canonical range; SUT will INSERT a new row.
         var botUser = CreateBotUser();
         var chatMemberUpdate = CreateChatMemberUpdated(
-            chat: CreateChat(TestChatId, ChatType.Supergroup, TestChatName),
+            chat: CreateChat(SyntheticChatId, ChatType.Supergroup, SyntheticChatName),
             oldStatus: ChatMemberStatus.Left,
             newStatus: ChatMemberStatus.Administrator,
             user: botUser);
@@ -132,12 +142,12 @@ public class BotChatServiceTests
         await _service!.HandleBotMembershipUpdateAsync(chatMemberUpdate);
 
         // Assert - Managed chat created
-        var managedChat = await _managedChatsRepo!.GetByChatIdAsync(TestChatId);
+        var managedChat = await _managedChatsRepo!.GetByChatIdAsync(SyntheticChatId);
         Assert.That(managedChat, Is.Not.Null);
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(managedChat!.Identity.Id, Is.EqualTo(TestChatId));
-            Assert.That(managedChat.Identity.ChatName, Is.EqualTo(TestChatName));
+            Assert.That(managedChat!.Identity.Id, Is.EqualTo(SyntheticChatId));
+            Assert.That(managedChat.Identity.ChatName, Is.EqualTo(SyntheticChatName));
             Assert.That(managedChat.IsAdmin, Is.True);
             Assert.That(managedChat.IsActive, Is.True);
             Assert.That(managedChat.IsDeleted, Is.False);
@@ -147,12 +157,10 @@ public class BotChatServiceTests
     [Test]
     public async Task HandleBotMembershipUpdateAsync_BotKicked_MarksAsInactiveAndDeleted()
     {
-        // Arrange - First create the chat record
-        await SeedManagedChat(TestChatId, TestChatName);
-
+        // Arrange — MainChat already exists in the canonical template (is_admin=true, is_active=true).
         var botUser = CreateBotUser();
         var chatMemberUpdate = CreateChatMemberUpdated(
-            chat: CreateChat(TestChatId, ChatType.Supergroup, TestChatName),
+            chat: CreateChat(MainChatId, ChatType.Supergroup, MainChatName),
             oldStatus: ChatMemberStatus.Administrator,
             newStatus: ChatMemberStatus.Kicked,
             user: botUser);
@@ -161,9 +169,8 @@ public class BotChatServiceTests
         await _service!.HandleBotMembershipUpdateAsync(chatMemberUpdate);
 
         // Assert - Chat marked as inactive (soft deleted)
-        var managedChat = await _managedChatsRepo!.GetByChatIdAsync(TestChatId);
+        var managedChat = await _managedChatsRepo!.GetByChatIdAsync(MainChatId);
         Assert.That(managedChat, Is.Not.Null);
-        // BotStatus should reflect kicked status, IsActive should be false
         using (Assert.EnterMultipleScope())
         {
             Assert.That(managedChat!.BotStatus, Is.EqualTo(BotChatStatus.Kicked));
@@ -174,10 +181,10 @@ public class BotChatServiceTests
     [Test]
     public async Task HandleBotMembershipUpdateAsync_PrivateChat_SkipsProcessing()
     {
-        // Arrange - Private chat should be ignored
+        // Arrange - Private chat should be ignored; SyntheticChatId used (no DB interaction expected).
         var botUser = CreateBotUser();
         var chatMemberUpdate = CreateChatMemberUpdated(
-            chat: CreateChat(TestChatId, ChatType.Private, null),
+            chat: CreateChat(SyntheticChatId, ChatType.Private, null),
             oldStatus: ChatMemberStatus.Member,
             newStatus: ChatMemberStatus.Administrator,
             user: botUser);
@@ -185,29 +192,29 @@ public class BotChatServiceTests
         // Act
         await _service!.HandleBotMembershipUpdateAsync(chatMemberUpdate);
 
-        // Assert - No managed chat created
-        var managedChat = await _managedChatsRepo!.GetByChatIdAsync(TestChatId);
+        // Assert - No managed chat created for this synthetic ID
+        var managedChat = await _managedChatsRepo!.GetByChatIdAsync(SyntheticChatId);
         Assert.That(managedChat, Is.Null);
     }
 
     [Test]
     public async Task HandleBotMembershipUpdateAsync_BotPromotedToAdmin_RefreshesChatAdmins()
     {
-        // Arrange - Existing chat, bot promoted
-        await SeedManagedChat(TestChatId, TestChatName, isAdmin: false);
+        // Arrange — Seed a synthetic chat with isAdmin=false so the bot promotion path triggers.
+        // SyntheticChatId is outside canonical range so no canonical row collision.
+        await SeedManagedChat(SyntheticChatId, SyntheticChatName, isAdmin: false);
 
         var botUser = CreateBotUser();
         var chatMemberUpdate = CreateChatMemberUpdated(
-            chat: CreateChat(TestChatId, ChatType.Supergroup, TestChatName),
+            chat: CreateChat(SyntheticChatId, ChatType.Supergroup, SyntheticChatName),
             oldStatus: ChatMemberStatus.Member,
             newStatus: ChatMemberStatus.Administrator,
             user: botUser);
 
-        // Mock admin list from Telegram
-        var adminUser = CreateUser(TestUserId, "AdminUser");
-        _mockChatHandler.GetChatAsync(TestChatId, Arg.Any<CancellationToken>())
-            .Returns(TelegramTestFactory.CreateChatFullInfo(TestChatId, ChatType.Supergroup, TestChatName));
-        _mockChatHandler.GetChatAdministratorsAsync(TestChatId, Arg.Any<CancellationToken>())
+        var adminUser = CreateUser(SyntheticUserId, "AdminUser");
+        _mockChatHandler.GetChatAsync(SyntheticChatId, Arg.Any<CancellationToken>())
+            .Returns(TelegramTestFactory.CreateChatFullInfo(SyntheticChatId, ChatType.Supergroup, SyntheticChatName));
+        _mockChatHandler.GetChatAdministratorsAsync(SyntheticChatId, Arg.Any<CancellationToken>())
             .Returns(new ChatMember[]
             {
                 new ChatMemberAdministrator { User = adminUser }
@@ -217,9 +224,9 @@ public class BotChatServiceTests
         await _service!.HandleBotMembershipUpdateAsync(chatMemberUpdate);
 
         // Assert - Admin list was refreshed
-        var admins = await _chatAdminsRepo!.GetChatAdminsAsync(TestChatId);
+        var admins = await _chatAdminsRepo!.GetChatAdminsAsync(SyntheticChatId);
         Assert.That(admins, Has.Count.EqualTo(1));
-        Assert.That(admins[0].User.Id, Is.EqualTo(TestUserId));
+        Assert.That(admins[0].User.Id, Is.EqualTo(SyntheticUserId));
     }
 
     #endregion
@@ -229,12 +236,10 @@ public class BotChatServiceTests
     [Test]
     public async Task HandleAdminStatusChangeAsync_UserPromoted_CreatesAdminRecordAndTrusts()
     {
-        // Arrange
-        await SeedManagedChat(TestChatId, TestChatName);
-
-        var promotedUser = CreateUser(TestUserId, "NewAdmin");
+        // Arrange — MainChat exists in canonical template; SyntheticUserId is new (outside canonical range).
+        var promotedUser = CreateUser(SyntheticUserId, "NewAdmin");
         var chatMemberUpdate = CreateChatMemberUpdated(
-            chat: CreateChat(TestChatId, ChatType.Supergroup, TestChatName),
+            chat: CreateChat(MainChatId, ChatType.Supergroup, MainChatName),
             oldStatus: ChatMemberStatus.Member,
             newStatus: ChatMemberStatus.Administrator,
             user: promotedUser);
@@ -242,13 +247,12 @@ public class BotChatServiceTests
         // Act
         await _service!.HandleAdminStatusChangeAsync(chatMemberUpdate);
 
-        // Assert - Admin record created
-        var admins = await _chatAdminsRepo!.GetChatAdminsAsync(TestChatId);
-        Assert.That(admins, Has.Count.EqualTo(1));
-        Assert.That(admins[0].User.Id, Is.EqualTo(TestUserId));
+        // Assert - Admin record created for SyntheticUserId in MainChat
+        var admins = await _chatAdminsRepo!.GetChatAdminsAsync(MainChatId);
+        Assert.That(admins.Any(a => a.User.Id == SyntheticUserId), Is.True);
 
         // Assert - User was auto-trusted
-        var user = await _userRepo!.GetByTelegramIdAsync(TestUserId);
+        var user = await _userRepo!.GetByTelegramIdAsync(SyntheticUserId);
         Assert.That(user, Is.Not.Null);
         Assert.That(user!.IsTrusted, Is.True);
     }
@@ -256,13 +260,11 @@ public class BotChatServiceTests
     [Test]
     public async Task HandleAdminStatusChangeAsync_UserDemoted_DeactivatesAdminRecord()
     {
-        // Arrange
-        await SeedManagedChat(TestChatId, TestChatName);
-        await SeedAdmin(TestChatId, TestUserId);
-
-        var demotedUser = CreateUser(TestUserId, "FormerAdmin");
+        // Arrange — WorkshopAlumni exists in canonical template with 5 active admins.
+        // WorkshopAlumniAdminId (9742468412405) is one of those canonical admins.
+        var demotedUser = CreateUser(WorkshopAlumniAdminId, "FormerAdmin");
         var chatMemberUpdate = CreateChatMemberUpdated(
-            chat: CreateChat(TestChatId, ChatType.Supergroup, TestChatName),
+            chat: CreateChat(WorkshopAlumniChatId, ChatType.Supergroup, WorkshopAlumniChatName),
             oldStatus: ChatMemberStatus.Administrator,
             newStatus: ChatMemberStatus.Member,
             user: demotedUser);
@@ -270,30 +272,33 @@ public class BotChatServiceTests
         // Act
         await _service!.HandleAdminStatusChangeAsync(chatMemberUpdate);
 
-        // Assert - Admin record deactivated
-        var admins = await _chatAdminsRepo!.GetChatAdminsAsync(TestChatId);
-        Assert.That(admins, Is.Empty); // Deactivated admins not returned
+        // Assert - The demoted admin is no longer in the active admin list
+        var admins = await _chatAdminsRepo!.GetChatAdminsAsync(WorkshopAlumniChatId);
+        Assert.That(admins.Any(a => a.User.Id == WorkshopAlumniAdminId), Is.False,
+            "Demoted admin should no longer appear in the active admin list");
     }
 
     [Test]
     public async Task HandleAdminStatusChangeAsync_NoAdminChange_DoesNothing()
     {
-        // Arrange - Member → Restricted (not an admin change)
-        await SeedManagedChat(TestChatId, TestChatName);
-
-        var user = CreateUser(TestUserId, "RegularUser");
+        // Arrange — MainChat exists in canonical template; Member → Restricted is not an admin change.
+        var user = CreateUser(SyntheticUserId, "RegularUser");
         var chatMemberUpdate = CreateChatMemberUpdated(
-            chat: CreateChat(TestChatId, ChatType.Supergroup, TestChatName),
+            chat: CreateChat(MainChatId, ChatType.Supergroup, MainChatName),
             oldStatus: ChatMemberStatus.Member,
             newStatus: ChatMemberStatus.Restricted,
             user: user);
 
+        // Record how many admins MainChat has before the no-op call.
+        var adminsBefore = await _chatAdminsRepo!.GetChatAdminsAsync(MainChatId);
+
         // Act
         await _service!.HandleAdminStatusChangeAsync(chatMemberUpdate);
 
-        // Assert - No admin record created
-        var admins = await _chatAdminsRepo!.GetChatAdminsAsync(TestChatId);
-        Assert.That(admins, Is.Empty);
+        // Assert - Admin count unchanged; SyntheticUserId was never inserted.
+        var adminsAfter = await _chatAdminsRepo!.GetChatAdminsAsync(MainChatId);
+        Assert.That(adminsAfter, Has.Count.EqualTo(adminsBefore.Count));
+        Assert.That(adminsAfter.Any(a => a.User.Id == SyntheticUserId), Is.False);
     }
 
     #endregion
@@ -303,7 +308,7 @@ public class BotChatServiceTests
     [Test]
     public async Task HandleChatMigrationAsync_MarksOldChatAsDeleted()
     {
-        // Arrange
+        // Arrange — Synthetic IDs outside canonical range; seed old chat inline.
         const long oldChatId = -100111111111L;
         const long newChatId = -100222222222L;
         await SeedManagedChat(oldChatId, "Old Group");
@@ -313,13 +318,11 @@ public class BotChatServiceTests
 
         // Assert - Old chat soft-deleted (IsDeleted = true)
         var oldChat = await _managedChatsRepo!.GetByChatIdAsync(oldChatId);
-        // GetByChatIdAsync may still return the record with IsDeleted = true
-        // The behavior depends on repository implementation - check what we get back
         if (oldChat != null)
         {
             Assert.That(oldChat.IsDeleted, Is.True, "Old chat should be marked as deleted");
         }
-        // If null, that's also acceptable (hard delete)
+        // If null, that's also acceptable (hard delete per SUT implementation)
     }
 
     #endregion
@@ -417,44 +420,6 @@ public class BotChatServiceTests
             IsAdmin = isAdmin,
             IsActive = true,
             AddedAt = DateTimeOffset.UtcNow
-        });
-
-        await context.SaveChangesAsync();
-    }
-
-    private async Task SeedAdmin(long chatId, long userId)
-    {
-        await using var context = _testHelper!.GetDbContext();
-
-        // Ensure user exists first (FK constraint)
-        var existingUser = await context.TelegramUsers
-            .FirstOrDefaultAsync(u => u.TelegramUserId == userId);
-
-        if (existingUser == null)
-        {
-            context.TelegramUsers.Add(new Data.Models.TelegramUserDto
-            {
-                TelegramUserId = userId,
-                FirstName = "Admin",
-                Username = "admin_user",
-                IsBot = false,
-                IsTrusted = false,
-                IsBanned = false,
-                BotDmEnabled = false,
-                FirstSeenAt = DateTimeOffset.UtcNow,
-                LastSeenAt = DateTimeOffset.UtcNow,
-                CreatedAt = DateTimeOffset.UtcNow,
-                UpdatedAt = DateTimeOffset.UtcNow
-            });
-        }
-
-        context.ChatAdmins.Add(new Data.Models.ChatAdminRecordDto
-        {
-            ChatId = chatId,
-            TelegramId = userId,
-            IsCreator = false,
-            PromotedAt = DateTimeOffset.UtcNow,
-            LastVerifiedAt = DateTimeOffset.UtcNow
         });
 
         await context.SaveChangesAsync();
