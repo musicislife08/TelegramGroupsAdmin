@@ -238,7 +238,7 @@ SUT IS the arrange step.
 
 ## Canonical bootstrap from local database
 
-The 17 `canonical/*.sql` files are NOT authored by hand. They are
+The 35 `canonical/*.sql` files are NOT authored by hand. They are
 produced **once, before Phase 1 begins**, by a collaborative export-and-
 sanitize task run interactively against the running local development
 database. The maintainer and Claude work this through together: write
@@ -251,19 +251,27 @@ Phase 1 commit.
 shot task, not a maintained tool. The procedure is documented here for
 context — and for any future re-bootstrap if a schema change ever
 invalidates the existing canonical (rare) — but the only artifact that
-lands in the repo is the 17 canonical SQL files themselves. After Phase
+lands in the repo is the 35 canonical SQL files themselves. After Phase
 1 they are maintained like any other code: small edits for new features
 as they ship.
 
 ### Sampling targets
 
-Local DB holds ~20,000 messages and proportionally large volumes of
-related data. Canonical samples a small but representative slice:
+> **Empirical update (Pre-1c audit, 2026-05-03):** Final post-Strict-Plus
+> counts below are what actually shipped — much larger than the original
+> sampling intent. Numbers preserved here as a record of what the
+> bootstrap produced. Earlier drafts targeted "low-hundreds" sizes; the
+> Strict-Plus prune retained any prod row referenced by ≥1 child of a
+> sampled row, which dragged in larger FK closures than initially
+> projected. Treat these as descriptive, not prescriptive.
 
-- **Messages: 400 total**
-  - 100 explicit ham (has `training_labels` row, class=Ham)
+Local DB holds ~20,000 messages and proportionally large volumes of
+related data. Canonical sampled a representative slice:
+
+- **Messages: 400 total** (verified post-prune)
+  - 100 explicit ham (has `training_labels` row, label=Ham)
   - 100 implicit ham (no training label, content benign)
-  - 100 explicit spam (has `training_labels` row, class=Spam)
+  - 100 explicit spam (has `training_labels` row, label=Spam)
   - 100 implicit spam (no training label, content spammy)
 
   The implicit/explicit split preserves test coverage for both
@@ -274,31 +282,49 @@ related data. Canonical samples a small but representative slice:
 - **Training labels: 200 total** — derived from the 100 explicit ham +
   100 explicit spam messages above (one row per explicit message). This
   is the corpus the `KeepSpam` / `KeepHam` reducers operate on.
-- **Telegram users: ~30–50 total** — every sender of a sampled message,
-  plus admins of any chat referenced, plus users referenced by
-  `chat_admins`, `username_history`, and `user_actions` rows.
-- **Admin users (`users` table): ~5** — the actual admin set on the
-  `users` table (.NET Identity-style, string GUID PK). Small group, no
-  sampling needed; bootstrap maps the first ~4 onto `User1_Id`–`User4_Id`
-  constants directly. (Earlier drafts called this `web_users`; the table
-  is named `users`.)
-- **Managed chats: 2–4** — at minimum the chat the sampled messages came
-  from, plus any chats referenced by `linked_channels` or admin scope.
-- **Configs: 1 row** — a representative `chat_id=0` global config, with
-  all five DataProtection-encrypted columns (`api_keys`,
-  `passphrase_encrypted`, `telegram_bot_token_encrypted`,
-  `vapid_private_key_encrypted`, `user_api_hash_encrypted`) stripped to
-  NULL. JSONB columns are kept but with secret/identifying values
-  neutralized (see sanitization rules). `LoadCanonicalAsync` post-step
-  fills in any encrypted column the test path needs populated.
-- **Content detection configs: ~3** — global plus a couple chat overrides.
-- **Detection results, user_actions, message_edits, invites,
-  web_notifications, username_history:** sampled as the FK-supporting set
-  for the above. No fixed target — bootstrap takes whatever rows are
-  needed to keep canonical FK-coherent.
+- **Telegram users: 335 total** (FK-closure carried far more than the
+  original ~30–50 estimate). Every sender of a sampled message, every
+  admin of every referenced chat, plus users referenced by `chat_admins`,
+  `username_history`, `user_actions`, `profile_scan_results`, and
+  `welcome_responses`. Strict-Plus prune retains only users with ≥1
+  child reference.
+- **Admin users (`users` table): 9 total** — 4 fixed canonical fixtures
+  (Owner / Admin / Deleted Admin / Deleted GlobalAdmin) plus 5 rotated
+  prod UUIDs (one of which is an active GlobalAdmin). All 9 share one
+  bcrypt hash (see `IntegrationTests/CLAUDE.md`). (Earlier drafts called
+  this `web_users`; the table is named `users`.)
+- **Managed chats: 21 total** — every chat referenced by any retained
+  child row. Anchors include MainChat, secondary chats, and a
+  soft-deleted chat (see CLAUDE.md Part 2 for canonical IDs).
+- **Configs: 20 rows** (1 global `chat_id=0` + 19 per-chat). All five
+  DataProtection-encrypted columns (`api_keys`, `passphrase_encrypted`,
+  `telegram_bot_token_encrypted`, `vapid_private_key_encrypted`,
+  `user_api_hash_encrypted`) stripped to NULL. JSONB columns kept with
+  secret/identifying values neutralized (see sanitization rules).
+  `LoadCanonicalAsync` post-step fills in any encrypted column the test
+  path needs populated. `welcome_config` populated only on global +
+  Main Chat (synthetic exam prompts), NULL on the other 18.
+- **Content detection configs: 18** — global plus per-chat overrides.
+- **Detection results: 376; user_actions: 993; message_edits: 23;
+  invites: 19; welcome_responses: 293; username_history: 4; admin_notes:
+  3; audit_log: 100; profile_scan_results: 10; reports: 10; user_tags:
+  12; chat_admins: 104; linked_channels: 3; telegram_user_mappings: 3;
+  notification_preferences: 5; message_translations: 14.** All are FK
+  closures of the message/user/chat anchors above; no fixed target —
+  bootstrap took whatever rows were needed to keep canonical FK-coherent.
+- **Reference tables (kept whole):** ban_celebration_captions: 74;
+  ban_celebration_gifs: 92; blocklist_subscriptions: 7; stop_words: 17;
+  tag_definitions: 6; prompt_versions: 1.
+- **EMPTY tables (5):** domain_filters, recovery_codes,
+  image_training_samples, video_training_samples, web_notifications.
+- **username_blacklist: 2 rows total** (1 enabled `spambot_admin`, 1
+  disabled `archived_pattern`, both Exact match). Other match types
+  (Contains/Regex/StartsWith) are not implemented in `BlacklistMatchType`;
+  fixtures for those are added when the feature ships.
 
-Final canonical row counts will be in the low hundreds — much smaller
-than full prod, much larger than today's hand-crafted ~50-row fixtures.
+Total: 3,174 INSERT statements across 35 SQL files. Larger than the
+original "low hundreds" projection, still small enough for fast template
+clone.
 
 ### Sanitization rules
 
@@ -308,16 +334,16 @@ before `pg_dump`:
 | Table / column | Rule |
 |---|---|
 | Real surrogate `id` / FK columns (DB-generated bigserial PKs — `detection_results.id`, `user_actions.id`, `message_edits.id`, `invites.id`, `web_notifications.id`, `username_history.id`, `linked_channels.id`, `configs.id`, `content_detection_configs.id`, `chat_admins.id`, etc.) and their FK references | Rewrite to deterministic canonical sequences starting at 1 within each table. These IDs are not exposed by `GoldenDataset.*` constants today, so renumbering is safe. |
-| `users.id` (string `nvarchar(450)` GUID-style PK on the `users` admin table — .NET Identity-style ID, NOT a bigserial) and `users.invited_by` self-FK | **Pin to existing constants where they exist.** `GoldenDataset.Users.User1_Id = "b388ee38-0ed3-4c09-9def-5715f9f07f56"`, `User2_Id = "921637d5-0f65-4c66-b143-6f057dd06a1c"`, etc. — bootstrap maps real local-DB admin rows onto these specific constant GUIDs (existing constants stay unchanged). Any `users` rows not pinned by a constant get fresh deterministic GUIDs (`00000000-0000-0000-0000-0000000000NN`). |
-| Telegram-semantic IDs (`managed_chats.id` real Telegram chat ID — supergroups/channels are negative; `telegram_users.id` real Telegram user ID — positive; `messages.message_id` int per-chat sequence Telegram assigns; `(chat_id, message_id)` is the composite uniqueness key for both `messages` AND `training_labels` — neither table has a surrogate PK) | **Pin to existing constants where they exist.** `GoldenDataset.TelegramUsers.User1_TelegramUserId = 100001`, `User2_TelegramUserId = 100002`, etc., and `GoldenDataset.ManagedChats.MainChat_Id = -1001322973935` are preserved unchanged — bootstrap maps real local-DB rows onto these constant values. Any unpinned chats/users get clearly-fake values that can never collide with a real backup: chat IDs in `-1009000000000..-1009000000099`, telegram user IDs in `9000000000..9000000099`. **Telegram `message_id` is per-chat, not globally unique** — the same value (1, 2, 3, …) appears independently in every chat. Bootstrap preserves this: each canonical chat gets its own `message_id` sequence starting near 1; `message_id` values WILL repeat across chats. Tests filtering `WHERE message_id = N` without scoping `chat_id` see multiple rows by design. Per-chat ordering stays monotonic in original send order. |
-| `telegram_users.username` / `first_name` / `last_name` for **non-spammer** users | Replace with synthetic (`user_<seq>`, `Test`, `User`) |
-| `telegram_users.username` / `first_name` / `last_name` for **spammer** users | **Keep verbatim.** Spam personas are intentional ML training signal; unpinned rewritten IDs put them in the fake `9000000000+` range so they don't map back to the real account. |
+| `users.id` (string `nvarchar(450)` GUID-style PK on the `users` admin table — .NET Identity-style ID, NOT a bigserial) and `users.invited_by` self-FK | **Four canonical fixture UUIDs preserved verbatim** (Owner `b388ee38-…`, Admin `921637d5-…`, Deleted Admin `a8dc8371-…`, Deleted GlobalAdmin `ba9ba542-…`). The other 5 web users are rotated prod UUIDs (one of which is an active GlobalAdmin: `8e3a7211-d0eb-40c6-af8e-7d15bb42d10a` `ahead@canonical.test`). **Stale-constants callout:** `GoldenDataset.Users.User{1..4}_Id` UUIDs match these four canonical fixtures. All other `GoldenDataset.*` constants (`TelegramUsers.UserN_TelegramUserId`, `ManagedChats.MainChat_Id`, `Messages.*`, `LinkedChannels.*`, `DetectionResults.*`, `TrainingLabels.*`) pin to PRE-rotation IDs that **DO NOT exist in canonical** — see `IntegrationTests/CLAUDE.md:86-87`. Test rewrites must use direct canonical IDs (or new constants minted on demand against canonical), not the stale legacy constants. |
+| Telegram-semantic IDs (`managed_chats.id` real Telegram chat ID — supergroups/channels are negative; `telegram_users.id` real Telegram user ID — positive; `messages.message_id` int per-chat sequence Telegram assigns; `(chat_id, message_id)` is the composite uniqueness key for both `messages` AND `training_labels` — neither table has a surrogate PK) | **All telegram_user_ids and chat_ids were rotated** via deterministic md5 + secret salt (no constant-preservation pinning happened). Telegram user IDs land in `[9_000_000_000_000, 10_000_000_000_000)` (13-digit, prefix `9`); chat IDs in `[-100_099_999_999_999, -100_000_000_000_000]` (15-digit, prefix `-100` — preserves the Telegram supergroup format that app code checks via `chatId.ToString().StartsWith("-100")`, while remaining clearly synthetic vs real 13-digit supergroup IDs). `chat_id = 0` preserved as sentinel via CASE WHEN guard during rotation. **Telegram `message_id` is per-chat, not globally unique** — the same value (1, 2, 3, …) appears independently in every chat. Canonical preserves this: each chat carries its own `message_id` sequence; `message_id` values WILL repeat across chats. Tests filtering `WHERE message_id = N` without scoping `chat_id` see multiple rows by design. Per-chat ordering stays monotonic in original send order. Anchor IDs to use in test rewrites (from `IntegrationTests/CLAUDE.md` Part 2): MainChat = `-100026957614982`, top ham author = `9921676191756`, heavily-banned spammer = `9971261287520`, renamed spammer = `9875141377477`, synthetic welcome target = `9196379650113`, profile-scan target = `9408530993787`. |
+| `telegram_users.username` / `first_name` / `last_name` for **non-spammer** users | Replace with synthetic (deterministic wordlist values; NULL fields stay NULL). |
+| `telegram_users.username` / `first_name` / `last_name` for **spammer** users | **Keep verbatim.** Spam personas are intentional ML training signal; rotated IDs put them in the synthetic 13-digit range so they don't map back to the real account. |
 | `messages.message_text` AND `messages.urls` for **ham** messages (explicit + implicit) | Replace `message_text` with `repeat(' lorem', length(message_text) / 6)` — preserves message length and tokenization shape, kills content. Set `messages.urls` to NULL on the same rows (lorem ipsum carries no URLs). |
-| `messages.message_text` AND `messages.urls` for **spam** messages (explicit + implicit) | **Preserve verbatim except for live URL hostnames.** Both columns get the same hostname rewrite: any URL's hostname becomes a deterministic `.invalid` domain (`https://bad.example/path?a=1` → `https://spam-host-01.invalid/path?a=1`). Scheme, path, query string, and surrounding text are preserved in `message_text`; `messages.urls` carries the rewritten URL list. Rationale: spam realism drives ML/detection fidelity; the only mandatory mutation is preventing committed fixtures, test output, or PR review from carrying clickable links to active malware/phishing infrastructure. Other identifiers in spam (handles, wallet addresses, phone numbers, invite codes, etc.) are deliberately kept intact for realism — these are public spammer artifacts, not protected PII. |
+| `messages.message_text` AND `messages.urls` for **spam** messages (explicit + implicit) | **Preserve verbatim except for live URL hostnames.** All URL hostnames in spam content (across `messages.message_text`, `messages.urls`, `message_translations.translated_text`, and `detection_results`) are uniformly replaced with `canonical-spam.test`. **No per-host suffixing**, no `.invalid` TLD, no `t.me` exception — paths, queries, and surrounding text are preserved verbatim. Rationale: matches what the SUT actually does (hostname-only blocklist + tokenizer-based ML); a single sink hostname is sufficient and prevents committed fixtures, test output, or PR review from carrying clickable links to active malware/phishing infrastructure. Other identifiers in spam (handles, wallet addresses, etc.) are kept intact for ML realism. Phone numbers replaced with NANP-reserved `+15555550199` / `555-555-0199`; non-canonical emails replaced with `spam@canonical.test` (canonical fixture domains `example.com`, `canonical.test`, `weekenders.us` preserved). |
 | `messages.media_local_path` / `messages.photo_local_path` / `messages.photo_thumbnail_path` / `messages.media_file_name` for **all** messages | Strip to NULL. These are local-filesystem paths and original filenames from the dev box; not test-relevant and they leak local layout. |
-| `message_edits.old_text` / `message_edits.new_text` for **all** messages | Sanitize using the same rules that apply to the parent `messages.message_text`: ham edits (where the edit belongs to a ham message) get `repeat(' lorem', length(text) / 6)`; spam edits get verbatim text with URL hostnames rewritten. The associated `*_content_hash` columns are recomputed from the sanitized values (see "derived hashes" row below). |
-| `message_translations.translated_text` for **all** translations | Sanitize using the same ham/spam rule the parent message gets. Recomputed `similarity_hash` lands in the "derived hashes" row. |
-| Derived hash columns: `messages.content_hash`, `messages.similarity_hash`, `message_translations.similarity_hash`, `message_edits.old_content_hash`, `message_edits.new_content_hash` | **Recompute deterministically from the sanitized inputs and embed the new values in the SQL fixture, matching the runtime call shape exactly.** `HashUtilities.ComputeContentHash` calls `.ToLowerInvariant()` on both args and throws on null; production coalesces with `?? ""` before calling — bootstrap MUST do the same. `messages.content_hash = ComputeContentHash(message_text ?? "", urls ?? "")`. `message_edits` has NO url columns; production extracts URLs from edit text, JSON-serializes them, and hashes — the bootstrap mirrors this: `ComputeContentHash(old_text ?? "", oldUrls != null ? JsonSerializer.Serialize(oldUrls) : "")` (same for `new_text`). See bootstrap workflow step 5 for the full code shape. Stale hashes (from pre-sanitization text) would break dedup and similarity tests; NULLed hashes would force tests to reseed them. Recomputed-and-embedded gives canonical the same self-contained, no-runtime-work property the rest of the SQL has. |
+| `message_edits.old_text` / `message_edits.new_text` for **all** messages | Sanitize using the same rules that apply to the parent `messages.message_text`: ham edits (where the edit belongs to a ham message) get `repeat(' lorem', length(text) / 6)`; spam edits get verbatim text with URL hostnames rewritten to `canonical-spam.test`. The associated `*_content_hash` columns are precomputed from the sanitized values (see "derived hashes" row below). |
+| `message_translations.translated_text` for **all** translations | Sanitize using the same ham/spam rule the parent message gets. Precomputed `similarity_hash` lands in the "derived hashes" row. |
+| Derived hash columns: `messages.content_hash`, `messages.similarity_hash`, `message_translations.similarity_hash`, `message_edits.old_content_hash`, `message_edits.new_content_hash` | **Hashes are PRECOMPUTED via a temporary console app referencing `TelegramGroupsAdmin.Core` and BAKED into the SQL files.** Tests do NOT recompute on load — there is no runtime `HashUtilities.ComputeContentHash` call in `LoadCanonicalAsync`. The bootstrap-time tool used the real `HashUtilities.ComputeContentHash` and `SimHashService.ComputeHash` against the post-sanitization values, then UPDATEd the bootstrap rows; `pg_dump --column-inserts` captured the resulting values as literals. This makes the SQL files self-contained and bit-stable across test runs. The console app source is gitignored (under `tmp/canonical-bootstrap/RehashTool.csproj`); the canonical SQL files carry the only durable record of the hash values. |
 | `users.email` / `users.normalized_email` / `users.password_hash` / `users.security_stamp` (the admin `users` table) | Replace with synthetic; password hash → known-good test value or NULL; security stamp → fresh deterministic GUID. |
 | `managed_chats.title` / `username` | Replace with synthetic |
 | `configs` encrypted columns (all five: `api_keys`, `passphrase_encrypted`, `telegram_bot_token_encrypted`, `vapid_private_key_encrypted`, `user_api_hash_encrypted`) | **Strip all to NULL.** None of the local DB's ciphertext can be decrypted under the test `EphemeralDataProtectionProvider`'s keyring; carrying it forward would produce undecryptable canonical rows. `LoadCanonicalAsync` post-step inserts canonical encrypted values via `SharedDataProtectionProvider` for any column the test path needs populated. |
@@ -330,13 +356,17 @@ before `pg_dump`:
 2. Run sampling queries to pick target rows per the table above.
 3. Apply sanitization SQL on a temporary copy.
 4. Rewrite IDs to canonical sequences; update FKs accordingly.
-5. **Recompute derived hashes against the sanitized inputs.** Run the
-   app's actual hash routines (whatever ships in the app code at the
-   time) and update the temporary copy with the new hash values so
-   `pg_dump` captures them as literals. Match the runtime call shape
-   exactly — `HashUtilities.ComputeContentHash` calls `.ToLowerInvariant()`
-   on both inputs, so it throws on null; production sites coalesce nulls
-   to `""` before calling. The bootstrap MUST use the same idiom.
+5. **Precompute derived hashes against the sanitized inputs and BAKE
+   them into the SQL fixtures.** Run the app's actual hash routines via
+   a temporary console app referencing `TelegramGroupsAdmin.Core` (real
+   `HashUtilities.ComputeContentHash` + `SimHashService.ComputeHash`)
+   and UPDATE the temporary copy with the new hash values so `pg_dump`
+   captures them as literals. **Tests do NOT recompute on load** —
+   `LoadCanonicalAsync` reads the baked values directly. Match the
+   runtime call shape exactly — `HashUtilities.ComputeContentHash` calls
+   `.ToLowerInvariant()` on both inputs and throws on null; production
+   sites coalesce nulls to `""` before calling. The bootstrap MUST use
+   the same idiom.
 
    - `messages.content_hash` — call
      `HashUtilities.ComputeContentHash(message_text ?? "", urls ?? "")`
@@ -361,16 +391,18 @@ before `pg_dump`:
      // same shape for new_*
      ```
      Note the URL extraction runs against the **already-sanitized** text:
-     for spam this means extraction picks up the `.invalid` hostnames
-     from the sanitization step (still a valid URL shape, will extract
-     normally); for ham `ExtractUrls` returns null (lorem ipsum has no
-     URLs), which the `?? ""` coalesce above turns into `""` for the
-     hash — bit-identical to what production produces for any other
+     for spam this means extraction picks up the `canonical-spam.test`
+     hostnames from the sanitization step (still a valid URL shape, will
+     extract normally); for ham `ExtractUrls` returns null (lorem ipsum
+     has no URLs), which the `?? ""` coalesce above turns into `""` for
+     the hash — bit-identical to what production produces for any other
      URL-less message. The null-vs-empty distinction matters: an empty
      list would JSON-serialize to `"[]"` and produce different hashes.
 
    This is the only step in the bootstrap that calls into application
-   code — everything else is pure SQL.
+   code — everything else is pure SQL. The console app source is
+   gitignored under `tmp/canonical-bootstrap/RehashTool.csproj`; the
+   canonical SQL files carry the only durable record of the hash values.
 6. `pg_dump --data-only --column-inserts --table=<each table>` to produce
    per-table SQL fixtures.
 7. Manual spot-check of the output, focused on (a) URL/hostname coverage
@@ -378,7 +410,7 @@ before `pg_dump`:
    covered by the rules table, (c) encrypted ciphertext that may have
    slipped through, (d) JSONB credential/token leakage. Realistic spam
    personas and intact spam wording are expected and not flagged.
-8. Commit the 17 `canonical/*.sql` files as part of the Phase 1 commit.
+8. Commit the 35 `canonical/*.sql` files as part of the Phase 1 commit.
    Do not commit the sampling/sanitization SQL or any tooling used along
    the way; the SQL files are the only artifact.
 
@@ -388,7 +420,7 @@ before `pg_dump`:
 
 ### Origin
 
-The 17 `canonical/*.sql` files are committed as ordinary SQL files
+The 35 `canonical/*.sql` files are committed as ordinary SQL files
 produced by the one-time bootstrap above. After Phase 1, they are edited
 directly for incremental additions (new tables, new columns, new
 test-relevant rows). Treat them as code, not as derived artifacts.
@@ -401,20 +433,38 @@ TelegramGroupsAdmin.IntegrationTests/TestData/SQL/
     01_users.sql                          ← admin users (.NET Identity-style); was misspelled `web_users` in earlier drafts
     02_telegram_users.sql
     03_managed_chats.sql
-    04_telegram_user_mappings.sql
-    05_linked_channels.sql
-    06_chat_admins.sql
-    07_messages.sql
-    08_message_edits.sql
-    09_user_actions.sql
-    10_detection_results.sql
-    11_content_detection_configs.sql
-    12_training_labels.sql
-    13_username_history.sql
-    14_invites.sql
-    15_web_notifications.sql
-    16_configs.sql                        ← all 5 encrypted cols NULL; filled by LoadCanonicalAsync post-step
-    17_message_translations.sql           ← child of messages AND message_edits; loaded last among message-children
+    04_configs.sql                        ← all 5 encrypted cols NULL; filled by LoadCanonicalAsync post-step
+    05_content_detection_configs.sql
+    06_ban_celebration_captions.sql
+    07_ban_celebration_gifs.sql
+    08_blocklist_subscriptions.sql
+    09_prompt_versions.sql
+    10_recovery_codes.sql                 ← EMPTY (0 rows)
+    11_stop_words.sql
+    12_tag_definitions.sql
+    13_username_blacklist.sql             ← 2 rows (1 enabled-Exact + 1 disabled-Exact)
+    14_domain_filters.sql                 ← EMPTY (0 rows)
+    15_image_training_samples.sql         ← EMPTY (0 rows)
+    16_video_training_samples.sql         ← EMPTY (0 rows)
+    17_web_notifications.sql              ← EMPTY (0 rows)
+    18_notification_preferences.sql
+    19_messages.sql                       ← 400 rows (100 each ham/spam slice)
+    20_chat_admins.sql
+    21_linked_channels.sql
+    22_telegram_user_mappings.sql
+    23_profile_scan_results.sql
+    24_username_history.sql
+    25_admin_notes.sql
+    26_audit_log.sql
+    27_user_tags.sql
+    28_welcome_responses.sql              ← includes synthetic 999001..999005 (5 status branches)
+    29_invites.sql
+    30_reports.sql
+    31_message_edits.sql
+    32_detection_results.sql
+    33_training_labels.sql                ← 200 rows (100 spam + 100 ham)
+    34_user_actions.sql                   ← 993 rows (see canonical contract below)
+    35_message_translations.sql           ← child of messages AND message_edits; loaded last among message-children
 
   migration/                              ← never loaded by canonical path
     40_pre_migration_impersonation_alerts.sql
@@ -481,11 +531,22 @@ splicing together today's hand-crafted scenario data.
 The old data was small, stable, and deterministic; the new canonical is
 larger, realistic-shape, and bootstrapped. Tests that referenced
 specific old IDs (e.g., dedup messages at `95001`–`95022`) get updated
-during Phase 3 to reference whatever IDs the bootstrap assigned to the
-equivalent canonical rows. The `GoldenDataset.*_Id` constants are the
-mapping layer: tests use the constants, the bootstrap fills them in.
+during Phase 3 to reference equivalent canonical rows.
 
-### Canonical contract for `09_user_actions.sql`
+> **Known canonical gap (Pre-1c audit, 2026-05-03):** The 95001..95022
+> SimHash dedup message IDs referenced by
+> `Deduplication/SimHashComparisonTests.cs:124` were a Pre-1b extension
+> requirement that **did not land** in canonical. Phase 3A.3 must either
+> extend canonical with these messages OR seed them inline at test setup.
+> See `IntegrationTests/CLAUDE.md` Part 2 "Known canonical gaps."
+
+Per the stale-constants callout above, `GoldenDataset.*` legacy
+constants outside `Users.*` are not the mapping layer they were
+originally designed to be — Phase 3A rewrites use canonical anchor IDs
+from `IntegrationTests/CLAUDE.md` Part 2 directly (or mint new constants
+on demand against canonical).
+
+### Canonical contract for `34_user_actions.sql`
 
 Every seeded `user_actions` row has a non-null `MessageId` (and
 corresponding `ChatId`). This guarantees that any `user_action` row a
@@ -645,12 +706,29 @@ during Phase 3 migration.
 
 ### Constants kept and extended
 
-`GoldenDataset.TelegramUsers.UserN_TelegramUserId` (1–7),
-`GoldenDataset.Users.UserN_Id` (admin user GUIDs on the `users` table),
-`GoldenDataset.ManagedChats.MainChat_Id` and siblings — all preserved
-unchanged. New constants added only if a new fixture introduces an identifier
-tests need to assert against (e.g., `Invites.PendingInvite_Id` if `14_invites.sql`
-introduces a row referenced by ID in test assertions).
+> **Stale-constants callout (Pre-1c audit, 2026-05-03):** The original plan
+> assumed `GoldenDataset.*` legacy constants would be preserved verbatim
+> through the bootstrap. This **did not happen** for anything but
+> `Users.User{1..4}_Id`. Every `telegram_user_id` and `chat_id` was rotated
+> to a synthetic value (see sanitization rules table). As a result:
+>
+> - `Users.User{1..4}_Id` (the four web-fixture UUIDs) — **still valid**;
+>   continue to use these.
+> - `TelegramUsers.UserN_TelegramUserId`, `ManagedChats.MainChat_Id`,
+>   `Messages.*`, `LinkedChannels.*`, `DetectionResults.*`,
+>   `TrainingLabels.*` — **STALE**; pin to PRE-rotation IDs that DO NOT
+>   exist in canonical. ~80 test sites consume them; all need a remap
+>   during Phase 3A. See `IntegrationTests/CLAUDE.md:86-87` and Part 2 of
+>   that file for the canonical anchor IDs to remap to (e.g., MainChat
+>   = `-100026957614982`, top ham author = `9921676191756`).
+>
+> Phase 3A rewrites should either reference canonical IDs directly or
+> mint new constants on demand against canonical, NOT continue to consume
+> the stale legacy constants.
+
+New constants added only if a new fixture introduces an identifier tests
+need to assert against (e.g., `Invites.PendingInvite_Id` if
+`29_invites.sql` introduces a row referenced by ID in test assertions).
 
 ### Methods retired (Phase 4)
 
@@ -988,7 +1066,7 @@ knows the full set of rows/tables/shapes canonical needs to carry.
 task described in the "Canonical bootstrap from local database" section
 above). Executed collaboratively against the running local DB once the
 audit has produced its definitive "needs canonical extension" list.
-Output: 17 `canonical/*.sql` files reviewed and ready to commit. Map
+Output: 35 `canonical/*.sql` files reviewed and ready to commit. Map
 existing `GoldenDataset.*_Id` constants to specific canonical rows;
 update the constants file if any IDs need to shift.
 
@@ -998,7 +1076,7 @@ Pre-Phase-1 prerequisites (audit and bootstrap) are complete; canonical
 SQL files exist on the maintainer's working copy ready to commit
 alongside the new infrastructure below.
 
-- Commit the 17 `canonical/*.sql` files (output of the pre-Phase-1
+- Commit the 35 `canonical/*.sql` files (output of the pre-Phase-1
   bootstrap, including any rows the audit identified as "needs canonical
   extension"). The `GoldenDataset.*_Id` constants file is updated in the
   same commit if IDs shifted.
@@ -1183,10 +1261,11 @@ changes. The implementer audits and updates only what's needed.
   in an extra commit before proceeding.
 - Delete the 11 retired methods from `GoldenDataset`.
 - Delete the 15 obsolete SQL files (listed in "Files deleted" above; this
-  count is intentionally less than the 17 new `canonical/*.sql` files,
+  count is intentionally less than the 35 new `canonical/*.sql` files,
   because today's configs row came from inline `SeedConfigsAsync` rather
-  than a SQL fixture, and `message_translations` had no fixture under the
-  old layout).
+  than a SQL fixture, `message_translations` had no fixture under the old
+  layout, and the new canonical includes per-table fixtures for many
+  prod tables not previously covered).
 - Capture final integration suite wall-clock for the PR description.
 
 `MigrationTestHelper.CreateDatabaseAndApplyMigrationsAsync` and
@@ -1418,7 +1497,7 @@ the template optimization on purpose.
       (canonical-consumer / true-empty / needs-canonical-extension /
       migration-test); union of "needs canonical extension" rows captured
       as bootstrap input
-- [ ] Canonical bootstrap complete: 17 `canonical/*.sql` files produced
+- [ ] Canonical bootstrap complete: 35 `canonical/*.sql` files produced
       from local DB sampling (400 messages — 100 of each ham/spam type,
       200 training labels, plus FK-supporting rows), sanitization rules
       applied per the rules table, manual spot-check passed (URL
@@ -1433,7 +1512,7 @@ the template optimization on purpose.
 
 ### Phase 1
 - [ ] `.csproj` `EmbeddedResource` glob updated to `TestData\SQL\**\*.sql`
-- [ ] `TestData/SQL/canonical/` exists with 17 per-table SQL files
+- [ ] `TestData/SQL/canonical/` exists with 35 per-table SQL files
       committed (output of the pre-Phase-1 bootstrap)
 - [ ] `TestData/SQL/migration/40_pre_migration_impersonation_alerts.sql`
       moved; `CriticalMigrationTests.cs` references the new path
@@ -1479,10 +1558,11 @@ the template optimization on purpose.
 - [ ] `find_symbol_usages` shows zero callers of every retired method
 - [ ] 11 retired methods deleted from `GoldenDataset`
 - [ ] 15 obsolete SQL files deleted (the deletion list above; distinct from
-      the 17 new `canonical/*.sql` files added in Phase 1 — asymmetry is
+      the 35 new `canonical/*.sql` files added in Phase 1 — asymmetry is
       intentional: today's `configs` row came from inline `SeedConfigsAsync`
       C# code, not a SQL file; `message_translations` had no fixture under
-      the old layout)
+      the old layout; canonical adds per-table fixtures for many prod
+      tables not previously covered)
 - [ ] `MigrationTestHelper.CreateDatabaseAndApplyMigrationsAsync` retained
       (still used by migration tests)
 - [ ] All tests pass

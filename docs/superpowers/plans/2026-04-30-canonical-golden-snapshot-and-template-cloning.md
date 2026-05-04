@@ -106,7 +106,7 @@ Expected: output shows `.gitignore:NN:tmp/    tmp/canonical-bootstrap/audit-outp
 
 ## Pre-Phase 1b: Canonical bootstrap from local database (no commit) — ✅ COMPLETE
 
-**Status:** Bootstrap complete on 2026-05-01. 35 canonical SQL files generated at `TelegramGroupsAdmin.IntegrationTests/TestData/SQL/canonical/` (3,200 INSERTs, 2.4 MB total). Bootstrap schema preserved in local DB and `tmp/canonical-bootstrap/` working files retained as a safety net — final cleanup runs in Post-Phase A after Pre-Phase 1c + Phase 1–4 prove canonical works end-to-end.
+**Status:** Bootstrap complete on 2026-05-01. 35 canonical SQL files generated at `TelegramGroupsAdmin.IntegrationTests/TestData/SQL/canonical/` (3,174 INSERTs, 2.4 MB total). Bootstrap schema preserved in local DB and `tmp/canonical-bootstrap/` working files retained as a safety net — final cleanup runs in Post-Phase A after Pre-Phase 1c + Phase 1–4 prove canonical works end-to-end.
 
 **Final canonical sizes (post-Strict-Plus prune):** 9 web users, 335 telegram_users, 21 managed_chats, 400 messages (100/100/100/100 ham/spam slices), 200 training_labels, 376 detection_results, 23 message_edits, 14 message_translations, 100 audit_log, 104 chat_admins, 10 reports, 10 profile_scan_results, 12 user_tags, 3 admin_notes, 4 username_history, 3 telegram_user_mappings, 19 invites, 3 linked_channels, 5 notification_preferences, 2 username_blacklist (only Exact match implemented in `BlacklistMatchType`; future types added when feature ships), 293 welcome_responses, 993 user_actions, 1 prompt_versions (single Main Chat synthetic row; tests build version history via SUT), 18 content_detection_configs, 20 configs (encrypted columns NULL — Apply-phase injects at runtime; `welcome_config` populated only on global+Main Chat for synthetic exam prompts, NULL on other 18 per-chat rows), reference tables (74 captions / 92 gifs / 7 blocklist / 17 stop_words / 6 tag_definitions), 5 EMPTY tables. Total 3174 INSERT statements.
 
@@ -120,13 +120,13 @@ Expected: output shows `.gitignore:NN:tmp/    tmp/canonical-bootstrap/audit-outp
 >
 > **Required input — Pre-Phase 1a audit output:** `tmp/canonical-bootstrap/audit-output.md` (already produced; gitignored under `tmp/`). Read its `needs-canonical-extension` section before sampling. The four concrete extensions canonical MUST carry to satisfy known consumer tests are listed below as a fast-path summary:
 >
-> 1. **SimHash dedup messages** — `Deduplication/SimHashComparisonTests.cs:124` references message IDs **95001–95022** with named near-duplicate groups: Group1 crypto signals (95001–95004), Group2 investment scams (95005–95007), Group3 giveaway scams (95008–95010), additional groups (95011–95016), Group6 ham ML (95017–95019), Group7 money-fast (95020–95022). Bootstrap pins these IDs to canonical with the named group structure preserved.
-> 2. **Welcome response slice** — `Jobs/WelcomeTimeoutJobTests.cs:113` needs a `welcome_responses` row pinned to `(MainChat_Id, User1_TelegramUserId, WelcomeMessageId=<new constant>)` with `Response=Pending`, plus variants for `Response IN (Accepted, Denied, Left, Timeout)` so all five timeout-path branches can be exercised. Add the corresponding constant to `GoldenDataset.WelcomeResponses` in Task B8.
-> 3. **Analytics time-spread data** — `Repositories/AnalyticsRepositoryTests.cs:78` aggregates over daily / weekly / monthly / 7-day / 30-day / 365-day windows. Sample `detection_results` and `welcome_responses` rows whose `created_at` / `responded_at` cover all those windows, keyed off `MainChat_Id` and pinned telegram users. Either pre-shift timestamps to be relative to a known anchor in the SQL, or include a post-load SQL UPDATE that shifts to `now() - interval` based on a slot column.
-> 4. **Ban-celebration `user_actions` set** — `Telegram/Services/BanCelebrationServiceTests.cs:546` renders `{bancount}` placeholders 1–7. Bootstrap includes seven `user_actions` rows with `ActionType=Ban` for `User1..User7_TelegramUserId` tied to `MainChat_Id`.
+> 1. **SimHash dedup messages** — `Deduplication/SimHashComparisonTests.cs:124` references message IDs **95001–95022** with named near-duplicate groups: Group1 crypto signals (95001–95004), Group2 investment scams (95005–95007), Group3 giveaway scams (95008–95010), additional groups (95011–95016), Group6 ham ML (95017–95019), Group7 money-fast (95020–95022). **Was attempted but did NOT land** — see `IntegrationTests/CLAUDE.md` Part 2 "Known canonical gaps." Phase 3A.3 must extend canonical OR seed inline.
+> 2. **Welcome response slice** — `Jobs/WelcomeTimeoutJobTests.cs:113` needed a `welcome_responses` row pinned to `(MainChat, specific user, WelcomeMessageId=<new constant>)` with `Response=Pending`, plus variants for `Response IN (Accepted, Denied, Left, Timeout)` so all five timeout-path branches can be exercised. **Partially landed:** canonical carries synthetic IDs `999001..999005` covering the five `WelcomeResponseType` statuses (Pending / Accepted / Denied / Timeout / Left) on `(chat_id=-100026957614982, user_id=9196379650113, username='canonical_user1', welcome_message_id=99001..99005)` — but NOT pinned to the legacy `User1_TelegramUserId` the test expects. Phase 3A.4 retargets the test at `9196379650113` (or extends canonical with the legacy-user variant).
+> 3. **Analytics time-spread data** — `Repositories/AnalyticsRepositoryTests.cs:78` aggregates over daily / weekly / monthly / 7-day / 30-day / 365-day windows. **Was attempted but did NOT land** — canonical does not pre-shift timestamps and the Pre-1b workflow does not produce the post-load UPDATE this needed. See `IntegrationTests/CLAUDE.md` Part 2 "Known canonical gaps." Phase 3A.7 needs a different approach (canonical extension OR test-local time shift).
+> 4. **Ban-celebration `user_actions` set** — `Telegram/Services/BanCelebrationServiceTests.cs:546` renders `{bancount}` placeholders 1–7. **Was attempted but did NOT land** — the seven synthetic ban anchor rows are not in canonical. See `IntegrationTests/CLAUDE.md` Part 2 "Known canonical gaps." Phase 3A.22 must extend canonical OR seed inline. (Note: canonical does include a heavily-banned spammer `9971261287520` with 4 Ban actions — usable as a partial fixture for tests that don't need exactly 1–7.)
 >
 > **Deliverables:**
-> 1. 17 `canonical/*.sql` files on the maintainer's working copy under `TelegramGroupsAdmin.IntegrationTests/TestData/SQL/canonical/`, sanitized and ready to commit alongside Phase 1's infrastructure changes. The four needs-canonical-extension items above MUST be present in the resulting fixtures.
+> 1. 35 `canonical/*.sql` files on the maintainer's working copy under `TelegramGroupsAdmin.IntegrationTests/TestData/SQL/canonical/`, sanitized and ready to commit alongside Phase 1's infrastructure changes. The four needs-canonical-extension items above were attempted but only #2 partially landed — see the per-item notes for what Phase 3A consumers will encounter.
 > 2. Three follow-up bug reports — filed as separate GitHub issues, **NOT** fixed in this PR. See "Follow-up bugs surfaced during bootstrap" at the end of this section.
 > 3. The `bootstrap` schema dropped from the local DB; no bootstrap script committed to the repo.
 
@@ -1221,12 +1221,12 @@ The bootstrap has already pinned these synthetic / canonical-fixture IDs. They M
   - `a8dc8371-afc5-4b61-9d71-d177f2dd9ddd` — Deleted Admin / `deleted@example.com` (status 3)
   - `ba9ba542-3df6-4473-a820-578562780c57` — Deleted GlobalAdmin / `globaladmin@example.com` (permission_level 1, status 3)
 - **Web user shared password** (all 9 users): `Passw0rd!SaidNoSecurityAuditorEver` — hash already baked into `01_users.sql`
-- **Synthetic `welcome_responses` rows**: IDs 999001–999005 cover the 5 status branches (Allowed / Banned / Restricted / Detected / Removed)
-- **Synthetic `username_blacklist` rows**: IDs 999001–999005 are the 5 hand-curated test patterns; 999006–999007 are imported audit rows
+- **Synthetic `welcome_responses` rows**: IDs 999001–999005 cover the 5 `WelcomeResponseType` status branches: 999001=Pending, 999002=Accepted, 999003=Denied, 999004=Timeout, 999005=Left. All 5 share `(chat_id=-100026957614982, user_id=9196379650113, username='canonical_user1', welcome_message_id=99001..99005)`.
+- **Synthetic `username_blacklist` rows**: 2 rows total — ID `999001` (`pattern='spambot_admin'`, `match_type=0` (Exact), `enabled=true`) and ID `999005` (`pattern='archived_pattern'`, `match_type=0` (Exact), `enabled=false`). No Contains/Regex/StartsWith fixtures — `BlacklistMatchType` enum only implements Exact.
 - **Synthetic `training_labels`** for 15 promoted explicit_ham messages: `reason='canonical_synthetic_promotion'`, `labeled_by_user_id` = the rotated id of original prod user `1312830442`
 - **Identity ranges** (rotated in B5):
-  - Telegram user IDs: `[9_000_000_000_000, 10_000_000_000_000)`
-  - Chat IDs: `[-1_000_000_000_000_000, -900_000_000_000_000)`
+  - Telegram user IDs: `[9_000_000_000_000, 10_000_000_000_000)` — 13-digit, prefix `9`
+  - Chat IDs: `[-100_099_999_999_999, -100_000_000_000_000]` — 15-digit, prefix `-100` (preserves the Telegram supergroup format that app code checks via `chatId.ToString().StartsWith("-100")`, while remaining clearly synthetic vs real 13-digit supergroup IDs)
   - `chat_id = 0` preserved as sentinel (CASE WHEN guard during rotation)
 
 ### Task C1: Audit existing integration tests for fixture-lookup patterns
@@ -1294,7 +1294,7 @@ The canonical dataset is a frozen superset of every entity type the integration 
 Origin: prod DB snapshot from 2026-04-30. Bootstrap pipeline (full detail in `docs/superpowers/plans/2026-04-30-canonical-golden-snapshot-and-template-cloning.md` Pre-Phase 1b):
 
 1. Mirrored 35 prod tables into a `bootstrap` schema (UNLOGGED, FK constraints replicated via `pg_get_constraintdef`).
-2. Sampled 100 messages from each of 4 slices: banned-spam, explicit-ham, deletion-clutch, pure-ham (400 total).
+2. Sampled 100 messages from each of 4 slices: explicit_spam, implicit_spam, explicit_ham, implicit_ham (400 total).
 3. Copied all parent rows up front (Option D), then pruned unreferenced parents at the end (Strict-Plus prune).
 4. Rotated user IDs into `[9×10¹², 10¹³)` and chat IDs into `[-1.001×10¹⁴, -1×10¹⁴]` (the `-100` prefix preserves Telegram supergroup format compatibility for app-code checks like `chatId.ToString().StartsWith("-100")`) via deterministic md5 + secret salt. `chat_id = 0` preserved as sentinel.
 5. Sanitized non-banned ("ham") users with wordlist names; banned users keep real names as spam evidence.
@@ -1394,7 +1394,7 @@ Recipe format: a heading, the anchor id(s), a one-line description, and "use whe
 
 ### Messages
 (Populate from canonical 19_messages.sql + audit output. Required scenarios at minimum:)
-- One message per slice: banned-spam, explicit-ham, deletion-clutch, pure-ham
+- One message per slice: explicit_spam, implicit_spam, explicit_ham, implicit_ham
 - A message with message_edits history
 - A message with message_translations
 - A message with multiple detection_results (different detector kinds)
@@ -1405,8 +1405,8 @@ Recipe format: a heading, the anchor id(s), a one-line description, and "use whe
 - Each kind of `content_detection_configs` row that current tests rely on
 
 ### Synthetic / reserved rows (do not regenerate)
-- `welcome_responses` IDs 999001–999005: 5 status branches (Allowed / Banned / Restricted / Detected / Removed) on `(MainChat, AnyTelegramUser)` — the canonical fixture for welcome-response-by-status lookups.
-- `username_blacklist` IDs 999001–999005: 5 hand-curated test patterns; 999006–999007 are imported audit rows.
+- `welcome_responses` IDs 999001–999005: 5 `WelcomeResponseType` status branches (Pending / Accepted / Denied / Timeout / Left) on `(chat_id=-100026957614982, user_id=9196379650113, username='canonical_user1', welcome_message_id=99001..99005)` — the canonical fixture for welcome-response-by-status lookups.
+- `username_blacklist`: 2 rows total — ID 999001 (`spambot_admin`, enabled, Exact) and ID 999005 (`archived_pattern`, disabled, Exact). No Contains/Regex/StartsWith fixtures (only Exact is implemented in `BlacklistMatchType`).
 - `training_labels` rows with `reason='canonical_synthetic_promotion'`: 15 explicit_ham promotions. `labeled_by_user_id` = rotated id of prod user `1312830442`.
 
 ### Cross-references
@@ -1526,7 +1526,7 @@ Run: `dotnet test TelegramGroupsAdmin.IntegrationTests --filter "FullyQualifiedN
 
 Expected: PASS.
 
-### Task 1.4: Place the 17 canonical SQL files (output of Pre-1b)
+### Task 1.4: Place the 35 canonical SQL files (output of Pre-1b)
 
 **Files:**
 - Create: 35 files under `TelegramGroupsAdmin.IntegrationTests/TestData/SQL/canonical/`
@@ -1535,7 +1535,23 @@ Expected: PASS.
 
 Run: `ls TelegramGroupsAdmin.IntegrationTests/TestData/SQL/canonical/`
 
-Expected: 35 files, names `01_users.sql` through `35_message_translations.sql` per the spec layout.
+Expected: 35 files, in this exact FK-safe load order (matches on-disk numeric order):
+```
+01_users.sql               02_telegram_users.sql        03_managed_chats.sql
+04_configs.sql             05_content_detection_configs.sql
+06_ban_celebration_captions.sql                         07_ban_celebration_gifs.sql
+08_blocklist_subscriptions.sql                          09_prompt_versions.sql
+10_recovery_codes.sql      11_stop_words.sql            12_tag_definitions.sql
+13_username_blacklist.sql  14_domain_filters.sql        15_image_training_samples.sql
+16_video_training_samples.sql                           17_web_notifications.sql
+18_notification_preferences.sql                         19_messages.sql
+20_chat_admins.sql         21_linked_channels.sql       22_telegram_user_mappings.sql
+23_profile_scan_results.sql                             24_username_history.sql
+25_admin_notes.sql         26_audit_log.sql             27_user_tags.sql
+28_welcome_responses.sql   29_invites.sql               30_reports.sql
+31_message_edits.sql       32_detection_results.sql     33_training_labels.sql
+34_user_actions.sql        35_message_translations.sql
+```
 
 - [ ] **Step 2: Verify recursive glob picks up canonical/ subfolder**
 
@@ -1551,7 +1567,7 @@ dotnet run --project TelegramGroupsAdmin.IntegrationTests -- --list-resources 2>
   dotnet test TelegramGroupsAdmin.IntegrationTests --filter "FullyQualifiedName~ManifestResourceProbe" 2>&1 | tail -5
 ```
 
-If no probe test exists, add the probe test in Task 1.7 (with `LoadCanonicalAsync`) which fails loud if any of the 17 resources is missing.
+If no probe test exists, add the probe test in Task 1.7 (with `LoadCanonicalAsync`) which fails loud if any of the 35 resources is missing.
 
 ### Task 1.5: Add SharedDataProtectionProvider to PostgresFixture
 
@@ -1665,7 +1681,7 @@ public class LoadCanonicalAsyncTests
     public void TearDown() => _helper?.Dispose();
 
     [Test]
-    public async Task LoadCanonicalAsync_PopulatesAllSeventeenTables()
+    public async Task LoadCanonicalAsync_PopulatesAllThirtyFiveTables()
     {
         await using var ctx = _helper!.GetDbContext();
         await GoldenDataset.LoadCanonicalAsync(ctx, PostgresFixture.SharedDataProtectionProvider);
@@ -1675,7 +1691,9 @@ public class LoadCanonicalAsyncTests
         Assert.That(await ctx.ManagedChats.CountAsync(), Is.GreaterThan(0), "managed_chats");
         Assert.That(await ctx.Messages.CountAsync(), Is.EqualTo(400), "messages should be exactly 400");
         Assert.That(await ctx.TrainingLabels.CountAsync(), Is.EqualTo(200), "training_labels should be exactly 200");
-        // ... assert > 0 on each remaining canonical table
+        // ... assert > 0 on each remaining canonical table (5 tables are intentionally
+        // EMPTY: domain_filters, recovery_codes, image_training_samples,
+        // video_training_samples, web_notifications — assert == 0 on those instead).
     }
 
     [Test]
@@ -1709,54 +1727,61 @@ Open `TelegramGroupsAdmin.IntegrationTests/TestData/GoldenDataset.cs`. Make the 
     /// provider. Used by PostgresFixture.[OneTimeSetUp] to build golden_template, and
     /// by GoldenReducePlanTests to exercise Reduce against canonical without depending
     /// on Phase 2's template infrastructure.
+    ///
+    /// HASHES are pre-baked into the SQL files (see Pre-1b) — this method does NOT
+    /// recompute content_hash / similarity_hash at load time. The only post-load step
+    /// is the encrypted-column UPDATE below.
     /// </summary>
     public static async Task LoadCanonicalAsync(
         AppDbContext context,
         IDataProtectionProvider dataProtection,
         CancellationToken ct = default)
     {
-        // FK-ordered list of resource names matching TestData/SQL/canonical/
-        // (35 files; ordering matches B7's pg_dump topological order)
+        // FK-safe load order matching TestData/SQL/canonical/ exactly (35 files;
+        // numeric on-disk order IS the FK-safe order — Pre-1b enforced this).
+        // Resource names use '.' separators per .NET embedded-resource conventions:
+        // path "TestData/SQL/canonical/01_users.sql" → "SQL.canonical.01_users.sql".
         string[] fixtures =
         {
-            // Layer 0 roots
+            // Layer 0 roots — users, telegram_users, managed_chats first
             "SQL.canonical.01_users.sql",
-            "SQL.canonical.02_configs.sql",
-            "SQL.canonical.03_content_detection_configs.sql",
-            "SQL.canonical.04_ban_celebration_captions.sql",
-            "SQL.canonical.05_ban_celebration_gifs.sql",
-            "SQL.canonical.06_blocklist_subscriptions.sql",
-            "SQL.canonical.07_prompt_versions.sql",
-            "SQL.canonical.08_stop_words.sql",
-            "SQL.canonical.09_tag_definitions.sql",
-            "SQL.canonical.10_telegram_users.sql",
-            "SQL.canonical.11_managed_chats.sql",
-            "SQL.canonical.12_notification_preferences.sql",
-            "SQL.canonical.13_domain_filters.sql",
-            "SQL.canonical.14_recovery_codes.sql",
-            "SQL.canonical.15_username_blacklist.sql",
-            // Layer 1 children of roots
-            "SQL.canonical.16_messages.sql",
-            "SQL.canonical.17_chat_admins.sql",
-            "SQL.canonical.18_linked_channels.sql",
-            "SQL.canonical.19_telegram_user_mappings.sql",
-            "SQL.canonical.20_profile_scan_results.sql",
-            "SQL.canonical.21_username_history.sql",
-            "SQL.canonical.22_admin_notes.sql",
-            "SQL.canonical.23_audit_log.sql",
-            "SQL.canonical.24_user_tags.sql",
-            "SQL.canonical.25_welcome_responses.sql",
-            "SQL.canonical.26_invites.sql",
-            "SQL.canonical.27_web_notifications.sql",
-            "SQL.canonical.28_reports.sql",
-            // Layer 2 children of messages
-            "SQL.canonical.29_message_edits.sql",
-            "SQL.canonical.30_detection_results.sql",
-            "SQL.canonical.31_training_labels.sql",
-            "SQL.canonical.32_user_actions.sql",
-            "SQL.canonical.33_image_training_samples.sql",
-            "SQL.canonical.34_video_training_samples.sql",
-            // Layer 3 grandchildren
+            "SQL.canonical.02_telegram_users.sql",
+            "SQL.canonical.03_managed_chats.sql",
+            // Independent reference / config tables
+            "SQL.canonical.04_configs.sql",
+            "SQL.canonical.05_content_detection_configs.sql",
+            "SQL.canonical.06_ban_celebration_captions.sql",
+            "SQL.canonical.07_ban_celebration_gifs.sql",
+            "SQL.canonical.08_blocklist_subscriptions.sql",
+            "SQL.canonical.09_prompt_versions.sql",
+            "SQL.canonical.10_recovery_codes.sql",       // EMPTY (0 rows)
+            "SQL.canonical.11_stop_words.sql",
+            "SQL.canonical.12_tag_definitions.sql",
+            "SQL.canonical.13_username_blacklist.sql",   // 2 rows (Exact only)
+            "SQL.canonical.14_domain_filters.sql",       // EMPTY
+            "SQL.canonical.15_image_training_samples.sql", // EMPTY
+            "SQL.canonical.16_video_training_samples.sql", // EMPTY
+            "SQL.canonical.17_web_notifications.sql",    // EMPTY
+            "SQL.canonical.18_notification_preferences.sql",
+            // Layer 1 — children of roots
+            "SQL.canonical.19_messages.sql",             // 400 rows
+            "SQL.canonical.20_chat_admins.sql",
+            "SQL.canonical.21_linked_channels.sql",
+            "SQL.canonical.22_telegram_user_mappings.sql",
+            "SQL.canonical.23_profile_scan_results.sql",
+            "SQL.canonical.24_username_history.sql",
+            "SQL.canonical.25_admin_notes.sql",
+            "SQL.canonical.26_audit_log.sql",
+            "SQL.canonical.27_user_tags.sql",
+            "SQL.canonical.28_welcome_responses.sql",    // includes synthetic 999001..999005
+            "SQL.canonical.29_invites.sql",
+            "SQL.canonical.30_reports.sql",
+            // Layer 2 — children of messages
+            "SQL.canonical.31_message_edits.sql",
+            "SQL.canonical.32_detection_results.sql",
+            "SQL.canonical.33_training_labels.sql",      // 200 rows
+            "SQL.canonical.34_user_actions.sql",         // 993 rows
+            // Layer 3 — child of messages AND message_edits
             "SQL.canonical.35_message_translations.sql",
         };
 
@@ -1766,7 +1791,7 @@ Open `TelegramGroupsAdmin.IntegrationTests/TestData/GoldenDataset.cs`. Make the 
             await LoadSqlScriptAsync(context, fixture);
         }
 
-        // Encrypted-column post-step: 02_configs.sql seeds the configs row with all 5
+        // Encrypted-column post-step: 04_configs.sql seeds the configs rows with all 5
         // DataProtection-encrypted columns NULL. Encrypt canonical plaintext under the
         // shared provider and UPDATE. Each column has its OWN purpose string — production
         // code in TelegramGroupsAdmin.Configuration uses DataProtectionPurposes.ApiKeys
@@ -2454,14 +2479,15 @@ git add TelegramGroupsAdmin.IntegrationTests/TelegramGroupsAdmin.IntegrationTest
 git commit -F- <<'EOF'
 feat(test): add canonical SQL fixtures + GoldenReducePlan builder + SharedDataProtectionProvider
 
-- Adds 17 canonical SQL fixtures under TestData/SQL/canonical/ produced by
+- Adds 35 canonical SQL fixtures under TestData/SQL/canonical/ produced by
   the one-time bootstrap from local DB sampling (400 messages, 200 training
-  labels, FK-supporting rows). Sanitization rules per spec applied.
+  labels, FK-supporting rows; 3,174 INSERTs total). Sanitization rules per
+  spec applied; content/similarity hashes pre-baked into the SQL.
 - Moves 40_pre_migration_impersonation_alerts.sql under TestData/SQL/migration/
   and updates CriticalMigrationTests path reference. Recursive EmbeddedResource
   glob picks up the subfolders.
 - Adds GoldenDataset.LoadCanonicalAsync(ctx, dataProtection, ct) which loads
-  the 17 fixtures FK-ordered and runs the encrypted-column UPDATE post-step.
+  the 35 fixtures FK-ordered and runs the encrypted-column UPDATE post-step.
 - Adds GoldenReducePlanBuilder + ChildReducePlan two-stage type-state builder
   with KeepMessages/KeepSpam/KeepHam/KeepDetectionResults/KeepUserActions.
   ApplyAsync runs ops in fixed parent-first topological order in a single
@@ -2808,6 +2834,24 @@ EOF
 
 Driver input: `audit-output.md` `canonical-consumer` and `mixed` sections (from Pre-Phase 1a). Each file gets its own commit step within this phase, but the migration pattern is identical, so this section documents the pattern once and lists every file as a checkbox.
 
+> **DRIFT NOTICE (Pre-1c audit, 2026-05-03):** Legacy `GoldenDataset.*` constants outside `Users.*` are STALE. Only `Users.User{1..4}_Id` UUIDs match canonical (the four web fixture UUIDs: Owner `b388ee38-…`, Admin `921637d5-…`, Deleted Admin `a8dc8371-…`, Deleted GlobalAdmin `ba9ba542-…`). Every other constant — `TelegramUsers.UserN_TelegramUserId` (`100001+`), `ManagedChats.MainChat_Id` (`-1001322973935`), `Messages.*`, `LinkedChannels.*`, `DetectionResults.*`, `TrainingLabels.*` — pins to PRE-rotation IDs that DO NOT exist in canonical. ~80 test sites consume them.
+>
+> **Rewrite rule:** use canonical anchor IDs directly (or mint new constants on demand against canonical), NOT the stale legacy constants. Anchor IDs from `IntegrationTests/CLAUDE.md` Part 2:
+>
+> - **MainChat:** `chat_id = -100026957614982` ("Main Community")
+> - **Top MainChat ham author:** `telegram_user_id = 9921676191756` (`@unhelpfulgrab`)
+> - **Second MainChat ham author:** `telegram_user_id = 9960171136314` (`@sillywolf`)
+> - **Heavily-banned spammer:** `9971261287520` (4 Ban actions)
+> - **Renamed spammer (with username_history):** `9875141377477`
+> - **Synthetic welcome target:** `9196379650113`
+> - **Profile-scan target:** `9408530993787`
+> - **Secondary chat:** `-100059667856554` ("Workshop Alumni")
+> - **Most-administered chat:** `-100094881429433` ("Crypto Group", 13 admins)
+> - **Soft-deleted chat:** `-100086877127767` ("Test Group")
+> - **Web user fixtures:** Owner `b388ee38-0ed3-4c09-9def-5715f9f07f56`, GlobalAdmin `8e3a7211-d0eb-40c6-af8e-7d15bb42d10a`, Admin `921637d5-0f65-4c66-b143-6f057dd06a1c`, Deleted Admin `a8dc8371-afc5-4b61-9d71-d177f2dd9ddd`, Deleted GlobalAdmin `ba9ba542-3df6-4473-a820-578562780c57`
+>
+> Read `TelegramGroupsAdmin.IntegrationTests/CLAUDE.md` end-to-end before starting any 3A task — Part 2 maps every common test fixture to a canonical anchor.
+
 ### Per-file migration pattern (apply to every canonical-consumer file)
 
 1. **Replace the [SetUp] db-creation call.** Change `await _testHelper.CreateDatabaseAndApplyMigrationsAsync()` to `await _testHelper.CreateDatabaseFromGoldenTemplateAsync()`.
@@ -2827,31 +2871,35 @@ Driver input: `audit-output.md` `canonical-consumer` and `mixed` sections (from 
 Authoritative list from `tmp/canonical-bootstrap/audit-output.md` (audit run 2026-04-30). All 27 files apply the per-file migration pattern. Audit rationale per file is in the audit-output document; cross-reference there before starting each task.
 
 - [ ] **Task 3A.1:** `Configuration/ConfigServiceIntegrationTests.cs`
-- [ ] **Task 3A.2:** `ContentDetection/Repositories/ProfileScanAlertMappingTests.cs` — currently uses non-canonical IDs for `managed_chats` / `telegram_users`; reuse `MainChat_Id` + `User1_TelegramUserId` after migration.
-- [ ] **Task 3A.3:** `Deduplication/SimHashComparisonTests.cs` — also needs-canonical-extension (see Pre-Phase 1b inputs); references message IDs 90001–90040 and 95001–95022 with named near-duplicate groups.
-- [ ] **Task 3A.4:** `Jobs/WelcomeTimeoutJobTests.cs` — also needs-canonical-extension; helper functions add `TelegramUserDto` + `WelcomeResponseDto` rows directly.
+- [ ] **Task 3A.2:** `ContentDetection/Repositories/ProfileScanAlertMappingTests.cs` — currently uses non-canonical IDs for `managed_chats` / `telegram_users`; remap to canonical anchors `MainChat = -100026957614982` and profile-scan target `telegram_user_id = 9408530993787` (NOT the stale `MainChat_Id` / `User1_TelegramUserId` constants).
+- [ ] **Task 3A.3:** `Deduplication/SimHashComparisonTests.cs` — references message IDs 90001–90040 and 95001–95022 with named near-duplicate groups.
+  > **DRIFT NOTICE (Pre-1c audit, 2026-05-03):** The 95001..95022 SimHash dedup messages are a KNOWN CANONICAL GAP — the Pre-1b extension #1 was attempted but did NOT land. Phase 3A.3 must either extend canonical with these messages OR seed them inline at test setup. See `IntegrationTests/CLAUDE.md` Part 2 "Known canonical gaps."
+- [ ] **Task 3A.4:** `Jobs/WelcomeTimeoutJobTests.cs` — helper functions add `TelegramUserDto` + `WelcomeResponseDto` rows directly.
+  > **DRIFT NOTICE (Pre-1c audit, 2026-05-03):** Pre-1b extension #2 partially landed — canonical carries synthetic IDs `999001..999005` covering the 5 `WelcomeResponseType` statuses (Pending=999001, Accepted=999002, Denied=999003, Timeout=999004, Left=999005) on `(chat_id=-100026957614982, user_id=9196379650113, username='canonical_user1', welcome_message_id=99001..99005)`, NOT pinned to the legacy `User1_TelegramUserId` the test originally expected. Retarget the test at `9196379650113` and the synthetic 999001..999005 IDs (or extend canonical with the legacy-user variant if a test specifically needs it). See `IntegrationTests/CLAUDE.md` Part 2 "Known canonical gaps."
 - [ ] **Task 3A.5:** `ML/BayesClassifierServiceTests.cs`
 - [ ] **Task 3A.6:** `ML/MLTextClassifierServiceTests.cs` — uses `Reduce(...).KeepSpam(...).KeepHam(...)` pattern for high-spam/high-ham threshold scenarios. See worked example at the end of this section.
-- [ ] **Task 3A.7:** `Repositories/AnalyticsRepositoryTests.cs` — also needs-canonical-extension; analytics aggregations across daily/weekly/monthly windows require deterministic timestamps.
+- [ ] **Task 3A.7:** `Repositories/AnalyticsRepositoryTests.cs` — analytics aggregations across daily/weekly/monthly/7-day/30-day/365-day windows require deterministic timestamps keyed off `MainChat = -100026957614982`.
+  > **DRIFT NOTICE (Pre-1c audit, 2026-05-03):** Pre-1b extension #3 (analytics time-spread) was attempted but did NOT land — canonical does not pre-shift timestamps and the original post-load UPDATE workflow was dropped. Phase 3A.7 needs a different approach: either extend canonical with pre-shifted detection_results / welcome_responses rows, OR run a test-local time-shift UPDATE before each test. See `IntegrationTests/CLAUDE.md` Part 2 "Known canonical gaps."
 - [ ] **Task 3A.8:** `Repositories/DbContextFactoryMigrationTests.cs`
 - [ ] **Task 3A.9:** `Repositories/DetectionResultsRepositoryTests.cs`
 - [ ] **Task 3A.10:** `Repositories/InviteRepositoryTests.cs` — currently runs raw `INSERT INTO users ('test-user-id', ...)` to satisfy `invites.created_by` FK; reuse `User1_Id`.
 - [ ] **Task 3A.11:** `Repositories/MessageHistoryRepositoryTests.cs`
 - [ ] **Task 3A.12:** `Repositories/NotificationRepositoriesTests.cs`
-- [ ] **Task 3A.13:** `Repositories/TelegramUserRepositoryKickCountTests.cs` — helper `CreateTestUserAsync` does inline `Add(...)`; reuse canonical pinned users 100001+.
+- [ ] **Task 3A.13:** `Repositories/TelegramUserRepositoryKickCountTests.cs` — helper `CreateTestUserAsync` does inline `Add(...)`; remap to canonical anchors (e.g., `9921676191756` for a top ham author, `9971261287520` for a heavily-banned spammer). Do NOT reuse the stale `100001+` legacy IDs — those don't exist in canonical.
 - [ ] **Task 3A.14:** `Repositories/TelegramUserRepositoryTests.cs`
 - [ ] **Task 3A.15:** `Repositories/TelegramUserUpsertTests.cs`
 - [ ] **Task 3A.16:** `Repositories/TrainingLabelsRepositoryTests.cs`
-- [ ] **Task 3A.17:** `Repositories/UserActionsRepositoryConstraintTests.cs` — `SeedTestUserAsync` does inline `Add(new TelegramUserDto { TelegramUserId = 555111222 })`; reuse `User1_TelegramUserId`.
-- [ ] **Task 3A.18:** `Repositories/UsernameHistoryRepositoryTests.cs` — `SeedUserAsync` calls a different SUT (`TelegramUserRepository.UpsertAsync`) to seed FK-required rows; reuse canonical pinned users.
+- [ ] **Task 3A.17:** `Repositories/UserActionsRepositoryConstraintTests.cs` — `SeedTestUserAsync` does inline `Add(new TelegramUserDto { TelegramUserId = 555111222 })`; remap to a canonical anchor (e.g., `9921676191756`). Do NOT reuse the stale `User1_TelegramUserId` legacy constant.
+- [ ] **Task 3A.18:** `Repositories/UsernameHistoryRepositoryTests.cs` — `SeedUserAsync` calls a different SUT (`TelegramUserRepository.UpsertAsync`) to seed FK-required rows; remap to canonical anchors (e.g., `9875141377477` for the renamed-spammer with username_history). Do NOT reuse stale legacy `100001+` IDs.
 - [ ] **Task 3A.19:** `Services/Backup/BackupServiceTests.cs` — also runs an inline `INSERT INTO telegram_users` to verify restore wipes it; route that arrange step through `TelegramUserRepository.UpsertAsync` (write-SUT) under the strict rule.
-- [ ] **Task 3A.20:** `Telegram/AuditHandlerTests.cs` — helper does inline `Add(new TelegramUserDto { TelegramUserId = 123456789 })`; reuse `User1_TelegramUserId`.
+- [ ] **Task 3A.20:** `Telegram/AuditHandlerTests.cs` — helper does inline `Add(new TelegramUserDto { TelegramUserId = 123456789 })`; remap to a canonical anchor (e.g., `9921676191756`). Do NOT reuse the stale `User1_TelegramUserId` legacy constant.
 - [ ] **Task 3A.21:** `Telegram/Repositories/LinkedChannelsRepositoryTests.cs`
-- [ ] **Task 3A.22:** `Telegram/Services/BanCelebrationServiceTests.cs` — also needs-canonical-extension; `SeedBanActions(int count)` inserts 1–7 ban rows for testing the `{bancount}` placeholder.
+- [ ] **Task 3A.22:** `Telegram/Services/BanCelebrationServiceTests.cs` — `SeedBanActions(int count)` inserts 1–7 ban rows for testing the `{bancount}` placeholder.
+  > **DRIFT NOTICE (Pre-1c audit, 2026-05-03):** Pre-1b extension #4 (the seven `{bancount}` synthetic anchor rows) was attempted but did NOT land in canonical. Phase 3A.22 must either extend canonical with the synthetic 1–7 ban rows OR seed them inline. Canonical does include heavily-banned spammer `9971261287520` (4 Ban actions) — usable for the {bancount}=4 case but not 1/2/3/5/6/7. See `IntegrationTests/CLAUDE.md` Part 2 "Known canonical gaps."
 - [ ] **Task 3A.23:** `Telegram/Services/Bot/BotChatServiceTests.cs` — helpers add `ManagedChatRecordDto` / `TelegramUserDto` / `ChatAdminRecordDto` for "chat already exists" / "admin cached" arrange paths.
 - [ ] **Task 3A.24:** `Telegram/Services/Bot/BotDmServiceTests.cs` — `SeedTestUser` adds `TelegramUserDto` with `bot_dm_enabled` toggled.
 - [ ] **Task 3A.25:** `Telegram/Services/Bot/BotMessageServiceTests.cs` — helpers add bot-user `TelegramUserDto` and `MessageRecordDto` rows.
-- [ ] **Task 3A.26:** `Telegram/Services/ExamFlowServiceTests.cs` — `CreateTestChatAsync` adds `ManagedChatRecordDto` directly; reuse `MainChat_Id`.
+- [ ] **Task 3A.26:** `Telegram/Services/ExamFlowServiceTests.cs` — `CreateTestChatAsync` adds `ManagedChatRecordDto` directly; remap to canonical MainChat anchor `chat_id = -100026957614982`. Do NOT reuse the stale `MainChat_Id` legacy constant.
 - [ ] **Task 3A.27:** `Telegram/Services/WelcomeFlowBypassIntegrationTests.cs` — currently uses three `LoadSqlScriptAsync` calls against legacy SQL fixtures; replace with canonical clone.
 
 ### Mixed class (1 file, per-test-method routing)
