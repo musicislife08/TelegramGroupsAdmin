@@ -12,6 +12,8 @@ using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Data.Constants;
 using TelegramGroupsAdmin.Data.Services;
+using TelegramGroupsAdmin.Telegram.Models;
+using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.IntegrationTests.TestData;
@@ -29,7 +31,7 @@ namespace TelegramGroupsAdmin.IntegrationTests.Services.Backup;
 /// 4. Metadata extraction and validation
 /// 5. Passphrase rotation and encryption config management
 ///
-/// Tests use golden dataset extracted from production (PII redacted) to ensure
+/// Tests use the canonical golden dataset (cloned per-test via PG TEMPLATE) to ensure
 /// realistic coverage of edge cases, JSONB columns, Data Protection fields, etc.
 ///
 /// After these tests pass, they serve as regression suite for REFACTOR-2:
@@ -47,28 +49,45 @@ public class BackupServiceTests
     private IPassphraseManagementService? _passphraseService;
     private IBackupEncryptionService? _encryptionService;
     private IDataProtectionProvider? _dataProtectionProvider;
+    private ITelegramUserRepository? _telegramUserRepository;
+
+    // Canonical anchor IDs (canonical telegram user IDs are in [9_000_000_000_000, 10_000_000_000_000))
+    // Top MainChat ham author (@unhelpfulgrab, "Squeak Degree", is_banned=false, 24 messages)
+    private const long CanonicalTopHamAuthorId = 9921676191756L;
+
+    // Canonical message with edit history in MainChat (has a message_edits row)
+    private const int CanonicalMessageWithEditsId = 212340;
+
+    // Canonical MainChat chat_id (15-digit synthetic, -100 prefix)
+    private const long CanonicalMainChatId = -100026957614982L;
+
+    // Canonical telegram_users row count (335 rows in golden_template)
+    private const int CanonicalTelegramUserCount = 335;
+
+    // Synthetic outside-canonical-range ID used by RestoreAsync_ShouldWipeAllTablesFirst
+    private const long SyntheticExtraUserId = 7777777777777L;
 
     [SetUp]
     public async Task SetUp()
     {
-        // Create unique test database with migrations applied
+        // Clone golden_template — full canonical dataset, ~50-150ms vs ~250-550ms migrations
         _testHelper = new MigrationTestHelper();
-        await _testHelper.CreateDatabaseAndApplyMigrationsAsync();
+        await _testHelper.CreateDatabaseFromGoldenTemplateAsync();
 
         // Set up dependency injection with test-specific services
         var services = new ServiceCollection();
 
-        // Configure Data Protection with ephemeral keys (test isolation)
-        services.AddDataProtection()
-            .SetApplicationName("TelegramGroupsAdmin.Tests")
-            .PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(Path.GetTempPath(), $"test_keys_{Guid.NewGuid():N}")));
+        // Use the session-shared DataProtection provider so encrypted-column ciphertext
+        // written into golden_template (by LoadCanonicalAsync) can be decrypted here.
+        _dataProtectionProvider = PostgresFixture.SharedDataProtectionProvider;
+        services.AddSingleton<IDataProtectionProvider>(_dataProtectionProvider);
 
         // Add NpgsqlDataSource
         var dataSourceBuilder = new Npgsql.NpgsqlDataSourceBuilder(_testHelper.ConnectionString);
         services.AddSingleton(dataSourceBuilder.Build());
 
-        // Add DbContext
-        services.AddDbContext<Data.AppDbContext>((serviceProvider, options) =>
+        // Add DbContextFactory (required by TelegramUserRepository)
+        services.AddDbContextFactory<Data.AppDbContext>((_, options) =>
         {
             options.UseNpgsql(_testHelper.ConnectionString);
         });
@@ -110,20 +129,17 @@ public class BackupServiceTests
         services.AddScoped<TelegramGroupsAdmin.BackgroundJobs.Services.Backup.Handlers.TableExportService>();
         services.AddScoped<TelegramGroupsAdmin.BackgroundJobs.Services.Backup.Handlers.DependencyResolutionService>();
 
+        // Add TelegramUserRepository (write-SUT used for arrange steps)
+        services.AddScoped<ITelegramUserRepository, TelegramUserRepository>();
+
         _serviceProvider = services.BuildServiceProvider();
-        _dataProtectionProvider = _serviceProvider.GetRequiredService<IDataProtectionProvider>();
         _encryptionService = _serviceProvider.GetRequiredService<IBackupEncryptionService>();
 
-        // Seed golden dataset (with Data Protection encryption)
-        await using (var context = _testHelper.GetDbContext())
-        {
-            await GoldenDataset.SeedAsync(context, _dataProtectionProvider);
-        }
-
-        // Create BackupService in a new scope (using interface)
+        // Create BackupService and PassphraseManagementService in a new scope (using interface)
         var scope = _serviceProvider.CreateScope();
         _backupService = scope.ServiceProvider.GetRequiredService<IBackupService>();
         _passphraseService = scope.ServiceProvider.GetRequiredService<IPassphraseManagementService>();
+        _telegramUserRepository = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
 
         // Set up default encryption config for all tests
         await _passphraseService.SaveEncryptionConfigAsync("test-passphrase-12345");
@@ -245,15 +261,15 @@ public class BackupServiceTests
     [Test]
     public async Task ExportToFileAsync_ShouldDecryptDataProtectionFields()
     {
-        // Arrange - Golden dataset has encrypted API keys
-        // Verify seed worked
+        // Arrange - Canonical golden_template has api_keys populated (non-NULL) under SharedDataProtectionProvider.
+        // Verify canonical seed worked.
         await using (var context = _testHelper!.GetDbContext())
         {
             var config = await context.Configs.FirstOrDefaultAsync(c => c.ChatId == 0);
             Assert.That(config?.ApiKeys, Is.Not.Null, "API keys should be encrypted in database");
         }
 
-        // Act - Export (should decrypt Data Protection fields)
+        // Act - Export (should decrypt Data Protection fields using SharedDataProtectionProvider)
         var backupPath = await ExportBackupToTempFileAsync();
         try
         {
@@ -413,21 +429,40 @@ public class BackupServiceTests
         var backupPath = await ExportBackupToTempFileAsync();
         try
         {
-            // Add extra user after backup (should be wiped during restore)
-            await _testHelper!.ExecuteSqlAsync(@"
-                INSERT INTO telegram_users (telegram_user_id, username, is_trusted, bot_dm_enabled, first_seen_at, last_seen_at, created_at, updated_at)
-                VALUES (999999, 'extra_user', false, false, NOW(), NOW(), NOW(), NOW())
-            ");
+            // Add extra telegram_user after backup via write-SUT (should be wiped during restore).
+            // SyntheticExtraUserId is outside the canonical [9e12, 10e12) range so it won't
+            // collide with any canonical anchor row.
+            var now = DateTimeOffset.UtcNow;
+            await _telegramUserRepository!.UpsertAsync(new TelegramUser(
+                TelegramUserId: SyntheticExtraUserId,
+                Username: "extra_user",
+                FirstName: "Extra",
+                LastName: "User",
+                UserPhotoPath: null,
+                PhotoHash: null,
+                PhotoFileUniqueId: null,
+                IsBot: false,
+                IsTrusted: false,
+                IsBanned: false,
+                KickCount: 0,
+                BotDmEnabled: false,
+                FirstSeenAt: now,
+                LastSeenAt: now,
+                CreatedAt: now,
+                UpdatedAt: now,
+                IsActive: true
+            ), cancellationToken: CancellationToken.None);
 
-            var countBeforeRestore = await _testHelper.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM telegram_users");
-            Assert.That(countBeforeRestore, Is.EqualTo(13), "Should have 12 golden users + 1 extra = 13 before restore");
+            var countBeforeRestore = await _testHelper!.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM telegram_users");
+            Assert.That(countBeforeRestore, Is.EqualTo(CanonicalTelegramUserCount + 1),
+                $"Should have {CanonicalTelegramUserCount} canonical users + 1 extra = {CanonicalTelegramUserCount + 1} before restore");
 
             // Act - Restore (should wipe extra_user)
             await _backupService!.RestoreAsync(backupPath);
 
             // Assert - Extra user should be gone
             var extraUserExists = await _testHelper.ExecuteScalarAsync<bool>(
-                "SELECT EXISTS(SELECT 1 FROM telegram_users WHERE telegram_user_id = 999999)");
+                $"SELECT EXISTS(SELECT 1 FROM telegram_users WHERE telegram_user_id = {SyntheticExtraUserId})");
             Assert.That(extraUserExists, Is.False, "Restore should wipe all existing data first");
         }
         finally
@@ -439,7 +474,8 @@ public class BackupServiceTests
     [Test]
     public async Task RestoreAsync_ShouldHandleSelfReferencingForeignKeys()
     {
-        // Arrange - Golden dataset has users.invited_by → users.id (self-reference)
+        // Arrange - Canonical dataset has users.invited_by → users.id (self-reference).
+        // Admin (User2_Id = 921637d5) is invited by Owner (User1_Id = b388ee38) in canonical.
         var backupPath = await ExportBackupToTempFileAsync();
         try
         {
@@ -469,7 +505,7 @@ public class BackupServiceTests
         var backupPath = await ExportBackupToTempFileAsync();
         try
         {
-            // Act - Restore (should re-encrypt using test Data Protection)
+            // Act - Restore (should re-encrypt using SharedDataProtectionProvider)
             await _backupService!.RestoreAsync(backupPath);
 
             // Assert - Verify API keys are re-encrypted
@@ -478,11 +514,11 @@ public class BackupServiceTests
                 var config = await context.Configs.FirstOrDefaultAsync(c => c.ChatId == 0);
                 Assert.That(config?.ApiKeys, Is.Not.Null, "API keys should be re-encrypted after restore");
 
-                // Verify can decrypt with test Data Protection provider
+                // Verify can decrypt with SharedDataProtectionProvider
                 var protector = _dataProtectionProvider!.CreateProtector(DataProtectionPurposes.ApiKeys);
                 var decrypted = protector.Unprotect(config!.ApiKeys!);
-                Assert.That(decrypted, Contains.Substring("VirusTotal"),
-                    "Decrypted API keys should contain original test data");
+                Assert.That(decrypted, Contains.Substring("openai"),
+                    "Decrypted API keys should contain original canonical test data");
             }
         }
         finally
@@ -501,11 +537,13 @@ public class BackupServiceTests
             // Act - Restore
             await _backupService!.RestoreAsync(backupPath);
 
-            // Assert - Insert new message_edit, verify ID continues from max
+            // Assert - Insert new message_edit, verify ID continues from max.
+            // Uses canonical message 212340 in MainChat (-100026957614982) which has an existing
+            // message_edits row (id 337) — confirms the sequence was reset to max(id) post-restore.
             // (message_edits.id still has identity/sequence, unlike messages.message_id which uses ValueGeneratedNever)
             await _testHelper!.ExecuteSqlAsync($@"
                 INSERT INTO message_edits (message_id, chat_id, edit_date, new_text)
-                VALUES ({GoldenDataset.Messages.Msg1_Id}, {GoldenDataset.ManagedChats.MainChat_Id}, NOW(), 'sequence test edit')
+                VALUES ({CanonicalMessageWithEditsId}, {CanonicalMainChatId}, NOW(), 'sequence test edit')
             ");
 
             var newEditId = await _testHelper.ExecuteScalarAsync<long>(@"
@@ -531,7 +569,7 @@ public class BackupServiceTests
     [Test]
     public async Task Restore_WithComplexDependencyGraph_ShouldSucceed()
     {
-        // Arrange - Golden dataset has complex FK relationships:
+        // Arrange - Canonical dataset has complex FK relationships:
         // users → users (self-ref)
         // messages → telegram_users
         // detection_results → messages
@@ -642,17 +680,18 @@ public class BackupServiceTests
     public async Task ExportToFileAsync_WithCorruptedJsonbColumn_ShouldFailFastWithClearError()
     {
         // Arrange - Corrupt the warnings JSONB column with JSON that can't deserialize to List<WarningEntry>
-        // This simulates database corruption or schema mismatch that would produce an incomplete backup
+        // This simulates database corruption or schema mismatch that would produce an incomplete backup.
+        // Uses canonical top-ham-author (CanonicalTopHamAuthorId = 9921676191756).
         await _testHelper!.ExecuteSqlAsync($@"
             UPDATE telegram_users
             SET warnings = '{{""not_an_array"": true}}'::jsonb
-            WHERE telegram_user_id = {GoldenDataset.TelegramUsers.User1_TelegramUserId}
+            WHERE telegram_user_id = {CanonicalTopHamAuthorId}
         ");
 
         // Verify the corruption was applied
         var corruptedValue = await _testHelper.ExecuteScalarAsync<string>($@"
             SELECT warnings::text FROM telegram_users
-            WHERE telegram_user_id = {GoldenDataset.TelegramUsers.User1_TelegramUserId}
+            WHERE telegram_user_id = {CanonicalTopHamAuthorId}
         ");
         Assert.That(corruptedValue, Does.Contain("not_an_array"), "Test setup: JSONB should be corrupted");
 
@@ -675,7 +714,7 @@ public class BackupServiceTests
     [Test]
     public async Task ExportToFileAsync_WithValidJsonbColumn_ShouldSucceed()
     {
-        // Arrange - Ensure we have valid JSONB data (golden dataset already has this)
+        // Arrange - Ensure we have valid JSONB data (canonical dataset already has this)
         // This test verifies the happy path still works after adding error handling
 
         // Act
@@ -743,21 +782,20 @@ public class BackupServiceTests
     [Test]
     public async Task ExportAndRestore_ShouldPreserveDateTimeOffsetTimezone()
     {
-        // Arrange - Insert a DateTimeOffset with a non-UTC timezone (+05:30 IST)
-        // This tests that both TableExportService.ReadTypedValue and the test helper
-        // correctly use GetFieldValue<DateTimeOffset> instead of GetValue (which loses timezone)
+        // Arrange - Update a DateTimeOffset with a non-UTC timezone (+05:30 IST) on a canonical
+        // telegram_user row. Uses CanonicalTopHamAuthorId (9921676191756) which exists in canonical.
         var specificOffset = new DateTimeOffset(2025, 6, 15, 14, 30, 0, TimeSpan.FromHours(5.5));
 
         await _testHelper!.ExecuteSqlAsync($@"
             UPDATE telegram_users
             SET first_seen_at = '{specificOffset:yyyy-MM-dd HH:mm:ss.ffffffzzz}'::timestamptz
-            WHERE telegram_user_id = {GoldenDataset.TelegramUsers.User1_TelegramUserId}
+            WHERE telegram_user_id = {CanonicalTopHamAuthorId}
         ");
 
-        // Verify the insert worked - test helper now uses GetFieldValue<DateTimeOffset> properly
+        // Verify the update worked - test helper uses GetFieldValue<DateTimeOffset> properly
         var insertedOffset = await _testHelper.ExecuteScalarAsync<DateTimeOffset>($@"
             SELECT first_seen_at FROM telegram_users
-            WHERE telegram_user_id = {GoldenDataset.TelegramUsers.User1_TelegramUserId}
+            WHERE telegram_user_id = {CanonicalTopHamAuthorId}
         ");
 
         // PostgreSQL stores timestamptz as UTC internally, so compare UTC instants
@@ -773,7 +811,7 @@ public class BackupServiceTests
             // Assert - Verify the DateTimeOffset was preserved through the roundtrip
             var restoredOffset = await _testHelper.ExecuteScalarAsync<DateTimeOffset>($@"
                 SELECT first_seen_at FROM telegram_users
-                WHERE telegram_user_id = {GoldenDataset.TelegramUsers.User1_TelegramUserId}
+                WHERE telegram_user_id = {CanonicalTopHamAuthorId}
             ");
 
             Assert.That(restoredOffset.UtcDateTime, Is.EqualTo(specificOffset.UtcDateTime).Within(TimeSpan.FromSeconds(1)),
@@ -788,8 +826,8 @@ public class BackupServiceTests
     [Test]
     public async Task ExportAndRestore_ShouldPreserveEnumValues()
     {
-        // Arrange - Verify enum value is set in golden dataset
-        // This tests that ReadTypedValue correctly uses Enum.ToObject for enum columns
+        // Arrange - Verify enum value is set in canonical dataset.
+        // User3_Id (a8dc8371) = deleted@example.com, status=3 (Deleted) — canonical fixture.
         var originalStatus = await _testHelper!.ExecuteScalarAsync<int>($@"
             SELECT status FROM users WHERE id = '{GoldenDataset.Users.User3_Id}'
         ");
