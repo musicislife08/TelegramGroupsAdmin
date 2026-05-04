@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "dotnet slopwatch analyze -d . --hook",
+            "command": "dotnet slopwatch analyze -d /Users/keisenmenger/Repos/personal/TelegramGroupsAdmin --hook",
             "timeout": 60000
           }
         ]
