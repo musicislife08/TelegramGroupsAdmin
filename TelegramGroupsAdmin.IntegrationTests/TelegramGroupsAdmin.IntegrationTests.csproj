@@ -46,7 +46,7 @@
 
   <ItemGroup>
     <!-- All SQL test data scripts (auto-embedded, numbered for FK dependency order) -->
-    <EmbeddedResource Include="TestData\SQL\*.sql" />
+    <EmbeddedResource Include="TestData\SQL\**\*.sql" />
     <!-- Legacy (to be removed after migration) -->
     <EmbeddedResource Include="TestData\MLTrainingData.sql" />
   </ItemGroup>

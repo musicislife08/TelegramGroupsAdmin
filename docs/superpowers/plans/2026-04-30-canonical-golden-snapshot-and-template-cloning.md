@@ -1455,14 +1455,14 @@ Files referenced in this phase:
 
 **Files:** none (read-only run; record output in worktree note)
 
-- [ ] **Step 1: Run the integration suite and capture wall-clock**
+- [x] **Step 1: Run the integration suite and capture wall-clock**
 
 Run:
 ```bash
 time dotnet test TelegramGroupsAdmin.IntegrationTests --logger "console;verbosity=normal" 2>&1 | tail -30
 ```
 
-- [ ] **Step 2: Record the result in `tmp/canonical-bootstrap/T0.txt`**
+- [x] **Step 2: Record the result in `tmp/canonical-bootstrap/T0.txt`**
 
 Write the `real`/`user`/`sys` line + the `Passed: N, Failed: N` summary into `tmp/canonical-bootstrap/T0.txt` for the PR description. This file is not committed.
 
@@ -1471,7 +1471,7 @@ Write the `real`/`user`/`sys` line + the `Passed: N, Failed: N` summary into `tm
 **Files:**
 - Modify: `TelegramGroupsAdmin.IntegrationTests/TelegramGroupsAdmin.IntegrationTests.csproj:49`
 
-- [ ] **Step 1: Edit the glob**
+- [x] **Step 1: Edit the glob**
 
 Change:
 ```xml
@@ -1482,7 +1482,7 @@ to:
 <EmbeddedResource Include="TestData\SQL\**\*.sql" />
 ```
 
-- [ ] **Step 2: Verify the build still succeeds and SQL fixtures are still embedded**
+- [x] **Step 2: Verify the build still succeeds and SQL fixtures are still embedded**
 
 Run: `dotnet build TelegramGroupsAdmin.IntegrationTests`
 
@@ -1498,7 +1498,7 @@ Expected: tests still pass — the recursive glob includes everything the flat g
 - Move: `TestData/SQL/40_pre_migration_impersonation_alerts.sql` → `TestData/SQL/migration/40_pre_migration_impersonation_alerts.sql`
 - Modify: `TelegramGroupsAdmin.IntegrationTests/Migrations/CriticalMigrationTests.cs:186`
 
-- [ ] **Step 1: Create the migration/ subfolder and move the file**
+- [x] **Step 1: Create the migration/ subfolder and move the file**
 
 Run:
 ```bash
@@ -1507,7 +1507,7 @@ git mv TelegramGroupsAdmin.IntegrationTests/TestData/SQL/40_pre_migration_impers
        TelegramGroupsAdmin.IntegrationTests/TestData/SQL/migration/40_pre_migration_impersonation_alerts.sql
 ```
 
-- [ ] **Step 2: Update the consumer reference**
+- [x] **Step 2: Update the consumer reference**
 
 Edit `TelegramGroupsAdmin.IntegrationTests/Migrations/CriticalMigrationTests.cs:186` from:
 ```csharp
@@ -1520,7 +1520,7 @@ await GoldenDataset.LoadSqlScriptAsync("SQL.migration.40_pre_migration_impersona
 
 (Embedded resource names use `.` separators, so `SQL/migration/40_…` becomes `SQL.migration.40_…`.)
 
-- [ ] **Step 3: Run the migration test to verify the path resolves**
+- [x] **Step 3: Run the migration test to verify the path resolves**
 
 Run: `dotnet test TelegramGroupsAdmin.IntegrationTests --filter "FullyQualifiedName~CriticalMigrationTests" --logger "console;verbosity=normal" 2>&1 | tail -15`
 
@@ -1531,7 +1531,7 @@ Expected: PASS.
 **Files:**
 - Create: 35 files under `TelegramGroupsAdmin.IntegrationTests/TestData/SQL/canonical/`
 
-- [ ] **Step 1: Confirm Pre-1b outputs are present**
+- [x] **Step 1: Confirm Pre-1b outputs are present**
 
 Run: `ls TelegramGroupsAdmin.IntegrationTests/TestData/SQL/canonical/`
 
@@ -1553,7 +1553,7 @@ Expected: 35 files, in this exact FK-safe load order (matches on-disk numeric or
 34_user_actions.sql        35_message_translations.sql
 ```
 
-- [ ] **Step 2: Verify recursive glob picks up canonical/ subfolder**
+- [x] **Step 2: Verify recursive glob picks up canonical/ subfolder**
 
 Run:
 ```bash
@@ -1575,7 +1575,7 @@ If no probe test exists, add the probe test in Task 1.7 (with `LoadCanonicalAsyn
 - Modify: `TelegramGroupsAdmin.IntegrationTests/Fixtures/PostgresFixture.cs`
 - Test: `TelegramGroupsAdmin.IntegrationTests/Fixtures/PostgresFixtureTests.cs` (new)
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `TelegramGroupsAdmin.IntegrationTests/Fixtures/PostgresFixtureTests.cs`:
 
@@ -1614,13 +1614,13 @@ public class PostgresFixtureTests
 }
 ```
 
-- [ ] **Step 2: Run the test — expect compile error (member missing)**
+- [x] **Step 2: Run the test — expect compile error (member missing)**
 
 Run: `dotnet test TelegramGroupsAdmin.IntegrationTests --filter "FullyQualifiedName~PostgresFixtureTests" --logger "console;verbosity=normal" 2>&1 | tail -10`
 
 Expected: build fails with "PostgresFixture does not contain a definition for SharedDataProtectionProvider."
 
-- [ ] **Step 3: Add the property to PostgresFixture**
+- [x] **Step 3: Add the property to PostgresFixture**
 
 Edit `TelegramGroupsAdmin.IntegrationTests/Fixtures/PostgresFixture.cs`:
 
@@ -1638,7 +1638,7 @@ After the `BaseConnectionString` property, add:
         = new EphemeralDataProtectionProvider();
 ```
 
-- [ ] **Step 4: Run the test — expect PASS**
+- [x] **Step 4: Run the test — expect PASS**
 
 Run: `dotnet test TelegramGroupsAdmin.IntegrationTests --filter "FullyQualifiedName~PostgresFixtureTests" --logger "console;verbosity=normal" 2>&1 | tail -10`
 
@@ -1650,7 +1650,7 @@ Expected: 3 tests passed.
 - Modify: `TelegramGroupsAdmin.IntegrationTests/TestData/GoldenDataset.cs`
 - Test: `TelegramGroupsAdmin.IntegrationTests/TestData/Tests/LoadCanonicalAsyncTests.cs` (new)
 
-- [ ] **Step 1: Create the test directory and write the failing test**
+- [x] **Step 1: Create the test directory and write the failing test**
 
 ```bash
 mkdir -p TelegramGroupsAdmin.IntegrationTests/TestData/Tests
@@ -1710,13 +1710,13 @@ public class LoadCanonicalAsyncTests
 }
 ```
 
-- [ ] **Step 2: Run the test — expect compile error (LoadCanonicalAsync missing)**
+- [x] **Step 2: Run the test — expect compile error (LoadCanonicalAsync missing)**
 
 Run: `dotnet test TelegramGroupsAdmin.IntegrationTests --filter "FullyQualifiedName~LoadCanonicalAsyncTests" 2>&1 | tail -10`
 
 Expected: build fails with "GoldenDataset does not contain a definition for LoadCanonicalAsync."
 
-- [ ] **Step 3: Implement LoadCanonicalAsync**
+- [x] **Step 3: Implement LoadCanonicalAsync**
 
 Open `TelegramGroupsAdmin.IntegrationTests/TestData/GoldenDataset.cs`. Make the class `partial` (rename `public static class GoldenDataset` to `public static partial class GoldenDataset` on line 12) so subsequent tasks can split additions cleanly. Then add inside the class:
 
@@ -1815,7 +1815,7 @@ using Microsoft.AspNetCore.DataProtection;
 using TelegramGroupsAdmin.Data.Constants;
 ```
 
-- [ ] **Step 4: Run the tests — expect PASS**
+- [x] **Step 4: Run the tests — expect PASS**
 
 Run: `dotnet test TelegramGroupsAdmin.IntegrationTests --filter "FullyQualifiedName~LoadCanonicalAsyncTests" --logger "console;verbosity=normal" 2>&1 | tail -10`
 

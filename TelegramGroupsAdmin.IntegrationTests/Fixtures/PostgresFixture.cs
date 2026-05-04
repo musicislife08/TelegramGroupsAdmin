@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.DataProtection;
 using Testcontainers.PostgreSql;
 
 namespace TelegramGroupsAdmin.IntegrationTests;
@@ -16,6 +17,14 @@ public class PostgresFixture
     /// Each test should create a unique database name and replace the database in this connection string.
     /// </summary>
     public static string BaseConnectionString { get; private set; } = string.Empty;
+
+    /// <summary>
+    /// A single ephemeral DataProtection provider shared across the entire test session.
+    /// Used by canonical-consumer tests so encrypted-column ciphertext written into
+    /// the golden_template (via LoadCanonicalAsync) can be decrypted by tests at runtime.
+    /// </summary>
+    public static IDataProtectionProvider SharedDataProtectionProvider { get; }
+        = new EphemeralDataProtectionProvider();
 
     [OneTimeSetUp]
     public async Task GlobalSetup()

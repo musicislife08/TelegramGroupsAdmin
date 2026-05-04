@@ -183,7 +183,7 @@ public class CriticalMigrationTests
         // Seed prerequisite data using golden dataset SQL scripts (FK dependency order)
         await GoldenDataset.LoadSqlScriptAsync("SQL.00_base_telegram_users.sql", helper.ExecuteSqlAsync);
         await GoldenDataset.LoadSqlScriptAsync("SQL.01_base_web_users.sql", helper.ExecuteSqlAsync);
-        await GoldenDataset.LoadSqlScriptAsync("SQL.40_pre_migration_impersonation_alerts.sql", helper.ExecuteSqlAsync);
+        await GoldenDataset.LoadSqlScriptAsync("SQL.migration.40_pre_migration_impersonation_alerts.sql", helper.ExecuteSqlAsync);
 
         var alertCountBefore = await helper.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM impersonation_alerts");
         Assert.That(alertCountBefore, Is.EqualTo(4), "Should have 4 test alerts before migration");
