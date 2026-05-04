@@ -10,8 +10,8 @@
 INSERT INTO messages (message_id, chat_id, user_id, message_text, timestamp)
 VALUES (
     96001,
-    -1001322973935,  -- MainChat_Id
-    100001,          -- alice_user
+    -100026957614982,  -- canonical MainChat
+    9991228601256,     -- canonical telegram user
     'Old message that should be cleaned up',
     NOW() - INTERVAL '45 days'
 );
@@ -20,8 +20,8 @@ VALUES (
 INSERT INTO messages (message_id, chat_id, user_id, message_text, timestamp)
 VALUES (
     96002,
-    -1001322973935,  -- MainChat_Id
-    100002,          -- bob_chat
+    -100026957614982,  -- canonical MainChat
+    9862700513599,     -- canonical telegram user
     'Another old message for cleanup testing',
     NOW() - INTERVAL '60 days'
 );
@@ -30,8 +30,8 @@ VALUES (
 INSERT INTO messages (message_id, chat_id, user_id, message_text, timestamp)
 VALUES (
     96003,
-    -1001322973935,  -- MainChat_Id
-    100003,          -- charlie_msg
+    -100026957614982,  -- canonical MainChat
+    9196379650113,     -- canonical telegram user
     'Old message with training data - keep for ML',
     NOW() - INTERVAL '90 days'
 );
@@ -40,7 +40,7 @@ VALUES (
 INSERT INTO detection_results (message_id, chat_id, detected_at, detection_source, detection_method, score, net_score, used_for_training, system_identifier, edit_version)
 VALUES (
     96003,
-    -1001322973935,
+    -100026957614982,
     NOW() - INTERVAL '90 days',
     'TextClassifier',
     'Bayes',
@@ -55,8 +55,8 @@ VALUES (
 INSERT INTO messages (message_id, chat_id, user_id, message_text, timestamp)
 VALUES (
     96004,
-    -1001322973935,  -- MainChat_Id
-    100004,          -- diana_test
+    -100026957614982,  -- canonical MainChat
+    9100564167787,     -- canonical telegram user
     'Edge case: just past 30 day retention',
     NOW() - INTERVAL '35 days'
 );
@@ -65,8 +65,8 @@ VALUES (
 INSERT INTO messages (message_id, chat_id, user_id, message_text, timestamp)
 VALUES (
     96005,
-    -1001322973935,  -- MainChat_Id
-    100005,          -- eve_trusted
+    -100026957614982,  -- canonical MainChat
+    9605136206445,     -- canonical telegram user
     'Boundary case: 29 days old - just inside retention',
     NOW() - INTERVAL '29 days'
 );
@@ -76,8 +76,8 @@ VALUES (
 INSERT INTO messages (message_id, chat_id, user_id, message_text, timestamp)
 VALUES (
     96006,
-    -1001322973935,  -- MainChat_Id
-    100006,
+    -100026957614982,  -- canonical MainChat
+    9566750116353,     -- canonical telegram user
     'Old message with non-training detection result - should be deleted',
     NOW() - INTERVAL '50 days'
 );
@@ -86,7 +86,7 @@ VALUES (
 INSERT INTO detection_results (message_id, chat_id, detected_at, detection_source, detection_method, score, net_score, used_for_training, system_identifier, edit_version)
 VALUES (
     96006,
-    -1001322973935,
+    -100026957614982,
     NOW() - INTERVAL '50 days',
     'TextClassifier',
     'Bayes',
@@ -107,7 +107,7 @@ INSERT INTO message_edits (id, message_id, chat_id, edit_date, old_text, new_tex
 VALUES (
     960001,
     96001,
-    -1001322973935,
+    -100026957614982,
     NOW() - INTERVAL '44 days',
     'Original text before edit',
     'Old message that should be cleaned up'
@@ -117,7 +117,7 @@ VALUES (
 INSERT INTO message_translations (message_id, chat_id, translated_text, detected_language, translated_at)
 VALUES (
     96002,
-    -1001322973935,
+    -100026957614982,
     'Another old message for cleanup testing (translated)',
     'es',
     NOW() - INTERVAL '60 days'
