@@ -2870,8 +2870,8 @@ Driver input: `audit-output.md` `canonical-consumer` and `mixed` sections (from 
 
 Authoritative list from `tmp/canonical-bootstrap/audit-output.md` (audit run 2026-04-30). All 27 files apply the per-file migration pattern. Audit rationale per file is in the audit-output document; cross-reference there before starting each task.
 
-- [ ] **Task 3A.1:** `Configuration/ConfigServiceIntegrationTests.cs`
-- [ ] **Task 3A.2:** `ContentDetection/Repositories/ProfileScanAlertMappingTests.cs` — currently uses non-canonical IDs for `managed_chats` / `telegram_users`; remap to canonical anchors `MainChat = -100026957614982` and profile-scan target `telegram_user_id = 9408530993787` (NOT the stale `MainChat_Id` / `User1_TelegramUserId` constants).
+- [x] **Task 3A.1:** `Configuration/ConfigServiceIntegrationTests.cs`
+- [x] **Task 3A.2:** `ContentDetection/Repositories/ProfileScanAlertMappingTests.cs` — currently uses non-canonical IDs for `managed_chats` / `telegram_users`; remap to canonical anchors `MainChat = -100026957614982` and profile-scan target `telegram_user_id = 9408530993787` (NOT the stale `MainChat_Id` / `User1_TelegramUserId` constants).
 - [ ] **Task 3A.3:** `Deduplication/SimHashComparisonTests.cs` — references message IDs 90001–90040 and 95001–95022 with named near-duplicate groups.
   > **DRIFT NOTICE (Pre-1c audit, 2026-05-03):** The 95001..95022 SimHash dedup messages are a KNOWN CANONICAL GAP — the Pre-1b extension #1 was attempted but did NOT land. Phase 3A.3 must either extend canonical with these messages OR seed them inline at test setup. See `IntegrationTests/CLAUDE.md` Part 2 "Known canonical gaps."
 - [ ] **Task 3A.4:** `Jobs/WelcomeTimeoutJobTests.cs` — helper functions add `TelegramUserDto` + `WelcomeResponseDto` rows directly.
@@ -2880,27 +2880,27 @@ Authoritative list from `tmp/canonical-bootstrap/audit-output.md` (audit run 202
 - [ ] **Task 3A.6:** `ML/MLTextClassifierServiceTests.cs` — uses `Reduce(...).KeepSpam(...).KeepHam(...)` pattern for high-spam/high-ham threshold scenarios. See worked example at the end of this section.
 - [ ] **Task 3A.7:** `Repositories/AnalyticsRepositoryTests.cs` — analytics aggregations across daily/weekly/monthly/7-day/30-day/365-day windows require deterministic timestamps keyed off `MainChat = -100026957614982`.
   > **DRIFT NOTICE (Pre-1c audit, 2026-05-03):** Pre-1b extension #3 (analytics time-spread) was attempted but did NOT land — canonical does not pre-shift timestamps and the original post-load UPDATE workflow was dropped. Phase 3A.7 needs a different approach: either extend canonical with pre-shifted detection_results / welcome_responses rows, OR run a test-local time-shift UPDATE before each test. See `IntegrationTests/CLAUDE.md` Part 2 "Known canonical gaps."
-- [ ] **Task 3A.8:** `Repositories/DbContextFactoryMigrationTests.cs`
-- [ ] **Task 3A.9:** `Repositories/DetectionResultsRepositoryTests.cs`
-- [ ] **Task 3A.10:** `Repositories/InviteRepositoryTests.cs` — currently runs raw `INSERT INTO users ('test-user-id', ...)` to satisfy `invites.created_by` FK; reuse `User1_Id`.
-- [ ] **Task 3A.11:** `Repositories/MessageHistoryRepositoryTests.cs`
-- [ ] **Task 3A.12:** `Repositories/NotificationRepositoriesTests.cs`
-- [ ] **Task 3A.13:** `Repositories/TelegramUserRepositoryKickCountTests.cs` — helper `CreateTestUserAsync` does inline `Add(...)`; remap to canonical anchors (e.g., `9921676191756` for a top ham author, `9971261287520` for a heavily-banned spammer). Do NOT reuse the stale `100001+` legacy IDs — those don't exist in canonical.
-- [ ] **Task 3A.14:** `Repositories/TelegramUserRepositoryTests.cs`
-- [ ] **Task 3A.15:** `Repositories/TelegramUserUpsertTests.cs`
-- [ ] **Task 3A.16:** `Repositories/TrainingLabelsRepositoryTests.cs`
-- [ ] **Task 3A.17:** `Repositories/UserActionsRepositoryConstraintTests.cs` — `SeedTestUserAsync` does inline `Add(new TelegramUserDto { TelegramUserId = 555111222 })`; remap to a canonical anchor (e.g., `9921676191756`). Do NOT reuse the stale `User1_TelegramUserId` legacy constant.
-- [ ] **Task 3A.18:** `Repositories/UsernameHistoryRepositoryTests.cs` — `SeedUserAsync` calls a different SUT (`TelegramUserRepository.UpsertAsync`) to seed FK-required rows; remap to canonical anchors (e.g., `9875141377477` for the renamed-spammer with username_history). Do NOT reuse stale legacy `100001+` IDs.
-- [ ] **Task 3A.19:** `Services/Backup/BackupServiceTests.cs` — also runs an inline `INSERT INTO telegram_users` to verify restore wipes it; route that arrange step through `TelegramUserRepository.UpsertAsync` (write-SUT) under the strict rule.
-- [ ] **Task 3A.20:** `Telegram/AuditHandlerTests.cs` — helper does inline `Add(new TelegramUserDto { TelegramUserId = 123456789 })`; remap to a canonical anchor (e.g., `9921676191756`). Do NOT reuse the stale `User1_TelegramUserId` legacy constant.
-- [ ] **Task 3A.21:** `Telegram/Repositories/LinkedChannelsRepositoryTests.cs`
+- [x] **Task 3A.8:** `Repositories/DbContextFactoryMigrationTests.cs`
+- [x] **Task 3A.9:** `Repositories/DetectionResultsRepositoryTests.cs`
+- [x] **Task 3A.10:** `Repositories/InviteRepositoryTests.cs` — currently runs raw `INSERT INTO users ('test-user-id', ...)` to satisfy `invites.created_by` FK; reuse `User1_Id`.
+- [x] **Task 3A.11:** `Repositories/MessageHistoryRepositoryTests.cs`
+- [x] **Task 3A.12:** `Repositories/NotificationRepositoriesTests.cs`
+- [x] **Task 3A.13:** `Repositories/TelegramUserRepositoryKickCountTests.cs` — helper `CreateTestUserAsync` does inline `Add(...)`; remap to canonical anchors (e.g., `9921676191756` for a top ham author, `9971261287520` for a heavily-banned spammer). Do NOT reuse the stale `100001+` legacy IDs — those don't exist in canonical.
+- [x] **Task 3A.14:** `Repositories/TelegramUserRepositoryTests.cs`
+- [x] **Task 3A.15:** `Repositories/TelegramUserUpsertTests.cs`
+- [x] **Task 3A.16:** `Repositories/TrainingLabelsRepositoryTests.cs`
+- [x] **Task 3A.17:** `Repositories/UserActionsRepositoryConstraintTests.cs` — `SeedTestUserAsync` does inline `Add(new TelegramUserDto { TelegramUserId = 555111222 })`; remap to a canonical anchor (e.g., `9921676191756`). Do NOT reuse the stale `User1_TelegramUserId` legacy constant.
+- [x] **Task 3A.18:** `Repositories/UsernameHistoryRepositoryTests.cs` — `SeedUserAsync` calls a different SUT (`TelegramUserRepository.UpsertAsync`) to seed FK-required rows; remap to canonical anchors (e.g., `9875141377477` for the renamed-spammer with username_history). Do NOT reuse stale legacy `100001+` IDs.
+- [x] **Task 3A.19:** `Services/Backup/BackupServiceTests.cs` — also runs an inline `INSERT INTO telegram_users` to verify restore wipes it; route that arrange step through `TelegramUserRepository.UpsertAsync` (write-SUT) under the strict rule.
+- [x] **Task 3A.20:** `Telegram/AuditHandlerTests.cs` — helper does inline `Add(new TelegramUserDto { TelegramUserId = 123456789 })`; remap to a canonical anchor (e.g., `9921676191756`). Do NOT reuse the stale `User1_TelegramUserId` legacy constant.
+- [x] **Task 3A.21:** `Telegram/Repositories/LinkedChannelsRepositoryTests.cs`
 - [ ] **Task 3A.22:** `Telegram/Services/BanCelebrationServiceTests.cs` — `SeedBanActions(int count)` inserts 1–7 ban rows for testing the `{bancount}` placeholder.
   > **DRIFT NOTICE (Pre-1c audit, 2026-05-03):** Pre-1b extension #4 (the seven `{bancount}` synthetic anchor rows) was attempted but did NOT land in canonical. Phase 3A.22 must either extend canonical with the synthetic 1–7 ban rows OR seed them inline. Canonical does include heavily-banned spammer `9971261287520` (4 Ban actions) — usable for the {bancount}=4 case but not 1/2/3/5/6/7. See `IntegrationTests/CLAUDE.md` Part 2 "Known canonical gaps."
-- [ ] **Task 3A.23:** `Telegram/Services/Bot/BotChatServiceTests.cs` — helpers add `ManagedChatRecordDto` / `TelegramUserDto` / `ChatAdminRecordDto` for "chat already exists" / "admin cached" arrange paths.
-- [ ] **Task 3A.24:** `Telegram/Services/Bot/BotDmServiceTests.cs` — `SeedTestUser` adds `TelegramUserDto` with `bot_dm_enabled` toggled.
-- [ ] **Task 3A.25:** `Telegram/Services/Bot/BotMessageServiceTests.cs` — helpers add bot-user `TelegramUserDto` and `MessageRecordDto` rows.
-- [ ] **Task 3A.26:** `Telegram/Services/ExamFlowServiceTests.cs` — `CreateTestChatAsync` adds `ManagedChatRecordDto` directly; remap to canonical MainChat anchor `chat_id = -100026957614982`. Do NOT reuse the stale `MainChat_Id` legacy constant.
-- [ ] **Task 3A.27:** `Telegram/Services/WelcomeFlowBypassIntegrationTests.cs` — currently uses three `LoadSqlScriptAsync` calls against legacy SQL fixtures; replace with canonical clone.
+- [x] **Task 3A.23:** `Telegram/Services/Bot/BotChatServiceTests.cs` — helpers add `ManagedChatRecordDto` / `TelegramUserDto` / `ChatAdminRecordDto` for "chat already exists" / "admin cached" arrange paths.
+- [x] **Task 3A.24:** `Telegram/Services/Bot/BotDmServiceTests.cs` — `SeedTestUser` adds `TelegramUserDto` with `bot_dm_enabled` toggled.
+- [x] **Task 3A.25:** `Telegram/Services/Bot/BotMessageServiceTests.cs` — helpers add bot-user `TelegramUserDto` and `MessageRecordDto` rows.
+- [x] **Task 3A.26:** `Telegram/Services/ExamFlowServiceTests.cs` — `CreateTestChatAsync` adds `ManagedChatRecordDto` directly; remap to canonical MainChat anchor `chat_id = -100026957614982`. Do NOT reuse the stale `MainChat_Id` legacy constant.
+- [x] **Task 3A.27:** `Telegram/Services/WelcomeFlowBypassIntegrationTests.cs` — currently uses three `LoadSqlScriptAsync` calls against legacy SQL fixtures; replace with canonical clone.
 
 ### Mixed class (1 file, per-test-method routing)
 
