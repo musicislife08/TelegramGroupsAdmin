@@ -3,7 +3,9 @@ INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, p
 ↘↘↘👇
 https://canonical-spam.test/+zy381kvpVbk1Y2M8
 https://canonical-spam.test/+zy381kvpVbk1Y2M8
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+zy381kvpVbk1Y2M8
 📉 Daily live trade	-100% payout guaranteed	-No upfront,No hidden fees 	-0% risk sessions	-minimum equity $100 	-payment	@FXSTEVEN
 FX〽️ CRYPTO INVESTMENT〽️ TRADING PLATFORM
@@ -16,7 +18,9 @@ INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, p
 If you’re serious about improving your financial future, take responsibility for your choices, educate yourself, and move with discipline. Progress is achievable when you approach it the right way.
 @mrs_first_lady 
 https://canonical-spam.test/+9XKAhk1PtGMxY2I0
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+9XKAhk1PtGMxY2I0
 ✔️We guarantee 💯the best payout 💰for all our loyal investors 📊	✔️ Perfect signal session📈	✔ Incredible win rate (3-5)📉	We offer daily pump signals with 90% profit per investment💯	Best winning signals 💯	Contact us
 ADMIRAL TRUST BINARY OPTION TRADING
@@ -46,7 +50,9 @@ If you’d like to learn more, message me “GROUP” and I’ll add you.', NULL
 INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, photo_file_id, photo_file_size, urls, edit_date, content_hash, photo_local_path, photo_thumbnail_path, deleted_at, deletion_source, reply_to_message_id, media_type, media_file_id, media_file_size, media_file_name, media_mime_type, media_local_path, media_duration, content_check_skip_reason, similarity_hash) VALUES (215055, 9913315232620, -100026957614982, '2026-01-19 02:43:15.681909+00', 'May god almighty bless you for the big change you brought upon my life , I’m so grateful 
  Mr James_Richard_x  you can get in touch with him here 💥💥😊😊👇👇👇👇
 https://canonical-spam.test/+bzKJSVuzpQYwYzlk
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+bzKJSVuzpQYwYzlk
 🧑‍💻.I WE GUARANTEE THE BEST TRADE 📈 STRATEGIES IN THE BUSINESS 💎💰	📉100% INVESTMENT✔️	100% PAYOUT✔️	WATCH YOUR MONEY GROW LIKE TREE 🌳💯 GUARANTEE...	INVESTMENT IS THE ONLY KEY🔑 TO FINANCIAL FREEDOM. 📩DM ME NOW FOR START UP📊	canonical-spam.test/James_Richard_x
 CRYPTO.EXPERT.TRADING.📊
@@ -84,7 +90,9 @@ INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, p
 INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, photo_file_id, photo_file_size, urls, edit_date, content_hash, photo_local_path, photo_thumbnail_path, deleted_at, deletion_source, reply_to_message_id, media_type, media_file_id, media_file_size, media_file_name, media_mime_type, media_local_path, media_duration, content_check_skip_reason, similarity_hash) VALUES (89459, 9960171136314, -100065252085265, '2026-03-01 01:21:02.384689+00', 'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui of', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 2, NULL);
 INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, photo_file_id, photo_file_size, urls, edit_date, content_hash, photo_local_path, photo_thumbnail_path, deleted_at, deletion_source, reply_to_message_id, media_type, media_file_id, media_file_size, media_file_name, media_mime_type, media_local_path, media_duration, content_check_skip_reason, similarity_hash) VALUES (216486, 9396630757639, -100026957614982, '2026-01-30 13:15:33.660048+00', 'I Saw a post about this platform and I took a step to try if it''s going to work out, him changed my life financially,I started with minimum of $100 and after 24 hours of trading,, I received $1000 as profits without any extra charges... Just want to share your good work and let the world know about this great man,, contact him via the link👇👇👇👇👇
 https://canonical-spam.test/+5BlV7TXm3hEwYTQ0
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+5BlV7TXm3hEwYTQ0
 We provide well-analyzed crypto trading signals with clear entry, TP & SL	✅ Disciplined strategies	✅ Risk management first	✅ Real market insights	📩 Support & Enquiries: DM the admin	http://canonical-spam.test/Trader_Robert_Westfield	Let’s trade smart and grow together
 AURA CAPITAL GLOBAL PLATFORM
@@ -94,7 +102,9 @@ INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, p
 INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, photo_file_id, photo_file_size, urls, edit_date, content_hash, photo_local_path, photo_thumbnail_path, deleted_at, deletion_source, reply_to_message_id, media_type, media_file_id, media_file_size, media_file_name, media_mime_type, media_local_path, media_duration, content_check_skip_reason, similarity_hash) VALUES (77826, 9511026333460, -100050808209814, '2026-04-19 22:32:36.721174+00', 'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit,', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 2, NULL);
 INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, photo_file_id, photo_file_size, urls, edit_date, content_hash, photo_local_path, photo_thumbnail_path, deleted_at, deletion_source, reply_to_message_id, media_type, media_file_id, media_file_size, media_file_name, media_mime_type, media_local_path, media_duration, content_check_skip_reason, similarity_hash) VALUES (214285, 9194512096161, -100026957614982, '2026-01-08 17:26:23.621179+00', 'I almost ignored the recommendation about BlockVest Capital because it sounded too good to be true. I decided to test it with just $500. Within days, my balance had grown to $4,000. I’m honestly still shocked at how fast the results came. Taking that small risk was the best decision I’ve made.
 https://canonical-spam.test/earn_with_BlockVest
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/earn_with_BlockVest
 ✅ 𝗜𝗡𝗩𝗘𝗦𝗧 𝗧𝗢 𝗚𝗘𝗧 𝗔 𝗚𝗢𝗢𝗗 𝗥𝗘𝗦𝗨𝗟𝗧 💰	✅ 𝗜𝗡𝗦𝗧𝗔𝗡𝗧 𝗣𝗔𝗬𝗠𝗘𝗡𝗧𝗦 & 𝗪𝗜𝗧𝗛𝗗𝗥𝗔𝗪𝗔𝗟𝗦 💯	📊 𝗧𝗥𝗔𝗗𝗘 𝗦𝗠𝗔𝗥𝗧. 𝗘𝗔𝗥𝗡 𝗖𝗢𝗡𝗦𝗜𝗦𝗧𝗘𝗡𝗧𝗟𝗬.  📥📥	Https//canonical-spam.test/Stephencryptotrader
 ʙʟᴏᴄᴋᴠᴇꜱᴛ ᴄᴀᴘɪᴛᴀʟ 📊 ᴄʀʏᴘᴛᴏ 📈 ᴇxᴄʜᴀɴɢᴇ 💱 ᴍɪɴɪɴɢ 💻⛏️ ᴄᴏᴍᴘᴀɴʏ 🇫🇷 ɪɴᴠᴇꜱᴛᴍᴇɴᴛꜱ
@@ -251,7 +261,9 @@ What stood out to me was the emphasis on clear communication and realistic expec
 This journey has been more about growth and responsibility than quick outcomes, and that has made all the difference for me.
 @mrs_first_lady 
  https://canonical-spam.test/+9XKAhk1PtGMxY2I0
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+9XKAhk1PtGMxY2I0
 ✔️We guarantee 💯the best payout 💰for all our loyal investors 📊	✔️ Perfect signal session📈	✔ Incredible win rate (3-5)📉	We offer daily pump signals with 90% profit per investment💯	Best winning signals 💯	Contact us
 ADMIRAL TRUST BINARY OPTION TRADING
@@ -261,7 +273,9 @@ After all, brands do everything they can to save money on our health and earn mo
 If you don''t want to poison yourself with your own money, read the LONGEVITY REMEDIES channel. It is run by a well-known naturopath who will tell you exactly how to be healthy, always look young, and feel like you''re 20 years old.
 He publishes blacklists of brands and explains how to lose 10 kilograms without dieting, get rid of chronic diseases for good, and regain a strong libido.
 Subscribing to this channel will give you a healthy life until at least 100 years old — save it: https://canonical-spam.test/+UZkFjoV4uoRjYWJi
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+UZkFjoV4uoRjYWJi
 I share natural remedies, healthy living, prepping, warnings about what to avoid in order to live a long and healthy life 🩺
 LONGEVITY REMEDIES
@@ -279,7 +293,9 @@ Today, I can say with satisfaction that the experience has been extremely positi
 If you''re facing financial difficulties and are looking for an opportunity in cryptocurrency trading, I recommend contacting him and opening a trading account to evaluate this possibility.
 Give it a try yourself and share your experience.
 https://canonical-spam.test/+mSUzwl-wpDA2YmQ0
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+mSUzwl-wpDA2YmQ0
 Welcome to STOCKS & CRYPTOS channel. 	Here We’re Going To Be Covering The Fundamentals Of Trading, Business & Wealth Building Through Educational Videos, Trading Tips, & Professional Insights.		Let’s Make Some Money 💰📊		Any questions: @KUNAL_CRYPTOS
 🌏STOCKS & CRYPTOS TRADING 📊
@@ -311,7 +327,9 @@ I was skeptical at first – we''ve all seen the horror stories – but I did my
 METRO STALLION PRO LTD is really a great platform without any doubt and is one of the best choice I have ever made. If you are looking for a reliable platform for earning money online. JOIN ME THEN.. 
 https://canonical-spam.test/+BeAclPGdlw85MWU0
 https://canonical-spam.test/+BeAclPGdlw85MWU0
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+BeAclPGdlw85MWU0
 Account Managers 🌍	Full Time Future Traders📈📉	🏦Financial Advisor	Cryptocurrencies📉		Incredible Win Rate: 97%	Accurate Signals With Daily Tips	✔️ Secret Trading Formula		Contact Admins 👇	@charlottesupport	@BNBcryptoworld	http://canonical-spam.test/+1(970)825-6144
 METRO STALLION PRO LTD
@@ -351,7 +369,9 @@ Optional Attention-Grabbing Hook at the Top for DM:
 INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, photo_file_id, photo_file_size, urls, edit_date, content_hash, photo_local_path, photo_thumbnail_path, deleted_at, deletion_source, reply_to_message_id, media_type, media_file_id, media_file_size, media_file_name, media_mime_type, media_local_path, media_duration, content_check_skip_reason, similarity_hash) VALUES (218169, 9595001918649, -100026957614982, '2026-02-18 12:30:38.747425+00', 'Not many channels I''ve ever recommended, but after speaking with the owner of this channel and vet the content.
 Strongly advise to join this channel!
 https://canonical-spam.test/+awPwNmb55etiMDlh
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+awPwNmb55etiMDlh
 LEADWAY CAPITAL, member FINRA/SIPC, a Global Investment Manager. 		Providing Investment Services for Beginners & Experienced Investors.	🔐100% Security Guarantee Trusted.		Your financial goals, our Mission.
 LEADWAY CAPITAL⚜️
@@ -360,7 +380,9 @@ INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, p
 ✅My Experience: My experience with https://canonical-spam.test/METROSTALLIONPROLTD  has been very positive, smooth registration, clear investment plans, steady earnings, fast withdrawals, and a very responsive support team.
 ✅ How to get started: Join the group first, Message the admin and ask her questions. How the platform has been working, Ask if it’s registered, if there are any withdrawal fees, and any other important questions.
 🔗 Telegram Channel Link: https://canonical-spam.test/+_Zo1DvERBThmM2Jk
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/METROSTALLIONPROLTD
 Account Manager 🌍	Full Time Future Trader📈📉	🏦Financial Advisor	Cryptocurrency📉		Incredible Win Rate: 97%	Accurate Signals With Daily Tips	✔️ Secret Trading Formula👩‍🏫		Contact 	⬇️⬇️⬇️	https://canonical-spam.test/CharlotteTradeSignal		http://canonical-spam.test/+1(970)825‐6144
 METRO STALLION PRO LTD
@@ -388,7 +410,9 @@ You can find a selection of the most effective recipes on my channel: "LONGEVITY
 — This method restores the retina even in diabetes! [find out how]
 Subscribe and regain your sharp vision without surgery 👇
 https://canonical-spam.test/+UZkFjoV4uoRjYWJi
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+UZkFjoV4uoRjYWJi
 I share natural remedies, healthy living, prepping, warnings about what to avoid in order to live a long and healthy life 🩺
 LONGEVITY REMEDIES
@@ -397,7 +421,9 @@ INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, p
 Click the link below and contact Jenny to be part of this testimony. Thank me later.👇👇👇👇
 https://canonical-spam.test/Message_manager_jenny
 https://canonical-spam.test/Message_manager_jenny
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/Message_manager_jenny
 📈 Your guide to the financial market We help investors professionally
 MANAGER JENNY
@@ -411,14 +437,18 @@ After all, brands do everything they can to save money on our health and earn mo
 If you don''t want to poison yourself with your own money, read the LONGEVITY REMEDIES channel. It is run by a well-known naturopath who will tell you exactly how to be healthy, always look young, and feel like you''re 20 years old.
 He publishes blacklists of brands and explains how to lose 10 kilograms without dieting, get rid of chronic diseases for good, and regain a strong libido.
 Subscribing to this channel will give you a healthy life until at least 100 years old — save it: https://canonical-spam.test/+UZkFjoV4uoRjYWJi
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+UZkFjoV4uoRjYWJi
 I share natural remedies, healthy living, prepping, warnings about what to avoid in order to live a long and healthy life 🩺
 LONGEVITY REMEDIES
 Telegram: Join Group Chat', 'AgACAgEAAx0CTzmWXQABA1R3aZZjmUwG_L89FmX9Gj0I33zpVGcAAq4LaxvRxbBEHqd8HM46z9ABAAMCAAN5AAM6BA', 70749, '["https://canonical-spam.test/\u002BUZkFjoV4uoRjYWJi"]', NULL, NULL, 'full/-1001329174109/218231.jpg', 'thumbs/-1001329174109/218231.jpg', '2026-02-19 01:13:09.288134+00', 'moderation_action', 218221, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL);
 INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, photo_file_id, photo_file_size, urls, edit_date, content_hash, photo_local_path, photo_thumbnail_path, deleted_at, deletion_source, reply_to_message_id, media_type, media_file_id, media_file_size, media_file_name, media_mime_type, media_local_path, media_duration, content_check_skip_reason, similarity_hash) VALUES (222793, 9025835516144, -100026957614982, '2026-04-23 20:51:08.565086+00', 'I am only doing this out of joy UNICORN FINANCE Company is a proof that legit companies still exists 
 https://canonical-spam.test/+pc1jZciX8o9hNTE1
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+pc1jZciX8o9hNTE1
 🌎WELCOME TO @UNICORN_FINANCE_AiBOT	The high-class level of conducting a trading company, the presence of a unique strategy in the hands of the best specialists give the best results of effective trading in the  market and on cryptocurrency exchanges.
 UNICORN_FINANCE⬢
@@ -428,7 +458,9 @@ INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, p
 👇👇👇👇👇👇👇👇
 https://canonical-spam.test/+xM0VkJxnFt02MWZk
 Please show me appreciation by thanking me after she finishes trading for you. I am now a fulfilled woman.
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+xM0VkJxnFt02MWZk
 Best4assets is for everyone, our duty is to trade for everyone with no Descrimination, kill your fears and become wealth
 Best4assets trading platform
@@ -444,7 +476,9 @@ Strange structures, ancient-looking monuments — and no clear explanation of wh
 “SCARY FACTS” is a Telegram community uncovering hidden history, alternative theories, suppressed discoveries, and global conspiracies rarely shown in textbooks.
 👉 If you question the official narrative — this is where you start. 
 https://canonical-spam.test/+ETBfTNFBxHRiYWIy
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+ETBfTNFBxHRiYWIy
 SCARY FACTS 🪬
 Telegram: Join Group Chat', NULL, NULL, '["https://canonical-spam.test/\u002BETBfTNFBxHRiYWIy"]', NULL, NULL, NULL, NULL, '2026-02-28 23:47:04.433862+00', 'moderation_action', 218718, 2, 'BAACAgEAAx0CTzmWXQABA1dzaaN-YT3vT4QjWb3taJ89uJoAAfnLAAIjBgACDqwgRYPvbr7R5hO6OgQ', 1647554, 'IMG_4160.MP4', 'video/mp4', 'video_218995_AgADIwYAAg6sIEU.MP4', 18, 0, NULL);
@@ -453,7 +487,9 @@ I recently joined Trade Tribe Assets, a passive income community, and it’s bee
 They operate a structured 10-day trading cycle, host live Zoom sessions for transparency, and allow flexible withdrawals—I personally withdraw weekly.
 I’m sharing based on my personal experience. If you’d like more information, feel free to join the public group via the link below:
 https://canonical-spam.test/+wAOu4w306OdiODJl
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+wAOu4w306OdiODJl
 This platform is to help the people become financially independent, help to earn daily (100% assured profit)		Disclaimer: no spamming allowed if found guilty you will be removed from the group with no questions asked.
 Trade Tribe Assets
@@ -467,7 +503,9 @@ My name is Carl Haynes and I''ve been involved in alternative energy for 40 year
 If you''re tired of system tricks and high utility bills, I offer to make your life easier here and now:
 https://canonical-spam.test/+yHBn7mNs9SowMjYy
 ⚡️⚡️⚡️
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+yHBn7mNs9SowMjYy
 Ways of obtaining and transforming free energy. Aether energy ⚡
 FREE ENERGY ⚡
@@ -484,7 +522,9 @@ On the "Health 💚" channel, Dr. Joseph Marcela will show you all the most impo
 This is not all you will learn after subscribing.
 ❗️ If you want to live, take responsibility for your health now
 https://canonical-spam.test/+HUDSJ8WQWPFjMzcy
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+HUDSJ8WQWPFjMzcy
 How to stop taking pills and forget about going to the doctor? Take care of your body and use natural ingredients! 🌸
 Life Without Pills 🧘
@@ -498,7 +538,9 @@ Fecal deposits, toxins, and parasites pose the greatest danger to our health, so
 ▪️The liver is cleansed and excess weight disappears while you sleep! [what to do?]
 To save your life and stay healthy, I recommend subscribing to this channel!👇
 https://canonical-spam.test/+UZkFjoV4uoRjYWJi
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+UZkFjoV4uoRjYWJi
 I share natural remedies, healthy living, prepping, warnings about what to avoid in order to live a long and healthy life 🌸
 LONGEVITY REMEDIES
@@ -507,7 +549,9 @@ INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, p
 👇👇
 @Message_manager_jenny
 https://canonical-spam.test/+v7tygCZJb20zOTFi
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+v7tygCZJb20zOTFi
 We are here to guide you on your journey to financial freedom.		👇👇	https://canonical-spam.test/+v7tygCZJb20zOTFi
 NEXO COINFLOOR COMPANY 📊📈📈
@@ -521,7 +565,9 @@ Fecal deposits, toxins, and parasites pose the greatest danger to our health, so
 ▪️The liver is cleansed and excess weight disappears while you sleep! [what to do?]
 To save your life and stay healthy, I recommend subscribing to this channel!👇
 https://canonical-spam.test/+UZkFjoV4uoRjYWJi
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+UZkFjoV4uoRjYWJi
 I share natural remedies, healthy living, prepping, warnings about what to avoid in order to live a long and healthy life 🌸
 LONGEVITY REMEDIES
@@ -530,7 +576,9 @@ INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, p
 https://canonical-spam.test/m/asidFYlMZmJk
 https://canonical-spam.test/m/asidFYlMZmJk
 https://canonical-spam.test/m/asidFYlMZmJk
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/m/asidFYlMZmJk
 Rational, No-Hype, Educational Crypto Content | Equities Trader, I help Traders become consistent💯
 Natalie Brunell
@@ -577,7 +625,9 @@ INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, p
 En 2008, Satoshi Nakamoto a introduit le Bitcoin — une monnaie affranchie du contrôle gouvernemental — afin d’offrir aux individus une plus grande indépendance financière. Aujourd’hui, le Bitcoin demeure l’une des formes de monnaie les plus solides, bien que sa véritable valeur soit souvent passée sous silence.
 C’est pourquoi Jeremy Goossens a créé une plateforme destinée à informer le public sur le Bitcoin et à aider chacun à générer des revenus au sein d’une communauté intelligente et tournée vers l’avenir. Dans un monde en mutation rapide, ce qui semblait autrefois impossible est désormais à portée de main.
 https://canonical-spam.test/joinchat/wL9d1amV34pmNWU0
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/joinchat/wL9d1amV34pmNWU0
 ✅ PLATEFORME DE TRADING AGRÉÉE ET FIABLE	Bâtissez votre patrimoine avec des investissements intelligents.		POURQUOI NOUS CHOISIR ?		✔️ Plans d''investissement sur mesure pour tous — des novices aux experts.	✔️ Profits constants et prouvés, rendement garant
 LUMIÈRE CAPITAL 🇫🇷🇧🇪 🇨🇦🇱🇺🇪🇺
@@ -593,7 +643,9 @@ https://canonical-spam.test/+ETBfTNFBxHRiYWIy
 https://canonical-spam.test/+ETBfTNFBxHRiYWIy
 Enter while it’s still up.
 * The author of this channel is being threatened with persecution, and attempts have already been made several times to block the channel, but people still find out the truth.
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+ETBfTNFBxHRiYWIy
 Тhe stories they don’t want you to know.	Secret experiments. Unexplained disappearances.	Some truths are buried for a reason.
 SCARY FACTS
@@ -620,7 +672,9 @@ https://canonical-spam.test/+ETBfTNFBxHRiYWIy
 https://canonical-spam.test/+ETBfTNFBxHRiYWIy
 Enter while it’s still up.
 * The author of this channel is being threatened with persecution, and attempts have already been made several times to block the channel, but people still find out the truth.
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+ETBfTNFBxHRiYWIy
 Тhe stories they don’t want you to know.	Secret experiments. Unexplained disappearances.	Some truths are buried for a reason.
 SCARY FACTS
@@ -635,7 +689,9 @@ Your future portfolio starts with one smart step, invest in yourself with Natali
 Take control. Level up now
 https://canonical-spam.test/m/u_PRwTvyMjQ8
 https://canonical-spam.test/m/u_PRwTvyMjQ8
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/m/u_PRwTvyMjQ8
 Rational, No-Hype, Educational Crypto Content | Equities Trader, I help Traders become consistent💯
 Natalie Brunell
@@ -655,7 +711,9 @@ https://canonical-spam.test/+ETBfTNFBxHRiYWIy
 https://canonical-spam.test/+ETBfTNFBxHRiYWIy
 Enter while it’s still up.
 * The author of this channel is being threatened with persecution, and attempts have already been made several times to block the channel, but people still find out the truth.
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+ETBfTNFBxHRiYWIy
 Тhe stories they don’t want you to know.	Secret experiments. Unexplained disappearances.	Some truths are buried for a reason.
 SCARY FACTS 🪬
@@ -675,7 +733,9 @@ https://canonical-spam.test/+ETBfTNFBxHRiYWIy
 https://canonical-spam.test/+ETBfTNFBxHRiYWIy
 Enter while it’s still up.
 * The author of this channel is being threatened with persecution, and attempts have already been made several times to block the channel, but people still find out the truth.
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+ETBfTNFBxHRiYWIy
 Тhe stories they don’t want you to know.	Secret experiments. Unexplained disappearances.	Some truths are buried for a reason.
 SCARY FACTS 🪬
@@ -695,7 +755,9 @@ https://canonical-spam.test/+ETBfTNFBxHRiYWIy
 https://canonical-spam.test/+ETBfTNFBxHRiYWIy
 Enter while it’s still up.
 * The author of this channel is being threatened with persecution, and attempts have already been made several times to block the channel, but people still find out the truth.
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+ETBfTNFBxHRiYWIy
 Тhe stories they don’t want you to know.	Secret experiments. Unexplained disappearances.	Some truths are buried for a reason.
 SCARY FACTS
@@ -713,7 +775,9 @@ This and more is discussed by renowned doctor Allan Jones. On his channel, he an
 🦠 Flu and cold can be cured in 1 day! [read].
 Subscribe, stop being sick 👇
 https://canonical-spam.test/+UZkFjoV4uoRjYWJi
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+UZkFjoV4uoRjYWJi
 I share natural remedies, healthy living, prepping, warnings about what to avoid in order to live a long and healthy life 🩺
 LONGEVITY REMEDIES
@@ -721,7 +785,9 @@ Telegram: Join Group Chat', 'AgACAgEAAx0CTzmWXQABA1KsaYvZBSbr4gsl2T88_5Zp90KTNNs
 INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, photo_file_id, photo_file_size, urls, edit_date, content_hash, photo_local_path, photo_thumbnail_path, deleted_at, deletion_source, reply_to_message_id, media_type, media_file_id, media_file_size, media_file_name, media_mime_type, media_local_path, media_duration, content_check_skip_reason, similarity_hash) VALUES (221234, 9691580313603, -100026957614982, '2026-03-30 00:44:09.013404+00', 'I’m grateful to be consistently earning over $3,000 weekly from forex trading with just a $250 start-up. I feel truly fortunate to have joined this platform. Special thanks to Mrs. Lindsey norris for her invaluable guidance—she’s a woman with a heart of gold who makes everything simple and stress-free. Click the links below to start earning from the comfort of your home
 Click for more info ⤵️⤵️
 https://canonical-spam.test/+j45fK6fdGz0zNjY8
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+j45fK6fdGz0zNjY8
 The collective voice of the crypto industry. The industry is hiring.	Founder ◇◇BlockchainAssn	Admin/Expert trader👉 @Lindseynorris_bvs
 Connectedpip Stock-Exch🚀⚡️
@@ -733,7 +799,9 @@ I’m a dermatologist with years of experience in dermatology and cosmetology. I
 ❗️Papillomas will dry out and fall off — and parasites will leave your body overnight if you apply this little-known natural remedy used by doctors decades ago... [open recipe]
 ✅ Let’s take care of our health and protect what matters most — our life and well-being. I’m waiting for you on my channel! 👇🏼
 https://canonical-spam.test/+YoUoEGqtUVs0Mjgy
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+YoUoEGqtUVs0Mjgy
 How to stop taking pills and forget about going to the doctor? Take care of your body and use natural ingredients! 🌸
 Life Without Pills 🧘
@@ -746,7 +814,9 @@ What does garlic do? This was told by a doctor-oncologist
 ❗️ Everyone who keeps THIS in their home gets cancer... 11 things you need to get rid of! (watch list)
 Before the channel gets blocked again, I suggest you join and keep the articles with you, here is the link to the channel 👇
 https://canonical-spam.test/+UZkFjoV4uoRjYWJi
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+UZkFjoV4uoRjYWJi
 I share natural remedies, healthy living, prepping, warnings about what to avoid in order to live a long and healthy life 🌸
 LONGEVITY REMEDIES
@@ -754,7 +824,9 @@ Telegram: Join Group Chat', 'AgACAgEAAx0CTzmWXQABA07kaYDAc5S3Wk2F9RHhSFuLu6G7hpI
 INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, photo_file_id, photo_file_size, urls, edit_date, content_hash, photo_local_path, photo_thumbnail_path, deleted_at, deletion_source, reply_to_message_id, media_type, media_file_id, media_file_size, media_file_name, media_mime_type, media_local_path, media_duration, content_check_skip_reason, similarity_hash) VALUES (220364, 9289730936667, -100026957614982, '2026-03-18 15:51:55.568614+00', 'Forever will I invest in @bestt4all investment company, her trading skills are excellent, 34,600 USD with just 3100 USD startup. I am so happy, now I know this shitt pays more than my job....her trading link is below, click to  join her channel
 https://canonical-spam.test/+sY-P3Idn2202MTRk
 https://canonical-spam.test/+sY-P3Idn2202MTRk
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+sY-P3Idn2202MTRk
 Best4assets Trading is suitable for everyone, invest now because time waits for no one... Your children''s future depends on the decision you make today...kill your fears and become who God wants you to be.
 llse Best4assets Platform
@@ -770,7 +842,9 @@ Unlock the power of your own immune system, and live a life where YOU are in con
 ➡️ Barbara O''Neill ✅️
 https://canonical-spam.test/+DwatSa-_uwcwODIy
 https://canonical-spam.test/+DwatSa-_uwcwODIy
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+DwatSa-_uwcwODIy
 Naturopath And Lecturer On Health Issue.	Achieve Optimal Health And Well-Being.	Do your own research.	Learn to Heal Yourse.
 Barbara O''Neill
@@ -783,7 +857,9 @@ INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, p
 👇👇👇👇
 https://canonical-spam.test/m/k9WMvOTxNjY8
 https://canonical-spam.test/m/k9WMvOTxNjY8
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/m/k9WMvOTxNjY8
 Invest today and get pay within 24 hours profits 100%sure guarantee
 Alfred Adam
@@ -799,7 +875,9 @@ I’m sharing based on my personal experience. If you’d like more information,
 INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, photo_file_id, photo_file_size, urls, edit_date, content_hash, photo_local_path, photo_thumbnail_path, deleted_at, deletion_source, reply_to_message_id, media_type, media_file_id, media_file_size, media_file_name, media_mime_type, media_local_path, media_duration, content_check_skip_reason, similarity_hash) VALUES (216795, 9224542242754, -100026957614982, '2026-02-02 12:32:34.65208+00', 'I’m grateful to be consistently earning over $3,000 weekly from forex trading with just a $250 start-up. I feel truly fortunate to have joined this platform. Special thanks to Mrs. Lindsey norris for her invaluable guidance—she’s a woman with a heart of gold who makes everything simple and stress-free. Click the links below to start earning from the comfort of your home
 Click for more info ⤵️⤵️
 https://canonical-spam.test/+j45fK6fdGz0zNjY8
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+j45fK6fdGz0zNjY8
 The collective voice of the crypto industry. The industry is hiring.	Founder ◇◇BlockchainAssn	Admin/Expert trader👉 @Lindseynorris_bvs
 Connectedpip Stock-Exch🚀⚡️
@@ -807,7 +885,9 @@ Telegram: Join Group Chat', NULL, NULL, '["https://canonical-spam.test/\u002Bj45
 INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, photo_file_id, photo_file_size, urls, edit_date, content_hash, photo_local_path, photo_thumbnail_path, deleted_at, deletion_source, reply_to_message_id, media_type, media_file_id, media_file_size, media_file_name, media_mime_type, media_local_path, media_duration, content_check_skip_reason, similarity_hash) VALUES (217878, 9636452344151, -100026957614982, '2026-02-12 15:27:46.402472+00', 'I''m happy I came across this investment platform which has transformed my life positively within the few weeks of my involvement with her platform. I have gotten a profit payment of 35,000$ with an investment of 500$ .
 Click on the platform channel to join and start earning if interested here .
 https://canonical-spam.test/+zwJGbqOwumJkMTJl
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+zwJGbqOwumJkMTJl
 ACCOUNT MANAGER🌏	EXPERT OPTIONS TRADER📉📈📊	FOREX TRADER 📉📈📊	FINANCIAL ADVISOR💼🗞	CRYPTOCURRENCY📈	STOCK TRADERS📉	Ask me how to earn 5 BTC	Incredible win rate,4-5 accurate signals daily 	Secret Trading〽️Formula	@ANNA_KLlPPSTEIN
 KRYPT🅾️F🅾️REX_Ⓜ️INI🆖_EXCH🅰️NGE
@@ -852,7 +932,9 @@ The platform offers daily returns, and through it, I was able to turn things aro
 If you’d like to learn more, just send me a message with the word “GROUP” and I’ll happily connect you with the adm', NULL, NULL, NULL, NULL, NULL, NULL, NULL, '2026-02-06 02:46:36.087876+00', 'moderation_action', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL);
 INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, photo_file_id, photo_file_size, urls, edit_date, content_hash, photo_local_path, photo_thumbnail_path, deleted_at, deletion_source, reply_to_message_id, media_type, media_file_id, media_file_size, media_file_name, media_mime_type, media_local_path, media_duration, content_check_skip_reason, similarity_hash) VALUES (1, 9862700513599, 0, '2025-10-15 17:32:48.338266+00', 'Hello everyone! Hope you''re having a great day. Are you looking for a safe and reliable way to earn passive income online without risking your money or falling for fake platforms?  If yes, feel free to message me. I’ll share with you how I’ve been earning a steady and lucrative income daily using Bitcoin or USDT.  This opportunity has truly changed my life. I’ve been part of it for over a year now, and it’s been a smooth and rewarding journey.  It’s not a Ponzi scheme, and you won’t be asked to refer people to earn. Also, you don’t have to be afraid, I won’t ask you to send me a penny. I’m only sharing this because it has helped me a lot, and I believe it can help others too.  Message me privately for more information if you''re interested...', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL);
 INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, photo_file_id, photo_file_size, urls, edit_date, content_hash, photo_local_path, photo_thumbnail_path, deleted_at, deletion_source, reply_to_message_id, media_type, media_file_id, media_file_size, media_file_name, media_mime_type, media_local_path, media_duration, content_check_skip_reason, similarity_hash) VALUES (219610, 9050167185081, -100026957614982, '2026-03-06 17:46:27.069959+00', 'The world needs to know about @bestt4all investment trading platform, I still can''t believe I was able to earn $16,700 profit with just $1,000 capital... everyone I am here today to recommend her investment trading channel to you all, click on the link below to join and invest with her. 👇https://canonical-spam.test/+sY-P3Idn2202MTRk
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+sY-P3Idn2202MTRk
 Best4assets Trading is suitable for everyone, invest now because time waits for no one... Your children''s future depends on the decision you make today...kill your fears and become who God wants you to be.
 llse Best4assets Platform
@@ -880,7 +962,9 @@ They dressed me up in pretty packaging and put me on the shelf. Inside — indus
 There are hundreds like me. Your fridge is full of them. Slowly, quietly, they do harm. Good news: there’s a channel that exposes the poison in the aisles — Life Without Pills
 Every day they publish lists of products to avoid and natural swaps you can buy instead. 
 Protect your health. Follow now: https://canonical-spam.test/LifeWithoutPills 💊
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/LifeWithoutPills
 Telegram: Contact @LifeWithoutPills', 'AgACAgEAAx0CTzmWXQABA2bKae5HY4ZuTlyHm61vxbS9vZClRGwAAugLaxstknFH0D-4dJQ1LSwBAAMCAAN4AAM7BA', 87128, '["https://canonical-spam.test/LifeWithoutPills"]', NULL, NULL, 'full/-1001329174109/222922.jpg', 'thumbs/-1001329174109/222922.jpg', '2026-04-26 17:12:17.457109+00', 'moderation_action', 222667, NULL, NULL, NULL, NULL, NULL, 'photo_222922_AQAD6AtrGy2ScUd9.jpg', NULL, 0, NULL);
 INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, photo_file_id, photo_file_size, urls, edit_date, content_hash, photo_local_path, photo_thumbnail_path, deleted_at, deletion_source, reply_to_message_id, media_type, media_file_id, media_file_size, media_file_name, media_mime_type, media_local_path, media_duration, content_check_skip_reason, similarity_hash) VALUES (222020, 9548870078206, -100026957614982, '2026-04-11 01:16:23.04171+00', 'I’M A YOGURT — LOVED BY KIDS AND PARENTS. I’LL KILL THEM IN 10 YEARS. 
@@ -888,7 +972,9 @@ They dressed me up in pretty packaging and put me on the shelf. Inside — indus
 There are hundreds like me. Your fridge is full of them. Slowly, quietly, they do harm. Good news: there’s a channel that exposes the poison in the aisles — Life Without Pills
 Every day they publish lists of products to avoid and natural swaps you can buy instead. 
 Protect your health. Follow now: https://canonical-spam.test/LifeWithoutPills
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/LifeWithoutPills
 Telegram: Contact @LifeWithoutPills', 'AgACAgEAAx0CTzmWXQABA2NEadmg5mwzlgfrw6W0Fw1TPZRJCmwAAukLaxtGV8hGAlf7keviCjABAAMCAAN4AAM7BA', 87126, '["https://canonical-spam.test/LifeWithoutPills"]', NULL, NULL, 'full/-1001329174109/222020.jpg', 'thumbs/-1001329174109/222020.jpg', '2026-04-11 01:16:35.107461+00', 'moderation_action', 221951, NULL, NULL, NULL, NULL, NULL, 'photo_222020_AQAD6QtrG0ZXyEZ9.jpg', NULL, 0, NULL);
 INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, photo_file_id, photo_file_size, urls, edit_date, content_hash, photo_local_path, photo_thumbnail_path, deleted_at, deletion_source, reply_to_message_id, media_type, media_file_id, media_file_size, media_file_name, media_mime_type, media_local_path, media_duration, content_check_skip_reason, similarity_hash) VALUES (221519, 9854457343116, -100026957614982, '2026-04-02 18:14:36.781636+00', 'I’M A YOGURT — LOVED BY KIDS AND PARENTS. I’LL KILL THEM IN 10 YEARS. 
@@ -896,7 +982,9 @@ They dressed me up in pretty packaging and put me on the shelf. Inside — indus
 There are hundreds like me. Your fridge is full of them. Slowly, quietly, they do harm. Good news: there’s a channel that exposes the poison in the aisles — Life Without Pills
 Every day they publish lists of products to avoid and natural swaps you can buy instead. 
 Protect your health. Follow now: https://canonical-spam.test/LifeWithoutPills
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/LifeWithoutPills
 Telegram: Contact @LifeWithoutPills', 'AgACAgEAAx0CTzmWXQABA2FPac6yDG1W7e-ZEPCYsiw8zPk48a4AAgMMaxvJt3hGXFTKcWwzNUMBAAMCAAN4AAM6BA', 87126, '["https://canonical-spam.test/LifeWithoutPills"]', NULL, NULL, 'full/-1001329174109/221519.jpg', 'thumbs/-1001329174109/221519.jpg', '2026-04-02 18:14:50.954239+00', 'moderation_action', 221514, NULL, NULL, NULL, NULL, NULL, 'photo_221519_AQADAwxrG8m3eEZ9.jpg', NULL, 0, NULL);
 INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, photo_file_id, photo_file_size, urls, edit_date, content_hash, photo_local_path, photo_thumbnail_path, deleted_at, deletion_source, reply_to_message_id, media_type, media_file_id, media_file_size, media_file_name, media_mime_type, media_local_path, media_duration, content_check_skip_reason, similarity_hash) VALUES (16511, 9338360445896, -100018848379585, '2026-01-08 01:35:38.408961+00', 'Hello everyone 👋
@@ -930,7 +1018,9 @@ If you want to know how I got through it, send me a direct message with the word
 INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, photo_file_id, photo_file_size, urls, edit_date, content_hash, photo_local_path, photo_thumbnail_path, deleted_at, deletion_source, reply_to_message_id, media_type, media_file_id, media_file_size, media_file_name, media_mime_type, media_local_path, media_duration, content_check_skip_reason, similarity_hash) VALUES (217855, 9417137874598, -100026957614982, '2026-02-11 23:01:25.865845+00', 'It''s really hard to believe, thank God it went smoothly for I and my family.  I was able to earn $5500 with my $500 investment within 48hours of trade, thank you for making it possible for me , you can contact him if you''re interested in trading...
 @fx_Hildegard
 https://canonical-spam.test/+Wye6y9dxZzcyNjJk
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+Wye6y9dxZzcyNjJk
 Binary and Forex Signals	Live trading sessions	🔹Coaching and mentoring	🔹Financial market analysis	🔹Forex Academy	🔹Reputed team of experienced traders and market analysts Latest binary options news and updates	📩📩	@fx_Hildegard
 📊💶𝗙𝗜𝗡𝗔𝗡𝗖𝗘 𝗪𝗜𝗧𝗛 𝗕𝗜𝗧𝗖𝗢𝗜𝗡 𝗦𝗨𝗜𝗦𝗦𝗘💰📈
@@ -938,7 +1028,9 @@ Telegram: Join Group Chat', NULL, NULL, '["https://canonical-spam.test/\u002BWye
 INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, photo_file_id, photo_file_size, urls, edit_date, content_hash, photo_local_path, photo_thumbnail_path, deleted_at, deletion_source, reply_to_message_id, media_type, media_file_id, media_file_size, media_file_name, media_mime_type, media_local_path, media_duration, content_check_skip_reason, similarity_hash) VALUES (220384, 9127536472473, -100026957614982, '2026-03-19 00:44:28.131164+00', 'My experience with crypto changed once I started paying attention to the educational insights shared by Natalie Brunell. A single good week proved that learning the market really matters.
 https://canonical-spam.test/m/snZ5OH6HY2Fk
 https://canonical-spam.test/m/snZ5OH6HY2Fk
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/m/snZ5OH6HY2Fk
 Rational, No-Hype, Educational Crypto Content | Equities Trader, I help Traders become consistent💯
 Natalie Brunell
@@ -951,14 +1043,18 @@ INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, p
 You can contact him here 
 👇👇👇👇
 https://canonical-spam.test/AVATRADE_INVESTMENT_PLATFROM
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/AVATRADE_INVESTMENT_PLATFROM
 Account manager🌏	FOREX TRADER📉📈📊	💼Financial advisor🗞	📉Seven figure	Cryptocurrency📈	Stock traders📉	📤📤 Ask me how to earn over 10.9 BTC	Incredible win rate, 3-5 accurate signals daily with tips.	✅ Secret Trading〽️Formula
 AVATRADE/INVESTMENT/PLATFORM 📊
 Telegram: View @AVATRADE_INVESTMENT_PLATFROM', NULL, NULL, '["https://canonical-spam.test/AVATRADE_INVESTMENT_PLATFROM"]', NULL, NULL, NULL, NULL, '2026-03-13 18:30:54.805329+00', 'moderation_action', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL);
 INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, photo_file_id, photo_file_size, urls, edit_date, content_hash, photo_local_path, photo_thumbnail_path, deleted_at, deletion_source, reply_to_message_id, media_type, media_file_id, media_file_size, media_file_name, media_mime_type, media_local_path, media_duration, content_check_skip_reason, similarity_hash) VALUES (214958, 9288092743605, -100026957614982, '2026-01-17 04:11:43.64821+00', 'Having someone like you who is not just a great motivator but also put in the best to get the work so honestly deserve nothing but appreciation. Thanks for the work well done 
 https://canonical-spam.test/earn_with_BlockVest
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/earn_with_BlockVest
 BlockVest Profits 📊	Smart digital investing with transparency & discipline.	Secure systems | Structured strategies | Real-time tracking	📩 Contact us to invest and grow financially 		Https//canonical-spam.test/Stephencryptotrader
 ʙʟᴏᴄᴋᴠᴇꜱᴛ ᴘʀᴏꜰɪᴛꜱ 📊 ✧ ᴄʀʏᴘᴛᴏ 📈 | ᴇxᴄʜᴀɴɢᴇ 💱 | ᴍɪɴɪɴɢ ⛏️
@@ -976,7 +1072,9 @@ They didn’t want this discussed.
 I gathered everything in one place:
 https://canonical-spam.test/+ETBfTNFBxHRiYWIy
 Enter while it’s still up.
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+ETBfTNFBxHRiYWIy
 Тhe stories they don’t want you to know.	Secret experiments. Unexplained disappearances.	Some truths are buried for a reason.
 SCARY FACTS 🪬
@@ -990,7 +1088,9 @@ They didn’t want this discussed.
 I gathered everything in one place:
 https://canonical-spam.test/+ETBfTNFBxHRiYWIy
 Enter while it’s still up.
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+ETBfTNFBxHRiYWIy
 Тhe stories they don’t want you to know.	Secret experiments. Unexplained disappearances.	Some truths are buried for a reason.
 SCARY FACTS 🪬
@@ -1006,7 +1106,9 @@ Our partners use tested strategies and reliable market sources.
 ❗️ Best for people 23+, ready to register on an exchange and take this seriously.
 👉 Message me “INFO” in private to learn how to join', NULL, NULL, NULL, NULL, NULL, NULL, NULL, '2026-02-19 14:59:57.400677+00', 'moderation_action', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL);
 INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, photo_file_id, photo_file_size, urls, edit_date, content_hash, photo_local_path, photo_thumbnail_path, deleted_at, deletion_source, reply_to_message_id, media_type, media_file_id, media_file_size, media_file_name, media_mime_type, media_local_path, media_duration, content_check_skip_reason, similarity_hash) VALUES (218883, 9693897799244, -100026957614982, '2026-02-28 00:54:46.731983+00', '😮 $9,550 profit in just 7 days of investing in the @bestt4all investment trading platform, I still can''t believe it, this platform are the best on telegram, I will drop their link here so you can join and take part in their trading👇👇👇👇👇👇https://canonical-spam.test/+sY-P3Idn2202MTRk
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+sY-P3Idn2202MTRk
 Best4assets Trading ist für jedermann geeignet, investieren Sie jetzt, denn die Zeit wartet auf niemanden...Die Zukunft Ihrer Kinder hängt von der Entscheidung ab, die Sie heute treffen.
 llse Best4assets Platform
@@ -1018,7 +1120,9 @@ INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, p
 👉 По всем вопросам пишите куратору: @astreona_bot (https://canonical-spam.test/astreona_bot?start=690dae876a595768e1ad31f1)', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL);
 INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, photo_file_id, photo_file_size, urls, edit_date, content_hash, photo_local_path, photo_thumbnail_path, deleted_at, deletion_source, reply_to_message_id, media_type, media_file_id, media_file_size, media_file_name, media_mime_type, media_local_path, media_duration, content_check_skip_reason, similarity_hash) VALUES (217900, 9406128074104, -100026957614982, '2026-02-12 19:38:16.318149+00', 'Investment is a way to earn extra income on a daily basis outside salary, invest $200 and earn $2000 within 12 hours of deposit and trading with the company platform manager here.
 https://canonical-spam.test/+zwJGbqOwumJkMTJl
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+zwJGbqOwumJkMTJl
 ACCOUNT MANAGER🌏	EXPERT OPTIONS TRADER📉📈📊	FOREX TRADER 📉📈📊	FINANCIAL ADVISOR💼🗞	CRYPTOCURRENCY📈	STOCK TRADERS📉	Ask me how to earn 5 BTC	Incredible win rate,4-5 accurate signals daily 	Secret Trading〽️Formula	@ANNA_KLlPPSTEIN
 KRYPT🅾️F🅾️REX_Ⓜ️INI🆖_EXCH🅰️NGE
@@ -1031,33 +1135,43 @@ httpstmet6zC9xgt1mU4MjI0', NULL, NULL, NULL, NULL, NULL, NULL, NULL, '2026-04-04
 INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, photo_file_id, photo_file_size, urls, edit_date, content_hash, photo_local_path, photo_thumbnail_path, deleted_at, deletion_source, reply_to_message_id, media_type, media_file_id, media_file_size, media_file_name, media_mime_type, media_local_path, media_duration, content_check_skip_reason, similarity_hash) VALUES (221506, 9505695016721, -100026957614982, '2026-04-02 15:53:07.741875+00', 'After just a few weeks of investing with Connectedpip Trading Platform, I’ve earned a 45% return on my initial $1,200 investment. So far, it’s been a smooth and trustworthy experience. Definitely feels like the real deal!
 ⤵️⤵️⤵️
 https://canonical-spam.test/+j45fK6fdGz0zNjY8
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+j45fK6fdGz0zNjY8
 The collective voice of the crypto industry. The industry is hiring.	Founder ◇◇BlockchainAssn	Admin/Expert trader👉 @Lindseynorris_bvs		This Channel offer you what you need 🚀
 Connectedpip Stock-Exch🚀⚡️
 Telegram: Join Group Chat', NULL, NULL, '["https://canonical-spam.test/\u002Bj45fK6fdGz0zNjY8"]', NULL, NULL, NULL, NULL, '2026-04-02 15:54:16.635125+00', 'moderation_action', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL);
 INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, photo_file_id, photo_file_size, urls, edit_date, content_hash, photo_local_path, photo_thumbnail_path, deleted_at, deletion_source, reply_to_message_id, media_type, media_file_id, media_file_size, media_file_name, media_mime_type, media_local_path, media_duration, content_check_skip_reason, similarity_hash) VALUES (8700, 9990948565741, -100017312732389, '2026-04-22 00:48:04.689885+00', 'Pay no attention to those who claim that success is unattainable in this era! Till date @Essaenaaa has been a great inspiration to me and my family. For a start I deposited $300 and after a trade I get $2, 100 return without any extra charges just 10% commission of trading for me that was deducted. She''s accuracy and reliability can''t be compromised... tap the Link contact and start earning
 Channelln 平44 https://canonical-spam.test/capitalfxprotradin
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/capitalfxprotradin
 Telegram: Contact @capitalfxprotradin', NULL, NULL, '["https://canonical-spam.test/capitalfxprotradin"]', NULL, NULL, NULL, NULL, '2026-04-22 00:48:09.099412+00', 'moderation_action', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL);
 INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, photo_file_id, photo_file_size, urls, edit_date, content_hash, photo_local_path, photo_thumbnail_path, deleted_at, deletion_source, reply_to_message_id, media_type, media_file_id, media_file_size, media_file_name, media_mime_type, media_local_path, media_duration, content_check_skip_reason, similarity_hash) VALUES (8435, 9334053766777, -100017312732389, '2026-02-27 05:01:44.50358+00', 'From my very first deposit of $1,500, I was hooked. Every single day, I watch my account grow as the earnings come in non-stop. This company knows exactly what they’re doing, and they’re doing it well. I’ve never experienced anything like it before, and it’s amazing how effortless it all is. I’m making more than I ever dreamed possible through trading! Join them today 👇🏻
 https://canonical-spam.test/stockdflava
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/stockdflava
 Profit isn’t luck, it’s precision 📈
 StockFlava📍
 Telegram: View @stockdflava', NULL, NULL, '["https://canonical-spam.test/stockdflava"]', NULL, NULL, NULL, NULL, '2026-02-27 05:01:49.596067+00', 'moderation_action', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL);
 INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, photo_file_id, photo_file_size, urls, edit_date, content_hash, photo_local_path, photo_thumbnail_path, deleted_at, deletion_source, reply_to_message_id, media_type, media_file_id, media_file_size, media_file_name, media_mime_type, media_local_path, media_duration, content_check_skip_reason, similarity_hash) VALUES (218719, 9111670815092, -100026957614982, '2026-02-26 20:46:55.925889+00', 'I am a happy woman because i just made a profir of $109, 500 in @bestt4all trading platform,  i will celebrate my Christmas in toronto, and i will share this testimony to the world.  
 https://canonical-spam.test/+sY-P3Idn2202MTRk
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+sY-P3Idn2202MTRk
 Best4assets Trading ist für jedermann geeignet, investieren Sie jetzt, denn die Zeit wartet auf niemanden...Die Zukunft Ihrer Kinder hängt von der Entscheidung ab, die Sie heute treffen.
 llse Best4assets Platform
 Telegram: Join Group Chat', NULL, NULL, '["https://canonical-spam.test/\u002BsY-P3Idn2202MTRk"]', NULL, NULL, NULL, NULL, '2026-02-26 20:47:02.708785+00', 'moderation_action', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL);
 INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, photo_file_id, photo_file_size, urls, edit_date, content_hash, photo_local_path, photo_thumbnail_path, deleted_at, deletion_source, reply_to_message_id, media_type, media_file_id, media_file_size, media_file_name, media_mime_type, media_local_path, media_duration, content_check_skip_reason, similarity_hash) VALUES (220885, 9507056383000, -100026957614982, '2026-03-24 18:24:25.026461+00', '$25,400 profit in just 7 days of her platform trading for me, am I dreaming? Oh my God! I will keep recommending. Your platform ma''am @TradeWithIrene..click the like below to join her platform. 
 https://canonical-spam.test/+KyjDyoJp2AY5M2I0
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+KyjDyoJp2AY5M2I0
 Trading is for everyone, kill your fears and become who God wants you to be... remember the future is today...start earning today because tomorrow might be too late.
 Irene investment trading platform
@@ -1065,7 +1179,9 @@ Telegram: Join Group Chat', NULL, NULL, '["https://canonical-spam.test/\u002BKyj
 INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, photo_file_id, photo_file_size, urls, edit_date, content_hash, photo_local_path, photo_thumbnail_path, deleted_at, deletion_source, reply_to_message_id, media_type, media_file_id, media_file_size, media_file_name, media_mime_type, media_local_path, media_duration, content_check_skip_reason, similarity_hash) VALUES (221139, 9229526752367, -100026957614982, '2026-03-27 19:08:30.46024+00', 'After just a few weeks of investing with Connectedpip Trading Platform, I’ve earned a 45% return on my initial $1,200 investment. So far, it’s been a smooth and trustworthy experience. Definitely feels like the real deal!
 ⤵️⤵️⤵️
 https://canonical-spam.test/+j45fK6fdGz0zNjY8
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+j45fK6fdGz0zNjY8
 The collective voice of the crypto industry. The industry is hiring.	Founder ◇◇BlockchainAssn	Admin/Expert trader👉 @Lindseynorris_bvs
 Connectedpip Stock-Exch🚀⚡️
@@ -1084,14 +1200,18 @@ Here you will see the breathtaking places of our planet that pass us by without 
 A 40-kilometer-long gorge under South America, lost cities, underground waterfalls, and beauty that has not been touched by tourists.
 Subscribe to see the world as nature intended it to be:👇
 https://canonical-spam.test/crazy_facts
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/crazy_facts
 You can view and join @crazy_facts right away.
 Crazy_facts
 Telegram: View @crazy_facts', NULL, NULL, '["https://canonical-spam.test/crazy_facts"]', NULL, NULL, NULL, NULL, '2026-02-03 17:51:17.166552+00', 'moderation_action', 216944, 2, 'BAACAgQAAx0CTzmWXQABA0-BaYIuM_iy1GE-EbR6DtM_854fvKcAApcnAAJq6AhQEZxRliUFVFc4BA', 2337830, 'IMG_3803.MP4', 'video/mp4', 'video_216961_AgADlycAAmroCFA.MP4', 26, 0, NULL);
 INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, photo_file_id, photo_file_size, urls, edit_date, content_hash, photo_local_path, photo_thumbnail_path, deleted_at, deletion_source, reply_to_message_id, media_type, media_file_id, media_file_size, media_file_name, media_mime_type, media_local_path, media_duration, content_check_skip_reason, similarity_hash) VALUES (222790, 9671392329178, -100026957614982, '2026-04-23 20:43:30.625877+00', 'I am only doing this out of joy UNICORN FINANCE Company is a proof that legit companies still exists 
 https://canonical-spam.test/+pc1jZciX8o9hNTE1
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+pc1jZciX8o9hNTE1
 🌎WELCOME TO @UNICORN_FINANCE_AiBOT	The high-class level of conducting a trading company, the presence of a unique strategy in the hands of the best specialists give the best results of effective trading in the  market and on cryptocurrency exchanges.
 UNICORN_FINANCE⬢
@@ -1109,19 +1229,25 @@ My friend at an institution just informed me! I''ve already swapped everything
 INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, photo_file_id, photo_file_size, urls, edit_date, content_hash, photo_local_path, photo_thumbnail_path, deleted_at, deletion_source, reply_to_message_id, media_type, media_file_id, media_file_size, media_file_name, media_mime_type, media_local_path, media_duration, content_check_skip_reason, similarity_hash) VALUES (20849, 9923620760050, -100055570785509, '2026-02-12 11:44:19.693037+00', 'Buy Ivermectin, Hydroxychloroquine, Doxycycline, Azithromycin tablets and other covid-19 medications at affordable prices.
 Telegram link:https://canonical-spam.test/covid_cancer_careplus
 Website: bluevalleypharmacy.com
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/covid_cancer_careplus
 Buy Ivermectin, Hydroxychloroquine, Doxycycline,fenbendazole, Azithromycin tablets and medications at affordable prices.
 Parasite Cleanse, Deworm and Detox protocols
 Telegram: View @covid_cancer_careplus', NULL, NULL, '["https://canonical-spam.test/covid_cancer_careplus"]', NULL, NULL, NULL, NULL, '2026-02-12 11:44:27.218426+00', 'moderation_action', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL);
 INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, photo_file_id, photo_file_size, urls, edit_date, content_hash, photo_local_path, photo_thumbnail_path, deleted_at, deletion_source, reply_to_message_id, media_type, media_file_id, media_file_size, media_file_name, media_mime_type, media_local_path, media_duration, content_check_skip_reason, similarity_hash) VALUES (220534, 9967327572849, -100026957614982, '2026-03-20 16:04:14.029535+00', '‎I am absolutely thrilled with @Tradewithdonald1 performance. With an initial investment of $900, I have achieved a remarkable return of $10,011. This platform has proven to be an excellent choice for trading.clink to join
 ‎https://canonical-spam.test/+JILCkUmZTxc2NDJk
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+JILCkUmZTxc2NDJk
 Crypto investments easy! Trust a licensed stock exchange partner. Strengthen Your Financial Potential.		DM 👉 https://canonical-spam.test/Donald8FX
 Telegram: Join Group Chat', NULL, NULL, '["https://canonical-spam.test/\u002BJILCkUmZTxc2NDJk"]', NULL, NULL, NULL, NULL, '2026-03-20 16:23:35.724537+00', 'moderation_action_failed', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL);
 INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, photo_file_id, photo_file_size, urls, edit_date, content_hash, photo_local_path, photo_thumbnail_path, deleted_at, deletion_source, reply_to_message_id, media_type, media_file_id, media_file_size, media_file_name, media_mime_type, media_local_path, media_duration, content_check_skip_reason, similarity_hash) VALUES (220560, 9529199901650, -100026957614982, '2026-03-20 17:37:10.547458+00', 'Thank you very much, Mr. @Tradewithdonald1, I am incredibly grateful to you. Another withdrawal tonight, it went stress-free again. Thanks again for turning my $2,500 into $22,700 in just one week. Now I am debt-free. https://canonical-spam.test/+JILCkUmZTxc2NDJk
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+JILCkUmZTxc2NDJk
 Crypto investments easy! Trust a licensed stock exchange partner. Strengthen Your Financial Potential.		DM 👉 https://canonical-spam.test/Donald8FX
 Telegram: Join Group Chat', NULL, NULL, '["https://canonical-spam.test/\u002BJILCkUmZTxc2NDJk"]', NULL, NULL, NULL, NULL, '2026-03-20 17:38:51.594633+00', 'moderation_action', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL);
@@ -1135,7 +1261,9 @@ INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, p
 https://canonical-spam.test/+dPMBMkcZMwEyYTM0
 https://canonical-spam.test/+dPMBMkcZMwEyYTM0
 https://canonical-spam.test/+dPMBMkcZMwEyYTM0
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+dPMBMkcZMwEyYTM0
 Krypto-Handelsunternehmen, das auf Disziplin, Präzision und strukturiertem Risikomanagement basiert.	📊 Bitcoin • Ethereum • Altcoins	🔐 Kapitalschutz hat oberste Priorität	⚠️ Kryptohandel birgt Risiken. Handeln Sie verantwortungsbewusst.
 Eisenberg Crypto Capital
@@ -1152,7 +1280,9 @@ INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, p
  The company offers an opportunity to earn 10% RIO of your investment daily based on your investment capital, that is if you invest in the minimum deposit of $500, you can earn $50 daily and you can withdraw daily or at your time and you will not lose your money, I guarantee you that 100% send me a message for link I''ll be deleting my text soon don''t miss out on this year crypto market', NULL, NULL, NULL, NULL, NULL, NULL, NULL, '2025-11-21 04:14:29.493992+00', 'spam_action_failed', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL);
 INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, photo_file_id, photo_file_size, urls, edit_date, content_hash, photo_local_path, photo_thumbnail_path, deleted_at, deletion_source, reply_to_message_id, media_type, media_file_id, media_file_size, media_file_name, media_mime_type, media_local_path, media_duration, content_check_skip_reason, similarity_hash) VALUES (217577, 9359835072947, -100026957614982, '2026-02-07 02:37:59.29614+00', '$7,900 profit in just 3 days of investing in @Violet4everyone1 investment trading platform, I am happy and my kids are happy now, I will recommend her channel to everyone here 
 https://canonical-spam.test/+kHA0wAGPg3QzNGI8
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+kHA0wAGPg3QzNGI8
 Trading is the future, do not joke with your future for your tomorrow is today, invest now and safeguard your tomorrow
 Best4assets trading platform 📊📉
@@ -1166,7 +1296,9 @@ They didn’t want this discussed.
 I gathered everything in one place:
 https://canonical-spam.test/+ETBfTNFBxHRiYWIy
 Enter while it’s still up.
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+ETBfTNFBxHRiYWIy
 SCARY FACTS 🪬
 Telegram: Join Group Chat', 'AgACAgEAAx0CTzmWXQABA1i7aaYZSKEDAAFJ2mwPtxOg41qLMu7FAAL5C2sbN_kwRYTWL9p3U3fCAQADAgADeAADOgQ', 71404, '["https://canonical-spam.test/\u002BETBfTNFBxHRiYWIy"]', NULL, NULL, 'full/-1001329174109/219323.jpg', 'thumbs/-1001329174109/219323.jpg', '2026-03-02 23:12:20.087446+00', 'moderation_action', 219268, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL);
@@ -1179,7 +1311,9 @@ They didn’t want this discussed.
 I gathered everything in one place:
 https://canonical-spam.test/+ETBfTNFBxHRiYWIy
 Enter while it’s still up.
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+ETBfTNFBxHRiYWIy
 SCARY FACTS 🪬
 Telegram: Join Group Chat', 'AgACAgEAAx0CTzmWXQABA1lZaad315vgpL7w04w2xtezVynn4IwAAhIMaxtfszlFr1PznD211FYBAAMCAAN4AAM6BA', 71121, '["https://canonical-spam.test/\u002BETBfTNFBxHRiYWIy"]', NULL, NULL, 'full/-1001329174109/219481.jpg', 'thumbs/-1001329174109/219481.jpg', '2026-03-04 00:08:04.201965+00', 'moderation_action', 219398, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL);
@@ -1200,7 +1334,9 @@ There you’ll find:
 🔥 The vitamin that melts up to 4 pounds a week
 🧘‍♀️ Simple home exercises that beat antidepressants
 Everything you need to rebuild your body from the inside out. Join now — and within a week, you’ll be amazed at what your body can really do: https://canonical-spam.test/+fyAXbBguAKY0YTUy
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+fyAXbBguAKY0YTUy
 Explore Japan’s secrets to longevity, mindful living, and holistic well-being — in easy, practical tips for your daily life 🇯🇵
 Health from Japan
@@ -1215,7 +1351,9 @@ Within its pages lie the secrets of survival—forgotten superfoods that can nou
 From the "doomsday" survival crackers, designed for the direst of circumstances, to the ingenious "Pocket Soup" that saved the Lewis and Clark expedition from the brink of starvation, these are the tools of survival.
 Time is of the essence. In a world where food security is at its most precarious, this book is your guardian angel. Seize your copy now, and be ready to face the harshest of challenges with unwavering determination and the knowledge to survive. Your very existence may hinge on it!
 Secure your copy of this essential survival guide here: https://canonical-spam.test/LostSuperfoodsBook
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/LostSuperfoodsBook
 The Lost SuperFoods', NULL, NULL, '["https://canonical-spam.test/LostSuperfoodsBook"]', NULL, NULL, NULL, NULL, '2025-11-14 15:57:04.474213+00', 'manual_ui_delete', 211518, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL);
 INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, photo_file_id, photo_file_size, urls, edit_date, content_hash, photo_local_path, photo_thumbnail_path, deleted_at, deletion_source, reply_to_message_id, media_type, media_file_id, media_file_size, media_file_name, media_mime_type, media_local_path, media_duration, content_check_skip_reason, similarity_hash) VALUES (213483, 9368797754579, -100026957614982, '2025-12-23 20:44:09.874266+00', '❗️IBUPROFEN – The Silent Killer of Fungus and Failing Vision!
@@ -1227,7 +1365,9 @@ My name is Kate. I’m a licensed pharmacist with 31 years of experience – and
 > Restore your eyesight by 2 diopters without surgery or correction. Just crush and swallow a common painkiller with… (Read more)
 > THROW THEM OUT NOW! 17 “headache meds” proven to cause brain cancer. (Read more)
 Subscribe, doctors won''t believe your test results: https://canonical-spam.test/+fyAXbBguAKY0YTUy
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+fyAXbBguAKY0YTUy
 Explore Japan’s secrets to longevity, mindful living, and holistic well-being — in easy, practical tips for your daily life 🇯🇵
 Health from Japan
@@ -1243,7 +1383,9 @@ Everyone should know this:
 💠 90% of people die from clogged blood vessels. A common remedy will help remove blood clots... (watch the video to see how it works)
 ✅ Subscribe and extend your life:
 https://canonical-spam.test/+bbCkk5xBB8FjYWE0
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+bbCkk5xBB8FjYWE0
 Your health is not a pharma revenue stream.	Evidence-based alternatives. No fear, no myths.	❤️🌿
 Life Without Pharma ❌💊
@@ -1256,7 +1398,9 @@ Your breakthrough might be closer than you think. Sometimes, all it takes is one
 Kindly reach out to her 
 @mrs_first_lady
 https://canonical-spam.test/+9XKAhk1PtGMxY2I0
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+9XKAhk1PtGMxY2I0
 ✔️We guarantee 💯the best payout 💰for all our loyal investors 📊	✔️ Perfect signal session📈	✔ Incredible win rate (3-5)📉	We offer daily pump signals with 90% profit per investment💯	Best winning signals 💯	Contact us
 ADMIRAL TRUST BINARY OPTION TRADING
@@ -1273,13 +1417,17 @@ YOU SHOULD KNOW THIS:
 ➡️ Cardiologists recommend! Vessels will be clean as glass [homemade decoction from...]
 Subscribe, these tips will keep you healthy for years to come 👇
 https://canonical-spam.test/+Mh8s_cg9RRY4NDE6
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+Mh8s_cg9RRY4NDE6
 How to stop taking pills and forget about going to the doctor? Take care of your body and use natural ingredients! 🌸
 Life Without Pills 🧘
 Telegram: Join Group Chat', 'AgACAgEAAx0CTzmWXQABA0fNaW0pNOo6Ngo3dSbk1lpGZsMVzVwAAtQLaxt7rnBHc22yDjGh2UsBAAMCAAN4AAM4BA', 33392, '["https://canonical-spam.test/\u002BMh8s_cg9RRY4NDE6"]', NULL, NULL, 'full/-1001329174109/214989.jpg', 'thumbs/-1001329174109/214989.jpg', '2026-01-18 18:41:13.784847+00', 'moderation_action', 214840, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL);
 INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, photo_file_id, photo_file_size, urls, edit_date, content_hash, photo_local_path, photo_thumbnail_path, deleted_at, deletion_source, reply_to_message_id, media_type, media_file_id, media_file_size, media_file_name, media_mime_type, media_local_path, media_duration, content_check_skip_reason, similarity_hash) VALUES (106688, 9207350258083, -100059667856554, '2025-12-28 00:53:42.46022+00', 'Why I Recommend ESTOCK Trading broker and coach @Tony_Harris_Fx as the Best for Investment, In the ever-evolving world of investment, choosing the right trading broker is paramount. After thorough research and consideration, I highly recommend ESTOCK trading broker for the following reasons: Transparent Fee Structure**: One of the standout features of ESTOCK is its transparent pricing model. They provide clear information about their fees and commissions, eliminating any hidden charges that could eat into your profits. ESTOCK trading broker stands out as a commendable choice for investors of all levels. Whether you’re just starting your investment journey or looking to enhance your trading strategies, https://canonical-spam.test/estockglobalfx provides the necessary tools and support to help you succeed.
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/estockglobalfx
 ⚡Share your feedback and testimony 	⚡Celebrate the success of Estock trade	⚡Recommend friends and family for	     financial growth.	⚡DM to get started	     👇👇👇👇	     @Tony_Harris_fx	     Join channel 	     👇👇👇	     https://canonical-spam.test/estockglobaltrade
 💰 ESTOCK GLOBAL TRADE 📈 chat
@@ -1288,7 +1436,9 @@ INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, p
 👇👇👇👇👇👇👇
 https://canonical-spam.test/+QDJ0jNphRDIyNTU0
 https://canonical-spam.test/+QDJ0jNphRDIyNTU0
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+QDJ0jNphRDIyNTU0
 WE GUARANTEE THE BEST TRADE STRATEGIES IN THE BUSINESS 🇨🇦💎💰	100% INVESTMENT✔️🇺🇸	100% PAYOUT✔️🇮🇳	INVESTMENT IS THE ONLY KEY To FINACIAL FREEDOM.	@CEO_COINBASE_INVESTORS6
 C🅾️INB🅰️SE TR🅰️DING ℹ️NVESTMENT 📈📉 chat
@@ -1303,7 +1453,9 @@ If you’ve faced scams, losses, or painful setbacks in the past, don’t give u
 Your breakthrough could be closer than you think.
 @mrs_first_lady
 https://canonical-spam.test/+9XKAhk1PtGMxY2I0
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+9XKAhk1PtGMxY2I0
 ✔️We guarantee 💯the best payout 💰for all our loyal investors 📊	✔️ Perfect signal session📈	✔ Incredible win rate (3-5)📉	We offer daily pump signals with 90% profit per investment💯	Best winning signals 💯	Contact us
 ADMIRAL TRUST BINARY OPTION TRADING
@@ -1325,7 +1477,9 @@ If you’re interested in learning more, feel free to reach out through the link
 👇
 https://canonical-spam.test/+Ja8R0AwW4YU5NDI0
 https://canonical-spam.test/+Ja8R0AwW4YU5NDI0
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+Ja8R0AwW4YU5NDI0
 TURN YOUR CAPITAL INTO A SOURCE OF INCOME THROUGH CRYPTO. TRADE WITH THE BEST PROFESSIONAL TRADER		📶100% ACCURACY✅	📶100% PROFIT ✅	📶INSTANT WITHDRAWAL ✅	💎DON''T MISS OUT, INVEST AND EARN	@FXCM_COMPANY1
 FOREX CAPITAL MARKETS 🌐🗺💱💲
@@ -1339,7 +1493,9 @@ As we begin a new year, this is a great chance for anyone looking to diversify t
 I confidently recommend @Earn_From_Roland to anyone who is serious about investing and earning consistently.
 👉 Click the link below to contact the admin and start your journey today:
 https://canonical-spam.test/+M2LGyEu71b44NmU0
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+M2LGyEu71b44NmU0
 📉 | WE GUARANTEE THE BEST TRADE STRATEGIES IN THE BUSINESS 💎💰	100% INVESTMENT✔️	100% PAYOUT✔️	WATCH YOUR MONEY GROW LIKE TREE 🌳💯 GUARANTEE...	INVESTMENT IS THE ONLY KEY🔑 TO FINANCIAL FREEDOM. 📩DM ME NOW FOR START UP	Contact: canonical-spam.test/Earn_From_Roland
 FOREX 📊 TRADING 📉 PRO LTD 📈
@@ -1353,7 +1509,9 @@ INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, p
 👇👇👇
 https://canonical-spam.test/joinchat/2igF5_gX7JE4ZDQ0
 https://canonical-spam.test/joinchat/2igF5_gX7JE4ZDQ0
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/joinchat/2igF5_gX7JE4ZDQ0
 💰INVEST & GET A POSITIVE RESULT	✅INSTANT PAYMENT & WITHDRAWAL 💯	📊TRADING SESSION 24/7	✅PROFIT RETURN 💯 GUARANTEE	✅ACCOUNT MANAGEMENT🔯	✅MINIMUM EQUITY $300	✅PAYMENT METHOD	        👇👇👇	✅BTC ✅USDT✅PAY PAL✅CASH APP	DM ADMIN TO START
 ©️RYPTO-EARNING INVESTMENT TRADING
@@ -1371,14 +1529,18 @@ Their transformative journey, recounted in “The Homesteaders Handbook” narra
 “The Homesteaders Handbook is our life’s work… condensed into an easy-to-read and easy-to-implement format.
 Pick it up once, and you’ll never want to walk into an overpriced grocery store again.”
 Get more information here: https://canonical-spam.test/SelfReliantLiving
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/SelfReliantLiving
 Self Reliant Living', 'AgACAgEAAx0CTzmWXQABA0zMaXlz2oNXRpBGfJ_71VipUyXdX7wAAtYLaxtiNclHcnVYCehVcr4BAAMCAAN5AAM4BA', 109083, '["https://canonical-spam.test/SelfReliantLiving"]', NULL, NULL, 'full/-1001329174109/216268.jpg', 'thumbs/-1001329174109/216268.jpg', '2026-01-28 02:26:46.901462+00', 'moderation_action', 216207, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL);
 INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, photo_file_id, photo_file_size, urls, edit_date, content_hash, photo_local_path, photo_thumbnail_path, deleted_at, deletion_source, reply_to_message_id, media_type, media_file_id, media_file_size, media_file_name, media_mime_type, media_local_path, media_duration, content_check_skip_reason, similarity_hash) VALUES (214147, 9776748955404, -100026957614982, '2026-01-06 10:28:27.296686+00', 'I used to think financial freedom was just a dream, until I joined FXCM. I kept seeing how the company was helping others — now I’m one of them. He’s a brilliant manager who is truly exceptional when it comes to trading, my deposit of $200 returns profits of $2500 within 48 hours
 Want the same for yourself? Reach out now 👇
 👉 https://canonical-spam.test/+Ja8R0AwW4YU5NDI0
 👉 https://canonical-spam.test/+Ja8R0AwW4YU5NDI0
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+Ja8R0AwW4YU5NDI0
 TURN YOUR CAPITAL INTO A SOURCE OF INCOME THROUGH CRYPTO. TRADE WITH THE BEST PROFESSIONAL TRADER		📶100% ACCURACY✅	📶100% PROFIT ✅	📶INSTANT WITHDRAWAL ✅	💎DON''T MISS OUT, INVEST AND EARN	@FXCM_COMPANY1
 FOREX CAPITAL MARKETS 🌐🗺💱💲
@@ -1403,7 +1565,9 @@ I took a leap of faith, trusted the process, and stayed committed — and my lif
 Opportunities don’t wait forever. If you truly want a better future, you have to be willing to start today. Believe in yourself.  And take the step. 
 @mrs_first_lady
 https://canonical-spam.test/+9XKAhk1PtGMxY2I0
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+9XKAhk1PtGMxY2I0
 ✔️We guarantee 💯the best payout 💰for all our loyal investors 📊	✔️ Perfect signal session📈	✔ Incredible win rate (3-5)📉	We offer daily pump signals with 90% profit per investment💯	Best winning signals 💯	Contact us
 ADMIRAL TRUST BINARY OPTION TRADING
@@ -1422,7 +1586,9 @@ This isn''t alternative medicine. This is standard practice in Tokyo that could 
 THE TEST NAME & FULL PROTOCOL 👇
 [LINK TO ARTICLE]
 https://canonical-spam.test/+fyAXbBguAKY0YTUy
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+fyAXbBguAKY0YTUy
 Explore Japan’s secrets to longevity, mindful living, and holistic well-being — in easy, practical tips for your daily life 🇯🇵
 Health from Japan
@@ -1433,7 +1599,9 @@ Even better? They’ll give you the fat, protein, and calories you need without 
 👉 Get more survival food tips and techniques here: 
 https://canonical-spam.test/TheCatalogUltimateSurvivalFoods
 https://canonical-spam.test/TheCatalogUltimateSurvivalFoods
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/TheCatalogUltimateSurvivalFoods
 With over 126 forgotten survival foods and storage hacks “The Lost Super Foods” is a vital book to place in your survival stockpile.
 The Ultimate Survival Foods
@@ -1465,7 +1633,9 @@ I found a unique channel. It''s called MASTER of STRINGS
 // What artificial disaster is planned for 2026? What will happen to the world? [read article] 
 Be sure to go and read, no one will tell you this
 https://canonical-spam.test/+W_M9Q8Ee3lVlYjQy
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+W_M9Q8Ee3lVlYjQy
 Unraveling the hidden strings behind world events, media myths, and unseen influences. Look deeper 🧶
 MASTER of STRINGS
@@ -1473,14 +1643,18 @@ Telegram: Join Group Chat', 'AgACAgEAAx0CTzmWXQABA0T-aV-sEHRD1zPcyWcHVlraj88hiaw
 INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, photo_file_id, photo_file_size, urls, edit_date, content_hash, photo_local_path, photo_thumbnail_path, deleted_at, deletion_source, reply_to_message_id, media_type, media_file_id, media_file_size, media_file_name, media_mime_type, media_local_path, media_duration, content_check_skip_reason, similarity_hash) VALUES (215060, 9038882384558, -100026957614982, '2026-01-19 03:47:10.58483+00', 'One decision has changed my financial status real. I choose to act on faith instead of fear, I''m now reaping the rewards of that bold step I made. Making money then I could even imagine online. Thanks to the amazing person. Thank you, boss, for giving me the opportunity to grow and be successful. It would''ve been difficult without your help. Thank you so much sir James_Richard_x, join him and make huge profits to achieve your goals click the link to join and send him to start your trading with him
 👇.   👇
 https://canonical-spam.test/+bzKJSVuzpQYwYzlk
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+bzKJSVuzpQYwYzlk
 🧑‍💻.I WE GUARANTEE THE BEST TRADE 📈 STRATEGIES IN THE BUSINESS 💎💰	📉100% INVESTMENT✔️	100% PAYOUT✔️	WATCH YOUR MONEY GROW LIKE TREE 🌳💯 GUARANTEE...	INVESTMENT IS THE ONLY KEY🔑 TO FINANCIAL FREEDOM. 📩DM ME NOW FOR START UP📊	canonical-spam.test/James_Richard_x
 CRYPTO.EXPERT.TRADING.📊
 Telegram: Join Group Chat', NULL, NULL, '["https://canonical-spam.test/\u002BbzKJSVuzpQYwYzlk"]', NULL, NULL, NULL, NULL, '2026-01-19 03:47:20.899742+00', 'moderation_action', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL);
 INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, photo_file_id, photo_file_size, urls, edit_date, content_hash, photo_local_path, photo_thumbnail_path, deleted_at, deletion_source, reply_to_message_id, media_type, media_file_id, media_file_size, media_file_name, media_mime_type, media_local_path, media_duration, content_check_skip_reason, similarity_hash) VALUES (-104, 9862700513599, 0, '2025-03-06 16:10:21+00', 'Hey, guys👋 Our team is looking for people for the position of NFT beta game tester💻 If you are looking for a job online with a stable income I can offer you: 1) the opportunity to work remotely;💻 2) a good work schedule;⏰ 3) timely salary from 700$ per week;💸 4) support administration around the clock;📩 Requirements for the employee: - Availability of a computer or laptop computer operating system Windows;💻 - responsibility and communication skills;🔮 - willingness to work.🛠️  We are also looking for investors in this project.💵 If you wish to invest your finances in a new profitable, developing project and be one of the investors, as well as in the future to receive a profit from their investments then it is to us.🫵  If you are interested in one of our proposals write to me in private messages discuss details📩', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL);
 INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, photo_file_id, photo_file_size, urls, edit_date, content_hash, photo_local_path, photo_thumbnail_path, deleted_at, deletion_source, reply_to_message_id, media_type, media_file_id, media_file_size, media_file_name, media_mime_type, media_local_path, media_duration, content_check_skip_reason, similarity_hash) VALUES (215672, 9747335491253, -100026957614982, '2026-01-24 11:43:54.007803+00', 'I''ve been working a job I hate for five years, but I was too scared to leave. I saw a friend''s success with BlockVest Profits and decided to take a chance. I put in a little bit of money and, to my surprise, saw consistent profits every single day. Within a month, my earnings were more than my salary. Today, I handed in my resignation. I''m finally my own boss, and it''s all thanks to this platform. Don''t let fear hold you back from living the life you deserve. https://canonical-spam.test/earn_with_BlockVest
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/earn_with_BlockVest
 BlockVest Profits 📊	Smart digital investing with transparency & discipline.	Secure systems | Structured strategies | Real-time tracking	📩 Contact us to invest and grow financially 		Https//canonical-spam.test/Stephencryptotrader
 ʙʟᴏᴄᴋᴠᴇꜱᴛ ᴘʀᴏꜰɪᴛꜱ 📊 ✧ ᴄʀʏᴘᴛᴏ 📈 | ᴇxᴄʜᴀɴɢᴇ 💱 | ᴍɪɴɪɴɢ ⛏️
@@ -1494,7 +1668,9 @@ INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, p
 Read more & Grab your copy👇
 https://canonical-spam.test/LostSuperfoodsBook
 https://canonical-spam.test/LostSuperfoodsBook
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/LostSuperfoodsBook
 The Lost SuperFoods
 With over 126 forgotten survival foods and storage hacks “The Lost Super Foods” is a vital book to place in your survival stockpile.
@@ -1523,7 +1699,9 @@ Think about it for a second:
 But the "Mystery of the Ether" channel will tell you what is really going on. We will show you how past civilizations were exterminated and how ours is being exterminated. We will tell you who rewrote history and why.
 Subscribe if you are ready to open Pandora''s Box👇
 https://canonical-spam.test/+IUz0SVOwwcplNWEy
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+IUz0SVOwwcplNWEy
 195,676 subscribers		We have published an old periodic table with ether in it 🛑👇		The world will never be the same aga
 Mystery of the Ether
@@ -1540,7 +1718,9 @@ ATC Trading is a fully registered and certified company based in the United King
 The ROI plans pay 2%, 2.40%, and 2.70% hourly, depending on the plan you choose. Every earning is credited automatically to your account. From my personal experience, after just a few weeks of investing, I’ve already made up to $30,000, which shows how powerful the system can be.
 If you want more information, simply send me a DM saying “Add me to the group chat.”', NULL, NULL, NULL, NULL, NULL, NULL, NULL, '2025-11-19 02:06:00.051495+00', 'spam_action_failed', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL);
 INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, photo_file_id, photo_file_size, urls, edit_date, content_hash, photo_local_path, photo_thumbnail_path, deleted_at, deletion_source, reply_to_message_id, media_type, media_file_id, media_file_size, media_file_name, media_mime_type, media_local_path, media_duration, content_check_skip_reason, similarity_hash) VALUES (106329, 9741317526119, -100059667856554, '2025-12-16 16:52:26.487128+00', 'I''ve been involved in Bitcoin trading for a while, but working with Mrs. Alexandra has been a game-changer. Her team''s insights and strategies have helped me maximize my profits, and their professionalism is top-notch. They''re always available to answer questions and provide guidance, making me feel confident in my investments. If you''re serious about Bitcoin trading, I highly recommend reaching out to Mrs. Alexandra and her team - they know what they''re doing😀👉👉👉https://canonical-spam.test/+nXMQbiRazSJhZjUx
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+nXMQbiRazSJhZjUx
 WELCOME !	We Guarantee 💯The Best Payout💰For All Our Loyal 👈Investors	✔️ Perfect 📊signal session	✔️Instant payment and withdrawals 💯	canonical-spam.test/Alexandra_S_Davis2
 Maximum forex trading online Investment💯💯💯 💵
@@ -1584,7 +1764,9 @@ INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, p
 Connect with him if you''re concerned via...
 👇👇
 https://canonical-spam.test/+bzKJSVuzpQYwYzlk
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+bzKJSVuzpQYwYzlk
 🧑‍💻.I WE GUARANTEE THE BEST TRADE 📈 STRATEGIES IN THE BUSINESS 💎💰	📉100% INVESTMENT✔️	100% PAYOUT✔️	WATCH YOUR MONEY GROW LIKE TREE 🌳💯 GUARANTEE...	INVESTMENT IS THE ONLY KEY🔑 TO FINANCIAL FREEDOM. 📩DM ME NOW FOR START UP📊	canonical-spam.test/James_Richard_x
 CRYPTO.EXPERT.TRADING.📊
@@ -1600,14 +1782,18 @@ Message me privately for more information if you''re interested...', NULL, NULL,
 INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, photo_file_id, photo_file_size, urls, edit_date, content_hash, photo_local_path, photo_thumbnail_path, deleted_at, deletion_source, reply_to_message_id, media_type, media_file_id, media_file_size, media_file_name, media_mime_type, media_local_path, media_duration, content_check_skip_reason, similarity_hash) VALUES (214964, 9680301255238, -100026957614982, '2026-01-17 08:26:37.318748+00', 'Trust me with this platform, I don''t think you will still need to continue looking for job again, trust me your story is going to change with just a step, and be your own boss 100% legit.. trading is best done by professionals all you need is an account manager who will manage and monitor your trading account for you contact Mr David Tyron,
 ‎⬇️⬇️⬇️⬇️⬇️
 https://canonical-spam.test/+uDE6JLbTCw1kZDBk
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+uDE6JLbTCw1kZDBk
 I DERIVED JOY REACHING OUT TO MY INVESTORS💯✅🙏		 |Teach what you believe	🔎 | Leave a Legacy	📚 | Student of life	💼 | Earn 💸 Weekly	Dm on how to trade and earned from Forex📈 /Binary options trading ⤵️⬇️	@Trade_And_Earned_With_DavidTyron
 Dominion 📊 Markets📈online📉 investment platform🏧
 Telegram: Join Group Chat', NULL, NULL, '["https://canonical-spam.test/\u002BuDE6JLbTCw1kZDBk"]', NULL, NULL, NULL, NULL, '2026-01-17 08:26:47.985869+00', 'moderation_action', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL);
 INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, photo_file_id, photo_file_size, urls, edit_date, content_hash, photo_local_path, photo_thumbnail_path, deleted_at, deletion_source, reply_to_message_id, media_type, media_file_id, media_file_size, media_file_name, media_mime_type, media_local_path, media_duration, content_check_skip_reason, similarity_hash) VALUES (210772, 9063342700386, -100026957614982, '2025-11-04 15:20:02.778203+00', 'My testimony started the day I saw a post about Mr. Michael Kennedy After carefully watching his  Telegram channel and reading success stories about how he helped many people, I was really impressed and quickly contacted him Today my life has changed. It''s has changed financially and my joy is completely restored. Contact him and share your own story by clicking the link below.
 https://canonical-spam.test/+NKS4PEXxHZtiMjUy
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+NKS4PEXxHZtiMjUy
 Telegram: Join Group Chat
 MARKETING📊 OPTION📉 📌📈TRADE
@@ -1619,7 +1805,9 @@ INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, p
 ‎Mr David Tyron and I withdraw my profits I made a promise to him that I''m gonna share the good news to people mostly the US .if u''re looking for an account manger I''ll urge you to contact sir David Tyron he''s one of the best regarding to trade 
 ‎Contact him through the link below 
 https://canonical-spam.test/+uDE6JLbTCw1kZDBk
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+uDE6JLbTCw1kZDBk
 I DERIVED JOY REACHING OUT TO MY INVESTORS💯✅🙏		 |Teach what you believe	🔎 | Leave a Legacy	📚 | Student of life	💼 | Earn 💸 Weekly	Dm on how to trade and earned from Forex📈 /Binary options trading ⤵️⬇️	@Trade_And_Earned_With_DavidTyron
 Dominion 📊 Markets📈online📉 investment platform🏧
@@ -1638,7 +1826,9 @@ INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, p
  👇👇
 @fx_Hildegard
 https://canonical-spam.test/+Wye6y9dxZzcyNjJk
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+Wye6y9dxZzcyNjJk
 Binary and Forex Signals	Live trading sessions	🔹Coaching and mentoring	🔹Financial market analysis	🔹Forex Academy	🔹Reputed team of experienced traders and market analysts Latest binary options news and updates	📩📩	@fx_Hildegard
 📊💶𝗙𝗜𝗡𝗔𝗡𝗖𝗘 𝗪𝗜𝗧𝗛 𝗕𝗜𝗧𝗖𝗢𝗜𝗡 𝗦𝗨𝗜𝗦𝗦𝗘💰📈
@@ -1648,7 +1838,9 @@ INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, p
 👇👇👇👇👇
 👇👇👇👇👇
 https://canonical-spam.test/+bzKJSVuzpQYwYzlk
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+bzKJSVuzpQYwYzlk
 🧑‍💻.I WE GUARANTEE THE BEST TRADE 📈 STRATEGIES IN THE BUSINESS 💎💰	📉100% INVESTMENT✔️	100% PAYOUT✔️	WATCH YOUR MONEY GROW LIKE TREE 🌳💯 GUARANTEE...	INVESTMENT IS THE ONLY KEY🔑 TO FINANCIAL FREEDOM. 📩DM ME NOW FOR START UP📊	canonical-spam.test/James_Richard_x
 CRYPTO.EXPERT.TRADING.📊
@@ -1665,7 +1857,9 @@ CLICK HERE TO JOIN THE GROUP CLICK HERE TO JOIN THE GROUP', NULL, NULL, NULL, NU
 INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, photo_file_id, photo_file_size, urls, edit_date, content_hash, photo_local_path, photo_thumbnail_path, deleted_at, deletion_source, reply_to_message_id, media_type, media_file_id, media_file_size, media_file_name, media_mime_type, media_local_path, media_duration, content_check_skip_reason, similarity_hash) VALUES (210743, 9566750116353, -100026957614982, '2025-11-03 22:27:34.565409+00', 'A wonderful person, @crypto_optionfx came into my life in a way I never expected. With a modest starting capital of €900, I was able to make an amazing €15,900 from my first foray into trading. Thank you again for your invaluable help and support, @crypto_optionfx. If you''re interested in investing and profits, click the link below to get in touch and get started.
 👇👇👇
 https://canonical-spam.test/+Ib3QOrU1aN44NjZk
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+Ib3QOrU1aN44NjZk
 Telegram: Join Group Chat
 EX🅿️ERT TR🅰️DE INVESTⓂ️ENT 📊™️
@@ -1677,13 +1871,17 @@ USEFUL LIFEHACKS 💡 — your ultimate source for the most useful collection of
 🔹 Discover brilliantly simple ideas every day
 Subscribe — it will be useful for absolutely everyone! And tomorrow, you''ll already find something there to make your day easier 👇
 https://canonical-spam.test/+KhLSKEauGxc1YTM6
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+KhLSKEauGxc1YTM6
 We collect the best life hacks, tips, and tricks that really make life easier 💡
 Useful Life Hacks
 Telegram: Join Group Chat', NULL, NULL, '["https://canonical-spam.test/\u002BKhLSKEauGxc1YTM6"]', NULL, NULL, NULL, NULL, '2025-12-29 01:02:55.153445+00', 'moderation_action', 213477, 2, 'BAACAgEAAx0CTzmWXQABA0KwaVHTMEkDi94E1TySjDFM4c-gpe8AAqAFAALSFZBGwFdexU4XJWs2BA', 6544428, 'IMG_3004.MP4', 'video/mp4', 'video_213680_AgADoAUAAtIVkEY.MP4', 72, 0, NULL);
 INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, photo_file_id, photo_file_size, urls, edit_date, content_hash, photo_local_path, photo_thumbnail_path, deleted_at, deletion_source, reply_to_message_id, media_type, media_file_id, media_file_size, media_file_name, media_mime_type, media_local_path, media_duration, content_check_skip_reason, similarity_hash) VALUES (214112, 9615749812465, -100026957614982, '2026-01-05 23:34:37.49163+00', 'I started this journey drowning in debt and full of doubt. My credit cards were maxed out, and I had nothing to lose. I invested a small amount just to try—and the results shocked me. In less than two weeks, I was able to pay everything off. Being debt-free feels unreal. This isn’t a shortcut to wealth; it’s a path to financial stability. https://canonical-spam.test/earn_with_BlockVest
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/earn_with_BlockVest
 ✅ 𝗜𝗡𝗩𝗘𝗦𝗧 𝗧𝗢 𝗚𝗘𝗧 𝗔 𝗚𝗢𝗢𝗗 𝗥𝗘𝗦𝗨𝗟𝗧 💰	✅ 𝗜𝗡𝗦𝗧𝗔𝗡𝗧 𝗣𝗔𝗬𝗠𝗘𝗡𝗧𝗦 & 𝗪𝗜𝗧𝗛𝗗𝗥𝗔𝗪𝗔𝗟𝗦 💯	📊 𝗧𝗥𝗔𝗗𝗘 𝗦𝗠𝗔𝗥𝗧. 𝗘𝗔𝗥𝗡 𝗖𝗢𝗡𝗦𝗜𝗦𝗧𝗘𝗡𝗧𝗟𝗬.  📥📥	Https//canonical-spam.test/Stephencryptotrader
 ʙʟᴏᴄᴋᴠᴇꜱᴛ ᴄᴀᴘɪᴛᴀʟ 📊 ᴄʀʏᴘᴛᴏ 📈 ᴇxᴄʜᴀɴɢᴇ 💱 ᴍɪɴɪɴɢ 💻⛏️ ᴄᴏᴍᴘᴀɴʏ 🇫🇷 ɪɴᴠᴇꜱᴛᴍᴇɴᴛꜱ
@@ -1705,7 +1903,9 @@ INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, p
 ⚠️ 중요한 점
 하루에 5,000개 지갑만 한정으로 참여할 수 있다고 하니,
 관심 있으신 분들은 서두르시는 게 좋을 것 같아요!
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/
 The Base Coin airdrop is a fun and rewarding way for the community to get free tokens just for showing support and participating.
 BASE SPIN', 'AgACAgQAAx0CTzmWXQABA0CMaT9dcYaAxYjkpFwVxchhoGrm3zcAAj4Laxt8zwABUlcD2ku4pbsKAQADAgADeQADNgQ', 92968, '["https://canonical-spam.test/"]', NULL, NULL, 'full/-1001329174109/213132.jpg', 'thumbs/-1001329174109/213132.jpg', '2025-12-15 00:59:52.529419+00', 'moderation_action', 212971, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL);
@@ -1735,7 +1935,9 @@ INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, p
 INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, photo_file_id, photo_file_size, urls, edit_date, content_hash, photo_local_path, photo_thumbnail_path, deleted_at, deletion_source, reply_to_message_id, media_type, media_file_id, media_file_size, media_file_name, media_mime_type, media_local_path, media_duration, content_check_skip_reason, similarity_hash) VALUES (7834, 9100564167787, -100017312732389, '2025-11-01 23:30:27.53876+00', 'Success is always a decision which is why most people won''t take advantage of this but a wise person should not depend on a single income or salary.
 Click on the link below and contact the admin to earn money on daily basis with $100 to earn $2500 everyday with guaranteed payment successful 
 https://canonical-spam.test/+LQLxBStfQLBlYzM0
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+LQLxBStfQLBlYzM0
 Telegram: Join Group Chat
 F🅾️REX_OPTION_TR🅰️DING_PLATF🅾️RM📈
@@ -1743,7 +1945,9 @@ WE GUARANTEE THE BEST TRADE 📊	BUSINESS STRATEGIES 💎	💯% LEGIT ✔	💯% 
 INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, photo_file_id, photo_file_size, urls, edit_date, content_hash, photo_local_path, photo_thumbnail_path, deleted_at, deletion_source, reply_to_message_id, media_type, media_file_id, media_file_size, media_file_name, media_mime_type, media_local_path, media_duration, content_check_skip_reason, similarity_hash) VALUES (106402, 9025828368896, -100059667856554, '2025-12-17 17:48:21.196787+00', 'Mrs. Alexandra is the BITCOIN QUEEN! 👑 Her trading platform is the ultimate game-changer for investors! I invested in Bitcoin with her guidance, and the returns are LIFE-CHANGING! 🚀 100% legit, 100% profitable! Join the Bitcoin revolution with Mrs. Alexandra and start growing your wealth TODAY
 👇👇
 https://canonical-spam.test/+nXMQbiRazSJhZjUx
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+nXMQbiRazSJhZjUx
 WELCOME !	We Guarantee 💯The Best Payout💰For All Our Loyal 👈Investors	✔️ Perfect 📊signal session	✔️Instant payment and withdrawals 💯	canonical-spam.test/Alexandra_S_Davis2
 Maximum forex trading online Investment💯💯💯 💵
@@ -1753,7 +1957,9 @@ Send me a private message for more information.', NULL, NULL, NULL, NULL, NULL, 
 INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, photo_file_id, photo_file_size, urls, edit_date, content_hash, photo_local_path, photo_thumbnail_path, deleted_at, deletion_source, reply_to_message_id, media_type, media_file_id, media_file_size, media_file_name, media_mime_type, media_local_path, media_duration, content_check_skip_reason, similarity_hash) VALUES (106498, 9837002395365, -100059667856554, '2025-12-19 22:55:58.561912+00', 'I 𝗃𝗈𝗂𝗇𝖾𝖽 𝗍𝗁𝗂𝗌 𝗂𝗇𝗏𝖾𝗌𝗍𝗆𝖾𝗇𝗍 𝗐𝗂𝗍𝗁 $200 𝖺𝗇𝖽 𝖺𝖿𝗍𝖾𝗋 𝗍𝗋𝖺𝖽𝗂𝗇𝗀 𝖿𝗈𝗋 48 𝗁𝗈𝗎𝗋𝗌 𝗂𝗇 𝗆𝗒 𝗂𝗇𝗏𝖾𝗌𝗍𝗆𝖾𝗇𝗍 𝖺𝖼𝖼𝗈𝗎𝗇𝗍 𝖨 𝗐𝖺𝗌 𝖺𝖻𝗅𝖾 𝗍𝗈 𝖾𝖺𝗋𝗇 ($4000) 𝖺𝗌 𝗉𝗋𝗈𝖿𝗂𝗍𝗌 𝖾𝖺𝗋𝗇𝗂𝗇𝗀𝗌 𝗌𝗎𝖼𝖼𝖾𝗌𝗌𝖿𝗎𝗅, 𝖨 𝗌𝗎𝗋𝖾𝗅𝗒 𝗋𝖾𝖼𝗈𝗆𝗆𝖾𝗇𝖽 this company 𝖿𝗈𝗋 𝖾𝗏𝖾𝗋𝗒𝗈𝗇𝖾 𝗐𝗁𝗈 𝗐𝖺𝗇𝗍𝗌 𝗍𝗈 𝗆𝖺𝗄𝖾 𝗆𝗈𝗇𝖾𝗒 𝗈𝗇 𝖽𝖺𝗂𝗅𝗒 𝖻𝖺𝗌𝗂𝗌 𝗈𝗎𝗍𝗌𝗂𝖽𝖾 𝗍𝗁𝖾𝗂𝗋 𝗃𝗈𝖻 𝗈𝗋 𝖻𝗎𝗌𝗂𝗇𝖾𝗌𝗌.𝖢𝗅𝗂𝖼𝗄 𝗈𝗇 𝗍𝗁𝖾 𝗅𝗂𝗇𝗄 𝖻𝖾𝗅𝗈𝗐 𝗍𝗈 𝖼𝗈𝗇𝗍𝖺𝖼𝗍 𝖠𝖽𝗆𝗂𝗇 𝖭𝗈𝗐
 @Lindseynorris_bvs
 https://canonical-spam.test/+j45fK6fdGz0zNjY8
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+j45fK6fdGz0zNjY8
 The collective voice of the crypto industry. The industry is hiring.	Founder ◇◇BlockchainAssn	Admin/Expert trader👉 @Lindseynorris_bvs
 Connectedpip Stock-Exch🚀⚡️
@@ -1762,7 +1968,9 @@ INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, p
 All thanks to Mrs. @Sophiamartn, who guided me patiently through the entire process. She is truly a woman with a heart of gold.
 Click the link below and start earning from the comfort of your home.
 https://canonical-spam.test/+U2JUNR5dFIg3ZTY
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+U2JUNR5dFIg3ZTY
 Join group chat on Telegram
 Telegram: Join Group Chat', NULL, NULL, '["https://canonical-spam.test/\u002BU2JUNR5dFIg3ZTY"]', NULL, NULL, NULL, NULL, '2026-01-14 19:29:35.308943+00', 'moderation_action', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL);
@@ -1797,7 +2005,9 @@ INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, p
 ⚠️ 중요한 건
 하루에 5,000명만 받는다고 하니까
 관심 있으면 빨리 들어가보는 게 좋을 듯!
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/', 'AgACAgQAAx0CTzmWXQABA0CTaUCPvc3coA8m1myT770XAykbGLEAAosMaxsG0QFSQWvmhyVzkKQBAAMCAAN5AAM2BA', 71609, '["https://canonical-spam.test/"]', NULL, NULL, 'full/-1001329174109/213139.jpg', 'thumbs/-1001329174109/213139.jpg', '2025-12-15 22:46:40.93998+00', 'moderation_action', 213138, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL);
 INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, photo_file_id, photo_file_size, urls, edit_date, content_hash, photo_local_path, photo_thumbnail_path, deleted_at, deletion_source, reply_to_message_id, media_type, media_file_id, media_file_size, media_file_name, media_mime_type, media_local_path, media_duration, content_check_skip_reason, similarity_hash) VALUES (213225, 9988851602530, -100026957614982, '2025-12-17 23:51:29.158868+00', '어어어?? Base 체인에 USDT 에어드랭 터졌다! 💥
 선착순 5천 명 뿐이래, 얼른 와!
@@ -1831,7 +2041,9 @@ INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, p
 [중요]
  최근에 거래한 활성 지갑이어야 가능함
  일일 한정 인원이라서 빨리 하는 게 좋을 듯
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/spin', 'AgACAgUAAx0CTzmWXQABA0TsaV7EHmK8TDcee0kaVWAzeL_GjiUAAiUOaxvINPFW0g2YRHkTQJABAAMCAAN5AAM4BA', 72051, '["https://canonical-spam.test/spin"]', NULL, NULL, 'full/-1001329174109/214252.jpg', 'thumbs/-1001329174109/214252.jpg', '2026-01-07 20:38:18.057937+00', 'moderation_action', 214242, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL);
 INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, photo_file_id, photo_file_size, urls, edit_date, content_hash, photo_local_path, photo_thumbnail_path, deleted_at, deletion_source, reply_to_message_id, media_type, media_file_id, media_file_size, media_file_name, media_mime_type, media_local_path, media_duration, content_check_skip_reason, similarity_hash) VALUES (214596, 9306234060091, -100026957614982, '2026-01-12 08:01:18.204761+00', 'DO YOU KNOW!!!
 There’s a community here on telegram called 
@@ -1843,7 +2055,9 @@ If you’re interested, you want to create a passive income for yourself, messag
 INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, photo_file_id, photo_file_size, urls, edit_date, content_hash, photo_local_path, photo_thumbnail_path, deleted_at, deletion_source, reply_to_message_id, media_type, media_file_id, media_file_size, media_file_name, media_mime_type, media_local_path, media_duration, content_check_skip_reason, similarity_hash) VALUES (7836, 9328449671290, -100017312732389, '2025-11-03 16:10:14.661178+00', 'The right time to invest in now, get paid everyday and have money to spoil your family in this Xmas 🎁 celebration.
 Invest $50 and start making $500 everyday under this platform which is providing financial assistance to you 
 https://canonical-spam.test/+LQLxBStfQLBlYzM0
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+LQLxBStfQLBlYzM0
 Telegram: Join Group Chat
 F🅾️REX_OPTION_TR🅰️DING_PLATF🅾️RM📈
@@ -1855,13 +2069,17 @@ INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, p
 ✅ 지갑 연결하기
 ✅ 네 $BP 받아가!
 클레임 기간 제한될 수 있다는 말도 있으니 얼른!
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/', 'AgACAgUAAx0CTzmWXQABA0QnaVwX6s7J50SQg5HIVXMpSjskPgQAAlULaxueU-FWCfygigubhOwBAAMCAAN4AAM4BA', 40226, '["https://canonical-spam.test/"]', NULL, NULL, 'full/-1001329174109/214055.jpg', 'thumbs/-1001329174109/214055.jpg', '2026-01-05 19:58:55.011087+00', 'moderation_action', 214041, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL);
 INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, photo_file_id, photo_file_size, urls, edit_date, content_hash, photo_local_path, photo_thumbnail_path, deleted_at, deletion_source, reply_to_message_id, media_type, media_file_id, media_file_size, media_file_name, media_mime_type, media_local_path, media_duration, content_check_skip_reason, similarity_hash) VALUES (210937, 9505944526042, -100026957614982, '2025-11-05 23:13:40.479759+00', 'My heart is overflowing with gratitude after earning over $4,100 from forex trading with an initial investment of just $200. This experience has made me realize how fortunate I am to be part of this financial revolution. All thanks to Mrs. @Sophiamartn, a woman with a heart of gold, who guided me through the entire process.
 Click the link below to start earning from home and join the platform’s community!
 👇👇👇
 https://canonical-spam.test/+U2JUNR5dFIg3ZTY
+
 ━━━ URL Previews ━━━
+
 https://canonical-spam.test/+U2JUNR5dFIg3ZTY
 Join group chat on Telegram
 Telegram: Join Group Chat', NULL, NULL, '["https://canonical-spam.test/\u002BU2JUNR5dFIg3ZTY"]', NULL, NULL, NULL, NULL, '2025-11-05 23:13:47.345933+00', 'manual_ui_delete', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL);
@@ -1972,3 +2190,414 @@ Spots are very limited - there are only a few left.
 
 Want to know what this is all about?
 → Just send a private message with “+” to 👉 @ashhley_1', NULL, NULL, NULL, NULL, '982FF48ADFF517B063236C8FF64B97968E608BFE82A4D55FE8C93E6216EF38F9', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, -2903372178231310946);
+
+-- ==========================================================================
+-- Hash backfill (content_hash + similarity_hash)
+--
+-- Computed via tmp/canonical-bootstrap/bake-hashes.cs (verbatim copy of
+-- HashUtilities.ComputeContentHash + SimHashService.ComputeHash). For each
+-- row, content_hash hashes the pre-enrichment text (stripped at the
+-- '\n\n━━━ URL Previews ━━━\n\n' delimiter), and similarity_hash hashes
+-- the full stored message_text. See bake-hashes.cs for the algorithm and
+-- tmp/canonical-bootstrap/build-hash-batches.py for how rows were sliced.
+-- ==========================================================================
+UPDATE messages SET content_hash = '49ED62B9F84524CF46A62DE1F887123A239E032595C3B78BA2639653A717A501', similarity_hash = -7223906729396276262 WHERE message_id = -217 AND chat_id = 0;
+UPDATE messages SET content_hash = '3898005EF9CABCF62C1E176FF48E01679B4991DFB60D22A2AB9E54B9277A6BE3', similarity_hash = 6037188138739657539 WHERE message_id = -208 AND chat_id = 0;
+UPDATE messages SET content_hash = 'B9D29B484CC3F3730AEC8918956A7FFEE64C2668B40EE0EB6102D604EE5EF7C6', similarity_hash = -4283329179766778406 WHERE message_id = -189 AND chat_id = 0;
+UPDATE messages SET content_hash = '5910285B5E68AACC4B8BA339AA40DED7716FFE24B3F38C68B6569ACCE33CC6D8', similarity_hash = -4194112907664452456 WHERE message_id = -186 AND chat_id = 0;
+UPDATE messages SET content_hash = '4524722EA6C1DCB351939E55366222361C769CA2E1421A4828A814C34ACEB93B', similarity_hash = -8362308675625590479 WHERE message_id = -173 AND chat_id = 0;
+UPDATE messages SET content_hash = '23D06DC61F03B580A5931272363891B673892416269A9C1D35C7A3CEE4E07006', similarity_hash = -4176799577052423560 WHERE message_id = -162 AND chat_id = 0;
+UPDATE messages SET content_hash = 'C7F46EDDFAF7E9FD15ED1B3AABFA55550938945CE8134B7CC278DBEB621DF24C', similarity_hash = 8578093601104179404 WHERE message_id = -131 AND chat_id = 0;
+UPDATE messages SET content_hash = '6F69C792FF1913BCA2F2FEE8C239A49E381CC98D7A74F5F7EA9813FF624C4D5C', similarity_hash = -2140961885357544236 WHERE message_id = -118 AND chat_id = 0;
+UPDATE messages SET content_hash = 'F33F9A2B02FB8D0BF871D190D0A3393BEA3DE160A232133BFA8B161515AA0A00', similarity_hash = 6565706759236930523 WHERE message_id = -111 AND chat_id = 0;
+UPDATE messages SET content_hash = 'F0FFDFF1A684A66C508CD8E8FFA57A16F6AF7B124B50BD809BF23A5C6598F702', similarity_hash = -7893978509621330992 WHERE message_id = -104 AND chat_id = 0;
+UPDATE messages SET content_hash = 'B29E33AA7DC91AEFAD2B980914F6C59130EC6B1A34649397E24899744A0A23E4', similarity_hash = 3969957986338955739 WHERE message_id = -103 AND chat_id = 0;
+UPDATE messages SET content_hash = '5D0F03CE376D71EFC3FB6DFE7D2B95FA7FEF6547300C8B9B1E476C5D22972BCE', similarity_hash = -3285232566093534760 WHERE message_id = -99 AND chat_id = 0;
+UPDATE messages SET content_hash = '3F938D4BFE1878A5DC47AC230DE63CE4681127330DDB19E75EA00478511DDF6E', similarity_hash = 3723146631980413946 WHERE message_id = -94 AND chat_id = 0;
+UPDATE messages SET content_hash = '4B8B00535FE68B1F4B7C0EC05697CEFFC313B5EC045798BEFF2A628CE0BA5497', similarity_hash = 2318931655404153242 WHERE message_id = -76 AND chat_id = 0;
+UPDATE messages SET content_hash = '2A114644D833773A01BE0DA6BB913B8A6D9B33CE1A81ED1AFF6DC088FFDAC6F7', similarity_hash = 3623503152260374371 WHERE message_id = -74 AND chat_id = 0;
+UPDATE messages SET content_hash = 'CC13098E562D24E74F50C6E931ECC9D93F5368999692A08566A36C352D97A4B1', similarity_hash = -3050198308222430088 WHERE message_id = -64 AND chat_id = 0;
+UPDATE messages SET content_hash = '16631A7FC3D1424BF9E81135484F22001D8317250F4168C57E3AF7197B228E08', similarity_hash = 5065361590670181720 WHERE message_id = -62 AND chat_id = 0;
+UPDATE messages SET content_hash = '16B459680C1C8A45BF5FE108920D406F98F31C274D23A595C1055CA24D222578', similarity_hash = -5190592689107826349 WHERE message_id = -60 AND chat_id = 0;
+UPDATE messages SET content_hash = '054E80B158CFFB26B4A698749A677747B0D58A81F2039B0AD6053A6FEE007F91', similarity_hash = 6262479969807733147 WHERE message_id = -20 AND chat_id = 0;
+UPDATE messages SET content_hash = 'A6C5B8E3FC0C2A563DA25818FAB82336B0145135B5BF3A3DCEB7E9F52616F1A7', similarity_hash = -4410638587534770960 WHERE message_id = -12 AND chat_id = 0;
+UPDATE messages SET content_hash = '1BFF3570E3A634E32083E178ECF6E3D02462F70FF65F05ABC3E4B19038ED981A', similarity_hash = 7986295867581690769 WHERE message_id = -6 AND chat_id = 0;
+UPDATE messages SET content_hash = '5341A32509A6DE4C98792E338052FECD6E2A28505C997744DB8BE443A5A5B8D9', similarity_hash = 1381008810639167701 WHERE message_id = -3 AND chat_id = 0;
+UPDATE messages SET content_hash = '7A66EDBC47A72426E94ADAF85AE4789F7A14E9B20D0C7E9C49F35DFB5A92A50A', similarity_hash = -8863076361147526819 WHERE message_id = -2 AND chat_id = 0;
+UPDATE messages SET content_hash = '07CC04ADB111A4914A773C4693584A29DB9FE2C41A800E22D494D13E2202EE72', similarity_hash = 42158090604872664 WHERE message_id = 1 AND chat_id = 0;
+UPDATE messages SET content_hash = '6BC38C1E7E9C9A72D04F5D9229C103B7E2EC9D08FAFD6CF564CAF012E309AF71', similarity_hash = -1847525309148489357 WHERE message_id = 103 AND chat_id = -100082190806505;
+UPDATE messages SET content_hash = '9C208AC66C46D705AB35A5D97414F4C11AF60BF032B547154BA59E6BBA593D31', similarity_hash = -1847235034790028941 WHERE message_id = 172 AND chat_id = -100082190806505;
+UPDATE messages SET content_hash = 'E0BB4F6F1C3C558D7B421E3F70504428276BAB54D81BD36A8F29BE883C098208', similarity_hash = 7986014388310008721 WHERE message_id = 217 AND chat_id = -100082190806505;
+UPDATE messages SET content_hash = '4729E625E056B48261062A32F5301EF90CD82488D6E524BEA1E4602AD6FF64BC', similarity_hash = -298203198466639795 WHERE message_id = 4575 AND chat_id = -100048429560480;
+UPDATE messages SET content_hash = 'EE5D461692EC840654F83CCC8B34E7EF7310A520724F0333FEBD11AFF9C85EC1', similarity_hash = 7949985591291044753 WHERE message_id = 4602 AND chat_id = -100048429560480;
+UPDATE messages SET content_hash = 'CEA731A69EF05786BE3DE964BD0F5CE228A8BC5F4A7E6238C29EA674E7ED249E', similarity_hash = -3481488149659477593 WHERE message_id = 4620 AND chat_id = -100048429560480;
+UPDATE messages SET content_hash = '19B2055DA9ACCCFAE0DCCB9A320CC91E58B70795E187C696787A7970758DE674', similarity_hash = -4435750248021615864 WHERE message_id = 4655 AND chat_id = -100048429560480;
+UPDATE messages SET content_hash = '62F4FE8BAAE6EDECB67B66328166B1B2F747CD1E3C674A01DE61F5F2DF78F611', similarity_hash = -258054023874772837 WHERE message_id = 4693 AND chat_id = -100048429560480;
+UPDATE messages SET content_hash = 'DEBEB202E5CDDE354EC0D01BAE7A972830DAADFC2E5D6D4A7CC7A53CA095F84B', similarity_hash = -3307677582487062855 WHERE message_id = 4697 AND chat_id = -100048429560480;
+UPDATE messages SET content_hash = '65DB997AC450C92D109DB56161FFDD52A5CBDFC7F62A23721E7782CAF06813FF', similarity_hash = 1263686879206569467 WHERE message_id = 7789 AND chat_id = -100017312732389;
+UPDATE messages SET content_hash = '62FDF9324B1C0F4A4EB86A92FAA30B5552246B85CE7D36EA64D9A5F4D5482524', similarity_hash = 7986295867581690769 WHERE message_id = 7794 AND chat_id = -100017312732389;
+UPDATE messages SET content_hash = 'FBF4333EF3B1C0AEB7E1D3A82978CB5D410EBC13D5512D894A01FDCD623516AD', similarity_hash = 7224976138100148595 WHERE message_id = 7795 AND chat_id = -100017312732389;
+UPDATE messages SET content_hash = '20B3B5D74B4AC775DEA4108F42787685D274657C985C59F3731B8F4C3D5A782D', similarity_hash = -1804696844611434009 WHERE message_id = 7796 AND chat_id = -100017312732389;
+UPDATE messages SET content_hash = '2B6E07FBA346FA3C4D9D0BBD8670963FF07BA2F26367E8C3968756506C19A4C2', similarity_hash = -7854350878530099810 WHERE message_id = 7834 AND chat_id = -100017312732389;
+UPDATE messages SET content_hash = 'AC8559F6F9F972D08D02B6B2D295C3D03B157F7B68A824562B78BE2018F9B356', similarity_hash = -5284237724685458293 WHERE message_id = 7836 AND chat_id = -100017312732389;
+UPDATE messages SET content_hash = 'DAD872BD238D3B5628478116465667D00F913E729B2BBD8CFDDBF5221420C2E7', similarity_hash = -5166043239634840965 WHERE message_id = 7853 AND chat_id = -100017312732389;
+UPDATE messages SET content_hash = '4FF588883814FD0C3E7A62D45AC46346614786CCDD7B5385B5436E49FC23E244', similarity_hash = -8058752096824015110 WHERE message_id = 7880 AND chat_id = -100017312732389;
+UPDATE messages SET content_hash = '47DB46F013FB024D0AD17FB541B18D52A81E890E6BC58633633D4B3DEBA0227C', similarity_hash = -5094550798867115405 WHERE message_id = 7890 AND chat_id = -100017312732389;
+UPDATE messages SET content_hash = 'B8A9F59AFB3709F7EDF67ABFD4FBE88F3FE91FB6C3147C456137803314CBC0F5', similarity_hash = 5161555778602648008 WHERE message_id = 7893 AND chat_id = -100017312732389;
+UPDATE messages SET content_hash = '6E2F12801BE1772D00A5A16E9FFC41935CEB9B56A649DDED301B9FD8659157F9', similarity_hash = 7986014392604980113 WHERE message_id = 7974 AND chat_id = -100017312732389;
+UPDATE messages SET content_hash = '1BBDA3D01B4F6A3E813F59ECD4C297783E8F8F32AFBDDF0B1E58D6BC27A0F8DF', similarity_hash = -7228677511437599487 WHERE message_id = 8095 AND chat_id = -100017312732389;
+UPDATE messages SET content_hash = 'BC909852FF529BE94DACFE924B6E9C839CB25180A8B47C09C4EF55FECCC527E9', similarity_hash = 7986295867581690769 WHERE message_id = 8127 AND chat_id = -100017312732389;
+UPDATE messages SET content_hash = 'C85287608F582472BA7B85E0372A051F6CF90016830495EABE5B2E94F724AB75', similarity_hash = 1687596554831456593 WHERE message_id = 8132 AND chat_id = -100017312732389;
+UPDATE messages SET content_hash = 'AC61A5410A6E9D769CFB38896A56A39A513F41CCB9DFCDEF34AA81D3145BB600', similarity_hash = -7623594566791792423 WHERE message_id = 8133 AND chat_id = -100017312732389;
+UPDATE messages SET content_hash = '855DE1B3BA2B4BA9F31C746BDC7E96FBA445BCE63F45C7AAAB739EC0924887DD', similarity_hash = -8756532337370467775 WHERE message_id = 8138 AND chat_id = -100017312732389;
+UPDATE messages SET content_hash = '08A5B207912B99A5BB4C4AC262B2E4628637177105CFD3B526B34BCA3FF04E53', similarity_hash = -9069259631261218960 WHERE message_id = 8266 AND chat_id = -100017312732389;
+UPDATE messages SET content_hash = '332C66D75401F93FEF09D08093AAF6193D767D6FC0665EACF8F6272164D28788', similarity_hash = 7986295867581690769 WHERE message_id = 8297 AND chat_id = -100017312732389;
+UPDATE messages SET content_hash = '902CF314079A69803DDB2AF32C78A79D731886B6034489F883E78BD2F932D04C', similarity_hash = -2639806736169767108 WHERE message_id = 8390 AND chat_id = -100017312732389;
+UPDATE messages SET content_hash = 'B787FF5D7315D4C0B87A7FAC9E26F1EB4B422E2C28DB54B8272FB879DEDFEC9C', similarity_hash = -7625635695486833769 WHERE message_id = 8397 AND chat_id = -100017312732389;
+UPDATE messages SET content_hash = 'E7F00F1F2B4EA7DCFCA5E692A06354C56459E8B4B7575F7C78187DBC3F5AEFB5', similarity_hash = -7554774937037976684 WHERE message_id = 8400 AND chat_id = -100017312732389;
+UPDATE messages SET content_hash = 'E0F6602927D4E12177D3B7B612583195657192B4B8D255761EB44EC8DEAE8BF8', similarity_hash = -6531409565349066384 WHERE message_id = 8435 AND chat_id = -100017312732389;
+UPDATE messages SET content_hash = 'F6BEDD34203E87B58125386599E2FF50F991E0A417A8894411531EB61B60B6F8', similarity_hash = 8938167058131117455 WHERE message_id = 8567 AND chat_id = -100017312732389;
+UPDATE messages SET content_hash = '10BBD48AC71F573189576BD7D8672F46D5C41A515B172ACB46C2BA5B21BB4087', similarity_hash = -8060725129790705065 WHERE message_id = 8646 AND chat_id = -100017312732389;
+UPDATE messages SET content_hash = '00D054DB6D4DACFD6C5999B6FF83CC8EB3F434FE1B54773E81D45733B5F54881', similarity_hash = -7905906304616126122 WHERE message_id = 8700 AND chat_id = -100017312732389;
+UPDATE messages SET content_hash = '686867B94BF400EDDDBC7D3D251E0FE7EE84ACBAC22669E847800F03996399A0', similarity_hash = -7816959587845639439 WHERE message_id = 14202 AND chat_id = -100017608907459;
+UPDATE messages SET content_hash = 'E0A7793ED2CBE8A6208FC201C4650D43EF684A7B1D232FA8F0F58BAFA6014379', similarity_hash = -1847232565788311177 WHERE message_id = 14273 AND chat_id = -100017608907459;
+UPDATE messages SET content_hash = '533DC07B16B4E4165523C4DBF5C7A67DF6DAA59712709821138B230E8D2DEDD5', similarity_hash = 7986014392604980113 WHERE message_id = 14352 AND chat_id = -100017608907459;
+UPDATE messages SET content_hash = '293D98CB385AEF678D778EB6D3AE67C101E76C2B028C6505916A8AD4878D02A2', similarity_hash = 7949985591291048849 WHERE message_id = 14498 AND chat_id = -100017608907459;
+UPDATE messages SET content_hash = 'A93F9D66D6CEABC670D53C23742BEDCCCFA36AB21BA379A3056789394E0256C8', similarity_hash = 6315608441201582545 WHERE message_id = 16511 AND chat_id = -100018848379585;
+UPDATE messages SET content_hash = '54C202BBD8611226A48C059A4A023E85517263A3B4CD0BB99512D6508A6CA823', similarity_hash = -1847235034790028941 WHERE message_id = 16516 AND chat_id = -100018848379585;
+UPDATE messages SET content_hash = '54C202BBD8611226A48C059A4A023E85517263A3B4CD0BB99512D6508A6CA823', similarity_hash = -1847235034790028941 WHERE message_id = 16518 AND chat_id = -100018848379585;
+UPDATE messages SET content_hash = '747B74F477B76A3BCC4D11701B22D1E3EF895D5DC63EFA57F9372B3B6B1C403F', similarity_hash = 7986295867581690769 WHERE message_id = 16754 AND chat_id = -100018848379585;
+UPDATE messages SET content_hash = '0CD161BC3C906AEF5B9897DF41AB7D6BD2B058F421AE6CCD8FDC300983CFF0F7', similarity_hash = 7949985595586012049 WHERE message_id = 20416 AND chat_id = -100055570785509;
+UPDATE messages SET content_hash = '1C21BA4FC50599EC7BDA76C23FF459EA4E22A5C8A4E78AB19428A6BA3CAC8150', similarity_hash = 2366999595080556949 WHERE message_id = 20424 AND chat_id = -100055570785509;
+UPDATE messages SET content_hash = '8A90BB7A50DAE46F351CF7CA070AABE3CD67FD266B0007B2610E38C16D0E14F2', similarity_hash = 2619201176360788373 WHERE message_id = 20454 AND chat_id = -100055570785509;
+UPDATE messages SET content_hash = 'EB7BCE9362AD81E2FBBAC1C0AA8CA2E96CC19CD81BF9E746B4A35DD5FAA7F9BC', similarity_hash = 7986295867581690769 WHERE message_id = 20460 AND chat_id = -100055570785509;
+UPDATE messages SET content_hash = '12BAEB723F6F2DC1E3FE1D9F675A327CBDE88DC5F3E7D14CB4C8E4FFA04EF955', similarity_hash = 2651852547029270997 WHERE message_id = 20462 AND chat_id = -100055570785509;
+UPDATE messages SET content_hash = 'FAFC195AF5C278896465CFEA1D2C76F986D12209223AB0F72E3B31AAB1B43C69', similarity_hash = 2327311547093549425 WHERE message_id = 20463 AND chat_id = -100055570785509;
+UPDATE messages SET content_hash = '60CC33BB91F71B557D558C07B2CD205713F849ED8A70C0D3DDB3172DF7AD1124', similarity_hash = 3349628738779558357 WHERE message_id = 20465 AND chat_id = -100055570785509;
+UPDATE messages SET content_hash = 'B8EDD722898FACB4AD4ECEDEBFF35C3EBC3DCFA41BB4057F6CFDF6AFCC72C9CA', similarity_hash = 7949985595586016145 WHERE message_id = 20466 AND chat_id = -100055570785509;
+UPDATE messages SET content_hash = '8051B8BE9DDCA963FD111ECA878A0A54304E94D3C17C73247B37C98493D90146', similarity_hash = -7622396262179461862 WHERE message_id = 20486 AND chat_id = -100055570785509;
+UPDATE messages SET content_hash = 'C7018C26C8CB33D4F996FED8DB87D20DFAE879951725F34D4985C50009E05262', similarity_hash = 7986295867581690769 WHERE message_id = 20604 AND chat_id = -100055570785509;
+UPDATE messages SET content_hash = '381CDF15F7D02CB6B524A9EF3562B9E383CA9ADC98239646D94E66F51830B288', similarity_hash = -7590299407332957800 WHERE message_id = 20753 AND chat_id = -100055570785509;
+UPDATE messages SET content_hash = 'DA6F915E5D057690F543C1A8E9DE986A8DB2AFDAD169C695162DBFCF893561F7', similarity_hash = -8672353527042708232 WHERE message_id = 20763 AND chat_id = -100055570785509;
+UPDATE messages SET content_hash = 'BEA9FBB8B13F7554E9D9838F8743A86C71911FFA60B65D56CEF0FE7E304B564D', similarity_hash = -9062423698413902219 WHERE message_id = 20849 AND chat_id = -100055570785509;
+UPDATE messages SET content_hash = '3FE1AED72AE48467E662260AE487510CA68A4295610516650FC71B5B9A31292E', similarity_hash = -4436744747456879211 WHERE message_id = 20875 AND chat_id = -100055570785509;
+UPDATE messages SET content_hash = 'E5E346B65BC8AB959B0EB527B9CB30094A63FD0EB9253F3E31AED148CF6CBBC2', similarity_hash = -4679503850744972313 WHERE message_id = 20877 AND chat_id = -100055570785509;
+UPDATE messages SET content_hash = 'FA130C322566E9ADF2434CCADA92971688740834D3200645FF24E3619D2D8876', similarity_hash = 7986295867581690769 WHERE message_id = 20925 AND chat_id = -100055570785509;
+UPDATE messages SET content_hash = 'A8678FA7B8E3B4FDFC3635A7B8CC814F554B9D38945004DFA9CC0321A6026829', similarity_hash = -339594980030174722 WHERE message_id = 20956 AND chat_id = -100055570785509;
+UPDATE messages SET content_hash = '65FC5A70A3C9DCC8A1BABC80A952D1955B5A114B0DEF4BBA5FB90ED451D418A2', similarity_hash = 2759939960687370609 WHERE message_id = 22052 AND chat_id = -100094881429433;
+UPDATE messages SET content_hash = '776C1E27428FB9A055D86C4E709DBD3AC3BE2B6D6A7393CACC44BF654F4A1F2E', similarity_hash = 2619201174313959701 WHERE message_id = 22076 AND chat_id = -100094881429433;
+UPDATE messages SET content_hash = 'A7EE6EB5082213EC9A273F12DA9470CB96F99AA46CF96170C57E15A03F185EF0', similarity_hash = 2656356146119778773 WHERE message_id = 22078 AND chat_id = -100094881429433;
+UPDATE messages SET content_hash = 'A3B493F554C8E0BABAAEBECC5363464AE08989BCC3565E1B79942C2FB9FAD94D', similarity_hash = 7986295867581690769 WHERE message_id = 22080 AND chat_id = -100094881429433;
+UPDATE messages SET content_hash = 'FC24DC5CCE9E8B946F37E6EF64FEC871A619C9F11F1B12B649D64FD19705FD06', similarity_hash = 7986295867581690769 WHERE message_id = 22133 AND chat_id = -100094881429433;
+UPDATE messages SET content_hash = '54AB523ACBEABA181A48011E819885260394EDD461EC460CDE3D190131408680', similarity_hash = -6995354899124992776 WHERE message_id = 22143 AND chat_id = -100094881429433;
+UPDATE messages SET content_hash = 'C7183239ACD87A23893E5EC98AC01D2E5F4C429B811997D9C3E79047F283FBF8', similarity_hash = 42158090604872664 WHERE message_id = 22150 AND chat_id = -100094881429433;
+UPDATE messages SET content_hash = 'AB3ECB21F83ADA5A876B34144CAC1A8305A0AEC485977BE301607ADF282C4E8F', similarity_hash = -5157038239402167693 WHERE message_id = 22160 AND chat_id = -100094881429433;
+UPDATE messages SET content_hash = 'B7C5DF7B15558EA5DEBA53B7D2DDE733842EE16B320F8B67A814A5E456544BA6', similarity_hash = -8256842701650003594 WHERE message_id = 22170 AND chat_id = -100094881429433;
+UPDATE messages SET content_hash = 'A93F9D66D6CEABC670D53C23742BEDCCCFA36AB21BA379A3056789394E0256C8', similarity_hash = 6315608441201582545 WHERE message_id = 22171 AND chat_id = -100094881429433;
+UPDATE messages SET content_hash = '24D7AB8FE6E261D2486EB50C41AF04A4DA18B5901B5233991E89422179EC8692', similarity_hash = -4527607693589725880 WHERE message_id = 22172 AND chat_id = -100094881429433;
+UPDATE messages SET content_hash = '49E0EC8AF5966D4506C67E8B2FE9390B99CB3E54FAA7EB603205B2FDD621F818', similarity_hash = -5583373521411694086 WHERE message_id = 22173 AND chat_id = -100094881429433;
+UPDATE messages SET content_hash = '902CF314079A69803DDB2AF32C78A79D731886B6034489F883E78BD2F932D04C', similarity_hash = -2639806736169767108 WHERE message_id = 22229 AND chat_id = -100094881429433;
+UPDATE messages SET content_hash = '50F3A073B678DB2AC6EDFCF4EE174ECF24FC6C5AB94762D2D9EE2429203CDEF4', similarity_hash = 7950267066267755409 WHERE message_id = 22309 AND chat_id = -100094881429433;
+UPDATE messages SET content_hash = 'F0F8D84E74EA3A5278486C0C60103B06BEE02177FD07A6879EFDEA20E540CFB8', similarity_hash = 7986295863286719377 WHERE message_id = 22312 AND chat_id = -100094881429433;
+UPDATE messages SET content_hash = 'A3C8ADECE4BA1E5F4C2B4D3637BFE71F3F69453FF019AD5F4976BBE23840A09E', similarity_hash = 7986295867581690769 WHERE message_id = 22327 AND chat_id = -100094881429433;
+UPDATE messages SET content_hash = 'BE87FC96C64852799F767871D07C4F09492BAE71724B11D765DD3FEE390D4A42', similarity_hash = 7986014392604976017 WHERE message_id = 35597 AND chat_id = -100063904363399;
+UPDATE messages SET content_hash = 'C9CC9ECFA36CBEBBEDF68E2D55E8773A02376B139C7D2D0AFBAB6B16AD11EECA', similarity_hash = 7986295867581690769 WHERE message_id = 35699 AND chat_id = -100063904363399;
+UPDATE messages SET content_hash = '72B8E41C62C51973B231050899C8997169B4C421AE7D0F4282F5261A2D6694DF', similarity_hash = 7949985591291044753 WHERE message_id = 35893 AND chat_id = -100063904363399;
+UPDATE messages SET content_hash = 'A7CBD22B1F6F091C6C6755F6B580F0B45974DAC298AB7B595C14E67439A10024', similarity_hash = 7986295867581690769 WHERE message_id = 36040 AND chat_id = -100063904363399;
+UPDATE messages SET content_hash = '28C459E0B52B9DBDBDDCC56B9989A2F9F6BF5B874808548C22F3403F7CD8C222', similarity_hash = 7986295867581690769 WHERE message_id = 37225 AND chat_id = -100063904363399;
+UPDATE messages SET content_hash = 'CFB6D4ADDEBCB5BEFAF2AA4B223EFD07AE5FF3F9A650F86FF030C216D2E3F1A8', similarity_hash = -7117146944168316903 WHERE message_id = 37677 AND chat_id = -100063904363399;
+UPDATE messages SET content_hash = '97B708A635996F2204294E31C1DE4FDB35830814412E15DA791F9BE77DC48D61', similarity_hash = 7986295867581686673 WHERE message_id = 37743 AND chat_id = -100063904363399;
+UPDATE messages SET content_hash = '39B15AFED657F50B155D74FBF723DE08C2559D62136E096B4FC6D17FA593D252', similarity_hash = 7986295863286719377 WHERE message_id = 38954 AND chat_id = -100063904363399;
+UPDATE messages SET content_hash = 'CE91188938EAC328A715B78288BA4B4EB1625E32059C3619C3601DE5FE3D9546', similarity_hash = 7986295867581690769 WHERE message_id = 39561 AND chat_id = -100063904363399;
+UPDATE messages SET content_hash = 'EC5F54BF89D91E8C6988ED70410E2547EEB5231C5CB164B8407A37AD71E8A47B', similarity_hash = 7950267070562726801 WHERE message_id = 48385 AND chat_id = -100003785594462;
+UPDATE messages SET content_hash = 'B7B11A482ACD329CA19736313B65FCF39481E6743C5E4E8B92B57F1D8ECE9521', similarity_hash = 7986295867581690769 WHERE message_id = 48422 AND chat_id = -100003785594462;
+UPDATE messages SET content_hash = 'DCEEB4A14A144D38232A55E7AEE8EADA34FB744DA72AEB471ABDD3604A27038D', similarity_hash = 7986014392604976017 WHERE message_id = 48849 AND chat_id = -100003785594462;
+UPDATE messages SET content_hash = '7E449D7A6AECB9095B05EA17D679250FDD7C90F2AADC0224C9F9E1809CAE75F1', similarity_hash = 7986295867581690769 WHERE message_id = 49309 AND chat_id = -100003785594462;
+UPDATE messages SET content_hash = '37B5E9F48A5880E67CA52ED7A8F040D7F368EFE6ACB4830BA60DAD98E0387204', similarity_hash = 7986295867581690769 WHERE message_id = 49410 AND chat_id = -100003785594462;
+UPDATE messages SET content_hash = '713631C4D81B8E103505380B86523B1058547AE559F13D65739C53506A75A8EC', similarity_hash = 7986295867581690769 WHERE message_id = 49597 AND chat_id = -100003785594462;
+UPDATE messages SET content_hash = '7044E1F1D62B9B2500BA04A1A31B514901A4C73D7B8D3CE03F39CC4F7BC1CEE8', similarity_hash = 7950267066267820951 WHERE message_id = 70976 AND chat_id = -100054416618415;
+UPDATE messages SET content_hash = '7846BADF49DC6F311A7B16AA6C6987D63EB0BA90F2CFDD21C91875D9B23F56FE', similarity_hash = -2099715889339623053 WHERE message_id = 70979 AND chat_id = -100054416618415;
+UPDATE messages SET content_hash = '0ADE4686AB750BAB8171A750D989C1A789332CA894E82708F6F1CF3FA8FB1AAF', similarity_hash = -1779942654894727817 WHERE message_id = 70989 AND chat_id = -100054416618415;
+UPDATE messages SET content_hash = 'F8C52FF17FE8B9494FD6C6D460B23135F2B8BE11218E72BE3F95540BD3E21FF7', similarity_hash = 2649318025859498357 WHERE message_id = 70992 AND chat_id = -100054416618415;
+UPDATE messages SET content_hash = '6FCEC0A789662FDB3B1143EAF7BCA95265BFA4BC4216FD27E7E6B8937B136370', similarity_hash = 7085373343538413939 WHERE message_id = 70997 AND chat_id = -100054416618415;
+UPDATE messages SET content_hash = 'E0A7793ED2CBE8A6208FC201C4650D43EF684A7B1D232FA8F0F58BAFA6014379', similarity_hash = -1847232565788311177 WHERE message_id = 71006 AND chat_id = -100054416618415;
+UPDATE messages SET content_hash = '6AAF84C16411E1785E8AD9C34E643059D7CAAE545961C8C5B936F7E9B080B576', similarity_hash = -1998395894451074703 WHERE message_id = 71025 AND chat_id = -100054416618415;
+UPDATE messages SET content_hash = '8C973B03548832A435F9576C2C55DAA6C6C84AAB6577563CDECCA5AE8D5A194C', similarity_hash = -1849768312869088911 WHERE message_id = 71028 AND chat_id = -100054416618415;
+UPDATE messages SET content_hash = '7846BADF49DC6F311A7B16AA6C6987D63EB0BA90F2CFDD21C91875D9B23F56FE', similarity_hash = -2099715889339623053 WHERE message_id = 71030 AND chat_id = -100054416618415;
+UPDATE messages SET content_hash = '7319C26E8D189A320C0D3E4E1E5DEB992BA4C43918F93E4D5CB401A6A335917E', similarity_hash = 7371624602040928627 WHERE message_id = 71041 AND chat_id = -100054416618415;
+UPDATE messages SET content_hash = 'F885D00AAA600ABBA2658EB1FF8A6D0DB0E4720632B1A71593CBBBF0439FE670', similarity_hash = 7950267066267755409 WHERE message_id = 71062 AND chat_id = -100054416618415;
+UPDATE messages SET content_hash = 'B1B99654548FDD7ED8DDE3FC037D808CA4538913A16AD6090E7DFC4B6FAF86DB', similarity_hash = 7950267135054345109 WHERE message_id = 71070 AND chat_id = -100054416618415;
+UPDATE messages SET content_hash = 'F78B755DC798E582333B4D903D982CECD9EA3B9B1FA5EDC20A95D1E139EC37B4', similarity_hash = 2615859683951190397 WHERE message_id = 71076 AND chat_id = -100054416618415;
+UPDATE messages SET content_hash = '208C3B66BAD6FABBADCCF6F82A62ABE54536B744CB7C226502D31E6231E5D3DD', similarity_hash = 7986295867581690769 WHERE message_id = 71534 AND chat_id = -100054416618415;
+UPDATE messages SET content_hash = 'BA71DA713AF40B6AD21EAB8D8FFC739D78D5864143ACEFEECA9AE3D1AED0AD01', similarity_hash = -492583374061062668 WHERE message_id = 72233 AND chat_id = -100054416618415;
+UPDATE messages SET content_hash = 'C6E4BB0D63171E10F340DAEB0AB1EF3C612FEBD97D9EAC49DDAE6D83B275E84A', similarity_hash = 7986295867581690769 WHERE message_id = 72288 AND chat_id = -100054416618415;
+UPDATE messages SET content_hash = '2609C8DDBAAC833E257D323E55D031787C862851F4FD65B6DFFAABAEC493B1E5', similarity_hash = 7949985595586012049 WHERE message_id = 73227 AND chat_id = -100054416618415;
+UPDATE messages SET content_hash = 'AC9DBED34F6132A11B937581A20DBBF5035EA3E385B83232294A25933C487A79', similarity_hash = 7949985595586016145 WHERE message_id = 74689 AND chat_id = -100054416618415;
+UPDATE messages SET content_hash = 'F694839A3EE449F3356A8FC9948799AA92765A4E2C6C425A407A1496AEE18A9D', similarity_hash = 7986295867581690769 WHERE message_id = 76963 AND chat_id = -100050808209814;
+UPDATE messages SET content_hash = 'BA619B4743EDF7DC3DDCD2CDF51021CBF13020DAF8111667196FC2965DD10EB1', similarity_hash = 7950267066267759505 WHERE message_id = 76967 AND chat_id = -100050808209814;
+UPDATE messages SET content_hash = '574B66D8DEF9FB59D171EAAD4198977F2F7FFFAA4F3FBD2A41EA67423D51D7D3', similarity_hash = 7986295867581690769 WHERE message_id = 77017 AND chat_id = -100050808209814;
+UPDATE messages SET content_hash = '6C620B8A9D0368B29509A60B6061D7A03A0C4687205A6EB93A5C689B60BD04DD', similarity_hash = 7986295867581690769 WHERE message_id = 77020 AND chat_id = -100050808209814;
+UPDATE messages SET content_hash = 'C8E108D1BC41E55EDDC2B50E5DD47C9B16B28BB05B5DB3BC50ACB40D112C7CB0', similarity_hash = 7986014388310012817 WHERE message_id = 77050 AND chat_id = -100050808209814;
+UPDATE messages SET content_hash = 'C5C6C9AAA17C9511A712DEEAD6EE5C877F06F49E9DED80CEB2820F557DEF6137', similarity_hash = 7986295863286719377 WHERE message_id = 77261 AND chat_id = -100050808209814;
+UPDATE messages SET content_hash = '39436C13DB316091A5640FF67BE51DCE50714C6AAE34A44AC3DE2D27DAF09F49', similarity_hash = 7986295867581690769 WHERE message_id = 77825 AND chat_id = -100050808209814;
+UPDATE messages SET content_hash = '12B79A17B9F915874737049DD5BF6455AF94DD9CA24916174FC6B9D366B04689', similarity_hash = 7986295867581690769 WHERE message_id = 77826 AND chat_id = -100050808209814;
+UPDATE messages SET content_hash = '3519C96F71C0D5B680E270317045B04B898F3F127E976E4518D32ACF8E218C4D', similarity_hash = 7986295867581690769 WHERE message_id = 77989 AND chat_id = -100050808209814;
+UPDATE messages SET content_hash = '8A90BB7A50DAE46F351CF7CA070AABE3CD67FD266B0007B2610E38C16D0E14F2', similarity_hash = 2619201176360788373 WHERE message_id = 82824 AND chat_id = -100065252085265;
+UPDATE messages SET content_hash = 'A7BE38E24319614A4672FD21C71E4443A0741C89A7D19E4282DB9A3A26A1A318', similarity_hash = 7986295867581690769 WHERE message_id = 82837 AND chat_id = -100065252085265;
+UPDATE messages SET content_hash = '56930EFBFFF87C68B58C61F10C99BBAAA8193261891D858F9025B043C3589E54', similarity_hash = 3338580824468501397 WHERE message_id = 82842 AND chat_id = -100065252085265;
+UPDATE messages SET content_hash = '70E834BA5ABD3DBE9ADDDAE7B4F98A0D926ECEDA16AA230879F10454CA1A1A9B', similarity_hash = 7986014388310012817 WHERE message_id = 83511 AND chat_id = -100065252085265;
+UPDATE messages SET content_hash = 'E8D38469919A9A71786924915250FC3A4130124A06BFCC1705539FD55AD9FC6A', similarity_hash = 7986014388310012817 WHERE message_id = 83783 AND chat_id = -100065252085265;
+UPDATE messages SET content_hash = '5DB860C6A7E4ACEDFAA919C6D8DA04BB4940738B89072FB0A6DA3FC2C0AD38AC', similarity_hash = 7986295867581690769 WHERE message_id = 83819 AND chat_id = -100065252085265;
+UPDATE messages SET content_hash = '30535E98938C205F862438BE201ABC66430C0D1C3E1D1F6AABE4C39D95B53551', similarity_hash = 7986295867581690769 WHERE message_id = 84793 AND chat_id = -100065252085265;
+UPDATE messages SET content_hash = 'CE91188938EAC328A715B78288BA4B4EB1625E32059C3619C3601DE5FE3D9546', similarity_hash = 7986295867581690769 WHERE message_id = 84794 AND chat_id = -100065252085265;
+UPDATE messages SET content_hash = '60E6E41D239A5FECD8A2251365DA87E4BA84D415E5F0EA0FC854B102C9545579', similarity_hash = 7986295867581686673 WHERE message_id = 85531 AND chat_id = -100065252085265;
+UPDATE messages SET content_hash = '7A4C73F316BE85E6760CE80B5CBDBFEBD62E3305E39666388270CB7AB30CA3AB', similarity_hash = 7986295867581690769 WHERE message_id = 86292 AND chat_id = -100065252085265;
+UPDATE messages SET content_hash = '8BAD5A21FA1A927AA69131695F85F9471A94446F9A87FF1399C2ACD8FC1E5B4C', similarity_hash = 7986295867581690769 WHERE message_id = 87158 AND chat_id = -100065252085265;
+UPDATE messages SET content_hash = '6F347602CF0DB143A29C32D27039C59E19EA25918352F141DE6B0168701E0A14', similarity_hash = 7986295867581690769 WHERE message_id = 87963 AND chat_id = -100065252085265;
+UPDATE messages SET content_hash = '7CE4363881753EAFAF1310F414E5F04065D9BD81878293170A77FA41638FCC30', similarity_hash = 7986014388310008721 WHERE message_id = 88848 AND chat_id = -100065252085265;
+UPDATE messages SET content_hash = 'F2FB70B5C58132BBD57BE2792E60461BBC6A199C7F7539676FE1ADCCFF3933DB', similarity_hash = 7986295867581690769 WHERE message_id = 88849 AND chat_id = -100065252085265;
+UPDATE messages SET content_hash = '0D65C747572608142018509770A9790AE9341873A160F942D634B1C10297492C', similarity_hash = 7986295867581690769 WHERE message_id = 88884 AND chat_id = -100065252085265;
+UPDATE messages SET content_hash = 'EEB2B1947A2EA77CE2436FC8BD16E83834B3925E09641CB46A37C226B62371A5', similarity_hash = 7986014388310008721 WHERE message_id = 89459 AND chat_id = -100065252085265;
+UPDATE messages SET content_hash = '33B8BFBE0B67477A444D3D953CE39C59256A6DC2BA3B1B43FA043CC489BA08E7', similarity_hash = 7949985591291044753 WHERE message_id = 90080 AND chat_id = -100065252085265;
+UPDATE messages SET content_hash = 'A7F102B047D6128FE508B194A443A095F47665A0E8C205315A6748300D868B9A', similarity_hash = 7950267070562722705 WHERE message_id = 90579 AND chat_id = -100065252085265;
+UPDATE messages SET content_hash = 'E0B58370FBD0A624EEDBE4D54BC2D91802252C0E946C117F3A194559B713C799', similarity_hash = 7950267066267759505 WHERE message_id = 91234 AND chat_id = -100065252085265;
+UPDATE messages SET content_hash = 'B11AA61ACBE6A4A8B81BDABF82380E86E037C24654B47B4DCC5F5C6C69727909', similarity_hash = 7986014388310012817 WHERE message_id = 92033 AND chat_id = -100065252085265;
+UPDATE messages SET content_hash = '3E55A09B036F7C89D45A428CAB466EA690881692F23028C60587BC007EC3B7E5', similarity_hash = 7986295867581690769 WHERE message_id = 93308 AND chat_id = -100065252085265;
+UPDATE messages SET content_hash = '8D4EE94CFFDC14417A78110854963FEA825113BE3CE29E36B18D0E2D139519BD', similarity_hash = 7986295867581690769 WHERE message_id = 93450 AND chat_id = -100065252085265;
+UPDATE messages SET content_hash = 'D521B960C9B6A93206C42BE96369965E633B59142874480419EB4C6FAC30CAB2', similarity_hash = 2363374911992693757 WHERE message_id = 104222 AND chat_id = -100059667856554;
+UPDATE messages SET content_hash = 'B1EDAD4381E0701858451BB056875433BE045EA61F66FE3DB7D8B9D9D5A058ED', similarity_hash = 7950267117874475957 WHERE message_id = 104224 AND chat_id = -100059667856554;
+UPDATE messages SET content_hash = '294E6655D8E366B32E2DAB8F2D3A9804DD7C15158C8246AB7774975FA8CBF95F', similarity_hash = 3203191313459909013 WHERE message_id = 104225 AND chat_id = -100059667856554;
+UPDATE messages SET content_hash = '4A7B519BE8509B2E5F7E0DF16F2C1E83AA643E79846FF1EAA9B16EECA251E94F', similarity_hash = -6607829761821179435 WHERE message_id = 104278 AND chat_id = -100059667856554;
+UPDATE messages SET content_hash = 'EB264A698F6BCF14D541D8149D5249957B88492E14B32015CE44BE1CD9C5E77A', similarity_hash = 7950267070562722705 WHERE message_id = 104317 AND chat_id = -100059667856554;
+UPDATE messages SET content_hash = 'C032F30946AA0C0C3D2F887B08706833B5D02109EE5A06D43DEB7E7E747A4BE1', similarity_hash = 7986014392604976017 WHERE message_id = 104328 AND chat_id = -100059667856554;
+UPDATE messages SET content_hash = '23F2CB78F17972AEF86DF2B749FD6894CDA25BFC80F13599F515C828B0AD4FED', similarity_hash = -6454389486650578571 WHERE message_id = 104339 AND chat_id = -100059667856554;
+UPDATE messages SET content_hash = '5E78D61466BE7C5CA2E877B730B2FD0E52A062DFC785B1A5BAF0672E5FDBB2E8', similarity_hash = 3374328163690689430 WHERE message_id = 104395 AND chat_id = -100059667856554;
+UPDATE messages SET content_hash = 'D87DFFD13CF89DCF49D8E77F65060F9705C68AD509E660480C81F22745560890', similarity_hash = 7986295867581690769 WHERE message_id = 104517 AND chat_id = -100059667856554;
+UPDATE messages SET content_hash = '9C208AC66C46D705AB35A5D97414F4C11AF60BF032B547154BA59E6BBA593D31', similarity_hash = -1847235034790028941 WHERE message_id = 104519 AND chat_id = -100059667856554;
+UPDATE messages SET content_hash = '65FC5A70A3C9DCC8A1BABC80A952D1955B5A114B0DEF4BBA5FB90ED451D418A2', similarity_hash = 2759939960687370609 WHERE message_id = 104520 AND chat_id = -100059667856554;
+UPDATE messages SET content_hash = 'D521B960C9B6A93206C42BE96369965E633B59142874480419EB4C6FAC30CAB2', similarity_hash = 2363374911992693757 WHERE message_id = 104755 AND chat_id = -100059667856554;
+UPDATE messages SET content_hash = '7C3F5B801E5FE7264883561EE003D08FA37A3328878835596AD18D2A0DDB3E55', similarity_hash = -6527249338582714018 WHERE message_id = 104948 AND chat_id = -100059667856554;
+UPDATE messages SET content_hash = 'EFA0930E4B94C6413516E64409ACD6BA75BE01FCCA99CA09CDD182B3C8726085', similarity_hash = -4402119599317352088 WHERE message_id = 104979 AND chat_id = -100059667856554;
+UPDATE messages SET content_hash = '5D6E33D5E71DC73E14177A1FBE6321C7362738E70B7F8D26F56DF981D178A32A', similarity_hash = 2764160786147647829 WHERE message_id = 105058 AND chat_id = -100059667856554;
+UPDATE messages SET content_hash = 'E5A7387C2F5B158AC4CDC2608E3525A8E7E0A3347910B72B789D6D573BEB73A6', similarity_hash = 2615824772611506497 WHERE message_id = 105266 AND chat_id = -100059667856554;
+UPDATE messages SET content_hash = '6FCEC0A789662FDB3B1143EAF7BCA95265BFA4BC4216FD27E7E6B8937B136370', similarity_hash = 7085373343538413939 WHERE message_id = 105368 AND chat_id = -100059667856554;
+UPDATE messages SET content_hash = 'B8C0A191C03D9D73E03706F4F25F0864B81990D7F8CABDA0764569402201B158', similarity_hash = 2649318025859498357 WHERE message_id = 105371 AND chat_id = -100059667856554;
+UPDATE messages SET content_hash = '23F2CB78F17972AEF86DF2B749FD6894CDA25BFC80F13599F515C828B0AD4FED', similarity_hash = -6454389486650578571 WHERE message_id = 105436 AND chat_id = -100059667856554;
+UPDATE messages SET content_hash = 'E0180E3EB049B0EAC332CE08DED455477845EC43BE1D5DFE873472EE4197B23E', similarity_hash = 4630902733172541793 WHERE message_id = 105670 AND chat_id = -100059667856554;
+UPDATE messages SET content_hash = 'CED5D0267DC929F3285526E41DC6DAD1B0A8A76338CBD605165409A261B391E7', similarity_hash = -6454706350010324719 WHERE message_id = 105677 AND chat_id = -100059667856554;
+UPDATE messages SET content_hash = 'CAF2439C86231E93AEEE7F4A61C8FFE602CA5928EB346683C3DB7C2D73D14E77', similarity_hash = -1847232835230004877 WHERE message_id = 105678 AND chat_id = -100059667856554;
+UPDATE messages SET content_hash = '3696BC5919BD69FA47DE3E2D13EBC0CF8293868E12474F008DB81FB96958F7D5', similarity_hash = -6463678160781366411 WHERE message_id = 105680 AND chat_id = -100059667856554;
+UPDATE messages SET content_hash = 'DF231AFC069822CCF33157EA16B84601B65C9B9894F64E89B43E3CED3162EB9A', similarity_hash = 6317589039071737073 WHERE message_id = 105816 AND chat_id = -100059667856554;
+UPDATE messages SET content_hash = '37F6B19AE0DB7C9D4D1878E2B5750A7B930FE7776C152CA316E593F24FFFF198', similarity_hash = 2327594395386052945 WHERE message_id = 105898 AND chat_id = -100059667856554;
+UPDATE messages SET content_hash = '1F81B1AD63D62245F60860004617D9A2802CD7BA26A8D0EEB56912E835A195CC', similarity_hash = -7027009425637558401 WHERE message_id = 106069 AND chat_id = -100059667856554;
+UPDATE messages SET content_hash = 'A3C8ADECE4BA1E5F4C2B4D3637BFE71F3F69453FF019AD5F4976BBE23840A09E', similarity_hash = 7986295867581690769 WHERE message_id = 106123 AND chat_id = -100059667856554;
+UPDATE messages SET content_hash = 'C781EA0F78D49A5CED5D5CCF7D32748A8E65988EA3A9FE2DCCAB0916DAE8F241', similarity_hash = -2375781020956388007 WHERE message_id = 106229 AND chat_id = -100059667856554;
+UPDATE messages SET content_hash = '0B56C49C5EBBF7230C440E25F5174B4CEA1DA92A635F7EBFD7DFEB509D64E936', similarity_hash = -2972571357100137896 WHERE message_id = 106329 AND chat_id = -100059667856554;
+UPDATE messages SET content_hash = '087D4BE78C8B4F24AE04BD65380724FA4B670B970DB3E4681B614FAC255D22A8', similarity_hash = -8725083955339479272 WHERE message_id = 106402 AND chat_id = -100059667856554;
+UPDATE messages SET content_hash = 'EEF1C9ED1B816B2DB5FE21FB5376ED95F68284756E47282C196B5F9E2DAFC06F', similarity_hash = 3097356790936179605 WHERE message_id = 106443 AND chat_id = -100059667856554;
+UPDATE messages SET content_hash = 'BF423A0967F127088A0FBBA94FFB48128A5C54178FB51D5A94D433CA07415854', similarity_hash = -6142190418000793449 WHERE message_id = 106498 AND chat_id = -100059667856554;
+UPDATE messages SET content_hash = 'DEBB159553497536D9C6A1A0FB58F3D9D9625537138B0579C6C8F245B3F4019B', similarity_hash = -3287813644036166434 WHERE message_id = 106688 AND chat_id = -100059667856554;
+UPDATE messages SET content_hash = 'F5D51733C5E0A717F8F41C0E427B69DAEC7CD5B6B37C646570483B3A028BA463', similarity_hash = 7950267070562722705 WHERE message_id = 106779 AND chat_id = -100059667856554;
+UPDATE messages SET content_hash = '35DE9310EC05630299E6DE2F4DC6DB3A23EFA823B9102F492548BA602786A7B1', similarity_hash = -920767277672883365 WHERE message_id = 107216 AND chat_id = -100059667856554;
+UPDATE messages SET content_hash = '70E834BA5ABD3DBE9ADDDAE7B4F98A0D926ECEDA16AA230879F10454CA1A1A9B', similarity_hash = 7986014388310012817 WHERE message_id = 107354 AND chat_id = -100059667856554;
+UPDATE messages SET content_hash = '7E2E2E56E5E8AB4503D4933D6B24E2DBA4EBBE9E9F4C7E3B460BAB97C30C8E91', similarity_hash = 7986295867581690769 WHERE message_id = 107998 AND chat_id = -100059667856554;
+UPDATE messages SET content_hash = 'E685CC7AE838BA813AFF3C0C4B8A74F1DBFF5A3966F02DBAADFF3248DB26766A', similarity_hash = 7950267070562726801 WHERE message_id = 108141 AND chat_id = -100059667856554;
+UPDATE messages SET content_hash = '40CBA7219747CE5EBA9B9A64B8A6C99A37C56719B618A7D1F3DF39E567F726C5', similarity_hash = 7986014388310012817 WHERE message_id = 110254 AND chat_id = -100059667856554;
+UPDATE messages SET content_hash = '62B7BADFE067536102A0BB818220E2091F06A563762DACC35805EFDAE140B83A', similarity_hash = 2453695184952434993 WHERE message_id = 210673 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'F2CD25AD14E2D099045701ADE6E9881501547F755D76F2EDA2E66152ED065CBE', similarity_hash = 154111986598988834 WHERE message_id = 210708 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '4A7B519BE8509B2E5F7E0DF16F2C1E83AA643E79846FF1EAA9B16EECA251E94F', similarity_hash = -6607829761821179435 WHERE message_id = 210709 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'B0A2ABF4B184EABAA8AF74E77A3DF9E84974643F7C44BB388FD0DC7DB7E06975', similarity_hash = -638774370482405894 WHERE message_id = 210743 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '34608DC0B79BE78C05F3A7F9C8AE1CB33117BFE4373F810199CF047EEE04BC5E', similarity_hash = -7295948651521952646 WHERE message_id = 210772 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'A2920E53312FEF2DCC4266DD51E656F3871A977C93235B6022405BBF4E00D7D6', similarity_hash = -7838297963246837927 WHERE message_id = 210937 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '0A559B2A27B0C4136C0CD1E62430E649061CF07A5D5CE52B318D5FD50FB70F38', similarity_hash = 4290528065809523072 WHERE message_id = 211168 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '4C592A4C404F39A72E36EEB932A93C868FE93E4A897AEB914A1C4BCE6B2F4F72', similarity_hash = -3275659495252134020 WHERE message_id = 211184 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '7044E1F1D62B9B2500BA04A1A31B514901A4C73D7B8D3CE03F39CC4F7BC1CEE8', similarity_hash = 7950267066267820951 WHERE message_id = 211255 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '7F0971C5F82A4A0342C31B83A865820118A0BA4A18886F19082E602ACDCAFABA', similarity_hash = 7950267134995624885 WHERE message_id = 211256 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'B46633FCBADA08881F5BBA893D47BBFA59A0ED21026655C0334C7D47C1CC7DA5', similarity_hash = 3052391163373101397 WHERE message_id = 211260 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '70AB4CF8661BCA2F52CC4ED132462E2A88809D81A918A63E80A5EC6A250158E8', similarity_hash = 2334065914940490069 WHERE message_id = 211396 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'E94D5DD3A4B213C8AFEEA9FFE3B5770CB1484F1C4DCDBCD96C2F515D0C4E932F', similarity_hash = -8058752096824015110 WHERE message_id = 211508 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '47726DF2E4324A1C500E24551D7191A8B08BD30C7D5B9FA41B435A170E74C7D1', similarity_hash = -8851785159350936496 WHERE message_id = 211511 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '15B71D045C60505D9986303DD47290039E144539D74F4A54268DA4F6C3DDB0C0', similarity_hash = -6754339332651428830 WHERE message_id = 211533 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'AB434725758775D91AF7B5D6E2A6851CAA449F2082876E2261C43813179EEDD2', similarity_hash = 7986295867581690769 WHERE message_id = 211779 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '73288A87C43FD2F004668F3251B9D04673143F0F3221F985B989AFEE7CAFC9B6', similarity_hash = -1508137383317403733 WHERE message_id = 211933 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'FDEEEC2AE560ED17373A6E5622C29A4604BCE8FA23DA839E0E0EBEEE61053CBF', similarity_hash = -2072196193617509334 WHERE message_id = 212044 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'AE25204D834825F9D7D8EDC07F6228202F5B7C2A35A924D174115318AE2BA870', similarity_hash = 6217940085098966873 WHERE message_id = 212184 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '8CD30C1373A7069ACB471D908FC2BCCBBFB5B23CA11BD18110D830907DEBE530', similarity_hash = 1381176307131438970 WHERE message_id = 212216 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '8B3286B207B325D3039BD361B4191AEEE428893D2568099B85E8E231900A744C', similarity_hash = 7986295867581690769 WHERE message_id = 212340 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '9F269314DE2AF6678B4AB238F31A5C64260AE5B8DB440400B68D6D158556CFB4', similarity_hash = 2804727672254302589 WHERE message_id = 212456 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'BE63A166CEA4E7DC990B8D220ACD8763514049188FE6365F3F53051CF60413A3', similarity_hash = 174663655136871704 WHERE message_id = 212521 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'C0114DD80DBA35C91DA0CAF12001F53C65DA143E6791232D87EF02FDF2013F57', similarity_hash = 7986295867581690769 WHERE message_id = 212523 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '60CC33BB91F71B557D558C07B2CD205713F849ED8A70C0D3DDB3172DF7AD1124', similarity_hash = 3349628738779558357 WHERE message_id = 212548 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '395FF476D0011D7907DDFED93FBE9F39DF1DE9A78DEBB12BB397F1420C1B6D2D', similarity_hash = 7949985595586016145 WHERE message_id = 212694 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'E1095AEDC2A8315802702843FD98068944031C8BAAE28125CA5740928373F933', similarity_hash = -5613008219161039422 WHERE message_id = 212705 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'F6CCDC83C19B402F0FDC21056600B4D660195EF2DE2A2557740C04967FB98865', similarity_hash = 7986295867581690769 WHERE message_id = 212803 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'CAAF5240ECCCAB3A1873D47A97999811C17C6C3C437962FA2A63D2E1EA5BF559', similarity_hash = -7774464577976211720 WHERE message_id = 212918 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '7F28CE457FFAF3E2A0C1FEFDAE1673B85F870F6B9C3E6F49B8E87CE16D45D368', similarity_hash = -3194576332140774424 WHERE message_id = 212936 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'AA0D653933F42E358AD4B707E50DB38B893480C8A06BA2F3170534A49851E102', similarity_hash = 7172438226063309278 WHERE message_id = 212950 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '7F0971C5F82A4A0342C31B83A865820118A0BA4A18886F19082E602ACDCAFABA', similarity_hash = 7950267134995624885 WHERE message_id = 213070 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '171C94D2044E30EBF5F783D776530926C71F0F3DD49E0F5DA4FF21696FFC7D93', similarity_hash = -7910065071311821706 WHERE message_id = 213088 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'E77DBEF6883E351CA29C88B6A0C7D7F28024D1EE59D8E61F812C94E1FD31FCEC', similarity_hash = 7950267066267755409 WHERE message_id = 213117 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'A36B63983E64E6A4EA22911427DBDAEE1ABAE6B3E0B452CA7AB36C0D5C11356D', similarity_hash = -8093153900350692235 WHERE message_id = 213132 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '90E43F86F64B22B1288E4FB508D2D2FAF4DEE98A420005D49D7DCF06E359EE79', similarity_hash = -4394963786431351307 WHERE message_id = 213139 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '6124904A1786AD615E05C7F1DF3C82ECC0182CDCB1D6D5A8154FC290AB673DE4', similarity_hash = 7986014392604980113 WHERE message_id = 213167 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '90E43F86F64B22B1288E4FB508D2D2FAF4DEE98A420005D49D7DCF06E359EE79', similarity_hash = -4395034155175537163 WHERE message_id = 213199 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '0C81832157A3FB237CA9406C05BA2B34AA24FDFAA2D745A9BE146792358F2764', similarity_hash = -3784779882054176447 WHERE message_id = 213225 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '5E80E047F3F856186565AB714F111967867282B4BCE4558F60455897EEFEC7E7', similarity_hash = 6116963079219967184 WHERE message_id = 213284 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '24B597F1104F3DC85A0C4ED66654BF228D20648A8E4DECE409BCDA5FD8DBD8C6', similarity_hash = 7986295863286723473 WHERE message_id = 213293 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '62B7BADFE067536102A0BB818220E2091F06A563762DACC35805EFDAE140B83A', similarity_hash = 2453695184952434993 WHERE message_id = 213325 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'CAF2439C86231E93AEEE7F4A61C8FFE602CA5928EB346683C3DB7C2D73D14E77', similarity_hash = -1847232835230004877 WHERE message_id = 213409 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '1857124D828BA1B7DCD05B595B9EA0132875797B7B926A9F730AF68374B0D997', similarity_hash = -2728470251621585803 WHERE message_id = 213483 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'EB2787762083685AA696E46339032B2D1A069A3BA45AA582F90A58984883FDA1', similarity_hash = 7986295867581690769 WHERE message_id = 213519 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '16929E9799FC86DFCD6650A3E1CE05A46584E06B1013BACFA54E17EA54D2D3D7', similarity_hash = -9064192405432960523 WHERE message_id = 213521 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'BB426184F032C28C9514D98ABB4AB5FABA8F842BAD4B92F8A43DC1117B199A1B', similarity_hash = -5729838379408427242 WHERE message_id = 213680 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '82B47E8EF56DD9BB9A5F9E842A5580B2BBD0826BA301010F9B5E204991BBC828', similarity_hash = -1000135648935585415 WHERE message_id = 213710 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'D117B8C82B51ED214193F935C949EC0C779FF234969DA868FB210942283E4FB1', similarity_hash = -9075030243986114064 WHERE message_id = 213713 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '5BDF7E1A34F71E06CB33E741902A056EF7D7E1E2EBD11528E01BC7CBCE25E268', similarity_hash = 7986295867581690769 WHERE message_id = 213720 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'D13CDD9B0BF15CA16D9B31D1ACDB7F918E35138C47F9F6E27E1E88F9779B1B8E', similarity_hash = 7986295867581690769 WHERE message_id = 213722 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '4E7E17B337E038A5B4E643E34A6432FF0312A08C1C3CCE214D15B0B7D3D214BD', similarity_hash = 7949985595586012049 WHERE message_id = 213958 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '4FEEAD0DEF422B773BA007C162E682A75F5F07CD4AD323A9CAB0A3BC6D185380', similarity_hash = 5647333819430483723 WHERE message_id = 214055 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'A266A7AC8B2A61E0A230E2658999CA3B0E3D18FFE60767933D23A4A510E9B65B', similarity_hash = -5831522249158251778 WHERE message_id = 214112 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '730AD2258CBD63417B6A02463B7323E2DD63AA549CA8AEFAFE10B8EE4048BAB2', similarity_hash = -6653008469974495335 WHERE message_id = 214147 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '310B4F2FCA83FA885E88B2A1A4A6F27445C3BBE0AC0CDF3CD971899E117ED5AC', similarity_hash = -4141966355313600646 WHERE message_id = 214211 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '7ABEC0BA2211F0176D578210CC14F5B3A5E6F38DB3A1FD12B0F1779F6A77A2CD', similarity_hash = 7986295867581690769 WHERE message_id = 214245 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '452EE7EB95141DD0A5A5E0494551BB8470BD5A67C4AEBC590A1D5E358CEE98CA', similarity_hash = -8080913800458587823 WHERE message_id = 214252 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'F9615BA53C33BC5462A4FFB528E43A572E8E792B7F876B2B79F300A5E4D103E4', similarity_hash = -4170451062823146376 WHERE message_id = 214270 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'F7883876958677BBA3AB76280DFE58EB97291560540AD7ED9FF21EE05913D71B', similarity_hash = 2755734998740186239 WHERE message_id = 214285 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '96E070C3403BEEFEFF6DFD1E29F7236AAF1CB1D13E94325BC85AE467B381B44F', similarity_hash = -1224875585591466627 WHERE message_id = 214422 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '440AC84DFD3367FCE0002AC2A7CAA648A8CE448C1F905DBFEA680541441E844F', similarity_hash = 890517206675998034 WHERE message_id = 214424 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '1D05134B198F3B089A04E2FB0009B3A3E29C79A26313167CC1DC507313819EA5', similarity_hash = 7986295867581690769 WHERE message_id = 214485 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '654F95E893C26B41655EEDF2FAEA2F0098566F102A598C92B82CF814E2B9866E', similarity_hash = 7986295867581690769 WHERE message_id = 214486 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'E4070C7C042278A294CA28C8F726E7BB6F9A63AA05A862BB562E8F905B96552F', similarity_hash = 2651854396411683189 WHERE message_id = 214535 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '62331AF6A12B32DDEEE4FECA2279782DBEB7CD59E1F8023AA461DC8D724D264F', similarity_hash = 1993271267205369784 WHERE message_id = 214596 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'FC38533AC9D2A6B5156D57FD5795FDF195968D930AD57F82298ED26C56A96F7F', similarity_hash = 7986295867581690769 WHERE message_id = 214636 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '77EB5539C49AAB0310FEBF4A32DD539260C21A90AF2B7B39FF45DD21CC8595A8', similarity_hash = 7986295867581690769 WHERE message_id = 214638 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '66A309408D45409981D51B61B3FAC20C7797748B9E87BB8835177500A0718E2D', similarity_hash = -9065416876014451081 WHERE message_id = 214685 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '80FD233D233EDC6B9F5BBBBFAC2F0B38FE47F1361BF383DA0048823C0A5B5913', similarity_hash = -8548531098168663112 WHERE message_id = 214869 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '169120F519D95D06DF6728E4AECC197F029B00D98577F3E675385C475EEDD6BD', similarity_hash = 7986295863286723473 WHERE message_id = 214891 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'EE5D461692EC840654F83CCC8B34E7EF7310A520724F0333FEBD11AFF9C85EC1', similarity_hash = 7949985591291044753 WHERE message_id = 214895 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '2E5CF942619775E04105B9202CF74EA3984F7B6B14181D2FB59AD7E595E3DE77', similarity_hash = -2924650444308430404 WHERE message_id = 214908 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'F7F2C3628524BC4D4712C097C6BCEAD60E3D066E191F71BABF74594FCEACC571', similarity_hash = -7609248363500986072 WHERE message_id = 214958 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'B43C7C44565932D886A0B6F3B8B8EB869F4506944E3655371E8833DA602404C7', similarity_hash = -5207348799515482667 WHERE message_id = 214964 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '93D6CA6C2E751359FE32EEBCD5F1D8892DBA2589DD358464CF8AE9999BD2FF03', similarity_hash = 3340551170780631445 WHERE message_id = 214977 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '17D0D2306EE7E955028D253C6A3542FF8C7BA302EA0E1731FB5107CBDF718D7A', similarity_hash = -7909582380577852944 WHERE message_id = 214989 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'A8CD90BDAA5C21752CF0F4018CA3B0C83BDC49CAEEEFA5AC5DEA5458F88A57F0', similarity_hash = -2989398331519196844 WHERE message_id = 215055 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '0C205AF0BC1688C33785807D5CC23FEED1ABD39BA1FE1DA95551D5136D3E4F2F', similarity_hash = 6813812350117717448 WHERE message_id = 215056 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '970F9CD1D0C1AFFF828B24D1B7585F3189F16116DD38026110252AAC0E1088F0', similarity_hash = -4156956529934261860 WHERE message_id = 215057 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'CE83D6FE483F0EF290C65D6A5B34F214D5603EF658A13149081BBD4D853D064E', similarity_hash = 8530598937506603468 WHERE message_id = 215060 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'C728C8FF6BF10BD2E99699890269BD4C19119D0DF56409537DC6EDA84E64E1E2', similarity_hash = 7986295867581690769 WHERE message_id = 215219 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '902CF314079A69803DDB2AF32C78A79D731886B6034489F883E78BD2F932D04C', similarity_hash = -2639806736169767108 WHERE message_id = 215393 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'B8AE08DA68DE2674E57ADA59F4187AC46D9EE8BA77F8CF395F0226075B392CB1', similarity_hash = 446846075483431390 WHERE message_id = 215672 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '02092FCE94B032C7C0A7AAA1133B2213A76DB22B6F67300A921213F6C720094D', similarity_hash = -7319611550353408148 WHERE message_id = 215815 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '1EDECFAF773F402A24EED3A74BAE41C8EC2D6E0C4183327E116735501476F62D', similarity_hash = -5210427409516583856 WHERE message_id = 215930 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'C8C7710C3F1737C42EFE105AFFA037AF8B4E9F472C3F722A735036B77867395B', similarity_hash = 7949985595586012049 WHERE message_id = 216042 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '9FFD975153B6168FF6A4F92ACD65470B8FF5DFA75DEDB55AA591750F7F1FE2EF', similarity_hash = 7949985591291044753 WHERE message_id = 216050 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '3DD55647C4C2A36D43FBBC7A9FA5E6A1C089B63589081EDDEB3FB2F0BFDD8BF7', similarity_hash = 7986295867581690769 WHERE message_id = 216051 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'CE8F9E38F8B49164F41A5EF9531EEFE3E6AB054FFED4FE7F23591DF8FF132CEB', similarity_hash = 7986295867581690769 WHERE message_id = 216182 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'C74F835B54FFC031B1C788051E6AC47102732AA18945F6B3B90255359F02F3FA', similarity_hash = 3338299370966627220 WHERE message_id = 216185 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'FA1E9D46219DD977F47F37324F8B91ED670ACA3C8321B83DCDD91E9088F3A00A', similarity_hash = 7986014388310008721 WHERE message_id = 216196 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'C9872B6756D9A05B570BA40A91B670C505A7105ACF4AB842558F886235CC7D13', similarity_hash = 7986295867581690769 WHERE message_id = 216214 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'D5A18B87D6E0F0B3DF8E0B4185376D406263C405FFFE86189E47DD74E3CBEEE5', similarity_hash = 7085373343538413939 WHERE message_id = 216219 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'B40F0C66F29BA0DA76279EF2544E0E8E47F32660E563E23108E820D3C9306C63', similarity_hash = -2122460574973319372 WHERE message_id = 216268 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '6F54E79AF0C8CE83711FBAE54D9702DF1C1263AB363B763E70D721610C2BBBA1', similarity_hash = 7986295867581690769 WHERE message_id = 216287 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '9417AAE63F365E3031EF18795B55333DD5E18EA25EFBDF878C3FA1C467C9A414', similarity_hash = 7986295867581690769 WHERE message_id = 216300 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '60D9DD03EE3D4BDCB541A94A5710425DCE4C615322038533CB56DADE70149080', similarity_hash = -7923231407380403853 WHERE message_id = 216355 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '580699E8A7D2D8B53AE7AA91D7AAAB30668C365F1DB00AC12C5A70204A33CE5C', similarity_hash = -5302059898827758277 WHERE message_id = 216486 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'AFA389FBD27D5D856AAC5C10B41D236B9AB693FED2D8085870163DB38F260FB5', similarity_hash = -8495187569707324707 WHERE message_id = 216684 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'E95BDE50A11310BDCF093F744CED90217E0E40A841034E8308F2027368981118', similarity_hash = -5352004674775567027 WHERE message_id = 216712 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'AFA389FBD27D5D856AAC5C10B41D236B9AB693FED2D8085870163DB38F260FB5', similarity_hash = -8495187569707324707 WHERE message_id = 216745 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '281C562025039FB0CE8DE288C7DF72BA1DC2A272ABDE6A28C25835EC0B9A7AAE', similarity_hash = -7844263350450442954 WHERE message_id = 216768 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'ED94519A18C12F3BC6638456FD142189D72CB2BAE9447CDC6F8927C0FC48BDB1', similarity_hash = 7986295867581690769 WHERE message_id = 216783 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '88099DC9FC5A5710423D3BC34C375F71FB68D372E71C825208CAA45248B14942', similarity_hash = 7986295867581690769 WHERE message_id = 216784 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '00660545AAE35F3D594A0423D0BF9756837A9654948698FD1553689AFA992928', similarity_hash = -2938444240729833390 WHERE message_id = 216795 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'F955B65781B727EE2D21D311C653A802FB9D05540D502330A2DF6F26E6FBE2B0', similarity_hash = 1877674126052798301 WHERE message_id = 216804 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '191F1FBF5E88F9B7D5A8300F7BA031E57EB79CD6A61069258E5F80AD9DDE9353', similarity_hash = -7921054785792779003 WHERE message_id = 216961 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '86EE9AC180206ED4DC26D40E2D74935F0362A2EF6F15598C478EBD039B853E22', similarity_hash = -2717773759722428808 WHERE message_id = 217064 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '0D2777E38E310DF9DE358CD301536C5B3ADA96B41D11CDC412CE4155E9342D16', similarity_hash = 7949985595586012049 WHERE message_id = 217217 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '53AA9ABF3530C71D37A8307E32AE899F9D47C8E592CA8033008F53EECF3AE2E9', similarity_hash = 7986295867581690769 WHERE message_id = 217412 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '691F879C8AE01997B67DBBFADB1CD15883E3C4C3E401ED122C315DEEADFA05F6', similarity_hash = 7949985591291044753 WHERE message_id = 217420 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '1737974646B189DFD88BCC824FEE4DC4F9D2A3A5558952581033620D364B0CB5', similarity_hash = 7986295867581690769 WHERE message_id = 217535 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'FBC3EE248CCF0280007DC3DB6B36AC06BF2FFFCB5F5B72E2EA343CC3102A4740', similarity_hash = 7949985595586016145 WHERE message_id = 217557 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '83D0D218453518BB674877D49F0F498361E68E3C155C7EAF92DCA81689923EA4', similarity_hash = 7949985591291048849 WHERE message_id = 217558 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '68838DEFA288FB13EF5FB2313DD80B92324A1B316D6BD93C361178A84BA38E6A', similarity_hash = -2944573304817240763 WHERE message_id = 217577 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '2C97491431798031288EF77270143FA5A10B3F5B299866ED43E7E66D3CBBE528', similarity_hash = -3063698433846287447 WHERE message_id = 217663 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'E69AC3F7C34B00F836903A1BDCDAAC36D9D986ECEA8D1B447586841BB3A8A10A', similarity_hash = -2996549566414201125 WHERE message_id = 217726 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '2A305A04FDC1910B97E6D5402C89729404F6CEE640B21FE738D285A62DAEB5F3', similarity_hash = -6382833760328116751 WHERE message_id = 217766 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '81173DB3BF9CC56A75358833D25583382CCAC16F3D619B379DCF4A309F8A0DAC', similarity_hash = 4764250924758627421 WHERE message_id = 217772 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'AD984DBB48EA1E0431633B4BEDFC98FFEECE8B0A967F4B7DB77562386C3F3575', similarity_hash = -7628034711665958798 WHERE message_id = 217855 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '902CF314079A69803DDB2AF32C78A79D731886B6034489F883E78BD2F932D04C', similarity_hash = -2639806736169767108 WHERE message_id = 217871 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '6C1719F9D850CC36DE83D4BE171D83D69474BE57602887A7815D9A4ED61A9BEF', similarity_hash = -6938702312483015331 WHERE message_id = 217878 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'A01504A1F8C4AFB720767E520CC8DA992BC080A27E487C2196F6969793D03D4E', similarity_hash = -8456688063810783466 WHERE message_id = 217900 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '074F0FFF84DF9AD38E33C12CAD08A848C714A8516EBD52BB4620789AFC93F6C2', similarity_hash = -3314485855381034542 WHERE message_id = 217922 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '64917CBD076811AE814E188A1CBBBD772514E15996ED0C41E30CA57091B1347A', similarity_hash = 4828919054020329601 WHERE message_id = 217938 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '395880B46AE323B1C9BDBCEBD4872D8AC0BF32816980DB64CED7082CEA0B87E4', similarity_hash = -6612548649126228143 WHERE message_id = 218125 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '265C946F5FD04FEAA483A4A1C2BA9594EAD02762DFD762BAF89DFA5BFF33D96C', similarity_hash = 4574274282093785944 WHERE message_id = 218169 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '03B6BCDDBD3B62D1B74C38F0ECAD6BCF250A5F9FD0FA820BB5D92372BA4F4773', similarity_hash = 7986295863286723473 WHERE message_id = 218201 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'D9FFDF92E23A0678DE3921631894E84792EBC06222283268E19397F03B33E50E', similarity_hash = -7900714252431525431 WHERE message_id = 218231 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'C88A301A2259692DB83322EED6373E2643A92D2DBBA69B3B2968089BDA3DE369', similarity_hash = 7986295867581690769 WHERE message_id = 218233 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'D9FFDF92E23A0678DE3921631894E84792EBC06222283268E19397F03B33E50E', similarity_hash = -7900714252431525431 WHERE message_id = 218256 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '0E80D4A8A58467D8DE4BED88DC5768CB67E641731ADD871F6D76CC8B257CF115', similarity_hash = 7986295867581690769 WHERE message_id = 218375 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'EF3E614BCD66BEEE35A69728CDA72033EF51E90C8AB30C648CB758F26A2B6B42', similarity_hash = 7986295867581690769 WHERE message_id = 218387 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'B5D9BDFA83EBA681230F912F7B0DE53B5C27042E705CAB953C9A870D74E4B4C2', similarity_hash = -8975878934288157442 WHERE message_id = 218431 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '13383D1656034510D5BEF62CB212F0755F37C5C83536FFA1449B10C384A519C2', similarity_hash = -6937089192415480613 WHERE message_id = 218454 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '609BF02CAB5B9042262B3B9E1D3B54E371C45DEE0E2D03C85DD622FB2BF4941F', similarity_hash = 6172892347123354853 WHERE message_id = 218579 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '0995EB214398586916C647ADAA8FC1F4ACEB938702E46DC20A1A32756647C946', similarity_hash = -5538337614513296897 WHERE message_id = 218719 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '03661F56332847CFBE909C0DF4E6E510EB0537F542AFE300B071EDF3FCC7A9A0', similarity_hash = -8991202412841977345 WHERE message_id = 218883 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '13242D67D1A7F5C090DDBC75483AF8D5E65C04044F16758C3C249091B78BD559', similarity_hash = -5031492978781017770 WHERE message_id = 218995 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'E8D38469919A9A71786924915250FC3A4130124A06BFCC1705539FD55AD9FC6A', similarity_hash = 7986014388310012817 WHERE message_id = 219218 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '733CC1C70D197D67B89BCD6CFA540F4803652C98464CA817D77BA7EA0B23A4A5', similarity_hash = 7986295867581690769 WHERE message_id = 219219 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'F0AA9DBFAD6080C5F6F4222F1D5286B8D29B22FA1EBCCA38A159A92FE6F32247', similarity_hash = 2413793718778866952 WHERE message_id = 219323 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '23B61671393B77A6CBC6A3312D3CD899B318167673E6A3468C1EDFDD1F6C9A26', similarity_hash = 7986295867581690769 WHERE message_id = 219463 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'F0AA9DBFAD6080C5F6F4222F1D5286B8D29B22FA1EBCCA38A159A92FE6F32247', similarity_hash = 2413793718778866952 WHERE message_id = 219481 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '10385C907000CB2BA86BA578D37EE0535B14C30901B94D9B5649011FCA319508', similarity_hash = 7986295867581690769 WHERE message_id = 219521 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'F0AA9DBFAD6080C5F6F4222F1D5286B8D29B22FA1EBCCA38A159A92FE6F32247', similarity_hash = -7962497612921819683 WHERE message_id = 219586 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'F352E15E71ED669AF7CAB3E334E0CB79D01D383143050478F86BE744E4852B8D', similarity_hash = -2941758739749814796 WHERE message_id = 219610 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '2C3A5BA2A0DE7474E84D352BF2C7E17F1979574D0ADF33FE9BCBDC2C9DF4611F', similarity_hash = 7986295867581686673 WHERE message_id = 219899 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'A4B620A470B7A4D2B1C7A2EC9A30043574058468EB4152CB4A4019F719740AC8', similarity_hash = -5028123400280544391 WHERE message_id = 219971 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '2E4C05EC960DCC494293967419AD0FD0AB27B02975A25C8C026C436DA9327AE7', similarity_hash = 7986295867581690769 WHERE message_id = 220007 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '61F0ECBD22B4FE5E9B269AF615236EB07833DDF22B8255270669ACDFFA22AA1E', similarity_hash = 1637506181868861713 WHERE message_id = 220017 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'F0AA9DBFAD6080C5F6F4222F1D5286B8D29B22FA1EBCCA38A159A92FE6F32247', similarity_hash = -7962497612921819683 WHERE message_id = 220093 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '0317F0A0529840D1BD01F24A4EDFC0F5BEDCF2AA24147FB82E19276682291210', similarity_hash = 7986295867581690769 WHERE message_id = 220134 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '31DEB8B125C2E200834D736ECED340276676E215205C80962E2FDE29A9A89192', similarity_hash = 7950267070562726801 WHERE message_id = 220166 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'BF4291A2A33FD45BC827F97977B031F2925D7DCABAF085C5AA4F3B884FE16F17', similarity_hash = 7986295867581686673 WHERE message_id = 220191 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'A582BF6F734BF97575E9409CCA51FEC3209080BA192CD13D74A5A3621CE7D13A', similarity_hash = -4203399081150816174 WHERE message_id = 220224 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'F7BD4B68FF87F8CEF2B4AB67DF000A0DFD4EBE488F18156974A2148E4E18B8C4', similarity_hash = -2951943961359435315 WHERE message_id = 220364 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'E8D5222A645DC194FE4621A63872268044438CF6BB64E655A348D02DB53CDD10', similarity_hash = 1023396881790083265 WHERE message_id = 220384 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '73729A308A153A9D4950938F442F9BCEF4043E4D19B00615B65C36875D315513', similarity_hash = 7986295867581690769 WHERE message_id = 220392 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '184507EDB1E01F2A7864D112F00629D050EA0647B05C5DD7ABABB08CA277035E', similarity_hash = -4743531157305968293 WHERE message_id = 220534 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'DEC4EA20C2AEC9251D61002C7A524969494BF349BF9BD54427748A86BC89ED51', similarity_hash = -4749171103608887936 WHERE message_id = 220560 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '516C309AFF6A214B33345F36126A9211E2295D8B1E2BC17E6A0395186A851000', similarity_hash = 1015673515613537757 WHERE message_id = 220573 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '23C7D856A05D6886A87449B8EE52C5A4F170FC83E791EB011597CEAF0A4F95D2', similarity_hash = 554768396062213569 WHERE message_id = 220631 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '090F977A7C0954C69501FBC59CA9A215D40D324799F074D25350883FEA283FE8', similarity_hash = 1381486342177926105 WHERE message_id = 220750 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'FF0921F1F7896683BF5C3EFC5DDC8733F0DBDED567B4F3385B92D8884DE30E9F', similarity_hash = -4096439433366786795 WHERE message_id = 220885 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '46A5AA4A59D4100A2C98B577FD499C8E8A140FAB203F7A99E414059CFC253837', similarity_hash = -7964186499274801699 WHERE message_id = 220964 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'E1388AFBBB89F78188FEFE165DA1743AC3D575193119A2BD68FE83AAB84E4705', similarity_hash = 7986295867581690769 WHERE message_id = 221030 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '46A5AA4A59D4100A2C98B577FD499C8E8A140FAB203F7A99E414059CFC253837', similarity_hash = -7964186499274801699 WHERE message_id = 221095 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '46A5AA4A59D4100A2C98B577FD499C8E8A140FAB203F7A99E414059CFC253837', similarity_hash = -7964186499274801699 WHERE message_id = 221125 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '50D5EB940B7DCF35B55CA7C1552C25326663AEBC95E2F8D685EFBE33EADEA134', similarity_hash = -2775757474286588902 WHERE message_id = 221139 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '00660545AAE35F3D594A0423D0BF9756837A9654948698FD1553689AFA992928', similarity_hash = -2938444240729833390 WHERE message_id = 221234 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'BFC4BF793267ECED5FE7FEC3DDB987F61FFD0A2CFB2AE7CC1C5C8A056FFDC8AC', similarity_hash = -7964185399763173923 WHERE message_id = 221339 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '5FEF96554E3D1B5E6ACEAC818D18207CB7CE77ABACE1A5C9982610FC95BF5164', similarity_hash = 7986295867581686673 WHERE message_id = 221367 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'BFC4BF793267ECED5FE7FEC3DDB987F61FFD0A2CFB2AE7CC1C5C8A056FFDC8AC', similarity_hash = -7964185399763173923 WHERE message_id = 221385 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '3E341ADF63A78118F4297BF6C80BA8DE2CC49F400ACF15F1C75E182FAD30EBFF', similarity_hash = 7950267066267759505 WHERE message_id = 221452 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '50D5EB940B7DCF35B55CA7C1552C25326663AEBC95E2F8D685EFBE33EADEA134', similarity_hash = -2343411910042243750 WHERE message_id = 221506 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'F1FD01A0F3FF71D900C783AC776E7F3C32688D9BC6E19B646FB2D0B412034B29', similarity_hash = -7501990194037956496 WHERE message_id = 221519 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '72678EC1B354F3A3187FDFA159A35E2737B08CEC203DF6A8407E7438F587C87C', similarity_hash = -7241852049529914249 WHERE message_id = 221604 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '7A278889DD3483DA4485BB4DC2838B4C53D5D0309D328F830321569F1EC93D4C', similarity_hash = 7986295863286723473 WHERE message_id = 221698 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'E9E58AA0458DD98C1B0925B1E40546814B1BA17B94BD72E77CD7B104954C8A0B', similarity_hash = 7986295867581690769 WHERE message_id = 221745 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '4180CEAEDF9CB283E6352B988E5BADDB3E3DCF94E72BB3F7FF0AABD898F2EC5B', similarity_hash = 7950267066267759505 WHERE message_id = 221746 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '2656D79C45D60D1D42316033BB4E1B5462E7B81A966961522F1601CD1BB86A91', similarity_hash = 7949985591291044753 WHERE message_id = 221932 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'F1FD01A0F3FF71D900C783AC776E7F3C32688D9BC6E19B646FB2D0B412034B29', similarity_hash = -7501990194037956496 WHERE message_id = 222020 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '8896052B2265741CC0F03EAE2D3FF48CFB776BCFC94E2EA786254D379909B1F0', similarity_hash = -3592451470862861057 WHERE message_id = 222092 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'C15FDE3C007F2C4506534ABD7F8E46C4881F5F999CCD531C1B52B5AC2F01BA50', similarity_hash = -5612726744456958566 WHERE message_id = 222403 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '5D0C74780E6AB63F14F55BFFF16D742AD838C7A47EC974E3C879BB347F72B836', similarity_hash = -6467302139245644800 WHERE message_id = 222552 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'D96AAA9408A9F36C734341FB79DEE649D2E993D64704EC3062B3004B0BE5BCEE', similarity_hash = 6333623623279568085 WHERE message_id = 222578 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'E789842145DD40FDD2972D6BD22D4016FB7C4D4844089E3732265D66DB04EBE2', similarity_hash = 7986295867581690769 WHERE message_id = 222636 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '5FAA280A2F3358F8283FF1641A136D1E03CE15434CB6D14D232AA6E0BD80474F', similarity_hash = -8454587188306023978 WHERE message_id = 222706 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'D44CC7785180D888AFD614566D3D98A5C7AD64982138644D364016864DD4E79F', similarity_hash = -6760179930054043190 WHERE message_id = 222716 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'F48F6F17F9DF761AC1D4EF4CE55F51123D6AFF2ECF9A7AFCC4CABE3D837654FA', similarity_hash = -6621764135463772909 WHERE message_id = 222790 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'F48F6F17F9DF761AC1D4EF4CE55F51123D6AFF2ECF9A7AFCC4CABE3D837654FA', similarity_hash = -6621764135463772909 WHERE message_id = 222793 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'C15FDE3C007F2C4506534ABD7F8E46C4881F5F999CCD531C1B52B5AC2F01BA50', similarity_hash = -5612726744456958566 WHERE message_id = 222808 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'C15FDE3C007F2C4506534ABD7F8E46C4881F5F999CCD531C1B52B5AC2F01BA50', similarity_hash = -5612726744456958566 WHERE message_id = 222818 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = 'E53C9131666337BC83DD5570102416DB79F5F0F2319D0E88193A5C640EA18A62', similarity_hash = 7986295867581690769 WHERE message_id = 222863 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '567E64505B6163BCBE3C1D435B3C68995A255B60598410D1AF65DC5DE2D43BB3', similarity_hash = -7499738394224271247 WHERE message_id = 222922 AND chat_id = -100026957614982;
+UPDATE messages SET content_hash = '7B3D4AF012A061E31D8F806273E1B79B24E6DC41E1CD885930A387267E6170E9', similarity_hash = -4113107816996298699 WHERE message_id = 223002 AND chat_id = -100026957614982;
