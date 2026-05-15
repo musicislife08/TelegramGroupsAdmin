@@ -23,17 +23,37 @@ namespace TelegramGroupsAdmin.IntegrationTests.Jobs;
 
 /// <summary>
 /// Integration tests for WelcomeTimeoutJob.
-/// Validates the full job execution path using real PostgreSQL (via Testcontainers)
-/// for database state assertions. Telegram API dependencies (IBotModerationService,
-/// IBotMessageService) are mocked with NSubstitute.
+/// Uses the canonical golden template clone for DB state; Telegram API
+/// dependencies (IBotModerationService, IBotMessageService) are mocked.
 /// </summary>
 [TestFixture]
 public class WelcomeTimeoutJobTests
 {
-    // ── test constants ────────────────────────────────────────────────────────
-    private const long TestChatId = -1001234567890L;
-    private const long TestUserId = 987654321L;
-    private const int TestWelcomeMessageId = 42;
+    // ── canonical anchors ─────────────────────────────────────────────────────
+    // Synthetic welcome-flow target user. Canonical telegram_users carries this
+    // row; canonical welcome_responses 999001..999005 are pinned to it.
+    private const long WelcomeUserId = 9196379650113L;
+    private const long MainChatId = -100026957614982L;
+
+    // welcome_responses anchors (canonical id → welcome_message_id → response):
+    //   999001 → 99001 → Pending
+    //   999002 → 99002 → Accepted
+    //   999003 → 99003 → Denied
+    //   999004 → 99004 → Timeout
+    //   999005 → 99005 → Left
+    private const int PendingWelcomeMsgId = 99001;
+    private const int AcceptedWelcomeMsgId = 99002;
+    private const int DeniedWelcomeMsgId = 99003;
+    private const int TimeoutWelcomeMsgId = 99004;
+    private const int LeftWelcomeMsgId = 99005;
+
+    // Deliberately not in canonical — used by "no matching row" tests.
+    private const int NonExistentWelcomeMsgId = 99099;
+
+    // Second-most-active canonical chat; carries no welcome_responses for
+    // WelcomeUserId, so payloads addressed here against the canonical Pending
+    // anchor's user/message-id miss the WHERE clause.
+    private const long WorkshopAlumniChatId = -100059667856554L;
 
     // ── infrastructure ────────────────────────────────────────────────────────
     private MigrationTestHelper? _testHelper;
@@ -53,7 +73,7 @@ public class WelcomeTimeoutJobTests
     public async Task SetUp()
     {
         _testHelper = new MigrationTestHelper();
-        await _testHelper.CreateDatabaseAndApplyMigrationsAsync();
+        await _testHelper.CreateDatabaseFromGoldenTemplateAsync();
 
         var services = new ServiceCollection();
 
@@ -83,59 +103,6 @@ public class WelcomeTimeoutJobTests
 
     // ── helpers ───────────────────────────────────────────────────────────────
 
-    /// <summary>
-    /// Ensures a TelegramUserDto parent row exists for the given userId.
-    /// Required because welcome_responses has an FK to telegram_users.
-    /// </summary>
-    private async Task EnsureTelegramUserExistsAsync(long userId)
-    {
-        await using var context = ContextFactory.CreateDbContext();
-        var exists = await context.TelegramUsers.AnyAsync(u => u.TelegramUserId == userId);
-        if (exists) return;
-
-        context.TelegramUsers.Add(new TelegramUserDto
-        {
-            TelegramUserId = userId,
-            FirstName = "Test",
-            LastName = "User",
-            FirstSeenAt = DateTimeOffset.UtcNow,
-            LastSeenAt = DateTimeOffset.UtcNow,
-            CreatedAt = DateTimeOffset.UtcNow,
-            UpdatedAt = DateTimeOffset.UtcNow
-        });
-        await context.SaveChangesAsync();
-    }
-
-    /// <summary>
-    /// Seeds a WelcomeResponseDto directly via AppDbContext and returns its generated ID.
-    /// Automatically creates the prerequisite telegram_users row if needed.
-    /// </summary>
-    private async Task<long> SeedWelcomeResponseAsync(
-        WelcomeResponseType responseType,
-        long chatId = TestChatId,
-        long userId = TestUserId,
-        int welcomeMessageId = TestWelcomeMessageId)
-    {
-        await EnsureTelegramUserExistsAsync(userId);
-
-        await using var context = ContextFactory.CreateDbContext();
-        var dto = new WelcomeResponseDto
-        {
-            ChatId = chatId,
-            UserId = userId,
-            WelcomeMessageId = welcomeMessageId,
-            Response = responseType,
-            RespondedAt = DateTimeOffset.UtcNow,
-            CreatedAt = DateTimeOffset.UtcNow
-        };
-        context.WelcomeResponses.Add(dto);
-        await context.SaveChangesAsync();
-        return dto.Id;
-    }
-
-    /// <summary>
-    /// Builds a WelcomeTimeoutJob using the real ContextFactory and the mock services.
-    /// </summary>
     private WelcomeTimeoutJob BuildJob() =>
         new WelcomeTimeoutJob(
             _mockLogger!,
@@ -146,9 +113,6 @@ public class WelcomeTimeoutJobTests
             new JobMetrics(),
             new WelcomeMetrics());
 
-    /// <summary>
-    /// Creates a mock IJobExecutionContext whose MergedJobDataMap contains the given payload.
-    /// </summary>
     private static IJobExecutionContext BuildJobContext(WelcomeTimeoutPayload payload)
     {
         var payloadJson = JsonSerializer.Serialize(payload);
@@ -170,13 +134,10 @@ public class WelcomeTimeoutJobTests
         return context;
     }
 
-    /// <summary>
-    /// Convenience payload for the standard test user/chat/message triple.
-    /// </summary>
     private static WelcomeTimeoutPayload BuildPayload(
-        long chatId = TestChatId,
-        long userId = TestUserId,
-        int welcomeMessageId = TestWelcomeMessageId) =>
+        long chatId = MainChatId,
+        long userId = WelcomeUserId,
+        int welcomeMessageId = PendingWelcomeMsgId) =>
         new WelcomeTimeoutPayload(
             User: UserIdentity.FromId(userId),
             Chat: ChatIdentity.FromId(chatId),
@@ -191,8 +152,8 @@ public class WelcomeTimeoutJobTests
     [Test]
     public async Task Execute_ResponseNotFound_EarlyReturn_NoKick()
     {
-        // Arrange — no database row seeded
-        var payload = BuildPayload();
+        // Arrange — payload targets a welcome_message_id deliberately absent from canonical
+        var payload = BuildPayload(welcomeMessageId: NonExistentWelcomeMsgId);
         var context = BuildJobContext(payload);
         var job = BuildJob();
 
@@ -207,8 +168,8 @@ public class WelcomeTimeoutJobTests
         await _mockMessageService!
             .Received(1)
             .DeleteAndMarkMessageAsync(
-                TestChatId,
-                TestWelcomeMessageId,
+                MainChatId,
+                NonExistentWelcomeMsgId,
                 "welcome_timeout_cleanup",
                 Arg.Any<CancellationToken>());
     }
@@ -217,26 +178,37 @@ public class WelcomeTimeoutJobTests
     /// When the WelcomeResponse row exists but has already transitioned out of Pending
     /// (e.g., Accepted), the job should skip — the user has already responded.
     /// </summary>
-    [TestCase(WelcomeResponseType.Accepted)]
-    [TestCase(WelcomeResponseType.Denied)]
-    [TestCase(WelcomeResponseType.Left)]
-    [TestCase(WelcomeResponseType.Timeout)]
-    public async Task Execute_ResponseNotPending_EarlyReturn_NoKick(WelcomeResponseType responseType)
+    [TestCase(WelcomeResponseType.Accepted, AcceptedWelcomeMsgId)]
+    [TestCase(WelcomeResponseType.Denied, DeniedWelcomeMsgId)]
+    [TestCase(WelcomeResponseType.Left, LeftWelcomeMsgId)]
+    [TestCase(WelcomeResponseType.Timeout, TimeoutWelcomeMsgId)]
+    public async Task Execute_ResponseNotPending_EarlyReturn_NoKick(
+        WelcomeResponseType responseType,
+        int welcomeMessageId)
     {
-        // Arrange
-        await SeedWelcomeResponseAsync(responseType);
-
-        var payload = BuildPayload();
+        // Arrange — canonical already carries the pre-baked non-Pending row
+        var payload = BuildPayload(welcomeMessageId: welcomeMessageId);
         var context = BuildJobContext(payload);
         var job = BuildJob();
 
         // Act
         await job.Execute(context);
 
-        // Assert
+        // Assert — no kick
         await _mockModerationService!
             .DidNotReceive()
             .KickUserFromChatAsync(Arg.Any<KickIntent>(), Arg.Any<CancellationToken>());
+
+        // Assert — the pre-existing non-Pending status was NOT mutated to Timeout
+        await using var verifyContext = ContextFactory.CreateDbContext();
+        var actualResponse = await verifyContext.WelcomeResponses
+            .Where(r => r.ChatId == MainChatId
+                        && r.UserId == WelcomeUserId
+                        && r.WelcomeMessageId == welcomeMessageId)
+            .Select(r => r.Response)
+            .FirstAsync();
+        Assert.That(actualResponse, Is.EqualTo(responseType),
+            "Non-Pending row should not be mutated by the job");
     }
 
     /// <summary>
@@ -246,9 +218,7 @@ public class WelcomeTimeoutJobTests
     [Test]
     public async Task Execute_ResponsePending_KicksUserAndUpdatesResponse()
     {
-        // Arrange
-        await SeedWelcomeResponseAsync(WelcomeResponseType.Pending);
-
+        // Arrange — canonical 999001 is Pending at (MainChatId, WelcomeUserId, 99001)
         var payload = BuildPayload();
         var context = BuildJobContext(payload);
         var job = BuildJob();
@@ -263,25 +233,25 @@ public class WelcomeTimeoutJobTests
             .Received(1)
             .KickUserFromChatAsync(
                 Arg.Is<KickIntent>(intent =>
-                    intent.User.Id == TestUserId
-                    && intent.Chat.Id == TestChatId),
+                    intent.User.Id == WelcomeUserId
+                    && intent.Chat.Id == MainChatId),
                 Arg.Any<CancellationToken>());
 
         // Assert — welcome message deletion was called with correct chatId and messageId
         await _mockMessageService!
             .Received(1)
             .DeleteAndMarkMessageAsync(
-                TestChatId,
-                TestWelcomeMessageId,
+                MainChatId,
+                PendingWelcomeMsgId,
                 "welcome_timeout",
                 Arg.Any<CancellationToken>());
 
         // Assert — database row is now Timeout with a fresh RespondedAt
-        await using var context2 = ContextFactory.CreateDbContext();
-        var updated = await context2.WelcomeResponses
-            .Where(r => r.ChatId == TestChatId
-                        && r.UserId == TestUserId
-                        && r.WelcomeMessageId == TestWelcomeMessageId)
+        await using var verifyContext = ContextFactory.CreateDbContext();
+        var updated = await verifyContext.WelcomeResponses
+            .Where(r => r.ChatId == MainChatId
+                        && r.UserId == WelcomeUserId
+                        && r.WelcomeMessageId == PendingWelcomeMsgId)
             .FirstOrDefaultAsync();
 
         using (Assert.EnterMultipleScope())
@@ -302,9 +272,7 @@ public class WelcomeTimeoutJobTests
     [Test]
     public async Task Execute_KickThrows_StillDeletesMessageAndUpdatesResponse()
     {
-        // Arrange
-        await SeedWelcomeResponseAsync(WelcomeResponseType.Pending);
-
+        // Arrange — canonical 999001 is Pending; force the kick to throw
         _mockModerationService!
             .KickUserFromChatAsync(Arg.Any<KickIntent>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("Telegram API error: user not found"));
@@ -320,17 +288,17 @@ public class WelcomeTimeoutJobTests
         await _mockMessageService!
             .Received(1)
             .DeleteAndMarkMessageAsync(
-                TestChatId,
-                TestWelcomeMessageId,
+                MainChatId,
+                PendingWelcomeMsgId,
                 "welcome_timeout",
                 Arg.Any<CancellationToken>());
 
         // Assert — response row transitioned to Timeout regardless of kick outcome
         await using var verifyContext = ContextFactory.CreateDbContext();
         var updated = await verifyContext.WelcomeResponses
-            .Where(r => r.ChatId == TestChatId
-                        && r.UserId == TestUserId
-                        && r.WelcomeMessageId == TestWelcomeMessageId)
+            .Where(r => r.ChatId == MainChatId
+                        && r.UserId == WelcomeUserId
+                        && r.WelcomeMessageId == PendingWelcomeMsgId)
             .FirstOrDefaultAsync();
 
         using (Assert.EnterMultipleScope())
@@ -348,12 +316,8 @@ public class WelcomeTimeoutJobTests
     [Test]
     public async Task Execute_PendingRowForDifferentChat_EarlyReturn_NoKick()
     {
-        // Arrange — seed a pending row with a different chat ID
-        const long differentChatId = -9999999999L;
-        await SeedWelcomeResponseAsync(WelcomeResponseType.Pending, chatId: differentChatId);
-
-        // Payload targets the original chat — no matching row
-        var payload = BuildPayload(chatId: TestChatId);
+        // Arrange — canonical 999001 Pending row lives in MainChat; query a different chat
+        var payload = BuildPayload(chatId: WorkshopAlumniChatId);
         var context = BuildJobContext(payload);
         var job = BuildJob();
 
@@ -373,14 +337,8 @@ public class WelcomeTimeoutJobTests
     [Test]
     public async Task Execute_PendingRowForDifferentMessageId_EarlyReturn_NoKick()
     {
-        // Arrange — seed a pending row with a different welcome message ID
-        const int differentMessageId = 9999;
-        await SeedWelcomeResponseAsync(
-            WelcomeResponseType.Pending,
-            welcomeMessageId: differentMessageId);
-
-        // Payload targets the original message — no matching row
-        var payload = BuildPayload(welcomeMessageId: TestWelcomeMessageId);
+        // Arrange — canonical 999001 Pending row is at welcome_message_id 99001; query 99099
+        var payload = BuildPayload(welcomeMessageId: NonExistentWelcomeMsgId);
         var context = BuildJobContext(payload);
         var job = BuildJob();
 
@@ -400,11 +358,9 @@ public class WelcomeTimeoutJobTests
     [Test]
     public async Task Execute_PendingWithActiveExamSession_DefersToExamFlow_NoKick()
     {
-        // Arrange — pending welcome response + active exam session
-        await SeedWelcomeResponseAsync(WelcomeResponseType.Pending);
-
+        // Arrange — canonical 999001 Pending + mock returns active exam session
         _mockExamSessionRepository!
-            .HasActiveSessionAsync(TestChatId, TestUserId, Arg.Any<CancellationToken>())
+            .HasActiveSessionAsync(MainChatId, WelcomeUserId, Arg.Any<CancellationToken>())
             .Returns(true);
 
         var payload = BuildPayload();
@@ -430,9 +386,9 @@ public class WelcomeTimeoutJobTests
         // Assert — welcome response remains Pending (not changed to Timeout)
         await using var verifyContext = ContextFactory.CreateDbContext();
         var response = await verifyContext.WelcomeResponses
-            .Where(r => r.ChatId == TestChatId
-                        && r.UserId == TestUserId
-                        && r.WelcomeMessageId == TestWelcomeMessageId)
+            .Where(r => r.ChatId == MainChatId
+                        && r.UserId == WelcomeUserId
+                        && r.WelcomeMessageId == PendingWelcomeMsgId)
             .FirstOrDefaultAsync();
 
         Assert.That(response, Is.Not.Null);
@@ -447,9 +403,7 @@ public class WelcomeTimeoutJobTests
     [Test]
     public async Task Execute_PendingWithNoExamSession_KicksUser()
     {
-        // Arrange — pending welcome response, no active exam session (default mock returns false)
-        await SeedWelcomeResponseAsync(WelcomeResponseType.Pending);
-
+        // Arrange — canonical 999001 Pending; default mock returns no active exam session
         var payload = BuildPayload();
         var context = BuildJobContext(payload);
         var job = BuildJob();
@@ -462,8 +416,8 @@ public class WelcomeTimeoutJobTests
             .Received(1)
             .KickUserFromChatAsync(
                 Arg.Is<KickIntent>(intent =>
-                    intent.User.Id == TestUserId
-                    && intent.Chat.Id == TestChatId),
+                    intent.User.Id == WelcomeUserId
+                    && intent.Chat.Id == MainChatId),
                 Arg.Any<CancellationToken>());
     }
 }
