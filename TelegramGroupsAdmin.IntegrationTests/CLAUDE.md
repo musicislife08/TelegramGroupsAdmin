@@ -40,7 +40,7 @@ Origin: prod DB snapshot from 2026-04-30. Bootstrap pipeline (full detail in `do
 | 16 | video_training_samples | 0 | Empty by design (no payloads carried). |
 | 17 | web_notifications | 0 | Empty by design. |
 | 18 | notification_preferences | 5 | One per active web user. |
-| 19 | messages | 400 | 100 per slice: explicit_spam, implicit_spam, explicit_ham, implicit_ham. |
+| 19 | messages | 407 | 100 per slice: explicit_spam, implicit_spam, explicit_ham, implicit_ham. Plus 7 SimHash test anchors appended in 3A.3 (4666, 14538, 212355, 220848, 221429, 221904, 222949) — all banned-user spam from dev DB, preserved verbatim, FK-resolved against existing canonical telegram_users and MainChat. |
 | 20 | chat_admins | 104 | Snapshot of admin membership across all 21 chats. |
 | 21 | linked_channels | 3 | One per chat that has a linked channel. |
 | 22 | telegram_user_mappings | 3 | Cross-chat user identity links. |
@@ -253,7 +253,7 @@ Recipe format: a heading, the anchor id(s), a one-line description, and "use whe
 
 If a Phase 3A test rewrite needs one of these, the option is (a) extend canonical with a follow-up bootstrap pass, or (b) seed inline in the test setup.
 
-- **SimHash deduplication messages (IDs 95001..95022):** the named near-duplicate group structure (Group1 crypto signals 95001..95004, Group2 investment scams 95005..95007, Group3 giveaway scams 95008..95010, Groups 4..7 for additional spam/ham variants) is referenced by `Deduplication/SimHashComparisonTests.cs:124` but NOT present in canonical. The legacy `SQL.30_dedup_test_data.sql` (loaded via `GoldenDataset.SeedDeduplicationTestDataAsync`) still carries them as a separate seed.
+- **SimHash deduplication messages (IDs 95001..95022):** ✅ RESOLVED in 3A.3 by a different approach — canonical was extended with real prod near-duplicate clusters (banned-user spam campaigns) instead of the original 95001..95022 synthetic groups. The test now uses cluster `220848/221429/221904/222949` (recruitment-spam variants, all pairwise SimHash ≤ 10) for `SimHash_DetectsNearDuplicates_InRecruitmentSpamCluster`, anchor `212355` for the bit_count query test, and `20849/4666/221139/14538` for `SimHash_DistinguishesDifferentGroups`. Legacy `SQL.30_dedup_test_data.sql` may be retired in Phase 4 cleanup.
 - **Analytics time-spread data:** `AnalyticsRepositoryTests.cs:78` aggregates over daily/weekly/monthly/7-day/30-day/365-day windows. Canonical does not pre-shift timestamps for this; tests still rely on legacy `SQL.50_analytics_test_data.sql` via `GoldenDataset.SeedAnalyticsDataAsync`. Phase 3A migration here will need either a UPDATE-on-load pass or a `Reduce` plan that injects time-shifted rows.
 - **Ban-celebration `{bancount}` anchors:** see Synthetic / reserved rows note above.
 - **Welcome-response slice anchor pinned to a specific welcome_message_id constant:** `WelcomeTimeoutJobTests.cs:113` wants a Pending row at `(MainChat, User1, WelcomeMessageId=<new constant>)` plus variants for the 4 other statuses. Canonical's synthetic 999001..999005 set is anchored on user `9196379650113` instead of legacy `User1`; the welcome_message_ids are `99001..99005` (sequential synthetic ids). Phase 3A may need to confirm those welcome_message_ids do not collide with any messages.message_id in canonical (currently they don't: canonical message_ids are 5-7 digits in the legacy ranges, with synthetic ids reserved at 999xxx).

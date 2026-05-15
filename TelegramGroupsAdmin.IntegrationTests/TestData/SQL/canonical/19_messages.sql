@@ -1912,3 +1912,63 @@ Zero manual work and no missed leads.
 Your website should work for you 24/7, not be an expensive brochure decoration.
 Email 📧: spam@canonical.test
  WhatsApp 💬: +15555550199', 'AgACAgQAAx0CUAkc8wACEgxpYJqnGkRBwNteFlpGXu-8dkWc3wACOwtrG1NDCFN9pqvf-4PBoQEAAwIAA3gAAzgE', 83935, NULL, NULL, NULL, 'full/-1001342774515/4620.jpg', 'thumbs/-1001342774515/4620.jpg', '2026-01-09 06:05:46.809304+00', 'moderation_action', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL);
+INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, photo_file_id, photo_file_size, urls, edit_date, content_hash, photo_local_path, photo_thumbnail_path, deleted_at, deletion_source, reply_to_message_id, media_type, media_file_id, media_file_size, media_file_name, media_mime_type, media_local_path, media_duration, content_check_skip_reason, similarity_hash) VALUES (4666, 9971261287520, -100026957614982, '2026-02-01 23:50:25.164705+00', '🚀 Shopify & Payment Gateway Expert
+I offer professional Shopify services including:
+✅ Shopify store setup & customization
+✅ Payment gateway integration (PayPal, Paystack, Stripe, Flutterwave, etc.)
+✅ Store optimization & checkout fixes
+✅ Currency & country-based payment setup
+💬 Ready to start or fix your store?
+Send me a message.@prodev2d', NULL, NULL, NULL, NULL, 'EB361AABA57F501FB652058F6BDFE44B1BEA44DF8A752E78D88C7E8709FF6210', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, 1940462222735837131);
+INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, photo_file_id, photo_file_size, urls, edit_date, content_hash, photo_local_path, photo_thumbnail_path, deleted_at, deletion_source, reply_to_message_id, media_type, media_file_id, media_file_size, media_file_name, media_mime_type, media_local_path, media_duration, content_check_skip_reason, similarity_hash) VALUES (14538, 9875141377477, -100026957614982, '2026-03-19 21:03:25.483367+00', 'Stop working harder. Start working smarter.
+To start working smarter, you need a helper that knows no boundaries – WORMGPT.
+With WORMGPT, you won''t see any problems.
+When writing Trojan code
+When writing hacker tools
+WORMGPT is your best friend
+To buy at a reasonable price —>@Commander_of_the_Guard', NULL, NULL, NULL, NULL, '1DD248B5F5C0CE246074400A540DDEBF8BD23B432D62800F9E8EB74AC7B74DA1', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, 2415543793079794295);
+INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, photo_file_id, photo_file_size, urls, edit_date, content_hash, photo_local_path, photo_thumbnail_path, deleted_at, deletion_source, reply_to_message_id, media_type, media_file_id, media_file_size, media_file_name, media_mime_type, media_local_path, media_duration, content_check_skip_reason, similarity_hash) VALUES (212355, 9971261287520, -100026957614982, '2025-11-29 22:27:12.91349+00', 'Hello I have a good platform that you can earn from daily they offer 2.0% hourly you can withdraw your profit daily you can also withdraw your capital at the end of 5days if you are interested inbox me privately for the platform link', NULL, NULL, NULL, NULL, '584F1D2D5F7E58BD0B8C51932142863018B7DA7B06B33BF9BD97F2C78BB4E57E', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, -7583917519576518408);
+INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, photo_file_id, photo_file_size, urls, edit_date, content_hash, photo_local_path, photo_thumbnail_path, deleted_at, deletion_source, reply_to_message_id, media_type, media_file_id, media_file_size, media_file_name, media_mime_type, media_local_path, media_duration, content_check_skip_reason, similarity_hash) VALUES (220848, 9971261287520, -100026957614982, '2026-03-24 14:03:24.637044+00', 'I’m looking for some motivated people.
+
+What I offer:
+• 100% online earnings.
+• All you need is a smartphone.
+• Average actual earnings: ~€1,500 per week.
+
+Spots are very limited - there are only a few left.
+
+Want to know what this is all about?
+→ Just send a private message with “+” to 👉 @realewan', NULL, NULL, NULL, NULL, '8C87CF797669D887BA434CC7E94770F5BC1220C4C9D9E1FBBA1C4485F1E9F14D', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, -2945030440423700578);
+INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, photo_file_id, photo_file_size, urls, edit_date, content_hash, photo_local_path, photo_thumbnail_path, deleted_at, deletion_source, reply_to_message_id, media_type, media_file_id, media_file_size, media_file_name, media_mime_type, media_local_path, media_duration, content_check_skip_reason, similarity_hash) VALUES (221429, 9875141377477, -100026957614982, '2026-04-01 13:27:19.391671+00', 'I’m looking for some motivated people.
+
+What I offer:
+• 100% online earnings.
+• All you need is a smartphone.
+• Average actual earnings: ~€1,500 per week.
+
+Spots are very limited - there are only a few left.
+
+Want to know what this is all about?
+→ Just send a private message with “+” to 👉 @Raymond_Martinez', NULL, NULL, NULL, NULL, '179EA4211135D1F949048C699758018B1475A8275F8B7A1352D0C251492AFDE4', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, -4092322617429244514);
+INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, photo_file_id, photo_file_size, urls, edit_date, content_hash, photo_local_path, photo_thumbnail_path, deleted_at, deletion_source, reply_to_message_id, media_type, media_file_id, media_file_size, media_file_name, media_mime_type, media_local_path, media_duration, content_check_skip_reason, similarity_hash) VALUES (221904, 9971261287520, -100026957614982, '2026-04-08 20:13:19.463098+00', 'I’m looking for some motivated people.
+
+What I offer:
+• 100% online earnings.
+• All you need is a smartphone.
+• Average actual earnings: ~€1,500 per week.
+
+Spots are very limited - there are only a few left.
+
+Want to know what this is all about?
+→ Just send a private message with “+” to 👉 @Alejandro_Bitriago', NULL, NULL, NULL, NULL, '63703CDFA7BF8C89F5ECCD36571986A6C266DF599D889EA6B7F77082504C69A1', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, -4070930796224624738);
+INSERT INTO messages (message_id, user_id, chat_id, "timestamp", message_text, photo_file_id, photo_file_size, urls, edit_date, content_hash, photo_local_path, photo_thumbnail_path, deleted_at, deletion_source, reply_to_message_id, media_type, media_file_id, media_file_size, media_file_name, media_mime_type, media_local_path, media_duration, content_check_skip_reason, similarity_hash) VALUES (222949, 9875141377477, -100026957614982, '2026-04-28 12:44:39.652324+00', 'I’m looking for some motivated people.
+
+What I offer:
+• 100% online earnings.
+• All you need is a smartphone.
+• Average actual earnings: ~€1,500 per week.
+
+Spots are very limited - there are only a few left.
+
+Want to know what this is all about?
+→ Just send a private message with “+” to 👉 @ashhley_1', NULL, NULL, NULL, NULL, '982FF48ADFF517B063236C8FF64B97968E608BFE82A4D55FE8C93E6216EF38F9', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, -2903372178231310946);
