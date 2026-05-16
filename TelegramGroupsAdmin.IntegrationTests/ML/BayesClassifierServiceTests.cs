@@ -7,7 +7,6 @@ using TelegramGroupsAdmin.ContentDetection.Extensions;
 using TelegramGroupsAdmin.ContentDetection.ML;
 using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Data;
-using TelegramGroupsAdmin.IntegrationTests.TestData;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
 
 namespace TelegramGroupsAdmin.IntegrationTests.ML;
@@ -30,10 +29,10 @@ namespace TelegramGroupsAdmin.IntegrationTests.ML;
 /// - Classify with null/empty/special chars: Returns valid results after training
 /// - TrainAsync with pre-cancelled token: Throws TaskCanceledException
 ///
-/// GoldenDataset Training Data:
-/// - 3 spam labels: Label1 (Msg1), Label2 (Msg2), Label5 (Msg5)
-/// - 2 ham labels: Label3 (Msg3), Label4 (Msg4)
-/// - MLTrainingData.sql adds 20 spam + 20 ham — total 23 spam + 22 ham
+/// Training Data Substrate:
+/// - Database cloned from the canonical golden_template (`33_training_labels.sql`),
+///   which ships 100 spam (label=0) + 100 ham (label=1) — both classes comfortably
+///   above MLConstants.MinimumSamplesPerClass = 20.
 /// </summary>
 [TestFixture]
 public class BayesClassifierServiceTests
@@ -41,13 +40,12 @@ public class BayesClassifierServiceTests
     private MigrationTestHelper? _testHelper;
     private IServiceProvider? _serviceProvider;
     private IBayesClassifierService? _bayesService;
-    private AppDbContext? _context;
 
     [SetUp]
     public async Task SetUp()
     {
         _testHelper = new MigrationTestHelper();
-        await _testHelper.CreateDatabaseAndApplyMigrationsAsync();
+        await _testHelper.CreateDatabaseFromGoldenTemplateAsync();
 
         var services = new ServiceCollection();
         services.AddDbContextFactory<AppDbContext>(options =>
@@ -73,19 +71,11 @@ public class BayesClassifierServiceTests
 
         _serviceProvider = services.BuildServiceProvider();
         _bayesService = _serviceProvider.GetRequiredService<IBayesClassifierService>();
-
-        // Seed GoldenDataset (23 spam + 22 ham from combined scripts)
-        _context = _testHelper.GetDbContext();
-        await GoldenDataset.SeedAsync(_context);
     }
 
     [TearDown]
-    public async Task TearDown()
+    public void TearDown()
     {
-        if (_context != null)
-        {
-            await _context.DisposeAsync();
-        }
         _testHelper?.Dispose();
         (_bayesService as IDisposable)?.Dispose();
         (_serviceProvider as IDisposable)?.Dispose();
@@ -96,7 +86,7 @@ public class BayesClassifierServiceTests
     [Test]
     public async Task TrainAsync_SufficientData_MetadataReflectsCorrectSampleCounts()
     {
-        // Arrange — GoldenDataset provides 23 spam + 22 ham from combined scripts
+        // Arrange — canonical template clone provides 100 spam + 100 ham labels
 
         // Act
         await _bayesService!.TrainAsync();
@@ -121,9 +111,11 @@ public class BayesClassifierServiceTests
     [Test]
     public async Task TrainAsync_InsufficientData_LogsWarningAndLeavesMetadataNull()
     {
-        // Arrange — Clear all training labels to simulate no training data
+        // Arrange — MLTrainingDataRepository draws from three pools: training_labels
+        // (explicit), detection_results (implicit spam), and messages (implicit ham).
+        // Truncating messages with CASCADE drains all three at once.
         await using var context = _testHelper!.GetDbContext();
-        await context.Database.ExecuteSqlRawAsync("DELETE FROM training_labels");
+        await context.Database.ExecuteSqlRawAsync("TRUNCATE messages CASCADE");
 
         // Act
         await _bayesService!.TrainAsync();
@@ -137,7 +129,7 @@ public class BayesClassifierServiceTests
     [Test]
     public async Task TrainAsync_OverlappingCalls_SecondCallSkippedClassifierStillValid()
     {
-        // Arrange — GoldenDataset provides training data
+        // Arrange — canonical template clone provides training data
 
         // Act — Launch two concurrent TrainAsync calls; semaphore should block the second
         var task1 = _bayesService!.TrainAsync();
