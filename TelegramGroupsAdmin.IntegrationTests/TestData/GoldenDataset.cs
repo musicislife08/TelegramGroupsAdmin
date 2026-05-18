@@ -424,18 +424,6 @@ public static partial class GoldenDataset
     }
 
     /// <summary>
-    /// Seeds base data + GoldenDataset training labels only (3 spam + 2 ham) - skips MLTrainingData.sql.
-    /// Total: 3 spam + 2 ham training samples (below 20 minimum threshold).
-    /// Use for tests validating behavior with insufficient training data.
-    /// </summary>
-    public static async Task SeedWithMinimalTrainingDataAsync(AppDbContext context, IDataProtectionProvider? dataProtectionProvider = null)
-    {
-        await SeedBaseDataAsync(context, dataProtectionProvider);
-        await SeedGoldenDatasetTrainingLabelsAsync(context);
-        await context.SaveChangesAsync();
-    }
-
-    /// <summary>
     /// Seeds base database structure (users, chats, messages, detection_results, configs).
     /// Loads SQL scripts 00-05 in FK dependency order, then configs inline (encryption).
     /// Does NOT seed training_labels or ML training data.
@@ -503,15 +491,6 @@ public static partial class GoldenDataset
     }
 
     /// <summary>
-    /// Seeds balanced ML training data (20 spam + 20 ham).
-    /// Use for tests requiring balanced training datasets.
-    /// </summary>
-    public static async Task SeedBalancedTrainingDataAsync(AppDbContext context)
-    {
-        await LoadSqlScriptAsync(context, "SQL.11_training_full.sql");
-    }
-
-    /// <summary>
     /// Seeds global content detection configuration (chat_id = 0).
     /// Use for tests that need content detection settings without full base data.
     /// </summary>
@@ -529,24 +508,6 @@ public static partial class GoldenDataset
     public static async Task SeedWebUsersOnlyAsync(AppDbContext context)
     {
         await LoadSqlScriptAsync(context, "SQL.01_base_web_users.sql");
-    }
-
-    /// <summary>
-    /// Seeds high-spam imbalanced ML training data (100 spam + 20 ham, 83.3% spam, 5:1 ratio).
-    /// Use for testing ML classifier behavior with high spam ratio.
-    /// </summary>
-    public static async Task SeedHighSpamTrainingDataAsync(AppDbContext context)
-    {
-        await LoadSqlScriptAsync(context, "SQL.20_unbalanced_100_20.sql");
-    }
-
-    /// <summary>
-    /// Seeds high-ham imbalanced ML training data (20 spam + 100 ham, 16.7% spam, 1:5 ratio).
-    /// Use for testing ML classifier behavior with high ham ratio.
-    /// </summary>
-    public static async Task SeedHighHamTrainingDataAsync(AppDbContext context)
-    {
-        await LoadSqlScriptAsync(context, "SQL.21_unbalanced_20_100.sql");
     }
 
     /// <summary>
@@ -689,7 +650,7 @@ public static partial class GoldenDataset
     /// <see cref="LoadCanonicalSqlScriptAsync"/> instead.
     /// </summary>
     /// <param name="context">Database context</param>
-    /// <param name="scriptPath">Relative path within TestData (e.g., "SQL.11_training_full.sql")</param>
+    /// <param name="scriptPath">Relative path within TestData (e.g., "SQL.10_training_minimal.sql")</param>
     private static async Task LoadSqlScriptAsync(AppDbContext context, string scriptPath)
     {
         await LoadSqlScriptAsync(scriptPath, sql => context.Database.ExecuteSqlRawAsync(sql));
