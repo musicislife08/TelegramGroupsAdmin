@@ -284,4 +284,58 @@ public class GoldenReducePlanTests
         await GoldenDataset.Reduce(ctx).KeepSpam(10).KeepSpam(3).ApplyAsync();
         Assert.That(await ctx.TrainingLabels.CountAsync(tl => tl.Label == SpamLabel), Is.EqualTo(3));
     }
+
+    // ── KeepMessages allowlist overload ─────────────────────────────────────────
+
+    [Test]
+    public async Task KeepMessages_Allowlist_KeepsOnlyAllowedPairs()
+    {
+        await using var ctx = _helper!.GetDbContext();
+        // Pin 3 known MainChat messages from canonical.
+        const long MainChat = -100026957614982L;
+        var allowlist = new[] { (MainChat, 220017L), (MainChat, 220093L), (MainChat, 211184L) };
+
+        await GoldenDataset.Reduce(ctx).KeepMessages(allowlist).ApplyAsync();
+
+        var remaining = await ctx.Messages
+            .Select(m => new { m.ChatId, m.MessageId })
+            .ToListAsync();
+        Assert.That(remaining, Has.Count.EqualTo(3));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(remaining.Any(m => m.ChatId == MainChat && m.MessageId == 220017), Is.True);
+            Assert.That(remaining.Any(m => m.ChatId == MainChat && m.MessageId == 220093), Is.True);
+            Assert.That(remaining.Any(m => m.ChatId == MainChat && m.MessageId == 211184), Is.True);
+        }
+    }
+
+    [Test]
+    public async Task KeepMessages_Allowlist_FKCascadesDropDetectionResultsOfDroppedMessages()
+    {
+        await using var ctx = _helper!.GetDbContext();
+        const long MainChat = -100026957614982L;
+        // msg 211184 has 2 detection_results in canonical (the FN pair: dr_ids 1492 + 1494).
+        var beforeOnKeeper = await ctx.DetectionResults.CountAsync(d => d.MessageId == 211184);
+
+        await GoldenDataset.Reduce(ctx).KeepMessages(new[] { (MainChat, 211184L) }).ApplyAsync();
+
+        var afterTotal = await ctx.DetectionResults.CountAsync();
+        var afterOnKeeper = await ctx.DetectionResults.CountAsync(d => d.MessageId == 211184);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(afterOnKeeper, Is.EqualTo(beforeOnKeeper),
+                "detection_results on the keeper message must survive");
+            Assert.That(afterTotal, Is.EqualTo(beforeOnKeeper),
+                "no detection_results from other messages should remain");
+        }
+    }
+
+    [Test]
+    public void KeepMessages_Allowlist_EmptyEnumerable_Throws()
+    {
+        using var ctx = _helper!.GetDbContext();
+        Assert.That(
+            () => GoldenDataset.Reduce(ctx).KeepMessages(Array.Empty<(long, long)>()),
+            Throws.ArgumentException);
+    }
 }

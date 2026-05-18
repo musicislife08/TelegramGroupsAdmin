@@ -70,6 +70,7 @@ internal sealed class GoldenReducePlanState
     private readonly AppDbContext _context;
 
     public int? MessagesCount { get; set; }
+    public IReadOnlyList<(long ChatId, long MessageId)>? MessageIdAllowlist { get; set; }
     public int? SpamCount { get; set; }
     public int? HamCount { get; set; }
     public int? DetectionResultsCount { get; set; }
@@ -85,8 +86,22 @@ internal sealed class GoldenReducePlanState
         {
             // 1. KeepMessages — runs first; FK cascade fires (CASCADE on
             //    message_edits/training_labels/detection_results/message_translations,
-            //    SetNull on user_actions.MessageId/ChatId).
-            if (MessagesCount is int msgN)
+            //    SetNull on user_actions.MessageId/ChatId). Allowlist overload takes
+            //    precedence over count when both are set.
+            if (MessageIdAllowlist is { Count: > 0 } allowlist)
+            {
+                var values = string.Join(",", allowlist.Select((_, i) => $"({{{2 * i}}}::bigint, {{{2 * i + 1}}}::bigint)"));
+                var parameters = new object[allowlist.Count * 2];
+                for (int i = 0; i < allowlist.Count; i++)
+                {
+                    parameters[2 * i] = allowlist[i].ChatId;
+                    parameters[2 * i + 1] = allowlist[i].MessageId;
+                }
+                await ExecRawAsync(_context, ct,
+                    $"DELETE FROM messages WHERE (chat_id, message_id) NOT IN ({values})",
+                    parameters, "KeepMessages(allowlist)");
+            }
+            else if (MessagesCount is int msgN)
             {
                 await ExecAsync(_context, ct,
                     "DELETE FROM messages " +
@@ -202,6 +217,19 @@ internal sealed class GoldenReducePlanState
         try
         {
             await ctx.Database.ExecuteSqlRawAsync(sql, ct);
+        }
+        catch (Exception ex)
+        {
+            throw new GoldenReducePlanException($"Step '{stepName}' failed", stepName, ex);
+        }
+    }
+
+    private static async Task ExecRawAsync(AppDbContext ctx, CancellationToken ct,
+        string sql, object[] parameters, string stepName)
+    {
+        try
+        {
+            await ctx.Database.ExecuteSqlRawAsync(sql, parameters, ct);
         }
         catch (Exception ex)
         {

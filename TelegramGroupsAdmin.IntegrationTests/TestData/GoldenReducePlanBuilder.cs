@@ -25,6 +25,22 @@ public sealed class GoldenReducePlanBuilder
         return this;
     }
 
+    /// <summary>
+    /// Allowlist overload: keeps only the named (chat_id, message_id) tuples and drops
+    /// every other <c>messages</c> row. Use when a test needs deterministic isolation by
+    /// identity (e.g., AnalyticsRepositoryTests pinning specific FP/FN message anchors).
+    /// FK CASCADE drops associated detection_results / training_labels / message_edits /
+    /// message_translations; user_actions.MessageId/ChatId become NULL via SetNull.
+    /// </summary>
+    public GoldenReducePlanBuilder KeepMessages(IEnumerable<(long ChatId, long MessageId)> ids)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+        var list = ids.ToList();
+        if (list.Count == 0) throw new ArgumentException("Allowlist cannot be empty.", nameof(ids));
+        _state.MessageIdAllowlist = list;
+        return this;
+    }
+
     public ChildReducePlan KeepSpam(int count)
     {
         if (count < 0) throw new ArgumentOutOfRangeException(nameof(count));
