@@ -7,6 +7,7 @@ using TelegramGroupsAdmin.ContentDetection.Extensions;
 using TelegramGroupsAdmin.ContentDetection.ML;
 using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Data;
+using TelegramGroupsAdmin.IntegrationTests.TestData;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
 
 namespace TelegramGroupsAdmin.IntegrationTests.ML;
@@ -20,9 +21,10 @@ namespace TelegramGroupsAdmin.IntegrationTests.ML;
 /// - Validates thread safety (semaphore), atomic model swapping, and classification
 /// - Unlike ML.NET, Bayes does NOT persist to disk — no file assertions needed
 ///
-/// Test Coverage (7 tests):
+/// Test Coverage:
 /// - TrainAsync with sufficient data: Classifier trains, metadata reflects sample counts
-/// - TrainAsync with insufficient data: Logs warning, metadata remains null
+/// - TrainAsync threshold gate at MinimumSamplesPerClass - 1 (both below / spam-only-above /
+///   ham-only-above): Metadata remains null in all three failing-corner cases
 /// - Classify after training: Returns non-null result with probability in [0.0, 1.0]
 /// - Classify before training: Returns null (not trained)
 /// - Overlapping TrainAsync calls: Second call skipped by semaphore, classifier still valid
@@ -111,19 +113,68 @@ public class BayesClassifierServiceTests
     [Test]
     public async Task TrainAsync_InsufficientData_LogsWarningAndLeavesMetadataNull()
     {
-        // Arrange — MLTrainingDataRepository draws from three pools: training_labels
-        // (explicit), detection_results (implicit spam), and messages (implicit ham).
-        // Truncating messages with CASCADE drains all three at once.
+        // Arrange — Reduce both classes to exactly MinimumSamplesPerClass - 1, which
+        // exercises the threshold gate at its boundary. KeepDetectionResults(0) drains
+        // implicit spam; KeepLabeledMessagesOnly drains implicit ham. So the repository
+        // sees exactly (Threshold - 1) explicit + 0 implicit per class.
+        const int BelowThreshold = MLConstants.MinimumSamplesPerClass - 1;
         await using var context = _testHelper!.GetDbContext();
-        await context.Database.ExecuteSqlRawAsync("TRUNCATE messages CASCADE");
+        await GoldenDataset.Reduce(context)
+            .KeepSpam(BelowThreshold)
+            .KeepHam(BelowThreshold)
+            .KeepDetectionResults(0)
+            .KeepLabeledMessagesOnly()
+            .ApplyAsync();
 
         // Act
         await _bayesService!.TrainAsync();
 
-        // Assert — Metadata stays null when insufficient data exists
+        // Assert — Metadata stays null when training data falls below MinimumSamplesPerClass
         var metadata = _bayesService.GetMetadata();
         Assert.That(metadata, Is.Null,
-            "Metadata should remain null when training data falls below MinimumSamplesPerClass");
+            "Metadata should remain null when both classes fall below MinimumSamplesPerClass");
+    }
+
+    [Test]
+    public async Task TrainAsync_OnlyHamAboveThreshold_LeavesMetadataNull()
+    {
+        // Arrange — ham retains canonical 100 labels (above threshold); spam reduced
+        // to threshold - 1. Verifies the gate requires BOTH classes ≥ threshold, not just one.
+        const int BelowThreshold = MLConstants.MinimumSamplesPerClass - 1;
+        await using var context = _testHelper!.GetDbContext();
+        await GoldenDataset.Reduce(context)
+            .KeepSpam(BelowThreshold)
+            .KeepDetectionResults(0)
+            .KeepLabeledMessagesOnly()
+            .ApplyAsync();
+
+        // Act
+        await _bayesService!.TrainAsync();
+
+        // Assert
+        Assert.That(_bayesService.GetMetadata(), Is.Null,
+            "Gate should fail when spam is below threshold even if ham is above");
+    }
+
+    [Test]
+    public async Task TrainAsync_OnlySpamAboveThreshold_LeavesMetadataNull()
+    {
+        // Arrange — spam retains canonical 100 labels (above threshold); ham reduced
+        // to threshold - 1. Verifies the gate requires BOTH classes ≥ threshold, not just one.
+        const int BelowThreshold = MLConstants.MinimumSamplesPerClass - 1;
+        await using var context = _testHelper!.GetDbContext();
+        await GoldenDataset.Reduce(context)
+            .KeepHam(BelowThreshold)
+            .KeepDetectionResults(0)
+            .KeepLabeledMessagesOnly()
+            .ApplyAsync();
+
+        // Act
+        await _bayesService!.TrainAsync();
+
+        // Assert
+        Assert.That(_bayesService.GetMetadata(), Is.Null,
+            "Gate should fail when ham is below threshold even if spam is above");
     }
 
     [Test]
