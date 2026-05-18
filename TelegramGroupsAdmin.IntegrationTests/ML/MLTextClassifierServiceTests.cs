@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
+using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Extensions;
 using TelegramGroupsAdmin.ContentDetection.ML;
 using TelegramGroupsAdmin.Core.Extensions;
@@ -16,22 +17,23 @@ namespace TelegramGroupsAdmin.IntegrationTests.ML;
 /// Integration tests for MLTextClassifierService - ML.NET SDCA text classifier.
 ///
 /// Test Strategy:
-/// - Uses real PostgreSQL database (Testcontainers) with GoldenDataset
-/// - Tests full ML.NET training pipeline (TF-IDF + SDCA)
-/// - Validates model persistence, SHA256 verification, and thread safety
-/// - Temp directory for model files (cleaned up after tests)
+/// - Uses real PostgreSQL database (Testcontainers) cloned from the canonical
+///   golden_template (100 spam + 100 ham training_labels, well above threshold).
+/// - Tests full ML.NET training pipeline (TF-IDF + SDCA).
+/// - Validates model persistence, SHA256 verification, and thread safety.
+/// - All substrate mutation goes through `GoldenDataset.Reduce(...)` — no raw SQL,
+///   no inline INSERTs.
+/// - Temp directory for model files (cleaned up after tests).
 ///
-/// Test Coverage (5 tests):
+/// Test Coverage:
 /// - TrainModelAsync with sufficient data: Trains and saves model
-/// - TrainModelAsync with insufficient data: Logs warning, no model
+/// - TrainModelAsync threshold gate at MinimumSamplesPerClass - 1 (both below /
+///   spam-only-above / ham-only-above): Model is not produced in all three corners
 /// - LoadModelAsync with valid model: SHA256 verification succeeds
-/// - Predict with loaded model: Returns prediction
+/// - LoadModelAsync error paths: corrupted model, missing model, corrupted metadata, hash mismatch
+/// - Predict with loaded model: Returns prediction; null/empty/long/unicode inputs handled
 /// - Prevent overlapping retrains: Semaphore blocks concurrent calls
-///
-/// GoldenDataset Training Data:
-/// - 3 spam labels: Label1 (Msg1), Label2 (Msg2), Label5 (Msg5)
-/// - 2 ham labels: Label3 (Msg3), Label4 (Msg4)
-/// - Minimal but realistic for testing ML pipeline
+/// - Imbalanced datasets: HighSpamRatio adds implicit ham; HighHamRatio caps explicit ham
 /// </summary>
 [TestFixture]
 public class MLTextClassifierServiceTests
@@ -40,7 +42,6 @@ public class MLTextClassifierServiceTests
     private IServiceProvider? _serviceProvider;
     private IMLTextClassifierService? _mlService;
     private string _tempDataDirectory = null!;
-    private AppDbContext? _context;
 
     [SetUp]
     public async Task SetUp()
@@ -50,7 +51,7 @@ public class MLTextClassifierServiceTests
         Directory.CreateDirectory(_tempDataDirectory);
 
         _testHelper = new MigrationTestHelper();
-        await _testHelper.CreateDatabaseAndApplyMigrationsAsync();
+        await _testHelper.CreateDatabaseFromGoldenTemplateAsync();
 
         var services = new ServiceCollection();
         services.AddDbContextFactory<AppDbContext>(options =>
@@ -76,19 +77,11 @@ public class MLTextClassifierServiceTests
 
         _serviceProvider = services.BuildServiceProvider();
         _mlService = _serviceProvider.GetRequiredService<IMLTextClassifierService>();
-
-        // Seed GoldenDataset for training data
-        _context = _testHelper.GetDbContext();
-        await GoldenDataset.SeedAsync(_context);
     }
 
     [TearDown]
-    public async Task TearDown()
+    public void TearDown()
     {
-        if (_context != null)
-        {
-            await _context.DisposeAsync();
-        }
         _testHelper?.Dispose();
         (_mlService as IDisposable)?.Dispose();
         (_serviceProvider as IDisposable)?.Dispose();
@@ -103,7 +96,7 @@ public class MLTextClassifierServiceTests
     [Test]
     public async Task TrainModelAsync_SufficientData_TrainsAndSavesModel()
     {
-        // Arrange - GoldenDataset provides training data (3 spam + 2 ham labels + 20 spam + 20 ham from MLTrainingData.sql)
+        // Arrange — canonical template clone provides 100 spam + 100 ham training_labels
 
         // Act
         await _mlService!.TrainModelAsync();
@@ -123,31 +116,85 @@ public class MLTextClassifierServiceTests
         Assert.That(metadata, Is.Not.Null);
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(metadata!.SpamSampleCount, Is.GreaterThanOrEqualTo(20), "At least 20 spam samples from combined datasets");
-            Assert.That(metadata.HamSampleCount, Is.GreaterThanOrEqualTo(20), "At least 20 ham samples (explicit labels + implicit ≥50 words)");
+            Assert.That(metadata!.SpamSampleCount, Is.GreaterThanOrEqualTo(20), "At least 20 spam samples after dedup");
+            Assert.That(metadata.HamSampleCount, Is.GreaterThanOrEqualTo(20), "At least 20 ham samples (explicit + implicit)");
             Assert.That(metadata.TotalSampleCount, Is.GreaterThanOrEqualTo(40));
-            Assert.That(metadata.IsBalanced, Is.True, "Training data should be balanced (20-80% spam)");
             Assert.That(metadata.ModelHash, Is.Not.Null.And.Not.Empty);
             Assert.That(metadata.ModelSizeBytes, Is.GreaterThan(0));
+            // IsBalanced is a separate concern covered by TrainModelAsync_BalancedDataset_IsBalancedTrue.
+            // Canonical default is intentionally NOT balanced (real prod spam outweighs labeled ham).
         }
     }
 
     [Test]
-    public async Task TrainModelAsync_InsufficientData_LogsWarningAndReturns()
+    public async Task TrainModelAsync_InsufficientData_LeavesMetadataNull()
     {
-        // Arrange - Clear training labels to simulate no data
+        // Arrange — Reduce both classes to exactly MinimumSamplesPerClass - 1, exercising
+        // the threshold gate at its boundary. KeepDetectionResults(0) drains implicit spam;
+        // KeepLabeledMessagesOnly drains implicit ham.
+        const int BelowThreshold = MLConstants.MinimumSamplesPerClass - 1;
         await using var context = _testHelper!.GetDbContext();
-        await context.Database.ExecuteSqlRawAsync("DELETE FROM training_labels");
+        await GoldenDataset.Reduce(context)
+            .KeepSpam(BelowThreshold)
+            .KeepHam(BelowThreshold)
+            .KeepDetectionResults(0)
+            .KeepLabeledMessagesOnly()
+            .ApplyAsync();
 
         // Act
         await _mlService!.TrainModelAsync();
 
-        // Assert - No model created
+        // Assert — No model file created, no metadata
         var modelPath = Path.Combine(_tempDataDirectory, "ml-models", "spam-classifier.zip");
-        Assert.That(File.Exists(modelPath), Is.False, "No model should be created with insufficient data");
+        Assert.That(File.Exists(modelPath), Is.False, "No model should be written when both classes are below threshold");
+        Assert.That(_mlService.GetMetadata(), Is.Null,
+            "Metadata should remain null when both classes fall below MinimumSamplesPerClass");
+    }
 
-        var metadata = _mlService.GetMetadata();
-        Assert.That(metadata, Is.Null, "Metadata should be null when training fails");
+    [Test]
+    public async Task TrainModelAsync_OnlyHamAboveThreshold_LeavesMetadataNull()
+    {
+        // Arrange — ham retains canonical 100 labels (above threshold); spam reduced
+        // to threshold - 1. Verifies the gate requires BOTH classes ≥ threshold, not just one.
+        const int BelowThreshold = MLConstants.MinimumSamplesPerClass - 1;
+        await using var context = _testHelper!.GetDbContext();
+        await GoldenDataset.Reduce(context)
+            .KeepSpam(BelowThreshold)
+            .KeepDetectionResults(0)
+            .KeepLabeledMessagesOnly()
+            .ApplyAsync();
+
+        // Act
+        await _mlService!.TrainModelAsync();
+
+        // Assert
+        var modelPath = Path.Combine(_tempDataDirectory, "ml-models", "spam-classifier.zip");
+        Assert.That(File.Exists(modelPath), Is.False, "No model should be written when spam is below threshold");
+        Assert.That(_mlService.GetMetadata(), Is.Null,
+            "Gate should fail when spam is below threshold even if ham is above");
+    }
+
+    [Test]
+    public async Task TrainModelAsync_OnlySpamAboveThreshold_LeavesMetadataNull()
+    {
+        // Arrange — spam retains canonical 100 labels (above threshold); ham reduced
+        // to threshold - 1. Verifies the gate requires BOTH classes ≥ threshold, not just one.
+        const int BelowThreshold = MLConstants.MinimumSamplesPerClass - 1;
+        await using var context = _testHelper!.GetDbContext();
+        await GoldenDataset.Reduce(context)
+            .KeepHam(BelowThreshold)
+            .KeepDetectionResults(0)
+            .KeepLabeledMessagesOnly()
+            .ApplyAsync();
+
+        // Act
+        await _mlService!.TrainModelAsync();
+
+        // Assert
+        var modelPath = Path.Combine(_tempDataDirectory, "ml-models", "spam-classifier.zip");
+        Assert.That(File.Exists(modelPath), Is.False, "No model should be written when ham is below threshold");
+        Assert.That(_mlService.GetMetadata(), Is.Null,
+            "Gate should fail when ham is below threshold even if spam is above");
     }
 
     [Test]
@@ -220,7 +267,7 @@ public class MLTextClassifierServiceTests
     [Test]
     public async Task TrainModelAsync_OverlappingCalls_OnlyOneExecutes()
     {
-        // Arrange - GoldenDataset provides training data (3 spam + 2 ham labels + 20 spam + 20 ham from MLTrainingData.sql)
+        // Arrange — canonical template clone provides 100 spam + 100 ham training_labels
 
         // Act - Start two training tasks concurrently
         var task1 = _mlService!.TrainModelAsync();
@@ -496,13 +543,15 @@ public class MLTextClassifierServiceTests
     [Test]
     public async Task TrainModelAsync_HighSpamRatio_AddsImplicitHamForBalance()
     {
-        // Arrange - Use composable SQL dataset (100 spam + 20 explicit ham = 83.3% spam without implicit)
+        // Arrange — reduce canonical to 100 spam + 20 ham explicit labels and zero
+        // detection_results (no implicit spam). The unlabeled canonical message tail
+        // remains as the implicit-ham pool the repository will draw from to balance.
         await using var context = _testHelper!.GetDbContext();
-
-        // Truncate and reseed with high-spam dataset
-        await context.Database.ExecuteSqlRawAsync("TRUNCATE TABLE training_labels, detection_results, messages, managed_chats, linked_channels, telegram_users, users, configs, content_detection_configs CASCADE");
-        await GoldenDataset.SeedWithoutTrainingDataAsync(context);
-        await GoldenDataset.SeedHighSpamTrainingDataAsync(context);
+        await GoldenDataset.Reduce(context)
+            .KeepSpam(100)
+            .KeepHam(20)
+            .KeepDetectionResults(0)
+            .ApplyAsync();
 
         // Act
         await _mlService!.TrainModelAsync();
@@ -512,8 +561,10 @@ public class MLTextClassifierServiceTests
         Assert.That(metadata, Is.Not.Null, "Model should train successfully");
         using (Assert.EnterMultipleScope())
         {
-            // SQL has 100 spam samples, but SimHash deduplication removes near-duplicates (~6)
-            Assert.That(metadata!.SpamSampleCount, Is.GreaterThanOrEqualTo(90), "After dedup, most spam samples should remain");
+            // Canonical's 100 prod-derived spam labels include real near-duplicates; SimHash
+            // dedup removes ~19% (vs ~6% on the legacy synthetic seed). 75% retention is the
+            // floor that still proves "most samples remain after dedup."
+            Assert.That(metadata!.SpamSampleCount, Is.GreaterThanOrEqualTo(75), "After dedup, most spam samples should remain");
             Assert.That(metadata.SpamSampleCount, Is.LessThanOrEqualTo(100), "Should not exceed raw spam count");
             Assert.That(metadata.HamSampleCount, Is.GreaterThan(20), "Should add implicit ham on top of 20 explicit ham");
             Assert.That(metadata.IsBalanced, Is.True, "Implicit ham should bring dataset into balanced range (20-80% spam)");
@@ -523,13 +574,15 @@ public class MLTextClassifierServiceTests
     [Test]
     public async Task TrainModelAsync_HighHamRatio_CapsExplicitHamForBalance()
     {
-        // Arrange - Use composable SQL dataset (20 spam + 100 ham explicit labels)
+        // Arrange — KeepSpam(25) so canonical's ~19% dedup leaves spam ≥ 20 (above
+        // threshold); KeepHam(100) keeps all canonical ham; KeepDetectionResults(0)
+        // eliminates implicit spam so the explicit-ham cap is the only ratio knob.
         await using var context = _testHelper!.GetDbContext();
-
-        // Truncate and reseed with high-ham dataset
-        await context.Database.ExecuteSqlRawAsync("TRUNCATE TABLE training_labels, detection_results, messages, managed_chats, linked_channels, telegram_users, users, configs, content_detection_configs CASCADE");
-        await GoldenDataset.SeedWithoutTrainingDataAsync(context);
-        await GoldenDataset.SeedHighHamTrainingDataAsync(context);
+        await GoldenDataset.Reduce(context)
+            .KeepSpam(25)
+            .KeepHam(100)
+            .KeepDetectionResults(0)
+            .ApplyAsync();
 
         // Act
         await _mlService!.TrainModelAsync();
@@ -539,13 +592,15 @@ public class MLTextClassifierServiceTests
         Assert.That(metadata, Is.Not.Null, "Model should train successfully");
         using (Assert.EnterMultipleScope())
         {
-            // SQL has 20 spam samples; small dataset so minimal dedup impact expected
-            Assert.That(metadata!.SpamSampleCount, Is.GreaterThanOrEqualTo(15), "After dedup, most spam samples should remain");
-            Assert.That(metadata.SpamSampleCount, Is.LessThanOrEqualTo(20), "Should not exceed raw spam count");
+            // KeepSpam(25); canonical dedups ~19% → ~20-21 surviving spam samples.
+            Assert.That(metadata!.SpamSampleCount, Is.GreaterThanOrEqualTo(18), "After dedup, most spam samples should remain");
+            Assert.That(metadata.SpamSampleCount, Is.LessThanOrEqualTo(25), "Should not exceed raw spam count");
 
-            // NEW BEHAVIOR: Explicit ham is capped to dynamicHamCap (20 * 2.33 = 46)
-            Assert.That(metadata.HamSampleCount, Is.LessThanOrEqualTo(46),
-                "Explicit ham should be capped at dynamicHamCap (20 * 2.33 = 46) for balance");
+            // Explicit ham capped at dynamicHamCap (SpamSampleCount * HamMultiplier where
+            // HamMultiplier = 2.33). Using +1 slack for integer truncation in the SUT.
+            var dynamicHamCap = (int)(metadata.SpamSampleCount * 2.33) + 1;
+            Assert.That(metadata.HamSampleCount, Is.LessThanOrEqualTo(dynamicHamCap),
+                $"Explicit ham should be capped at dynamicHamCap ({metadata.SpamSampleCount} * 2.33 = {dynamicHamCap}) for balance");
         }
         using (Assert.EnterMultipleScope())
         {
@@ -559,8 +614,13 @@ public class MLTextClassifierServiceTests
     [Test]
     public async Task TrainModelAsync_BalancedDataset_IsBalancedTrue()
     {
-        // Arrange - GoldenDataset provides balanced data (3 spam, 2-3 ham)
-        // This verifies the baseline behavior for comparison
+        // Arrange — drain detection_results to remove implicit spam (the unbalancing
+        // pool by default). Leave the unlabeled-message pool intact so the repository's
+        // implicit-ham draw balances the 81-post-dedup explicit spam.
+        await using var context = _testHelper!.GetDbContext();
+        await GoldenDataset.Reduce(context)
+            .KeepDetectionResults(0)
+            .ApplyAsync();
 
         // Act
         await _mlService!.TrainModelAsync();
@@ -578,126 +638,6 @@ public class MLTextClassifierServiceTests
 
     #endregion
 
-    #region Minimum Threshold Tests
-
-    [Test]
-    public async Task TrainModelAsync_BelowMinimumThreshold_LogsWarningAndReturns()
-    {
-        // Arrange - Start with NO training data, create exactly 5 spam + 5 ham (below 20 minimum)
-        await using var context = _testHelper!.GetDbContext();
-
-        // Truncate and reseed with zero training data
-        await context.Database.ExecuteSqlRawAsync("TRUNCATE TABLE training_labels, detection_results, messages, managed_chats, linked_channels, telegram_users, users, configs, content_detection_configs CASCADE");
-        await GoldenDataset.SeedWithoutTrainingDataAsync(context);
-
-        // Create 10 test messages (5 spam + 5 ham)
-        for (int i = 1; i <= 10; i++)
-        {
-            int messageId = 110000 + i;
-            await context.Database.ExecuteSqlRawAsync(
-                $$"""
-                INSERT INTO messages (message_id, user_id, chat_id, timestamp, message_text, content_check_skip_reason)
-                VALUES ({{messageId}}, {{GoldenDataset.TelegramUsers.User1_TelegramUserId}}, {{GoldenDataset.ManagedChats.MainChat_Id}}, NOW() - INTERVAL '1 hour', {0}, 0)
-                """,
-                $"Threshold test message {i} with sufficient length for ML training purposes"
-            );
-        }
-
-        // Add 5 spam labels
-        for (int i = 1; i <= 5; i++)
-        {
-            int messageId = 110000 + i;
-            await context.Database.ExecuteSqlRawAsync(
-                $"INSERT INTO training_labels (message_id, chat_id, label, labeled_by_user_id, labeled_at) VALUES ({messageId}, {GoldenDataset.ManagedChats.MainChat_Id}, 0, {GoldenDataset.TelegramUsers.User1_TelegramUserId}, NOW())"
-            );
-        }
-
-        // Add 5 ham labels
-        for (int i = 6; i <= 10; i++)
-        {
-            int messageId = 110000 + i;
-            await context.Database.ExecuteSqlRawAsync(
-                $"INSERT INTO training_labels (message_id, chat_id, label, labeled_by_user_id, labeled_at) VALUES ({messageId}, {GoldenDataset.ManagedChats.MainChat_Id}, 1, {GoldenDataset.TelegramUsers.User1_TelegramUserId}, NOW())"
-            );
-        }
-
-        // Act
-        await _mlService!.TrainModelAsync();
-
-        // Assert - Model should NOT train (below 20 sample minimum)
-        Assert.That(_mlService.GetMetadata(), Is.Null, "Model should not train with only 5 spam and 5 ham (below 20 minimum)");
-    }
-
-    [Test]
-    public async Task TrainModelAsync_ZeroSpamSamples_LogsWarningAndReturns()
-    {
-        // Arrange - Start with NO training data, create only ham samples (0 spam + 22 ham)
-        await using var context = _testHelper!.GetDbContext();
-
-        // Truncate and reseed with zero training data
-        await context.Database.ExecuteSqlRawAsync("TRUNCATE TABLE training_labels, detection_results, messages, managed_chats, linked_channels, telegram_users, users, configs, content_detection_configs CASCADE");
-        await GoldenDataset.SeedWithoutTrainingDataAsync(context);
-
-        // Create 22 ham messages
-        for (int i = 1; i <= 22; i++)
-        {
-            int messageId = 120000 + i;
-            await context.Database.ExecuteSqlRawAsync(
-                $$"""
-                INSERT INTO messages (message_id, user_id, chat_id, timestamp, message_text, content_check_skip_reason)
-                VALUES ({{messageId}}, {{GoldenDataset.TelegramUsers.User1_TelegramUserId}}, {{GoldenDataset.ManagedChats.MainChat_Id}}, NOW() - INTERVAL '1 hour', {0}, 0)
-                """,
-                $"Ham test message {i} with sufficient length for ML training purposes"
-            );
-
-            // Add ham label
-            await context.Database.ExecuteSqlRawAsync(
-                $"INSERT INTO training_labels (message_id, chat_id, label, labeled_by_user_id, labeled_at) VALUES ({messageId}, {GoldenDataset.ManagedChats.MainChat_Id}, 1, {GoldenDataset.TelegramUsers.User1_TelegramUserId}, NOW())"
-            );
-        }
-
-        // Act
-        await _mlService!.TrainModelAsync();
-
-        // Assert
-        Assert.That(_mlService.GetMetadata(), Is.Null, "Model should not train with zero spam samples");
-    }
-
-    [Test]
-    public async Task TrainModelAsync_ZeroHamSamples_LogsWarningAndReturns()
-    {
-        // Arrange - Start with NO training data, create only spam samples (23 spam + 0 ham)
-        await using var context = _testHelper!.GetDbContext();
-
-        // Truncate and reseed with zero training data
-        await context.Database.ExecuteSqlRawAsync("TRUNCATE TABLE training_labels, detection_results, messages, managed_chats, linked_channels, telegram_users, users, configs, content_detection_configs CASCADE");
-        await GoldenDataset.SeedWithoutTrainingDataAsync(context);
-
-        // Create 23 spam messages
-        for (int i = 1; i <= 23; i++)
-        {
-            int messageId = 130000 + i;
-            await context.Database.ExecuteSqlRawAsync(
-                $$"""
-                INSERT INTO messages (message_id, user_id, chat_id, timestamp, message_text, content_check_skip_reason)
-                VALUES ({{messageId}}, {{GoldenDataset.TelegramUsers.User1_TelegramUserId}}, {{GoldenDataset.ManagedChats.MainChat_Id}}, NOW() - INTERVAL '1 hour', {0}, 0)
-                """,
-                $"Spam test message {i} with sufficient length for ML training purposes"
-            );
-
-            // Add spam label
-            await context.Database.ExecuteSqlRawAsync(
-                $"INSERT INTO training_labels (message_id, chat_id, label, labeled_by_user_id, labeled_at) VALUES ({messageId}, {GoldenDataset.ManagedChats.MainChat_Id}, 0, {GoldenDataset.TelegramUsers.User1_TelegramUserId}, NOW())"
-            );
-        }
-
-        // Act
-        await _mlService!.TrainModelAsync();
-
-        // Assert
-        Assert.That(_mlService.GetMetadata(), Is.Null, "Model should not train with zero ham samples");
-    }
-
     [Test]
     public void TrainModelAsync_PreCancelledToken_ThrowsTaskCanceledException()
     {
@@ -710,6 +650,4 @@ public class MLTextClassifierServiceTests
             async () => await _mlService!.TrainModelAsync(cts.Token),
             "Pre-cancelled token should throw TaskCanceledException");
     }
-
-    #endregion
 }
