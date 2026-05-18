@@ -147,6 +147,64 @@ public class GoldenReducePlanTests
         Assert.That(hangingTl, Is.EqualTo(0), "training_labels rows must all reference surviving messages");
     }
 
+    // ── KeepLabeledMessagesOnly: drop unlabeled survivors after Keep{Spam,Ham} ─
+
+    [Test]
+    public async Task KeepLabeledMessagesOnly_AfterKeepSpamKeepHam_DropsUnlabeledMessages()
+    {
+        await using var ctx = _helper!.GetDbContext();
+        var messagesBefore = await ctx.Messages.CountAsync();
+
+        await GoldenDataset.Reduce(ctx).KeepSpam(3).KeepHam(2).KeepLabeledMessagesOnly().ApplyAsync();
+
+        // Every surviving message must have at least one training_labels row.
+        var unlabeledSurvivors = await ctx.Messages
+            .Where(m => !ctx.TrainingLabels.Any(tl => tl.MessageId == m.MessageId && tl.ChatId == m.ChatId))
+            .CountAsync();
+        Assert.That(unlabeledSurvivors, Is.EqualTo(0), "No surviving message may be unlabeled");
+
+        // Substrate shrank — most canonical messages were unlabeled and dropped.
+        var messagesAfter = await ctx.Messages.CountAsync();
+        Assert.That(messagesAfter, Is.LessThan(messagesBefore),
+            "Many canonical messages should have been dropped (most are unlabeled)");
+    }
+
+    [Test]
+    public async Task KeepLabeledMessagesOnly_FKCascade_ClearsDetectionResultsAndEditsOfDroppedMessages()
+    {
+        await using var ctx = _helper!.GetDbContext();
+
+        await GoldenDataset.Reduce(ctx).KeepSpam(3).KeepHam(2).KeepLabeledMessagesOnly().ApplyAsync();
+
+        var orphanedDetections = await ctx.DetectionResults
+            .Where(dr => !ctx.Messages.Any(m => m.MessageId == dr.MessageId && m.ChatId == dr.ChatId))
+            .CountAsync();
+        Assert.That(orphanedDetections, Is.EqualTo(0),
+            "Cascade FK should clear detection_results pointing at dropped messages");
+
+        var orphanedEdits = await ctx.MessageEdits
+            .Where(me => !ctx.Messages.Any(m => m.MessageId == me.MessageId && m.ChatId == me.ChatId))
+            .CountAsync();
+        Assert.That(orphanedEdits, Is.EqualTo(0),
+            "Cascade FK should clear message_edits pointing at dropped messages");
+    }
+
+    [Test]
+    public async Task KeepLabeledMessagesOnly_KeepSpamZero_KeepHam2_LeavesOnlyHamLabeledMessages()
+    {
+        await using var ctx = _helper!.GetDbContext();
+
+        await GoldenDataset.Reduce(ctx).KeepSpam(0).KeepHam(2).KeepLabeledMessagesOnly().ApplyAsync();
+
+        Assert.That(await ctx.TrainingLabels.CountAsync(tl => tl.Label == SpamLabel), Is.EqualTo(0));
+        Assert.That(await ctx.TrainingLabels.CountAsync(tl => tl.Label == HamLabel), Is.LessThanOrEqualTo(2));
+        // Every surviving message references a ham label (the only labels left).
+        var unlabeledSurvivors = await ctx.Messages
+            .Where(m => !ctx.TrainingLabels.Any(tl => tl.MessageId == m.MessageId && tl.ChatId == m.ChatId))
+            .CountAsync();
+        Assert.That(unlabeledSurvivors, Is.EqualTo(0));
+    }
+
     // ── Task 1.15: Cascade narrowing + topological execution ──────────────────
 
     [Test]

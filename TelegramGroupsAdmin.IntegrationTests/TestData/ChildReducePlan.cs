@@ -43,6 +43,20 @@ public sealed class ChildReducePlan
         return this;
     }
 
+    /// <summary>
+    /// Drops every <c>messages</c> row that has no surviving <c>training_labels</c> row
+    /// after KeepSpam / KeepHam have been applied. FK cascades clean up the message's
+    /// <c>detection_results</c>, <c>message_edits</c>, and <c>message_translations</c>
+    /// children. Use this when a test needs the "labels-only" substrate (no implicit ham
+    /// pool from unlabeled messages, no implicit spam pool unless KeepDetectionResults
+    /// is also constrained).
+    /// </summary>
+    public ChildReducePlan KeepLabeledMessagesOnly()
+    {
+        _state.DropUnlabeledMessages = true;
+        return this;
+    }
+
     public Task ApplyAsync(CancellationToken ct = default) => _state.ApplyAsync(ct);
 }
 
@@ -60,6 +74,7 @@ internal sealed class GoldenReducePlanState
     public int? HamCount { get; set; }
     public int? DetectionResultsCount { get; set; }
     public int? UserActionsCount { get; set; }
+    public bool DropUnlabeledMessages { get; set; }
 
     public GoldenReducePlanState(AppDbContext context) => _context = context;
 
@@ -112,7 +127,21 @@ internal sealed class GoldenReducePlanState
                     hamN, "KeepHam", LabelHam);
             }
 
-            // 4. KeepDetectionResults — surrogate id PK
+            // 4. KeepLabeledMessagesOnly — must run after KeepSpam/KeepHam so it sees
+            //    the post-filter label state. FK CASCADE fires on the dropped messages
+            //    (detection_results, training_labels (none left for these), message_edits,
+            //    message_translations). user_actions.MessageId/ChatId become NULL via SetNull.
+            if (DropUnlabeledMessages)
+            {
+                await ExecBareAsync(_context, ct,
+                    "DELETE FROM messages " +
+                    "WHERE NOT EXISTS (" +
+                    "  SELECT 1 FROM training_labels t " +
+                    "  WHERE t.message_id = messages.message_id AND t.chat_id = messages.chat_id)",
+                    "KeepLabeledMessagesOnly");
+            }
+
+            // 5. KeepDetectionResults — surrogate id PK
             if (DetectionResultsCount is int drN)
             {
                 await ExecAsync(_context, ct,
@@ -123,7 +152,7 @@ internal sealed class GoldenReducePlanState
                     drN, "KeepDetectionResults");
             }
 
-            // 5. KeepUserActions — surrogate id PK; runs last so SetNull orphans
+            // 6. KeepUserActions — surrogate id PK; runs last so SetNull orphans
             //    from KeepMessages can be cleaned up if user explicitly requests.
             if (UserActionsCount is int uaN)
             {
@@ -160,6 +189,19 @@ internal sealed class GoldenReducePlanState
             parameters[0] = n;
             for (int i = 0; i < extraParams.Length; i++) parameters[i + 1] = extraParams[i];
             await ctx.Database.ExecuteSqlRawAsync(sql, parameters, ct);
+        }
+        catch (Exception ex)
+        {
+            throw new GoldenReducePlanException($"Step '{stepName}' failed", stepName, ex);
+        }
+    }
+
+    private static async Task ExecBareAsync(AppDbContext ctx, CancellationToken ct,
+        string sql, string stepName)
+    {
+        try
+        {
+            await ctx.Database.ExecuteSqlRawAsync(sql, ct);
         }
         catch (Exception ex)
         {
