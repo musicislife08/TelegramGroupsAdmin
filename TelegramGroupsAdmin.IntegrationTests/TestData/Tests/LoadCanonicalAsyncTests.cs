@@ -29,8 +29,9 @@ public class LoadCanonicalAsyncTests
         Assert.That(await ctx.Users.CountAsync(), Is.GreaterThan(0), "users");
         Assert.That(await ctx.TelegramUsers.CountAsync(), Is.GreaterThan(0), "telegram_users");
         Assert.That(await ctx.ManagedChats.CountAsync(), Is.GreaterThan(0), "managed_chats");
-        Assert.That(await ctx.Messages.CountAsync(), Is.EqualTo(400), "messages should be exactly 400");
+        Assert.That(await ctx.Messages.CountAsync(), Is.EqualTo(407), "messages should be exactly 407");
         Assert.That(await ctx.TrainingLabels.CountAsync(), Is.EqualTo(200), "training_labels should be exactly 200");
+        Assert.That(await ctx.WelcomeResponses.CountAsync(), Is.EqualTo(11), "welcome_responses should be exactly 11 (deliberate trim)");
         // 5 tables are intentionally EMPTY in canonical: domain_filters, recovery_codes,
         // image_training_samples, video_training_samples, web_notifications.
     }

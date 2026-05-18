@@ -49,7 +49,7 @@ Origin: prod DB snapshot from 2026-04-30. Bootstrap pipeline (full detail in `do
 | 25 | admin_notes | 3 | Free-text rebuilt from sanitized telegram_users; rows 5+6 cross-reference each other's sanitized usernames. |
 | 26 | audit_log | 100 | Connected-as / disconnected-as narrative anchored to canonical fixture identities. |
 | 27 | user_tags | 12 | |
-| 28 | welcome_responses | 293 | Includes synthetic IDs 999001..999005 (5 status branches). |
+| 28 | welcome_responses | 11 | Deliberately trimmed from 293 (Pre-3A.7 audit): no test exercised the prod-derived volume. Kept: 5 synthetics 999001..999005 (one per WelcomeResponseType, anchors `WelcomeTimeoutJobTests`), 4 prod-derived MainChat anchors (ids 73/75/94/128) for AnalyticsRepositoryTests' status-distributed shape (3 Accepted + 1 Timeout + the synthetic Denied/Left filling out the 6 analytics windows), 2 non-MainChat keepers (ids 55/121) for chat-grouping shape diversity. |
 | 29 | invites | 19 | |
 | 30 | reports | 10 | `reviewed_by` mapped via deterministic hashtext to canonical fixture emails. |
 | 31 | message_edits | 23 | Edit history for messages whose canonical row carries `edit_count > 0`. |
