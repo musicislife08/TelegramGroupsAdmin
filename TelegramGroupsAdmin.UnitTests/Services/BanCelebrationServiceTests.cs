@@ -8,6 +8,7 @@ using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Models.Welcome;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Telegram.Metrics;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
@@ -40,6 +41,7 @@ public class BanCelebrationServiceTests
     private IUserActionsRepository _mockUserActionsRepository = null!;
     private IOptions<AppOptions> _appOptions = null!;
     private ILogger<BanCelebrationService> _mockLogger = null!;
+    private PipelineMetrics _pipelineMetrics = null!;
     private BanCelebrationService _sut = null!;
 
     [SetUp]
@@ -54,6 +56,7 @@ public class BanCelebrationServiceTests
         _mockDmService = Substitute.For<IBotDmService>();
         _mockUserActionsRepository = Substitute.For<IUserActionsRepository>();
         _mockLogger = Substitute.For<ILogger<BanCelebrationService>>();
+        _pipelineMetrics = new PipelineMetrics();
 
         // Setup AppOptions
         _appOptions = Options.Create(new AppOptions { DataPath = "/data" });
@@ -87,7 +90,8 @@ public class BanCelebrationServiceTests
             _mockDmService,
             _mockUserActionsRepository,
             _appOptions,
-            _mockLogger);
+            _mockLogger,
+            _pipelineMetrics);
     }
 
     /// <summary>

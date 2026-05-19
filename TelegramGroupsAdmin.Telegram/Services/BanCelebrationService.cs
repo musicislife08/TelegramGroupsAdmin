@@ -8,6 +8,7 @@ using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
+using TelegramGroupsAdmin.Telegram.Metrics;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
@@ -32,7 +33,8 @@ public class BanCelebrationService(
     IBotDmService dmDeliveryService,
     IUserActionsRepository userActionsRepository,
     IOptions<AppOptions> appOptions,
-    ILogger<BanCelebrationService> logger) : IBanCelebrationService
+    ILogger<BanCelebrationService> logger,
+    PipelineMetrics pipelineMetrics) : IBanCelebrationService
 {
     private readonly string _mediaBasePath = Path.Combine(appOptions.Value.DataPath, "media");
 
@@ -108,6 +110,7 @@ public class BanCelebrationService(
             {
                 logger.LogDebug("Masking explicit display name for {User} in {Chat}",
                     bannedUser.ToLogDebug(), chat.ToLogDebug());
+                pipelineMetrics.RecordMaskedUsername(isAutoBan ? "auto_ban" : "manual_ban");
             }
 
             // Build the chat caption with placeholders replaced

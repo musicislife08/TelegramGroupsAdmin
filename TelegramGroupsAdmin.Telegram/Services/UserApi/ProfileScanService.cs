@@ -398,6 +398,17 @@ public sealed class ProfileScanService(
                 ? string.Join(", ", scoreResult.AiSignals) : null,
             ExplicitDisplayText: scoreResult.ExplicitDisplayText), cancellationToken: ct);
 
+        if (scoreResult.ExplicitDisplayText)
+        {
+            var outcomeTag = scoreResult.Outcome switch
+            {
+                ProfileScanOutcome.Banned => "banned",
+                ProfileScanOutcome.HeldForReview => "held_for_review",
+                _ => "clean"
+            };
+            pipelineMetrics.RecordExplicitUsernameDetection(outcomeTag);
+        }
+
         var result = new ProfileScanResult(
             TelegramUserId: user.Id,
             Bio: bio,
