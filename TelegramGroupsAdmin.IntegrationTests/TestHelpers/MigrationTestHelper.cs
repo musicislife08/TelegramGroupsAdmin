@@ -33,33 +33,6 @@ public class MigrationTestHelper : IDisposable
     }
 
     /// <summary>
-    /// Creates the test database and applies all EF Core migrations.
-    /// Call this in test setup to get a fresh database with schema applied.
-    /// </summary>
-    public async Task CreateDatabaseAndApplyMigrationsAsync()
-    {
-        // First, create the database using the postgres database connection
-        var adminBuilder = new NpgsqlConnectionStringBuilder(PostgresFixture.BaseConnectionString)
-        {
-            Database = "postgres" // Connect to default postgres DB to create our test DB
-        };
-
-        await using (var connection = new NpgsqlConnection(adminBuilder.ConnectionString))
-        {
-            await connection.OpenAsync();
-            await using var cmd = new NpgsqlCommand($"CREATE DATABASE \"{_databaseName}\"", connection);
-            await cmd.ExecuteNonQueryAsync();
-        }
-
-        // Now apply migrations to the new database
-        var optionsBuilder = new DbContextOptionsBuilder<AppDbContext>();
-        optionsBuilder.UseNpgsql(_connectionString);
-
-        await using var context = new AppDbContext(optionsBuilder.Options);
-        await context.Database.MigrateAsync();
-    }
-
-    /// <summary>
     /// Builds a connection string targeting the "postgres" admin DB with pooling disabled.
     /// Required for CREATE DATABASE … TEMPLATE, where Postgres rejects the operation if any
     /// other backend session is connected to the source template.

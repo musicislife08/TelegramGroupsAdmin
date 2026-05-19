@@ -3116,16 +3116,27 @@ Driver input: `audit-output.md` `migration-test` section + the 8 known migration
 
 ### Migration test files
 
-- [ ] **Task 3C.1:** `Migrations/CascadeBehaviorTests.cs`
-- [ ] **Task 3C.2:** `Migrations/CriticalMigrationTests.cs` (also fix line 210's `-1001234567890` and line 265's `-1009876543210` literals → `GoldenDataset.ManagedChats.MainChat_Id` or new constants)
-- [ ] **Task 3C.3:** `Migrations/DataIntegrityTests.cs`
-- [ ] **Task 3C.4:** `Migrations/InfrastructureTests.cs`
-- [ ] **Task 3C.5:** `Migrations/MigrationCompactionTests.cs`
-- [ ] **Task 3C.6:** `Migrations/MigrationWorkflowTests.cs`
-- [ ] **Task 3C.7:** `Migrations/SequenceIntegrityTests.cs`
-- [ ] **Task 3C.8:** `PgBouncer/PgBouncerMigrationTests.cs`
+- [x] **Task 3C.1:** `Migrations/CascadeBehaviorTests.cs`
+- [x] **Task 3C.2:** `Migrations/CriticalMigrationTests.cs` (also fix line 210's `-1001234567890` and line 265's `-1009876543210` literals → `GoldenDataset.ManagedChats.MainChat_Id` or new constants)
+- [x] **Task 3C.3:** `Migrations/DataIntegrityTests.cs`
+- [x] **Task 3C.4:** `Migrations/InfrastructureTests.cs`
+- [x] **Task 3C.5:** `Migrations/MigrationCompactionTests.cs`
+- [x] **Task 3C.6:** `Migrations/MigrationWorkflowTests.cs`
+- [x] **Task 3C.7:** `Migrations/SequenceIntegrityTests.cs`
+- [x] **Task 3C.8:** `PgBouncer/PgBouncerMigrationTests.cs`
 
 Some of these have minimal or no constant references and require zero changes — verify by inspection before editing.
+
+> **RESOLUTION 2026-05-18:** Audit + strict-lens revisit revealed several mismatches between the plan-as-written and what each file actually needed:
+>
+> - **3C.1 / 3C.3 / 3C.5 / 3C.7 / 3C.8 — Zero constant changes needed.** Inspection showed these files have no business-data ID references; they test schema/cascade/constraint/infra behavior on fresh inserts. No `GoldenDataset.*` substitution applied.
+> - **3C.2 — Resolved by deletion.** `CriticalMigrationTests.cs` tested a one-time data migration (`UnifiedReviewsAndExamSessions`) that shipped on 2026-01-28. After ~110 days in prod, regression value approached zero while maintenance cost was non-zero (it was the last consumer of legacy `GoldenDataset.LoadSqlScriptAsync`, `GoldenDataset.TelegramUsers.*`, and the legacy `00_*`/`01_*` SQL fixtures Phase 4 deletes). User criterion adopted: "migration tests for already-shipped one-time data migrations are low-value regression nets once the migration has executed in prod and won't run again." The sole-purpose fixture `SQL/migration/40_pre_migration_impersonation_alerts.sql` was deleted alongside.
+> - **3C.4 — Partial deletion + empty-template swap.** `InfrastructureTests.ShouldCreateDatabaseAndApplyMigrations` was deleted as redundant with `PostgresFixture.BuildEmptyTemplateAsync()` (the template build IS the cold-migration smoke test that runs at `[OneTimeSetUp]`; if it breaks, every test fails before this one would run). Remaining 4 tests in the file swapped to `CreateDatabaseFromEmptyTemplateAsync`.
+> - **3C.6 — Partial deletion + empty-template swap.** Same logic: `MigrationOrdering_ShouldApplyAllMigrationsToFreshDatabase` was deleted (redundant with fixture build). `RollbackSafety_ShouldRevertMostRecentMigration` swapped to empty template (its setup just needs "all migrations applied" state, which the template provides).
+>
+> **Bonus surface the plan didn't include:** the audit surfaced a 5-file empty-template sweep that was missing from the original 3C/3B plan — `CascadeBehaviorTests`, `DataIntegrityTests`, `InfrastructureTests` (post-deletion), `MigrationWorkflowTests` (post-deletion), `SequenceIntegrityTests`. Plus 3 TestData self-tests (`LoadCanonicalAsyncTests`, `GoldenReducePlanTests`, `GoldenMutatePlanTests`) that the original audit missed entirely. All swapped from `CreateDatabaseAndApplyMigrationsAsync` to `CreateDatabaseFromEmptyTemplateAsync` (~16 call sites total).
+>
+> **Helper-method retirement:** with zero callers remaining, `MigrationTestHelper.CreateDatabaseAndApplyMigrationsAsync` was deleted as dead code in the same commit. The cold-migrate path now exists only inside `PostgresFixture.BuildEmptyTemplateAsync` (where it builds the template once per session). All per-test setup goes through cloning.
 
 ### Phase 3C close-out
 
@@ -3637,7 +3648,7 @@ After all seven issues are filed, paste the issue numbers into a `bootstrap-bugs
 - [x] `GoldenDataset.SeedOldMessagesAsync` retired; `MessageHistoryRepositoryTests` retention test runs on canonical+reducer+mutator (3A.29)
 - [x] All true-empty consumer files migrated; suite green
 - [ ] DI provider swap reviewed per-file with documented intent
-- [ ] Migration tests adopt `GoldenDataset.*` constants where applicable; suite green
+- [x] Migration tests adopt `GoldenDataset.*` constants where applicable; suite green
 
 ### Phase 4
 - [ ] `find_symbol_usages` shows zero callers of every retired method

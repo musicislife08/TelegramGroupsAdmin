@@ -14,7 +14,7 @@ public class LoadCanonicalAsyncTests
     public async Task Setup()
     {
         _helper = new MigrationTestHelper();
-        await _helper.CreateDatabaseAndApplyMigrationsAsync();
+        await _helper.CreateDatabaseFromEmptyTemplateAsync();
     }
 
     [TearDown]

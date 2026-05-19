@@ -14,7 +14,7 @@ public class GoldenMutatePlanTests
     public async Task Setup()
     {
         _helper = new MigrationTestHelper();
-        await _helper.CreateDatabaseAndApplyMigrationsAsync();
+        await _helper.CreateDatabaseFromEmptyTemplateAsync();
         await using var ctx = _helper.GetDbContext();
         await GoldenDataset.LoadCanonicalAsync(ctx, PostgresFixture.SharedDataProtectionProvider);
     }

@@ -16,107 +16,6 @@ namespace TelegramGroupsAdmin.IntegrationTests.Migrations;
 public class MigrationWorkflowTests
 {
     /// <summary>
-    /// Test 13: Migration Ordering (fresh DB)
-    ///
-    /// **What it tests**: Validates that all migrations can be applied in order to a
-    /// fresh database without dependency errors (FK before table exists, etc.).
-    ///
-    /// **Why it matters**: This simulates a production deployment to a new environment.
-    /// If migrations have ordering issues, the deployment will fail catastrophically.
-    ///
-    /// **Production scenario**: Deploying to a new production instance, or provisioning
-    /// a new development environment. All migrations must apply cleanly in sequence.
-    ///
-    /// **Note**: This test is already partially validated by CreateDatabaseAndApplyMigrationsAsync
-    /// in earlier tests, but we make it explicit here to verify the full workflow.
-    /// </summary>
-    [Test]
-    public async Task MigrationOrdering_ShouldApplyAllMigrationsToFreshDatabase()
-    {
-        // Arrange - Create a fresh database (no tables, no schema)
-        using var helper = new MigrationTestHelper();
-
-        // Act - Apply ALL migrations in order
-        await helper.CreateDatabaseAndApplyMigrationsAsync();
-
-        // Assert - Verify all migrations applied successfully
-
-        // 1. Check that __EFMigrationsHistory table exists and has entries
-        var migrationCount = await helper.ExecuteScalarAsync<long>(@"
-            SELECT COUNT(*)
-            FROM ""__EFMigrationsHistory""
-        ");
-
-        Assert.That(migrationCount, Is.GreaterThan(0),
-            "Should have at least one migration applied");
-
-        // 2. Verify all expected tables exist (sample of critical tables)
-        var criticalTables = new[]
-        {
-            "users",
-            "telegram_users",
-            "managed_chats",
-            "messages",
-            "message_edits",
-            "message_translations",
-            "audit_log",
-            "chat_admins",
-            "detection_results"
-        };
-
-        foreach (var tableName in criticalTables)
-        {
-            var tableExists = await helper.ExecuteScalarAsync<bool>($@"
-                SELECT EXISTS (
-                    SELECT 1
-                    FROM information_schema.tables
-                    WHERE table_schema = 'public'
-                    AND table_name = '{tableName}'
-                )
-            ");
-
-            Assert.That(tableExists, Is.True,
-                $"Critical table '{tableName}' should exist after migrations");
-        }
-
-        // 3. Verify FK constraints exist (proves tables created before FKs)
-        var fkCount = await helper.ExecuteScalarAsync<long>(@"
-            SELECT COUNT(*)
-            FROM information_schema.table_constraints
-            WHERE constraint_type = 'FOREIGN KEY'
-            AND table_schema = 'public'
-        ");
-
-        Assert.That(fkCount, Is.GreaterThan(0),
-            "Should have foreign key constraints (proves migration ordering correct)");
-
-        // 4. Verify CHECK constraints exist (proves constraints added after data migration)
-        var checkCount = await helper.ExecuteScalarAsync<long>(@"
-            SELECT COUNT(*)
-            FROM information_schema.table_constraints
-            WHERE constraint_type = 'CHECK'
-            AND table_schema = 'public'
-        ");
-
-        Assert.That(checkCount, Is.GreaterThan(0),
-            "Should have CHECK constraints (proves schema integrity enforced)");
-
-        // 5. Verify indexes exist
-        var indexCount = await helper.ExecuteScalarAsync<long>(@"
-            SELECT COUNT(*)
-            FROM pg_indexes
-            WHERE schemaname = 'public'
-            AND indexname NOT LIKE 'pg_%'  -- Exclude system indexes
-        ");
-
-        Assert.That(indexCount, Is.GreaterThan(0),
-            "Should have indexes (proves performance optimization applied)");
-
-        // Success! All migrations applied in correct order without errors
-        Console.WriteLine($"✅ Successfully applied {migrationCount} migrations to fresh database");
-    }
-
-    /// <summary>
     /// Test 14: Rollback Safety (Down migrations)
     ///
     /// **What it tests**: Validates that Down() migrations correctly revert schema changes
@@ -139,7 +38,7 @@ public class MigrationWorkflowTests
     {
         // Arrange - Create database and apply all migrations
         using var helper = new MigrationTestHelper();
-        await helper.CreateDatabaseAndApplyMigrationsAsync();
+        await helper.CreateDatabaseFromEmptyTemplateAsync();
 
         // Get list of applied migrations
         var migrationsBeforeRollback = new List<string>();

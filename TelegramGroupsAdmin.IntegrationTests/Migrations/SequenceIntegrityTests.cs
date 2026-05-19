@@ -16,7 +16,7 @@ public class SequenceIntegrityTests
     {
         // Arrange
         using var helper = new MigrationTestHelper();
-        await helper.CreateDatabaseAndApplyMigrationsAsync();
+        await helper.CreateDatabaseFromEmptyTemplateAsync();
 
         // Act - Check all sequences
         var mismatches = await GetSequenceMismatchesAsync(helper);
@@ -33,7 +33,7 @@ public class SequenceIntegrityTests
     {
         // Arrange
         using var helper = new MigrationTestHelper();
-        await helper.CreateDatabaseAndApplyMigrationsAsync();
+        await helper.CreateDatabaseFromEmptyTemplateAsync();
 
         // Insert test data across multiple tables to increment sequences
         await using (var context = helper.GetDbContext())
@@ -85,7 +85,7 @@ public class SequenceIntegrityTests
     {
         // Arrange
         using var helper = new MigrationTestHelper();
-        await helper.CreateDatabaseAndApplyMigrationsAsync();
+        await helper.CreateDatabaseFromEmptyTemplateAsync();
 
         // Manually insert audit log entry with explicit ID, bypassing sequence
         await helper.ExecuteSqlAsync(@"
