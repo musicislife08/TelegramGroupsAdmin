@@ -593,6 +593,179 @@ public class WelcomeSystemConfigTests : WelcomeSystemConfigTestContext
         }, TimeSpan.FromSeconds(2));
     }
 
+    #endregion
+
+    #region Explicit Username Masking Tests
+
+    [Test]
+    public void WelcomeSystemConfig_RendersMaskExplicitUsernameSwitchWhenProfileScanEnabled()
+    {
+        // Arrange - profile scan ON so the masking switch should render enabled
+        ConfigService.GetWelcomeAsync(Arg.Any<long>())
+            .Returns(new WelcomeConfig
+            {
+                Enabled = true,
+                MainWelcomeMessage = "Welcome {username}!",
+                JoinSecurity = new JoinSecurityConfig
+                {
+                    ProfileScan = new ProfileScanConfig
+                    {
+                        Enabled = true,
+                        MaskExplicitUsername = true,
+                        ExplicitUsernameRedactionText = "[explicit username redacted]"
+                    }
+                }
+            });
+
+        // Act
+        var cut = Render<WelcomeSystemConfig>();
+
+        // Assert - locate the masking switch input via its label text and confirm not disabled
+        cut.WaitForAssertion(() =>
+        {
+            var maskLabel = cut.FindAll("label")
+                .FirstOrDefault(l => l.TextContent.Contains("Mask explicit usernames"));
+            Assert.That(maskLabel, Is.Not.Null,
+                "Mask explicit usernames switch label should be present in the rendered DOM");
+
+            // MudSwitch renders <label><span class="mud-switch"><input /></span>...<span>Label</span></label>
+            var maskInput = maskLabel!.QuerySelector("input");
+            Assert.That(maskInput, Is.Not.Null, "Mask switch should expose an input element");
+            Assert.That(maskInput!.HasAttribute("disabled"), Is.False,
+                "Mask switch should be enabled when ProfileScan.Enabled is true");
+        }, TimeSpan.FromSeconds(2));
+    }
+
+    [Test]
+    public void WelcomeSystemConfig_DisablesMaskingSwitchWhenProfileScanDisabled()
+    {
+        // Arrange - profile scan OFF cascades disabled to the masking switch
+        ConfigService.GetWelcomeAsync(Arg.Any<long>())
+            .Returns(new WelcomeConfig
+            {
+                Enabled = true,
+                MainWelcomeMessage = "Welcome {username}!",
+                JoinSecurity = new JoinSecurityConfig
+                {
+                    ProfileScan = new ProfileScanConfig
+                    {
+                        Enabled = false,
+                        MaskExplicitUsername = true,
+                        ExplicitUsernameRedactionText = "[explicit username redacted]"
+                    }
+                }
+            });
+
+        // Act
+        var cut = Render<WelcomeSystemConfig>();
+
+        // Assert - the mask switch input carries the disabled attribute
+        cut.WaitForAssertion(() =>
+        {
+            var maskLabel = cut.FindAll("label")
+                .FirstOrDefault(l => l.TextContent.Contains("Mask explicit usernames"));
+            Assert.That(maskLabel, Is.Not.Null,
+                "Mask explicit usernames switch label should be present in the rendered DOM");
+
+            var maskInput = maskLabel!.QuerySelector("input");
+            Assert.That(maskInput, Is.Not.Null, "Mask switch should expose an input element");
+            Assert.That(maskInput!.HasAttribute("disabled"), Is.True,
+                "Mask switch should be disabled when ProfileScan.Enabled is false");
+        }, TimeSpan.FromSeconds(2));
+    }
+
+    [Test]
+    public void WelcomeSystemConfig_DisablesRedactionTextFieldWhenMaskingOff()
+    {
+        // Arrange - profile scan ON but masking OFF: the redaction text should be disabled
+        ConfigService.GetWelcomeAsync(Arg.Any<long>())
+            .Returns(new WelcomeConfig
+            {
+                Enabled = true,
+                MainWelcomeMessage = "Welcome {username}!",
+                JoinSecurity = new JoinSecurityConfig
+                {
+                    ProfileScan = new ProfileScanConfig
+                    {
+                        Enabled = true,
+                        MaskExplicitUsername = false,
+                        ExplicitUsernameRedactionText = "[explicit username redacted]"
+                    }
+                }
+            });
+
+        // Act
+        var cut = Render<WelcomeSystemConfig>();
+
+        // Assert - MudTextField label sits in a sibling element addressed via for/id linkage
+        cut.WaitForAssertion(() =>
+        {
+            var redactionLabel = cut.FindAll("label")
+                .FirstOrDefault(l => l.TextContent.Contains("Redaction text"));
+            Assert.That(redactionLabel, Is.Not.Null,
+                "Redaction text field label should be present in the rendered DOM");
+
+            var forId = redactionLabel!.GetAttribute("for");
+            Assert.That(forId, Is.Not.Null.And.Not.Empty,
+                "Redaction text label should be linked to its input via for=");
+
+            var redactionInput = cut.Find($"#{forId}");
+            Assert.That(redactionInput.HasAttribute("disabled"), Is.True,
+                "Redaction text field should be disabled when MaskExplicitUsername is false");
+        }, TimeSpan.FromSeconds(2));
+    }
+
+    [Test]
+    public async Task WelcomeSystemConfig_Save_PassesMaskingFieldsThrough()
+    {
+        // Arrange - load with custom masking values; the component performs a wholesale
+        // assign and SaveWelcomeAsync should receive them verbatim
+        ConfigService.GetWelcomeAsync(Arg.Any<long>())
+            .Returns(new WelcomeConfig
+            {
+                Enabled = true,
+                MainWelcomeMessage = "Welcome {username}!",
+                JoinSecurity = new JoinSecurityConfig
+                {
+                    ProfileScan = new ProfileScanConfig
+                    {
+                        Enabled = true,
+                        MaskExplicitUsername = false,
+                        ExplicitUsernameRedactionText = "custom redaction"
+                    }
+                }
+            });
+
+        // WebUser cascading parameter is required by SaveConfig (uses WebUser!.ToActor())
+        this.AddTestWebUser();
+
+        var cut = Render<WelcomeSystemConfig>();
+
+        // Wait until the Save Configuration button is present, then click it
+        cut.WaitForAssertion(() =>
+        {
+            Assert.That(cut.Markup, Does.Contain("Save Configuration"));
+        }, TimeSpan.FromSeconds(2));
+
+        var saveButton = cut.FindAll("button")
+            .First(b => b.TextContent.Contains("Save Configuration"));
+        saveButton.Click();
+
+        // Assert - SaveWelcomeAsync received the wholesale config with the masking fields
+        // intact. Service internals (audit, repo dispatch) are not retested here.
+        await ConfigService.Received(1).SaveWelcomeAsync(
+            Arg.Any<ChatIdentity>(),
+            Arg.Is<WelcomeConfig>(c =>
+                c.JoinSecurity.ProfileScan.MaskExplicitUsername == false
+             && c.JoinSecurity.ProfileScan.ExplicitUsernameRedactionText == "custom redaction"),
+            Arg.Any<Actor>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    #endregion
+
+    #region Trusted Bypass Migration Tests
+
     [Test]
     public void LoadConfig_MigrationBranch_PreservesTrustedBypassAndJoinSecurity()
     {
