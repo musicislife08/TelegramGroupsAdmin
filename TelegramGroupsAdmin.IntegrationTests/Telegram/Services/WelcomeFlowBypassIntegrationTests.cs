@@ -13,7 +13,6 @@ using TelegramGroupsAdmin.Core.Repositories;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Data.Models;
-using TelegramGroupsAdmin.IntegrationTests.TestData;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
@@ -41,19 +40,28 @@ namespace TelegramGroupsAdmin.IntegrationTests.Telegram.Services;
 [TestFixture]
 public class WelcomeFlowBypassIntegrationTests
 {
-    // ── constants matching seeded test data ───────────────────────────────────
-    // 100001 is linked to Owner user b388ee38-... by 07_base_telegram_user_mappings.sql.
-    private const long LinkedOwnerTelegramUserId = 100001L;
+    // ── canonical anchor IDs ──────────────────────────────────────────────────
+    // 9899999990001 — synthetic telegram user seeded inline in WebAdminJoin_LinkedOwner test.
+    // This ID is in the canonical telegram-user range [9_000_000_000_000, 10_000_000_000_000)
+    // and is reserved here so it never collides with any canonical telegram_users row.
+    // It is mapped to the Owner web user (b388ee38-...) in the test arrange block.
+    // A separate synthetic user is needed because all three canonical telegram_user_mappings
+    // rows reference users who are also registered in chat_admins — which would cause the
+    // ChatAdmin rule (Rule 1) to fire before the WebAdmin rule.
+    private const long LinkedOwnerTelegramUserId = 9899999990001L;
 
-    // 100002 is an unlinked, non-trusted-by-default user (see 00_base_telegram_users.sql).
-    private const long TrustedUserTelegramId = 100002L;
+    // 9862700513599 (@unbeatenmutiny) — untrusted, not mapped to any web user.
+    // Used for the TrustedUser bypass scenario (trust is set in-test).
+    private const long TrustedUserTelegramId = 9862700513599L;
 
-    // 100004 is another unlinked, non-trusted user, used for the pre-banned scenario.
-    private const long PreBannedUserTelegramId = 100004L;
+    // 9997671644156 ("Sediment Sitter") — untrusted, not mapped to any web user.
+    // Used for the PreBanned scenario (trust + ban both set in-test).
+    private const long PreBannedUserTelegramId = 9997671644156L;
 
     // Any supergroup-ish id — the bypass resolver and audit handler don't verify the
     // chat's existence in managed_chats, so we use a synthetic id that doesn't collide
-    // with any seeded row.
+    // with any canonical managed_chats row (canonical chat IDs are 15-digit numbers in
+    // the range [-100_099_999_999_999, -100_000_000_000_000]).
     private const long TestChatId = -1009876543210L;
 
     // ── infrastructure ────────────────────────────────────────────────────────
@@ -74,20 +82,7 @@ public class WelcomeFlowBypassIntegrationTests
     public async Task SetUp()
     {
         _testHelper = new MigrationTestHelper();
-        await _testHelper.CreateDatabaseAndApplyMigrationsAsync();
-
-        // Seed the base telegram_users, web users, managed chats, and the
-        // 07_base_telegram_user_mappings.sql fixture (linked-owner mapping).
-        // These are the only fixtures the bypass pipeline actually queries.
-        await GoldenDataset.LoadSqlScriptAsync(
-            "SQL.00_base_telegram_users.sql",
-            sql => _testHelper.ExecuteSqlAsync(sql));
-        await GoldenDataset.LoadSqlScriptAsync(
-            "SQL.01_base_web_users.sql",
-            sql => _testHelper.ExecuteSqlAsync(sql));
-        await GoldenDataset.LoadSqlScriptAsync(
-            "SQL.07_base_telegram_user_mappings.sql",
-            sql => _testHelper.ExecuteSqlAsync(sql));
+        await _testHelper.CreateDatabaseFromGoldenTemplateAsync();
 
         _mockBotUserService = Substitute.For<IBotUserService>();
 
@@ -162,7 +157,7 @@ public class WelcomeFlowBypassIntegrationTests
     {
         // Arrange — seed the parent managed_chats row first to satisfy the chat_admins FK,
         // then seed the chat_admins row so the resolver's DB-backed chat-admin rule fires.
-        // We use TrustedUserTelegramId (100002) because it has no web mapping, so the
+        // We use TrustedUserTelegramId because it has no web mapping, so the
         // only rule that can match is the chat-admin rule.
         await using (var context = _testHelper!.GetDbContext())
         {
@@ -197,15 +192,40 @@ public class WelcomeFlowBypassIntegrationTests
     }
 
     /// <summary>
-    /// Scenario 2: Joining user is linked to an Owner-level web admin via
-    /// 07_base_telegram_user_mappings.sql. Expectation: resolver returns
-    /// <see cref="BypassDecision.Admin"/> with the WebAdmin reason string.
+    /// Scenario 2: Joining user is linked to an Owner-level web admin. Expectation: resolver
+    /// returns <see cref="BypassDecision.Admin"/> with the WebAdmin reason string.
+    ///
+    /// <para>
+    /// A synthetic telegram user (<see cref="LinkedOwnerTelegramUserId"/>) is seeded inline
+    /// rather than using an existing canonical mapping, because all three canonical
+    /// telegram_user_mappings rows reference users who are also registered in chat_admins.
+    /// That would cause Rule 1 (ChatAdmin) to fire before Rule 1b (WebAdmin), masking the
+    /// path under test. The synthetic user is mapped to the Owner web user and has no
+    /// chat_admins rows, so only the WebAdmin rule can match.
+    /// </para>
     /// </summary>
     [Test]
     public async Task WebAdminJoin_LinkedOwner_WritesAuditAndBypasses()
     {
-        // Arrange — the mock defaults to returning Member, so the ChatAdmin rule fails
-        // and the resolver falls through to the linked-web-admin rule.
+        // Arrange — seed a synthetic telegram user + Owner web mapping with no chat_admins
+        // row, so the ChatAdmin rule (Rule 1) cannot fire and the resolver falls through to
+        // the linked-web-admin rule (Rule 1b).
+        await _testHelper!.ExecuteSqlAsync(
+            $"""
+            INSERT INTO telegram_users
+                (telegram_user_id, username, first_name, last_name, is_bot, is_trusted, is_active,
+                 is_banned, bot_dm_enabled, first_seen_at, last_seen_at, created_at, updated_at,
+                 warnings, has_pinned_stories, is_fake, is_scam, is_verified, kick_count)
+            VALUES ({LinkedOwnerTelegramUserId}, 'bypass_webadmin_test', 'WebAdmin', 'Test',
+                    false, false, true, false, false,
+                    NOW(), NOW(), NOW(), NOW(),
+                    NULL, false, false, false, false, 0);
+
+            INSERT INTO telegram_user_mappings (telegram_id, telegram_username, user_id, linked_at, is_active)
+            VALUES ({LinkedOwnerTelegramUserId}, 'bypass_webadmin_test',
+                    'b388ee38-0ed3-4c09-9def-5715f9f07f56', NOW(), TRUE);
+            """);
+
         var user = UserIdentity.FromId(LinkedOwnerTelegramUserId);
         var chat = ChatIdentity.FromId(TestChatId);
 
@@ -231,7 +251,7 @@ public class WelcomeFlowBypassIntegrationTests
     [Test]
     public async Task TrustedUserJoin_ToggleOn_Bypasses_CreatesAudit()
     {
-        // Arrange — mark user 100002 as trusted, then enable global bypass.
+        // Arrange — mark the canonical untrusted user as trusted, then enable global bypass.
         await MarkUserTrustedAsync(TrustedUserTelegramId);
 
         var welcomeConfig = new WelcomeConfig
@@ -389,36 +409,9 @@ public class WelcomeFlowBypassIntegrationTests
         };
 
     /// <summary>
-    /// Builds a <see cref="ChatMemberAdministrator"/> used to simulate chat-admin status
-    /// for the ChatAdmin bypass scenario.
-    /// </summary>
-    private static ChatMember BuildAdministratorChatMember(long telegramUserId) =>
-        new ChatMemberAdministrator
-        {
-            User = new User
-            {
-                Id = telegramUserId,
-                FirstName = "Test",
-                IsBot = false,
-            },
-            CanBeEdited = false,
-            IsAnonymous = false,
-            CanManageChat = true,
-            CanDeleteMessages = true,
-            CanManageVideoChats = false,
-            CanRestrictMembers = true,
-            CanPromoteMembers = false,
-            CanChangeInfo = false,
-            CanInviteUsers = true,
-            CanPostStories = false,
-            CanEditStories = false,
-            CanDeleteStories = false,
-        };
-
-    /// <summary>
-    /// Marks a seeded telegram user as trusted by flipping the flag directly via repository.
-    /// We use <see cref="ITelegramUserRepository.TrustUserAsync"/> so the write goes through the
-    /// production code path, including UpdatedAt bookkeeping.
+    /// Marks a canonical telegram user as trusted by flipping the flag directly via
+    /// repository. We use <see cref="ITelegramUserRepository.TrustUserAsync"/> so the write
+    /// goes through the production code path, including UpdatedAt bookkeeping.
     /// </summary>
     private async Task MarkUserTrustedAsync(long telegramUserId)
     {
@@ -436,6 +429,7 @@ public class WelcomeFlowBypassIntegrationTests
         var rows = await context.UserActions
             .AsNoTracking()
             .Where(a => a.UserId == telegramUserId
+                        && a.ChatId == TestChatId
                         && a.ActionType == (int)UserActionType.WelcomeBypass)
             .ToListAsync();
 

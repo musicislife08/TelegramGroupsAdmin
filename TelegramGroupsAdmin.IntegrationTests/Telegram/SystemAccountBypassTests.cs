@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -10,6 +11,7 @@ using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Data;
+using TelegramGroupsAdmin.IntegrationTests.Fixtures;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
@@ -39,9 +41,9 @@ public class SystemAccountBypassTests
     [SetUp]
     public async Task SetUp()
     {
-        // Create unique test database with migrations applied
+        // Clone the empty migrated template for this test
         _testHelper = new MigrationTestHelper();
-        await _testHelper.CreateDatabaseAndApplyMigrationsAsync();
+        await _testHelper.CreateDatabaseFromEmptyTemplateAsync();
 
         // Set up dependency injection with real repositories
         var services = new ServiceCollection();
@@ -70,7 +72,7 @@ public class SystemAccountBypassTests
         services.AddScoped<IConfigRepository, ConfigRepository>();
         services.AddScoped<IContentDetectionConfigRepository, ContentDetectionConfigRepository>();
         services.AddHybridCache();
-        services.AddDataProtection();
+        services.AddSingleton<IDataProtectionProvider>(PostgresFixture.SharedDataProtectionProvider);
         services.AddScoped<IAuditLogRepository, AuditLogRepository>();
         services.AddScoped<IAuditService, AuditService>();
         services.AddScoped<IConfigService, ConfigService>();

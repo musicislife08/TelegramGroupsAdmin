@@ -58,14 +58,16 @@ public class BanCelebrationServiceTests
     [SetUp]
     public async Task SetUp()
     {
-        // Create unique test database with migrations applied
+        // This test family is the documented exception to the canonical+reducer+mutator
+        // pattern. Every test starts from an empty schema and adds its own scenario via
+        // production repositories (captions, GIFs, configs). Canonical's reference data
+        // (74 captions + 92 GIFs + per-chat configs with ban_celebration enabled) would
+        // contaminate the SUT's RNG-driven caption/GIF selection and break the
+        // "no captions" / "no GIFs" / "disabled by default" tests. SeedBanActions below
+        // is a direct EF insert as a deliberate exception — the user_actions table has
+        // no public production "insert ban action" API for tests to route through.
         _testHelper = new MigrationTestHelper();
-        await _testHelper.CreateDatabaseAndApplyMigrationsAsync();
-
-        // Seed only telegram users (needed for user_actions FK constraint in SeedBanActions)
-        await GoldenDataset.LoadSqlScriptAsync(
-            "SQL.00_base_telegram_users.sql",
-            sql => _testHelper.ExecuteSqlAsync(sql));
+        await _testHelper.CreateDatabaseFromEmptyTemplateAsync();
 
         // Create temp directory for media files
         _tempMediaPath = Path.Combine(Path.GetTempPath(), $"BanCelebrationServiceTests_{Guid.NewGuid():N}");
@@ -346,7 +348,8 @@ public class BanCelebrationServiceTests
         await _captionRepository!.AddAsync("Ban #{bancount} today!", "DM", "Test");
         await EnableBanCelebration(TestChatId);
 
-        // Seed some ban actions for today
+        // Seed 3 ban actions for today (direct EF insert is this test family's
+        // documented exception — see the SetUp docstring for rationale).
         await SeedBanActions(3);
 
         string? capturedCaption = null;
@@ -547,23 +550,25 @@ public class BanCelebrationServiceTests
     {
         await using var context = _testHelper!.GetDbContext();
 
-        // Use existing telegram users from GoldenDataset (100001-100007)
-        var existingUserIds = new[]
+        // Insert telegram_users + user_actions in one transaction-free batch.
+        // Self-contained: no dependency on the legacy 00_base_telegram_users.sql
+        // (which is on the cleanup-deletion trajectory). Synthetic IDs live in
+        // the canonical 9_xxx_xxx_xxx_xxx identity space so they can't collide
+        // with any future canonical sample.
+        const long SyntheticUserIdBase = 9100000000000L;
+        for (int i = 0; i < count; i++)
         {
-            GoldenDataset.TelegramUsers.User1_TelegramUserId,
-            GoldenDataset.TelegramUsers.User2_TelegramUserId,
-            GoldenDataset.TelegramUsers.User3_TelegramUserId,
-            GoldenDataset.TelegramUsers.User4_TelegramUserId,
-            GoldenDataset.TelegramUsers.User5_TelegramUserId,
-            GoldenDataset.TelegramUsers.User6_TelegramUserId,
-            GoldenDataset.TelegramUsers.User7_TelegramUserId
-        };
-
-        for (int i = 0; i < count && i < existingUserIds.Length; i++)
-        {
+            var bannedUserId = SyntheticUserIdBase + i;
+            context.TelegramUsers.Add(new Data.Models.TelegramUserDto
+            {
+                TelegramUserId = bannedUserId,
+                Username = $"test_bancelebration_user_{i}",
+                FirstName = "Test",
+            });
             context.UserActions.Add(new Data.Models.UserActionRecordDto
             {
-                TelegramUserId = existingUserIds[i],
+                UserId = bannedUserId,
+                SystemIdentifier = "test-bancelebration",
                 ActionType = (int)UserActionType.Ban,
                 IssuedAt = DateTimeOffset.UtcNow,
                 Reason = "Test ban"

@@ -33,7 +33,7 @@ public class CascadeBehaviorTests
     {
         // Arrange - Create database and apply migrations
         using var helper = new MigrationTestHelper();
-        await helper.CreateDatabaseAndApplyMigrationsAsync();
+        await helper.CreateDatabaseFromEmptyTemplateAsync();
 
         // Create two web users (actor and target)
         await using (var context = helper.GetDbContext())
@@ -144,7 +144,7 @@ public class CascadeBehaviorTests
     {
         // Arrange - Create database and apply migrations
         using var helper = new MigrationTestHelper();
-        await helper.CreateDatabaseAndApplyMigrationsAsync();
+        await helper.CreateDatabaseFromEmptyTemplateAsync();
 
         // Create message using DbContext (handles all required fields)
         await using (var context = helper.GetDbContext())
@@ -241,7 +241,7 @@ public class CascadeBehaviorTests
     {
         // Arrange - Create database and apply migrations
         using var helper = new MigrationTestHelper();
-        await helper.CreateDatabaseAndApplyMigrationsAsync();
+        await helper.CreateDatabaseFromEmptyTemplateAsync();
 
         // Create managed chat
         await using (var context = helper.GetDbContext())

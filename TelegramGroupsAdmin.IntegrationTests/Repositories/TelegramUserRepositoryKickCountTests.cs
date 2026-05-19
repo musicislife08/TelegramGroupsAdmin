@@ -3,7 +3,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Data;
-using TelegramGroupsAdmin.Data.Models;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
 using TelegramGroupsAdmin.Telegram.Repositories;
 
@@ -13,7 +12,7 @@ namespace TelegramGroupsAdmin.IntegrationTests.Repositories;
 /// Integration tests for <see cref="ITelegramUserRepository.GetKickCountAsync"/> and
 /// <see cref="ITelegramUserRepository.IncrementKickCountAsync"/>.
 ///
-/// Each test gets a fresh isolated PostgreSQL database (via MigrationTestHelper).
+/// Each test gets a fresh isolated PostgreSQL database cloned from the golden template.
 /// The shared container is managed by <see cref="PostgresFixture"/> at assembly level.
 /// </summary>
 [TestFixture]
@@ -24,11 +23,19 @@ public class TelegramUserRepositoryKickCountTests
     private IServiceScope? _scope;
     private ITelegramUserRepository? _repository;
 
+    // Canonical anchor IDs — kick_count = 0 in golden dataset.
+    // Top MainChat ham author (@unhelpfulgrab, 24 messages, is_banned=false).
+    private const long TopHamAuthorId = 9921676191756L;
+    // Second active MainChat ham author (@sillywolf, 23 messages, is_banned=false).
+    private const long SecondHamAuthorId = 9960171136314L;
+    // Heavily-banned spammer (@lazinessunsheathe, 4 Ban actions) — kick_count = 0.
+    private const long HeavilyBannedSpammerId = 9971261287520L;
+
     [SetUp]
     public async Task SetUp()
     {
         _testHelper = new MigrationTestHelper();
-        await _testHelper.CreateDatabaseAndApplyMigrationsAsync();
+        await _testHelper.CreateDatabaseFromGoldenTemplateAsync();
 
         var services = new ServiceCollection();
 
@@ -59,44 +66,14 @@ public class TelegramUserRepositoryKickCountTests
     }
 
     // ============================================================================
-    // Helper Methods
-    // ============================================================================
-
-    /// <summary>
-    /// Inserts a minimal telegram_users row directly via EF Core.
-    /// The kick_count column defaults to 0 unless overridden.
-    /// </summary>
-    private async Task CreateTestUserAsync(long telegramUserId)
-    {
-        var contextFactory = _serviceProvider!.GetRequiredService<IDbContextFactory<AppDbContext>>();
-        await using var context = await contextFactory.CreateDbContextAsync();
-
-        var now = DateTimeOffset.UtcNow;
-        context.TelegramUsers.Add(new TelegramUserDto
-        {
-            TelegramUserId = telegramUserId,
-            FirstName = "Test",
-            LastName = "User",
-            IsBot = false,
-            FirstSeenAt = now,
-            LastSeenAt = now,
-            CreatedAt = now,
-            UpdatedAt = now,
-        });
-
-        await context.SaveChangesAsync();
-    }
-
-    // ============================================================================
     // GetKickCountAsync Tests
     // ============================================================================
 
     [Test]
     public async Task GetKickCountAsync_NewUser_ReturnsZero()
     {
-        // Arrange
-        const long userId = 100_001L;
-        await CreateTestUserAsync(userId);
+        // Arrange — canonical anchor has kick_count = 0 in the golden dataset
+        const long userId = TopHamAuthorId;
 
         // Act
         var kickCount = await _repository!.GetKickCountAsync(userId);
@@ -108,9 +85,8 @@ public class TelegramUserRepositoryKickCountTests
     [Test]
     public async Task GetKickCountAsync_AfterIncrements_MatchesCount()
     {
-        // Arrange
-        const long userId = 100_002L;
-        await CreateTestUserAsync(userId);
+        // Arrange — canonical anchor has kick_count = 0 in the golden dataset
+        const long userId = SecondHamAuthorId;
 
         await _repository!.IncrementKickCountAsync(UserIdentity.FromId(userId));
         await _repository!.IncrementKickCountAsync(UserIdentity.FromId(userId));
@@ -129,9 +105,8 @@ public class TelegramUserRepositoryKickCountTests
     [Test]
     public async Task IncrementKickCountAsync_FirstKick_ReturnsRowsAffected()
     {
-        // Arrange
-        const long userId = 100_003L;
-        await CreateTestUserAsync(userId);
+        // Arrange — canonical anchor exists in the golden dataset
+        const long userId = HeavilyBannedSpammerId;
 
         // Act — returns rows affected (1 = success)
         var result = await _repository!.IncrementKickCountAsync(UserIdentity.FromId(userId));
@@ -143,9 +118,8 @@ public class TelegramUserRepositoryKickCountTests
     [Test]
     public async Task IncrementKickCountAsync_MultipleKicks_EachReturnsRowsAffected()
     {
-        // Arrange
-        const long userId = 100_004L;
-        await CreateTestUserAsync(userId);
+        // Arrange — canonical anchor exists in the golden dataset; kick_count starts at 0
+        const long userId = TopHamAuthorId;
 
         // Act — each call returns rows affected (always 1 for existing user)
         var identity = UserIdentity.FromId(userId);
@@ -169,7 +143,7 @@ public class TelegramUserRepositoryKickCountTests
     [Test]
     public async Task IncrementKickCountAsync_UnknownUser_ReturnsZero()
     {
-        // Arrange — no user created, so the user does not exist in the database
+        // Arrange — no user with this ID in canonical (canonical IDs are 13-digit numbers in the 9T range)
         const long userId = 999_999L;
 
         // Act
@@ -182,7 +156,7 @@ public class TelegramUserRepositoryKickCountTests
     [Test]
     public async Task GetKickCountAsync_UnknownUser_ReturnsZero()
     {
-        // Arrange — no user created, so user does not exist in the database
+        // Arrange — no user with this ID in canonical (canonical IDs are 13-digit numbers in the 9T range)
         const long userId = 999_998L;
 
         // Act
@@ -195,11 +169,9 @@ public class TelegramUserRepositoryKickCountTests
     [Test]
     public async Task IncrementKickCountAsync_DifferentUsers_IndependentCounts()
     {
-        // Arrange
-        const long userA = 100_005L;
-        const long userB = 100_006L;
-        await CreateTestUserAsync(userA);
-        await CreateTestUserAsync(userB);
+        // Arrange — two canonical anchors, both with kick_count = 0 in the golden dataset
+        const long userA = TopHamAuthorId;
+        const long userB = SecondHamAuthorId;
 
         await _repository!.IncrementKickCountAsync(UserIdentity.FromId(userA));
         await _repository!.IncrementKickCountAsync(UserIdentity.FromId(userA));

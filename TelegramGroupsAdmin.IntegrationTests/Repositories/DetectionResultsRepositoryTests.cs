@@ -3,7 +3,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.Data;
-using TelegramGroupsAdmin.IntegrationTests.TestData;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
 
 namespace TelegramGroupsAdmin.IntegrationTests.Repositories;
@@ -17,8 +16,14 @@ namespace TelegramGroupsAdmin.IntegrationTests.Repositories;
 /// - AddManualTrainingSampleAsync: synthetic ChatId=0 samples with composite FK
 ///
 /// Test Infrastructure:
-/// - Unique PostgreSQL database per test (test_db_xxx)
-/// - GoldenDataset provides 2 detection results (Result1 for Msg1, Result2 for Msg11)
+/// - Unique PostgreSQL database per test (cloned from golden_template)
+/// - Canonical dataset provides 376 detection results across multiple chats
+///
+/// Canonical anchors used:
+/// - Batch retrieval: message_id=20465 and message_id=20466 in chat -100055570785509
+///   (both have canonical detection_results rows; 20465 is the multi-DR anchor)
+/// - Invalidation insert target: message_id=212340 in MainChat -100026957614982
+///   (exists in canonical messages with no existing detection_result — clean insert target)
 /// </summary>
 [TestFixture]
 public class DetectionResultsRepositoryTests
@@ -27,11 +32,20 @@ public class DetectionResultsRepositoryTests
     private IServiceProvider? _serviceProvider;
     private IDetectionResultsRepository? _repository;
 
+    // Canonical chat that holds message_id=20465 and message_id=20466
+    private const long BatchChatId = -100055570785509L;
+    private const int BatchMsg1Id = 20465;
+    private const int BatchMsg2Id = 20466;
+
+    // MainChat — used for the InvalidateTrainingData tests (insert a fresh DR here)
+    private const long MainChatId = -100026957614982L;
+    private const int InvalidateTargetMessageId = 212340;
+
     [SetUp]
     public async Task SetUp()
     {
         _testHelper = new MigrationTestHelper();
-        await _testHelper.CreateDatabaseAndApplyMigrationsAsync();
+        await _testHelper.CreateDatabaseFromGoldenTemplateAsync();
 
         var services = new ServiceCollection();
 
@@ -48,10 +62,6 @@ public class DetectionResultsRepositoryTests
         _serviceProvider = services.BuildServiceProvider();
         _repository = _serviceProvider.CreateScope()
             .ServiceProvider.GetRequiredService<IDetectionResultsRepository>();
-
-        // Seed golden dataset
-        await using var context = _testHelper.GetDbContext();
-        await GoldenDataset.SeedAsync(context);
     }
 
     [TearDown]
@@ -66,28 +76,27 @@ public class DetectionResultsRepositoryTests
     [Test]
     public async Task GetDetectionHistoryBatchAsync_WithCorrectChatId_ReturnsResults()
     {
-        // Arrange — both golden dataset detection results are for MainChat
-        var chatId = GoldenDataset.ManagedChats.MainChat_Id;
-        int[] messageIds = [GoldenDataset.DetectionResults.Result1_MessageId, GoldenDataset.DetectionResults.Result2_MessageId];
+        // Arrange — both canonical anchors (20465, 20466) have detection_results in BatchChatId
+        int[] messageIds = [BatchMsg1Id, BatchMsg2Id];
 
         // Act
-        var results = await _repository!.GetDetectionHistoryBatchAsync(chatId, messageIds);
+        var results = await _repository!.GetDetectionHistoryBatchAsync(BatchChatId, messageIds);
 
         // Assert
         using (Assert.EnterMultipleScope())
         {
             Assert.That(results, Has.Count.EqualTo(2));
-            Assert.That(results.ContainsKey(GoldenDataset.DetectionResults.Result1_MessageId), Is.True);
-            Assert.That(results.ContainsKey(GoldenDataset.DetectionResults.Result2_MessageId), Is.True);
+            Assert.That(results.ContainsKey(BatchMsg1Id), Is.True);
+            Assert.That(results.ContainsKey(BatchMsg2Id), Is.True);
         }
     }
 
     [Test]
     public async Task GetDetectionHistoryBatchAsync_WithWrongChatId_ReturnsEmpty()
     {
-        // Arrange — use a different chat ID than the golden dataset
+        // Arrange — use a different chat ID than the canonical anchors live in
         var wrongChatId = 999999L;
-        int[] messageIds = [GoldenDataset.DetectionResults.Result1_MessageId, GoldenDataset.DetectionResults.Result2_MessageId];
+        int[] messageIds = [BatchMsg1Id, BatchMsg2Id];
 
         // Act
         var results = await _repository!.GetDetectionHistoryBatchAsync(wrongChatId, messageIds);
@@ -99,11 +108,8 @@ public class DetectionResultsRepositoryTests
     [Test]
     public async Task GetDetectionHistoryBatchAsync_WithEmptyMessageIds_ReturnsEmpty()
     {
-        // Arrange
-        var chatId = GoldenDataset.ManagedChats.MainChat_Id;
-
         // Act
-        var results = await _repository!.GetDetectionHistoryBatchAsync(chatId, []);
+        var results = await _repository!.GetDetectionHistoryBatchAsync(BatchChatId, []);
 
         // Assert
         Assert.That(results, Is.Empty);
@@ -116,16 +122,14 @@ public class DetectionResultsRepositoryTests
     [Test]
     public async Task InvalidateTrainingDataForMessageAsync_SetsUsedForTrainingFalse()
     {
-        // Arrange — insert a detection result with used_for_training = true
-        var chatId = GoldenDataset.ManagedChats.MainChat_Id;
-        var messageId = GoldenDataset.Messages.Msg3_Id; // Use a message that doesn't have a detection result yet
-
+        // Arrange — insert a detection result with used_for_training = true on a canonical
+        // message that has no existing detection_result (clean insert target)
         await using (var context = _testHelper!.GetDbContext())
         {
             context.DetectionResults.Add(new Data.Models.DetectionResultRecordDto
             {
-                MessageId = messageId,
-                ChatId = chatId,
+                MessageId = InvalidateTargetMessageId,
+                ChatId = MainChatId,
                 DetectedAt = DateTimeOffset.UtcNow,
                 DetectionSource = "System",
                 DetectionMethod = "TestMethod",
@@ -140,13 +144,13 @@ public class DetectionResultsRepositoryTests
         }
 
         // Act
-        await _repository!.InvalidateTrainingDataForMessageAsync(messageId, chatId);
+        await _repository!.InvalidateTrainingDataForMessageAsync(InvalidateTargetMessageId, MainChatId);
 
         // Assert — verify used_for_training is now false
         await using (var context = _testHelper.GetDbContext())
         {
             var result = await context.DetectionResults
-                .FirstAsync(dr => dr.MessageId == messageId && dr.ChatId == chatId);
+                .FirstAsync(dr => dr.MessageId == InvalidateTargetMessageId && dr.ChatId == MainChatId);
             Assert.That(result.UsedForTraining, Is.False);
         }
     }
@@ -155,15 +159,12 @@ public class DetectionResultsRepositoryTests
     public async Task InvalidateTrainingDataForMessageAsync_WrongChatId_DoesNotAffectOtherChats()
     {
         // Arrange — insert a detection result with used_for_training = true
-        var chatId = GoldenDataset.ManagedChats.MainChat_Id;
-        var messageId = GoldenDataset.Messages.Msg3_Id;
-
         await using (var context = _testHelper!.GetDbContext())
         {
             context.DetectionResults.Add(new Data.Models.DetectionResultRecordDto
             {
-                MessageId = messageId,
-                ChatId = chatId,
+                MessageId = InvalidateTargetMessageId,
+                ChatId = MainChatId,
                 DetectedAt = DateTimeOffset.UtcNow,
                 DetectionSource = "System",
                 DetectionMethod = "TestMethod",
@@ -178,13 +179,13 @@ public class DetectionResultsRepositoryTests
         }
 
         // Act — invalidate with a DIFFERENT chat ID
-        await _repository!.InvalidateTrainingDataForMessageAsync(messageId, 999999L);
+        await _repository!.InvalidateTrainingDataForMessageAsync(InvalidateTargetMessageId, 999999L);
 
         // Assert — original record should still have used_for_training = true
         await using (var context = _testHelper.GetDbContext())
         {
             var result = await context.DetectionResults
-                .FirstAsync(dr => dr.MessageId == messageId && dr.ChatId == chatId);
+                .FirstAsync(dr => dr.MessageId == InvalidateTargetMessageId && dr.ChatId == MainChatId);
             Assert.That(result.UsedForTraining, Is.True);
         }
     }

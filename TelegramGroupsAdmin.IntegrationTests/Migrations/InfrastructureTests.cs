@@ -12,49 +12,11 @@ namespace TelegramGroupsAdmin.IntegrationTests.Migrations;
 public class InfrastructureTests
 {
     [Test]
-    public async Task ShouldCreateDatabaseAndApplyMigrations()
-    {
-        // Arrange
-        using var helper = new MigrationTestHelper();
-
-        // Act
-        await helper.CreateDatabaseAndApplyMigrationsAsync();
-
-        // Assert - Verify database exists and has expected tables
-        var tableCount = await helper.ExecuteScalarAsync(@"
-            SELECT COUNT(*)
-            FROM information_schema.tables
-            WHERE table_schema = 'public'
-            AND table_type = 'BASE TABLE'
-        ");
-
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(tableCount, Is.Not.Null);
-            Assert.That(Convert.ToInt32(tableCount), Is.GreaterThan(0),
-                "Expected at least one table after applying migrations");
-        }
-
-        // Verify specific critical tables exist
-        var usersTableExists = await helper.ExecuteScalarAsync(@"
-            SELECT EXISTS (
-                SELECT 1
-                FROM information_schema.tables
-                WHERE table_schema = 'public'
-                AND table_name = 'users'
-            )
-        ");
-
-        Assert.That(usersTableExists, Is.EqualTo(true),
-            "Expected 'users' table to exist after migrations");
-    }
-
-    [Test]
     public async Task ShouldIsolateDatabasesBetweenTests()
     {
         // Arrange - Create first database and insert data using DbContext
         using var helper1 = new MigrationTestHelper();
-        await helper1.CreateDatabaseAndApplyMigrationsAsync();
+        await helper1.CreateDatabaseFromEmptyTemplateAsync();
 
         await using (var context = helper1.GetDbContext())
         {
@@ -77,7 +39,7 @@ public class InfrastructureTests
 
         // Act - Create second database (should be completely isolated)
         using var helper2 = new MigrationTestHelper();
-        await helper2.CreateDatabaseAndApplyMigrationsAsync();
+        await helper2.CreateDatabaseFromEmptyTemplateAsync();
 
         // Assert - Second database should have no users
         var count2 = await helper2.ExecuteScalarAsync("SELECT COUNT(*) FROM users");
@@ -102,7 +64,7 @@ public class InfrastructureTests
             using var helper = new MigrationTestHelper();
             databaseName = helper.DatabaseName;
 
-            await helper.CreateDatabaseAndApplyMigrationsAsync();
+            await helper.CreateDatabaseFromEmptyTemplateAsync();
 
             // Insert some data to verify database is working
             await using (var context = helper.GetDbContext())
@@ -133,7 +95,7 @@ public class InfrastructureTests
     {
         // Arrange
         using var helper = new MigrationTestHelper();
-        await helper.CreateDatabaseAndApplyMigrationsAsync();
+        await helper.CreateDatabaseFromEmptyTemplateAsync();
 
         // Insert test data using DbContext first
         await using (var context = helper.GetDbContext())
@@ -176,7 +138,7 @@ public class InfrastructureTests
     {
         // Arrange
         using var helper = new MigrationTestHelper();
-        await helper.CreateDatabaseAndApplyMigrationsAsync();
+        await helper.CreateDatabaseFromEmptyTemplateAsync();
 
         // Act - Use DbContext to query
         await using var context = helper.GetDbContext();

@@ -1,10 +1,8 @@
-using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
-using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 
 namespace TelegramGroupsAdmin.IntegrationTests.Repositories;
@@ -12,6 +10,15 @@ namespace TelegramGroupsAdmin.IntegrationTests.Repositories;
 /// <summary>
 /// Integration tests verifying UsernameHistoryRepository against a real PostgreSQL database.
 /// Covers insert/retrieve round-trips, ordering, cascade delete, user isolation, and null handling.
+///
+/// All tests clone the golden_template. Canonical has 4 username_history rows total:
+///   id=1  user_id=9726308613009
+///   id=2  user_id=9875141377477  (prior name "QQQ", renamed spammer)
+///   id=3  user_id=9032620986755
+///   id=4  user_id=9095125964119
+///
+/// Fresh-INSERT tests use canonical telegram_users with no existing username_history rows so
+/// count assertions are unambiguous without requiring any legacy seed calls.
 /// </summary>
 [TestFixture]
 [Category("Integration")]
@@ -20,17 +27,22 @@ public class UsernameHistoryRepositoryTests
     private MigrationTestHelper? _testHelper;
     private IServiceProvider? _serviceProvider;
 
+    // Canonical telegram_user_ids with NO existing username_history rows.
+    // These are valid FK targets (exist in telegram_users after golden_template clone).
+    private const long FreshUser1 = 9921676191756L; // @unhelpfulgrab — "Squeak Degree"
+    private const long FreshUser2 = 9960171136314L; // @sillywolf — "Early Spirits"
+    private const long FreshUser3 = 9452657005278L; // @strainermaroon — "Obtrusive Impure"
+    private const long FreshUserA = 9971261287520L; // @lazinessunsheathe — "Reappear Math"
+    private const long FreshUserB = 9793662571780L; // canonical no-history user
+    private const long FreshUser5 = 9196379650113L; // @squishierspectacle — "Recall Zen"
+
     [SetUp]
     public async Task SetUp()
     {
         _testHelper = new MigrationTestHelper();
-        await _testHelper.CreateDatabaseAndApplyMigrationsAsync();
+        await _testHelper.CreateDatabaseFromGoldenTemplateAsync();
 
         var services = new ServiceCollection();
-
-        services.AddDataProtection()
-            .SetApplicationName("TelegramGroupsAdmin.Tests")
-            .PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(Path.GetTempPath(), $"test_keys_{Guid.NewGuid():N}")));
 
         var dataSourceBuilder = new Npgsql.NpgsqlDataSourceBuilder(_testHelper.ConnectionString);
         services.AddSingleton(dataSourceBuilder.Build());
@@ -43,10 +55,8 @@ public class UsernameHistoryRepositoryTests
         services.AddLogging(builder =>
         {
             builder.AddConsole().SetMinimumLevel(LogLevel.Warning);
-            builder.AddFilter("Microsoft.AspNetCore.DataProtection", LogLevel.Error);
         });
 
-        services.AddScoped<ITelegramUserRepository, TelegramUserRepository>();
         services.AddScoped<IUsernameHistoryRepository, UsernameHistoryRepository>();
 
         _serviceProvider = services.BuildServiceProvider();
@@ -66,8 +76,8 @@ public class UsernameHistoryRepositoryTests
     [Test]
     public async Task InsertAsync_And_GetByUserIdAsync_RoundTrips()
     {
-        const long userId = 100001L;
-        await SeedUserAsync(userId);
+        // FreshUser1 has no existing username_history rows in canonical.
+        const long userId = FreshUser1;
 
         await using var scope = _serviceProvider!.CreateAsyncScope();
         var repo = scope.ServiceProvider.GetRequiredService<IUsernameHistoryRepository>();
@@ -95,10 +105,10 @@ public class UsernameHistoryRepositoryTests
     [Test]
     public async Task GetByUserIdAsync_ReturnsDescendingByRecordedAt()
     {
-        const long userId = 100002L;
-        await SeedUserAsync(userId);
+        // FreshUser2 has no existing username_history rows in canonical.
+        const long userId = FreshUser2;
 
-        // Seed rows directly with explicit, deterministic timestamps to avoid any timing dependency
+        // Seed rows directly with explicit, deterministic timestamps to avoid any timing dependency.
         var olderTs = "2024-01-01 10:00:00+00";
         var newerTs = "2024-01-02 10:00:00+00";
         await _testHelper!.ExecuteSqlAsync($"""
@@ -126,8 +136,8 @@ public class UsernameHistoryRepositoryTests
     [Test]
     public async Task CascadeDelete_RemovesHistoryWhenUserDeleted()
     {
-        const long userId = 100003L;
-        await SeedUserAsync(userId);
+        // FreshUser3 has no existing username_history rows in canonical.
+        const long userId = FreshUser3;
 
         await using (var scope = _serviceProvider!.CreateAsyncScope())
         {
@@ -164,10 +174,9 @@ public class UsernameHistoryRepositoryTests
     [Test]
     public async Task GetByUserIdAsync_DoesNotReturnOtherUsersHistory()
     {
-        const long userAId = 100004L;
-        const long userBId = 100005L;
-        await SeedUserAsync(userAId, username: "user_a");
-        await SeedUserAsync(userBId, username: "user_b");
+        // FreshUserA and FreshUserB have no existing username_history rows in canonical.
+        const long userAId = FreshUserA;
+        const long userBId = FreshUserB;
 
         await using (var scope = _serviceProvider!.CreateAsyncScope())
         {
@@ -203,8 +212,8 @@ public class UsernameHistoryRepositoryTests
     [Test]
     public async Task InsertAsync_HandlesNullFields()
     {
-        const long userId = 100006L;
-        await SeedUserAsync(userId);
+        // FreshUser5 has no existing username_history rows in canonical.
+        const long userId = FreshUser5;
 
         await using var scope = _serviceProvider!.CreateAsyncScope();
         var repo = scope.ServiceProvider.GetRequiredService<IUsernameHistoryRepository>();
@@ -223,34 +232,5 @@ public class UsernameHistoryRepositoryTests
             Assert.That(record.FirstName, Is.Null);
             Assert.That(record.LastName, Is.Null);
         });
-    }
-
-    // ============================================================================
-    // Helper
-    // ============================================================================
-
-    private async Task SeedUserAsync(long userId, string? username = "testuser", string? firstName = "Test", string? lastName = "User")
-    {
-        await using var scope = _serviceProvider!.CreateAsyncScope();
-        var userRepo = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
-        var now = DateTimeOffset.UtcNow;
-        await userRepo.UpsertAsync(new TelegramUser(
-            TelegramUserId: userId,
-            Username: username,
-            FirstName: firstName,
-            LastName: lastName,
-            UserPhotoPath: null,
-            PhotoHash: null,
-            PhotoFileUniqueId: null,
-            IsBot: false,
-            IsTrusted: false,
-            IsBanned: false,
-            KickCount: 0,
-            BotDmEnabled: false,
-            FirstSeenAt: now,
-            LastSeenAt: now,
-            CreatedAt: now,
-            UpdatedAt: now,
-            IsActive: false));
     }
 }

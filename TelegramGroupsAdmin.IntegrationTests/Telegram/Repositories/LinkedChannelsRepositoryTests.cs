@@ -1,29 +1,44 @@
-using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Data;
+using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
-using TelegramGroupsAdmin.IntegrationTests.TestData;
-using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
 
 namespace TelegramGroupsAdmin.IntegrationTests.Telegram.Repositories;
 
 /// <summary>
 /// Integration tests for LinkedChannelsRepository.
 /// Tests CRUD operations against a real PostgreSQL database using Testcontainers.
-/// Uses golden dataset for realistic test data.
+/// Uses golden template clone for canonical test data.
+///
+/// Canonical baseline (from 21_linked_channels.sql — 3 rows, sequence at id=3):
+///   id=1: managed_chat_id=-100026957614982, channel_id=-100021999196951
+///         name='Linked Channel for Main Community', photo_hash=NULL
+///   id=2: managed_chat_id=-100054416618415, channel_id=-100024769901572
+///         name='Linked Channel for Regional Group', photo_hash=NULL
+///   id=3: managed_chat_id=-100050808209814, channel_id=-100080262325997
+///         name='Linked Channel for Growth Community', photo_hash=NULL
 /// </summary>
 [TestFixture]
 public class LinkedChannelsRepositoryTests
 {
     private MigrationTestHelper? _testHelper;
     private IServiceProvider? _serviceProvider;
+    private IServiceScope? _scope;
     private ILinkedChannelsRepository? _repository;
-    private IDataProtectionProvider? _dataProtectionProvider;
 
-    // Test constants for new records (not in golden dataset)
+    // Canonical anchor — MainChat linked channel (id=1)
+    private const long MainChatId = -100026957614982L;
+    private const long MainChannelId = -100021999196951L;
+    private const string MainChannelName = "Linked Channel for Main Community";
+
+    // Canonical anchor — second linked channel (id=2)
+    private const long RegionalChatId = -100054416618415L;
+    private const long RegionalChannelId = -100024769901572L;
+
+    // Test constants for new records (not in canonical dataset)
     private const long TestChatId = -1001999888777;
     private const long TestChannelId = -1001777888999;
     private const string TestChannelName = "Test Channel";
@@ -31,58 +46,30 @@ public class LinkedChannelsRepositoryTests
     [SetUp]
     public async Task SetUp()
     {
-        // Create unique test database with migrations applied
         _testHelper = new MigrationTestHelper();
-        await _testHelper.CreateDatabaseAndApplyMigrationsAsync();
+        await _testHelper.CreateDatabaseFromGoldenTemplateAsync();
 
-        // Set up dependency injection
         var services = new ServiceCollection();
 
-        // Configure Data Protection with ephemeral keys
-        services.AddDataProtection()
-            .SetApplicationName("TelegramGroupsAdmin.Tests")
-            .PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(Path.GetTempPath(), $"test_keys_{Guid.NewGuid():N}")));
+        services.AddDbContextFactory<AppDbContext>(options =>
+            options.UseNpgsql(_testHelper.ConnectionString));
 
-        // Add NpgsqlDataSource
-        var dataSourceBuilder = new Npgsql.NpgsqlDataSourceBuilder(_testHelper.ConnectionString);
-        services.AddSingleton(dataSourceBuilder.Build());
-
-        // Add DbContextFactory
-        services.AddDbContextFactory<AppDbContext>((_, options) =>
-        {
-            options.UseNpgsql(_testHelper.ConnectionString);
-        });
-
-        // Add logging
         services.AddLogging(builder =>
-        {
-            builder.AddConsole().SetMinimumLevel(LogLevel.Warning);
-            builder.AddFilter("Microsoft.AspNetCore.DataProtection", LogLevel.Error);
-        });
+            builder.AddConsole().SetMinimumLevel(LogLevel.Warning));
 
-        // Register LinkedChannelsRepository
         services.AddScoped<ILinkedChannelsRepository, LinkedChannelsRepository>();
 
         _serviceProvider = services.BuildServiceProvider();
-        _dataProtectionProvider = _serviceProvider.GetRequiredService<IDataProtectionProvider>();
-
-        // Seed golden dataset
-        var contextFactory = _serviceProvider.GetRequiredService<IDbContextFactory<AppDbContext>>();
-        await using (var context = await contextFactory.CreateDbContextAsync())
-        {
-            await GoldenDataset.SeedAsync(context, _dataProtectionProvider);
-        }
-
-        // Create repository instance
-        var scope = _serviceProvider.CreateScope();
-        _repository = scope.ServiceProvider.GetRequiredService<ILinkedChannelsRepository>();
+        _scope = _serviceProvider.CreateScope();
+        _repository = _scope.ServiceProvider.GetRequiredService<ILinkedChannelsRepository>();
     }
 
     [TearDown]
     public void TearDown()
     {
-        _testHelper?.Dispose();
+        _scope?.Dispose();
         (_serviceProvider as IDisposable)?.Dispose();
+        _testHelper?.Dispose();
     }
 
     #region GetByChatIdAsync Tests
@@ -90,20 +77,16 @@ public class LinkedChannelsRepositoryTests
     [Test]
     public async Task GetByChatIdAsync_ExistingChat_ReturnsRecord()
     {
-        // Arrange - Use channel from golden dataset
-        var chatId = GoldenDataset.LinkedChannels.Channel1_ManagedChatId;
-
         // Act
-        var result = await _repository!.GetByChatIdAsync(chatId);
+        var result = await _repository!.GetByChatIdAsync(MainChatId);
 
         // Assert
         Assert.That(result, Is.Not.Null);
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(result!.ManagedChatId, Is.EqualTo(chatId));
-            Assert.That(result.ChannelId, Is.EqualTo(GoldenDataset.LinkedChannels.Channel1_ChannelId));
-            Assert.That(result.ChannelName, Is.EqualTo(GoldenDataset.LinkedChannels.Channel1_Name));
-            Assert.That(result.PhotoHash, Is.Not.Null, "Channel1 has photo hash in golden dataset");
+            Assert.That(result!.ManagedChatId, Is.EqualTo(MainChatId));
+            Assert.That(result.ChannelId, Is.EqualTo(MainChannelId));
+            Assert.That(result.ChannelName, Is.EqualTo(MainChannelName));
         }
     }
 
@@ -127,18 +110,15 @@ public class LinkedChannelsRepositoryTests
     [Test]
     public async Task GetByChannelIdAsync_ExistingChannel_ReturnsRecord()
     {
-        // Arrange - Use channel from golden dataset
-        var channelId = GoldenDataset.LinkedChannels.Channel1_ChannelId;
-
         // Act
-        var result = await _repository!.GetByChannelIdAsync(channelId);
+        var result = await _repository!.GetByChannelIdAsync(MainChannelId);
 
         // Assert
         Assert.That(result, Is.Not.Null);
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(result!.ChannelId, Is.EqualTo(channelId));
-            Assert.That(result.ManagedChatId, Is.EqualTo(GoldenDataset.LinkedChannels.Channel1_ManagedChatId));
+            Assert.That(result!.ChannelId, Is.EqualTo(MainChannelId));
+            Assert.That(result.ManagedChatId, Is.EqualTo(MainChatId));
         }
     }
 
@@ -197,8 +177,8 @@ public class LinkedChannelsRepositoryTests
     [Test]
     public async Task UpsertAsync_ExistingRecord_UpdatesSuccessfully()
     {
-        // Arrange - Get existing record from golden dataset
-        var existingRecord = await _repository!.GetByChatIdAsync(GoldenDataset.LinkedChannels.Channel1_ManagedChatId);
+        // Arrange - Get existing canonical record
+        var existingRecord = await _repository!.GetByChatIdAsync(MainChatId);
         Assert.That(existingRecord, Is.Not.Null);
 
         // Create updated record with new channel name
@@ -212,7 +192,7 @@ public class LinkedChannelsRepositoryTests
         await _repository.UpsertAsync(updatedRecord);
 
         // Assert - Verify it was updated
-        var retrieved = await _repository.GetByChatIdAsync(GoldenDataset.LinkedChannels.Channel1_ManagedChatId);
+        var retrieved = await _repository.GetByChatIdAsync(MainChatId);
         Assert.That(retrieved, Is.Not.Null);
         using (Assert.EnterMultipleScope())
         {
@@ -228,16 +208,15 @@ public class LinkedChannelsRepositoryTests
     [Test]
     public async Task DeleteByChatIdAsync_ExistingRecord_DeletesSuccessfully()
     {
-        // Arrange - Verify record exists (using golden dataset Channel2)
-        var chatId = GoldenDataset.LinkedChannels.Channel2_ManagedChatId;
-        var existingRecord = await _repository!.GetByChatIdAsync(chatId);
+        // Arrange - Verify canonical record exists before deleting
+        var existingRecord = await _repository!.GetByChatIdAsync(RegionalChatId);
         Assert.That(existingRecord, Is.Not.Null, "Should have record to delete");
 
         // Act
-        await _repository.DeleteByChatIdAsync(chatId);
+        await _repository.DeleteByChatIdAsync(RegionalChatId);
 
         // Assert - Verify it was deleted
-        var retrieved = await _repository.GetByChatIdAsync(chatId);
+        var retrieved = await _repository.GetByChatIdAsync(RegionalChatId);
         Assert.That(retrieved, Is.Null);
     }
 
@@ -261,38 +240,36 @@ public class LinkedChannelsRepositoryTests
         // Act
         var results = await _repository!.GetAllAsync();
 
-        // Assert - Golden dataset has 2 linked channels
+        // Assert - canonical dataset has 3 linked channels
         Assert.That(results, Is.Not.Null);
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(results.Count, Is.EqualTo(2), "Golden dataset should have 2 linked channels");
+            Assert.That(results.Count, Is.EqualTo(3), "Canonical dataset should have 3 linked channels");
 
             // Verify records are ordered by channel name
             Assert.That(
                 string.Compare(results[0].ChannelName, results[1].ChannelName, StringComparison.Ordinal),
                 Is.LessThanOrEqualTo(0),
                 "Results should be ordered by channel name");
+            Assert.That(
+                string.Compare(results[1].ChannelName, results[2].ChannelName, StringComparison.Ordinal),
+                Is.LessThanOrEqualTo(0),
+                "Results should be ordered by channel name");
         }
     }
 
     [Test]
-    public async Task GetAllAsync_IncludesPhotoHashWherePresent()
+    public async Task GetAllAsync_PhotoHashIsNullForAllCanonicalRows()
     {
-        // Act
+        // All 3 canonical linked_channels rows have photo_hash=NULL.
+        // This test verifies that null photo_hash is correctly round-tripped.
         var results = await _repository!.GetAllAsync();
 
-        // Assert - Channel1 has photo hash, Channel2 does not
-        var channel1 = results.FirstOrDefault(r => r.ChannelId == GoldenDataset.LinkedChannels.Channel1_ChannelId);
-        var channel2 = results.FirstOrDefault(r => r.ChannelId == GoldenDataset.LinkedChannels.Channel2_ChannelId);
-
-        Assert.That(channel1, Is.Not.Null);
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(channel1!.PhotoHash, Is.Not.Null, "Channel1 should have photo hash");
-
-            Assert.That(channel2, Is.Not.Null);
-        }
-        Assert.That(channel2!.PhotoHash, Is.Null, "Channel2 should not have photo hash");
+        Assert.That(results, Is.Not.Empty);
+        Assert.That(
+            results.All(r => r.PhotoHash is null),
+            Is.True,
+            "All canonical linked channel rows should have null photo_hash");
     }
 
     #endregion
@@ -305,11 +282,12 @@ public class LinkedChannelsRepositoryTests
         // Act
         var chatIds = await _repository!.GetAllManagedChatIdsAsync();
 
-        // Assert - Golden dataset has 2 linked channels
+        // Assert - canonical dataset has 3 linked channels
         Assert.That(chatIds, Is.Not.Null);
-        Assert.That(chatIds.Count, Is.EqualTo(2));
-        Assert.That(chatIds, Does.Contain(GoldenDataset.LinkedChannels.Channel1_ManagedChatId));
-        Assert.That(chatIds, Does.Contain(GoldenDataset.LinkedChannels.Channel2_ManagedChatId));
+        Assert.That(chatIds.Count, Is.EqualTo(3));
+        Assert.That(chatIds, Does.Contain(MainChatId));
+        Assert.That(chatIds, Does.Contain(RegionalChatId));
+        Assert.That(chatIds, Does.Contain(-100050808209814L));
     }
 
     [Test]

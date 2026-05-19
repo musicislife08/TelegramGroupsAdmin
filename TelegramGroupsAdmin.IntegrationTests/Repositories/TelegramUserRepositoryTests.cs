@@ -1,4 +1,3 @@
-using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -7,7 +6,6 @@ using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
-using TelegramGroupsAdmin.IntegrationTests.TestData;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
 using UiModels = TelegramGroupsAdmin.Telegram.Models;
 
@@ -23,8 +21,8 @@ namespace TelegramGroupsAdmin.IntegrationTests.Repositories;
 ///
 /// Test Infrastructure:
 /// - Shared PostgreSQL container (PostgresFixture) — started once per test run
-/// - Unique database per test — perfect isolation
-/// - Golden dataset seeded per test — consistent starting state
+/// - Unique database per test cloned from golden_template — perfect isolation
+/// - Canonical dataset available per test — consistent starting state
 /// </summary>
 [TestFixture]
 public class TelegramUserRepositoryTests
@@ -33,17 +31,22 @@ public class TelegramUserRepositoryTests
     private IServiceProvider? _serviceProvider;
     private ITelegramUserRepository? _repository;
 
+    // Canonical anchor IDs
+    // Top MainChat ham author (@unhelpfulgrab, "Squeak Degree", is_banned=false)
+    private const long TopHamAuthorId = 9921676191756L;
+    private const string TopHamAuthorUsername = "unhelpfulgrab";
+    private const string TopHamAuthorFirstName = "Squeak";
+
+    // Second active MainChat ham author (@sillywolf, is_banned=false)
+    private const long SecondHamAuthorId = 9960171136314L;
+
     [SetUp]
     public async Task SetUp()
     {
         _testHelper = new MigrationTestHelper();
-        await _testHelper.CreateDatabaseAndApplyMigrationsAsync();
+        await _testHelper.CreateDatabaseFromGoldenTemplateAsync();
 
         var services = new ServiceCollection();
-
-        services.AddDataProtection()
-            .SetApplicationName("TelegramGroupsAdmin.Tests")
-            .PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(Path.GetTempPath(), $"test_keys_{Guid.NewGuid():N}")));
 
         var dataSourceBuilder = new Npgsql.NpgsqlDataSourceBuilder(_testHelper.ConnectionString);
         services.AddSingleton(dataSourceBuilder.Build());
@@ -56,21 +59,12 @@ public class TelegramUserRepositoryTests
         services.AddLogging(builder =>
         {
             builder.AddConsole().SetMinimumLevel(LogLevel.Warning);
-            builder.AddFilter("Microsoft.AspNetCore.DataProtection", LogLevel.Error);
         });
 
         services.AddScoped<ITelegramUserRepository, TelegramUserRepository>();
         services.AddScoped<IUsernameHistoryRepository, UsernameHistoryRepository>();
 
         _serviceProvider = services.BuildServiceProvider();
-
-        // Seed golden dataset
-        var dataProtectionProvider = _serviceProvider.GetRequiredService<IDataProtectionProvider>();
-        var contextFactory = _serviceProvider.GetRequiredService<IDbContextFactory<AppDbContext>>();
-        await using (var context = await contextFactory.CreateDbContextAsync())
-        {
-            await GoldenDataset.SeedAsync(context, dataProtectionProvider);
-        }
 
         var scope = _serviceProvider.CreateScope();
         _repository = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
@@ -113,7 +107,7 @@ public class TelegramUserRepositoryTests
     [Test]
     public async Task GetPagedUsersAsync_SearchMatchesPastUsername()
     {
-        // Seed an active user with current username "new_name"
+        // Seed a synthetic user (ID below canonical range) with current username "new_name"
         const long userId = 200001L;
         await SeedActiveUserAsync(userId, username: "new_name", firstName: "Current", lastName: "User");
 
@@ -137,7 +131,7 @@ public class TelegramUserRepositoryTests
     [Test]
     public async Task GetPagedUsersAsync_SearchMatchesPastFirstName()
     {
-        // Seed an active user with current first name "NewFirst"
+        // Seed a synthetic user (ID below canonical range) with current first name "NewFirst"
         const long userId = 200002L;
         await SeedActiveUserAsync(userId, username: "history_user", firstName: "NewFirst", lastName: "User");
 
@@ -161,7 +155,7 @@ public class TelegramUserRepositoryTests
     [Test]
     public async Task GetUserTabCountsAsync_IncludesUsersMatchedByPastNames()
     {
-        // Seed an active user with a current username that won't match the search
+        // Seed a synthetic user (ID below canonical range) with a current username that won't match the search
         const long userId = 200003L;
         await SeedActiveUserAsync(userId, username: "current_handle", firstName: "Present", lastName: "User");
 
@@ -271,7 +265,7 @@ public class TelegramUserRepositoryTests
     [Test]
     public async Task GetOrCreateAsync_NewUser_CreatesAndReturns()
     {
-        // Arrange — use an ID that doesn't exist in the golden dataset
+        // Arrange — use an ID that doesn't exist in canonical (canonical IDs are 13-digit numbers in the 9T range)
         const long newUserId = 999999;
 
         // Act
@@ -301,8 +295,8 @@ public class TelegramUserRepositoryTests
     [Test]
     public async Task GetOrCreateAsync_ExistingUser_ReturnsWithoutCreating()
     {
-        // Arrange — User2 (Bob) exists in golden dataset
-        const long existingUserId = GoldenDataset.TelegramUsers.User2_TelegramUserId;
+        // Arrange — canonical anchor exists in golden template (top ham author, @unhelpfulgrab)
+        const long existingUserId = TopHamAuthorId;
 
         // Act
         var result = await _repository!.GetOrCreateAsync(
@@ -312,17 +306,17 @@ public class TelegramUserRepositoryTests
         Assert.Multiple(() =>
         {
             Assert.That(result.TelegramUserId, Is.EqualTo(existingUserId));
-            Assert.That(result.Username, Is.EqualTo(GoldenDataset.TelegramUsers.User2_Username),
+            Assert.That(result.Username, Is.EqualTo(TopHamAuthorUsername),
                 "Should return existing DB username, not the one we passed");
-            Assert.That(result.FirstName, Is.EqualTo(GoldenDataset.TelegramUsers.User2_FirstName));
+            Assert.That(result.FirstName, Is.EqualTo(TopHamAuthorFirstName));
         });
     }
 
     [Test]
     public async Task GetOrCreateAsync_ExistingBannedUser_ReturnsBannedState()
     {
-        // Arrange — ban User1 first, then call GetOrCreateAsync
-        const long userId = GoldenDataset.TelegramUsers.User1_TelegramUserId;
+        // Arrange — ban a canonical anchor first, then call GetOrCreateAsync
+        const long userId = SecondHamAuthorId;
         await _repository!.SetBanStatusAsync(userId, isBanned: true);
 
         // Act
@@ -338,10 +332,8 @@ public class TelegramUserRepositoryTests
     public async Task GetOrCreateAsync_SystemUser_AutoTrusted()
     {
         // Arrange — use the Telegram service account ID (777000)
+        // 777000 does not exist in canonical, so this will create it
         const long systemUserId = TelegramConstants.ServiceAccountUserId;
-
-        // Delete the system user if it exists from golden dataset (system user ID 0 exists, not 777000)
-        // 777000 does not exist in golden dataset, so this will create it
 
         // Act
         var result = await _repository!.GetOrCreateAsync(

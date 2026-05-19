@@ -5,7 +5,6 @@ using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Data;
-using TelegramGroupsAdmin.IntegrationTests.TestData;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
@@ -39,13 +38,11 @@ public class DbContextFactoryMigrationTests
     public async Task SetUp()
     {
         _testHelper = new MigrationTestHelper();
-        await _testHelper.CreateDatabaseAndApplyMigrationsAsync();
+        await _testHelper.CreateDatabaseFromGoldenTemplateAsync();
 
         var services = new ServiceCollection();
 
-        services.AddDataProtection()
-            .SetApplicationName("TelegramGroupsAdmin.Tests")
-            .PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(Path.GetTempPath(), $"test_keys_{Guid.NewGuid():N}")));
+        services.AddSingleton<IDataProtectionProvider>(PostgresFixture.SharedDataProtectionProvider);
 
         var dataSourceBuilder = new Npgsql.NpgsqlDataSourceBuilder(_testHelper.ConnectionString);
         services.AddSingleton(dataSourceBuilder.Build());
@@ -71,12 +68,6 @@ public class DbContextFactoryMigrationTests
         services.AddScoped<IUserTagsRepository, UserTagsRepository>();
 
         _serviceProvider = services.BuildServiceProvider();
-
-        // Seed golden dataset — some repos require telegram_users/web_users for FK constraints
-        var dataProtectionProvider = _serviceProvider.GetRequiredService<IDataProtectionProvider>();
-        var contextFactory = _serviceProvider.GetRequiredService<IDbContextFactory<AppDbContext>>();
-        await using var context = await contextFactory.CreateDbContextAsync(cancellationToken: CancellationToken.None);
-        await GoldenDataset.SeedAsync(context, dataProtectionProvider);
     }
 
     [TearDown]
@@ -149,7 +140,8 @@ public class DbContextFactoryMigrationTests
         await using var scope = _serviceProvider!.CreateAsyncScope();
         var repo = scope.ServiceProvider.GetRequiredService<IPendingNotificationsRepository>();
 
-        const long userId = GoldenDataset.TelegramUsers.User1_TelegramUserId;
+        // Canonical top MainChat ham author (@unhelpfulgrab, telegram_user_id 9921676191756)
+        const long userId = 9921676191756L;
         await repo.AddPendingNotificationAsync(
             telegramUserId: userId,
             notificationType: "test",
@@ -169,7 +161,8 @@ public class DbContextFactoryMigrationTests
         await using var scope = _serviceProvider!.CreateAsyncScope();
         var repo = scope.ServiceProvider.GetRequiredService<IAdminNotesRepository>();
 
-        const long userId = GoldenDataset.TelegramUsers.User1_TelegramUserId;
+        // Canonical top MainChat ham author (@unhelpfulgrab, telegram_user_id 9921676191756)
+        const long userId = 9921676191756L;
         var note = new AdminNote
         {
             TelegramUserId = userId,
@@ -196,7 +189,8 @@ public class DbContextFactoryMigrationTests
         var userTagsRepo = scope.ServiceProvider.GetRequiredService<IUserTagsRepository>();
 
         const string tagName = "integration-user-tag";
-        const long userId = GoldenDataset.TelegramUsers.User1_TelegramUserId;
+        // Canonical top MainChat ham author (@unhelpfulgrab, telegram_user_id 9921676191756)
+        const long userId = 9921676191756L;
 
         // Create the tag definition first (FK constraint)
         await tagDefsRepo.CreateAsync(tagName, TagColor.Info, cancellationToken: CancellationToken.None);

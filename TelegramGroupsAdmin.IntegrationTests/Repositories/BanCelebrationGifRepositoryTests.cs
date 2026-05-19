@@ -40,9 +40,9 @@ public class BanCelebrationGifRepositoryTests
     [SetUp]
     public async Task SetUp()
     {
-        // Create unique test database with migrations applied
+        // Clone the empty migrated template for this test
         _testHelper = new MigrationTestHelper();
-        await _testHelper.CreateDatabaseAndApplyMigrationsAsync();
+        await _testHelper.CreateDatabaseFromEmptyTemplateAsync();
 
         // Start WireMock server for URL download tests
         _mockServer = WireMockServer.Start();

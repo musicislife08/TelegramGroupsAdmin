@@ -33,7 +33,8 @@ namespace TelegramGroupsAdmin.IntegrationTests.Telegram.Services;
 [TestFixture]
 public class ExamFlowServiceTests
 {
-    private const long TestChatId = -1001234567890L;
+    // Canonical MainChat anchor: chat_id = -100026957614982 (Main Community in golden_template)
+    private const long TestChatId = -100026957614982L;
     private const long TestUserId = 123456789L;
     private const long TestDmChatId = 123456789L; // DM chat ID equals user ID
 
@@ -47,7 +48,7 @@ public class ExamFlowServiceTests
     public async Task SetUp()
     {
         _testHelper = new MigrationTestHelper();
-        await _testHelper.CreateDatabaseAndApplyMigrationsAsync();
+        await _testHelper.CreateDatabaseFromGoldenTemplateAsync();
 
         // Set up mocks for the new Bot*Service interfaces
         _mockMessageService = Substitute.For<IBotMessageService>();
@@ -143,25 +144,6 @@ public class ExamFlowServiceTests
         services.AddScoped<IExamFlowService, ExamFlowService>();
 
         _serviceProvider = services.BuildServiceProvider();
-
-        // Create test chat in database (required for exam flow)
-        await CreateTestChatAsync();
-    }
-
-    private async Task CreateTestChatAsync()
-    {
-        var contextFactory = _serviceProvider!.GetRequiredService<IDbContextFactory<AppDbContext>>();
-        await using var context = await contextFactory.CreateDbContextAsync();
-
-        context.ManagedChats.Add(new Data.Models.ManagedChatRecordDto
-        {
-            ChatId = TestChatId,
-            ChatName = "Test Chat",
-            ChatType = Data.Models.ManagedChatType.Supergroup,
-            AddedAt = DateTimeOffset.UtcNow,
-            IsActive = true
-        });
-        await context.SaveChangesAsync();
     }
 
     [TearDown]

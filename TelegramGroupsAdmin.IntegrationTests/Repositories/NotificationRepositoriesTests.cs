@@ -1,4 +1,3 @@
-using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -28,26 +27,18 @@ public class NotificationRepositoriesTests
     private IServiceProvider? _serviceProvider;
     private IPushSubscriptionsRepository? _pushRepo;
     private IWebNotificationRepository? _notificationRepo;
-    private IDataProtectionProvider? _dataProtectionProvider;
 
-    // Test user IDs from golden dataset
-    private const string TestUserId1 = GoldenDataset.Users.User1_Id;
-    private const string TestUserId2 = GoldenDataset.Users.User2_Id;
+    // Canonical web user fixtures (Owner + Admin)
+    private const string TestUserId1 = GoldenDatasetConstants.WebUsers.OwnerId;
+    private const string TestUserId2 = GoldenDatasetConstants.WebUsers.AdminId;
 
     [SetUp]
     public async Task SetUp()
     {
-        // Create unique test database with migrations applied
         _testHelper = new MigrationTestHelper();
-        await _testHelper.CreateDatabaseAndApplyMigrationsAsync();
+        await _testHelper.CreateDatabaseFromGoldenTemplateAsync();
 
-        // Set up dependency injection
         var services = new ServiceCollection();
-
-        // Configure Data Protection with ephemeral keys
-        services.AddDataProtection()
-            .SetApplicationName("TelegramGroupsAdmin.Tests")
-            .PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(Path.GetTempPath(), $"test_keys_{Guid.NewGuid():N}")));
 
         // Add NpgsqlDataSource
         var dataSourceBuilder = new Npgsql.NpgsqlDataSourceBuilder(_testHelper.ConnectionString);
@@ -63,7 +54,6 @@ public class NotificationRepositoriesTests
         services.AddLogging(builder =>
         {
             builder.AddConsole().SetMinimumLevel(LogLevel.Warning);
-            builder.AddFilter("Microsoft.AspNetCore.DataProtection", LogLevel.Error);
         });
 
         // Register repositories
@@ -71,14 +61,6 @@ public class NotificationRepositoriesTests
         services.AddScoped<IWebNotificationRepository, WebNotificationRepository>();
 
         _serviceProvider = services.BuildServiceProvider();
-        _dataProtectionProvider = _serviceProvider.GetRequiredService<IDataProtectionProvider>();
-
-        // Seed golden dataset (creates test users we'll reference)
-        var contextFactory = _serviceProvider.GetRequiredService<IDbContextFactory<AppDbContext>>();
-        await using (var context = await contextFactory.CreateDbContextAsync())
-        {
-            await GoldenDataset.SeedAsync(context, _dataProtectionProvider);
-        }
 
         // Create repository instances
         var scope = _serviceProvider.CreateScope();

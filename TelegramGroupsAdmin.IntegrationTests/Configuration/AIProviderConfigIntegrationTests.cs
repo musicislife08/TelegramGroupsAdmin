@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Configuration.Models;
 using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.Data;
+using TelegramGroupsAdmin.IntegrationTests.Fixtures;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
 
 namespace TelegramGroupsAdmin.IntegrationTests.Configuration;
@@ -28,18 +29,15 @@ public class AIProviderConfigIntegrationTests
     [SetUp]
     public async Task SetUp()
     {
-        // Create unique test database with migrations applied
+        // Clone the empty migrated template for this test
         _testHelper = new MigrationTestHelper();
-        await _testHelper.CreateDatabaseAndApplyMigrationsAsync();
+        await _testHelper.CreateDatabaseFromEmptyTemplateAsync();
 
         // Set up dependency injection
         var services = new ServiceCollection();
 
-        // Configure Data Protection with ephemeral keys
-        var keyDirectory = new DirectoryInfo(Path.Combine(Path.GetTempPath(), $"test_keys_{Guid.NewGuid():N}"));
-        services.AddDataProtection()
-            .SetApplicationName("TelegramGroupsAdmin.Tests")
-            .PersistKeysToFileSystem(keyDirectory);
+        // Use shared DataProtection provider (same keys used to encrypt canonical data)
+        services.AddSingleton<IDataProtectionProvider>(PostgresFixture.SharedDataProtectionProvider);
 
         // Add NpgsqlDataSource
         var dataSourceBuilder = new Npgsql.NpgsqlDataSourceBuilder(_testHelper.ConnectionString);
@@ -55,7 +53,6 @@ public class AIProviderConfigIntegrationTests
         services.AddLogging(builder =>
         {
             builder.AddConsole().SetMinimumLevel(LogLevel.Warning);
-            builder.AddFilter("Microsoft.AspNetCore.DataProtection", LogLevel.Error);
         });
 
         // Register repository

@@ -25,9 +25,11 @@ namespace TelegramGroupsAdmin.IntegrationTests.Repositories;
 /// - Database constraints: Verify PK uniqueness and check constraint enforcement
 ///
 /// Test Infrastructure:
-/// - Unique PostgreSQL database per test (test_db_xxx)
-/// - GoldenDataset provides realistic test data with 5 training labels
-/// - Tests use existing messages (Msg1-11) for FK validation
+/// - Unique PostgreSQL database per test (cloned from golden_template)
+/// - Canonical dataset provides 200 training labels
+///
+/// All anchor IDs are pinned via <see cref="GoldenDatasetConstants.TrainingLabels"/>,
+/// <see cref="GoldenDatasetConstants.Chats"/>, and <see cref="GoldenDatasetConstants.TelegramUsers"/>.
 /// </summary>
 [TestFixture]
 public class TrainingLabelsRepositoryTests
@@ -35,47 +37,33 @@ public class TrainingLabelsRepositoryTests
     private MigrationTestHelper? _testHelper;
     private IServiceProvider? _serviceProvider;
     private ITrainingLabelsRepository? _repository;
-    private AppDbContext? _context;
 
     [SetUp]
     public async Task SetUp()
     {
-        // Create unique test database with migrations applied
         _testHelper = new MigrationTestHelper();
-        await _testHelper.CreateDatabaseAndApplyMigrationsAsync();
+        await _testHelper.CreateDatabaseFromGoldenTemplateAsync();
 
-        // Set up dependency injection
         var services = new ServiceCollection();
 
-        // Add DbContextFactory (TrainingLabelsRepository uses this)
         services.AddDbContextFactory<AppDbContext>(options =>
             options.UseNpgsql(_testHelper.ConnectionString));
 
-        // Add logging with test-specific suppressions
         services.AddLogging(builder =>
         {
             builder.AddConsole().SetMinimumLevel(LogLevel.Warning);
         });
 
-        // Register repository
         services.AddScoped<ITrainingLabelsRepository, TrainingLabelsRepository>();
 
         _serviceProvider = services.BuildServiceProvider();
         _repository = _serviceProvider.CreateScope()
             .ServiceProvider.GetRequiredService<ITrainingLabelsRepository>();
-
-        // Seed GoldenDataset test data
-        _context = _testHelper.GetDbContext();
-        await GoldenDataset.SeedAsync(_context);
     }
 
     [TearDown]
-    public async Task TearDown()
+    public void TearDown()
     {
-        if (_context != null)
-        {
-            await _context.DisposeAsync();
-        }
         _testHelper?.Dispose();
         (_serviceProvider as IDisposable)?.Dispose();
     }
@@ -85,27 +73,26 @@ public class TrainingLabelsRepositoryTests
     [Test]
     public async Task UpsertLabelAsync_NewSpamLabel_ShouldInsert()
     {
-        // Arrange - Use GoldenDataset message without existing label
-        int messageId = GoldenDataset.Messages.Msg6_Id;
-        long userId = GoldenDataset.TelegramUsers.User3_TelegramUserId;
+        // Arrange - canonical message with no existing training_label
+        int messageId = GoldenDatasetConstants.TrainingLabels.UnlabeledMsg1Id;
 
         // Act
         await _repository!.UpsertLabelAsync(
             messageId,
-            GoldenDataset.Messages.Msg6_ChatId,
+            GoldenDatasetConstants.Chats.TrainingFixturesChatId,
             TrainingLabel.Spam,
-            Actor.FromTelegramUser(userId),
+            Actor.FromTelegramUser(GoldenDatasetConstants.TelegramUsers.TrainingLabelActorId),
             "Manual spam marking by admin",
             auditLogId: 123);
 
         // Assert - Verify inserted
-        var label = await _repository.GetByMessageIdAsync(messageId, GoldenDataset.Messages.Msg6_ChatId);
+        var label = await _repository.GetByMessageIdAsync(messageId, GoldenDatasetConstants.Chats.TrainingFixturesChatId);
         Assert.That(label, Is.Not.Null);
         using (Assert.EnterMultipleScope())
         {
             Assert.That(label!.MessageId, Is.EqualTo(messageId));
             Assert.That(label.Label, Is.EqualTo(TrainingLabel.Spam));
-            Assert.That(label.LabeledByUserId, Is.EqualTo(userId));
+            Assert.That(label.LabeledByUserId, Is.EqualTo(GoldenDatasetConstants.TelegramUsers.TrainingLabelActorId));
             Assert.That(label.Reason, Is.EqualTo("Manual spam marking by admin"));
             Assert.That(label.AuditLogId, Is.EqualTo(123));
             Assert.That(label.LabeledAt, Is.GreaterThan(DateTimeOffset.UtcNow.AddMinutes(-1)));
@@ -115,19 +102,19 @@ public class TrainingLabelsRepositoryTests
     [Test]
     public async Task UpsertLabelAsync_NewHamLabel_ShouldInsert()
     {
-        // Arrange - Use GoldenDataset message without existing label
-        int messageId = GoldenDataset.Messages.Msg7_Id;
+        // Arrange - canonical message with no existing training_label
+        int messageId = GoldenDatasetConstants.TrainingLabels.UnlabeledMsg2Id;
 
         // Act
         await _repository!.UpsertLabelAsync(
             messageId,
-            GoldenDataset.Messages.Msg7_ChatId,
+            GoldenDatasetConstants.Chats.LandOwnersChatId,
             TrainingLabel.Ham,
             actor: Actor.SystemSeed, // System-generated
             "False positive correction");
 
         // Assert
-        var label = await _repository.GetByMessageIdAsync(messageId, GoldenDataset.Messages.Msg7_ChatId);
+        var label = await _repository.GetByMessageIdAsync(messageId, GoldenDatasetConstants.Chats.LandOwnersChatId);
         Assert.That(label, Is.Not.Null);
         using (Assert.EnterMultipleScope())
         {
@@ -139,23 +126,23 @@ public class TrainingLabelsRepositoryTests
     [Test]
     public async Task UpsertLabelAsync_ExistingLabel_ShouldUpdate()
     {
-        // Arrange - Use existing GoldenDataset label (Msg1 = spam)
-        int messageId = GoldenDataset.TrainingLabels.Label1_MessageId;
+        // Arrange - canonical spam label (label=0); update to ham (false positive correction)
+        int messageId = GoldenDatasetConstants.TrainingLabels.ExistingSpamMsgId;
 
-        // Act - Update to ham (false positive correction)
+        // Act
         await _repository!.UpsertLabelAsync(
             messageId,
-            GoldenDataset.ManagedChats.MainChat_Id,
+            GoldenDatasetConstants.Chats.TrainingFixturesChatId,
             TrainingLabel.Ham,
-            Actor.FromTelegramUser(GoldenDataset.TelegramUsers.User4_TelegramUserId),
+            Actor.FromTelegramUser(GoldenDatasetConstants.TelegramUsers.TopMainChatHamAuthorId),
             "Corrected to ham");
 
         // Assert - Should update, not duplicate
-        var label = await _repository.GetByMessageIdAsync(messageId, GoldenDataset.ManagedChats.MainChat_Id);
+        var label = await _repository.GetByMessageIdAsync(messageId, GoldenDatasetConstants.Chats.TrainingFixturesChatId);
         using (Assert.EnterMultipleScope())
         {
             Assert.That(label!.Label, Is.EqualTo(TrainingLabel.Ham));
-            Assert.That(label.LabeledByUserId, Is.EqualTo(GoldenDataset.TelegramUsers.User4_TelegramUserId));
+            Assert.That(label.LabeledByUserId, Is.EqualTo(GoldenDatasetConstants.TelegramUsers.TopMainChatHamAuthorId));
             Assert.That(label.Reason, Is.EqualTo("Corrected to ham"));
         }
 
@@ -168,17 +155,18 @@ public class TrainingLabelsRepositoryTests
     [Test]
     public async Task UpsertLabelAsync_ConcurrentUpserts_ShouldHandleRaceCondition()
     {
-        // Arrange - Use GoldenDataset message without existing label
-        int messageId = GoldenDataset.Messages.Msg11_Id;
-        long userId1 = GoldenDataset.TelegramUsers.User3_TelegramUserId;
-        long userId2 = GoldenDataset.TelegramUsers.User4_TelegramUserId;
+        // Arrange - canonical message with no existing training_label
+        int messageId = GoldenDatasetConstants.TrainingLabels.UnlabeledMsg3Id;
+        long chatId = GoldenDatasetConstants.Chats.LandOwnersChatId;
+        long spamActor = GoldenDatasetConstants.TelegramUsers.TrainingLabelActorId;
+        long hamActor = GoldenDatasetConstants.TelegramUsers.SecondMainChatHamAuthorId;
 
         // Act - Fire 10 concurrent upserts to same message_id (race condition)
         var tasks = new List<Task>();
         for (int i = 0; i < 5; i++)
         {
-            tasks.Add(_repository!.UpsertLabelAsync(messageId, GoldenDataset.Messages.Msg11_ChatId, TrainingLabel.Spam, Actor.FromTelegramUser(userId1), "Concurrent spam"));
-            tasks.Add(_repository!.UpsertLabelAsync(messageId, GoldenDataset.Messages.Msg11_ChatId, TrainingLabel.Ham, Actor.FromTelegramUser(userId2), "Concurrent ham"));
+            tasks.Add(_repository!.UpsertLabelAsync(messageId, chatId, TrainingLabel.Spam, Actor.FromTelegramUser(spamActor), "Concurrent spam"));
+            tasks.Add(_repository!.UpsertLabelAsync(messageId, chatId, TrainingLabel.Ham, Actor.FromTelegramUser(hamActor), "Concurrent ham"));
         }
         await Task.WhenAll(tasks);
 
@@ -188,7 +176,7 @@ public class TrainingLabelsRepositoryTests
         Assert.That(count, Is.EqualTo(1), "Concurrent upserts should result in exactly one row (last writer wins)");
 
         // Verify the final label is valid (either spam or ham, depending on last writer)
-        var label = await _repository!.GetByMessageIdAsync(messageId, GoldenDataset.Messages.Msg11_ChatId);
+        var label = await _repository!.GetByMessageIdAsync(messageId, chatId);
         Assert.That(label, Is.Not.Null);
         Assert.That(label!.Label, Is.AnyOf(TrainingLabel.Spam, TrainingLabel.Ham), "Final label should be valid");
     }
@@ -200,11 +188,11 @@ public class TrainingLabelsRepositoryTests
     [Test]
     public async Task GetByMessageIdAsync_LabelExists_ShouldReturnLabel()
     {
-        // Arrange - Use existing GoldenDataset label
-        int messageId = GoldenDataset.TrainingLabels.Label2_MessageId;
+        // Arrange - canonical spam label (label=0)
+        int messageId = GoldenDatasetConstants.TrainingLabels.ExistingSpamMsgId;
 
         // Act
-        var label = await _repository!.GetByMessageIdAsync(messageId, GoldenDataset.ManagedChats.MainChat_Id);
+        var label = await _repository!.GetByMessageIdAsync(messageId, GoldenDatasetConstants.Chats.TrainingFixturesChatId);
 
         // Assert
         Assert.That(label, Is.Not.Null);
@@ -218,11 +206,11 @@ public class TrainingLabelsRepositoryTests
     [Test]
     public async Task GetByMessageIdAsync_LabelNotExists_ShouldReturnNull()
     {
-        // Arrange - Use message without label
-        int messageId = GoldenDataset.Messages.Msg8_Id;
+        // Arrange - canonical message with no training_label
+        int messageId = GoldenDatasetConstants.TrainingLabels.UnlabeledMsg4Id;
 
         // Act
-        var label = await _repository!.GetByMessageIdAsync(messageId, GoldenDataset.Messages.Msg8_ChatId);
+        var label = await _repository!.GetByMessageIdAsync(messageId, GoldenDatasetConstants.Chats.LandOwnersChatId);
 
         // Assert
         Assert.That(label, Is.Null);
@@ -235,27 +223,27 @@ public class TrainingLabelsRepositoryTests
     [Test]
     public async Task DeleteLabelAsync_ExistingLabel_ShouldDelete()
     {
-        // Arrange - Use existing GoldenDataset label
-        int messageId = GoldenDataset.TrainingLabels.Label3_MessageId;
+        // Arrange - canonical ham label (label=1)
+        int messageId = GoldenDatasetConstants.TrainingLabels.ExistingHamMsgId;
 
         // Act
-        await _repository!.DeleteLabelAsync(messageId, GoldenDataset.ManagedChats.MainChat_Id);
+        await _repository!.DeleteLabelAsync(messageId, GoldenDatasetConstants.Chats.TrainingFixturesChatId);
 
         // Assert
-        var label = await _repository.GetByMessageIdAsync(messageId, GoldenDataset.ManagedChats.MainChat_Id);
+        var label = await _repository.GetByMessageIdAsync(messageId, GoldenDatasetConstants.Chats.TrainingFixturesChatId);
         Assert.That(label, Is.Null);
     }
 
     [Test]
     public async Task DeleteLabelAsync_NonExistentLabel_ShouldNotThrow()
     {
-        // Arrange - Use message without label
-        int messageId = GoldenDataset.Messages.Msg9_Id;
+        // Arrange - canonical message with no training_label
+        int messageId = GoldenDatasetConstants.TrainingLabels.UnlabeledMsg5Id;
 
         // Act & Assert - Should not throw
         Assert.DoesNotThrowAsync(async () =>
         {
-            await _repository!.DeleteLabelAsync(messageId, GoldenDataset.Messages.Msg9_ChatId);
+            await _repository!.DeleteLabelAsync(messageId, GoldenDatasetConstants.Chats.LandOwnersChatId);
         });
     }
 
@@ -266,15 +254,14 @@ public class TrainingLabelsRepositoryTests
     [Test]
     public async Task Database_TrainingLabels_ShouldEnforceUniqueMessageId()
     {
-        // Arrange - Use existing GoldenDataset label
-        int messageId = GoldenDataset.TrainingLabels.Label4_MessageId;
+        // Arrange - canonical spam label (label=0) — raw insert should violate PK constraint
+        int messageId = GoldenDatasetConstants.TrainingLabels.ExistingSpam2MsgId;
 
-        // Raw SQL insert should violate PK constraint
         Assert.ThrowsAsync<Npgsql.PostgresException>(async () =>
         {
             await _testHelper!.ExecuteSqlAsync($@"
                 INSERT INTO training_labels (message_id, chat_id, label, labeled_at)
-                VALUES ({messageId}, {GoldenDataset.ManagedChats.MainChat_Id}, 0, NOW())
+                VALUES ({messageId}, {GoldenDatasetConstants.Chats.TrainingFixturesChatId}, 0, NOW())
             ");
         });
     }
@@ -282,15 +269,14 @@ public class TrainingLabelsRepositoryTests
     [Test]
     public async Task Database_TrainingLabels_ShouldEnforceCheckConstraint()
     {
-        // Arrange - Use message without existing label
-        int messageId = GoldenDataset.Messages.Msg10_Id;
+        // Arrange - canonical message with no training_label; invalid label value (99) should fail
+        int messageId = GoldenDatasetConstants.TrainingLabels.UnlabeledMsg6Id;
 
-        // Verify check constraint: label IN (0, 1)
         Assert.ThrowsAsync<Npgsql.PostgresException>(async () =>
         {
             await _testHelper!.ExecuteSqlAsync($@"
                 INSERT INTO training_labels (message_id, chat_id, label, labeled_at)
-                VALUES ({messageId}, {GoldenDataset.Messages.Msg10_ChatId}, 99, NOW())
+                VALUES ({messageId}, {GoldenDatasetConstants.Chats.LandOwnersChatId}, 99, NOW())
             ");
         });
     }

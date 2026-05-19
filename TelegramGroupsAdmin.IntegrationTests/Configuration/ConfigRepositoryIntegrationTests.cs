@@ -9,6 +9,7 @@ using TelegramGroupsAdmin.Configuration.Models.Welcome;
 using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Data;
+using TelegramGroupsAdmin.IntegrationTests.Fixtures;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
 
 namespace TelegramGroupsAdmin.IntegrationTests.Configuration;
@@ -35,14 +36,11 @@ public class ConfigRepositoryIntegrationTests
     public async Task SetUp()
     {
         _testHelper = new MigrationTestHelper();
-        await _testHelper.CreateDatabaseAndApplyMigrationsAsync();
+        await _testHelper.CreateDatabaseFromEmptyTemplateAsync();
 
         var services = new ServiceCollection();
 
-        var keyDirectory = new DirectoryInfo(Path.Combine(Path.GetTempPath(), $"test_keys_{Guid.NewGuid():N}"));
-        services.AddDataProtection()
-            .SetApplicationName("TelegramGroupsAdmin.Tests")
-            .PersistKeysToFileSystem(keyDirectory);
+        services.AddSingleton<IDataProtectionProvider>(PostgresFixture.SharedDataProtectionProvider);
 
         var dataSource = new NpgsqlDataSourceBuilder(_testHelper.ConnectionString).Build();
         services.AddSingleton(dataSource);
@@ -50,7 +48,6 @@ public class ConfigRepositoryIntegrationTests
         services.AddLogging(builder =>
         {
             builder.AddConsole().SetMinimumLevel(LogLevel.Warning);
-            builder.AddFilter("Microsoft.AspNetCore.DataProtection", LogLevel.Error);
         });
 
         services.AddScoped<IConfigRepository, ConfigRepository>();

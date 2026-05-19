@@ -33,20 +33,17 @@ public class ConfigServiceIntegrationTests
     private IDbContextFactory<AppDbContext>? _contextFactory;
 
     private static readonly Actor TestActor =
-        Actor.FromWebUser(GoldenDataset.Users.User1_Id, GoldenDataset.Users.User1_Email);
+        Actor.FromWebUser(GoldenDatasetConstants.WebUsers.OwnerId, GoldenDatasetConstants.WebUsers.OwnerEmail);
 
     [SetUp]
     public async Task SetUp()
     {
         _testHelper = new MigrationTestHelper();
-        await _testHelper.CreateDatabaseAndApplyMigrationsAsync();
+        await _testHelper.CreateDatabaseFromGoldenTemplateAsync();
 
         var services = new ServiceCollection();
 
-        var keyDirectory = new DirectoryInfo(Path.Combine(Path.GetTempPath(), $"test_keys_{Guid.NewGuid():N}"));
-        services.AddDataProtection()
-            .SetApplicationName("TelegramGroupsAdmin.Tests")
-            .PersistKeysToFileSystem(keyDirectory);
+        services.AddSingleton<IDataProtectionProvider>(PostgresFixture.SharedDataProtectionProvider);
 
         var dataSource = new NpgsqlDataSourceBuilder(_testHelper.ConnectionString).Build();
         services.AddSingleton(dataSource);
@@ -65,12 +62,6 @@ public class ConfigServiceIntegrationTests
         services.AddScoped<IConfigService, ConfigService>();
 
         _serviceProvider = services.BuildServiceProvider();
-
-        var contextFactory = _serviceProvider.GetRequiredService<IDbContextFactory<AppDbContext>>();
-        await using (var context = await contextFactory.CreateDbContextAsync())
-        {
-            await GoldenDataset.SeedWebUsersOnlyAsync(context);
-        }
 
         _sut = _serviceProvider.GetRequiredService<IConfigService>();
         _contextFactory = _serviceProvider.GetRequiredService<IDbContextFactory<AppDbContext>>();
@@ -192,7 +183,7 @@ public class ConfigServiceIntegrationTests
             Assert.That(lastEntry!.EventType, Is.EqualTo((Data.Models.AuditEventType)AuditEventType.ConfigurationChanged));
             Assert.That(lastEntry.Value, Does.Contain("ContentDetection"));
             Assert.That(lastEntry.Value, Does.Contain("Test Chat"));
-            Assert.That(lastEntry.ActorWebUserId, Is.EqualTo(GoldenDataset.Users.User1_Id));
+            Assert.That(lastEntry.ActorWebUserId, Is.EqualTo(GoldenDatasetConstants.WebUsers.OwnerId));
         });
     }
 }

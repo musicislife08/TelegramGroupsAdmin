@@ -1,0 +1,4 @@
+INSERT INTO linked_channels (id, managed_chat_id, channel_id, channel_name, channel_icon_path, photo_hash, last_synced) VALUES (1, -100026957614982, -100021999196951, 'Linked Channel for Main Community', 'chat_icons/1001224540016.jpg', NULL, '2026-04-30 20:00:32.545301+00');
+INSERT INTO linked_channels (id, managed_chat_id, channel_id, channel_name, channel_icon_path, photo_hash, last_synced) VALUES (2, -100054416618415, -100024769901572, 'Linked Channel for Regional Group', 'chat_icons/1001447679068.jpg', NULL, '2026-04-30 20:00:30.964236+00');
+INSERT INTO linked_channels (id, managed_chat_id, channel_id, channel_name, channel_icon_path, photo_hash, last_synced) VALUES (3, -100050808209814, -100080262325997, 'Linked Channel for Growth Community', 'chat_icons/1001562670163.jpg', NULL, '2026-04-30 20:00:29.949345+00');
+SELECT pg_catalog.setval('linked_channels_id_seq', 3, true);
