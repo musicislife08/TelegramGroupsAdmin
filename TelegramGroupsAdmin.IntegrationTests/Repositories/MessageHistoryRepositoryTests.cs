@@ -1002,20 +1002,37 @@ public class MessageHistoryRepositoryTests
     [Test]
     public async Task CleanupExpiredAsync_ShouldNotDeleteRecentMessages()
     {
-        // Arrange - Get current message count
+        // Invariant under test: cleanup with a window LARGER than every message's age
+        // deletes nothing — regardless of training-flag state. Distinct from the
+        // training-preservation path (covered by CleanupExpiredAsync_PreservesMessagesWithDetectionResults)
+        // and the deletion path (covered by CleanupExpiredAsync_WithOldMessages_*).
+        //
+        // Anchor strategy: Reduce to the 6 retention anchors and shift them via
+        // GoldenDatasetConstants.Retention.MessageShifts so each lands at a known
+        // NOW()-relative age in [-29d, -90d]. NOW()-relative timestamps mean this
+        // test never time-bombs as the canonical bootstrap date recedes into the past.
+        var contextFactory = _serviceProvider!.GetRequiredService<IDbContextFactory<AppDbContext>>();
+        await using (var context = await contextFactory.CreateDbContextAsync())
+        {
+            await GoldenDataset.Reduce(context)
+                .KeepMessages(GoldenDatasetConstants.Retention.AllMessageRefs)
+                .ApplyAsync();
+
+            await GoldenDataset.Mutate(context)
+                .ShiftMessageTimestamps(GoldenDatasetConstants.Chats.MainChatId, GoldenDatasetConstants.Retention.MessageShifts)
+                .ApplyAsync();
+        }
+
         var statsBefore = await _statsService!.GetStatsAsync();
 
-        // Act - Use 2-year (730-day) retention. The canonical dataset spans back to
-        // 2025-10 (~200 days), so 730 days covers all messages. This tests the invariant
-        // that cleanup with a sufficiently large window deletes nothing.
-        var result = await _repository!.CleanupExpiredAsync(TimeSpan.FromDays(730));
+        // Act - 365-day window covers the oldest anchor (-90d) with ~4x safety margin.
+        var result = await _repository!.CleanupExpiredAsync(TimeSpan.FromDays(365));
 
         using (Assert.EnterMultipleScope())
         {
-            // Assert - Should not delete anything (all canonical messages within 730-day window)
             Assert.That(result.DeletedCount, Is.EqualTo(0), "Should not delete messages within the retention window");
-            Assert.That(result.ImagePaths.Count, Is.EqualTo(0));
-            Assert.That(result.MediaPaths.Count, Is.EqualTo(0));
+            Assert.That(result.ImagePaths, Is.Empty);
+            Assert.That(result.MediaPaths, Is.Empty);
         }
 
         // Verify message count unchanged

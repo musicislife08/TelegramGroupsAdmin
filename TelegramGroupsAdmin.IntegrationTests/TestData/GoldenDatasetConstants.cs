@@ -70,6 +70,86 @@ internal static class GoldenDatasetConstants
         /// the only non-NULL <c>prompt_versions</c> row, and a <c>linked_channels</c> row.
         /// </summary>
         public const long MainChatId = -100026957614982L;
+
+        /// <summary>
+        /// Land Owners Group — non-MainChat with substantive message volume and a global
+        /// welcome flow (per CLAUDE.md Part 2 recipe). Hosts most of the canonical
+        /// unlabeled-message anchors used by training-label tests.
+        /// </summary>
+        public const long LandOwnersChatId = -100017312732389L;
+
+        /// <summary>
+        /// Unnamed canonical chat that hosts the existing spam/ham training-label fixtures
+        /// (messages 4575, 4602, 4655, 4620). Co-located so a single chat anchor lets
+        /// tests pin spam+ham labels without crossing chat boundaries.
+        /// </summary>
+        public const long TrainingFixturesChatId = -100048429560480L;
+    }
+
+    /// <summary>
+    /// Telegram user anchors from <c>canonical/02_telegram_users.sql</c>. Each constant
+    /// pins a specific role the test suite relies on (top author, second author,
+    /// labeling actor). Identity boundary: all IDs land in
+    /// <c>[9_000_000_000_000, 10_000_000_000_000)</c> per the canonical rotation salt.
+    /// </summary>
+    public static class TelegramUsers
+    {
+        /// <summary>
+        /// Top MainChat ham author (@unhelpfulgrab, "Squeak Degree"). 24 canonical messages,
+        /// mostly in MainChat. Per CLAUDE.md Part 2 recipe.
+        /// </summary>
+        public const long TopMainChatHamAuthorId = 9921676191756L;
+
+        /// <summary>
+        /// Second active MainChat ham author (@sillywolf, "Early Spirits"). 23 canonical
+        /// messages. Paired with <see cref="TopMainChatHamAuthorId"/> for cross-author
+        /// scenarios. Per CLAUDE.md Part 2 recipe.
+        /// </summary>
+        public const long SecondMainChatHamAuthorId = 9960171136314L;
+
+        /// <summary>
+        /// Canonical user that appears as <c>labeled_by_user_id</c> on training_labels rows.
+        /// Stable anchor for tests that need an Actor recognized as a prior labeler in the
+        /// canonical training set.
+        /// </summary>
+        public const long TrainingLabelActorId = 9084745993769L;
+    }
+
+    /// <summary>
+    /// Canonical anchors used by <c>TrainingLabelsRepositoryTests</c> to pin existing
+    /// spam/ham label rows and FK-valid-but-unlabeled message rows. The chat side of
+    /// each anchor is in <see cref="Chats.TrainingFixturesChatId"/> for the labeled set
+    /// and <see cref="Chats.LandOwnersChatId"/> for most of the unlabeled set
+    /// (see per-constant notes).
+    /// </summary>
+    public static class TrainingLabels
+    {
+        /// <summary>Canonical spam label (label=0) — message_id in <see cref="Chats.TrainingFixturesChatId"/>.</summary>
+        public const int ExistingSpamMsgId = 4575;
+
+        /// <summary>Canonical ham label (label=1) — message_id in <see cref="Chats.TrainingFixturesChatId"/>.</summary>
+        public const int ExistingHamMsgId = 4602;
+
+        /// <summary>Second canonical spam label — used for PK-uniqueness enforcement tests. Chat: <see cref="Chats.TrainingFixturesChatId"/>.</summary>
+        public const int ExistingSpam2MsgId = 4655;
+
+        /// <summary>Unlabeled FK-valid message in <see cref="Chats.TrainingFixturesChatId"/>.</summary>
+        public const int UnlabeledMsg1Id = 4620;
+
+        /// <summary>Unlabeled FK-valid message in <see cref="Chats.LandOwnersChatId"/>.</summary>
+        public const int UnlabeledMsg2Id = 7789;
+
+        /// <summary>Unlabeled FK-valid message in <see cref="Chats.LandOwnersChatId"/>.</summary>
+        public const int UnlabeledMsg3Id = 7834;
+
+        /// <summary>Unlabeled FK-valid message in <see cref="Chats.LandOwnersChatId"/>.</summary>
+        public const int UnlabeledMsg4Id = 7836;
+
+        /// <summary>Unlabeled FK-valid message in <see cref="Chats.LandOwnersChatId"/>.</summary>
+        public const int UnlabeledMsg5Id = 7853;
+
+        /// <summary>Unlabeled FK-valid message in <see cref="Chats.LandOwnersChatId"/>.</summary>
+        public const int UnlabeledMsg6Id = 8095;
     }
 
     /// <summary>
