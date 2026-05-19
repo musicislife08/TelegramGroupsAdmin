@@ -74,12 +74,21 @@ public sealed class ProfileScanService(
             pipelineMetrics.RecordProfileScanSkipped("dedup");
             var cachedOutcome = await DetermineOutcomeAsync(existingUser.ProfileScanScore.Value, triggeringChat, scope.ServiceProvider, ct);
             return new ProfileScanResult(
-                user.Id,
-                existingUser.Bio, existingUser.PersonalChannelId,
-                existingUser.PersonalChannelTitle, existingUser.PersonalChannelAbout,
-                existingUser.HasPinnedStories, existingUser.PinnedStoryCaptions,
-                existingUser.IsScam, existingUser.IsFake, existingUser.IsVerified,
-                existingUser.ProfileScanScore.Value, cachedOutcome, null, null);
+                TelegramUserId: user.Id,
+                Bio: existingUser.Bio,
+                PersonalChannelId: existingUser.PersonalChannelId,
+                PersonalChannelTitle: existingUser.PersonalChannelTitle,
+                PersonalChannelAbout: existingUser.PersonalChannelAbout,
+                HasPinnedStories: existingUser.HasPinnedStories,
+                PinnedStoryCaptions: existingUser.PinnedStoryCaptions,
+                IsScam: existingUser.IsScam,
+                IsFake: existingUser.IsFake,
+                IsVerified: existingUser.IsVerified,
+                Score: existingUser.ProfileScanScore.Value,
+                Outcome: cachedOutcome,
+                AiReason: null,
+                AiSignalsDetected: null,
+                ExplicitDisplayText: false);
         }
 
         // ── Get User API client (prefer one with access to the triggering chat) ──
@@ -324,9 +333,21 @@ public sealed class ProfileScanService(
 
             var cachedOutcome = await DetermineOutcomeAsync(existingUser.ProfileScanScore.Value, triggeringChat, sp, ct);
             return new ProfileScanResult(
-                user.Id, bio, personalChannelId, channelTitle, channelAbout,
-                hasPinnedStories, pinnedStoryCaptions, isScam, isFake, isVerified,
-                existingUser.ProfileScanScore.Value, cachedOutcome, null, null);
+                TelegramUserId: user.Id,
+                Bio: bio,
+                PersonalChannelId: personalChannelId,
+                PersonalChannelTitle: channelTitle,
+                PersonalChannelAbout: channelAbout,
+                HasPinnedStories: hasPinnedStories,
+                PinnedStoryCaptions: pinnedStoryCaptions,
+                IsScam: isScam,
+                IsFake: isFake,
+                IsVerified: isVerified,
+                Score: existingUser.ProfileScanScore.Value,
+                Outcome: cachedOutcome,
+                AiReason: null,
+                AiSignalsDetected: null,
+                ExplicitDisplayText: false);
         }
 
         // ── Step 5: Collect images for AI vision ──
