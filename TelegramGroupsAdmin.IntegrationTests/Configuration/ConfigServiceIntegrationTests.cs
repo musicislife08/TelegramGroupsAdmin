@@ -33,7 +33,7 @@ public class ConfigServiceIntegrationTests
     private IDbContextFactory<AppDbContext>? _contextFactory;
 
     private static readonly Actor TestActor =
-        Actor.FromWebUser(GoldenDataset.Users.User1_Id, GoldenDataset.Users.User1_Email);
+        Actor.FromWebUser(GoldenDatasetConstants.WebUsers.OwnerId, GoldenDatasetConstants.WebUsers.OwnerEmail);
 
     [SetUp]
     public async Task SetUp()
@@ -183,7 +183,7 @@ public class ConfigServiceIntegrationTests
             Assert.That(lastEntry!.EventType, Is.EqualTo((Data.Models.AuditEventType)AuditEventType.ConfigurationChanged));
             Assert.That(lastEntry.Value, Does.Contain("ContentDetection"));
             Assert.That(lastEntry.Value, Does.Contain("Test Chat"));
-            Assert.That(lastEntry.ActorWebUserId, Is.EqualTo(GoldenDataset.Users.User1_Id));
+            Assert.That(lastEntry.ActorWebUserId, Is.EqualTo(GoldenDatasetConstants.WebUsers.OwnerId));
         });
     }
 }

@@ -28,9 +28,9 @@ public class NotificationRepositoriesTests
     private IPushSubscriptionsRepository? _pushRepo;
     private IWebNotificationRepository? _notificationRepo;
 
-    // Test user IDs from golden dataset
-    private const string TestUserId1 = GoldenDataset.Users.User1_Id;
-    private const string TestUserId2 = GoldenDataset.Users.User2_Id;
+    // Canonical web user fixtures (Owner + Admin)
+    private const string TestUserId1 = GoldenDatasetConstants.WebUsers.OwnerId;
+    private const string TestUserId2 = GoldenDatasetConstants.WebUsers.AdminId;
 
     [SetUp]
     public async Task SetUp()

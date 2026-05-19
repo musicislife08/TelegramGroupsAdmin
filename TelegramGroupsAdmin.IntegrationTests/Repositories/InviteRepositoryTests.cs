@@ -19,7 +19,7 @@ namespace TelegramGroupsAdmin.IntegrationTests.Repositories;
 /// Test Infrastructure:
 /// - Unique PostgreSQL database per test (cloned from golden_template)
 /// - Canonical dataset provides 19 invites: 1 Pending, 13 Used, 5 Revoked.
-/// - created_by FK satisfied via GoldenDataset.Users.User1_Id (Owner fixture).
+/// - created_by FK satisfied via canonical Owner fixture (GoldenDatasetConstants.WebUsers.OwnerId).
 ///
 /// Canonical baseline counts (before each test adds its own rows):
 ///   All:     19  Pending: 1  Used: 13  Revoked: 5
@@ -34,8 +34,8 @@ public class InviteRepositoryTests
     private IServiceScope? _scope;
     private IInviteRepository? _repository;
 
-    // Canonical Owner fixture — satisfies invites.created_by FK without raw INSERT.
-    private const string CreatedByUserId = GoldenDataset.Users.User1_Id;
+    // Canonical Owner fixture (owner@example.com) — satisfies invites.created_by FK without raw INSERT.
+    private const string CreatedByUserId = GoldenDatasetConstants.WebUsers.OwnerId;
 
     // Canonical baseline counts (from 29_invites.sql)
     private const int CanonicalTotal = 19;

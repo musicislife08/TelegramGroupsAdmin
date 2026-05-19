@@ -45,10 +45,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- All SQL test data scripts (auto-embedded, numbered for FK dependency order) -->
+    <!-- Canonical SQL fixtures (auto-embedded; canonical/*.sql is FK-ordered by filename prefix). -->
     <EmbeddedResource Include="TestData\SQL\**\*.sql" />
-    <!-- Legacy (to be removed after migration) -->
-    <EmbeddedResource Include="TestData\MLTrainingData.sql" />
   </ItemGroup>
 
   <ItemGroup>

@@ -22,7 +22,7 @@ namespace TelegramGroupsAdmin.IntegrationTests.Repositories;
 /// Substrate: canonical template-clone, narrowed by Reduce.KeepMessages(allowlist)
 /// to the 9 analytics anchor messages, then Mutate.Shift* re-times the surviving
 /// 11 detection_results and 6 welcome_responses into today/yesterday/last-week
-/// windows relative to NOW(). See <see cref="AnalyticsAnchors"/> for the pinned
+/// windows relative to NOW(). See <see cref="GoldenDatasetConstants.Analytics"/> for the pinned
 /// canonical IDs.
 /// </summary>
 [TestFixture]
@@ -48,15 +48,15 @@ public class AnalyticsRepositoryTests
             // ResponseTimeStats empty-result assertion can't accidentally fail
             // from canonical user_actions joining onto our anchor spam messages.
             await GoldenDataset.Reduce(ctx)
-                .KeepMessages(AnalyticsAnchors.AllMessageRefs)
+                .KeepMessages(GoldenDatasetConstants.Analytics.AllMessageRefs)
                 .KeepUserActions(0)
                 .ApplyAsync();
 
             // Re-time the 11 surviving detection_results + 6 welcome_responses
             // into today/yesterday/last-week buckets.
             await GoldenDataset.Mutate(ctx)
-                .ShiftDetectionResultTimestamps(AnalyticsAnchors.DetectionResultShifts)
-                .ShiftWelcomeResponseTimestamps(AnalyticsAnchors.WelcomeResponseShifts)
+                .ShiftDetectionResultTimestamps(GoldenDatasetConstants.Analytics.DetectionResultShifts)
+                .ShiftWelcomeResponseTimestamps(GoldenDatasetConstants.Analytics.WelcomeResponseShifts)
                 .ApplyAsync();
         }
 
@@ -93,10 +93,10 @@ public class AnalyticsRepositoryTests
         using (Assert.EnterMultipleScope())
         {
             // Today's spam includes: base data (82581) + analytics automated spam + manual corrections
-            Assert.That(summary.TodaySpamCount, Is.GreaterThanOrEqualTo(AnalyticsAnchors.TodaySpamCount),
+            Assert.That(summary.TodaySpamCount, Is.GreaterThanOrEqualTo(GoldenDatasetConstants.Analytics.TodaySpamCount),
                 "Should have at least the analytics spam detections today");
             Assert.That(summary.HasYesterdayData, Is.True, "Should have yesterday data");
-            Assert.That(summary.YesterdaySpamCount, Is.GreaterThanOrEqualTo(AnalyticsAnchors.YesterdaySpamCount),
+            Assert.That(summary.YesterdaySpamCount, Is.GreaterThanOrEqualTo(GoldenDatasetConstants.Analytics.YesterdaySpamCount),
                 "Should have at least the analytics spam detections yesterday");
         }
     }
@@ -197,7 +197,7 @@ public class AnalyticsRepositoryTests
         // This week should include today's 3 spam + yesterday's 2 spam = 5 minimum
         // (depending on timezone, could be more from last week's data)
         Assert.That(trends.ThisWeekSpamCount, Is.GreaterThanOrEqualTo(
-            AnalyticsAnchors.TodaySpamCount + AnalyticsAnchors.YesterdaySpamCount),
+            GoldenDatasetConstants.Analytics.TodaySpamCount + GoldenDatasetConstants.Analytics.YesterdaySpamCount),
             "This week should include at least today + yesterday spam");
     }
 
@@ -211,7 +211,7 @@ public class AnalyticsRepositoryTests
         using (Assert.EnterMultipleScope())
         {
             // Assert
-            Assert.That(trends.LastWeekSpamCount, Is.EqualTo(AnalyticsAnchors.LastWeekSpamCount),
+            Assert.That(trends.LastWeekSpamCount, Is.EqualTo(GoldenDatasetConstants.Analytics.LastWeekSpamCount),
                 "Last week should have 2 spam detections from analytics test data");
             Assert.That(trends.CanShowWeekPercent, Is.True,
                 "Should be able to show percentage since last week has data");
@@ -229,7 +229,7 @@ public class AnalyticsRepositoryTests
             // Assert - test data guarantees last week data exists
             Assert.That(trends.CanShowWeekPercent, Is.True,
                 "Test data should provide last week spam for comparison");
-            Assert.That(trends.LastWeekSpamCount, Is.EqualTo(AnalyticsAnchors.LastWeekSpamCount),
+            Assert.That(trends.LastWeekSpamCount, Is.EqualTo(GoldenDatasetConstants.Analytics.LastWeekSpamCount),
                 "Last week should have exactly 2 spam from test data");
 
             // With 2 spam last week and 5+ this week, change should be positive (more spam)
@@ -268,7 +268,7 @@ public class AnalyticsRepositoryTests
         var trends = await _analyticsRepository.GetSpamTrendComparisonAsync(DefaultTimeZoneId);
 
         // Assert
-        Assert.That(trends.ThisMonthSpamCount, Is.GreaterThanOrEqualTo(AnalyticsAnchors.TodaySpamCount),
+        Assert.That(trends.ThisMonthSpamCount, Is.GreaterThanOrEqualTo(GoldenDatasetConstants.Analytics.TodaySpamCount),
             "This month should include at least today's spam");
     }
 
@@ -280,9 +280,9 @@ public class AnalyticsRepositoryTests
 
         // Assert
         Assert.That(trends.ThisYearSpamCount, Is.GreaterThanOrEqualTo(
-            AnalyticsAnchors.TodaySpamCount +
-            AnalyticsAnchors.YesterdaySpamCount +
-            AnalyticsAnchors.LastWeekSpamCount),
+            GoldenDatasetConstants.Analytics.TodaySpamCount +
+            GoldenDatasetConstants.Analytics.YesterdaySpamCount +
+            GoldenDatasetConstants.Analytics.LastWeekSpamCount),
             "This year should include all test data spam");
     }
 
@@ -437,9 +437,9 @@ public class AnalyticsRepositoryTests
         Assert.That(stats.TotalDetections, Is.GreaterThan(0), "Should have detections");
         // Total should be at least base ham (2) + analytics spam (5 recent days) = 7+
         Assert.That(stats.TotalDetections, Is.GreaterThanOrEqualTo(
-            AnalyticsAnchors.InWindowHamAutoCount +
-            AnalyticsAnchors.TodaySpamCount +
-            AnalyticsAnchors.YesterdaySpamCount));
+            GoldenDatasetConstants.Analytics.InWindowHamAutoCount +
+            GoldenDatasetConstants.Analytics.TodaySpamCount +
+            GoldenDatasetConstants.Analytics.YesterdaySpamCount));
     }
 
     [Test]
@@ -635,17 +635,12 @@ public class AnalyticsRepositoryTests
     }
 
     [Test]
-    public async Task GetDetectionMethodComparison_TracksFPContributions_HonoursCanonicalShape()
+    public async Task GetDetectionMethodComparison_TracksFPContributions()
     {
-        // Substrate note: canonical's organic FP candidates (`auto_S` + later `manual_H`
-        // on the same message) all carry `check_results_json = '{"Checks": []}'` — the
-        // bootstrap pipeline stripped per-check signals from FP-corrected auto rows. So
-        // the SUT has no algorithm-level attribution data to count for the FP message
-        // (213325) in our substrate, and correctly returns 0.
-        //
-        // Logged as a canonical gap in IntegrationTests/CLAUDE.md Part 2; a future
-        // bootstrap pass that pulls an FP candidate with populated, non-abstained
-        // check_results_json from devdb will allow flipping the assertion to >= 1.
+        // Canonical FP anchor: msg 213325 (DR 2012 auto_S → DR 2013 manual_H) carries
+        // populated check_results_json with 3 non-abstained algorithm signals (ML, Bayes,
+        // OpenAI). Each non-abstained algorithm gets one FP-attribution credit, so the
+        // sum across all algorithms is >= 1.
         var startDate = DateTimeOffset.UtcNow.AddDays(-7);
         var endDate = DateTimeOffset.UtcNow.AddDays(1);
 
@@ -653,8 +648,8 @@ public class AnalyticsRepositoryTests
             startDate, endDate, DefaultTimeZoneId);
 
         var totalFPContributions = stats.Sum(s => s.ContributedToFalsePositives);
-        Assert.That(totalFPContributions, Is.EqualTo(0),
-            "Canonical's FP candidates have empty check_results_json — algorithm attribution returns 0 by design.");
+        Assert.That(totalFPContributions, Is.GreaterThanOrEqualTo(1),
+            "At least one method should have contributed to FP from correction data");
     }
 
     #endregion
@@ -677,10 +672,10 @@ public class AnalyticsRepositoryTests
         Assert.That(summary, Is.Not.Null);
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(summary.TotalJoins, Is.EqualTo(AnalyticsAnchors.TotalWelcomeResponses),
+            Assert.That(summary.TotalJoins, Is.EqualTo(GoldenDatasetConstants.Analytics.TotalWelcomeResponses),
                       "Total joins should match test data");
             Assert.That(summary.TotalAccepted, Is.EqualTo(
-                AnalyticsAnchors.TodayAcceptedCount + AnalyticsAnchors.LastWeekAcceptedCount),
+                GoldenDatasetConstants.Analytics.TodayAcceptedCount + GoldenDatasetConstants.Analytics.LastWeekAcceptedCount),
                 "Total accepted should match test data");
         }
     }
@@ -700,8 +695,8 @@ public class AnalyticsRepositoryTests
         {
             // Assert - use precalculated expected value from test data
             // 3 accepted out of 6 total = 50%
-            Assert.That(summary.TotalJoins, Is.EqualTo(AnalyticsAnchors.TotalWelcomeResponses));
-            Assert.That(summary.AcceptanceRate, Is.EqualTo(AnalyticsAnchors.ExpectedAcceptedPercentage),
+            Assert.That(summary.TotalJoins, Is.EqualTo(GoldenDatasetConstants.Analytics.TotalWelcomeResponses));
+            Assert.That(summary.AcceptanceRate, Is.EqualTo(GoldenDatasetConstants.Analytics.ExpectedAcceptedPercentage),
                 "Acceptance rate should be 50% (3 accepted / 6 total)");
         }
     }
@@ -740,10 +735,10 @@ public class AnalyticsRepositoryTests
         Assert.That(distribution, Is.Not.Null);
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(distribution.TotalResponses, Is.EqualTo(AnalyticsAnchors.TotalWelcomeResponses));
-            Assert.That(distribution.DeniedCount, Is.EqualTo(AnalyticsAnchors.TodayDeniedCount));
-            Assert.That(distribution.TimeoutCount, Is.EqualTo(AnalyticsAnchors.YesterdayTimeoutCount));
-            Assert.That(distribution.LeftCount, Is.EqualTo(AnalyticsAnchors.YesterdayLeftCount));
+            Assert.That(distribution.TotalResponses, Is.EqualTo(GoldenDatasetConstants.Analytics.TotalWelcomeResponses));
+            Assert.That(distribution.DeniedCount, Is.EqualTo(GoldenDatasetConstants.Analytics.TodayDeniedCount));
+            Assert.That(distribution.TimeoutCount, Is.EqualTo(GoldenDatasetConstants.Analytics.YesterdayTimeoutCount));
+            Assert.That(distribution.LeftCount, Is.EqualTo(GoldenDatasetConstants.Analytics.YesterdayLeftCount));
         }
     }
 
@@ -761,16 +756,16 @@ public class AnalyticsRepositoryTests
         using (Assert.EnterMultipleScope())
         {
             // Assert - use precalculated expected percentages
-            Assert.That(distribution.TotalResponses, Is.EqualTo(AnalyticsAnchors.TotalWelcomeResponses));
+            Assert.That(distribution.TotalResponses, Is.EqualTo(GoldenDatasetConstants.Analytics.TotalWelcomeResponses));
 
             // Verify each percentage against precalculated values
-            Assert.That(distribution.AcceptedPercentage, Is.EqualTo(AnalyticsAnchors.ExpectedAcceptedPercentage),
+            Assert.That(distribution.AcceptedPercentage, Is.EqualTo(GoldenDatasetConstants.Analytics.ExpectedAcceptedPercentage),
                 "Accepted percentage should be 50% (3/6)");
-            Assert.That(distribution.DeniedPercentage, Is.EqualTo(AnalyticsAnchors.ExpectedDeniedPercentage).Within(0.001),
+            Assert.That(distribution.DeniedPercentage, Is.EqualTo(GoldenDatasetConstants.Analytics.ExpectedDeniedPercentage).Within(0.001),
                 "Denied percentage should be ~16.67% (1/6)");
-            Assert.That(distribution.TimeoutPercentage, Is.EqualTo(AnalyticsAnchors.ExpectedTimeoutPercentage).Within(0.001),
+            Assert.That(distribution.TimeoutPercentage, Is.EqualTo(GoldenDatasetConstants.Analytics.ExpectedTimeoutPercentage).Within(0.001),
                 "Timeout percentage should be ~16.67% (1/6)");
-            Assert.That(distribution.LeftPercentage, Is.EqualTo(AnalyticsAnchors.ExpectedLeftPercentage).Within(0.001),
+            Assert.That(distribution.LeftPercentage, Is.EqualTo(GoldenDatasetConstants.Analytics.ExpectedLeftPercentage).Within(0.001),
                 "Left percentage should be ~16.67% (1/6)");
         }
 
@@ -807,7 +802,7 @@ public class AnalyticsRepositoryTests
 
         // Total join count should match
         var totalJoins = trends.Sum(t => t.JoinCount);
-        Assert.That(totalJoins, Is.EqualTo(AnalyticsAnchors.TotalWelcomeResponses));
+        Assert.That(totalJoins, Is.EqualTo(GoldenDatasetConstants.Analytics.TotalWelcomeResponses));
     }
 
     [Test]
@@ -826,9 +821,9 @@ public class AnalyticsRepositoryTests
         Assert.That(chatStats.Count, Is.GreaterThan(0), "Should have per-chat stats");
 
         // All welcome responses are for MainChat
-        var mainChatStats = chatStats.FirstOrDefault(c => c.ChatId == AnalyticsAnchors.MainChatId);
+        var mainChatStats = chatStats.FirstOrDefault(c => c.ChatId == GoldenDatasetConstants.Chats.MainChatId);
         Assert.That(mainChatStats, Is.Not.Null, "Should have stats for main chat");
-        Assert.That(mainChatStats!.TotalJoins, Is.EqualTo(AnalyticsAnchors.TotalWelcomeResponses));
+        Assert.That(mainChatStats!.TotalJoins, Is.EqualTo(GoldenDatasetConstants.Analytics.TotalWelcomeResponses));
     }
 
     [Test]

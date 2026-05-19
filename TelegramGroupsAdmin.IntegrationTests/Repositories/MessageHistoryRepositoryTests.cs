@@ -1068,20 +1068,20 @@ public class MessageHistoryRepositoryTests
         await using (var context = await contextFactory.CreateDbContextAsync())
         {
             await GoldenDataset.Reduce(context)
-                .KeepMessages(RetentionAnchors.AllMessageRefs)
+                .KeepMessages(GoldenDatasetConstants.Retention.AllMessageRefs)
                 .ApplyAsync();
 
             await GoldenDataset.Mutate(context)
-                .ShiftMessageTimestamps(RetentionAnchors.MainChatId, RetentionAnchors.MessageShifts)
+                .ShiftMessageTimestamps(GoldenDatasetConstants.Chats.MainChatId, GoldenDatasetConstants.Retention.MessageShifts)
                 .ApplyAsync();
         }
 
         // Verify anchors exist before cleanup
-        var bareWithEditBefore = await _repository!.GetMessageAsync(RetentionAnchors.MsgId_BareWithEdit, MainChatId);
-        var bareOrphan60Before = await _repository!.GetMessageAsync(RetentionAnchors.MsgId_BareOrphan60d, MainChatId);
-        var trainingPreservedBefore = await _repository!.GetMessageAsync(RetentionAnchors.MsgId_TrainingPreserved, MainChatId);
-        var bareOrphan29Before = await _repository!.GetMessageAsync(RetentionAnchors.MsgId_BareOrphan29d, MainChatId);
-        var nonTrainingBefore = await _repository!.GetMessageAsync(RetentionAnchors.MsgId_NonTrainingDeleted, MainChatId);
+        var bareWithEditBefore = await _repository!.GetMessageAsync(GoldenDatasetConstants.Retention.MsgId_BareWithEdit, MainChatId);
+        var bareOrphan60Before = await _repository!.GetMessageAsync(GoldenDatasetConstants.Retention.MsgId_BareOrphan60d, MainChatId);
+        var trainingPreservedBefore = await _repository!.GetMessageAsync(GoldenDatasetConstants.Retention.MsgId_TrainingPreserved, MainChatId);
+        var bareOrphan29Before = await _repository!.GetMessageAsync(GoldenDatasetConstants.Retention.MsgId_BareOrphan29d, MainChatId);
+        var nonTrainingBefore = await _repository!.GetMessageAsync(GoldenDatasetConstants.Retention.MsgId_NonTrainingDeleted, MainChatId);
 
         using (Assert.EnterMultipleScope())
         {
@@ -1095,7 +1095,7 @@ public class MessageHistoryRepositoryTests
         // Verify edit row exists before cleanup (cascade target for anchor #1)
         await using (var context = await contextFactory.CreateDbContextAsync())
         {
-            var editBefore = await context.MessageEdits.FindAsync(RetentionAnchors.EditId_ForBareWithEdit);
+            var editBefore = await context.MessageEdits.FindAsync(GoldenDatasetConstants.Retention.EditId_ForBareWithEdit);
             Assert.That(editBefore, Is.Not.Null, "Edit row for 45-day anchor should exist before cleanup");
         }
 
@@ -1103,14 +1103,14 @@ public class MessageHistoryRepositoryTests
         var result = await _repository.CleanupExpiredAsync(TimeSpan.FromDays(30));
 
         // Assert - Correct number deleted
-        Assert.That(result.DeletedCount, Is.EqualTo(RetentionAnchors.ExpectedDeletionsWith30DayRetention),
+        Assert.That(result.DeletedCount, Is.EqualTo(GoldenDatasetConstants.Retention.ExpectedDeletionsWith30DayRetention),
             "Should delete exactly 4 anchors past 30d without training preservation");
 
         // Assert - Anchors past retention without training preservation are DELETED
-        var bareWithEditAfter = await _repository.GetMessageAsync(RetentionAnchors.MsgId_BareWithEdit, MainChatId);
-        var bareOrphan60After = await _repository.GetMessageAsync(RetentionAnchors.MsgId_BareOrphan60d, MainChatId);
-        var bareOrphan35After = await _repository.GetMessageAsync(RetentionAnchors.MsgId_BareOrphan35d, MainChatId);
-        var nonTrainingAfter = await _repository.GetMessageAsync(RetentionAnchors.MsgId_NonTrainingDeleted, MainChatId);
+        var bareWithEditAfter = await _repository.GetMessageAsync(GoldenDatasetConstants.Retention.MsgId_BareWithEdit, MainChatId);
+        var bareOrphan60After = await _repository.GetMessageAsync(GoldenDatasetConstants.Retention.MsgId_BareOrphan60d, MainChatId);
+        var bareOrphan35After = await _repository.GetMessageAsync(GoldenDatasetConstants.Retention.MsgId_BareOrphan35d, MainChatId);
+        var nonTrainingAfter = await _repository.GetMessageAsync(GoldenDatasetConstants.Retention.MsgId_NonTrainingDeleted, MainChatId);
 
         using (Assert.EnterMultipleScope())
         {
@@ -1122,19 +1122,19 @@ public class MessageHistoryRepositoryTests
         }
 
         // Assert - Anchor with training-flagged DR is PRESERVED despite -90d age
-        var trainingPreservedAfter = await _repository.GetMessageAsync(RetentionAnchors.MsgId_TrainingPreserved, MainChatId);
+        var trainingPreservedAfter = await _repository.GetMessageAsync(GoldenDatasetConstants.Retention.MsgId_TrainingPreserved, MainChatId);
         Assert.That(trainingPreservedAfter, Is.Not.Null,
             "90-day anchor with used_for_training=true detection should be preserved");
 
         // Assert - Boundary anchor (29 days) is PRESERVED
-        var bareOrphan29After = await _repository.GetMessageAsync(RetentionAnchors.MsgId_BareOrphan29d, MainChatId);
+        var bareOrphan29After = await _repository.GetMessageAsync(GoldenDatasetConstants.Retention.MsgId_BareOrphan29d, MainChatId);
         Assert.That(bareOrphan29After, Is.Not.Null,
             "29-day anchor should NOT be deleted (just inside retention window)");
 
         // Assert - Edit cascade (SUT's explicit MessageEdits.RemoveRange path)
         await using (var context = await contextFactory.CreateDbContextAsync())
         {
-            var editAfter = await context.MessageEdits.FindAsync(RetentionAnchors.EditId_ForBareWithEdit);
+            var editAfter = await context.MessageEdits.FindAsync(GoldenDatasetConstants.Retention.EditId_ForBareWithEdit);
             Assert.That(editAfter, Is.Null, "Edit row should be deleted along with its parent message");
         }
 

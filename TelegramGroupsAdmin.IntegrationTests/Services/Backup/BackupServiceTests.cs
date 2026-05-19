@@ -64,6 +64,10 @@ public class BackupServiceTests
     // Canonical telegram_users row count (335 rows in golden_template)
     private const int CanonicalTelegramUserCount = 335;
 
+    // Tables with DTOs that BackupService can export (excludes __EFMigrationsHistory,
+    // file_scan_quota, ticker.*). Updated 2026-04-09: +file_scan_results (FileScanResultDto rename).
+    private const int ExpectedBackupTableCount = 42;
+
     // Synthetic outside-canonical-range ID used by RestoreAsync_ShouldWipeAllTablesFirst
     private const long SyntheticExtraUserId = 7777777777777L;
 
@@ -244,8 +248,8 @@ public class BackupServiceTests
             var metadata = await _backupService!.GetMetadataAsync(backupPath);
 
             // Assert - Verify table count matches golden dataset
-            Assert.That(metadata.TableCount, Is.EqualTo(GoldenDataset.TotalTableCount),
-                $"Expected {GoldenDataset.TotalTableCount} tables in backup (excluding system tables)");
+            Assert.That(metadata.TableCount, Is.EqualTo(ExpectedBackupTableCount),
+                $"Expected {ExpectedBackupTableCount} tables in backup (excluding system tables)");
 
             // Verify metadata contains recent timestamp
             var now = DateTimeOffset.UtcNow;
@@ -486,10 +490,10 @@ public class BackupServiceTests
             var user2 = await _testHelper!.ExecuteScalarAsync<string>($@"
                 SELECT invited_by
                 FROM users
-                WHERE id = '{GoldenDataset.Users.User2_Id}'
+                WHERE id = '{GoldenDatasetConstants.WebUsers.AdminId}'
             ");
 
-            Assert.That(user2, Is.EqualTo(GoldenDataset.Users.User1_Id),
+            Assert.That(user2, Is.EqualTo(GoldenDatasetConstants.WebUsers.OwnerId),
                 "Self-referencing FK (invited_by) should be preserved");
         }
         finally
@@ -619,7 +623,7 @@ public class BackupServiceTests
             using (Assert.EnterMultipleScope())
             {
                 Assert.That(metadata.Version, Is.EqualTo("3.0"));
-                Assert.That(metadata.TableCount, Is.EqualTo(GoldenDataset.TotalTableCount));
+                Assert.That(metadata.TableCount, Is.EqualTo(ExpectedBackupTableCount));
                 Assert.That(metadata.CreatedAt, Is.LessThanOrEqualTo(DateTimeOffset.UtcNow));
             }
         }
@@ -727,7 +731,7 @@ public class BackupServiceTests
 
             // Verify the backup contains telegram_users table with warnings column
             var metadata = await _backupService!.GetMetadataAsync(backupPath);
-            Assert.That(metadata.TableCount, Is.EqualTo(GoldenDataset.TotalTableCount));
+            Assert.That(metadata.TableCount, Is.EqualTo(ExpectedBackupTableCount));
         }
         finally
         {
@@ -827,13 +831,13 @@ public class BackupServiceTests
     public async Task ExportAndRestore_ShouldPreserveEnumValues()
     {
         // Arrange - Verify enum value is set in canonical dataset.
-        // User3_Id (a8dc8371) = deleted@example.com, status=3 (Deleted) — canonical fixture.
+        // DeletedAdminId (a8dc8371) = deleted@example.com, status=3 (Deleted) — canonical fixture.
         var originalStatus = await _testHelper!.ExecuteScalarAsync<int>($@"
-            SELECT status FROM users WHERE id = '{GoldenDataset.Users.User3_Id}'
+            SELECT status FROM users WHERE id = '{GoldenDatasetConstants.WebUsers.DeletedAdminId}'
         ");
 
-        Assert.That(originalStatus, Is.EqualTo(GoldenDataset.Users.User3_Status),
-            "Test setup: User3 should have Deleted status (3)");
+        Assert.That(originalStatus, Is.EqualTo(GoldenDatasetConstants.WebUsers.DeletedAdminStatus),
+            "Test setup: Deleted Admin fixture should have Deleted status (3)");
 
         // Act - Export and restore
         var backupPath = await ExportBackupToTempFileAsync();
@@ -843,10 +847,10 @@ public class BackupServiceTests
 
             // Assert - Verify enum was preserved
             var restoredStatus = await _testHelper.ExecuteScalarAsync<int>($@"
-                SELECT status FROM users WHERE id = '{GoldenDataset.Users.User3_Id}'
+                SELECT status FROM users WHERE id = '{GoldenDatasetConstants.WebUsers.DeletedAdminId}'
             ");
 
-            Assert.That(restoredStatus, Is.EqualTo(GoldenDataset.Users.User3_Status),
+            Assert.That(restoredStatus, Is.EqualTo(GoldenDatasetConstants.WebUsers.DeletedAdminStatus),
                 "Enum value should be preserved through backup/restore roundtrip");
         }
         finally

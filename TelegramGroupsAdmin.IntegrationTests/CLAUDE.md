@@ -5,7 +5,9 @@ This file is auto-loaded by Claude Code when working under `TelegramGroupsAdmin.
 ## Part 1 - Dataset orientation
 
 ### What this is
-The canonical dataset is a frozen superset of every entity type the integration suite needs to read from. Tests clone it per-method via Postgres template DBs (Phase 2+) and reduce it down with `GoldenReducePlan` (Phase 1+). Source: `TestData/SQL/canonical/*.sql` (35 files, 3,174 INSERT statements).
+The canonical dataset is a frozen superset of every entity type the integration suite needs to read from. Tests clone it per-method via Postgres template DBs (`MigrationTestHelper.CreateDatabaseFromGoldenTemplateAsync`) and either consume it as-is, reduce it down with `GoldenDataset.Reduce(ctx).KeepMessages(...).ApplyAsync()` (subtractive — FK CASCADE drops everything outside the allowlist), or mutate it in-place with `GoldenDataset.Mutate(ctx).ShiftDetectionResultTimestamps(...).ApplyAsync()` (NOW()-relative re-timing for windowed aggregations). Source: `TestData/SQL/canonical/*.sql` (35 files, 3,174 INSERT statements).
+
+True-empty tests use `MigrationTestHelper.CreateDatabaseFromEmptyTemplateAsync` instead (post-migrate, zero rows) — cheaper than a golden clone, and the right choice when the SUT writes its own state from scratch.
 
 ### How we built it
 Origin: prod DB snapshot from 2026-04-30. Bootstrap pipeline (full detail in `docs/superpowers/plans/2026-04-30-canonical-golden-snapshot-and-template-cloning.md` Pre-Phase 1b):
@@ -83,8 +85,16 @@ Origin: prod DB snapshot from 2026-04-30. Bootstrap pipeline (full detail in `do
 ### Schema reference
 For column-level details, read the per-table SQL file directly (`head -1 <file>` shows the INSERT column list, then read a row or two). Do not transcribe column lists into this document.
 
-### Legacy `GoldenDataset.cs` warning
-The existing `TestData/GoldenDataset.cs` predates canonical. Its `Users.User{1..4}_Id` UUIDs match canonical (preserved as fixtures), but `TelegramUsers.*`, `ManagedChats.*`, `Messages.*`, `LinkedChannels.*`, `DetectionResults.*`, and `TrainingLabels.*` constants pin to **pre-rotation** IDs that DO NOT exist in canonical. Phase 4 retires that class. Until then, do not introduce new references to those constants; use direct canonical IDs (or new constants minted on demand against canonical) instead.
+### Canonical anchors in code
+Test code references canonical IDs through `TestData/GoldenDatasetConstants.cs` — the single discovery surface for every ID the test suite pins to. **Magic-string UUIDs and bare numeric chat/message ids in test code are a code smell**: extend `GoldenDatasetConstants` with a named constant instead.
+
+Layout (`internal static class GoldenDatasetConstants` with nested static classes):
+- `WebUsers` — `OwnerId`, `AdminId` (canonical `web_users.id` UUIDs)
+- `Chats` — `MainChatId`
+- `Retention` — message anchors, `MessageShifts`, `AllMessageRefs`, `ExpectedDeletionsWith30DayRetention` (consumed by `MessageHistoryRepositoryTests.CleanupExpiredAsync_*`)
+- `Analytics` — DR / WR anchors, `DetectionResultShifts`, `WelcomeResponseShifts`, `AllMessageRefs`, expected counts (consumed by `AnalyticsRepositoryTests`)
+
+Promote a constant to its top-level domain class (`WebUsers`, `Chats`) once a second consumer wants it; until then, keep it under a test-domain nested class next to the tests that use it. The `GoldenDataset.cs` loader file holds the canonical *behavior* (`LoadCanonicalAsync`, `Reduce`, `Mutate`); the constants file holds canonical *data*.
 
 ## Part 2 - Scenario recipes
 
@@ -125,13 +135,13 @@ Recipe format: a heading, the anchor id(s), a one-line description, and "use whe
 - `telegram_user_id` = `9921676191756`
 - `@unhelpfulgrab`, "Squeak Degree", `is_banned=false`
 - 24 messages in canonical, mostly in MainChat. Cross-referenced by `admin_notes` row 6 (notes them as a suspected duplicate of `9452657005278`).
-- Use when: a test needs a real, prolific MainChat author. Closest canonical analog of legacy `GoldenDataset.TelegramUsers.User1_TelegramUserId`.
+- Use when: a test needs a real, prolific MainChat author.
 
 #### Second active MainChat author (ham)
 - `telegram_user_id` = `9960171136314`
 - `@sillywolf`, "Early Spirits", `is_banned=false`
 - 23 messages. `admin_notes` row 4 references this user with a generic "Test Note".
-- Use when: a test needs a paired second author for cross-author scenarios in MessageHistoryRepositoryTests. Closest canonical analog of legacy `User2_TelegramUserId`.
+- Use when: a test needs a paired second author for cross-author scenarios in MessageHistoryRepositoryTests.
 
 #### Suspected duplicate account (ham, cross-referenced)
 - `telegram_user_id` = `9452657005278`
@@ -167,12 +177,12 @@ Recipe format: a heading, the anchor id(s), a one-line description, and "use whe
 #### Main Community: the canonical "MainChat"
 - `chat_id` = `-100026957614982`
 - Holds 198 of 400 messages (49.5%). Carries the only non-NULL `welcome_config` JSONB outside the global row, the only non-NULL `prompt_versions` row, and a `linked_channels` row.
-- Use when: any test that historically pinned to `GoldenDataset.ManagedChats.MainChat_Id`. This is the de facto MainChat anchor.
+- Use when: any test needs a primary chat anchor — exposed in code as `GoldenDatasetConstants.Chats.MainChatId`.
 
 #### Workshop Alumni: secondary chat for cross-chat tests
 - `chat_id` = `-100059667856554`
 - Second-most messages (39). 5 `chat_admins` members.
-- Use when: a test needs a second active chat to pair against MainChat (`chatA` vs `chatB` patterns in MessageHistoryRepositoryTests). Closest canonical analog of legacy `Chat1_Id`.
+- Use when: a test needs a second active chat to pair against MainChat (`chatA` vs `chatB` patterns in MessageHistoryRepositoryTests).
 
 #### Crypto Group: most-administered chat
 - `chat_id` = `-100094881429433`
@@ -243,21 +253,8 @@ Recipe format: a heading, the anchor id(s), a one-line description, and "use whe
 - `welcome_responses` IDs `999001..999005`: 5 status branches anchored on `(MainChat_Id=-100026957614982, user_id=9196379650113, username='canonical_user1')`. Mapping: `999001`=Pending, `999002`=Accepted, `999003`=Denied, `999004`=Timeout, `999005`=Left.
 - `username_blacklist` IDs `999001` (`pattern='spambot_admin'`, enabled, Exact match) + `999005` (`pattern='archived_pattern'`, disabled, Exact match). No Contains/Regex/StartsWith fixtures (feature not yet implemented).
 - `training_labels` rows with `reason='canonical_synthetic_promotion'`: 15 explicit_ham promotions. `labeled_by_user_id` is the rotated id of prod user `1312830442` (a stable canonical synthetic-promotion attribution anchor).
-- `user_actions` ban-celebration anchors: **NOT yet added** as synthetic rows. `BanCelebrationServiceTests` `{bancount}` placeholder tests (1..7) currently have no dedicated synthetic anchors; the test rewrite in Phase 3A should either pick 7 canonical telegram_users with `>=1` Ban action_type=0 row (top candidates: `9971261287520`, `9793662571780`, `9319426004230`), or extend canonical with synthetic rows in a follow-up bootstrap pass.
 
 ### Cross-references
 - **Auth password (all 9 web users):** `Passw0rd!SaidNoSecurityAuditorEver`. Hash baked into `01_users.sql`.
 - **`chat_id = 0`:** preserved sentinel (rotation skipped via CASE WHEN guard). Global config row, global content_detection_config row, and global stop_words/etc. anchor here.
 
-### Known canonical gaps (Pre-Phase 1b extensions that were NOT carried into the final dump)
-
-If a Phase 3A test rewrite needs one of these, the option is (a) extend canonical with a follow-up bootstrap pass, or (b) seed inline in the test setup.
-
-- **SimHash deduplication messages (IDs 95001..95022):** ✅ RESOLVED in 3A.3 by a different approach — canonical was extended with real prod near-duplicate clusters (banned-user spam campaigns) instead of the original 95001..95022 synthetic groups. The test now uses cluster `220848/221429/221904/222949` (recruitment-spam variants, all pairwise SimHash ≤ 10) for `SimHash_DetectsNearDuplicates_InRecruitmentSpamCluster`, anchor `212355` for the bit_count query test, and `20849/4666/221139/14538` for `SimHash_DistinguishesDifferentGroups`. Legacy `SQL.30_dedup_test_data.sql` may be retired in Phase 4 cleanup.
-- **Analytics time-spread data:** `AnalyticsRepositoryTests.cs:78` aggregates over daily/weekly/monthly/7-day/30-day/365-day windows. Canonical does not pre-shift timestamps for this; tests still rely on legacy `SQL.50_analytics_test_data.sql` via `GoldenDataset.SeedAnalyticsDataAsync`. Phase 3A migration here will need either a UPDATE-on-load pass or a `Reduce` plan that injects time-shifted rows.
-- **Ban-celebration `{bancount}` anchors:** see Synthetic / reserved rows note above.
-- **Welcome-response slice anchor pinned to a specific welcome_message_id constant:** ✅ RESOLVED in 3A.4 — `WelcomeTimeoutJobTests` was retargeted at canonical user `9196379650113` and welcome_message_ids `99001..99005` (one per `WelcomeResponseType`). Per-test template clones give each test a fresh canonical 999001 Pending anchor, so mutation-as-assertion tests (kick path → Timeout) don't pollute one another. The "near-miss" tests (different chat / different message id) use the existing Pending row in MainChat as the deliberate near-miss instead of seeding a synthetic row. welcome_message_ids 99001..99005 confirmed not to collide with any `messages.message_id` in canonical.
-
-- **Analytics aggregation timestamps:** ✅ RESOLVED in 3A.7 — `AnalyticsRepositoryTests` now uses canonical + `Reduce.KeepMessages(allowlist)` to isolate 9 anchor messages (7 spam-only + 1 FP pair + 1 FN pair, all MainChat), then `Mutate.ShiftDetectionResultTimestamps` and `Mutate.ShiftWelcomeResponseTimestamps` to re-time the surviving rows into today/yesterday/last-week buckets relative to NOW(). Canonical itself stays structurally frozen; only test-local clones are mutated. See `TestData/AnalyticsAnchors.cs` for pinned IDs.
-
-- **FP candidate check_results_json populated for algorithm attribution:** Canonical's 9 organic FP candidates (`auto_S` + later `manual_H` on same message: 213325, 214891, 210709, 105368, 104755, 105371, 212456, 213409, 104222) all carry `check_results_json = '{"Checks": []}'` — the bootstrap pipeline stripped per-check signals from FP-corrected auto detections. This means `AnalyticsRepository.GetDetectionMethodComparisonAsync` returns `ContributedToFalsePositives = 0` for canonical's FP rows by design (no algorithm-level data to attribute from). `AnalyticsRepositoryTests.GetDetectionMethodComparison_TracksFPContributions_HonoursCanonicalShape` asserts the substrate-honest `EqualTo(0)`. **To lift this:** future canonical bootstrap pass should pull at least one FP candidate from devdb with populated, non-abstained `check_results_json` (e.g., `[{"CheckName":0,"Score":4.25,"Abstained":false,...}]`), sanitize URL hostnames per canonical's posture, and append. Then flip the assertion to `>= 1`.
