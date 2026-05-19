@@ -8,4 +8,11 @@ INSERT INTO profile_scan_results (id, user_id, scanned_at, score, outcome, rule_
 INSERT INTO profile_scan_results (id, user_id, scanned_at, score, outcome, rule_score, ai_score, ai_reason, ai_signals) VALUES (528, 9758118926756, '2026-04-29 21:37:20.345492+00', 1.2, 0, 0.0, 1.2, NULL, NULL);
 INSERT INTO profile_scan_results (id, user_id, scanned_at, score, outcome, rule_score, ai_score, ai_reason, ai_signals) VALUES (529, 9995544961449, '2026-04-30 00:55:52.082553+00', 0.2, 0, 0.0, 0.2, NULL, NULL);
 INSERT INTO profile_scan_results (id, user_id, scanned_at, score, outcome, rule_score, ai_score, ai_reason, ai_signals) VALUES (533, 9922735795237, '2026-04-30 15:42:53.888433+00', 0.0, 0, 0.0, 0.0, NULL, NULL);
-SELECT pg_catalog.setval('profile_scan_results_id_seq', 533, true);
+
+-- Flagged display-text scan row for tests that exercise BanCelebrationService masking
+-- and IProfileScanResultsRepository.GetLatestByUserIdAsync flagged-read behavior.
+-- Anchored to canonical user 9220500615182 (already has a high-score scan, ID 530).
+-- Newer scanned_at than ID 530 so this row wins "latest" lookups.
+INSERT INTO profile_scan_results (id, user_id, scanned_at, score, outcome, rule_score, ai_score, ai_reason, ai_signals, ai_explicit_display_text) VALUES (534, 9220500615182, '2026-05-01 09:00:00.000000+00', 4.6, 2, 0.0, 4.6, 'Display name itself reads as explicit solicitation.', 'explicit_display_text, manufactured profile signals', true);
+
+SELECT pg_catalog.setval('profile_scan_results_id_seq', 534, true);
