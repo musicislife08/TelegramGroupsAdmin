@@ -15,4 +15,5 @@ public record ProfileScanResultRecord(
     decimal RuleScore,
     decimal AiScore,
     string? AiReason,
-    string? AiSignals);
+    string? AiSignals,
+    bool ExplicitDisplayText = false);
