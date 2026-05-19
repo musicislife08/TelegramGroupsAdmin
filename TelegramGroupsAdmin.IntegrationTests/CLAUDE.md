@@ -46,7 +46,7 @@ Origin: prod DB snapshot from 2026-04-30. Bootstrap pipeline (full detail in `do
 | 20 | chat_admins | 104 | Snapshot of admin membership across all 21 chats. |
 | 21 | linked_channels | 3 | One per chat that has a linked channel. |
 | 22 | telegram_user_mappings | 3 | Cross-chat user identity links. |
-| 23 | profile_scan_results | 10 | Includes a mix of clean and flagged scans. |
+| 23 | profile_scan_results | 11 | Includes a mix of clean and flagged scans; row 534 carries an `explicit_display_text` value for the explicit-username masking tests. |
 | 24 | username_history | 4 | Rename trail for spam-rename-then-spam users. |
 | 25 | admin_notes | 3 | Free-text rebuilt from sanitized telegram_users; rows 5+6 cross-reference each other's sanitized usernames. |
 | 26 | audit_log | 100 | Connected-as / disconnected-as narrative anchored to canonical fixture identities. |
