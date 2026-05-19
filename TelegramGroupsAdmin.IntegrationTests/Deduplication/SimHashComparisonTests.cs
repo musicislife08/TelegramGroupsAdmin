@@ -17,9 +17,6 @@ public class SimHashIntegrationTests
     [SetUp]
     public Task Setup()
     {
-        // Per-test DB routing (mixed class): tests 2 and 4 use canonical template
-        // clone; tests 1 and 3 still use the legacy migrate+seed path pending
-        // their own migration. Each test method chooses its own Create* call.
         _testHelper = new MigrationTestHelper();
         _simHashService = new SimHashService();
         return Task.CompletedTask;
@@ -44,13 +41,6 @@ public class SimHashIntegrationTests
 
         await _testHelper.CreateDatabaseFromGoldenTemplateAsync();
         await using var context = _testHelper.GetDbContext();
-
-        // Canonical messages currently ship with NULL similarity_hash (bulk pre-bake
-        // pending). Populate the anchor's hash from its text so the SQL bit_count
-        // query has something to match against.
-        var anchor = await context.Messages.FirstAsync(m => m.MessageId == AnchorMessageId);
-        anchor.SimilarityHash = _simHashService.ComputeHash(anchor.MessageText);
-        await context.SaveChangesAsync();
 
         // Near-duplicate query: one-word variant of msg 212355's text.
         var queryText = "Hello I have a great platform that you can earn from daily they offer 2.0% hourly you can withdraw your profit daily you can also withdraw your capital at the end of 5days if you are interested inbox me privately for the platform link";
