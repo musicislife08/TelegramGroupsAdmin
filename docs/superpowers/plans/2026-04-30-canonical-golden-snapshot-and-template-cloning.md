@@ -3024,15 +3024,13 @@ git commit -m "refactor(test): migrate MLTextClassifierServiceTests to canonical
 
 ### Phase 3A close-out
 
-- [ ] **Step 1: Run the full suite**
+- [ ] **Run the full suite**
 
 Run: `dotnet test TelegramGroupsAdmin.IntegrationTests --logger "console;verbosity=normal" 2>&1 | tail -15`
 
 Expected: every test passes. Wall-clock should be lower than T0 because canonical-consumers now use ~50–150ms template clones instead of full migrate.
 
-- [ ] **Step 2: Optional — if many small commits, squash within Phase 3A only into one commit per the table at the top**
-
-Default: keep individual file commits for granular bisect. Squash only if commit count > 30 makes review unwieldy.
+Keep individual file commits — granular bisect outweighs any temptation to compress history.
 
 ---
 
@@ -3079,19 +3077,13 @@ Authoritative list from `tmp/canonical-bootstrap/audit-output.md`. Most are writ
 
 ### Phase 3B close-out
 
-- [ ] **Step 1: Run the full suite**
+- [ ] **Run the full suite**
 
 Run: `dotnet test TelegramGroupsAdmin.IntegrationTests --logger "console;verbosity=normal" 2>&1 | tail -15`
 
 Expected: every test passes.
 
-- [ ] **Step 2: Squash into a single commit if Phase 3B touched < 10 files**
-
-```bash
-git rebase -i HEAD~<N>  # only if the maintainer wants squash; default is granular commits
-```
-
-(Rebase decisions are user-driven; the plan's default is one commit per file.)
+Keep one commit per file. Granular history is the point.
 
 ---
 
@@ -3121,17 +3113,13 @@ Some of these have minimal or no constant references and require zero changes �
 
 ### Phase 3C close-out
 
-- [ ] **Step 1: Run the full suite**
+- [ ] **Run the full suite**
 
 Run: `dotnet test TelegramGroupsAdmin.IntegrationTests --logger "console;verbosity=normal" 2>&1 | tail -15`
 
 Expected: every test passes.
 
-- [ ] **Step 2: Squash into a single commit per the phase plan**
-
-```bash
-git rebase -i HEAD~<N>  # squash to "refactor(test): migration tests adopt GoldenDataset constants"
-```
+Keep individual commits — granular history beats a clean-looking summary line.
 
 ---
 
