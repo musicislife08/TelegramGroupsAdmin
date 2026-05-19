@@ -12,6 +12,7 @@ public class ProfileScanConfig
 
     public const decimal DefaultBanThreshold = 4.0m;
     public const decimal DefaultNotifyThreshold = 2.0m;
+    public const string DefaultExplicitUsernameRedactionText = "[explicit username redacted]";
 
     /// <summary>
     /// Score threshold for automatic ban (0.0-5.0)
@@ -45,5 +46,5 @@ public class ProfileScanConfig
     /// when <see cref="MaskExplicitUsername"/> is true and the AI flagged the
     /// display text as explicit.
     /// </summary>
-    public string ExplicitUsernameRedactionText { get; set; } = "[explicit username redacted]";
+    public string ExplicitUsernameRedactionText { get; set; } = DefaultExplicitUsernameRedactionText;
 }

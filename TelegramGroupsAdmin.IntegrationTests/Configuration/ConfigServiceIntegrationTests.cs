@@ -172,7 +172,6 @@ public class ConfigServiceIntegrationTests
         var welcome = WelcomeConfig.Default;
         welcome.JoinSecurity.ProfileScan = new ProfileScanConfig
         {
-            Enabled = true,
             MaskExplicitUsername = false,
             ExplicitUsernameRedactionText = "custom redaction value"
         };
@@ -190,7 +189,7 @@ public class ConfigServiceIntegrationTests
     }
 
     [Test]
-    public async Task GetEffectiveWelcomeAsync_NoSavedConfig_ReturnsDefaultsForMaskingFields()
+    public async Task GetEffectiveWelcomeAsync_GlobalConfigMissingMaskingFields_FallsBackToPropertyDefaults()
     {
         var freshChat = ChatIdentity.FromId(-100987654321L);
 
@@ -202,7 +201,7 @@ public class ConfigServiceIntegrationTests
             Assert.That(effective!.JoinSecurity.ProfileScan.MaskExplicitUsername, Is.True,
                 "Default for MaskExplicitUsername should be true");
             Assert.That(effective.JoinSecurity.ProfileScan.ExplicitUsernameRedactionText,
-                Is.EqualTo("[explicit username redacted]"));
+                Is.EqualTo(ProfileScanConfig.DefaultExplicitUsernameRedactionText));
         });
     }
 
