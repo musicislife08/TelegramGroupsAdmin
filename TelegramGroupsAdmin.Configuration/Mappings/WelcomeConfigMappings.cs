@@ -74,7 +74,9 @@ public static class WelcomeConfigMappings
         public JoinSecurityConfig ToModel() => new()
         {
             Cas = (data.Cas ?? new CasConfigData()).ToModel(),
-            Impersonation = (data.Impersonation ?? new ImpersonationConfigData()).ToModel()
+            Impersonation = (data.Impersonation ?? new ImpersonationConfigData()).ToModel(),
+            ProfileScan = (data.ProfileScan ?? new ProfileScanConfigData()).ToModel(),
+            UsernameBlacklist = (data.UsernameBlacklist ?? new UsernameBlacklistConfigData()).ToModel()
         };
     }
 
@@ -83,7 +85,9 @@ public static class WelcomeConfigMappings
         public JoinSecurityConfigData ToData() => new()
         {
             Cas = model.Cas.ToData(),
-            Impersonation = model.Impersonation.ToData()
+            Impersonation = model.Impersonation.ToData(),
+            ProfileScan = model.ProfileScan.ToData(),
+            UsernameBlacklist = model.UsernameBlacklist.ToData()
         };
     }
 
@@ -132,6 +136,58 @@ public static class WelcomeConfigMappings
     extension(ImpersonationConfig model)
     {
         public ImpersonationConfigData ToData() => new()
+        {
+            Enabled = model.Enabled
+        };
+    }
+
+    // ============================================================================
+    // ProfileScanConfig mappings
+    // ============================================================================
+
+    extension(ProfileScanConfigData data)
+    {
+        public ProfileScanConfig ToModel() => new()
+        {
+            Enabled = data.Enabled,
+            BanThreshold = data.BanThreshold,
+            NotifyThreshold = data.NotifyThreshold,
+            ScanOnJoin = data.ScanOnJoin,
+            ScanOnProfileChange = data.ScanOnProfileChange,
+            MaskExplicitUsername = data.MaskExplicitUsername,
+            ExplicitUsernameRedactionText = data.ExplicitUsernameRedactionText
+        };
+    }
+
+    extension(ProfileScanConfig model)
+    {
+        public ProfileScanConfigData ToData() => new()
+        {
+            Enabled = model.Enabled,
+            BanThreshold = model.BanThreshold,
+            NotifyThreshold = model.NotifyThreshold,
+            ScanOnJoin = model.ScanOnJoin,
+            ScanOnProfileChange = model.ScanOnProfileChange,
+            MaskExplicitUsername = model.MaskExplicitUsername,
+            ExplicitUsernameRedactionText = model.ExplicitUsernameRedactionText
+        };
+    }
+
+    // ============================================================================
+    // UsernameBlacklistConfig mappings
+    // ============================================================================
+
+    extension(UsernameBlacklistConfigData data)
+    {
+        public UsernameBlacklistConfig ToModel() => new()
+        {
+            Enabled = data.Enabled
+        };
+    }
+
+    extension(UsernameBlacklistConfig model)
+    {
+        public UsernameBlacklistConfigData ToData() => new()
         {
             Enabled = model.Enabled
         };
