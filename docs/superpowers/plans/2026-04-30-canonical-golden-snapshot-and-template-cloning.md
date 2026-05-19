@@ -3069,21 +3069,21 @@ Authoritative list from `tmp/canonical-bootstrap/audit-output.md`. Most are writ
 
 **Real DB-touching files (11)** — apply the per-file pattern, swap `CreateDatabaseAndApplyMigrationsAsync()` to `CreateDatabaseFromEmptyTemplateAsync()`:
 
-- [ ] **Task 3B.1:** `Configuration/AIProviderConfigIntegrationTests.cs` — write-SUT (`SaveAIProviderConfigAsync` / `SaveApiKeysAsync`).
-- [ ] **Task 3B.2:** `Configuration/ConfigRepositoryIntegrationTests.cs` — write-SUT (typed `ConfigRepository.SaveXxxAsync` per config type).
-- [ ] **Task 3B.3:** `Configuration/ContentDetectionConfigRepositoryTests.cs` — write-SUT (`UpdateGlobalConfigAsync`).
-- [ ] **Task 3B.4:** `Configuration/SystemConfigRepositoryWebPushTests.cs` — write-SUT + assertion-on-empty (`*_WhenNoConfigExists_ShouldReturnDefault`, `*_WhenNotSet_ShouldReturnNull`).
-- [ ] **Task 3B.5:** `ContentDetection/Repositories/ReportsRepositoryTests.cs` — write-SUT (`InsertContentReportAsync`, `InsertExamFailureAsync`, `InsertImpersonationAlertAsync`).
-- [ ] **Task 3B.6:** `Repositories/BanCelebrationCaptionRepositoryTests.cs` — write-SUT + assertion-on-empty (`GetAllAsync_EmptyDatabase_ReturnsEmptyList`, etc.).
-- [ ] **Task 3B.7:** `Repositories/BanCelebrationGifRepositoryTests.cs` — write-SUT.
-- [ ] **Task 3B.8:** `Repositories/ReportCallbackContextRepositoryTests.cs` — write-SUT (`InsertContentReportAsync` + `CreateAsync`).
-- [ ] **Task 3B.9:** `Services/BackgroundJobConfigPersistenceTests.cs` — write-SUT (`EnsureDefaultConfigsAsync`).
-- [ ] **Task 3B.10:** `Telegram/Repositories/ExamSessionRepositoryTests.cs` — write-SUT (`CreateSessionAsync`, `RecordMcAnswerAsync`).
-- [ ] **Task 3B.11:** `Telegram/SystemAccountBypassTests.cs` — assertion-on-empty (system account bypass produces no DB writes; mock engine throws if any query fires).
+- [x] **Task 3B.1:** `Configuration/AIProviderConfigIntegrationTests.cs` — write-SUT (`SaveAIProviderConfigAsync` / `SaveApiKeysAsync`).
+- [x] **Task 3B.2:** `Configuration/ConfigRepositoryIntegrationTests.cs` — write-SUT (typed `ConfigRepository.SaveXxxAsync` per config type).
+- [x] **Task 3B.3:** `Configuration/ContentDetectionConfigRepositoryTests.cs` — write-SUT (`UpdateGlobalConfigAsync`).
+- [x] **Task 3B.4:** `Configuration/SystemConfigRepositoryWebPushTests.cs` — write-SUT + assertion-on-empty (`*_WhenNoConfigExists_ShouldReturnDefault`, `*_WhenNotSet_ShouldReturnNull`).
+- [x] **Task 3B.5:** `ContentDetection/Repositories/ReportsRepositoryTests.cs` — write-SUT (`InsertContentReportAsync`, `InsertExamFailureAsync`, `InsertImpersonationAlertAsync`).
+- [x] **Task 3B.6:** `Repositories/BanCelebrationCaptionRepositoryTests.cs` — write-SUT + assertion-on-empty (`GetAllAsync_EmptyDatabase_ReturnsEmptyList`, etc.).
+- [x] **Task 3B.7:** `Repositories/BanCelebrationGifRepositoryTests.cs` — write-SUT.
+- [x] **Task 3B.8:** `Repositories/ReportCallbackContextRepositoryTests.cs` — write-SUT (`InsertContentReportAsync` + `CreateAsync`).
+- [x] **Task 3B.9:** `Services/BackgroundJobConfigPersistenceTests.cs` — write-SUT (`EnsureDefaultConfigsAsync`).
+- [x] **Task 3B.10:** `Telegram/Repositories/ExamSessionRepositoryTests.cs` — write-SUT (`CreateSessionAsync`, `RecordMcAnswerAsync`).
+- [x] **Task 3B.11:** `Telegram/SystemAccountBypassTests.cs` — assertion-on-empty (system account bypass produces no DB writes; mock engine throws if any query fires).
 
 **Per-method route (1)** — already counted in Phase 3A.28:
 
-- [ ] **Task 3B.12:** `Repositories/UserRepositoryTests.cs::AnyUsersExistAsync_EmptyDatabase_ReturnsFalse` — handled inside the mixed-class task in Phase 3A.
+- [x] **Task 3B.12:** `Repositories/UserRepositoryTests.cs::AnyUsersExistAsync_EmptyDatabase_ReturnsFalse` — handled inside the mixed-class task in Phase 3A.
 
 **No-DB unit tests (3 files)** — these don't instantiate `MigrationTestHelper` at all. Empty clone is harmless but they don't gain template-clone speedup either; **no migration needed**. List for completeness so a future audit doesn't re-flag them:
 
@@ -3635,7 +3635,7 @@ After all seven issues are filed, paste the issue numbers into a `bootstrap-bugs
 - [ ] All canonical-consumer files migrated; suite green
 - [ ] `UserRepositoryTests` mixed class migrated per-test-method; suite green
 - [x] `GoldenDataset.SeedOldMessagesAsync` retired; `MessageHistoryRepositoryTests` retention test runs on canonical+reducer+mutator (3A.29)
-- [ ] All true-empty consumer files migrated; suite green
+- [x] All true-empty consumer files migrated; suite green
 - [ ] DI provider swap reviewed per-file with documented intent
 - [ ] Migration tests adopt `GoldenDataset.*` constants where applicable; suite green
 
