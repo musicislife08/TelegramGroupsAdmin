@@ -251,4 +251,5 @@ internal record ProfileScanAIResponse(
     [property: JsonPropertyName("score")] decimal Score,
     [property: JsonPropertyName("reason")] string? Reason,
     [property: JsonPropertyName("signals_detected")] string[]? SignalsDetected,
-    [property: JsonPropertyName("contains_nudity")] bool ContainsNudity);
+    [property: JsonPropertyName("contains_nudity")] bool ContainsNudity,
+    [property: JsonPropertyName("explicit_display_text")] bool ExplicitDisplayText = false);
