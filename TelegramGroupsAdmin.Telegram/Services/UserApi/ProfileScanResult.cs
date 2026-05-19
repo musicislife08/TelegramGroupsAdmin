@@ -21,4 +21,5 @@ public record ProfileScanResult(
     string? AiReason,
     string[]? AiSignalsDetected,
     bool ContainsNudity = false,
+    bool ExplicitDisplayText = false,
     string? SkipReason = null);

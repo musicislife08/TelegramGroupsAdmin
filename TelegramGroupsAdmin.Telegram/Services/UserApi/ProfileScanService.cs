@@ -840,7 +840,7 @@ public sealed class ProfileScanService(
 
     private static ProfileScanResult EmptyResult(long userId, string? skipReason = null) =>
         new(userId, null, null, null, null, false, null, false, false, false,
-            0.0m, ProfileScanOutcome.Clean, null, null, ContainsNudity: false, skipReason);
+            0.0m, ProfileScanOutcome.Clean, null, null, ContainsNudity: false, SkipReason: skipReason);
 
     private static string OutcomeToTag(ProfileScanOutcome outcome) => outcome switch
     {
