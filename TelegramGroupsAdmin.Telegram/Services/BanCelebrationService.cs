@@ -92,13 +92,23 @@ public class BanCelebrationService(
             // Determine whether the AI flagged the user's display text as explicit,
             // and whether per-chat config says to mask it in the public caption.
             var welcomeConfig = await configService.GetEffectiveWelcomeAsync(chat.Id, cancellationToken);
-            var profileScanCfg = welcomeConfig?.JoinSecurity?.ProfileScan ?? new ProfileScanConfig();
-            var latestScan = await scanRepository.GetLatestByUserIdAsync(bannedUser.Id, cancellationToken);
+            var profileScanConfig = welcomeConfig?.JoinSecurity?.ProfileScan ?? new ProfileScanConfig();
+
+            // Only consult the scan repo if masking is even configured - saves a DB roundtrip per ban.
+            var latestScan = profileScanConfig.MaskExplicitUsername
+                ? await scanRepository.GetLatestByUserIdAsync(bannedUser.Id, cancellationToken)
+                : null;
             var aiFlagged = latestScan?.ExplicitDisplayText ?? false;
-            var maskUsername = profileScanCfg.MaskExplicitUsername && aiFlagged;
+            var maskUsername = profileScanConfig.MaskExplicitUsername && aiFlagged;
             var displayedName = maskUsername
-                ? profileScanCfg.ExplicitUsernameRedactionText
+                ? profileScanConfig.ExplicitUsernameRedactionText
                 : bannedUser.DisplayName;
+
+            if (maskUsername)
+            {
+                logger.LogDebug("Masking explicit display name for {User} in {Chat}",
+                    bannedUser.ToLogDebug(), chat.ToLogDebug());
+            }
 
             // Build the chat caption with placeholders replaced
             var chatCaption = ReplacePlaceholders(

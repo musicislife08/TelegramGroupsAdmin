@@ -34,7 +34,7 @@ public class BanCelebrationServiceTests
     private BanCelebrationCache _celebrationCache = null!; // Real cache for shuffle-bag testing
     private IBanCelebrationGifRepository _mockGifRepository = null!;
     private IBanCelebrationCaptionRepository _mockCaptionRepository = null!;
-    private IProfileScanResultsRepository _scanRepository = null!;
+    private IProfileScanResultsRepository _mockScanRepository = null!;
     private IBotMessageService _mockMessageService = null!;
     private IBotDmService _mockDmService = null!;
     private IUserActionsRepository _mockUserActionsRepository = null!;
@@ -49,7 +49,7 @@ public class BanCelebrationServiceTests
         _celebrationCache = new BanCelebrationCache(); // Real cache - tests shuffle-bag algorithm
         _mockGifRepository = Substitute.For<IBanCelebrationGifRepository>();
         _mockCaptionRepository = Substitute.For<IBanCelebrationCaptionRepository>();
-        _scanRepository = Substitute.For<IProfileScanResultsRepository>();
+        _mockScanRepository = Substitute.For<IProfileScanResultsRepository>();
         _mockMessageService = Substitute.For<IBotMessageService>();
         _mockDmService = Substitute.For<IBotDmService>();
         _mockUserActionsRepository = Substitute.For<IUserActionsRepository>();
@@ -74,7 +74,7 @@ public class BanCelebrationServiceTests
             .Returns(0);
 
         // Default scan repository returns no scan record - masking branch off
-        _scanRepository.GetLatestByUserIdAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
+        _mockScanRepository.GetLatestByUserIdAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns((ProfileScanResultRecord?)null);
 
         _sut = new BanCelebrationService(
@@ -82,7 +82,7 @@ public class BanCelebrationServiceTests
             _celebrationCache, // Real cache
             _mockGifRepository,
             _mockCaptionRepository,
-            _scanRepository,
+            _mockScanRepository,
             _mockMessageService,
             _mockDmService,
             _mockUserActionsRepository,
@@ -751,7 +751,7 @@ public class BanCelebrationServiceTests
             AiSignals: "explicit_handle",
             ExplicitDisplayText: true);
 
-        _scanRepository.GetLatestByUserIdAsync(TestUserId, Arg.Any<CancellationToken>())
+        _mockScanRepository.GetLatestByUserIdAsync(TestUserId, Arg.Any<CancellationToken>())
             .Returns(scan);
 
         EnableProfileScanConfig(maskExplicitUsername: true, redactionText: "[explicit username redacted]");
@@ -787,7 +787,7 @@ public class BanCelebrationServiceTests
             AiSignals: "explicit_handle",
             ExplicitDisplayText: true);
 
-        _scanRepository.GetLatestByUserIdAsync(TestUserId, Arg.Any<CancellationToken>())
+        _mockScanRepository.GetLatestByUserIdAsync(TestUserId, Arg.Any<CancellationToken>())
             .Returns(scan);
 
         EnableProfileScanConfig(maskExplicitUsername: false, redactionText: "[explicit username redacted]");
@@ -811,7 +811,7 @@ public class BanCelebrationServiceTests
     [Test]
     public async Task SendBanCelebrationAsync_NoScanRecord_CaptionContainsDisplayName()
     {
-        _scanRepository.GetLatestByUserIdAsync(TestUserId, Arg.Any<CancellationToken>())
+        _mockScanRepository.GetLatestByUserIdAsync(TestUserId, Arg.Any<CancellationToken>())
             .Returns((ProfileScanResultRecord?)null);
 
         EnableProfileScanConfig(maskExplicitUsername: true, redactionText: "[explicit username redacted]");
