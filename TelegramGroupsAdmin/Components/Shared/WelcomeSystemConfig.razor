@@ -181,6 +181,21 @@
                                                    Label="Scan on profile change"
                                                    Disabled="!_config.JoinSecurity.ProfileScan.Enabled" />
                                     </MudItem>
+                                    <MudItem xs="6">
+                                        <MudSwitch @bind-Value="_config.JoinSecurity.ProfileScan.MaskExplicitUsername"
+                                                   Color="Color.Primary"
+                                                   Label="Mask explicit usernames in public ban posts"
+                                                   Disabled="!_config.JoinSecurity.ProfileScan.Enabled" />
+                                    </MudItem>
+                                    <MudItem xs="12">
+                                        <MudTextField @bind-Value="_config.JoinSecurity.ProfileScan.ExplicitUsernameRedactionText"
+                                                      Label="Redaction text"
+                                                      Variant="Variant.Outlined"
+                                                      MaxLength="80"
+                                                      HelperText="Shown in place of the user's name when the AI flags it as explicit"
+                                                      Disabled="@(!_config.JoinSecurity.ProfileScan.Enabled
+                                                                  || !_config.JoinSecurity.ProfileScan.MaskExplicitUsername)" />
+                                    </MudItem>
                                 </MudGrid>
                             </ChildContent>
                         </MudExpansionPanel>
