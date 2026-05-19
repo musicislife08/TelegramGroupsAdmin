@@ -5,6 +5,7 @@ using NSubstitute.ExceptionExtensions;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Configuration.Models.Welcome;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Models;
@@ -24,10 +25,16 @@ namespace TelegramGroupsAdmin.UnitTests.Services;
 [TestFixture]
 public class BanCelebrationServiceTests
 {
+    private const long TestChatId = 123;
+    private const long TestUserId = 456;
+    private static readonly ChatIdentity TestChat = new(TestChatId, "Test Chat");
+    private static readonly UserIdentity TestBannedUser = new(TestUserId, "Bad", "User", null);
+
     private IConfigService _mockConfigService = null!;
     private BanCelebrationCache _celebrationCache = null!; // Real cache for shuffle-bag testing
     private IBanCelebrationGifRepository _mockGifRepository = null!;
     private IBanCelebrationCaptionRepository _mockCaptionRepository = null!;
+    private IProfileScanResultsRepository _scanRepository = null!;
     private IBotMessageService _mockMessageService = null!;
     private IBotDmService _mockDmService = null!;
     private IUserActionsRepository _mockUserActionsRepository = null!;
@@ -42,6 +49,7 @@ public class BanCelebrationServiceTests
         _celebrationCache = new BanCelebrationCache(); // Real cache - tests shuffle-bag algorithm
         _mockGifRepository = Substitute.For<IBanCelebrationGifRepository>();
         _mockCaptionRepository = Substitute.For<IBanCelebrationCaptionRepository>();
+        _scanRepository = Substitute.For<IProfileScanResultsRepository>();
         _mockMessageService = Substitute.For<IBotMessageService>();
         _mockDmService = Substitute.For<IBotDmService>();
         _mockUserActionsRepository = Substitute.For<IUserActionsRepository>();
@@ -65,16 +73,64 @@ public class BanCelebrationServiceTests
         _mockUserActionsRepository.GetTodaysBanCountAsync(Arg.Any<CancellationToken>())
             .Returns(0);
 
+        // Default scan repository returns no scan record - masking branch off
+        _scanRepository.GetLatestByUserIdAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
+            .Returns((ProfileScanResultRecord?)null);
+
         _sut = new BanCelebrationService(
             _mockConfigService,
             _celebrationCache, // Real cache
             _mockGifRepository,
             _mockCaptionRepository,
+            _scanRepository,
             _mockMessageService,
             _mockDmService,
             _mockUserActionsRepository,
             _appOptions,
             _mockLogger);
+    }
+
+    /// <summary>
+    /// Configures the substituted IConfigService to return a WelcomeConfig with the given
+    /// per-chat masking toggle and redaction text. Used by explicit-username-masking tests.
+    /// </summary>
+    private void EnableProfileScanConfig(bool maskExplicitUsername, string redactionText)
+    {
+        var welcomeConfig = new WelcomeConfig
+        {
+            Enabled = true,
+            JoinSecurity = new JoinSecurityConfig
+            {
+                ProfileScan = new ProfileScanConfig
+                {
+                    Enabled = true,
+                    MaskExplicitUsername = maskExplicitUsername,
+                    ExplicitUsernameRedactionText = redactionText
+                }
+            }
+        };
+
+        _mockConfigService.GetEffectiveWelcomeAsync(TestChatId, Arg.Any<CancellationToken>())
+            .Returns(welcomeConfig);
+    }
+
+    /// <summary>
+    /// Seeds the GIF and caption repositories with a single GIF (Id=1) and a single
+    /// caption (Id=1) whose Text uses the supplied template. Used by explicit-username-masking
+    /// tests so the captured caption argument can be asserted against the template's
+    /// post-replacement output.
+    /// </summary>
+    private void SeedOneGifAndOneCaption(string captionTemplate)
+    {
+        var gif = new BanCelebrationGif { Id = 1, FilePath = "ban-gifs/1.gif", FileId = "file1" };
+        var caption = new BanCelebrationCaption { Id = 1, Text = captionTemplate, DmText = "DM" };
+
+        _mockGifRepository.GetAllIdsAsync(Arg.Any<CancellationToken>()).Returns(new List<int> { 1 });
+        _mockGifRepository.GetByIdAsync(1, Arg.Any<CancellationToken>()).Returns(gif);
+        _mockCaptionRepository.GetAllIdsAsync(Arg.Any<CancellationToken>()).Returns(new List<int> { 1 });
+        _mockCaptionRepository.GetByIdAsync(1, Arg.Any<CancellationToken>()).Returns(caption);
+
+        SetupSuccessfulSendAnimation();
     }
 
     /// <summary>
@@ -674,6 +730,106 @@ public class BanCelebrationServiceTests
 
         // Assert - Service handles exception gracefully and returns false
         Assert.That(result, Is.False);
+    }
+
+    #endregion
+
+    #region Explicit Username Masking Tests
+
+    [Test]
+    public async Task SendBanCelebrationAsync_AiFlaggedAndMaskingOn_CaptionContainsRedactionText()
+    {
+        var scan = new ProfileScanResultRecord(
+            Id: 1,
+            UserId: TestUserId,
+            ScannedAt: DateTimeOffset.UtcNow,
+            Score: 4.5m,
+            Outcome: ProfileScanOutcome.Banned,
+            RuleScore: 0.0m,
+            AiScore: 4.5m,
+            AiReason: "explicit handle",
+            AiSignals: "explicit_handle",
+            ExplicitDisplayText: true);
+
+        _scanRepository.GetLatestByUserIdAsync(TestUserId, Arg.Any<CancellationToken>())
+            .Returns(scan);
+
+        EnableProfileScanConfig(maskExplicitUsername: true, redactionText: "[explicit username redacted]");
+        SeedOneGifAndOneCaption("{username} got banned!");
+
+        await _sut.SendBanCelebrationAsync(
+            chat: TestChat,
+            bannedUser: TestBannedUser,
+            isAutoBan: true,
+            cancellationToken: CancellationToken.None);
+
+        await _mockMessageService.Received(1).SendAndSaveAnimationAsync(
+            TestChatId,
+            Arg.Any<InputFile>(),
+            Arg.Is<string>(s => s.Contains("[explicit username redacted]")
+                             && !s.Contains(TestBannedUser.DisplayName)),
+            ParseMode.Markdown,
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task SendBanCelebrationAsync_AiFlaggedButMaskingOff_CaptionContainsDisplayName()
+    {
+        var scan = new ProfileScanResultRecord(
+            Id: 1,
+            UserId: TestUserId,
+            ScannedAt: DateTimeOffset.UtcNow,
+            Score: 4.5m,
+            Outcome: ProfileScanOutcome.Banned,
+            RuleScore: 0.0m,
+            AiScore: 4.5m,
+            AiReason: "explicit handle",
+            AiSignals: "explicit_handle",
+            ExplicitDisplayText: true);
+
+        _scanRepository.GetLatestByUserIdAsync(TestUserId, Arg.Any<CancellationToken>())
+            .Returns(scan);
+
+        EnableProfileScanConfig(maskExplicitUsername: false, redactionText: "[explicit username redacted]");
+        SeedOneGifAndOneCaption("{username} got banned!");
+
+        await _sut.SendBanCelebrationAsync(
+            chat: TestChat,
+            bannedUser: TestBannedUser,
+            isAutoBan: true,
+            cancellationToken: CancellationToken.None);
+
+        await _mockMessageService.Received(1).SendAndSaveAnimationAsync(
+            TestChatId,
+            Arg.Any<InputFile>(),
+            Arg.Is<string>(s => s.Contains(TestBannedUser.DisplayName)
+                             && !s.Contains("[explicit username redacted]")),
+            ParseMode.Markdown,
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task SendBanCelebrationAsync_NoScanRecord_CaptionContainsDisplayName()
+    {
+        _scanRepository.GetLatestByUserIdAsync(TestUserId, Arg.Any<CancellationToken>())
+            .Returns((ProfileScanResultRecord?)null);
+
+        EnableProfileScanConfig(maskExplicitUsername: true, redactionText: "[explicit username redacted]");
+        SeedOneGifAndOneCaption("{username} got banned!");
+
+        await _sut.SendBanCelebrationAsync(
+            chat: TestChat,
+            bannedUser: TestBannedUser,
+            isAutoBan: true,
+            cancellationToken: CancellationToken.None);
+
+        await _mockMessageService.Received(1).SendAndSaveAnimationAsync(
+            TestChatId,
+            Arg.Any<InputFile>(),
+            Arg.Is<string>(s => s.Contains(TestBannedUser.DisplayName)
+                             && !s.Contains("[explicit username redacted]")),
+            ParseMode.Markdown,
+            Arg.Any<CancellationToken>());
     }
 
     #endregion

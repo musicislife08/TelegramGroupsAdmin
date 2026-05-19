@@ -3,6 +3,7 @@ using Microsoft.Extensions.Options;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Configuration.Models.Welcome;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
@@ -26,6 +27,7 @@ public class BanCelebrationService(
     IBanCelebrationCache celebrationCache,
     IBanCelebrationGifRepository gifRepository,
     IBanCelebrationCaptionRepository captionRepository,
+    IProfileScanResultsRepository scanRepository,
     IBotMessageService messageService,
     IBotDmService dmDeliveryService,
     IUserActionsRepository userActionsRepository,
@@ -87,10 +89,21 @@ public class BanCelebrationService(
             // Get today's ban count for this chat
             var banCount = await GetTodaysBanCountAsync(cancellationToken);
 
+            // Determine whether the AI flagged the user's display text as explicit,
+            // and whether per-chat config says to mask it in the public caption.
+            var welcomeConfig = await configService.GetEffectiveWelcomeAsync(chat.Id, cancellationToken);
+            var profileScanCfg = welcomeConfig?.JoinSecurity?.ProfileScan ?? new ProfileScanConfig();
+            var latestScan = await scanRepository.GetLatestByUserIdAsync(bannedUser.Id, cancellationToken);
+            var aiFlagged = latestScan?.ExplicitDisplayText ?? false;
+            var maskUsername = profileScanCfg.MaskExplicitUsername && aiFlagged;
+            var displayedName = maskUsername
+                ? profileScanCfg.ExplicitUsernameRedactionText
+                : bannedUser.DisplayName;
+
             // Build the chat caption with placeholders replaced
             var chatCaption = ReplacePlaceholders(
                 caption.Text,
-                bannedUser.DisplayName,
+                displayedName,
                 chat.ChatName ?? chat.Id.ToString(),
                 banCount);
 
