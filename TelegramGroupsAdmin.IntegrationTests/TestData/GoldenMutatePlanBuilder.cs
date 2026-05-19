@@ -23,7 +23,7 @@ public sealed class GoldenMutatePlanBuilder
     internal GoldenMutatePlanBuilder(AppDbContext context) => _context = context;
 
     /// <summary>
-    /// For each shift, sets <c>detection_results.detected_at = NOW() + OffsetFromNow</c>
+    /// For each shift, sets <c>detection_results.detected_at = date_trunc('day', NOW()) + Offset</c>
     /// where <c>id</c> matches. Rows not in the shift list are left untouched. Calling
     /// twice merges (last shift wins per id).
     /// </summary>
@@ -35,7 +35,7 @@ public sealed class GoldenMutatePlanBuilder
     }
 
     /// <summary>
-    /// For each shift, sets <c>welcome_responses.responded_at = NOW() + OffsetFromNow</c>
+    /// For each shift, sets <c>welcome_responses.responded_at = date_trunc('day', NOW()) + Offset</c>
     /// (and <c>created_at</c> to <c>responded_at - 1 minute</c>, mirroring the legacy seed's
     /// "created shortly before response" pattern) where <c>id</c> matches. Rows not in the
     /// shift list are left untouched.
@@ -57,8 +57,8 @@ public sealed class GoldenMutatePlanBuilder
                 foreach (var s in drShifts)
                 {
                     await _context.Database.ExecuteSqlRawAsync(
-                        "UPDATE detection_results SET detected_at = NOW() + ({0}::text)::interval WHERE id = {1}",
-                        new object[] { FormatInterval(s.OffsetFromNow), s.Id },
+                        "UPDATE detection_results SET detected_at = date_trunc('day', NOW()) + ({0}::text)::interval WHERE id = {1}",
+                        new object[] { FormatInterval(s.Offset), s.Id },
                         ct);
                 }
             }
@@ -69,10 +69,10 @@ public sealed class GoldenMutatePlanBuilder
                 {
                     await _context.Database.ExecuteSqlRawAsync(
                         "UPDATE welcome_responses " +
-                        "SET responded_at = NOW() + ({0}::text)::interval, " +
-                        "    created_at   = NOW() + ({0}::text)::interval - INTERVAL '1 minute' " +
+                        "SET responded_at = date_trunc('day', NOW()) + ({0}::text)::interval, " +
+                        "    created_at   = date_trunc('day', NOW()) + ({0}::text)::interval - INTERVAL '1 minute' " +
                         "WHERE id = {1}",
-                        new object[] { FormatInterval(s.OffsetFromNow), s.Id },
+                        new object[] { FormatInterval(s.Offset), s.Id },
                         ct);
                 }
             }

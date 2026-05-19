@@ -71,40 +71,48 @@ internal static class AnalyticsAnchors
     ];
 
     /// <summary>
-    /// All 11 detection_result shifts (7 spam-only + 4 FP/FN pair rows).
+    /// All 11 detection_result shifts (7 spam-only + 4 FP/FN pair rows). Offsets
+    /// are midnight-anchored (see <see cref="TimestampShift"/>), so they land in
+    /// the right calendar bucket regardless of what time of day the test runs.
     /// Manual correction rows are timed AFTER their corresponding auto row so the
     /// detection_accuracy view's "latest manual correction per message" CTE
     /// resolves correctly.
     /// </summary>
     public static readonly IReadOnlyList<TimestampShift> DetectionResultShifts =
     [
-        new(DrId_TodaySpam1,     TimeSpan.FromSeconds(-1)),
-        new(DrId_TodaySpam2,     TimeSpan.FromSeconds(-2)),
-        new(DrId_TodaySpam3,     TimeSpan.FromSeconds(-3)),
-        new(DrId_YesterdaySpam1, TimeSpan.FromHours(-12) - TimeSpan.FromDays(1)),
-        new(DrId_YesterdaySpam2, TimeSpan.FromHours(-10) - TimeSpan.FromDays(1)),
-        new(DrId_LastWeekSpam1,  TimeSpan.FromHours(-12) - TimeSpan.FromDays(8)),
-        new(DrId_LastWeekSpam2,  TimeSpan.FromHours(-12) - TimeSpan.FromDays(9)),
-        // FP pair — auto first, manual ~1s later (both within today's window)
-        new(DrId_FpAuto,         TimeSpan.FromSeconds(-5)),
-        new(DrId_FpManual,       TimeSpan.FromSeconds(-4)),
-        // FN pair — auto first, manual ~1s later (both within today's window)
-        new(DrId_FnAuto,         TimeSpan.FromSeconds(-7)),
-        new(DrId_FnManual,       TimeSpan.FromSeconds(-6)),
+        // FP pair — auto at 00:01, manual at 00:02 (both in today's calendar day,
+        // manual strictly after auto for the view's DISTINCT ON ordering).
+        new(DrId_FpAuto,         TimeSpan.FromMinutes(1)),
+        new(DrId_FpManual,       TimeSpan.FromMinutes(2)),
+        // FN pair — auto at 00:03, manual at 00:04 (same ordering).
+        new(DrId_FnAuto,         TimeSpan.FromMinutes(3)),
+        new(DrId_FnManual,       TimeSpan.FromMinutes(4)),
+        // Today spam — 5/6/7 minutes past midnight, all in today's calendar day.
+        new(DrId_TodaySpam1,     TimeSpan.FromMinutes(5)),
+        new(DrId_TodaySpam2,     TimeSpan.FromMinutes(6)),
+        new(DrId_TodaySpam3,     TimeSpan.FromMinutes(7)),
+        // Yesterday spam — yesterday at noon and 10am (always yesterday's calendar day).
+        new(DrId_YesterdaySpam1, TimeSpan.FromHours(-12)),
+        new(DrId_YesterdaySpam2, TimeSpan.FromHours(-14)),
+        // Last week spam — 7 and 8 days ago at noon. SUT's "last week" is rolling
+        // (today-7 to today-13), so both land safely in last-week bucket.
+        new(DrId_LastWeekSpam1,  TimeSpan.FromDays(-7) + TimeSpan.FromHours(12)),
+        new(DrId_LastWeekSpam2,  TimeSpan.FromDays(-8) + TimeSpan.FromHours(12)),
     ];
 
     /// <summary>
     /// All 6 welcome_response shifts. Today: 2 Accepted + 1 Denied; Yesterday:
-    /// 1 Timeout + 1 Left; Last week: 1 Accepted.
+    /// 1 Timeout + 1 Left; Last week: 1 Accepted. Same midnight-anchored offsets
+    /// as <see cref="DetectionResultShifts"/>.
     /// </summary>
     public static readonly IReadOnlyList<TimestampShift> WelcomeResponseShifts =
     [
-        new(WrId_TodayAccepted1,   TimeSpan.FromSeconds(-3)),
-        new(WrId_TodayAccepted2,   TimeSpan.FromSeconds(-4)),
-        new(WrId_TodayDenied,      TimeSpan.FromSeconds(-5)),
-        new(WrId_YesterdayTimeout, TimeSpan.FromHours(-12) - TimeSpan.FromDays(1)),
-        new(WrId_YesterdayLeft,    TimeSpan.FromHours(-10) - TimeSpan.FromDays(1)),
-        new(WrId_LastWeekAccepted, TimeSpan.FromHours(-12) - TimeSpan.FromDays(7) - TimeSpan.FromMinutes(2)),
+        new(WrId_TodayAccepted1,   TimeSpan.FromMinutes(5)),
+        new(WrId_TodayAccepted2,   TimeSpan.FromMinutes(6)),
+        new(WrId_TodayDenied,      TimeSpan.FromMinutes(7)),
+        new(WrId_YesterdayTimeout, TimeSpan.FromHours(-12)),
+        new(WrId_YesterdayLeft,    TimeSpan.FromHours(-14)),
+        new(WrId_LastWeekAccepted, TimeSpan.FromDays(-7) + TimeSpan.FromHours(12)),
     ];
 
     // ── Expected count constants (migrated from GoldenDataset.AnalyticsData) ──
