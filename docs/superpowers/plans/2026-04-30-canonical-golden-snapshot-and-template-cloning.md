@@ -2928,7 +2928,47 @@ Authoritative list from `tmp/canonical-bootstrap/audit-output.md` (audit run 202
 
 ### Mixed class (1 file, per-test-method routing)
 
-- [ ] **Task 3A.28:** `Repositories/UserRepositoryTests.cs` — **mixed**: `AnyUsersExistAsync_EmptyDatabase_ReturnsFalse` (line 31) stays empty (Phase 3B); `AnyUsersExistAsync_WithExistingUser_ReturnsTrue` (line 56) goes canonical. Each `[Test]` method picks its own `Create*` call inside the method body.
+- [x] **Task 3A.28:** `Repositories/UserRepositoryTests.cs` — **mixed**: `AnyUsersExistAsync_EmptyDatabase_ReturnsFalse` (line 31) stays empty (Phase 3B); `AnyUsersExistAsync_WithExistingUser_ReturnsTrue` (line 56) goes canonical. Each `[Test]` method picks its own `Create*` call inside the method body.
+  > **RESOLUTION (2026-05-18):** Migrated per the planned per-test-method routing.
+  >
+  > Migration changes:
+  >   - `AnyUsersExistAsync_EmptyDatabase_ReturnsFalse`: `CreateDatabaseAndApplyMigrationsAsync` → `CreateDatabaseFromEmptyTemplateAsync`. One-line swap; same empty-schema contract, template-clone speed.
+  >   - `AnyUsersExistAsync_WithExistingUser_ReturnsTrue`: `CreateDatabaseAndApplyMigrationsAsync` + `GoldenDataset.SeedAsync(context, dataProtectionProvider)` → `CreateDatabaseFromGoldenTemplateAsync`. Canonical's `01_users.sql` ships with 9 web users baked in (4 fixtures + 5 prod-derived), so `AnyUsersExistAsync` returns true off the clone without any explicit seed step.
+  >   - Dropped the 12-line `AddDataProtection` / `PersistKeysToFileSystem` / `AddFilter` scaffold from Test 2 — it existed only to satisfy `GoldenDataset.SeedAsync`'s `configs.api_keys` JSONB encryption pass. Canonical leaves those columns NULL by design and the SUT (`context.Users.AnyAsync()`) never projects them. Removed `using Microsoft.AspNetCore.DataProtection` and `using TelegramGroupsAdmin.IntegrationTests.TestData` imports as a result.
+  >   - This was the **last surviving caller** of `GoldenDataset.SeedAsync` in the integration suite. `GoldenDataset.SeedOldMessagesAsync` (a narrower, separately-tracked seeder) is the remaining legacy seed entry point — see Task 3A.29 for its retirement.
+  >
+  > Wall-clock impact: Test 2's per-test setup dropped from cold-migration + 12 SQL scripts + DataProtection encryption pass down to a 117ms template clone. Full integration suite passes 656/656.
+
+### Residual legacy-seeder retirement (1 file)
+
+- [ ] **Task 3A.29:** Retire `GoldenDataset.SeedOldMessagesAsync` — the last surviving caller is `Repositories/MessageHistoryRepositoryTests.cs::CleanupExpiredAsync_WithOldMessages_DeletesExpiredAndPreservesTrainingData` (line 1062), missed in the 3A.11 sweep. The test currently does `Reduce(ctx).KeepMessages(0)` then post-seeds 6 controlled-age messages via `SQL/60_old_messages.sql` — this is the same anti-pattern Phase 3A is removing elsewhere ("no test should manually do anything outside of the reducer code"). Migrate the test to canonical + reducer + mutator, then delete `SeedOldMessagesAsync`, the `GoldenDataset.OldMessages` constants block, and `SQL/60_old_messages.sql`.
+
+  **Approach:**
+
+  1. **Extend the mutator** (`TestData/GoldenMutatePlanBuilder.cs`) with three new verbs, mirroring the midnight-anchored pattern already used for `detection_results` and `welcome_responses`:
+     - `ShiftMessageTimestamps(IEnumerable<TimestampShift>)` → `UPDATE messages SET timestamp = date_trunc('day', NOW()) + Offset WHERE message_id = ... AND chat_id = ...`. Note: messages are composite-keyed `(chat_id, message_id)`, so `TimestampShift.Id` semantics need a sibling record (`MessageTimestampShift(long ChatId, long MessageId, TimeSpan Offset)`) or a chat-id parameter on the verb.
+     - `ShiftMessageEditTimestamps(IEnumerable<TimestampShift>)` → updates `message_edits.edit_date`. Keyed on `message_edits.id` (single PK), so reuses `TimestampShift`.
+     - `ShiftMessageTranslationTimestamps(IEnumerable<TimestampShift>)` → updates `message_translations.translated_at`. Keyed on `message_translations.id`.
+
+  2. **Survey canonical for retention-test anchors.** Pick 6 canonical messages in MainChat (`-100026957614982`) matching the structural shape of `60_old_messages.sql`:
+     - 1 message with NO detection_results AND an attached `message_edits` row (analog of `Msg45DaysOld_Id`/`Edit_ForMsg45Days_Id` — proves cascade: message → edit deletion).
+     - 1 message with NO detection_results AND an attached `message_translations` row on the message (analog of `Msg60DaysOld_Id` — proves cascade: message → translation deletion).
+     - 1 message with 1 detection_result where `used_for_training = true` (analog of `MsgWithTraining_Id` — preserved by cleanup).
+     - 1 message with NO detection_results (analog of `Msg35DaysOld_Id` — deleted as bare orphan past retention).
+     - 1 message with NO detection_results (analog of `Msg29DaysOld_Id` — preserved as inside-retention boundary).
+     - 1 message with 1 detection_result where `used_for_training = false` (analog of `MsgNonTraining_Id` — deleted with detection cascade).
+
+     Cross-reference `SQL/canonical/19_messages.sql`, `32_detection_results.sql`, `31_message_edits.sql`, and `35_message_translations.sql` to find joint shapes. If canonical lacks a message with the exact joint shape (e.g., "MainChat + no DR + has edit + has translation-on-edit"), document the gap in `IntegrationTests/CLAUDE.md` under "Known canonical gaps" and either (a) extend canonical via a follow-up bootstrap pass or (b) settle for a slightly different cascade narrative that still exercises the SUT branch.
+
+  3. **Add a `RetentionAnchors.cs`** alongside `AnalyticsAnchors.cs` pinning the chosen IDs + offsets. Same midnight-anchored shift convention.
+
+  4. **Replace the test body.** Drop `KeepMessages(0)` + `SeedOldMessagesAsync` in favor of `KeepMessages(RetentionAnchors.AllMessageRefs)` + `ShiftMessageTimestamps(RetentionAnchors.MessageShifts)` + the two cascade-artifact shifts. Update the 6 `GoldenDataset.OldMessages.*` references in the assertion block to `RetentionAnchors.*`.
+
+  5. **Delete the seeder + its dependencies.** Remove `GoldenDataset.SeedOldMessagesAsync`, the `GoldenDataset.OldMessages` static class, and `TestData/SQL/60_old_messages.sql` (also remove its embedded-resource entry from the `.csproj` if explicitly listed).
+
+  6. **Verify with self-tests.** Add self-tests to `GoldenMutatePlanTests.cs` for each new verb following the existing pattern (assert midnight-anchored equality + untouched rows unaffected). Then run the full integration suite — expect 656/656 to remain passing (the one retention test now runs against canonical-substrate rows but asserts the same cleanup outcomes).
+
+  **Single commit boundary** — extending the mutator and migrating the consumer go together because the new verbs have no other consumer. Mark `3A.29 [x]` in the plan in the same commit as the test migration.
 
 ### Worked example: ML/MLTextClassifierServiceTests.cs
 
@@ -3590,6 +3630,7 @@ After all seven issues are filed, paste the issue numbers into a `bootstrap-bugs
 ### Phases 3A–C
 - [ ] All canonical-consumer files migrated; suite green
 - [ ] `UserRepositoryTests` mixed class migrated per-test-method; suite green
+- [ ] `GoldenDataset.SeedOldMessagesAsync` retired; `MessageHistoryRepositoryTests` retention test runs on canonical+reducer+mutator (3A.29)
 - [ ] All true-empty consumer files migrated; suite green
 - [ ] DI provider swap reviewed per-file with documented intent
 - [ ] Migration tests adopt `GoldenDataset.*` constants where applicable; suite green
