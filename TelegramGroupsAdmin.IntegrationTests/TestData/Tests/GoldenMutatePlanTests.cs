@@ -118,4 +118,52 @@ public class GoldenMutatePlanTests
             Assert.That(wrAfter, Is.EqualTo(expected).Within(TimeSpan.FromSeconds(2)));
         }
     }
+
+    [Test]
+    public async Task ShiftMessageTimestamps_AnchorsToMidnightTodayPlusOffset()
+    {
+        // Canonical msg 212340 in MainChat (-100026957614982) — bare orphan with attached edit.
+        const long ChatId = -100026957614982L;
+        const int MsgId = 212340;
+        var offset = TimeSpan.FromDays(-45);  // 45 days before midnight today
+
+        await using var ctx = _helper!.GetDbContext();
+        var before = await ctx.Messages.Where(m => m.MessageId == MsgId && m.ChatId == ChatId)
+            .Select(m => m.Timestamp).SingleAsync();
+
+        await GoldenDataset.Mutate(ctx)
+            .ShiftMessageTimestamps(ChatId, new[] { new TimestampShift(MsgId, offset) })
+            .ApplyAsync();
+
+        var after = await ctx.Messages.Where(m => m.MessageId == MsgId && m.ChatId == ChatId)
+            .Select(m => m.Timestamp).SingleAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(after, Is.Not.EqualTo(before), "mutator must change the timestamp");
+            var expected = MidnightTodayUtc + offset;
+            Assert.That(after, Is.EqualTo(expected).Within(TimeSpan.FromSeconds(2)),
+                "shifted timestamp must equal midnight-today + offset within clock-drift tolerance");
+        }
+    }
+
+    [Test]
+    public async Task ShiftMessageTimestamps_DoesNotTouchUnshiftedRows()
+    {
+        const long ChatId = -100026957614982L;
+        const int ShiftedMsgId = 212340;
+        const int UntouchedMsgId = 218579;
+
+        await using var ctx = _helper!.GetDbContext();
+        var untouchedBefore = await ctx.Messages.Where(m => m.MessageId == UntouchedMsgId && m.ChatId == ChatId)
+            .Select(m => m.Timestamp).SingleAsync();
+
+        await GoldenDataset.Mutate(ctx)
+            .ShiftMessageTimestamps(ChatId, new[] { new TimestampShift(ShiftedMsgId, TimeSpan.FromDays(-45)) })
+            .ApplyAsync();
+
+        var untouchedAfter = await ctx.Messages.Where(m => m.MessageId == UntouchedMsgId && m.ChatId == ChatId)
+            .Select(m => m.Timestamp).SingleAsync();
+        Assert.That(untouchedAfter, Is.EqualTo(untouchedBefore));
+    }
 }

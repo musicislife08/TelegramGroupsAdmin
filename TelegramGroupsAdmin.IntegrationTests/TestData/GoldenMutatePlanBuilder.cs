@@ -19,6 +19,7 @@ public sealed class GoldenMutatePlanBuilder
     private readonly AppDbContext _context;
     private List<TimestampShift>? _detectionResultShifts;
     private List<TimestampShift>? _welcomeResponseShifts;
+    private List<(long ChatId, TimestampShift Shift)>? _messageShifts;
 
     internal GoldenMutatePlanBuilder(AppDbContext context) => _context = context;
 
@@ -31,6 +32,19 @@ public sealed class GoldenMutatePlanBuilder
     {
         ArgumentNullException.ThrowIfNull(shifts);
         (_detectionResultShifts ??= new()).AddRange(shifts);
+        return this;
+    }
+
+    /// <summary>
+    /// For each shift, sets <c>messages.timestamp = date_trunc('day', NOW()) + Offset</c>
+    /// where <c>(chat_id, message_id)</c> matches. <see cref="TimestampShift.Id"/> carries
+    /// <c>message_id</c>; the composite key's chat side is passed once per call. Rows not
+    /// in the shift list are left untouched.
+    /// </summary>
+    public GoldenMutatePlanBuilder ShiftMessageTimestamps(long chatId, IEnumerable<TimestampShift> shifts)
+    {
+        ArgumentNullException.ThrowIfNull(shifts);
+        (_messageShifts ??= new()).AddRange(shifts.Select(s => (chatId, s)));
         return this;
     }
 
@@ -73,6 +87,18 @@ public sealed class GoldenMutatePlanBuilder
                         "    created_at   = date_trunc('day', NOW()) + ({0}::text)::interval - INTERVAL '1 minute' " +
                         "WHERE id = {1}",
                         new object[] { FormatInterval(s.Offset), s.Id },
+                        ct);
+                }
+            }
+
+            if (_messageShifts is { Count: > 0 } msgShifts)
+            {
+                foreach (var (chatId, s) in msgShifts)
+                {
+                    await _context.Database.ExecuteSqlRawAsync(
+                        "UPDATE messages SET timestamp = date_trunc('day', NOW()) + ({0}::text)::interval " +
+                        "WHERE chat_id = {1} AND message_id = {2}",
+                        new object[] { FormatInterval(s.Offset), chatId, s.Id },
                         ct);
                 }
             }

@@ -2941,7 +2941,7 @@ Authoritative list from `tmp/canonical-bootstrap/audit-output.md` (audit run 202
 
 ### Residual legacy-seeder retirement (1 file)
 
-- [ ] **Task 3A.29:** Retire `GoldenDataset.SeedOldMessagesAsync` — the last surviving caller is `Repositories/MessageHistoryRepositoryTests.cs::CleanupExpiredAsync_WithOldMessages_DeletesExpiredAndPreservesTrainingData` (line 1062), missed in the 3A.11 sweep. The test currently does `Reduce(ctx).KeepMessages(0)` then post-seeds 6 controlled-age messages via `SQL/60_old_messages.sql` — this is the same anti-pattern Phase 3A is removing elsewhere ("no test should manually do anything outside of the reducer code"). Migrate the test to canonical + reducer + mutator, then delete `SeedOldMessagesAsync`, the `GoldenDataset.OldMessages` constants block, and `SQL/60_old_messages.sql`.
+- [x] **Task 3A.29:** Retire `GoldenDataset.SeedOldMessagesAsync` — the last surviving caller is `Repositories/MessageHistoryRepositoryTests.cs::CleanupExpiredAsync_WithOldMessages_DeletesExpiredAndPreservesTrainingData` (line 1062), missed in the 3A.11 sweep. The test currently does `Reduce(ctx).KeepMessages(0)` then post-seeds 6 controlled-age messages via `SQL/60_old_messages.sql` — this is the same anti-pattern Phase 3A is removing elsewhere ("no test should manually do anything outside of the reducer code"). Migrate the test to canonical + reducer + mutator, then delete `SeedOldMessagesAsync`, the `GoldenDataset.OldMessages` constants block, and `SQL/60_old_messages.sql`.
 
   **Approach:**
 
@@ -2969,6 +2969,22 @@ Authoritative list from `tmp/canonical-bootstrap/audit-output.md` (audit run 202
   6. **Verify with self-tests.** Add self-tests to `GoldenMutatePlanTests.cs` for each new verb following the existing pattern (assert midnight-anchored equality + untouched rows unaffected). Then run the full integration suite — expect 656/656 to remain passing (the one retention test now runs against canonical-substrate rows but asserts the same cleanup outcomes).
 
   **Single commit boundary** — extending the mutator and migrating the consumer go together because the new verbs have no other consumer. Mark `3A.29 [x]` in the plan in the same commit as the test migration.
+
+  > **RESOLUTION 2026-05-18:** Migrated under strict "this code, this migration, nothing else" lens — the original approach above was over-specified by future-feature thinking. Realised changes:
+  >
+  > - **One verb, not three.** `ShiftMessageEditTimestamps` + `ShiftMessageTranslationTimestamps` were dropped after reading `CleanupExpiredAsync` (`TelegramGroupsAdmin.Telegram/Repositories/MessageHistoryRepository.cs:49`): the SUT reads only `messages.timestamp`, never `message_edits.edit_date` or `message_translations.translated_at`. The legacy `60_old_messages.sql` set those dates but nothing in the SUT or test assertions read them — ghost requirements. Only `ShiftMessageTimestamps(long chatId, IEnumerable<TimestampShift>)` was added.
+  > - **Chat-id parameter, not sibling record.** The composite-key API question (`MessageTimestampShift` record vs. `chatId` param) was settled in favour of the param. Reuses `TimestampShift`, matches the single-consumer reality. Symmetry with `KeepMessages` is hypothetical-future-test concern, not load-bearing here.
+  > - **Translation cascade assertion dropped.** Canonical has zero MainChat translations, and `CleanupExpiredAsync` does not interact with `message_translations` — it relies on FK CASCADE. That assertion was pure schema-FK coverage (correlated with every other deletion-of-translated-message test in the suite), not SUT coverage. The edit-cascade assertion was kept because the SUT explicitly calls `context.MessageEdits.RemoveRange(editsToDelete)` — real SUT-path coverage.
+  > - **6 anchors, all in MainChat, text-only, non-overlapping with `AnalyticsAnchors`:**
+  >   - `212340` (0 DR, 1 edit id 337) → -45d, deleted; edit cascades
+  >   - `212694` (bare orphan) → -60d, deleted
+  >   - `218579` (1 DR, `used_for_training=true`) → -90d, preserved (training)
+  >   - `212803` (bare orphan) → -35d, deleted
+  >   - `213117` (bare orphan) → -29d, preserved (boundary)
+  >   - `220885` (1 DR, `used_for_training=false`) → -50d, deleted (DR cascades)
+  > - Anchor survey ran against the dev DB by loading canonical's MainChat msg_id list (205 ids) into a temp table and joining against `messages` / `detection_results` / `message_edits`. msg_id is preserved across canonical's user/chat rotation, so dev DB shape == canonical shape for these joins.
+  > - Pinned in new `TestData/RetentionAnchors.cs`. Mutator self-test added. Single commit covers the verb, the self-test, `RetentionAnchors.cs`, the test body replacement, and the deletion of `GoldenDataset.SeedOldMessagesAsync` + `GoldenDataset.OldMessages` + `TestData/SQL/60_old_messages.sql` (csproj uses a glob, no explicit entry to remove).
+  > - **TimeProvider follow-up** for `CleanupExpiredAsync` (and analytics methods) is already tracked as a separate GitHub issue — that refactor would retire the mutator-shift pattern entirely. Out of scope here.
 
 ### Worked example: ML/MLTextClassifierServiceTests.cs
 
@@ -3618,7 +3634,7 @@ After all seven issues are filed, paste the issue numbers into a `bootstrap-bugs
 ### Phases 3A–C
 - [ ] All canonical-consumer files migrated; suite green
 - [ ] `UserRepositoryTests` mixed class migrated per-test-method; suite green
-- [ ] `GoldenDataset.SeedOldMessagesAsync` retired; `MessageHistoryRepositoryTests` retention test runs on canonical+reducer+mutator (3A.29)
+- [x] `GoldenDataset.SeedOldMessagesAsync` retired; `MessageHistoryRepositoryTests` retention test runs on canonical+reducer+mutator (3A.29)
 - [ ] All true-empty consumer files migrated; suite green
 - [ ] DI provider swap reviewed per-file with documented intent
 - [ ] Migration tests adopt `GoldenDataset.*` constants where applicable; suite green

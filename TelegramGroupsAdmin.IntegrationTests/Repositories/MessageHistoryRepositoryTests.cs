@@ -1061,97 +1061,88 @@ public class MessageHistoryRepositoryTests
     [Test]
     public async Task CleanupExpiredAsync_WithOldMessages_DeletesExpiredAndPreservesTrainingData()
     {
-        // Arrange - Clear all canonical messages first (canonical spans 6+ months, which would
-        // interfere with precise deletion count assertions), then seed the controlled old-message set.
+        // Arrange - Reduce canonical to the 6 retention anchors (FK CASCADE drops all other
+        // messages' detection_results, edits, training_labels, translations) and shift their
+        // timestamps to retention-test ages via midnight-anchored mutator.
         var contextFactory = _serviceProvider!.GetRequiredService<IDbContextFactory<AppDbContext>>();
         await using (var context = await contextFactory.CreateDbContextAsync())
         {
-            await GoldenDataset.Reduce(context).KeepMessages(0).ApplyAsync();
+            await GoldenDataset.Reduce(context)
+                .KeepMessages(RetentionAnchors.AllMessageRefs)
+                .ApplyAsync();
+
+            await GoldenDataset.Mutate(context)
+                .ShiftMessageTimestamps(RetentionAnchors.MainChatId, RetentionAnchors.MessageShifts)
+                .ApplyAsync();
         }
 
-        await using (var context = await contextFactory.CreateDbContextAsync())
-        {
-            await GoldenDataset.SeedOldMessagesAsync(context);
-        }
-
-        // Verify old messages exist before cleanup
-        var msg45DaysBefore = await _repository!.GetMessageAsync(GoldenDataset.OldMessages.Msg45DaysOld_Id, MainChatId);
-        var msg60DaysBefore = await _repository!.GetMessageAsync(GoldenDataset.OldMessages.Msg60DaysOld_Id, MainChatId);
-        var msgWithTrainingBefore = await _repository!.GetMessageAsync(GoldenDataset.OldMessages.MsgWithTraining_Id, MainChatId);
-        var msg29DaysBefore = await _repository!.GetMessageAsync(GoldenDataset.OldMessages.Msg29DaysOld_Id, MainChatId);
-        var msgNonTrainingBefore = await _repository!.GetMessageAsync(GoldenDataset.OldMessages.MsgNonTraining_Id, MainChatId);
+        // Verify anchors exist before cleanup
+        var bareWithEditBefore = await _repository!.GetMessageAsync(RetentionAnchors.MsgId_BareWithEdit, MainChatId);
+        var bareOrphan60Before = await _repository!.GetMessageAsync(RetentionAnchors.MsgId_BareOrphan60d, MainChatId);
+        var trainingPreservedBefore = await _repository!.GetMessageAsync(RetentionAnchors.MsgId_TrainingPreserved, MainChatId);
+        var bareOrphan29Before = await _repository!.GetMessageAsync(RetentionAnchors.MsgId_BareOrphan29d, MainChatId);
+        var nonTrainingBefore = await _repository!.GetMessageAsync(RetentionAnchors.MsgId_NonTrainingDeleted, MainChatId);
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(msg45DaysBefore, Is.Not.Null, "45-day old message should exist before cleanup");
-            Assert.That(msg60DaysBefore, Is.Not.Null, "60-day old message should exist before cleanup");
-            Assert.That(msgWithTrainingBefore, Is.Not.Null, "Message with training data should exist before cleanup");
-            Assert.That(msg29DaysBefore, Is.Not.Null, "29-day old message should exist before cleanup");
-            Assert.That(msgNonTrainingBefore, Is.Not.Null, "Message with non-training detection should exist before cleanup");
+            Assert.That(bareWithEditBefore, Is.Not.Null, "45-day anchor (with edit) should exist before cleanup");
+            Assert.That(bareOrphan60Before, Is.Not.Null, "60-day bare orphan should exist before cleanup");
+            Assert.That(trainingPreservedBefore, Is.Not.Null, "90-day training-flagged message should exist before cleanup");
+            Assert.That(bareOrphan29Before, Is.Not.Null, "29-day boundary message should exist before cleanup");
+            Assert.That(nonTrainingBefore, Is.Not.Null, "50-day non-training-DR message should exist before cleanup");
         }
 
-        // Verify cascade data exists before cleanup (edits, translations)
+        // Verify edit row exists before cleanup (cascade target for anchor #1)
         await using (var context = await contextFactory.CreateDbContextAsync())
         {
-            var editBefore = await context.MessageEdits.FindAsync(GoldenDataset.OldMessages.Edit_ForMsg45Days_Id);
-            Assert.That(editBefore, Is.Not.Null, "Edit for 45-day old message should exist before cleanup");
-
-            var translationCountBefore = await context.MessageTranslations
-                .CountAsync(t => t.MessageId == GoldenDataset.OldMessages.Msg60DaysOld_Id
-                    || t.EditId == GoldenDataset.OldMessages.Edit_ForMsg45Days_Id);
-            Assert.That(translationCountBefore, Is.EqualTo(2), "Translations should exist before cleanup");
+            var editBefore = await context.MessageEdits.FindAsync(RetentionAnchors.EditId_ForBareWithEdit);
+            Assert.That(editBefore, Is.Not.Null, "Edit row for 45-day anchor should exist before cleanup");
         }
 
         // Act - Run cleanup with 30-day retention
         var result = await _repository.CleanupExpiredAsync(TimeSpan.FromDays(30));
 
         // Assert - Correct number deleted
-        Assert.That(result.DeletedCount, Is.EqualTo(GoldenDataset.OldMessages.ExpectedDeletionsWith30DayRetention),
-            "Should delete exactly 4 old messages without training data");
+        Assert.That(result.DeletedCount, Is.EqualTo(RetentionAnchors.ExpectedDeletionsWith30DayRetention),
+            "Should delete exactly 4 anchors past 30d without training preservation");
 
-        // Assert - Old messages WITHOUT training data are DELETED
-        var msg45DaysAfter = await _repository.GetMessageAsync(GoldenDataset.OldMessages.Msg45DaysOld_Id, MainChatId);
-        var msg60DaysAfter = await _repository.GetMessageAsync(GoldenDataset.OldMessages.Msg60DaysOld_Id, MainChatId);
-        var msg35DaysAfter = await _repository.GetMessageAsync(GoldenDataset.OldMessages.Msg35DaysOld_Id, MainChatId);
-        var msgNonTrainingAfter = await _repository.GetMessageAsync(GoldenDataset.OldMessages.MsgNonTraining_Id, MainChatId);
+        // Assert - Anchors past retention without training preservation are DELETED
+        var bareWithEditAfter = await _repository.GetMessageAsync(RetentionAnchors.MsgId_BareWithEdit, MainChatId);
+        var bareOrphan60After = await _repository.GetMessageAsync(RetentionAnchors.MsgId_BareOrphan60d, MainChatId);
+        var bareOrphan35After = await _repository.GetMessageAsync(RetentionAnchors.MsgId_BareOrphan35d, MainChatId);
+        var nonTrainingAfter = await _repository.GetMessageAsync(RetentionAnchors.MsgId_NonTrainingDeleted, MainChatId);
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(msg45DaysAfter, Is.Null, "45-day old message should be deleted");
-            Assert.That(msg60DaysAfter, Is.Null, "60-day old message should be deleted");
-            Assert.That(msg35DaysAfter, Is.Null, "35-day old message should be deleted");
-            Assert.That(msgNonTrainingAfter, Is.Null,
-                "50-day old message with non-training detection should be deleted (detection cascades)");
+            Assert.That(bareWithEditAfter, Is.Null, "45-day anchor should be deleted");
+            Assert.That(bareOrphan60After, Is.Null, "60-day bare orphan should be deleted");
+            Assert.That(bareOrphan35After, Is.Null, "35-day bare orphan should be deleted");
+            Assert.That(nonTrainingAfter, Is.Null,
+                "50-day message with non-training detection should be deleted (detection cascades)");
         }
 
-        // Assert - Old message WITH training data is PRESERVED
-        var msgWithTrainingAfter = await _repository.GetMessageAsync(GoldenDataset.OldMessages.MsgWithTraining_Id, MainChatId);
-        Assert.That(msgWithTrainingAfter, Is.Not.Null,
-            "90-day old message WITH training data (used_for_training=true) should be preserved");
+        // Assert - Anchor with training-flagged DR is PRESERVED despite -90d age
+        var trainingPreservedAfter = await _repository.GetMessageAsync(RetentionAnchors.MsgId_TrainingPreserved, MainChatId);
+        Assert.That(trainingPreservedAfter, Is.Not.Null,
+            "90-day anchor with used_for_training=true detection should be preserved");
 
-        // Assert - Boundary message (29 days) is PRESERVED
-        var msg29DaysAfter = await _repository.GetMessageAsync(GoldenDataset.OldMessages.Msg29DaysOld_Id, MainChatId);
-        Assert.That(msg29DaysAfter, Is.Not.Null,
-            "Message 29 days old should NOT be deleted (just inside retention window)");
+        // Assert - Boundary anchor (29 days) is PRESERVED
+        var bareOrphan29After = await _repository.GetMessageAsync(RetentionAnchors.MsgId_BareOrphan29d, MainChatId);
+        Assert.That(bareOrphan29After, Is.Not.Null,
+            "29-day anchor should NOT be deleted (just inside retention window)");
 
-        // Assert - Cascade deletion worked (edits and translations deleted with messages)
+        // Assert - Edit cascade (SUT's explicit MessageEdits.RemoveRange path)
         await using (var context = await contextFactory.CreateDbContextAsync())
         {
-            var editAfter = await context.MessageEdits.FindAsync(GoldenDataset.OldMessages.Edit_ForMsg45Days_Id);
-            Assert.That(editAfter, Is.Null, "Edit should be cascade deleted with message");
-
-            var translationCountAfter = await context.MessageTranslations
-                .CountAsync(t => t.MessageId == GoldenDataset.OldMessages.Msg60DaysOld_Id
-                    || t.EditId == GoldenDataset.OldMessages.Edit_ForMsg45Days_Id);
-            Assert.That(translationCountAfter, Is.EqualTo(0), "Translations should be cascade deleted");
+            var editAfter = await context.MessageEdits.FindAsync(RetentionAnchors.EditId_ForBareWithEdit);
+            Assert.That(editAfter, Is.Null, "Edit row should be deleted along with its parent message");
         }
 
         using (Assert.EnterMultipleScope())
         {
-            // Assert - Result statistics are populated
-            Assert.That(result.RemainingMessages, Is.GreaterThan(0), "Should have remaining messages");
-            Assert.That(result.ImagePaths, Is.Empty, "Test messages have no images");
-            Assert.That(result.MediaPaths, Is.Empty, "Test messages have no media");
+            Assert.That(result.RemainingMessages, Is.GreaterThan(0), "Should have remaining messages (2 preserved anchors)");
+            Assert.That(result.ImagePaths, Is.Empty, "Anchor messages are text-only (no photos)");
+            Assert.That(result.MediaPaths, Is.Empty, "Anchor messages are text-only (no media)");
         }
     }
 
