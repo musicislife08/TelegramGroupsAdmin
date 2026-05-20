@@ -105,9 +105,12 @@ public class BanCelebrationService(
                 : null;
             var aiFlagged = latestScan?.ExplicitDisplayText ?? false;
             var maskUsername = maskingActive && aiFlagged;
-            var displayedName = maskUsername
-                ? profileScanConfig.ExplicitUsernameRedactionText
-                : bannedUser.DisplayName;
+            // Admins can clear the redaction text field (MudTextField MaxLength is client-only).
+            // A blank value would publish a caption like " got banned!" — fall back to the default.
+            var redactionText = string.IsNullOrWhiteSpace(profileScanConfig.ExplicitUsernameRedactionText)
+                ? ProfileScanConfig.DefaultExplicitUsernameRedactionText
+                : profileScanConfig.ExplicitUsernameRedactionText;
+            var displayedName = maskUsername ? redactionText : bannedUser.DisplayName;
 
             if (maskUsername)
             {

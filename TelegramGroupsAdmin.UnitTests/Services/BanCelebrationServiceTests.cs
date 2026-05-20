@@ -836,5 +836,43 @@ public class BanCelebrationServiceTests
             Arg.Any<CancellationToken>());
     }
 
+    [TestCase("")]
+    [TestCase("   ")]
+    [TestCase("\t\n")]
+    public async Task SendBanCelebrationAsync_AiFlaggedAndRedactionTextBlank_FallsBackToDefault(string blankRedactionText)
+    {
+        var scan = new ProfileScanResultRecord(
+            Id: 1,
+            UserId: TestUserId,
+            ScannedAt: DateTimeOffset.UtcNow,
+            Score: 4.5m,
+            Outcome: ProfileScanOutcome.Banned,
+            RuleScore: 0.0m,
+            AiScore: 4.5m,
+            AiReason: "explicit handle",
+            AiSignals: "explicit_handle",
+            ExplicitDisplayText: true);
+
+        _mockScanRepository.GetLatestByUserIdAsync(TestUserId, Arg.Any<CancellationToken>())
+            .Returns(scan);
+
+        EnableProfileScanConfig(maskExplicitUsername: true, redactionText: blankRedactionText);
+        SeedOneGifAndOneCaption("{username} got banned!");
+
+        await _sut.SendBanCelebrationAsync(
+            chat: TestChat,
+            bannedUser: TestBannedUser,
+            isAutoBan: true,
+            cancellationToken: CancellationToken.None);
+
+        await _mockMessageService.Received(1).SendAndSaveAnimationAsync(
+            TestChatId,
+            Arg.Any<InputFile>(),
+            Arg.Is<string>(s => s.Contains(ProfileScanConfig.DefaultExplicitUsernameRedactionText)
+                             && !s.Contains(TestBannedUser.DisplayName)),
+            ParseMode.Markdown,
+            Arg.Any<CancellationToken>());
+    }
+
     #endregion
 }
