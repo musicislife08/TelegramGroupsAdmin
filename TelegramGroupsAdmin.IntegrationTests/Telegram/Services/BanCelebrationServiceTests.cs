@@ -599,6 +599,42 @@ public class BanCelebrationServiceTests
             Arg.Any<CancellationToken>());
     }
 
+    [Test]
+    public async Task SendBanCelebrationAsync_ProfileScanDisabledButStaleFlaggedScanExists_DoesNotMaskCaption()
+    {
+        // Arrange: an old flagged scan row exists (from when scanning was on).
+        await SeedExplicitFlaggedScanAsync(TestUserId, explicitFlag: true);
+
+        // Admin has since disabled profile scanning entirely. The child masking
+        // toggle is still at its default (true) because the UI only disables the
+        // child switch under the parent - it doesn't reset its stored value.
+        await EnableBanCelebration(TestChatId);
+        await SetWelcomeProfileScanMaskingAsync(
+            maskingEnabled: true,
+            redactionText: "[explicit username redacted]",
+            profileScanEnabled: false);
+        using var gifStream = CreateTestGifStream();
+        await _gifRepository!.AddFromFileAsync(gifStream, "test.gif", "Test GIF");
+        await _captionRepository!.AddAsync("{username} got banned!", "DM", "Test");
+
+        // Act
+        await _service!.SendBanCelebrationAsync(
+            chat: ChatIdentity.FromId(TestChatId),
+            bannedUser: new UserIdentity(TestUserId, TestUserName, null, null),
+            isAutoBan: true,
+            cancellationToken: CancellationToken.None);
+
+        // Assert: caption uses DisplayName, NOT the redaction text - profile scan
+        // is the parent kill-switch and overrides the stale child masking value.
+        await _mockMessageService!.Received(1).SendAndSaveAnimationAsync(
+            TestChatId,
+            Arg.Any<InputFile>(),
+            Arg.Is<string>(s => s.Contains(TestUserName)
+                             && !s.Contains("[explicit username redacted]")),
+            ParseMode.Markdown,
+            Arg.Any<CancellationToken>());
+    }
+
     #endregion
 
     #region Helper Methods
@@ -672,7 +708,10 @@ public class BanCelebrationServiceTests
                    ({userId}, NOW(), 4.5, 2, 0.0, 4.5, 'test', 'test_signal', {explicitFlag})");
     }
 
-    private async Task SetWelcomeProfileScanMaskingAsync(bool maskingEnabled, string redactionText)
+    private async Task SetWelcomeProfileScanMaskingAsync(
+        bool maskingEnabled,
+        string redactionText,
+        bool profileScanEnabled = true)
     {
         var welcomeConfig = new WelcomeConfig
         {
@@ -688,6 +727,7 @@ public class BanCelebrationServiceTests
             {
                 ProfileScan = new ProfileScanConfig
                 {
+                    Enabled = profileScanEnabled,
                     MaskExplicitUsername = maskingEnabled,
                     ExplicitUsernameRedactionText = redactionText
                 }

@@ -96,12 +96,15 @@ public class BanCelebrationService(
             var welcomeConfig = await configService.GetEffectiveWelcomeAsync(chat.Id, cancellationToken);
             var profileScanConfig = welcomeConfig?.JoinSecurity?.ProfileScan ?? new ProfileScanConfig();
 
-            // Only consult the scan repo if masking is even configured - saves a DB roundtrip per ban.
-            var latestScan = profileScanConfig.MaskExplicitUsername
+            // Honor the parent ProfileScan.Enabled kill-switch. If scans are off, don't
+            // consult stale scan rows even if MaskExplicitUsername was left on (UI disables
+            // the child switch under the parent but doesn't reset its stored value).
+            var maskingActive = profileScanConfig.Enabled && profileScanConfig.MaskExplicitUsername;
+            var latestScan = maskingActive
                 ? await scanRepository.GetLatestByUserIdAsync(bannedUser.Id, cancellationToken)
                 : null;
             var aiFlagged = latestScan?.ExplicitDisplayText ?? false;
-            var maskUsername = profileScanConfig.MaskExplicitUsername && aiFlagged;
+            var maskUsername = maskingActive && aiFlagged;
             var displayedName = maskUsername
                 ? profileScanConfig.ExplicitUsernameRedactionText
                 : bannedUser.DisplayName;
