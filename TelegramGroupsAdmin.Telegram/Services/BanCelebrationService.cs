@@ -3,10 +3,12 @@ using Microsoft.Extensions.Options;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Configuration.Models.Welcome;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
+using TelegramGroupsAdmin.Telegram.Metrics;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
@@ -26,11 +28,13 @@ public class BanCelebrationService(
     IBanCelebrationCache celebrationCache,
     IBanCelebrationGifRepository gifRepository,
     IBanCelebrationCaptionRepository captionRepository,
+    IProfileScanResultsRepository scanRepository,
     IBotMessageService messageService,
     IBotDmService dmDeliveryService,
     IUserActionsRepository userActionsRepository,
     IOptions<AppOptions> appOptions,
-    ILogger<BanCelebrationService> logger) : IBanCelebrationService
+    ILogger<BanCelebrationService> logger,
+    PipelineMetrics pipelineMetrics) : IBanCelebrationService
 {
     private readonly string _mediaBasePath = Path.Combine(appOptions.Value.DataPath, "media");
 
@@ -87,10 +91,38 @@ public class BanCelebrationService(
             // Get today's ban count for this chat
             var banCount = await GetTodaysBanCountAsync(cancellationToken);
 
+            // Determine whether the AI flagged the user's display text as explicit,
+            // and whether per-chat config says to mask it in the public caption.
+            var welcomeConfig = await configService.GetEffectiveWelcomeAsync(chat.Id, cancellationToken);
+            var profileScanConfig = welcomeConfig?.JoinSecurity?.ProfileScan ?? new ProfileScanConfig();
+
+            // Honor the parent ProfileScan.Enabled kill-switch. If scans are off, don't
+            // consult stale scan rows even if MaskExplicitUsername was left on (UI disables
+            // the child switch under the parent but doesn't reset its stored value).
+            var maskingActive = profileScanConfig.Enabled && profileScanConfig.MaskExplicitUsername;
+            var latestScan = maskingActive
+                ? await scanRepository.GetLatestByUserIdAsync(bannedUser.Id, cancellationToken)
+                : null;
+            var aiFlagged = latestScan?.ExplicitDisplayText ?? false;
+            var maskUsername = maskingActive && aiFlagged;
+            // Admins can clear the redaction text field (MudTextField MaxLength is client-only).
+            // A blank value would publish a caption like " got banned!" — fall back to the default.
+            var redactionText = string.IsNullOrWhiteSpace(profileScanConfig.ExplicitUsernameRedactionText)
+                ? ProfileScanConfig.DefaultExplicitUsernameRedactionText
+                : profileScanConfig.ExplicitUsernameRedactionText;
+            var displayedName = maskUsername ? redactionText : bannedUser.DisplayName;
+
+            if (maskUsername)
+            {
+                logger.LogDebug("Masking explicit display name for {User} in {Chat}",
+                    bannedUser.ToLogDebug(), chat.ToLogDebug());
+                pipelineMetrics.RecordMaskedUsername(isAutoBan ? "auto_ban" : "manual_ban");
+            }
+
             // Build the chat caption with placeholders replaced
             var chatCaption = ReplacePlaceholders(
                 caption.Text,
-                bannedUser.DisplayName,
+                displayedName,
                 chat.ChatName ?? chat.Id.ToString(),
                 banCount);
 

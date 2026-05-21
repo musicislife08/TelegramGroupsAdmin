@@ -15,6 +15,7 @@ using TelegramGroupsAdmin.ContentDetection.Services;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.IntegrationTests.TestData;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
+using TelegramGroupsAdmin.Telegram.Metrics;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
@@ -118,6 +119,10 @@ public class BanCelebrationServiceTests
         services.AddScoped<IBanCelebrationGifRepository, BanCelebrationGifRepository>();
         services.AddScoped<IBanCelebrationCaptionRepository, BanCelebrationCaptionRepository>();
         services.AddScoped<IUserActionsRepository, UserActionsRepository>();
+        services.AddScoped<IProfileScanResultsRepository, ProfileScanResultsRepository>();
+
+        // Register PipelineMetrics (real singleton - records masked-username metric)
+        services.AddSingleton<PipelineMetrics>();
 
         // Register ConfigService and its dependencies (real implementations)
         services.AddScoped<IConfigRepository, ConfigRepository>();
@@ -503,6 +508,135 @@ public class BanCelebrationServiceTests
 
     #endregion
 
+    #region Explicit Username Masking Tests
+
+    [Test]
+    public async Task SendBanCelebrationAsync_AiFlaggedAndMaskingOn_MasksUsernameInChatCaption()
+    {
+        // Arrange: scan row with ExplicitDisplayText=true + per-chat config with masking on.
+        await SeedExplicitFlaggedScanAsync(TestUserId, explicitFlag: true);
+        await EnableBanCelebration(TestChatId);
+        await SetWelcomeProfileScanMaskingAsync(maskingEnabled: true,
+            redactionText: "[explicit username redacted]");
+        using var gifStream = CreateTestGifStream();
+        await _gifRepository!.AddFromFileAsync(gifStream, "test.gif", "Test GIF");
+        await _captionRepository!.AddAsync("{username} got banned!", "DM", "Test");
+
+        // Act
+        var sent = await _service!.SendBanCelebrationAsync(
+            chat: ChatIdentity.FromId(TestChatId),
+            bannedUser: new UserIdentity(TestUserId, TestUserName, null, null),
+            isAutoBan: true,
+            cancellationToken: CancellationToken.None);
+
+        // Assert
+        Assert.That(sent, Is.True);
+        await _mockMessageService!.Received(1).SendAndSaveAnimationAsync(
+            TestChatId,
+            Arg.Any<InputFile>(),
+            Arg.Is<string>(s => s.Contains("[explicit username redacted]")
+                             && !s.Contains(TestUserName)),
+            ParseMode.Markdown,
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task SendBanCelebrationAsync_AiFlaggedButMaskingOff_LeavesDisplayNameInCaption()
+    {
+        // Arrange: scan row flagged, but masking disabled via config.
+        await SeedExplicitFlaggedScanAsync(TestUserId, explicitFlag: true);
+        await EnableBanCelebration(TestChatId);
+        await SetWelcomeProfileScanMaskingAsync(maskingEnabled: false,
+            redactionText: "[explicit username redacted]");
+        using var gifStream = CreateTestGifStream();
+        await _gifRepository!.AddFromFileAsync(gifStream, "test.gif", "Test GIF");
+        await _captionRepository!.AddAsync("{username} got banned!", "DM", "Test");
+
+        // Act
+        await _service!.SendBanCelebrationAsync(
+            chat: ChatIdentity.FromId(TestChatId),
+            bannedUser: new UserIdentity(TestUserId, TestUserName, null, null),
+            isAutoBan: true,
+            cancellationToken: CancellationToken.None);
+
+        // Assert
+        await _mockMessageService!.Received(1).SendAndSaveAnimationAsync(
+            TestChatId,
+            Arg.Any<InputFile>(),
+            Arg.Is<string>(s => s.Contains(TestUserName)
+                             && !s.Contains("[explicit username redacted]")),
+            ParseMode.Markdown,
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task SendBanCelebrationAsync_NoScanRow_LeavesDisplayNameInCaption()
+    {
+        // Arrange: no scan row seeded - user has never been scanned. Masking is on,
+        // so the service consults the scan repo and finds nothing; falls through to
+        // the display name.
+        await EnableBanCelebration(TestChatId);
+        await SetWelcomeProfileScanMaskingAsync(maskingEnabled: true,
+            redactionText: "[explicit username redacted]");
+        using var gifStream = CreateTestGifStream();
+        await _gifRepository!.AddFromFileAsync(gifStream, "test.gif", "Test GIF");
+        await _captionRepository!.AddAsync("{username} got banned!", "DM", "Test");
+
+        // Act
+        await _service!.SendBanCelebrationAsync(
+            chat: ChatIdentity.FromId(TestChatId),
+            bannedUser: new UserIdentity(TestUserId, TestUserName, null, null),
+            isAutoBan: true,
+            cancellationToken: CancellationToken.None);
+
+        // Assert
+        await _mockMessageService!.Received(1).SendAndSaveAnimationAsync(
+            TestChatId,
+            Arg.Any<InputFile>(),
+            Arg.Is<string>(s => s.Contains(TestUserName)
+                             && !s.Contains("[explicit username redacted]")),
+            ParseMode.Markdown,
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task SendBanCelebrationAsync_ProfileScanDisabledButStaleFlaggedScanExists_DoesNotMaskCaption()
+    {
+        // Arrange: an old flagged scan row exists (from when scanning was on).
+        await SeedExplicitFlaggedScanAsync(TestUserId, explicitFlag: true);
+
+        // Admin has since disabled profile scanning entirely. The child masking
+        // toggle is still at its default (true) because the UI only disables the
+        // child switch under the parent - it doesn't reset its stored value.
+        await EnableBanCelebration(TestChatId);
+        await SetWelcomeProfileScanMaskingAsync(
+            maskingEnabled: true,
+            redactionText: "[explicit username redacted]",
+            profileScanEnabled: false);
+        using var gifStream = CreateTestGifStream();
+        await _gifRepository!.AddFromFileAsync(gifStream, "test.gif", "Test GIF");
+        await _captionRepository!.AddAsync("{username} got banned!", "DM", "Test");
+
+        // Act
+        await _service!.SendBanCelebrationAsync(
+            chat: ChatIdentity.FromId(TestChatId),
+            bannedUser: new UserIdentity(TestUserId, TestUserName, null, null),
+            isAutoBan: true,
+            cancellationToken: CancellationToken.None);
+
+        // Assert: caption uses DisplayName, NOT the redaction text - profile scan
+        // is the parent kill-switch and overrides the stale child masking value.
+        await _mockMessageService!.Received(1).SendAndSaveAnimationAsync(
+            TestChatId,
+            Arg.Any<InputFile>(),
+            Arg.Is<string>(s => s.Contains(TestUserName)
+                             && !s.Contains("[explicit username redacted]")),
+            ParseMode.Markdown,
+            Arg.Any<CancellationToken>());
+    }
+
+    #endregion
+
     #region Helper Methods
 
     private async Task SeedTestGifAndCaption()
@@ -544,6 +678,63 @@ public class BanCelebrationServiceTests
         };
 
         await _configService!.SaveWelcomeAsync(ChatIdentity.FromId(chatId), welcomeConfig, Actor.SystemSeed);
+    }
+
+    /// <summary>
+    /// Raw INSERT (rare exception): this test class is the documented
+    /// canonical-clone exception (see SetUp comment). The masking
+    /// scenario requires a profile_scan_results row, but the class
+    /// uses empty-template so canonical extension doesn't help.
+    /// IProfileScanResultsRepository.InsertAsync is NOT used because
+    /// the scan row is prerequisite setup, not the assertion subject.
+    /// The telegram_users FK parent is also raw-INSERTed for the same
+    /// reason (mirrors SeedBanActions which uses direct EF inserts).
+    /// </summary>
+    private async Task SeedExplicitFlaggedScanAsync(long userId, bool explicitFlag)
+    {
+        await using var context = _testHelper!.GetDbContext();
+
+        // Satisfy FK_profile_scan_results_telegram_users_user_id: the
+        // scan row references telegram_users.telegram_user_id.
+        await context.Database.ExecuteSqlInterpolatedAsync(
+            $@"INSERT INTO telegram_users (telegram_user_id, is_bot, is_trusted, is_active, is_banned, bot_dm_enabled, first_seen_at, last_seen_at, created_at, updated_at, has_pinned_stories, is_fake, is_scam, is_verified, profile_scan_excluded, kick_count)
+               VALUES ({userId}, false, false, true, false, false, NOW(), NOW(), NOW(), NOW(), false, false, false, false, false, 0)
+               ON CONFLICT (telegram_user_id) DO NOTHING");
+
+        await context.Database.ExecuteSqlInterpolatedAsync(
+            $@"INSERT INTO profile_scan_results
+                   (user_id, scanned_at, score, outcome, rule_score, ai_score, ai_reason, ai_signals, ai_explicit_display_text)
+               VALUES
+                   ({userId}, NOW(), 4.5, 2, 0.0, 4.5, 'test', 'test_signal', {explicitFlag})");
+    }
+
+    private async Task SetWelcomeProfileScanMaskingAsync(
+        bool maskingEnabled,
+        string redactionText,
+        bool profileScanEnabled = true)
+    {
+        var welcomeConfig = new WelcomeConfig
+        {
+            Enabled = true,
+            Mode = WelcomeMode.ChatAcceptDeny,
+            TimeoutSeconds = 60,
+            MainWelcomeMessage = "Welcome!",
+            DmChatTeaserMessage = "Check DM",
+            AcceptButtonText = "Accept",
+            DenyButtonText = "Deny",
+            DmButtonText = "Open DM",
+            JoinSecurity = new JoinSecurityConfig
+            {
+                ProfileScan = new ProfileScanConfig
+                {
+                    Enabled = profileScanEnabled,
+                    MaskExplicitUsername = maskingEnabled,
+                    ExplicitUsernameRedactionText = redactionText
+                }
+            }
+        };
+
+        await _configService!.SaveWelcomeAsync(ChatIdentity.FromId(TestChatId), welcomeConfig, Actor.SystemSeed);
     }
 
     private async Task SeedBanActions(int count)

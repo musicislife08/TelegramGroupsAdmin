@@ -958,6 +958,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.Entity<ProfileScanResultDto>()
             .Property(p => p.AiScore)
             .HasPrecision(3, 1);
+        modelBuilder.Entity<ProfileScanResultDto>()
+            .Property(p => p.AiExplicitDisplayText)
+            .HasDefaultValue(false);
 
         // Users (web users): Set database defaults for columns added in later migrations
         modelBuilder.Entity<UserRecordDto>()

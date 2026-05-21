@@ -74,12 +74,21 @@ public sealed class ProfileScanService(
             pipelineMetrics.RecordProfileScanSkipped("dedup");
             var cachedOutcome = await DetermineOutcomeAsync(existingUser.ProfileScanScore.Value, triggeringChat, scope.ServiceProvider, ct);
             return new ProfileScanResult(
-                user.Id,
-                existingUser.Bio, existingUser.PersonalChannelId,
-                existingUser.PersonalChannelTitle, existingUser.PersonalChannelAbout,
-                existingUser.HasPinnedStories, existingUser.PinnedStoryCaptions,
-                existingUser.IsScam, existingUser.IsFake, existingUser.IsVerified,
-                existingUser.ProfileScanScore.Value, cachedOutcome, null, null);
+                TelegramUserId: user.Id,
+                Bio: existingUser.Bio,
+                PersonalChannelId: existingUser.PersonalChannelId,
+                PersonalChannelTitle: existingUser.PersonalChannelTitle,
+                PersonalChannelAbout: existingUser.PersonalChannelAbout,
+                HasPinnedStories: existingUser.HasPinnedStories,
+                PinnedStoryCaptions: existingUser.PinnedStoryCaptions,
+                IsScam: existingUser.IsScam,
+                IsFake: existingUser.IsFake,
+                IsVerified: existingUser.IsVerified,
+                Score: existingUser.ProfileScanScore.Value,
+                Outcome: cachedOutcome,
+                AiReason: null,
+                AiSignalsDetected: null,
+                ExplicitDisplayText: false);
         }
 
         // ── Get User API client (prefer one with access to the triggering chat) ──
@@ -324,9 +333,21 @@ public sealed class ProfileScanService(
 
             var cachedOutcome = await DetermineOutcomeAsync(existingUser.ProfileScanScore.Value, triggeringChat, sp, ct);
             return new ProfileScanResult(
-                user.Id, bio, personalChannelId, channelTitle, channelAbout,
-                hasPinnedStories, pinnedStoryCaptions, isScam, isFake, isVerified,
-                existingUser.ProfileScanScore.Value, cachedOutcome, null, null);
+                TelegramUserId: user.Id,
+                Bio: bio,
+                PersonalChannelId: personalChannelId,
+                PersonalChannelTitle: channelTitle,
+                PersonalChannelAbout: channelAbout,
+                HasPinnedStories: hasPinnedStories,
+                PinnedStoryCaptions: pinnedStoryCaptions,
+                IsScam: isScam,
+                IsFake: isFake,
+                IsVerified: isVerified,
+                Score: existingUser.ProfileScanScore.Value,
+                Outcome: cachedOutcome,
+                AiReason: null,
+                AiSignalsDetected: null,
+                ExplicitDisplayText: false);
         }
 
         // ── Step 5: Collect images for AI vision ──
@@ -374,13 +395,37 @@ public sealed class ProfileScanService(
             AiScore: scoreResult.AiScore,
             AiReason: scoreResult.AiReason,
             AiSignals: scoreResult.AiSignals is { Length: > 0 }
-                ? string.Join(", ", scoreResult.AiSignals) : null), cancellationToken: ct);
+                ? string.Join(", ", scoreResult.AiSignals) : null,
+            ExplicitDisplayText: scoreResult.ExplicitDisplayText), cancellationToken: ct);
+
+        if (scoreResult.ExplicitDisplayText)
+        {
+            var outcomeTag = scoreResult.Outcome switch
+            {
+                ProfileScanOutcome.Banned => "banned",
+                ProfileScanOutcome.HeldForReview => "held_for_review",
+                _ => "clean"
+            };
+            pipelineMetrics.RecordExplicitUsernameDetection(outcomeTag);
+        }
 
         var result = new ProfileScanResult(
-            user.Id, bio, personalChannelId, channelTitle, channelAbout,
-            hasPinnedStories, pinnedStoryCaptions, isScam, isFake, isVerified,
-            scoreResult.Score, scoreResult.Outcome, scoreResult.AiReason, scoreResult.AiSignals,
-            scoreResult.ContainsNudity);
+            TelegramUserId: user.Id,
+            Bio: bio,
+            PersonalChannelId: personalChannelId,
+            PersonalChannelTitle: channelTitle,
+            PersonalChannelAbout: channelAbout,
+            HasPinnedStories: hasPinnedStories,
+            PinnedStoryCaptions: pinnedStoryCaptions,
+            IsScam: isScam,
+            IsFake: isFake,
+            IsVerified: isVerified,
+            Score: scoreResult.Score,
+            Outcome: scoreResult.Outcome,
+            AiReason: scoreResult.AiReason,
+            AiSignalsDetected: scoreResult.AiSignals,
+            ContainsNudity: scoreResult.ContainsNudity,
+            ExplicitDisplayText: scoreResult.ExplicitDisplayText);
 
         // ── Step 8: Take moderation action ──
         if (scoreResult.Outcome == ProfileScanOutcome.Banned)
@@ -839,8 +884,23 @@ public sealed class ProfileScanService(
     }
 
     private static ProfileScanResult EmptyResult(long userId, string? skipReason = null) =>
-        new(userId, null, null, null, null, false, null, false, false, false,
-            0.0m, ProfileScanOutcome.Clean, null, null, ContainsNudity: false, skipReason);
+        new(TelegramUserId: userId,
+            Bio: null,
+            PersonalChannelId: null,
+            PersonalChannelTitle: null,
+            PersonalChannelAbout: null,
+            HasPinnedStories: false,
+            PinnedStoryCaptions: null,
+            IsScam: false,
+            IsFake: false,
+            IsVerified: false,
+            Score: 0.0m,
+            Outcome: ProfileScanOutcome.Clean,
+            AiReason: null,
+            AiSignalsDetected: null,
+            ContainsNudity: false,
+            ExplicitDisplayText: false,
+            SkipReason: skipReason);
 
     private static string OutcomeToTag(ProfileScanOutcome outcome) => outcome switch
     {

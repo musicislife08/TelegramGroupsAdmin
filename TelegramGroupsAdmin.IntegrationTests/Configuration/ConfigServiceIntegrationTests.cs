@@ -165,6 +165,47 @@ public class ConfigServiceIntegrationTests
     }
 
     [Test]
+    public async Task SaveWelcomeAsync_WithMaskingFields_RoundTripsThroughJsonb()
+    {
+        var chat = ChatIdentity.FromId(-100123456999L);
+        var actor = TestActor;
+        var welcome = WelcomeConfig.Default;
+        welcome.JoinSecurity.ProfileScan = new ProfileScanConfig
+        {
+            MaskExplicitUsername = false,
+            ExplicitUsernameRedactionText = "custom redaction value"
+        };
+
+        await _sut!.SaveWelcomeAsync(chat, welcome, actor, CancellationToken.None);
+
+        var reloaded = await _sut.GetEffectiveWelcomeAsync(chat.Id, CancellationToken.None);
+
+        Assert.That(reloaded, Is.Not.Null);
+        Assert.Multiple(() =>
+        {
+            Assert.That(reloaded!.JoinSecurity.ProfileScan.MaskExplicitUsername, Is.False);
+            Assert.That(reloaded.JoinSecurity.ProfileScan.ExplicitUsernameRedactionText, Is.EqualTo("custom redaction value"));
+        });
+    }
+
+    [Test]
+    public async Task GetEffectiveWelcomeAsync_GlobalConfigMissingMaskingFields_FallsBackToPropertyDefaults()
+    {
+        var freshChat = ChatIdentity.FromId(-100987654321L);
+
+        var effective = await _sut!.GetEffectiveWelcomeAsync(freshChat.Id, CancellationToken.None);
+
+        Assert.That(effective, Is.Not.Null);
+        Assert.Multiple(() =>
+        {
+            Assert.That(effective!.JoinSecurity.ProfileScan.MaskExplicitUsername, Is.True,
+                "Default for MaskExplicitUsername should be true");
+            Assert.That(effective.JoinSecurity.ProfileScan.ExplicitUsernameRedactionText,
+                Is.EqualTo(ProfileScanConfig.DefaultExplicitUsernameRedactionText));
+        });
+    }
+
+    [Test]
     public async Task SaveContentDetectionAsync_AppendsAuditLogRow()
     {
         var chat = new ChatIdentity(-1001234567890L, "Test Chat");

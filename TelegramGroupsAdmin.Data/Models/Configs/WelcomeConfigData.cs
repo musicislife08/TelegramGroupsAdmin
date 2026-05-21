@@ -64,7 +64,7 @@ public class WelcomeConfigData
     public ExamConfigData? ExamConfig { get; set; }
 
     /// <summary>
-    /// Nullable for backward compatibility — existing JSONB blobs may not have this key yet.
+    /// Optional. Nullable so chats that haven't configured trusted bypass deserialize cleanly without forcing a default subtree.
     /// </summary>
     public TrustedBypassConfigData? TrustedBypass { get; set; }
 }

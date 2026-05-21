@@ -17,6 +17,8 @@ public sealed class PipelineMetrics
     private readonly Counter<long> _profileScansTotal;
     private readonly Counter<long> _profileScanTimeoutsTotal;
     private readonly Counter<long> _profileScanSkippedTotal;
+    private readonly Counter<long> _profileScanExplicitUsernameTotal;
+    private readonly Counter<long> _banCelebrationMaskedUsernameTotal;
 
     private readonly Histogram<double> _processingDuration;
     private readonly Histogram<double> _profileScanDuration;
@@ -46,6 +48,14 @@ public sealed class PipelineMetrics
         _profileScanSkippedTotal = _meter.CreateCounter<long>(
             "tga.pipeline.profile_scan.skipped_total",
             description: "Profile scans skipped by reason");
+
+        _profileScanExplicitUsernameTotal = _meter.CreateCounter<long>(
+            "tga.pipeline.profile_scan.explicit_username_total",
+            description: "Profile scans where AI flagged the visible display text as explicit, by outcome");
+
+        _banCelebrationMaskedUsernameTotal = _meter.CreateCounter<long>(
+            "tga.pipeline.ban_celebration.masked_username_total",
+            description: "Ban celebrations where the banned user's display name was masked, by trigger");
 
         _processingDuration = _meter.CreateHistogram<double>(
             "tga.pipeline.processing.duration",
@@ -100,5 +110,15 @@ public sealed class PipelineMetrics
     public void RecordProfileScanSkipped(string reason)
     {
         _profileScanSkippedTotal.Add(1, new TagList { { "reason", reason } });
+    }
+
+    public void RecordExplicitUsernameDetection(string outcome)
+    {
+        _profileScanExplicitUsernameTotal.Add(1, new TagList { { "outcome", outcome } });
+    }
+
+    public void RecordMaskedUsername(string trigger)
+    {
+        _banCelebrationMaskedUsernameTotal.Add(1, new TagList { { "trigger", trigger } });
     }
 }

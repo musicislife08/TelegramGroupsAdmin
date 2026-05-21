@@ -181,6 +181,21 @@
                                                    Label="Scan on profile change"
                                                    Disabled="!_config.JoinSecurity.ProfileScan.Enabled" />
                                     </MudItem>
+                                    <MudItem xs="6">
+                                        <MudSwitch @bind-Value="_config.JoinSecurity.ProfileScan.MaskExplicitUsername"
+                                                   Color="Color.Primary"
+                                                   Label="Mask explicit usernames in public ban posts"
+                                                   Disabled="!_config.JoinSecurity.ProfileScan.Enabled" />
+                                    </MudItem>
+                                    <MudItem xs="12">
+                                        <MudTextField @bind-Value="_config.JoinSecurity.ProfileScan.ExplicitUsernameRedactionText"
+                                                      Label="Redaction text"
+                                                      Variant="Variant.Outlined"
+                                                      MaxLength="80"
+                                                      HelperText="Shown in place of the user's name when the AI flags it as explicit"
+                                                      Disabled="@(!_config.JoinSecurity.ProfileScan.Enabled
+                                                                  || !_config.JoinSecurity.ProfileScan.MaskExplicitUsername)" />
+                                    </MudItem>
                                 </MudGrid>
                             </ChildContent>
                         </MudExpansionPanel>
@@ -561,40 +576,7 @@
         {
             // Normalize null to 0 for global config (SQL NULL comparison doesn't work with ==)
             var config = await ConfigService.GetWelcomeAsync(Chat?.Identity.Id ?? 0);
-
-            if (config == null)
-            {
-                // No config exists - use defaults
-                _config = WelcomeConfig.Default;
-            }
-            else if (string.IsNullOrEmpty(config.MainWelcomeMessage))
-            {
-                // Old config format detected (missing new fields) - migrate to defaults
-                _config = WelcomeConfig.Default;
-
-                // Preserve old settings
-                _config.Enabled = config.Enabled;
-                _config.Mode = config.Mode;
-                _config.TimeoutSeconds = config.TimeoutSeconds;
-                _config.MaxKicksBeforeBan = config.MaxKicksBeforeBan;
-                _config.AcceptButtonText = !string.IsNullOrEmpty(config.AcceptButtonText)
-                    ? config.AcceptButtonText
-                    : _config.AcceptButtonText;
-                _config.DenyButtonText = !string.IsNullOrEmpty(config.DenyButtonText)
-                    ? config.DenyButtonText
-                    : _config.DenyButtonText;
-                _config.TrustedBypass = config.TrustedBypass;
-                _config.JoinSecurity = config.JoinSecurity;
-
-                Snackbar.Add(
-                    "Welcome system updated! Template structure has changed. Please review and save the new configuration.",
-                    Severity.Info);
-            }
-            else
-            {
-                // New config format - load as-is
-                _config = config;
-            }
+            _config = config ?? WelcomeConfig.Default;
         }
         catch (Exception ex)
         {

@@ -29,7 +29,8 @@ Use CSharperMcp tools (`find_symbol`, `find_references`, `get_diagnostics`) inst
 
 ## Critical Rules
 
-- NEVER run the app normally — validate with `dotnet run --migrate-only` (singleton constraint)
+- Apply DB migrations with `dotnet run --migrate` or `dotnet run --migrate-only` (either flag works; both run migrations and exit cleanly).
+- Running the app normally locally is fine. The Telegram bot is disabled by default (`TelegramBotConfig.BotEnabled = false`, stored in the `configs` table at `chat_id=0` as JSONB) and only flipped on in prod, so there's no singleton conflict with the production instance. The one-connection-per-token constraint only applies in shared/prod environments.
 - EF Core: Modify models + AppDbContext FIRST → then `dotnet ef migrations add`
 - Prefer Fluent API in AppDbContext over custom SQL for schema configuration
 - Central Package Management: NuGet versions in `Directory.Packages.props`

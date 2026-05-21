@@ -27,9 +27,10 @@ public sealed class ProfileScoringEngine(
         decimal Score,
         string? Reason,
         string[]? Signals,
-        bool ContainsNudity = false)
+        bool ContainsNudity = false,
+        bool ExplicitDisplayText = false)
     {
-        public static readonly AiScoringResult Empty = new(0.0m, null, null, false);
+        public static readonly AiScoringResult Empty = new(0.0m, null, null, ContainsNudity: false, ExplicitDisplayText: false);
     }
 
     private const decimal MaxScore = 5.0m;
@@ -70,7 +71,8 @@ public sealed class ProfileScoringEngine(
                 AiScore: 0.0m,
                 AiReason: "Rule-based detection triggered ban threshold",
                 AiSignals: null,
-                ContainsNudity: false);
+                ContainsNudity: false,
+                ExplicitDisplayText: false);
         }
 
         // ── Layer 2: AI vision analysis ──
@@ -94,7 +96,8 @@ public sealed class ProfileScoringEngine(
             AiScore: aiResult.Score,
             AiReason: aiResult.Reason,
             AiSignals: aiResult.Signals,
-            ContainsNudity: aiResult.ContainsNudity);
+            ContainsNudity: aiResult.ContainsNudity,
+            ExplicitDisplayText: aiResult.ExplicitDisplayText);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -240,7 +243,12 @@ public sealed class ProfileScoringEngine(
             }
 
             var score = Math.Clamp(response.Score, 0.0m, MaxScore);
-            return new AiScoringResult(score, response.Reason, response.SignalsDetected, response.ContainsNudity);
+            return new AiScoringResult(
+                Score: score,
+                Reason: response.Reason,
+                Signals: response.SignalsDetected,
+                ContainsNudity: response.ContainsNudity,
+                ExplicitDisplayText: response.ExplicitDisplayText);
         }
         catch (JsonException ex)
         {

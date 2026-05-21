@@ -572,6 +572,78 @@ public class ProfileScoringEngineTests
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // Layer 2: ExplicitDisplayText flag passthrough
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    [Test]
+    public async Task ScoreAsync_AiReturnsExplicitDisplayTextTrue_ExplicitDisplayTextIsTrue()
+    {
+        EnableAiWithResponse(
+            """{"score": 4.5, "reason": "explicit username", "signals_detected": ["explicit_handle"], "contains_nudity": false, "explicit_display_text": true}""");
+
+        var result = await _sut.ScoreAsync(
+            profile: BuildProfile(),
+            images: [],
+            imageLabels: null,
+            banThreshold: 4.0m,
+            notifyThreshold: 2.0m,
+            cancellationToken: CancellationToken.None);
+
+        Assert.That(result.ExplicitDisplayText, Is.True);
+    }
+
+    [Test]
+    public async Task ScoreAsync_AiReturnsExplicitDisplayTextFalse_ExplicitDisplayTextIsFalse()
+    {
+        EnableAiWithResponse(
+            """{"score": 1.0, "reason": "fine name", "signals_detected": [], "contains_nudity": false, "explicit_display_text": false}""");
+
+        var result = await _sut.ScoreAsync(
+            profile: BuildProfile(),
+            images: [],
+            imageLabels: null,
+            banThreshold: 4.0m,
+            notifyThreshold: 2.0m,
+            cancellationToken: CancellationToken.None);
+
+        Assert.That(result.ExplicitDisplayText, Is.False);
+    }
+
+    [Test]
+    public async Task ScoreAsync_AiOmitsExplicitDisplayTextField_DefaultsToFalse()
+    {
+        EnableAiWithResponse(
+            """{"score": 1.0, "reason": "fine name", "signals_detected": [], "contains_nudity": false}""");
+
+        var result = await _sut.ScoreAsync(
+            profile: BuildProfile(),
+            images: [],
+            imageLabels: null,
+            banThreshold: 4.0m,
+            notifyThreshold: 2.0m,
+            cancellationToken: CancellationToken.None);
+
+        Assert.That(result.ExplicitDisplayText, Is.False);
+    }
+
+    [Test]
+    public async Task ScoreAsync_RuleBasedFastPathBan_ExplicitDisplayTextIsFalse()
+    {
+        var scamProfile = BuildProfile(isScam: true);
+
+        var result = await _sut.ScoreAsync(
+            profile: scamProfile,
+            images: [],
+            imageLabels: null,
+            banThreshold: 4.0m,
+            notifyThreshold: 2.0m,
+            cancellationToken: CancellationToken.None);
+
+        Assert.That(result.Outcome, Is.EqualTo(ProfileScanOutcome.Banned));
+        Assert.That(result.ExplicitDisplayText, Is.False);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // Layer 2: Malformed / null JSON fallback
     // ═══════════════════════════════════════════════════════════════════════════
 

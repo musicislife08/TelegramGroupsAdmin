@@ -26,7 +26,7 @@ public static class ContentDetectionConfigMappings
             ReviewQueueThreshold = data.ReviewQueueThreshold,
             TrainingMode = data.TrainingMode,
 
-            // Use null-coalescing for sub-configs to handle partial JSON from legacy data
+            // Null-coalesce sub-configs so newly added nested configs default cleanly on chats that haven't re-saved.
             StopWords = (data.StopWords ?? new StopWordsConfigData()).ToModel(),
             Similarity = (data.Similarity ?? new SimilarityConfigData()).ToModel(),
             Bayes = (data.Bayes ?? new BayesConfigData()).ToModel(),
