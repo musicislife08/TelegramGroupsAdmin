@@ -1,7 +1,6 @@
-using System.Reflection;
 using Bunit;
-using Bunit.Rendering;
 using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Rendering;
 using Microsoft.Extensions.DependencyInjection;
 using MudBlazor;
 using MudBlazor.Services;
@@ -19,15 +18,15 @@ namespace TelegramGroupsAdmin.ComponentTests.Components.Analytics;
 /// </summary>
 public abstract class PerformanceMetricsTimezoneContext : BunitContext
 {
-    protected IAnalyticsRepository Analytics { get; }
+    protected IAnalyticsRepository AnalyticsRepository { get; }
     protected ISnackbar Snackbar { get; }
 
     protected PerformanceMetricsTimezoneContext(TimeZoneInfo? initialTimeZone)
     {
-        Analytics = Substitute.For<IAnalyticsRepository>();
+        AnalyticsRepository = Substitute.For<IAnalyticsRepository>();
         Snackbar = Substitute.For<ISnackbar>();
 
-        Services.AddSingleton(Analytics);
+        Services.AddSingleton(AnalyticsRepository);
         Services.AddSingleton(Snackbar);
 
         Services.AddMudServices(options =>
@@ -42,40 +41,38 @@ public abstract class PerformanceMetricsTimezoneContext : BunitContext
         JSInterop.SetupVoid("mudPopover.disconnect", _ => true).SetVoidResult();
         JSInterop.Setup<int>("mudpopoverHelper.countProviders").SetResult(1);
 
-        // Cascade TimeZoneInfo with the initial value for this scenario
         RenderTree.TryAdd<CascadingValue<TimeZoneInfo?>>(p =>
             p.Add(cv => cv.Value, initialTimeZone));
 
-        // Analytics mocks — valid defaults so LoadData doesn't throw if it fires
-        Analytics.GetDetectionAccuracyStatsAsync(
+        AnalyticsRepository.GetDetectionAccuracyStatsAsync(
                 Arg.Any<DateTimeOffset>(),
                 Arg.Any<DateTimeOffset>(),
                 Arg.Any<string>(),
                 Arg.Any<CancellationToken>())
             .Returns(new DetectionAccuracyStats());
 
-        Analytics.GetResponseTimeStatsAsync(
+        AnalyticsRepository.GetResponseTimeStatsAsync(
                 Arg.Any<DateTimeOffset>(),
                 Arg.Any<DateTimeOffset>(),
                 Arg.Any<string>(),
                 Arg.Any<CancellationToken>())
             .Returns(new ResponseTimeStats());
 
-        Analytics.GetDetectionMethodComparisonAsync(
+        AnalyticsRepository.GetDetectionMethodComparisonAsync(
                 Arg.Any<DateTimeOffset>(),
                 Arg.Any<DateTimeOffset>(),
                 Arg.Any<string>(),
                 Arg.Any<CancellationToken>())
             .Returns(new List<DetectionMethodStats>());
 
-        Analytics.GetDailyDetectionTrendsAsync(
+        AnalyticsRepository.GetDailyDetectionTrendsAsync(
                 Arg.Any<DateTimeOffset>(),
                 Arg.Any<DateTimeOffset>(),
                 Arg.Any<string>(),
                 Arg.Any<CancellationToken>())
             .Returns(new List<DailyDetectionTrend>());
 
-        Analytics.GetAlgorithmPerformanceStatsAsync(
+        AnalyticsRepository.GetAlgorithmPerformanceStatsAsync(
                 Arg.Any<DateTimeOffset>(),
                 Arg.Any<DateTimeOffset>(),
                 Arg.Any<string>(),
@@ -86,63 +83,51 @@ public abstract class PerformanceMetricsTimezoneContext : BunitContext
     [SetUp]
     public void ClearCalls()
     {
-        Analytics.ClearReceivedCalls();
+        AnalyticsRepository.ClearReceivedCalls();
     }
 
     /// <summary>
-    /// Renders PerformanceMetrics wrapped in a controllable CascadingValue[TimeZoneInfo?].
-    /// Returns the PerformanceMetrics cut and the container so the cascade can be updated mid-test.
+    /// Renders PerformanceMetrics wrapped in a TimezoneCascadeHost whose Tz [Parameter]
+    /// can be updated mid-test via host.InvokeAsync(() => host.Instance.SetParametersAsync(...)),
+    /// using only public bUnit APIs.
     /// </summary>
-    protected (IRenderedComponent<PerformanceMetrics> Cut, IRenderedComponent<ContainerFragment> Container)
-        RenderWithControllableCascade(TimeZoneInfo? initial)
+    protected (IRenderedComponent<PerformanceMetrics> Cut, IRenderedComponent<TimezoneCascadeHost> Host)
+        RenderWithCascadeHost(TimeZoneInfo? initial)
     {
-        var box = new TimeZoneBox { Value = initial };
-
-        RenderFragment fragment = builder =>
+        RenderFragment childContent = builder =>
         {
-            builder.OpenComponent<CascadingValue<TimeZoneInfo?>>(0);
-            builder.AddComponentParameter(1, nameof(CascadingValue<TimeZoneInfo?>.Value), box.Value);
-            builder.AddComponentParameter(2, nameof(CascadingValue<TimeZoneInfo?>.IsFixed), false);
-            builder.AddAttribute(3, "ChildContent", (RenderFragment)(inner =>
-            {
-                inner.OpenComponent<PerformanceMetrics>(0);
-                inner.CloseComponent();
-            }));
+            builder.OpenComponent<PerformanceMetrics>(0);
             builder.CloseComponent();
         };
 
-        var container = Render(fragment);
-        var cut = container.FindComponent<PerformanceMetrics>();
-        return (cut, container);
+        var host = Render<TimezoneCascadeHost>(p => p
+            .Add(h => h.Tz, initial)
+            .Add(h => h.ChildContent, childContent));
+
+        var cut = host.FindComponent<PerformanceMetrics>();
+        return (cut, host);
     }
 
     /// <summary>
-    /// Simulates a CascadingValue[TimeZoneInfo?] change via BunitRenderer.SetDirectParametersAsync
-    /// (accessed via reflection since it is internal in bUnit 2.7.x).
+    /// Updates the host's Tz [Parameter] (public bUnit API; SetParametersAsync on a
+    /// regular [Parameter] is allowed by Blazor — only [CascadingParameter] explicit-set is blocked).
     /// </summary>
-    protected async Task SimulateCascadeArrival(
-        IRenderedComponent<ContainerFragment> container,
-        TimeZoneInfo newTimeZone)
+    protected async Task SetHostTimezone(
+        IRenderedComponent<TimezoneCascadeHost> host,
+        TimeZoneInfo? newTimeZone)
     {
-        var setDirectParams = typeof(BunitRenderer)
-            .GetMethod(
-                "SetDirectParametersAsync",
-                BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)!
-            .MakeGenericMethod(typeof(CascadingValue<TimeZoneInfo?>));
-
-        var cascadeComp = Renderer.FindComponent<CascadingValue<TimeZoneInfo?>>(
-            (IRenderedComponent<IComponent>)container);
-
-        var newParams = ParameterView.FromDictionary(
-            new Dictionary<string, object?> { ["Value"] = (TimeZoneInfo?)newTimeZone });
-
-        await (Task)setDirectParams.Invoke(Renderer, [cascadeComp, newParams])!;
+        await host.InvokeAsync(() =>
+            host.Instance.SetParametersAsync(ParameterView.FromDictionary(
+                new Dictionary<string, object?>
+                {
+                    [nameof(TimezoneCascadeHost.Tz)] = newTimeZone,
+                    [nameof(TimezoneCascadeHost.ChildContent)] = (RenderFragment)(builder =>
+                    {
+                        builder.OpenComponent<PerformanceMetrics>(0);
+                        builder.CloseComponent();
+                    })
+                })));
         await Task.Yield();
-    }
-
-    protected sealed class TimeZoneBox
-    {
-        public TimeZoneInfo? Value { get; set; }
     }
 }
 
@@ -161,7 +146,7 @@ public class PerformanceMetricsTimezone_ColdCircuit : PerformanceMetricsTimezone
         var cut = Render<PerformanceMetrics>();
         await Task.Yield();
 
-        await Analytics.DidNotReceive().GetDetectionAccuracyStatsAsync(
+        await AnalyticsRepository.DidNotReceive().GetDetectionAccuracyStatsAsync(
             Arg.Any<DateTimeOffset>(),
             Arg.Any<DateTimeOffset>(),
             Arg.Any<string>(),
@@ -184,7 +169,7 @@ public class PerformanceMetricsTimezone_WarmCircuit : PerformanceMetricsTimezone
         var cut = Render<PerformanceMetrics>();
         await Task.Yield();
 
-        await Analytics.Received(1).GetDetectionAccuracyStatsAsync(
+        await AnalyticsRepository.Received(1).GetDetectionAccuracyStatsAsync(
             Arg.Any<DateTimeOffset>(),
             Arg.Any<DateTimeOffset>(),
             "UTC",
@@ -194,7 +179,7 @@ public class PerformanceMetricsTimezone_WarmCircuit : PerformanceMetricsTimezone
 
 /// <summary>
 /// Cascade-arrival: cascade starts null, then the real timezone arrives.
-/// LoadData fires exactly once on first non-null cascade.
+/// LoadData fires exactly once on first non-null cascade; subsequent changes are ignored.
 /// </summary>
 [TestFixture]
 public class PerformanceMetricsTimezone_CascadeArrival : PerformanceMetricsTimezoneContext
@@ -204,16 +189,36 @@ public class PerformanceMetricsTimezone_CascadeArrival : PerformanceMetricsTimez
     [Test]
     public async Task CascadeArrives_LoadsExactlyOnce_WithRealTimezone()
     {
-        var (cut, container) = RenderWithControllableCascade(null);
+        var (cut, host) = RenderWithCascadeHost(null);
         await Task.Yield();
 
         var real = TimeZoneInfo.FindSystemTimeZoneById("America/Chicago");
-        await SimulateCascadeArrival(container, real);
+        await SetHostTimezone(host, real);
 
-        await Analytics.Received(1).GetDetectionAccuracyStatsAsync(
+        await AnalyticsRepository.Received(1).GetDetectionAccuracyStatsAsync(
             Arg.Any<DateTimeOffset>(),
             Arg.Any<DateTimeOffset>(),
             "America/Chicago",
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task CascadeArrives_SubsequentParameterSetsDoNotReload()
+    {
+        var (cut, host) = RenderWithCascadeHost(null);
+        await Task.Yield();
+
+        var tz1 = TimeZoneInfo.FindSystemTimeZoneById("America/Chicago");
+        await SetHostTimezone(host, tz1);
+
+        // Second arrival — _seenTimeZone latch must block a second load
+        var tz2 = TimeZoneInfo.FindSystemTimeZoneById("Europe/London");
+        await SetHostTimezone(host, tz2);
+
+        await AnalyticsRepository.Received(1).GetDetectionAccuracyStatsAsync(
+            Arg.Any<DateTimeOffset>(),
+            Arg.Any<DateTimeOffset>(),
+            Arg.Any<string>(),
             Arg.Any<CancellationToken>());
     }
 }

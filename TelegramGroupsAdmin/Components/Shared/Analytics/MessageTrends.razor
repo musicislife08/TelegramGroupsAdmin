@@ -378,6 +378,7 @@
     private ApexChartOptions<DailyVolumeData>? _spamDetectionsChart;
     private ApexChartOptions<ChatVolumeData>? _perChatChart;
     private ApexChartOptions<DailyActiveUsersData>? _dailyActiveUsersChart;
+    private TimeZoneInfo? _seenTimeZone;
 
     // Helper to convert DateOnly to Unix timestamp (milliseconds) for ApexCharts
     private static long DateToUnixMs(DateOnly date) =>
@@ -423,8 +424,6 @@
         // Otherwise return the single selected chat ID as a list
         return [_selectedChatId];
     }
-
-    private TimeZoneInfo? _seenTimeZone;
 
     protected override async Task OnInitializedAsync()
     {

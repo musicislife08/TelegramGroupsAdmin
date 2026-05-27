@@ -317,11 +317,11 @@
     private ApexChartOptions<DailyDetectionTrend>? _dailyTrendsChart;
     private ApexChartOptions<DailyResponseTime>? _responseTimeChart;
 
+    private TimeZoneInfo? _seenTimeZone;
+
     // Helper to convert DateOnly to Unix timestamp (milliseconds) for ApexCharts
     private static long DateToUnixMs(DateOnly date) =>
         new DateTimeOffset(date.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero).ToUnixTimeMilliseconds();
-
-    private TimeZoneInfo? _seenTimeZone;
 
     protected override async Task OnInitializedAsync()
     {

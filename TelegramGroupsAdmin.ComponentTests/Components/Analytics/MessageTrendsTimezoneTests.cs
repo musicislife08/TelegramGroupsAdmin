@@ -1,7 +1,6 @@
-using System.Reflection;
 using Bunit;
-using Bunit.Rendering;
 using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Rendering;
 using Microsoft.Extensions.DependencyInjection;
 using MudBlazor;
 using MudBlazor.Services;
@@ -24,21 +23,21 @@ namespace TelegramGroupsAdmin.ComponentTests.Components.Analytics;
 /// </summary>
 public abstract class MessageTrendsTimezoneContext : BunitContext
 {
-    protected IMessageStatsService MessageStats { get; }
-    protected IAnalyticsRepository Analytics { get; }
-    protected IManagedChatsRepository Chats { get; }
+    protected IMessageStatsService MessageStatsService { get; }
+    protected IAnalyticsRepository AnalyticsRepository { get; }
+    protected IManagedChatsRepository ManagedChatsRepository { get; }
     protected ISnackbar Snackbar { get; }
 
     protected MessageTrendsTimezoneContext(TimeZoneInfo? initialTimeZone)
     {
-        MessageStats = Substitute.For<IMessageStatsService>();
-        Analytics = Substitute.For<IAnalyticsRepository>();
-        Chats = Substitute.For<IManagedChatsRepository>();
+        MessageStatsService = Substitute.For<IMessageStatsService>();
+        AnalyticsRepository = Substitute.For<IAnalyticsRepository>();
+        ManagedChatsRepository = Substitute.For<IManagedChatsRepository>();
         Snackbar = Substitute.For<ISnackbar>();
 
-        Services.AddSingleton(MessageStats);
-        Services.AddSingleton(Analytics);
-        Services.AddSingleton(Chats);
+        Services.AddSingleton(MessageStatsService);
+        Services.AddSingleton(AnalyticsRepository);
+        Services.AddSingleton(ManagedChatsRepository);
         Services.AddSingleton(Snackbar);
 
         Services.AddMudServices(options =>
@@ -53,29 +52,25 @@ public abstract class MessageTrendsTimezoneContext : BunitContext
         JSInterop.SetupVoid("mudPopover.disconnect", _ => true).SetVoidResult();
         JSInterop.Setup<int>("mudpopoverHelper.countProviders").SetResult(1);
 
-        // Cascade WebUserIdentity — component returns early in OnInitializedAsync if null
         RenderTree.TryAdd<CascadingValue<WebUserIdentity?>>(p =>
             p.Add(cv => cv.Value, WebUserRenderHelper.TestWebUser));
 
-        // Cascade TimeZoneInfo with the initial value for this scenario
         RenderTree.TryAdd<CascadingValue<TimeZoneInfo?>>(p =>
             p.Add(cv => cv.Value, initialTimeZone));
 
-        // Chats — return empty list to avoid NRE on _accessibleChats.Any() in the template
-        Chats.GetUserAccessibleChatsAsync(
+        ManagedChatsRepository.GetUserAccessibleChatsAsync(
                 Arg.Any<string>(),
                 Arg.Any<PermissionLevel>(),
                 Arg.Any<bool>(),
                 Arg.Any<CancellationToken>())
             .Returns(new List<ManagedChatRecord>());
 
-        // Analytics mocks — valid defaults so LoadData doesn't throw if it fires
-        Analytics.GetSpamTrendComparisonAsync(
+        AnalyticsRepository.GetSpamTrendComparisonAsync(
                 Arg.Any<string>(),
                 Arg.Any<CancellationToken>())
             .Returns(new SpamTrendComparison());
 
-        MessageStats.GetMessageTrendsAsync(
+        MessageStatsService.GetMessageTrendsAsync(
                 Arg.Any<List<long>>(),
                 Arg.Any<DateTimeOffset>(),
                 Arg.Any<DateTimeOffset>(),
@@ -87,70 +82,54 @@ public abstract class MessageTrendsTimezoneContext : BunitContext
     [SetUp]
     public void ClearCalls()
     {
-        MessageStats.ClearReceivedCalls();
-        Analytics.ClearReceivedCalls();
-        Chats.ClearReceivedCalls();
+        MessageStatsService.ClearReceivedCalls();
+        AnalyticsRepository.ClearReceivedCalls();
+        ManagedChatsRepository.ClearReceivedCalls();
     }
 
     /// <summary>
-    /// Renders MessageTrends wrapped in a controllable CascadingValue[TimeZoneInfo?].
-    /// Returns the MessageTrends cut and the container so the cascade can be updated mid-test.
-    /// The RenderTree's TimeZoneInfo? cascade is not used here; the fragment's own CascadingValue
-    /// takes precedence since it is the direct parent.
+    /// Renders MessageTrends wrapped in a TimezoneCascadeHost whose Tz [Parameter] can be
+    /// updated mid-test via host.InvokeAsync(() => host.Instance.SetParametersAsync(...)),
+    /// using only public bUnit APIs.
     /// </summary>
-    protected (IRenderedComponent<MessageTrends> Cut, IRenderedComponent<ContainerFragment> Container)
-        RenderWithControllableCascade(TimeZoneInfo? initial)
+    protected (IRenderedComponent<MessageTrends> Cut, IRenderedComponent<TimezoneCascadeHost> Host)
+        RenderWithCascadeHost(TimeZoneInfo? initial)
     {
-        // Capture value in a mutable box so the fragment closure can observe changes
-        var box = new TimeZoneBox { Value = initial };
-
-        RenderFragment fragment = builder =>
+        RenderFragment childContent = builder =>
         {
-            builder.OpenComponent<CascadingValue<TimeZoneInfo?>>(0);
-            builder.AddComponentParameter(1, nameof(CascadingValue<TimeZoneInfo?>.Value), box.Value);
-            builder.AddComponentParameter(2, nameof(CascadingValue<TimeZoneInfo?>.IsFixed), false);
-            builder.AddAttribute(3, "ChildContent", (RenderFragment)(inner =>
-            {
-                inner.OpenComponent<MessageTrends>(0);
-                inner.CloseComponent();
-            }));
+            builder.OpenComponent<MessageTrends>(0);
             builder.CloseComponent();
         };
 
-        var container = Render(fragment);
-        var cut = container.FindComponent<MessageTrends>();
-        return (cut, container);
+        var host = Render<TimezoneCascadeHost>(p => p
+            .Add(h => h.Tz, initial)
+            .Add(h => h.ChildContent, childContent));
+
+        var cut = host.FindComponent<MessageTrends>();
+        return (cut, host);
     }
 
     /// <summary>
-    /// Simulates a CascadingValue[TimeZoneInfo?] change by finding the parent CascadingValue
-    /// in the container's render tree and setting its Value via BunitRenderer.SetDirectParametersAsync
-    /// (accessed via reflection since it is internal in bUnit 2.7.x).
+    /// Updates the host's Tz [Parameter] and waits for the propagation cycle to settle.
+    /// Pure public bUnit API — SetParametersAsync on a regular [Parameter] is allowed
+    /// (only [CascadingParameter] explicit-set is blocked by Blazor).
     /// </summary>
-    protected async Task SimulateCascadeArrival(
-        IRenderedComponent<ContainerFragment> container,
-        TimeZoneInfo newTimeZone)
+    protected async Task SetHostTimezone(
+        IRenderedComponent<TimezoneCascadeHost> host,
+        TimeZoneInfo? newTimeZone)
     {
-        var setDirectParams = typeof(BunitRenderer)
-            .GetMethod(
-                "SetDirectParametersAsync",
-                BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)!
-            .MakeGenericMethod(typeof(CascadingValue<TimeZoneInfo?>));
-
-        // The CascadingValue<TimeZoneInfo?> is a direct child of the ContainerFragment
-        var cascadeComp = Renderer.FindComponent<CascadingValue<TimeZoneInfo?>>(
-            (IRenderedComponent<IComponent>)container);
-
-        var newParams = ParameterView.FromDictionary(
-            new Dictionary<string, object?> { ["Value"] = (TimeZoneInfo?)newTimeZone });
-
-        await (Task)setDirectParams.Invoke(Renderer, [cascadeComp, newParams])!;
+        await host.InvokeAsync(() =>
+            host.Instance.SetParametersAsync(ParameterView.FromDictionary(
+                new Dictionary<string, object?>
+                {
+                    [nameof(TimezoneCascadeHost.Tz)] = newTimeZone,
+                    [nameof(TimezoneCascadeHost.ChildContent)] = (RenderFragment)(builder =>
+                    {
+                        builder.OpenComponent<MessageTrends>(0);
+                        builder.CloseComponent();
+                    })
+                })));
         await Task.Yield();
-    }
-
-    protected sealed class TimeZoneBox
-    {
-        public TimeZoneInfo? Value { get; set; }
     }
 }
 
@@ -169,7 +148,7 @@ public class MessageTrendsTimezone_ColdCircuit : MessageTrendsTimezoneContext
         var cut = Render<MessageTrends>();
         await Task.Yield();
 
-        await MessageStats.DidNotReceive().GetMessageTrendsAsync(
+        await MessageStatsService.DidNotReceive().GetMessageTrendsAsync(
             Arg.Any<List<long>>(),
             Arg.Any<DateTimeOffset>(),
             Arg.Any<DateTimeOffset>(),
@@ -193,7 +172,7 @@ public class MessageTrendsTimezone_WarmCircuit : MessageTrendsTimezoneContext
         var cut = Render<MessageTrends>();
         await Task.Yield();
 
-        await MessageStats.Received(1).GetMessageTrendsAsync(
+        await MessageStatsService.Received(1).GetMessageTrendsAsync(
             Arg.Any<List<long>>(),
             Arg.Any<DateTimeOffset>(),
             Arg.Any<DateTimeOffset>(),
@@ -214,13 +193,13 @@ public class MessageTrendsTimezone_CascadeArrival : MessageTrendsTimezoneContext
     [Test]
     public async Task CascadeArrives_LoadsExactlyOnce_WithRealTimezone()
     {
-        var (cut, container) = RenderWithControllableCascade(null);
+        var (cut, host) = RenderWithCascadeHost(null);
         await Task.Yield();
 
         var real = TimeZoneInfo.FindSystemTimeZoneById("America/New_York");
-        await SimulateCascadeArrival(container, real);
+        await SetHostTimezone(host, real);
 
-        await MessageStats.Received(1).GetMessageTrendsAsync(
+        await MessageStatsService.Received(1).GetMessageTrendsAsync(
             Arg.Any<List<long>>(),
             Arg.Any<DateTimeOffset>(),
             Arg.Any<DateTimeOffset>(),
@@ -231,18 +210,17 @@ public class MessageTrendsTimezone_CascadeArrival : MessageTrendsTimezoneContext
     [Test]
     public async Task CascadeArrives_SubsequentParameterSetsDoNotReload()
     {
-        var (cut, container) = RenderWithControllableCascade(null);
+        var (cut, host) = RenderWithCascadeHost(null);
         await Task.Yield();
 
-        // First arrival — should trigger exactly one load
         var tz1 = TimeZoneInfo.FindSystemTimeZoneById("America/New_York");
-        await SimulateCascadeArrival(container, tz1);
+        await SetHostTimezone(host, tz1);
 
         // Second arrival — _seenTimeZone latch must block a second load
         var tz2 = TimeZoneInfo.FindSystemTimeZoneById("Europe/London");
-        await SimulateCascadeArrival(container, tz2);
+        await SetHostTimezone(host, tz2);
 
-        await MessageStats.Received(1).GetMessageTrendsAsync(
+        await MessageStatsService.Received(1).GetMessageTrendsAsync(
             Arg.Any<List<long>>(),
             Arg.Any<DateTimeOffset>(),
             Arg.Any<DateTimeOffset>(),
