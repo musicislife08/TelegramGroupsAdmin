@@ -66,7 +66,8 @@ public class BackupServiceTests
 
     // Tables with DTOs that BackupService can export (excludes __EFMigrationsHistory,
     // file_scan_quota, ticker.*). Updated 2026-04-09: +file_scan_results (FileScanResultDto rename).
-    private const int ExpectedBackupTableCount = 42;
+    // Updated 2026-05-27: +username_blacklist (UsernameBlacklistEntryDto now discovered via [Table] attribute).
+    private const int ExpectedBackupTableCount = 43;
 
     // Synthetic outside-canonical-range ID used by RestoreAsync_ShouldWipeAllTablesFirst
     private const long SyntheticExtraUserId = 7777777777777L;
@@ -309,7 +310,7 @@ public class BackupServiceTests
                 FROM information_schema.tables
                 WHERE table_schema = 'public'
                 AND table_type = 'BASE TABLE'
-                AND table_name NOT IN ('__EFMigrationsHistory', 'cached_blocked_domains', 'file_scan_quota', 'username_blacklist')
+                AND table_name NOT IN ('__EFMigrationsHistory', 'cached_blocked_domains', 'file_scan_quota')
             ");
 
             Assert.That(metadata.TableCount, Is.EqualTo(actualTableCount),

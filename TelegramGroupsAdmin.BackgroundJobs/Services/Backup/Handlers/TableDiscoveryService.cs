@@ -1,12 +1,11 @@
+using System.ComponentModel.DataAnnotations.Schema;
+using System.Reflection;
 using Dapper;
 using Microsoft.Extensions.Logging;
 using Npgsql;
 
 namespace TelegramGroupsAdmin.BackgroundJobs.Services.Backup.Handlers;
 
-/// <summary>
-/// Discovers database tables and maps them to DTO types using naming conventions
-/// </summary>
 public class TableDiscoveryService
 {
     private readonly ILogger<TableDiscoveryService> _logger;
@@ -16,12 +15,8 @@ public class TableDiscoveryService
         _logger = logger;
     }
 
-    /// <summary>
-    /// Discover all tables and their corresponding DTO types by reflection
-    /// </summary>
     public async Task<Dictionary<string, Type>> DiscoverTablesAsync(NpgsqlConnection connection)
     {
-        // Get all tables from database
         const string sql = """
             SELECT table_name
             FROM information_schema.tables
@@ -32,7 +27,6 @@ public class TableDiscoveryService
 
         var tableNames = (await connection.QueryAsync<string>(sql)).ToList();
 
-        // Load TelegramGroupsAdmin.Data assembly and find all DTO types
         var dataAssembly = AppDomain.CurrentDomain.GetAssemblies()
             .FirstOrDefault(a => a.GetName().Name == "TelegramGroupsAdmin.Data")
             ?? throw new InvalidOperationException("TelegramGroupsAdmin.Data assembly not found");
@@ -44,13 +38,11 @@ public class TableDiscoveryService
 
         _logger.LogDebug("Found {DtoCount} DTO types in Data assembly", dtoTypes.Count);
 
-        // Match tables to DTOs by convention (snake_case table name → PascalCaseDto)
         var mapping = new Dictionary<string, Type>();
         var knownSystemTables = new HashSet<string> { "VersionInfo" }; // FluentMigrator table
 
         foreach (var tableName in tableNames)
         {
-            // Skip known system tables
             if (knownSystemTables.Contains(tableName))
             {
                 _logger.LogDebug("Skipping system table '{TableName}'", tableName);
@@ -65,7 +57,6 @@ public class TableDiscoveryService
             }
             else
             {
-                // Expected: Some tables don't have DTOs (e.g., __EFMigrationsHistory, internal/system tables)
                 _logger.LogDebug("No DTO found for table '{TableName}', skipping", tableName);
             }
         }
@@ -73,45 +64,9 @@ public class TableDiscoveryService
         return mapping;
     }
 
-    /// <summary>
-    /// Find DTO type for a table using naming conventions
-    /// Examples: users → UserRecordDto, stop_words → StopWordDto
-    /// </summary>
-    internal Type? FindDtoForTable(string tableName, List<Type> dtoTypes)
+    internal static Type? FindDtoForTable(string tableName, IReadOnlyList<Type> dtoTypes)
     {
-        // Try exact match first (e.g., "users" → "UserRecordDto")
-        var pascalName = ToPascalCase(tableName);
-
-        // Try common DTO naming patterns
-        string[] candidates =
-        [
-            $"{pascalName}Dto",
-            $"{pascalName}RecordDto",
-            $"{Singularize(pascalName)}Dto",
-            $"{Singularize(pascalName)}RecordDto"
-        ];
-
         return dtoTypes.FirstOrDefault(dto =>
-            candidates.Any(c => dto.Name.Equals(c, StringComparison.OrdinalIgnoreCase)));
-    }
-
-    /// <summary>
-    /// Convert snake_case to PascalCase (e.g., "stop_words" → "StopWords")
-    /// </summary>
-    private static string ToPascalCase(string snakeCase)
-    {
-        var parts = snakeCase.Split('_', StringSplitOptions.RemoveEmptyEntries);
-        return string.Concat(parts.Select(p =>
-            p.Length > 0 ? char.ToUpperInvariant(p[0]) + p[1..].ToLowerInvariant() : ""));
-    }
-
-    /// <summary>
-    /// Simple pluralization removal (users → user, stop_words → stop_word)
-    /// </summary>
-    private string Singularize(string plural)
-    {
-        if (plural.EndsWith("s", StringComparison.OrdinalIgnoreCase))
-            return plural.Substring(0, plural.Length - 1);
-        return plural;
+            dto.GetCustomAttribute<TableAttribute>()?.Name?.Equals(tableName, StringComparison.OrdinalIgnoreCase) == true);
     }
 }
