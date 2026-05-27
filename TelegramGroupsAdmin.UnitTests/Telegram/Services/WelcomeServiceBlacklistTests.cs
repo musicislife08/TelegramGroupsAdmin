@@ -290,7 +290,6 @@ public class WelcomeServiceBlacklistTests
             MatchType: BlacklistMatchType.Exact,
             Enabled: true,
             CreatedAt: DateTimeOffset.UtcNow,
-            CreatedBy: Actor.FromSystem("test"),
             Notes: null);
 
         _usernameBlacklistService

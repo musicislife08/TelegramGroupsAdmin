@@ -535,20 +535,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         {
             entity.Property(e => e.MatchType).HasDefaultValue(0);
 
-            entity.HasOne<UserRecordDto>()
-                .WithMany()
-                .HasForeignKey(e => e.WebUserId)
-                .OnDelete(DeleteBehavior.SetNull);
-
-            entity.HasOne<TelegramUserDto>()
-                .WithMany()
-                .HasForeignKey(e => e.TelegramUserId)
-                .OnDelete(DeleteBehavior.SetNull);
-
-            entity.ToTable(t => t.HasCheckConstraint(
-                "CK_username_blacklist_exclusive_actor",
-                "(web_user_id IS NOT NULL)::int + (telegram_user_id IS NOT NULL)::int + (system_identifier IS NOT NULL)::int = 1"));
-
             // Prevent duplicate patterns (case-insensitive, only enabled entries)
             entity.HasIndex(e => e.Pattern)
                 .IsUnique()

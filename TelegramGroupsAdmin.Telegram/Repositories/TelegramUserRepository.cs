@@ -45,42 +45,27 @@ public class TelegramUserRepository : ITelegramUserRepository
         UserIdentity user, bool isBot, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var existing = await context.TelegramUsers
-            .AsNoTracking()
-            .FirstOrDefaultAsync(u => u.TelegramUserId == user.Id, cancellationToken);
-
-        if (existing != null)
-            return existing.ToModel();
-
         var now = DateTimeOffset.UtcNow;
-        var entity = new DataModels.TelegramUserDto
-        {
-            TelegramUserId = user.Id,
-            Username = user.Username,
-            FirstName = user.FirstName,
-            LastName = user.LastName,
-            IsBot = isBot,
-            IsTrusted = TelegramConstants.IsSystemUser(user.Id),
-            IsBanned = false,
-            BotDmEnabled = false,
-            FirstSeenAt = now,
-            LastSeenAt = now,
-            CreatedAt = now,
-            UpdatedAt = now,
-            IsActive = false
-        };
+        var isTrusted = TelegramConstants.IsSystemUser(user.Id);
 
-        context.TelegramUsers.Add(entity);
-        await context.SaveChangesAsync(cancellationToken);
+        await context.Database.ExecuteSqlAsync($"""
+            INSERT INTO telegram_users (
+                telegram_user_id, username, first_name, last_name,
+                is_bot, is_trusted, is_banned, bot_dm_enabled,
+                first_seen_at, last_seen_at, created_at, updated_at, is_active
+            ) VALUES (
+                {user.Id}, {user.Username}, {user.FirstName}, {user.LastName},
+                {isBot}, {isTrusted}, {false}, {false},
+                {now}, {now}, {now}, {now}, {false}
+            )
+            ON CONFLICT (telegram_user_id) DO NOTHING
+            """, cancellationToken);
 
-        if (entity.IsTrusted)
-        {
-            _logger.LogInformation("Created Telegram system account {TelegramUserId} with automatic trust", user.Id);
-        }
-        else
-        {
-            _logger.LogInformation("Created Telegram user {User}", user.ToLogInfo());
-        }
+        var entity = await context.TelegramUsers
+            .AsNoTracking()
+            .FirstAsync(u => u.TelegramUserId == user.Id, cancellationToken);
+
+        _logger.LogDebug("Ensured Telegram user {User}", user.ToLogDebug());
 
         return entity.ToModel();
     }
