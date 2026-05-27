@@ -8,6 +8,7 @@ using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Configuration.Models.Welcome;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Models;
 
@@ -33,7 +34,7 @@ public class WelcomeSystemConfigTestContext : BunitContext
         // Register mocks
         Services.AddSingleton(ConfigService);
         Services.AddSingleton(Substitute.For<IUsernameBlacklistRepository>());
-        Services.AddSingleton(Substitute.For<IAuditService>());
+        Services.AddSingleton(Substitute.For<IUsernameBlacklistService>());
 
         // Add MudBlazor services
         Services.AddMudServices(options =>

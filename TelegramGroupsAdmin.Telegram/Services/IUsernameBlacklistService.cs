@@ -1,3 +1,4 @@
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
@@ -16,4 +17,17 @@ public interface IUsernameBlacklistService
     Task<UsernameBlacklistEntry?> CheckDisplayNameAsync(
         string displayName,
         CancellationToken cancellationToken = default);
+
+    Task<long> AddEntryAsync(
+        string pattern,
+        BlacklistMatchType matchType,
+        string? notes,
+        Actor actor,
+        CancellationToken ct = default);
+
+    Task<bool> DeleteEntryAsync(long id, string pattern, Actor actor, CancellationToken ct = default);
+
+    Task<bool> SetEnabledAsync(long id, string pattern, bool enabled, Actor actor, CancellationToken ct = default);
+
+    Task<bool> UpdateNotesAsync(long id, string pattern, string? notes, Actor actor, CancellationToken ct = default);
 }

@@ -1,5 +1,3 @@
-using TelegramGroupsAdmin.Core.Models;
-
 namespace TelegramGroupsAdmin.Telegram.Models;
 
 /// <summary>
@@ -12,5 +10,4 @@ public sealed record UsernameBlacklistEntry(
     BlacklistMatchType MatchType,
     bool Enabled,
     DateTimeOffset CreatedAt,
-    Actor CreatedBy,
     string? Notes);

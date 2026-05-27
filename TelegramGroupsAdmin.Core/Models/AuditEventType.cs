@@ -127,5 +127,21 @@ public enum AuditEventType
     TelegramApiConfigured = 37,
 
     /// <summary>Admin's web account auto-linked to their Telegram account after User API auth</summary>
-    TelegramAccountLinked = 38
+    TelegramAccountLinked = 38,
+
+    // Username Blacklist (39-43)
+    /// <summary>Username blacklist entry added</summary>
+    BlacklistEntryAdded = 39,
+
+    /// <summary>Username blacklist entry removed</summary>
+    BlacklistEntryRemoved = 40,
+
+    /// <summary>Username blacklist entry enabled</summary>
+    BlacklistEntryEnabled = 41,
+
+    /// <summary>Username blacklist entry disabled</summary>
+    BlacklistEntryDisabled = 42,
+
+    /// <summary>Username blacklist entry notes changed</summary>
+    BlacklistEntryNotesChanged = 43,
 }
