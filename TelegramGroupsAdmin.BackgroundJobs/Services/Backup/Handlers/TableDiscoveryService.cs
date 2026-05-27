@@ -64,7 +64,7 @@ public class TableDiscoveryService
         return mapping;
     }
 
-    internal static Type? FindDtoForTable(string tableName, IReadOnlyList<Type> dtoTypes)
+    internal static Type? FindDtoForTable(string tableName, IEnumerable<Type> dtoTypes)
     {
         return dtoTypes.FirstOrDefault(dto =>
             dto.GetCustomAttribute<TableAttribute>()?.Name?.Equals(tableName, StringComparison.OrdinalIgnoreCase) == true);

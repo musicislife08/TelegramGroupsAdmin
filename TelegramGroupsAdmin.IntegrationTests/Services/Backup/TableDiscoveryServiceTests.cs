@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Reflection;
 using Microsoft.Extensions.Logging;
+using Npgsql;
 using NSubstitute;
 using NUnit.Framework;
 using TelegramGroupsAdmin.BackgroundJobs.Services.Backup.Handlers;
@@ -12,6 +13,12 @@ namespace TelegramGroupsAdmin.IntegrationTests.Services.Backup;
 [TestFixture]
 public class TableDiscoveryServiceTests
 {
+    private static IReadOnlyList<Type> GetDtoTypes() =>
+        typeof(AppDbContext).Assembly.GetTypes()
+            .Where(t => t.Namespace == "TelegramGroupsAdmin.Data.Models")
+            .Where(t => t.Name.EndsWith("Dto") && (t.IsClass || t.IsValueType))
+            .ToList();
+
     [Test]
     public void EveryTableBackedDtoHasTableAttribute()
     {
@@ -24,12 +31,7 @@ public class TableDiscoveryServiceTests
             "RawAlgorithmPerformanceStatsDto",
         };
 
-        var dtoTypes = typeof(AppDbContext).Assembly.GetTypes()
-            .Where(t => t.Namespace == "TelegramGroupsAdmin.Data.Models")
-            .Where(t => t.Name.EndsWith("Dto") && t.IsClass)
-            .ToList();
-
-        var missingTableAttr = dtoTypes
+        var missingTableAttr = GetDtoTypes()
             .Where(t => !expectedNonTableBacked.Contains(t.Name))
             .Where(t => t.GetCustomAttribute<TableAttribute>() is null)
             .Select(t => t.Name)
@@ -43,12 +45,7 @@ public class TableDiscoveryServiceTests
     [Test]
     public void FindDtoForTable_ResolvesUsernameBlacklist_ToUsernameBlacklistEntryDto()
     {
-        var dtoTypes = typeof(AppDbContext).Assembly.GetTypes()
-            .Where(t => t.Namespace == "TelegramGroupsAdmin.Data.Models")
-            .Where(t => t.Name.EndsWith("Dto") && t.IsClass)
-            .ToList();
-
-        var result = TableDiscoveryService.FindDtoForTable("username_blacklist", dtoTypes);
+        var result = TableDiscoveryService.FindDtoForTable("username_blacklist", GetDtoTypes());
 
         Assert.That(result, Is.Not.Null);
         Assert.That(result!.Name, Is.EqualTo("UsernameBlacklistEntryDto"));
@@ -57,12 +54,7 @@ public class TableDiscoveryServiceTests
     [Test]
     public void FindDtoForTable_ReturnsNullForUnmatchedTable()
     {
-        var dtoTypes = typeof(AppDbContext).Assembly.GetTypes()
-            .Where(t => t.Namespace == "TelegramGroupsAdmin.Data.Models")
-            .Where(t => t.Name.EndsWith("Dto") && t.IsClass)
-            .ToList();
-
-        var result = TableDiscoveryService.FindDtoForTable("qrtz_locks", dtoTypes);
+        var result = TableDiscoveryService.FindDtoForTable("qrtz_locks", GetDtoTypes());
 
         Assert.That(result, Is.Null);
     }
@@ -70,12 +62,7 @@ public class TableDiscoveryServiceTests
     [Test]
     public void FindDtoForTable_IsCaseInsensitive()
     {
-        var dtoTypes = typeof(AppDbContext).Assembly.GetTypes()
-            .Where(t => t.Namespace == "TelegramGroupsAdmin.Data.Models")
-            .Where(t => t.Name.EndsWith("Dto") && t.IsClass)
-            .ToList();
-
-        var result = TableDiscoveryService.FindDtoForTable("USERNAME_BLACKLIST", dtoTypes);
+        var result = TableDiscoveryService.FindDtoForTable("USERNAME_BLACKLIST", GetDtoTypes());
 
         Assert.That(result, Is.Not.Null);
         Assert.That(result!.Name, Is.EqualTo("UsernameBlacklistEntryDto"));
@@ -87,7 +74,7 @@ public class TableDiscoveryServiceTests
         using var testHelper = new MigrationTestHelper();
         await testHelper.CreateDatabaseFromGoldenTemplateAsync();
 
-        await using var connection = new Npgsql.NpgsqlConnection(testHelper.ConnectionString);
+        await using var connection = new NpgsqlConnection(testHelper.ConnectionString);
         await connection.OpenAsync();
 
         var logger = Substitute.For<ILogger<TableDiscoveryService>>();
