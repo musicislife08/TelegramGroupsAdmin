@@ -18,6 +18,8 @@ public class TagDefinitionsRepository : ITagDefinitionsRepository
         _logger = logger;
     }
 
+    private static string NormalizeTagName(string tagName) => tagName.Trim().ToLowerInvariant();
+
     public async Task<List<TagDefinition>> GetAllAsync(CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
@@ -31,7 +33,7 @@ public class TagDefinitionsRepository : ITagDefinitionsRepository
 
     public async Task<TagDefinition?> GetByNameAsync(string tagName, CancellationToken cancellationToken = default)
     {
-        var normalizedTag = tagName.ToLowerInvariant();
+        var normalizedTag = NormalizeTagName(tagName);
 
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var definition = await context.TagDefinitions
@@ -42,7 +44,7 @@ public class TagDefinitionsRepository : ITagDefinitionsRepository
 
     public async Task<TagDefinition> CreateAsync(string tagName, Models.TagColor color, CancellationToken cancellationToken = default)
     {
-        var normalizedTag = tagName.Trim().ToLowerInvariant();
+        var normalizedTag = NormalizeTagName(tagName);
         var now = DateTimeOffset.UtcNow;
         var dataColor = (int)(Data.Models.TagColor)color;
 
@@ -63,7 +65,7 @@ public class TagDefinitionsRepository : ITagDefinitionsRepository
 
     public async Task<bool> UpdateColorAsync(string tagName, Models.TagColor color, CancellationToken cancellationToken = default)
     {
-        var normalizedTag = tagName.ToLowerInvariant();
+        var normalizedTag = NormalizeTagName(tagName);
 
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var definition = await context.TagDefinitions
@@ -85,7 +87,7 @@ public class TagDefinitionsRepository : ITagDefinitionsRepository
 
     public async Task<bool> DeleteAsync(string tagName, CancellationToken cancellationToken = default)
     {
-        var normalizedTag = tagName.ToLowerInvariant();
+        var normalizedTag = NormalizeTagName(tagName);
 
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var definition = await context.TagDefinitions
@@ -113,7 +115,7 @@ public class TagDefinitionsRepository : ITagDefinitionsRepository
 
     public async Task IncrementUsageAsync(string tagName, CancellationToken cancellationToken = default)
     {
-        var normalizedTag = tagName.ToLowerInvariant();
+        var normalizedTag = NormalizeTagName(tagName);
         var now = DateTimeOffset.UtcNow;
         var primaryColor = (int)Data.Models.TagColor.Primary;
 
@@ -128,7 +130,7 @@ public class TagDefinitionsRepository : ITagDefinitionsRepository
 
     public async Task DecrementUsageAsync(string tagName, CancellationToken cancellationToken = default)
     {
-        var normalizedTag = tagName.ToLowerInvariant();
+        var normalizedTag = NormalizeTagName(tagName);
 
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var definition = await context.TagDefinitions
@@ -153,7 +155,7 @@ public class TagDefinitionsRepository : ITagDefinitionsRepository
 
     public async Task<bool> ExistsAsync(string tagName, CancellationToken cancellationToken = default)
     {
-        var normalizedTag = tagName.ToLowerInvariant();
+        var normalizedTag = NormalizeTagName(tagName);
 
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         return await context.TagDefinitions
@@ -162,7 +164,7 @@ public class TagDefinitionsRepository : ITagDefinitionsRepository
 
     public async Task<List<string>> SearchTagNamesAsync(string searchTerm, int limit = 50, CancellationToken cancellationToken = default)
     {
-        var normalizedSearch = searchTerm.ToLowerInvariant();
+        var normalizedSearch = NormalizeTagName(searchTerm);
 
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var tagNames = await context.TagDefinitions

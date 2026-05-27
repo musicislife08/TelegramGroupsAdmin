@@ -151,19 +151,30 @@
 
     private async Task ToggleEnabled(UsernameBlacklistEntry entry)
     {
-        var newState = !entry.Enabled;
-        var ok = await BlacklistService.SetEnabledAsync(
-            entry.Id, entry.Pattern, newState, WebUser!.ToActor());
-
-        if (ok)
+        if (_busy) return;
+        _busy = true;
+        try
         {
-            Snackbar.Add($"{(newState ? "Enabled" : "Disabled")} \"{entry.Pattern}\"", Severity.Success);
-            await LoadEntries();
+            var newState = !entry.Enabled;
+            var ok = await BlacklistService.SetEnabledAsync(entry.Id, entry.Pattern, newState, WebUser!.ToActor());
+            if (ok)
+            {
+                Snackbar.Add($"{(newState ? "Enabled" : "Disabled")} \"{entry.Pattern}\"", Severity.Success);
+                await LoadEntries();
+            }
+            else
+            {
+                Snackbar.Add("Entry not found — it may have been deleted", Severity.Warning);
+                await LoadEntries();
+            }
         }
-        else
+        catch (Exception ex)
         {
-            Snackbar.Add("Entry not found — it may have been deleted", Severity.Warning);
-            await LoadEntries();
+            Snackbar.Add($"Error toggling entry: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
         }
     }
 
@@ -175,11 +186,14 @@
             yesText: "Delete",
             cancelText: "Cancel");
 
-        if (confirmed == true)
-        {
-            var ok = await BlacklistService.DeleteEntryAsync(
-                entry.Id, entry.Pattern, WebUser!.ToActor());
+        if (confirmed != true)
+            return;
 
+        if (_busy) return;
+        _busy = true;
+        try
+        {
+            var ok = await BlacklistService.DeleteEntryAsync(entry.Id, entry.Pattern, WebUser!.ToActor());
             if (ok)
             {
                 Snackbar.Add($"Deleted \"{entry.Pattern}\"", Severity.Success);
@@ -190,6 +204,14 @@
                 Snackbar.Add("Entry not found — it may have already been deleted", Severity.Warning);
                 await LoadEntries();
             }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error deleting entry: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
         }
     }
 }

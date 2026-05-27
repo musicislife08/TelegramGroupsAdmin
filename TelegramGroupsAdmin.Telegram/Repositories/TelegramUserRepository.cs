@@ -61,11 +61,11 @@ public class TelegramUserRepository : ITelegramUserRepository
             ON CONFLICT (telegram_user_id) DO NOTHING
             """, cancellationToken);
 
-        _logger.LogDebug("Ensured Telegram user {User}", user.ToLogDebug());
-
         var entity = await context.TelegramUsers
             .AsNoTracking()
             .FirstAsync(u => u.TelegramUserId == user.Id, cancellationToken);
+
+        _logger.LogDebug("Ensured Telegram user {User}", user.ToLogDebug());
 
         return entity.ToModel();
     }

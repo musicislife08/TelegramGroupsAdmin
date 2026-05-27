@@ -30,18 +30,20 @@ public class QuartzSchedulingSyncService(
             // Ensure default job configs exist
             await jobConfigService.EnsureDefaultConfigsAsync(stoppingToken);
 
-            // Register this service with BackgroundJobConfigService for live re-sync notifications
-            if (jobConfigService is BackgroundJobConfigService configService)
-            {
-                configService.SetSyncService(this);
-                logger.LogDebug("Registered with BackgroundJobConfigService for live config re-sync");
-            }
-
             // Perform initial sync on startup
             await synchronizer.SyncAsync(scheduler, stoppingToken);
 
             // Update NextRunAt for all jobs after initial sync
             await synchronizer.UpdateNextRunTimesAsync(scheduler, stoppingToken);
+
+            // Register this service with BackgroundJobConfigService for live re-sync notifications.
+            // Registered after the initial sync so a config change that races startup doesn't
+            // queue a spurious immediate re-sync before the loop is even entered.
+            if (jobConfigService is BackgroundJobConfigService configService)
+            {
+                configService.SetSyncService(this);
+                logger.LogDebug("Registered with BackgroundJobConfigService for live config re-sync");
+            }
 
             logger.LogInformation("QuartzSchedulingSyncService initial sync complete - listening for config changes");
 
@@ -102,5 +104,11 @@ public class QuartzSchedulingSyncService(
     {
         logger.LogInformation("QuartzSchedulingSyncService stopping...");
         await base.StopAsync(cancellationToken);
+    }
+
+    public override void Dispose()
+    {
+        _resyncSignal.Dispose();
+        base.Dispose();
     }
 }
