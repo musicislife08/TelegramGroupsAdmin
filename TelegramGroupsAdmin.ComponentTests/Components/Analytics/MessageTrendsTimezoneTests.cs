@@ -25,19 +25,19 @@ public abstract class MessageTrendsTimezoneContext : BunitContext
 {
     protected IMessageStatsService MessageStatsService { get; }
     protected IAnalyticsRepository AnalyticsRepository { get; }
-    protected IManagedChatsRepository ManagedChatsRepository { get; }
+    protected IManagedChatsRepository ChatsRepository { get; }
     protected ISnackbar Snackbar { get; }
 
     protected MessageTrendsTimezoneContext(TimeZoneInfo? initialTimeZone)
     {
         MessageStatsService = Substitute.For<IMessageStatsService>();
         AnalyticsRepository = Substitute.For<IAnalyticsRepository>();
-        ManagedChatsRepository = Substitute.For<IManagedChatsRepository>();
+        ChatsRepository = Substitute.For<IManagedChatsRepository>();
         Snackbar = Substitute.For<ISnackbar>();
 
         Services.AddSingleton(MessageStatsService);
         Services.AddSingleton(AnalyticsRepository);
-        Services.AddSingleton(ManagedChatsRepository);
+        Services.AddSingleton(ChatsRepository);
         Services.AddSingleton(Snackbar);
 
         Services.AddMudServices(options =>
@@ -58,7 +58,7 @@ public abstract class MessageTrendsTimezoneContext : BunitContext
         RenderTree.TryAdd<CascadingValue<TimeZoneInfo?>>(p =>
             p.Add(cv => cv.Value, initialTimeZone));
 
-        ManagedChatsRepository.GetUserAccessibleChatsAsync(
+        ChatsRepository.GetUserAccessibleChatsAsync(
                 Arg.Any<string>(),
                 Arg.Any<PermissionLevel>(),
                 Arg.Any<bool>(),
@@ -84,7 +84,7 @@ public abstract class MessageTrendsTimezoneContext : BunitContext
     {
         MessageStatsService.ClearReceivedCalls();
         AnalyticsRepository.ClearReceivedCalls();
-        ManagedChatsRepository.ClearReceivedCalls();
+        ChatsRepository.ClearReceivedCalls();
     }
 
     /// <summary>
