@@ -102,10 +102,16 @@ public class QuartzSchedulingSyncService(
     }
 
     /// <summary>
+    /// Sets the scheduler instance directly. Used by integration tests to bypass
+    /// ExecuteAsync so SyncSchedulesAsync can be exercised in isolation.
+    /// </summary>
+    internal void SetSchedulerForTesting(IScheduler scheduler) => _scheduler = scheduler;
+
+    /// <summary>
     /// Syncs all job configurations from database to Quartz scheduler
     /// Creates triggers for enabled jobs, removes triggers for disabled jobs
     /// </summary>
-    private async Task SyncSchedulesAsync(CancellationToken cancellationToken)
+    internal async Task SyncSchedulesAsync(CancellationToken cancellationToken)
     {
         logger.LogInformation("Syncing job schedules from database to Quartz...");
 
@@ -158,8 +164,11 @@ public class QuartzSchedulingSyncService(
             }
         }
 
-        // Clean up orphaned Quartz jobs whose types were removed (e.g., after job merges/renames)
-        await RemoveOrphanedJobsAsync(allJobs.Keys, cancellationToken);
+        // Clean up orphaned Quartz jobs whose types were removed (e.g., after job merges/renames).
+        // Use BackgroundJobNames.AllRegisteredNames — the authoritative CLR-registered set — instead
+        // of allJobs.Keys (DB-config keyset). This prevents legitimate ad-hoc jobs (DeleteMessage,
+        // FileScan, etc.) from being deleted on every startup.
+        await RemoveOrphanedJobsAsync(BackgroundJobNames.AllRegisteredNames, cancellationToken);
 
         logger.LogInformation("Job schedule sync complete");
     }

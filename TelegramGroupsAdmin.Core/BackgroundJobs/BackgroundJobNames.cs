@@ -1,3 +1,6 @@
+using System.Collections.Immutable;
+using System.Reflection;
+
 namespace TelegramGroupsAdmin.Core.BackgroundJobs;
 
 /// <summary>
@@ -6,6 +9,20 @@ namespace TelegramGroupsAdmin.Core.BackgroundJobs;
 /// </summary>
 public static class BackgroundJobNames
 {
+    private static readonly ImmutableHashSet<string> _allNames =
+        typeof(BackgroundJobNames)
+            .GetFields(BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy)
+            .Where(f => f.IsLiteral && f.FieldType == typeof(string))
+            .Select(f => (string)f.GetRawConstantValue()!)
+            .ToImmutableHashSet(StringComparer.Ordinal);
+
+    /// <summary>
+    /// All CLR-registered job identity names, sourced via reflection over the
+    /// public const string fields of this type. Materialized once at type-load.
+    /// Use this as the authoritative "registered" set for orphan detection.
+    /// </summary>
+    public static IReadOnlySet<string> AllRegisteredNames => _allNames;
+
     /// <summary>
     /// Scheduled database backups with retention management
     /// Quartz Job: ScheduledBackupJob
