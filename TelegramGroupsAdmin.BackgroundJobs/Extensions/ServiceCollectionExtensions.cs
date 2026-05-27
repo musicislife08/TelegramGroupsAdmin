@@ -37,7 +37,11 @@ public static class ServiceCollectionExtensions
 
         // Note: RetryJobListener is registered by Quartz via AddJobListener<T>() below
 
-        // Register scheduling sync service (syncs database configs to Quartz triggers)
+        // Register the Quartz schedule synchronizer (holds the sync business logic).
+        // The hosted worker below is a thin shell that drives this service.
+        services.AddSingleton<IQuartzScheduleSynchronizer, QuartzScheduleSynchronizer>();
+
+        // Register scheduling sync worker (drives IQuartzScheduleSynchronizer on a loop)
         services.AddHostedService<QuartzSchedulingSyncService>();
 
         // Configure Quartz.NET
