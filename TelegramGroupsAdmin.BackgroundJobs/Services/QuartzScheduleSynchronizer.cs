@@ -21,7 +21,6 @@ public class QuartzScheduleSynchronizer(
     {
         logger.LogInformation("Syncing job schedules from database to Quartz...");
 
-        // Get all job configs from database
         var allJobs = await jobConfigService.GetAllJobsAsync(cancellationToken);
 
         logger.LogInformation("Found {JobCount} job configurations in database", allJobs.Count);
@@ -30,10 +29,8 @@ public class QuartzScheduleSynchronizer(
         {
             try
             {
-                // Map job name to Quartz JobKey (must match registered job identities)
                 var jobKey = new JobKey(jobName);
 
-                // Check if job exists in Quartz
                 var jobExists = await scheduler.CheckExists(jobKey, cancellationToken);
                 if (!jobExists)
                 {
@@ -43,24 +40,21 @@ public class QuartzScheduleSynchronizer(
                     continue;
                 }
 
-                // Generate trigger key (unique per job)
                 var triggerKey = new TriggerKey($"{jobName}_Trigger", "ScheduledJobs");
 
                 if (config.Enabled && !string.IsNullOrEmpty(config.Schedule))
                 {
-                    // Create or update trigger for enabled job
                     await CreateOrUpdateTriggerAsync(scheduler, jobKey, triggerKey, config, cancellationToken);
                 }
                 else
                 {
-                    // Remove trigger for disabled jobs
                     await RemoveTriggerIfExistsAsync(scheduler, triggerKey, jobName, cancellationToken);
                 }
             }
             catch (Exception ex)
             {
+                // Swallow per-job failures so one bad config doesn't abort the whole sync pass.
                 logger.LogError(ex, "Failed to sync schedule for job {JobName}", jobName);
-                // Continue processing other jobs
             }
         }
 
@@ -117,15 +111,14 @@ public class QuartzScheduleSynchronizer(
     /// </summary>
     private async Task RemoveOrphanedJobsAsync(
         IScheduler scheduler,
-        IEnumerable<string> registeredJobNames,
+        IReadOnlySet<string> registeredJobNames,
         CancellationToken cancellationToken)
     {
-        var registered = registeredJobNames.ToHashSet();
         var allQuartzJobs = await scheduler.GetJobKeys(GroupMatcher<JobKey>.AnyGroup(), cancellationToken);
 
         foreach (var jobKey in allQuartzJobs)
         {
-            if (!registered.Contains(jobKey.Name))
+            if (!registeredJobNames.Contains(jobKey.Name))
             {
                 await scheduler.DeleteJob(jobKey, cancellationToken);
                 logger.LogWarning("Removed orphaned Quartz job {JobName} — type no longer registered", jobKey.Name);
@@ -144,8 +137,8 @@ public class QuartzScheduleSynchronizer(
         BackgroundJobConfig config,
         CancellationToken cancellationToken)
     {
-        // Create pre-configured trigger builder (schedule + start time already set)
-        // For ClassifierRetrainingJob, skip missed executions (we already train fresh on startup)
+        // ClassifierRetrainingJob trains fresh on startup, so missed cron executions
+        // are not worth catching up on — use DoNothing instead of the SmartPolicy default.
         var misfireInstruction = config.JobName == BackgroundJobNames.ClassifierRetraining
             ? MisfireInstruction.CronTrigger.DoNothing
             : MisfireInstruction.SmartPolicy;
@@ -154,7 +147,6 @@ public class QuartzScheduleSynchronizer(
 
         if (parseResult is not HumanCron.Models.ParseResult<TriggerBuilder>.Success successResult)
         {
-            // Parse failed - log error and skip this job
             var errorMessage = parseResult is HumanCron.Models.ParseResult<TriggerBuilder>.Error errorResult
                 ? errorResult.Message
                 : "Unknown parse error";
@@ -171,7 +163,6 @@ public class QuartzScheduleSynchronizer(
 
         if (existingTrigger != null)
         {
-            // Check if schedule changed by comparing stored natural language schedule
             if (existingTrigger.JobDataMap.TryGetString("NaturalLanguageSchedule", out var existingSchedule) &&
                 existingSchedule == config.Schedule)
             {
@@ -182,7 +173,6 @@ public class QuartzScheduleSynchronizer(
                 return;
             }
 
-            // Schedule changed - remove old trigger
             logger.LogInformation(
                 "Schedule changed for {JobName} from '{OldSchedule}' to '{NewSchedule}', updating trigger",
                 config.JobName,
@@ -191,12 +181,11 @@ public class QuartzScheduleSynchronizer(
             await scheduler.UnscheduleJob(triggerKey, cancellationToken);
         }
 
-        // Complete the trigger with job-specific metadata
         var trigger = successResult.Value
             .WithIdentity(triggerKey)
             .ForJob(jobKey)
             .WithDescription($"Scheduled trigger for {config.DisplayName}")
-            .UsingJobData("NaturalLanguageSchedule", config.Schedule) // Store for change detection
+            .UsingJobData("NaturalLanguageSchedule", config.Schedule) // persisted so the next sync can detect schedule changes
             .Build();
 
         await scheduler.ScheduleJob(trigger, cancellationToken);
@@ -238,7 +227,6 @@ public class QuartzScheduleSynchronizer(
         if (!nextFireTimeUtc.HasValue)
             return "unknown";
 
-        // Get trigger's timezone if it's a cron or calendar interval trigger
         TimeZoneInfo? triggerTimeZone = trigger switch
         {
             ICronTrigger cronTrigger => cronTrigger.TimeZone,
@@ -246,12 +234,10 @@ public class QuartzScheduleSynchronizer(
             _ => null
         };
 
-        // Convert UTC to trigger's timezone (or local if not specified)
         var localTime = triggerTimeZone != null
             ? TimeZoneInfo.ConvertTimeFromUtc(nextFireTimeUtc.Value.UtcDateTime, triggerTimeZone)
             : nextFireTimeUtc.Value.ToLocalTime();
 
-        // Format with timezone offset
         return localTime.ToString("yyyy-MM-dd HH:mm:ss zzz");
     }
 }

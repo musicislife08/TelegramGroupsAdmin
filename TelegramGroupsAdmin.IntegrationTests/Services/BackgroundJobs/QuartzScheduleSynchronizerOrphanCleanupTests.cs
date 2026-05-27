@@ -106,17 +106,29 @@ public class QuartzScheduleSynchronizerOrphanCleanupTests
     [Test]
     public async Task SyncAsync_DeletesGenuineOrphans()
     {
-        // Seed a ghost job that does not exist in BackgroundJobNames.
+        // SetUp already seeds every BackgroundJobNames entry (including DeleteMessage); seeding
+        // the ghost here makes it the only orphan in the scheduler when SyncAsync runs.
         var ghostKey = new JobKey("GhostJobThatNoLongerExists");
         await _scheduler.AddJob(
             JobBuilder.Create<NoOpJob>().WithIdentity(ghostKey).StoreDurably().Build(),
             replace: true);
 
         Assert.That(await _scheduler.CheckExists(ghostKey), Is.True);
+        Assert.That(
+            await _scheduler.CheckExists(new JobKey(BackgroundJobNames.DeleteMessage)),
+            Is.True,
+            "Precondition: SetUp should have seeded DeleteMessage alongside every other CLR job.");
 
         await _synchronizer.SyncAsync(_scheduler, CancellationToken.None);
 
-        Assert.That(await _scheduler.CheckExists(ghostKey), Is.False);
+        // Belt-and-suspenders against #459 regression. Without the second assertion this test would
+        // pass even if AllRegisteredNames were reverted to allJobs.Keys (which would delete every
+        // CLR job alongside the ghost — including DeleteMessage).
+        var remaining = (await _scheduler.GetJobKeys(GroupMatcher<JobKey>.AnyGroup()))
+            .Select(k => k.Name)
+            .ToHashSet();
+        Assert.That(remaining, Does.Not.Contain(ghostKey.Name));
+        Assert.That(remaining, Does.Contain(BackgroundJobNames.DeleteMessage));
     }
 
     private sealed class NoOpJob : IJob
