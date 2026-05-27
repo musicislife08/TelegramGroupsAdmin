@@ -321,9 +321,24 @@
     private static long DateToUnixMs(DateOnly date) =>
         new DateTimeOffset(date.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero).ToUnixTimeMilliseconds();
 
+    private TimeZoneInfo? _seenTimeZone;
+
     protected override async Task OnInitializedAsync()
     {
-        await LoadLast30Days();
+        if (UserTimeZone is not null)
+        {
+            _seenTimeZone = UserTimeZone;
+            await LoadLast30Days();
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_seenTimeZone is null && UserTimeZone is not null)
+        {
+            _seenTimeZone = UserTimeZone;
+            await LoadLast30Days();
+        }
     }
 
     private async Task LoadLast7Days()
@@ -353,7 +368,7 @@
             return;
 
         _loading = true;
-        var timeZoneId = (UserTimeZone ?? TimeZoneInfo.Utc).Id;
+        var timeZoneId = UserTimeZone!.Id;
         try
         {
             // Load all analytics data in parallel

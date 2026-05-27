@@ -424,6 +424,8 @@
         return [_selectedChatId];
     }
 
+    private TimeZoneInfo? _seenTimeZone;
+
     protected override async Task OnInitializedAsync()
     {
         if (WebUser is null) return;
@@ -434,7 +436,20 @@
             WebUser.PermissionLevel,
             cancellationToken: CancellationToken.None);
 
-        await LoadLast30Days();
+        if (UserTimeZone is not null)
+        {
+            _seenTimeZone = UserTimeZone;
+            await LoadLast30Days();
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_seenTimeZone is null && UserTimeZone is not null)
+        {
+            _seenTimeZone = UserTimeZone;
+            await LoadLast30Days();
+        }
     }
 
     private async Task LoadLast7Days()
@@ -480,7 +495,7 @@
 
         try
         {
-            var timeZoneId = (UserTimeZone ?? TimeZoneInfo.Utc).Id;
+            var timeZoneId = UserTimeZone!.Id;
 
             // Load message trends and spam trend comparison in parallel
             var trendsTask = MessageStatsService.GetMessageTrendsAsync(
