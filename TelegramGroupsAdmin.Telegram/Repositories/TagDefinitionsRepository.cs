@@ -58,7 +58,6 @@ public class TagDefinitionsRepository : ITagDefinitionsRepository
             .AsNoTracking()
             .FirstAsync(td => td.TagName == normalizedTag, cancellationToken);
 
-        _logger.LogInformation("Ensured tag definition exists: {TagName}", normalizedTag);
         return definition.ToModel();
     }
 

@@ -101,12 +101,12 @@ public class TagDefinitionsRepositoryRaceTests
 
         const int concurrentCalls = 20;
         var tasks = Enumerable.Range(0, concurrentCalls)
-            .Select(_ =>
+            .Select(_ => Task.Run(async () =>
             {
-                var scope = _serviceProvider!.CreateAsyncScope();
-                var repo = scope.ServiceProvider.GetRequiredService<ITagDefinitionsRepository>();
-                return Task.Run(() => repo.IncrementUsageAsync(tagName, CancellationToken.None));
-            })
+                await using var scope = _serviceProvider!.CreateAsyncScope();
+                var scopedRepo = scope.ServiceProvider.GetRequiredService<ITagDefinitionsRepository>();
+                await scopedRepo.IncrementUsageAsync(tagName, CancellationToken.None);
+            }))
             .ToArray();
 
         // Act
