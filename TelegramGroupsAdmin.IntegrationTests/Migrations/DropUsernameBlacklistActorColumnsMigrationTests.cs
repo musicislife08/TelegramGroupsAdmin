@@ -29,6 +29,9 @@ public class DropUsernameBlacklistActorColumnsMigrationTests
                 columns.Add(reader.GetString(0));
         }
 
+        Assert.That(columns, Is.Not.Empty,
+            "username_blacklist table is missing — columns query returned zero rows");
+
         Assert.That(columns, Does.Not.Contain("web_user_id"));
         Assert.That(columns, Does.Not.Contain("telegram_user_id"));
         Assert.That(columns, Does.Not.Contain("system_identifier"));
