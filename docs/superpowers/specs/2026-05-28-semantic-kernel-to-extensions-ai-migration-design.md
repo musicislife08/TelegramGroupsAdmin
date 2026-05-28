@@ -72,8 +72,10 @@ public enum AIProviderType
   *chat client* (`client.GetChatClient(model)`), not on the top-level `OpenAIClient`.
 - `IChatClient : IDisposable` — **must dispose evicted cache entries** (SK's `Kernel`
   was not disposable; this is new responsibility).
-- `ChatOptions.Temperature` is `float?`; the existing `ChatCompletionOptions.Temperature`
-  is `double?` → **narrowing cast required** in the mapping.
+- `ChatOptions.Temperature` is `float?`. Rather than cast at the boundary, the **temperature
+  type is changed to `float` across the whole chain** (options, feature config, data layer,
+  UI) so the abstraction speaks the same type as its implementation. See the dedicated
+  temperature-type subsection in commit 1. No data migration (JSON has one number type).
 - `ChatOptions.MaxOutputTokens` is `int?` (maps cleanly from `MaxTokens`).
 - `ChatOptions.ResponseFormat = ChatResponseFormat.Json` replaces the SK `"json_object"`
   string for JSON mode.
@@ -140,8 +142,8 @@ commits 2–3 are additive.
   - `ChatHistory` + `AddSystemMessage`/`AddUserMessage` → `List<ChatMessage>` with
     `ChatRole.System` / `ChatRole.User`.
   - Vision: SK `ImageContent` → MEAI `DataContent(bytes, mimeType)`; text → `TextContent`.
-  - `OpenAIPromptExecutionSettings` → `ChatOptions { MaxOutputTokens, Temperature (cast to
-    float), ResponseFormat }`.
+  - `OpenAIPromptExecutionSettings` → `ChatOptions { MaxOutputTokens, Temperature,
+    ResponseFormat }` (Temperature now `float?` end-to-end — no cast; see below).
   - `GetChatMessageContentAsync(...)` → `IChatClient.GetResponseAsync(messages, options,
     ct)`.
   - `CreateResult`: read `response.Text`/message content, `response.Usage?.*` (cast `long?`
@@ -149,6 +151,23 @@ commits 2–3 are additive.
     `ChatCompletionResult` shape is unchanged.
 - Keep the existing `Stopwatch` + `try/catch` + `ApiMetrics.RecordOpenAiCall(...)`
   instrumentation **exactly as-is** (see Telemetry decision below).
+
+### Temperature type change (`double` → `float`, end-to-end)
+MEAI's `ChatOptions.Temperature` is `float?` where SK used `double`. Rather than cast at
+the boundary, change the type across the chain so the abstraction matches its implementation:
+- `TelegramGroupsAdmin.AI/Services/ChatCompletionOptions.cs:16`: `double?` → `float?`.
+- `TelegramGroupsAdmin.Configuration/Models/AIFeatureConfig.cs:26`: `double = 0.2` →
+  `float = 0.2f`.
+- `TelegramGroupsAdmin.Data/Models/Configs/AIFeatureConfigData.cs:26`: `double = 0.2` →
+  `float = 0.2f` (persisted JSONB; **no migration** — JSON has one number type, `0.2`
+  round-trips identically).
+- The `AIFeatureConfig` ↔ `AIFeatureConfigData` mapping assigns `Temperature` directly —
+  both `float`, no cast.
+- `TelegramGroupsAdmin/Components/Shared/ContentDetection/AIFeatureCard.razor:291`:
+  `OnTemperatureChanged(double value)` → `(float value)`; the bound `MudNumericField`
+  becomes `T="float"` (its `Step`/`Min`/`Max` attribute values become `float`).
+- Behavior-preserving: `0.2f` and `0.2d` both serialize to the wire string `"0.2"` sent to
+  the provider.
 
 ### Knock-on references
 - `TelegramGroupsAdmin/Services/MemoryMetrics.cs:95-99`: the gauge bound to
@@ -180,15 +199,21 @@ dashboard label change consistent with the no-backward-compat rule. If the exist
 it — default is to rename.
 
 ### Verification (hybrid contract)
-- The existing AI tests **must pass unchanged**: `AIContentCheckTests`,
+- The existing AI tests **must pass with no change to assertion intent**: `AIContentCheckTests`,
   `ExamEvaluationServiceTests`, `ProfileScoringEngineTests` (UnitTests),
   `FeatureTestServiceTests` (ComponentTests).
+- **One permitted class of mechanical test edit:** the `double` → `float` temperature
+  change forces numeric-literal suffix updates in config/integration tests (`0.2` →
+  `0.2f`, `Is.EqualTo(0.2)` → `Is.EqualTo(0.2f)`) at `AIProviderConfigTests`,
+  `AIProviderConfigIntegrationTests`, and `AIFeatureCardTests`. These are mechanical;
+  assertion *intent* is unchanged. (`ExamEvaluationServiceTests:607` asserts `Is.Null` —
+  type-agnostic, no edit.)
 - **Dedicated audit step:** dispatch an agent to scan the test projects for any SK type
   that leaked into test setup/mocks (`ChatHistory`, `Kernel`, `OpenAIPromptExecutionSettings`,
   `IChatCompletionService`, `Microsoft.SemanticKernel.*`) and flag any mechanical
-  adjustment needed. Assertions must remain unchanged; only type/namespace plumbing may be
-  touched if found. (Pre-check shows zero such references, so the expected outcome is "no
-  changes needed" — the audit confirms it.)
+  adjustment needed beyond the temperature suffixes. (Pre-check shows zero SK-type
+  references in tests, so the expected outcome is "no SK-related changes needed" — the
+  audit confirms it.)
 - `dotnet build` with `TreatWarningsAsErrors=true` must be clean (no leftover obsolete-API
   warnings, e.g. accidental `AsChatClient`).
 
@@ -297,8 +322,9 @@ Anthropic = 4   // appended
    the enum; fall back to SDK default + Debug log when unrecognized. Low practical risk —
    no Azure connection is configured in the primary deployment — but the public codebase
    supports Azure, so the mapping must exist.
-3. **`double` → `float` temperature cast.** Mechanical; no precision concern at the 0.0–2.0
-   range used.
+3. **`double` → `float` temperature type change.** Done end-to-end (no cast); see the
+   commit-1 temperature subsection. No data migration; behavior-preserving on the wire.
+   Forces ~8 mechanical test-literal suffix edits (covered by the hybrid contract).
 4. **Token counts `long?` → `int?`.** Safe for realistic token volumes; clamp/cast in
    `CreateResult`.
 5. **Anthropic package disambiguation.** Must reference `Anthropic.SDK` (tghamm), not the
