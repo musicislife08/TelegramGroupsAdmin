@@ -236,7 +236,7 @@ public class ProfilePage
     /// over IsTotpEnabledAsync() in test assertions: IsVisibleAsync() is a point-in-time
     /// snapshot and races the alert's async (Blazor) render under load.
     /// </summary>
-    public async Task AssertTotpEnabledAsync(float? timeoutMs = null)
+    public async Task AssertTotpEnabledAsync(int? timeoutMs = null)
     {
         var locator = _page.Locator(TotpSection).Locator(TotpEnabledAlert);
         await Expect(locator).ToBeVisibleAsync(timeoutMs is { } t ? new() { Timeout = t } : null);
@@ -246,7 +246,7 @@ public class ProfilePage
     /// Asserts (auto-retrying) that the TOTP section shows the "not enabled" warning.
     /// Prefer this over IsTotpDisabledAsync() in test assertions (see AssertTotpEnabledAsync).
     /// </summary>
-    public async Task AssertTotpDisabledAsync(float? timeoutMs = null)
+    public async Task AssertTotpDisabledAsync(int? timeoutMs = null)
     {
         var locator = _page.Locator(TotpSection).Locator(TotpDisabledAlert);
         await Expect(locator).ToBeVisibleAsync(timeoutMs is { } t ? new() { Timeout = t } : null);
