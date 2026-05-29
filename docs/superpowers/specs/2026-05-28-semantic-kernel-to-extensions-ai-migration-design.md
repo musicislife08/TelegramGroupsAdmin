@@ -351,7 +351,16 @@ Anthropic = 4   // appended
 
 - Gemini / AWS Bedrock / Groq / DeepSeek as first-class providers — reachable today via the
   `OpenAICompatible` endpoint or OpenRouter.
-- Anthropic prompt caching.
+- **Anthropic prompt caching.** Not automatic (unlike OpenAI's transparent server-side
+  caching): Anthropic requires explicit `cache_control` markers on content blocks per
+  request. The official SDK supports this (`CacheControl` on `ContentBase`, `PromptCacheType`
+  strategies), but only on its **native** message types — MEAI's `IChatClient`/`ChatMessage`
+  has no `cache_control` concept, so enabling it would mean dropping out of the `IChatClient`
+  abstraction for Anthropic (recoupling to the beta native surface we minimize) or using MEAI
+  escape hatches. Also threshold-gated (1,024–4,096 tokens min, model-dependent) and only
+  helps large, stable, repeated prefixes. Future enhancement: first confirm TGA prompts clear
+  the threshold, then choose native-path vs. escape-hatch. (Note: distinct from MEAI's
+  `UseDistributedCache()`, which is a client-side whole-response cache, not prefix caching.)
 - Cost-per-feature dashboards / OpenRouter pricing surfacing.
 - Structured-output JSON-schema upgrades (`ChatResponseFormat.ForJsonSchema`) — current
   code only needs plain JSON mode.
