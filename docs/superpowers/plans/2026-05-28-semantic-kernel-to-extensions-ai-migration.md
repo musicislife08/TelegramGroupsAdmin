@@ -581,6 +581,13 @@ with:
     <PackageVersion Include="Azure.AI.OpenAI" Version="2.1.0" />
 ```
 
+Also bump two existing abstraction packages from `10.0.7` → `10.0.8` — `Microsoft.Extensions.AI` 10.6.0 declares a `10.0.8` floor on both, so leaving them at 10.0.7 produces `NU1109` package-downgrade errors under Central Package Management (verified against the MEAI nuspec; `Microsoft.Extensions.Caching.Hybrid`/ContentDetection already pull 10.0.8 transitively):
+
+```xml
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.8" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.8" />
+```
+
 - [ ] **Step 2: Update the AI project references**
 
 In `TelegramGroupsAdmin.AI/TelegramGroupsAdmin.AI.csproj`, remove the `SKEXP0010` NoWarn line:
@@ -724,7 +731,7 @@ Overwrite `TelegramGroupsAdmin.AI/Services/ChatService.cs` with:
 
 ```csharp
 using System.ClientModel;
-using System.ClientModel.Primitives;
+using System.ClientModel;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using Azure.AI.OpenAI;
@@ -752,7 +759,6 @@ public class ChatService : IChatService
     // disposed on eviction via InvalidateCache().
     private static readonly ConcurrentDictionary<string, CachedClient> ClientCache = new();
     private readonly ISystemConfigRepository _configRepository;
-    private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<ChatService> _logger;
     private readonly ApiMetrics _apiMetrics;
     private readonly CacheMetrics _cacheMetrics;
@@ -761,13 +767,11 @@ public class ChatService : IChatService
 
     public ChatService(
         ISystemConfigRepository configRepository,
-        IHttpClientFactory httpClientFactory,
         ILogger<ChatService> logger,
         ApiMetrics apiMetrics,
         CacheMetrics cacheMetrics)
     {
         _configRepository = configRepository;
-        _httpClientFactory = httpClientFactory;
         _logger = logger;
         _apiMetrics = apiMetrics;
         _cacheMetrics = cacheMetrics;
@@ -1263,9 +1267,12 @@ public class ChatService : IChatService
 
     /// <summary>
     /// Build an IChatClient for the given connection and feature config.
-    /// All clients share the pooled HTTP handler via IHttpClientFactory.
+    /// Transport is left unset so the OpenAI SDK uses its default shared transport
+    /// (System.ClientModel HttpClientPipelineTransport.Shared), pooling the HTTP handler
+    /// across all clients — no IHttpClientFactory dependency, no per-client handler.
+    /// Static: no instance state is needed.
     /// </summary>
-    private IChatClient BuildClient(AIConnection connection, AIFeatureConfig featureConfig, string? apiKey)
+    private static IChatClient BuildClient(AIConnection connection, AIFeatureConfig featureConfig, string? apiKey)
     {
         switch (connection.Provider)
         {
@@ -1273,9 +1280,7 @@ public class ChatService : IChatService
                 if (string.IsNullOrWhiteSpace(apiKey))
                     throw new InvalidOperationException("OpenAI API key is required");
 
-                return new OpenAIClient(
-                        new ApiKeyCredential(apiKey),
-                        new OpenAIClientOptions { Transport = new HttpClientPipelineTransport(_httpClientFactory.CreateClient()) })
+                return new OpenAIClient(new ApiKeyCredential(apiKey))
                     .GetChatClient(featureConfig.Model)
                     .AsIChatClient();
 
@@ -1289,8 +1294,7 @@ public class ChatService : IChatService
 
                 return new AzureOpenAIClient(
                         new Uri(connection.AzureEndpoint),
-                        new ApiKeyCredential(apiKey),
-                        new AzureOpenAIClientOptions { Transport = new HttpClientPipelineTransport(_httpClientFactory.CreateClient()) })
+                        new ApiKeyCredential(apiKey))
                     .GetChatClient(featureConfig.AzureDeploymentName)
                     .AsIChatClient();
 
@@ -1303,11 +1307,7 @@ public class ChatService : IChatService
 
                 return new OpenAIClient(
                         new ApiKeyCredential(localApiKey),
-                        new OpenAIClientOptions
-                        {
-                            Endpoint = new Uri(connection.LocalEndpoint),
-                            Transport = new HttpClientPipelineTransport(_httpClientFactory.CreateClient())
-                        })
+                        new OpenAIClientOptions { Endpoint = new Uri(connection.LocalEndpoint) })
                     .GetChatClient(featureConfig.Model)
                     .AsIChatClient();
 
@@ -1712,10 +1712,17 @@ public class ChatServiceCacheTests
 
     private static ChatService CreateService() => new(
         Substitute.For<ISystemConfigRepository>(),
-        Substitute.For<IHttpClientFactory>(),
         NullLogger<ChatService>.Instance,
         new ApiMetrics(),
         new CacheMetrics());
+
+    [TearDown]
+    public void ClearStaticCache()
+    {
+        // ClientCache is static — clear it between tests to prevent cross-test pollution.
+        var cache = GetCache();
+        cache.Clear();
+    }
 
     [Test]
     public void InvalidateCache_DisposesEvictedClient()
@@ -1740,7 +1747,7 @@ public class ChatServiceCacheTests
 Run: `dotnet test TelegramGroupsAdmin.UnitTests --filter FullyQualifiedName~ChatServiceCacheTests`
 Expected: PASS (`fakeClient.Received(1).Dispose()` confirms eviction disposes). If the private field/record name differs after the rewrite, adjust the reflection names to match `ChatService.cs`.
 
-> **Contingency:** the disposal test confirms our `CachedClient.Client.Dispose()` runs. If a later integration smoke shows the underlying factory `HttpClient` is not released (handler pool growth), capture the created `HttpClient` in `CachedClient` (`record CachedClient(IChatClient Client, string ModelId, HttpClient Http)`) and dispose it alongside `Client` in `InvalidateCache`. Not expected — `HttpClientPipelineTransport : IDisposable` owns the `HttpClient`, and the OpenAI pipeline disposes the transport.
+> **Resolved (code review):** the disposal test asserts `InvalidateCache` calls `Dispose()` on the evicted client. Package-internals analysis showed MEAI's OpenAI/Azure `IChatClient.Dispose()` is currently a **no-op** (no resource/socket leak), so the eviction `Dispose()` is defensive forward-compat (e.g. the Anthropic client in commit 4 may hold real resources). The clients use the OpenAI SDK's **default shared transport** (`HttpClientPipelineTransport.Shared`) — no `IHttpClientFactory` and no per-client cached `HttpClient` (which would have been the "don't cache factory clients" antipattern). `CachedClient` stays `(IChatClient Client, string ModelId)`.
 
 - [ ] **Step 5: Test-leak audit (dispatch agent)**
 
@@ -1761,10 +1768,10 @@ refactor(ai): replace Semantic Kernel with Microsoft.Extensions.AI
 
 Rewrite the chat implementation behind the unchanged IChatService against
 MEAI's IChatClient. SemanticKernelChatService -> ChatService; static kernel
-cache -> static IChatClient cache with disposal on eviction. All clients share
-the pooled HTTP handler via IHttpClientFactory. Azure api-version is no longer
-pinned (the 2.x SDK floats the service version) - AzureApiVersion removed
-everywhere.
+cache -> static IChatClient cache with disposal on eviction. Clients use the
+OpenAI SDK's default shared transport (HttpClientPipelineTransport.Shared) for
+handler pooling. Azure api-version is no longer pinned (the 2.x SDK floats the
+service version) - AzureApiVersion removed everywhere.
 
 Carries two type changes made in the same files (neither a logic change):
 - Temperature double -> float end-to-end; default 0.2 -> 1.0 (1.0 is the only
@@ -1850,11 +1857,7 @@ In `BuildClient`, change the `case AIProviderType.LocalOpenAI:` to `case AIProvi
 
                 return new OpenAIClient(
                         new ApiKeyCredential(apiKey),
-                        new OpenAIClientOptions
-                        {
-                            Endpoint = new Uri(openRouterEndpoint),
-                            Transport = new HttpClientPipelineTransport(_httpClientFactory.CreateClient())
-                        })
+                        new OpenAIClientOptions { Endpoint = new Uri(openRouterEndpoint) })
                     .GetChatClient(featureConfig.Model)
                     .AsIChatClient();
 ```
