@@ -22,10 +22,4 @@ public static class QueryConstants
     /// Used when logging response items to prevent excessive log verbosity.
     /// </summary>
     public const int DefaultLogTruncationLength = 200;
-
-    /// <summary>
-    /// Maximum length for metadata value truncation in ChatService.
-    /// Used when logging SK response metadata to prevent log overflow.
-    /// </summary>
-    public const int MaxMetadataLogLength = 500;
 }

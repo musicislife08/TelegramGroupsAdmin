@@ -1,5 +1,4 @@
 using System.ClientModel;
-using System.ClientModel.Primitives;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using Azure.AI.OpenAI;
@@ -16,8 +15,14 @@ namespace TelegramGroupsAdmin.AI.Services;
 /// <summary>
 /// Implementation of IChatService using Microsoft.Extensions.AI (IChatClient).
 /// Supports OpenAI, Azure OpenAI, and OpenAI-compatible local endpoints.
-/// Static client cache persists across scoped instances for reuse; evicted
-/// clients are disposed (IChatClient : IDisposable).
+/// Clients use the OpenAI SDK's default shared transport
+/// (<see cref="System.ClientModel.Primitives.HttpClientPipelineTransport.Shared"/>),
+/// so the underlying HTTP handler is pooled across all clients automatically.
+/// The static cache, keyed by connection + model + key, persists across scoped
+/// instances for reuse. Evicted clients are disposed defensively
+/// (IChatClient : IDisposable) — Dispose is a no-op for the OpenAI/Azure MEAI
+/// clients today, but providers whose clients hold resources (e.g. the Anthropic
+/// client added later) rely on it.
 /// </summary>
 public class ChatService : IChatService
 {
@@ -27,7 +32,6 @@ public class ChatService : IChatService
     // disposed on eviction via InvalidateCache().
     private static readonly ConcurrentDictionary<string, CachedClient> ClientCache = new();
     private readonly ISystemConfigRepository _configRepository;
-    private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<ChatService> _logger;
     private readonly ApiMetrics _apiMetrics;
     private readonly CacheMetrics _cacheMetrics;
@@ -36,13 +40,11 @@ public class ChatService : IChatService
 
     public ChatService(
         ISystemConfigRepository configRepository,
-        IHttpClientFactory httpClientFactory,
         ILogger<ChatService> logger,
         ApiMetrics apiMetrics,
         CacheMetrics cacheMetrics)
     {
         _configRepository = configRepository;
-        _httpClientFactory = httpClientFactory;
         _logger = logger;
         _apiMetrics = apiMetrics;
         _cacheMetrics = cacheMetrics;
@@ -538,9 +540,11 @@ public class ChatService : IChatService
 
     /// <summary>
     /// Build an IChatClient for the given connection and feature config.
-    /// All clients share the pooled HTTP handler via IHttpClientFactory.
+    /// Transport is left unset so the OpenAI SDK uses its default shared
+    /// transport (HttpClientPipelineTransport.Shared), pooling the HTTP handler
+    /// across all clients.
     /// </summary>
-    private IChatClient BuildClient(AIConnection connection, AIFeatureConfig featureConfig, string? apiKey)
+    private static IChatClient BuildClient(AIConnection connection, AIFeatureConfig featureConfig, string? apiKey)
     {
         switch (connection.Provider)
         {
@@ -548,9 +552,7 @@ public class ChatService : IChatService
                 if (string.IsNullOrWhiteSpace(apiKey))
                     throw new InvalidOperationException("OpenAI API key is required");
 
-                return new OpenAIClient(
-                        new ApiKeyCredential(apiKey),
-                        new OpenAIClientOptions { Transport = new HttpClientPipelineTransport(_httpClientFactory.CreateClient()) })
+                return new OpenAIClient(new ApiKeyCredential(apiKey))
                     .GetChatClient(featureConfig.Model)
                     .AsIChatClient();
 
@@ -564,8 +566,7 @@ public class ChatService : IChatService
 
                 return new AzureOpenAIClient(
                         new Uri(connection.AzureEndpoint),
-                        new ApiKeyCredential(apiKey),
-                        new AzureOpenAIClientOptions { Transport = new HttpClientPipelineTransport(_httpClientFactory.CreateClient()) })
+                        new ApiKeyCredential(apiKey))
                     .GetChatClient(featureConfig.AzureDeploymentName)
                     .AsIChatClient();
 
@@ -578,11 +579,7 @@ public class ChatService : IChatService
 
                 return new OpenAIClient(
                         new ApiKeyCredential(localApiKey),
-                        new OpenAIClientOptions
-                        {
-                            Endpoint = new Uri(connection.LocalEndpoint),
-                            Transport = new HttpClientPipelineTransport(_httpClientFactory.CreateClient())
-                        })
+                        new OpenAIClientOptions { Endpoint = new Uri(connection.LocalEndpoint) })
                     .GetChatClient(featureConfig.Model)
                     .AsIChatClient();
 

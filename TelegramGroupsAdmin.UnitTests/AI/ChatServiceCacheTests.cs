@@ -28,10 +28,12 @@ public class ChatServiceCacheTests
 
     private static ChatService CreateService() => new(
         Substitute.For<ISystemConfigRepository>(),
-        Substitute.For<IHttpClientFactory>(),
         NullLogger<ChatService>.Instance,
         new ApiMetrics(),
         new CacheMetrics());
+
+    [TearDown]
+    public void ClearStaticCache() => GetCache().Clear();
 
     [Test]
     public void InvalidateCache_DisposesEvictedClient()
