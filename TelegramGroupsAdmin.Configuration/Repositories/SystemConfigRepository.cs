@@ -595,7 +595,7 @@ public class SystemConfigRepository : ISystemConfigRepository
 
         try
         {
-            return JsonSerializer.Deserialize<AIProviderConfig>(configRecord.AIProviderConfig, _jsonOptions);
+            return JsonSerializer.Deserialize<AIProviderConfigData>(configRecord.AIProviderConfig, _jsonOptions)?.ToModel();
         }
         catch (JsonException ex)
         {
@@ -610,8 +610,8 @@ public class SystemConfigRepository : ISystemConfigRepository
 
         _logger.LogInformation("Saving AI provider configuration to database");
 
-        // Serialize to JSON
-        var jsonConfig = JsonSerializer.Serialize(config, _jsonOptions);
+        // Serialize via the Data DTO (mirrors the UserApiConfig pattern)
+        var jsonConfig = JsonSerializer.Serialize(config.ToData(), _jsonOptions);
 
         // Find or create global config record (chat_id = 0)
         var configRecord = await context.Configs
