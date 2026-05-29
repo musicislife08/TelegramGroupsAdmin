@@ -22,6 +22,8 @@ public class ProfilePage
     private const string AccountInfoSection = ".mud-paper:has(.mud-typography-h6:has-text('Account Information'))";
     private const string ChangePasswordSection = ".mud-paper:has(.mud-typography-h6:has-text('Change Password'))";
     private const string TotpSection = ".mud-paper:has(.mud-typography-h6:has-text('Two-Factor Authentication'))";
+    private const string TotpEnabledAlert = ".mud-alert:has-text('2FA is currently enabled')";
+    private const string TotpDisabledAlert = ".mud-alert:has-text('2FA is not enabled')";
     private const string TelegramLinkingSection = ".mud-paper:has(.mud-typography-h6:has-text('Linked Telegram Accounts'))";
 
     public ProfilePage(IPage page)
@@ -218,8 +220,7 @@ public class ProfilePage
     /// </summary>
     public async Task<bool> IsTotpEnabledAsync()
     {
-        var enabledAlert = _page.Locator(TotpSection).Locator(".mud-alert:has-text('2FA is currently enabled')");
-        return await enabledAlert.IsVisibleAsync();
+        return await _page.Locator(TotpSection).Locator(TotpEnabledAlert).IsVisibleAsync();
     }
 
     /// <summary>
@@ -227,8 +228,28 @@ public class ProfilePage
     /// </summary>
     public async Task<bool> IsTotpDisabledAsync()
     {
-        var disabledAlert = _page.Locator(TotpSection).Locator(".mud-alert:has-text('2FA is not enabled')");
-        return await disabledAlert.IsVisibleAsync();
+        return await _page.Locator(TotpSection).Locator(TotpDisabledAlert).IsVisibleAsync();
+    }
+
+    /// <summary>
+    /// Asserts (auto-retrying) that the TOTP section shows the "enabled" alert. Prefer this
+    /// over IsTotpEnabledAsync() in test assertions: IsVisibleAsync() is a point-in-time
+    /// snapshot and races the alert's async (Blazor) render under load.
+    /// </summary>
+    public async Task AssertTotpEnabledAsync(int? timeoutMs = null)
+    {
+        var locator = _page.Locator(TotpSection).Locator(TotpEnabledAlert);
+        await Expect(locator).ToBeVisibleAsync(timeoutMs is { } t ? new() { Timeout = t } : null);
+    }
+
+    /// <summary>
+    /// Asserts (auto-retrying) that the TOTP section shows the "not enabled" warning.
+    /// Prefer this over IsTotpDisabledAsync() in test assertions (see AssertTotpEnabledAsync).
+    /// </summary>
+    public async Task AssertTotpDisabledAsync(int? timeoutMs = null)
+    {
+        var locator = _page.Locator(TotpSection).Locator(TotpDisabledAlert);
+        await Expect(locator).ToBeVisibleAsync(timeoutMs is { } t ? new() { Timeout = t } : null);
     }
 
     /// <summary>

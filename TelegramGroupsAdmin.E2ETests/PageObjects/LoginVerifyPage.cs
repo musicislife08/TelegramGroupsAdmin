@@ -34,11 +34,15 @@ public class LoginVerifyPage
     /// </summary>
     public async Task WaitForPageAsync(int timeoutMs = 10000)
     {
+        // WaitUntil=Commit waits only for the navigation to commit, not the full "Load"
+        // event (all sub-resources). The CodeInput assertion below is the real readiness
+        // signal and auto-retries; waiting for "Load" was the source of CI nav-timeout flakes.
         await _page.WaitForURLAsync("**/login/verify**", new PageWaitForURLOptions
         {
-            Timeout = timeoutMs
+            Timeout = timeoutMs,
+            WaitUntil = WaitUntilState.Commit
         });
-        await _page.WaitForSelectorAsync(CodeInput);
+        await Expect(_page.Locator(CodeInput)).ToBeVisibleAsync(new() { Timeout = timeoutMs });
     }
 
     /// <summary>
@@ -101,9 +105,12 @@ public class LoginVerifyPage
     /// </summary>
     public async Task WaitForRedirectAsync(int timeoutMs = 10000)
     {
+        // Commit, not Load: the redirect is done once the new URL commits; waiting for the
+        // destination's full Load event under contention is what times out.
         await _page.WaitForURLAsync(url => !url.Contains("/login/verify"), new PageWaitForURLOptions
         {
-            Timeout = timeoutMs
+            Timeout = timeoutMs,
+            WaitUntil = WaitUntilState.Commit
         });
     }
 

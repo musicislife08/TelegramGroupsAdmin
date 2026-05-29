@@ -231,9 +231,8 @@ public class RecoveryCodesTests : SharedE2ETestBase
         await _profilePage.NavigateAsync();
         await _profilePage.WaitForLoadAsync();
 
-        // Verify 2FA is disabled initially
-        Assert.That(await _profilePage.IsTotpDisabledAsync(), Is.True,
-            "2FA should be disabled initially");
+        // Verify 2FA is disabled initially (auto-retrying — the alert renders async)
+        await _profilePage.AssertTotpDisabledAsync();
 
         // Act - enable 2FA
         await _profilePage.ClickEnable2FAButtonAsync();
