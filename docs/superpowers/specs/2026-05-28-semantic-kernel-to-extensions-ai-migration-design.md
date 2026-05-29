@@ -62,7 +62,7 @@ public enum AIProviderType
 | `Microsoft.Extensions.AI.OpenAI` | `10.6.0` | GA | `AsIChatClient()` bridge for OpenAI + OpenAI-compatible |
 | `OpenAI` | `2.10.0` | GA | official SDK; provides `OpenAIClient`/`ChatClient` (transitive via above; pin explicitly) |
 | `Azure.AI.OpenAI` | `2.1.0` | GA | `AzureOpenAIClient` for the Azure path |
-| `Anthropic.SDK` | `5.10.0` | stable (community, maintainer **tghamm**) | implements `IChatClient` via `.Messages`; commit 3 only |
+| `Anthropic` | `12.24.1` | **official Anthropic SDK, beta** (versioned 10+) | implements `IChatClient` via `AsIChatClient(model)`; commit 3 only |
 
 **Remove:** `Microsoft.SemanticKernel` (1.74.0), `Microsoft.SemanticKernel.Abstractions` (1.74.0).
 
@@ -85,9 +85,14 @@ public enum AIProviderType
 - Vision: build `new ChatMessage(ChatRole.User, [ new TextContent(text), new
   DataContent(bytes, mimeType), ... ])`. `DataContent(ReadOnlyMemory<byte>, string
   mediaType)` — `byte[]` converts implicitly.
-- `Anthropic.SDK`: `new AnthropicClient(apiKey).Messages` **is** an `IChatClient`; model is
-  selected via `ChatOptions.ModelId`. Do **not** confuse with the unrelated `Anthropic`
-  package (tryAGI).
+- **Official `Anthropic` SDK (v10+):** `new AnthropicClient { ApiKey = key }.AsIChatClient(modelId)`
+  returns an `IChatClient` **bound to the model** at construction — uniform with the OpenAI
+  family (no per-request `ChatOptions.ModelId` needed). Namespaces `Anthropic` +
+  `Anthropic.Models.Messages`. **Beta:** breaking changes possible in minor/patch releases;
+  pin the exact version.
+- **Package-name disambiguation (three distinct packages):** use **`Anthropic` v10+**
+  (official Anthropic; current `12.24.1`). Do **not** use `Anthropic.SDK` (tghamm community)
+  or `tryAGI.Anthropic` (the former `Anthropic` ≤3.x, now relocated).
 - Azure api-version: the Azure SDK uses an `AzureOpenAIClientOptions` service-version
   **enum**, not a free string. The stored `AzureApiVersion` string is mapped to the enum
   where recognized; otherwise the SDK default is used (logged at Debug). See Risks.
@@ -270,28 +275,27 @@ Anthropic = 4   // appended
 ```
 
 ### Package
-- Add `Anthropic.SDK` 5.10.0 to `Directory.Packages.props` and the AI csproj.
+- Add the **official `Anthropic`** SDK (`12.24.1`) to `Directory.Packages.props` and the AI
+  csproj. Pin the exact version (beta — see Risks).
 
 ### Client construction
 - `ChatService.BuildClient`: `Anthropic` branch →
-  `new AnthropicClient(apiKey).Messages` (an `IChatClient`). **Model-binding asymmetry:**
-  the OpenAI/Azure/compat clients bind the model at `GetChatClient(model)`, but the
-  Anthropic `IChatClient` is **not** model-bound at construction — the Claude model id must
-  be supplied per request via `ChatOptions.ModelId`. Resolve this by storing `ModelId` on
-  `CachedClient` (already present) and setting `ChatOptions.ModelId = cached.ModelId` for
-  the Anthropic path in the options mapping. (For the OpenAI family `ModelId` stays unset;
-  the model is already bound to the client.) API key required.
+  `new AnthropicClient { ApiKey = apiKey }.AsIChatClient(model)` — an `IChatClient` **bound
+  to the model** at construction, uniform with the OpenAI family. No per-request
+  `ChatOptions.ModelId` handling and no model-binding special-case (the official SDK removes
+  the asymmetry the community package would have introduced). API key required.
 - Vision flows through the same `DataContent` path. Prompt caching is **out of scope**
-  (future enhancement — `Anthropic.SDK` supports it, but it needs explicit cache markers
-  and threshold awareness).
+  (future enhancement — Claude supports it, but it needs explicit cache markers + threshold
+  awareness).
 
 ### Model discovery
-- `AIServiceFactory.FetchModelsAsync`: `Anthropic` branch queries Anthropic's models
-  listing endpoint (`GET https://api.anthropic.com/v1/models`) using the Anthropic auth
-  headers (`x-api-key: <key>`, `anthropic-version: <date>`) rather than OpenAI's Bearer
-  scheme, and parses Anthropic's `{ data: [{ id, display_name, created_at }] }` shape into
-  `AIModelInfo`. This mirrors "query the API for the model list" as done for OpenAI, with
-  provider-specific auth + parsing.
+- `AIServiceFactory.FetchModelsAsync`: `Anthropic` branch lists models via the official
+  Anthropic models endpoint (Anthropic exposes `GET /v1/models`). Prefer the official SDK's
+  models-listing service if it surfaces one (confirm the exact method during implementation,
+  e.g. `client.Models.List()`); otherwise call `GET https://api.anthropic.com/v1/models`
+  directly with Anthropic auth headers (`x-api-key: <key>`, `anthropic-version: <date>`) and
+  parse the `{ data: [{ id, display_name, created_at }] }` shape into `AIModelInfo`. Mirrors
+  "query the API for the model list" as done for OpenAI, with provider-specific auth.
 
 ### UI
 - Add an "Anthropic (Claude)" provider item to `AddAIConnectionDialog.razor` with helper
@@ -327,8 +331,12 @@ Anthropic = 4   // appended
    Forces ~8 mechanical test-literal suffix edits (covered by the hybrid contract).
 4. **Token counts `long?` → `int?`.** Safe for realistic token volumes; clamp/cast in
    `CreateResult`.
-5. **Anthropic package disambiguation.** Must reference `Anthropic.SDK` (tghamm), not the
-   similarly named `Anthropic` (tryAGI) package.
+5. **Anthropic package — beta + disambiguation.** Use the **official `Anthropic` SDK v10+**
+   (`12.24.1`). It is documented beta: breaking changes may land in minor/patch releases, so
+   pin the exact version and expect occasional upgrade friction. Do not confuse with
+   `Anthropic.SDK` (tghamm community) or `tryAGI.Anthropic` (former `Anthropic` ≤3.x).
+   Acceptable risk here: Anthropic is a new, optional provider on a single-instance
+   deployment, not load-bearing.
 6. **`TreatWarningsAsErrors`.** The AI project treats warnings as errors; the obsolete
    `AsChatClient` would fail the build — `AsIChatClient` is mandatory.
 
