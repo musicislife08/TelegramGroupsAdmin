@@ -106,7 +106,7 @@ commits 2–3 are additive.
 
 ---
 
-## Commit 1 — Swap SK → MEAI (pure refactor, zero behavior change)
+## Commit 1 — Swap SK → MEAI (refactor; no logic changes)
 
 ### Package surface
 - `Directory.Packages.props`: remove the two `Microsoft.SemanticKernel*` versions; add
@@ -157,22 +157,39 @@ commits 2–3 are additive.
 - Keep the existing `Stopwatch` + `try/catch` + `ApiMetrics.RecordOpenAiCall(...)`
   instrumentation **exactly as-is** (see Telemetry decision below).
 
-### Temperature type change (`double` → `float`, end-to-end)
-MEAI's `ChatOptions.Temperature` is `float?` where SK used `double`. Rather than cast at
-the boundary, change the type across the chain so the abstraction matches its implementation:
+### Temperature: type change (`double` → `float`) + new default (`0.2` → `1.0`)
+Two small changes to the temperature field, made together in the same files. Neither is a
+logic change — the type change is a declaration swap, and the default is a single constant.
+
+**Type:** MEAI's `ChatOptions.Temperature` is `float?` where SK used `double`. Rather than
+cast at the boundary, change the type across the chain so the abstraction matches its
+implementation.
+
+**Default:** raise the default temperature from `0.2` to `1.0`. Rationale: `1.0` is the only
+value safe across all model classes. Reasoning models (GPT-5+) reject any `temperature ≠ 1`
+with a hard error, and Anthropic requires `temperature = 1` whenever Claude extended thinking
+is enabled. `0.2` therefore becomes an active failure mode as newer OpenAI models and the new
+Anthropic provider come into use. `1.0` also matches every provider's own default. Temperature
+remains per-feature configurable, so deterministic classification on standard models is still
+available by explicitly setting a lower value.
+
+Files:
 - `TelegramGroupsAdmin.AI/Services/ChatCompletionOptions.cs:16`: `double?` → `float?`.
 - `TelegramGroupsAdmin.Configuration/Models/AIFeatureConfig.cs:26`: `double = 0.2` →
-  `float = 0.2f`.
+  `float = 1.0f`.
 - `TelegramGroupsAdmin.Data/Models/Configs/AIFeatureConfigData.cs:26`: `double = 0.2` →
-  `float = 0.2f` (persisted JSONB; **no migration** — JSON has one number type, `0.2`
-  round-trips identically).
+  `float = 1.0f` (persisted JSONB; **no migration** — JSON has one number type, and the new
+  default only affects feature configs that have never had a temperature explicitly set;
+  existing stored values are preserved on read).
 - The `AIFeatureConfig` ↔ `AIFeatureConfigData` mapping assigns `Temperature` directly —
   both `float`, no cast.
-- `TelegramGroupsAdmin/Components/Shared/ContentDetection/AIFeatureCard.razor:291`:
-  `OnTemperatureChanged(double value)` → `(float value)`; the bound `MudNumericField`
-  becomes `T="float"` (its `Step`/`Min`/`Max` attribute values become `float`).
-- Behavior-preserving: `0.2f` and `0.2d` both serialize to the wire string `"0.2"` sent to
-  the provider.
+- `TelegramGroupsAdmin/Components/Shared/ContentDetection/AIFeatureCard.razor:120,291`:
+  the bound `MudNumericField` becomes `T="float"` (its `Min`/`Max`/`Step` attribute values
+  become `float`); `OnTemperatureChanged(double value)` → `(float value)`. The UI keeps
+  `Max="2.0"` for now — making the range provider-aware is deferred to a follow-on issue
+  (see Out of scope).
+- Type change is invisible on the wire (`0.2f`/`0.2d` both serialize to `"0.2"`); the
+  default change just means a never-configured feature now starts at `1.0` instead of `0.2`.
 
 ### Knock-on references
 - `TelegramGroupsAdmin/Services/MemoryMetrics.cs:95-99`: the gauge bound to
@@ -204,14 +221,17 @@ dashboard label change consistent with the no-backward-compat rule. If the exist
 it — default is to rename.
 
 ### Verification (hybrid contract)
-- The existing AI tests **must pass with no change to assertion intent**: `AIContentCheckTests`,
+No logic changes in commit 1, so green tests prove parity. The only test edits are mechanical
+reflections of the type swap and the default constant:
+- Behavioral AI tests **must pass with no change to assertion intent**: `AIContentCheckTests`,
   `ExamEvaluationServiceTests`, `ProfileScoringEngineTests` (UnitTests),
   `FeatureTestServiceTests` (ComponentTests).
-- **One permitted class of mechanical test edit:** the `double` → `float` temperature
-  change forces numeric-literal suffix updates in config/integration tests (`0.2` →
-  `0.2f`, `Is.EqualTo(0.2)` → `Is.EqualTo(0.2f)`) at `AIProviderConfigTests`,
-  `AIProviderConfigIntegrationTests`, and `AIFeatureCardTests`. These are mechanical;
-  assertion *intent* is unchanged. (`ExamEvaluationServiceTests:607` asserts `Is.Null` —
+- **Mechanical test edits:** the `double` → `float` change forces numeric-literal suffix
+  updates (`0.2` → `0.2f`, `Is.EqualTo(0.2)` → `Is.EqualTo(0.2f)`); the default-constant
+  test `AIProviderConfigTests:71` (`AIFeatureConfig_DefaultTemperature_Is0Point2` →
+  `_Is1Point0`, asserting `1.0f`) updates to the new constant. These touch
+  `AIProviderConfigTests`, `AIProviderConfigIntegrationTests`, and `AIFeatureCardTests`.
+  Assertion *intent* unchanged. (`ExamEvaluationServiceTests:607` asserts `Is.Null` —
   type-agnostic, no edit.)
 - **Dedicated audit step:** dispatch an agent to scan the test projects for any SK type
   that leaked into test setup/mocks (`ChatHistory`, `Kernel`, `OpenAIPromptExecutionSettings`,
@@ -316,6 +336,10 @@ Anthropic = 4   // appended
 - Per-connection vision-capability flag — the existing `FeatureTestService` vision probe
   already validates this at test time.
 - MEAI OpenTelemetry/logging middleware (see Telemetry decision).
+- **Provider-aware temperature min/max in the UI** — Anthropic accepts `0.0–1.0`, OpenAI
+  `0.0–2.0`; the UI currently hardcodes `Max="2.0"`, so a user could set a value Claude
+  rejects. Tracked as follow-on issue
+  [#480](https://github.com/musicislife08/TelegramGroupsAdmin/issues/480), not fixed in this PR.
 
 ## Risks & nuances
 
@@ -351,8 +375,9 @@ Anthropic = 4   // appended
 
 - Per-commit: `dotnet build` clean (warnings-as-errors) and the AI test suite green at each
   commit (each commit independently builds + passes).
-- Commit 1: existing AI tests pass **unmodified**; test-leak audit agent reports no required
-  test changes.
+- Commit 1: behavioral AI tests pass with unchanged assertion intent; the only test edits
+  are the mechanical `double`→`float` suffixes and the default-constant test
+  (`_Is0Point2` → `_Is1Point0`); test-leak audit agent reports no SK-type changes.
 - Commits 2–3: manual smoke via the Settings UI "Test" flow against a real OpenRouter key
   and a real Anthropic key (model refresh + a completion + a vision call where supported).
 - Migrations: none required (enum stored as int; rename preserves value 2).
@@ -360,5 +385,7 @@ Anthropic = 4   // appended
 ## Commit sequence (single PR → `develop`)
 
 1. `refactor(ai): replace Semantic Kernel with Microsoft.Extensions.AI`
+   — also carries the temperature `double`→`float` type change and the `0.2`→`1.0` default
+   constant (both noted in the commit body; neither is a logic change).
 2. `feat(ai): rename LocalOpenAI provider to OpenAICompatible and add OpenRouter`
 3. `feat(ai): add Anthropic (Claude) provider`
