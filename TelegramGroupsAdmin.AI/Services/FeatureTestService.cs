@@ -55,7 +55,7 @@ public class FeatureTestService(
         ArgumentNullException.ThrowIfNull(model);
 
         // Early validation: if azureDeploymentName was explicitly provided (not null) but is empty/whitespace,
-        // return a clear error instead of letting it fail deep in the kernel builder
+        // return a clear error instead of letting it fail deep in the client builder
         if (azureDeploymentName is not null && string.IsNullOrWhiteSpace(azureDeploymentName))
         {
             return FeatureTestResult.Fail(

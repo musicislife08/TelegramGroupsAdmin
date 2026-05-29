@@ -6,7 +6,7 @@ namespace TelegramGroupsAdmin.AI.Services;
 
 /// <summary>
 /// AI-based translation service for detecting and translating foreign language content
-/// Uses Semantic Kernel for multi-provider support (OpenAI, Azure OpenAI, local models)
+/// Uses IChatService for multi-provider support (OpenAI, Azure OpenAI, local models)
 /// </summary>
 public class AITranslationService : IAITranslationService
 {

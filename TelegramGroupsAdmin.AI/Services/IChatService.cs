@@ -4,7 +4,7 @@ namespace TelegramGroupsAdmin.AI.Services;
 
 /// <summary>
 /// Generic interface for AI chat completions
-/// Provider-agnostic abstraction using Semantic Kernel
+/// Provider-agnostic chat-completion abstraction backed by Microsoft.Extensions.AI IChatClient
 /// </summary>
 public interface IChatService
 {
@@ -65,7 +65,7 @@ public interface IChatService
     Task<bool> IsFeatureAvailableAsync(AIFeatureType feature, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Invalidate cached kernel for a connection (call when connection config changes)
+    /// Invalidate the cached chat client for a connection (call when connection config changes)
     /// </summary>
     /// <param name="connectionId">Connection ID to invalidate, or null to clear all</param>
     void InvalidateCache(string? connectionId = null);
