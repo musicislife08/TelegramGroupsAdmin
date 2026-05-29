@@ -44,6 +44,14 @@ public class ChatServiceBuildClientTests
     }
 
     [Test]
+    public void BuildClient_AzureOpenAI_WithoutApiKey_Throws()
+    {
+        Assert.That(() => InvokeBuildClient(
+                Conn(AIProviderType.AzureOpenAI, azureEndpoint: "https://r.openai.azure.com"), Feat(azureDeployment: "d"), null),
+            Throws.TypeOf<InvalidOperationException>());
+    }
+
+    [Test]
     public void BuildClient_AzureOpenAI_WithoutEndpoint_Throws()
     {
         Assert.That(() => InvokeBuildClient(Conn(AIProviderType.AzureOpenAI), Feat(azureDeployment: "d"), "key"),
