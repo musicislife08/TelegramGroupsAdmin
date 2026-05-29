@@ -1286,7 +1286,25 @@ public class MessageHistoryRepositoryTests
     [Test]
     public async Task GetMessageTrendsAsync_ShouldReturnTrends()
     {
-        // Arrange - Use date range covering golden dataset
+        // Re-time two MainChat messages into the NOW()-relative window. The golden
+        // messages keep their original (pre-snapshot) timestamps, which are already
+        // older than 30 days, so a NOW-30d query returns nothing once the bootstrap
+        // date recedes — the same NOW-relative anchoring the retention tests use.
+        // Offsets are strictly negative (midnight-anchored) so they stay in the past
+        // regardless of the time of day the test runs.
+        var contextFactory = _serviceProvider!.GetRequiredService<IDbContextFactory<AppDbContext>>();
+        await using (var context = await contextFactory.CreateDbContextAsync())
+        {
+            await GoldenDataset.Mutate(context)
+                .ShiftMessageTimestamps(MainChatId,
+                [
+                    new(Msg1Id, TimeSpan.FromDays(-1) + TimeSpan.FromHours(12)), // yesterday, noon
+                    new(Msg2Id, TimeSpan.FromDays(-3) + TimeSpan.FromHours(12))  // 3 days ago, noon
+                ])
+                .ApplyAsync();
+        }
+
+        // Arrange - 30-day window ending now (the two shifted messages fall inside it)
         var endDate = DateTimeOffset.UtcNow;
         var startDate = endDate.AddDays(-30);
         List<long> chatIds = [MainChatId];
