@@ -80,7 +80,8 @@ public enum AIProviderType
 - `ChatOptions.ResponseFormat = ChatResponseFormat.Json` replaces the SK `"json_object"`
   string for JSON mode.
 - Token usage: `response.Usage?.InputTokenCount` / `OutputTokenCount` / `TotalTokenCount`
-  (all `long?` — cast to `int?` for the existing `ChatCompletionResult`).
+  (all `long?`). No cast — `ChatCompletionResult`'s token fields change to `long?` to match,
+  and `ApiMetrics.RecordOpenAiCall` takes `long` (see below).
 - Finish reason: `response.FinishReason` is `ChatFinishReason?` (struct; `.ToString()`).
 - Vision: build `new ChatMessage(ChatRole.User, [ new TextContent(text), new
   DataContent(bytes, mimeType), ... ])`. `DataContent(ReadOnlyMemory<byte>, string
@@ -152,9 +153,9 @@ commits 2–3 are additive.
     ResponseFormat }` (Temperature now `float?` end-to-end — no cast; see below).
   - `GetChatMessageContentAsync(...)` → `IChatClient.GetResponseAsync(messages, options,
     ct)`.
-  - `CreateResult`: read `response.Text`/message content, `response.Usage?.*` (cast `long?`
-    → `int?`), `response.FinishReason?.ToString()`, `response.ModelId ?? fallback`. The
-    `ChatCompletionResult` shape is unchanged.
+  - `CreateResult`: read `response.Text`/message content, `response.Usage?.*` (`long?`,
+    assigned straight into the now-`long?` token fields — no cast),
+    `response.FinishReason?.ToString()`, `response.ModelId ?? fallback`.
 - Keep the existing `Stopwatch` + `try/catch` + `ApiMetrics.RecordOpenAiCall(...)`
   instrumentation **exactly as-is** (see Telemetry decision below).
 
@@ -191,6 +192,20 @@ Files:
   (see Out of scope).
 - Type change is invisible on the wire (`0.2f`/`0.2d` both serialize to `"0.2"`); the
   default change just means a never-configured feature now starts at `1.0` instead of `0.2`.
+
+### Token counts: `int` → `long` (match the interface, no cast)
+MEAI's `UsageDetails` exposes token counts as `long?`. Adopt that type through our own
+surface rather than casting back to `int?`:
+- `TelegramGroupsAdmin.AI/Services/ChatCompletionResult.cs:17,22,27`: `TotalTokens`,
+  `PromptTokens`, `CompletionTokens` → `long?`.
+- `TelegramGroupsAdmin.Core/Metrics/ApiMetrics.cs:65`: `RecordOpenAiCall` `int promptTokens,
+  int completionTokens` → `long`. The instrument is already `Counter<long>`, so the inner
+  `.Add(...)` calls are unchanged (this just removes today's implicit `int`→`long` widening).
+  The AI service is the only caller.
+- Everything else compiles unchanged because `int`→`long` is an *implicit widening*: the
+  `FeatureTestService` token strings, the `AITranslationService` log, and the test literals
+  (`TotalTokens = 5`, etc. in `FeatureTestServiceTests` / `AIContentCheckTests`) all keep
+  working with no edits.
 
 ### Remove `AzureApiVersion` (api-version no longer pinned)
 The 2.x SDK floats the service version with each upgrade, so the stored pin is dead. Remove
@@ -399,8 +414,9 @@ Anthropic = 4   // appended
 3. **`double` → `float` temperature type change.** Done end-to-end (no cast); see the
    commit-1 temperature subsection. No data migration; behavior-preserving on the wire.
    Forces ~8 mechanical test-literal suffix edits (covered by the hybrid contract).
-4. **Token counts `long?` → `int?`.** Safe for realistic token volumes; clamp/cast in
-   `CreateResult`.
+4. **Token counts adopt `long?` (no cast).** `ChatCompletionResult` token fields and
+   `ApiMetrics.RecordOpenAiCall` move to `long`/`long?` to match `UsageDetails`. Implicit
+   widening means no other code or tests change. See the commit-1 token-counts subsection.
 5. **Anthropic package — beta, but minimally exposed.** Use the **official `Anthropic` SDK
    v10+** (`12.24.1`), documented beta (breaking changes may land in minor/patch). **Our
    exposure to that churn is near-zero**: we touch only two of the SDK's native symbols —
