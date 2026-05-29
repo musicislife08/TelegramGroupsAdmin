@@ -93,9 +93,10 @@ public enum AIProviderType
 - **Package-name disambiguation (three distinct packages):** use **`Anthropic` v10+**
   (official Anthropic; current `12.24.1`). Do **not** use `Anthropic.SDK` (tghamm community)
   or `tryAGI.Anthropic` (the former `Anthropic` ≤3.x, now relocated).
-- Azure api-version: the Azure SDK uses an `AzureOpenAIClientOptions` service-version
-  **enum**, not a free string. The stored `AzureApiVersion` string is mapped to the enum
-  where recognized; otherwise the SDK default is used (logged at Debug). See Risks.
+- Azure api-version: **no longer pinned.** The 2.x `AzureOpenAIClient` defaults to the
+  latest service version the SDK knows about, and that default advances with each SDK
+  upgrade — i.e. it floats. The `AzureApiVersion` field (config, data, UI, cache key) is
+  **removed** rather than mapped to the SDK's version enum. See commit 1 and Risks.
 
 ## Guiding principle
 
@@ -125,18 +126,18 @@ commits 2–3 are additive.
   `AddScoped<IChatService, ChatService>()`.
 - Cache type: `ConcurrentDictionary<string, CachedKernel>` →
   `ConcurrentDictionary<string, CachedClient>`, where
-  `CachedClient(IChatClient Client, string ModelId)`. **Same composite cache key.** Same
-  `GetOrAdd`, same `InvalidateCache(connectionId?)` semantics, same cache hit/miss metrics
-  (`CacheMetrics.RecordHit/Miss("kernel")` — keep the `"kernel"` tag value, or rename to
-  `"chat_client"`; see Naming below).
+  `CachedClient(IChatClient Client, string ModelId)`. Composite cache key as today, **minus
+  the now-removed `AzureApiVersion` component**. Same `GetOrAdd`, same
+  `InvalidateCache(connectionId?)` semantics. Cache hit/miss metrics are renamed from the
+  `"kernel"` tag value to `"chat_client"` (see Naming below).
 - **Disposal (new):** `InvalidateCache` and the clear-all path must `Dispose()` each
   removed `IChatClient`. Use `TryRemove` then dispose; clear-all enumerates and disposes
   before/after `Clear()`.
 - `BuildKernel` → `BuildClient`, returning `IChatClient`:
   - **OpenAI:** `new OpenAIClient(apiKey).GetChatClient(model).AsIChatClient()`.
   - **AzureOpenAI:** `new AzureOpenAIClient(new Uri(endpoint), new
-    ApiKeyCredential(apiKey), options).GetChatClient(deploymentName).AsIChatClient()`,
-    where `options` carries the mapped service version (see Risks).
+    ApiKeyCredential(apiKey)).GetChatClient(deploymentName).AsIChatClient()` — no
+    service-version argument; the SDK default applies and floats with SDK upgrades.
   - **LocalOpenAI:** `new OpenAIClient(new ApiKeyCredential(apiKey ?? "not-required"), new
     OpenAIClientOptions { Endpoint = new Uri(localEndpoint) }).GetChatClient(model)
     .AsIChatClient()`.
@@ -191,6 +192,27 @@ Files:
 - Type change is invisible on the wire (`0.2f`/`0.2d` both serialize to `"0.2"`); the
   default change just means a never-configured feature now starts at `1.0` instead of `0.2`.
 
+### Remove `AzureApiVersion` (api-version no longer pinned)
+The 2.x SDK floats the service version with each upgrade, so the stored pin is dead. Remove
+the field everywhere:
+- `TelegramGroupsAdmin.Configuration/Models/AIConnection.cs:32`: delete the property.
+- `TelegramGroupsAdmin.Data/Models/Configs/AIConnectionData.cs:32`: delete the property
+  (old stored JSONB keeps an `azureApiVersion` key; System.Text.Json ignores it on read —
+  no migration).
+- The `AIConnection` ↔ `AIConnectionData` mapping: drop the `AzureApiVersion` assignment.
+- `ChatService.GenerateCacheKey` (was `SemanticKernelChatService.cs:588`): remove the
+  `AzureApiVersion` key component.
+- Azure client construction: no `apiVersion` argument (was `SemanticKernelChatService.cs:623`).
+- `TelegramGroupsAdmin/Components/Shared/AddAIConnectionDialog.razor:126`: drop the
+  `AzureApiVersion = "2024-10-21"` default-set.
+- `TelegramGroupsAdmin/Components/Shared/Settings/AIConnectionCard.razor:39,119,131,152`:
+  remove the api-version `MudTextField`, the `_azureApiVersion` field, and its load/save.
+- Tests: delete `AIProviderConfigTests:150` (`AIConnection_DefaultAzureApiVersion_Is2024_10_21`)
+  and the `AzureApiVersion` assertion at `:352`; remove the `azureApiVersion` param + cases
+  from `AIConnectionCardTests` (`:23,33,116`). (The `?api_version=` strings in
+  `AIProviderConfigIntegrationTests:615,626` are `LocalEndpoint` query params — unrelated,
+  leave them.)
+
 ### Knock-on references
 - `TelegramGroupsAdmin/Services/MemoryMetrics.cs:95-99`: the gauge bound to
   `SemanticKernelChatService.CachedKernelCount` → `ChatService.CachedClientCount`. Rename
@@ -213,12 +235,12 @@ which have no notion of `AIFeatureType`, so adopting it would **lose feature att
 that the Core metrics rules mandate and the Grafana dashboards rely on. The manual
 instrumentation is retained verbatim.
 
-### Naming note (cache metric tag)
-`CacheMetrics.RecordHit/Miss` is currently called with the literal `"kernel"`. Rename to
-`"chat_client"` for accuracy (bounded-cardinality tag, dashboard-facing). This is a code +
-dashboard label change consistent with the no-backward-compat rule. If the existing
-`"kernel"` tag value must persist for dashboard continuity, that is the only reason to keep
-it — default is to rename.
+### Naming note (cache metric tag) — decided
+`CacheMetrics.RecordHit/Miss` is currently called with the literal `"kernel"`. **Renamed to
+`"chat_client"`** for accuracy (bounded-cardinality tag, dashboard-facing), alongside the
+`tga.cache.kernel.count` → `tga.cache.chat_client.count` gauge rename. No backward-compat
+alias (per project rules); any Grafana panel querying the old tag value or gauge name is
+updated to match.
 
 ### Verification (hybrid contract)
 No logic changes in commit 1, so green tests prove parity. The only test edits are mechanical
@@ -346,11 +368,12 @@ Anthropic = 4   // appended
 1. **`IChatClient` disposal leak.** The single genuinely-new behavior. If eviction does not
    dispose, the underlying `OpenAIClient`/HTTP pipeline leaks. Covered by the disposal
    change in commit 1; worth an explicit test that `InvalidateCache` disposes.
-2. **Azure api-version string → enum.** SK accepted a free string (`"2024-10-21"`); the
-   Azure SDK uses an `AzureOpenAIClientOptions` service-version enum. Map known strings to
-   the enum; fall back to SDK default + Debug log when unrecognized. Low practical risk —
-   no Azure connection is configured in the primary deployment — but the public codebase
-   supports Azure, so the mapping must exist.
+2. **Azure api-version no longer pinned.** The stored `AzureApiVersion` pin is removed; the
+   2.x SDK's default service version applies and floats with SDK upgrades (matches the
+   "keep up with the SDK" cadence). Behavior change only for a deployment that deliberately
+   pinned an older Azure API surface — none does in the primary deployment, and the floating
+   default is the intended behavior. The version-pinning *knob* is gone; full per-version
+   control is not a goal (re-add via a future issue if ever needed).
 3. **`double` → `float` temperature type change.** Done end-to-end (no cast); see the
    commit-1 temperature subsection. No data migration; behavior-preserving on the wire.
    Forces ~8 mechanical test-literal suffix edits (covered by the hybrid contract).
