@@ -357,10 +357,16 @@ Anthropic = 4   // appended
   strategies), but only on its **native** message types — MEAI's `IChatClient`/`ChatMessage`
   has no `cache_control` concept, so enabling it would mean dropping out of the `IChatClient`
   abstraction for Anthropic (recoupling to the beta native surface we minimize) or using MEAI
-  escape hatches. Also threshold-gated (1,024–4,096 tokens min, model-dependent) and only
-  helps large, stable, repeated prefixes. Future enhancement: first confirm TGA prompts clear
-  the threshold, then choose native-path vs. escape-hatch. (Note: distinct from MEAI's
-  `UseDistributedCache()`, which is a client-side whole-response cache, not prefix caching.)
+  escape hatches (and it's Anthropic-specific — OpenAI/OpenRouter wouldn't use it).
+  **Promising specifically for the spam-detection path:** that prompt is structured stable
+  head (system prompt + spam examples) followed by dynamic tail (recent chat messages +
+  target message) — the ideal prefix-cache layout (breakpoint after the examples). High call
+  volume + 0.1× cache-read pricing + 5-min TTL refreshed on each hit makes a busy chat a real
+  win. Two gating unknowns to resolve first: (1) are the spam examples a *fixed* set or
+  selected/rotated per check (rotation breaks the stable prefix)? (2) does the stable head
+  clear the token floor (1,024–4,096, model-dependent)? Future enhancement, own focused
+  change. (Note: distinct from MEAI's `UseDistributedCache()`, a client-side whole-response
+  cache, not prefix caching.)
 - Cost-per-feature dashboards / OpenRouter pricing surfacing.
 - Structured-output JSON-schema upgrades (`ChatResponseFormat.ForJsonSchema`) — current
   code only needs plain JSON mode.
