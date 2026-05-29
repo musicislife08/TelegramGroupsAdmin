@@ -56,6 +56,7 @@ public class AIConnectionCardTests : MudBlazorTestContext
     [TestCase(AIProviderType.AzureOpenAI, "Azure OpenAI")]
     [TestCase(AIProviderType.OpenAICompatible, "OpenAI-compatible")]
     [TestCase(AIProviderType.OpenRouter, "OpenRouter")]
+    [TestCase(AIProviderType.Anthropic, "Anthropic (Claude)")]
     public void DisplaysProviderName(AIProviderType provider, string expectedText)
     {
         // Arrange

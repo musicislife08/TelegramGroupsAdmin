@@ -300,5 +300,5 @@ public class AIServiceFactory : IAIServiceFactory
     private record OllamaModelsResponse(OllamaModelData[]? Models);
     private record OllamaModelData(string Name, long Size, DateTimeOffset ModifiedAt);
     private record AnthropicModelsResponse(AnthropicModelData[]? Data);
-    private record AnthropicModelData(string Id, string? DisplayName);
+    private record AnthropicModelData(string Id);
 }
