@@ -2172,10 +2172,10 @@ And add to the response-records block at the bottom:
 
 ```csharp
     private record AnthropicModelsResponse(AnthropicModelData[]? Data);
-    private record AnthropicModelData(string Id, string? DisplayName);
+    private record AnthropicModelData(string Id);
 ```
 
-> `anthropic-version: 2023-06-01` is the stable Messages-API version header. The `{ data: [{ id, display_name, created_at }] }` shape maps `id` → `AIModelInfo.Id`.
+> `anthropic-version: 2023-06-01` is the stable Messages-API version header. The `{ data: [{ id, display_name, created_at }] }` shape maps `id` → `AIModelInfo.Id`. Only `id` is captured — the API's `display_name` is intentionally not modelled (friendlier model names are tracked provider-agnostically as model-list collapsing in #499; capturing an Anthropic-only field here would be dead code).
 
 ### Task 4.5: UI (Anthropic item)
 
