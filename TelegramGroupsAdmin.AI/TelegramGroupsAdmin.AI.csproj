@@ -16,6 +16,7 @@
     <PackageReference Include="Microsoft.Extensions.AI.OpenAI" />
     <PackageReference Include="OpenAI" />
     <PackageReference Include="Azure.AI.OpenAI" />
+    <PackageReference Include="Anthropic" />
   </ItemGroup>
 
   <ItemGroup>

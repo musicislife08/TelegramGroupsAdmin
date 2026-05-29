@@ -1,6 +1,7 @@
 using System.ClientModel;
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using Anthropic;
 using Azure.AI.OpenAI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
@@ -596,6 +597,12 @@ public class ChatService : IChatService
                         new OpenAIClientOptions { Endpoint = new Uri(openRouterEndpoint) })
                     .GetChatClient(featureConfig.Model)
                     .AsIChatClient();
+
+            case AIProviderType.Anthropic:
+                if (string.IsNullOrWhiteSpace(apiKey))
+                    throw new InvalidOperationException("Anthropic API key is required");
+
+                return new AnthropicClient { ApiKey = apiKey }.AsIChatClient(featureConfig.Model);
 
             default:
                 throw new InvalidOperationException($"Unsupported AI provider type: {connection.Provider}");

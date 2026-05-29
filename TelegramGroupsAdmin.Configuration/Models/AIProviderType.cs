@@ -23,5 +23,10 @@ public enum AIProviderType
     /// <summary>
     /// OpenRouter aggregator (https://openrouter.ai/api/v1)
     /// </summary>
-    OpenRouter = 3
+    OpenRouter = 3,
+
+    /// <summary>
+    /// Anthropic (Claude), direct (api.anthropic.com)
+    /// </summary>
+    Anthropic = 4
 }

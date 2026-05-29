@@ -166,6 +166,7 @@
         AIProviderType.AzureOpenAI => "Azure OpenAI Service",
         AIProviderType.OpenAICompatible => "OpenAI-compatible",
         AIProviderType.OpenRouter => "OpenRouter",
+        AIProviderType.Anthropic => "Anthropic (Claude)",
         _ => provider.ToString()
     };
 
@@ -175,6 +176,7 @@
         AIProviderType.AzureOpenAI => Icons.Material.Filled.CloudQueue,
         AIProviderType.OpenAICompatible => Icons.Material.Filled.Computer,
         AIProviderType.OpenRouter => Icons.Material.Filled.Hub,
+        AIProviderType.Anthropic => Icons.Material.Filled.Psychology,
         _ => Icons.Material.Filled.Psychology
     };
 
@@ -184,6 +186,7 @@
         AIProviderType.AzureOpenAI => "Azure API key",
         AIProviderType.OpenAICompatible => "Optional API key",
         AIProviderType.OpenRouter => "sk-or-...",
+        AIProviderType.Anthropic => "sk-ant-...",
         _ => "API key"
     };
 
@@ -193,6 +196,7 @@
         AIProviderType.AzureOpenAI => "Azure OpenAI Service API key from Azure Portal",
         AIProviderType.OpenAICompatible => "Leave empty if your provider doesn't require authentication",
         AIProviderType.OpenRouter => "Get your API key from https://openrouter.ai/keys",
+        AIProviderType.Anthropic => "Get your API key from https://console.anthropic.com/settings/keys",
         _ => ""
     };
 }

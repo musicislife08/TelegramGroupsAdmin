@@ -48,6 +48,7 @@
     <PackageVersion Include="Microsoft.Extensions.AI.OpenAI" Version="10.6.0" />
     <PackageVersion Include="OpenAI" Version="2.10.0" />
     <PackageVersion Include="Azure.AI.OpenAI" Version="2.1.0" />
+    <PackageVersion Include="Anthropic" Version="12.24.1" />
 
     <!-- Telegram -->
     <PackageVersion Include="Telegram.Bot" Version="22.9.6.1" />

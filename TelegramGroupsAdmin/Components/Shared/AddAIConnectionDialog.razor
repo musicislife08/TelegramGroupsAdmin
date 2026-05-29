@@ -37,6 +37,12 @@
                         <span>OpenRouter</span>
                     </MudStack>
                 </MudSelectItem>
+                <MudSelectItem Value="AIProviderType.Anthropic">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudIcon Icon="@Icons.Material.Filled.Psychology" Size="Size.Small" />
+                        <span>Anthropic (Claude)</span>
+                    </MudStack>
+                </MudSelectItem>
             </MudSelect>
 
             <MudTextField @bind-Value="_connectionId"
@@ -140,6 +146,7 @@
         AIProviderType.AzureOpenAI => "Azure OpenAI Service - requires endpoint URL and API key from Azure Portal",
         AIProviderType.OpenAICompatible => "Ollama, LM Studio, vLLM, or other OpenAI-compatible APIs",
         AIProviderType.OpenRouter => "OpenRouter aggregator - requires an API key from openrouter.ai",
+        AIProviderType.Anthropic => "Anthropic Claude - requires an API key from console.anthropic.com",
         _ => ""
     };
 
@@ -149,6 +156,7 @@
         AIProviderType.AzureOpenAI => "azure-prod",
         AIProviderType.OpenAICompatible => "local-ollama",
         AIProviderType.OpenRouter => "openrouter-main",
+        AIProviderType.Anthropic => "anthropic-main",
         _ => "my-connection"
     };
 }

@@ -139,6 +139,11 @@ public class AIServiceFactory : IAIServiceFactory
         var apiKeys = await _configRepository.GetApiKeysAsync(cancellationToken);
         var apiKey = apiKeys?.GetAIConnectionKey(connection.Id);
 
+        if (connection.Provider == AIProviderType.Anthropic)
+        {
+            return await FetchAnthropicModelsAsync(apiKey, cancellationToken);
+        }
+
         // Determine endpoint based on provider
         var endpoint = connection.Provider switch
         {
@@ -246,9 +251,54 @@ public class AIServiceFactory : IAIServiceFactory
             .ToList() ?? [];
     }
 
+    /// <summary>
+    /// Fetch models from the Anthropic Messages API (/v1/models).
+    /// Uses raw REST (x-api-key + anthropic-version headers) to keep model
+    /// discovery off the SDK's beta surface, consistent with every other provider.
+    /// </summary>
+    private async Task<IReadOnlyList<AIModelInfo>> FetchAnthropicModelsAsync(
+        string? apiKey,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            _logger.LogWarning("Cannot fetch Anthropic models: API key not configured");
+            return [];
+        }
+
+        using var client = _httpClientFactory.CreateClient();
+        client.DefaultRequestHeaders.Add("x-api-key", apiKey);
+        client.DefaultRequestHeaders.Add("anthropic-version", "2023-06-01");
+
+        try
+        {
+            var response = await client.GetAsync("https://api.anthropic.com/v1/models", cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("Failed to fetch Anthropic models: {StatusCode}", response.StatusCode);
+                return [];
+            }
+
+            var content = await response.Content.ReadAsStringAsync(cancellationToken);
+            var modelsResponse = JsonSerializer.Deserialize<AnthropicModelsResponse>(content, JsonOptions);
+
+            return modelsResponse?.Data?
+                .Select(m => new AIModelInfo { Id = m.Id })
+                .OrderBy(m => m.Id)
+                .ToList() ?? [];
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to fetch Anthropic models");
+            return [];
+        }
+    }
+
     // Response models for API parsing
     private record OpenAIModelsResponse(OpenAIModelData[]? Data);
     private record OpenAIModelData(string Id, string? OwnedBy);
     private record OllamaModelsResponse(OllamaModelData[]? Models);
     private record OllamaModelData(string Name, long Size, DateTimeOffset ModifiedAt);
+    private record AnthropicModelsResponse(AnthropicModelData[]? Data);
+    private record AnthropicModelData(string Id, string? DisplayName);
 }
