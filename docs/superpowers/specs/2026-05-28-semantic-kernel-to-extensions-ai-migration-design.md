@@ -351,22 +351,19 @@ Anthropic = 4   // appended
 
 - Gemini / AWS Bedrock / Groq / DeepSeek as first-class providers — reachable today via the
   `OpenAICompatible` endpoint or OpenRouter.
-- **Anthropic prompt caching.** Not automatic (unlike OpenAI's transparent server-side
-  caching): Anthropic requires explicit `cache_control` markers on content blocks per
-  request. The official SDK supports this (`CacheControl` on `ContentBase`, `PromptCacheType`
-  strategies), but only on its **native** message types — MEAI's `IChatClient`/`ChatMessage`
-  has no `cache_control` concept, so enabling it would mean dropping out of the `IChatClient`
-  abstraction for Anthropic (recoupling to the beta native surface we minimize) or using MEAI
-  escape hatches (and it's Anthropic-specific — OpenAI/OpenRouter wouldn't use it).
-  **Promising specifically for the spam-detection path:** that prompt is structured stable
-  head (system prompt + spam examples) followed by dynamic tail (recent chat messages +
-  target message) — the ideal prefix-cache layout (breakpoint after the examples). High call
-  volume + 0.1× cache-read pricing + 5-min TTL refreshed on each hit makes a busy chat a real
-  win. Two gating unknowns to resolve first: (1) are the spam examples a *fixed* set or
-  selected/rotated per check (rotation breaks the stable prefix)? (2) does the stable head
-  clear the token floor (1,024–4,096, model-dependent)? Future enhancement, own focused
-  change. (Note: distinct from MEAI's `UseDistributedCache()`, a client-side whole-response
-  cache, not prefix caching.)
+- **Anthropic prompt caching** (tracked: issue #481). Not automatic (unlike OpenAI); requires
+  explicit `cache_control` markers per request, on the SDK's **native** message types — which
+  MEAI's `IChatClient` doesn't expose, so it'd mean dropping to the native path or a MEAI
+  escape hatch (Anthropic-specific; OpenAI/OpenRouter don't use it). Structure *is* favorable
+  (verified against `AIPromptBuilder.cs`): stable system prompt (`baseTechnical` + the long,
+  rarely-changed admin `customRulesPrompt` + veto guidance) as the cacheable prefix, dynamic
+  `<message_history>` + target message as the uncached tail. **But model-floor-gated, and the
+  likely usage doesn't clear it:** a configured chat's system prompt (~1,100–1,300 tokens for
+  a TSP-sized rules block) clears the 1,024-token floor (Sonnet 4.6/4.5, etc.) but *not* the
+  4,096-token floor — and Anthropic spam-checking would most likely run on an Opus-level model
+  (4,096 floor), so caching wouldn't trigger at current prompt sizes. It'd need a much larger
+  stable rules/exemplar corpus or a smaller-floor model. Out of this PR regardless. (Distinct
+  from MEAI's `UseDistributedCache()`, a client-side whole-response cache, not prefix caching.)
 - Cost-per-feature dashboards / OpenRouter pricing surfacing.
 - Structured-output JSON-schema upgrades (`ChatResponseFormat.ForJsonSchema`) — current
   code only needs plain JSON mode.
