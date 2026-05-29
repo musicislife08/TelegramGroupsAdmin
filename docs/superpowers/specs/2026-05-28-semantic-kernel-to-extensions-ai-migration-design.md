@@ -365,8 +365,18 @@ Anthropic = 4   // appended
   stable rules/exemplar corpus or a smaller-floor model. Out of this PR regardless. (Distinct
   from MEAI's `UseDistributedCache()`, a client-side whole-response cache, not prefix caching.)
 - Cost-per-feature dashboards / OpenRouter pricing surfacing.
-- Structured-output JSON-schema upgrades (`ChatResponseFormat.ForJsonSchema`) — current
-  code only needs plain JSON mode.
+- **Structured-output JSON-schema enforcement** (`ChatResponseFormat.ForJsonSchema` /
+  `GetResponseAsync<T>()`). Plain JSON mode (`JsonMode` → `ChatResponseFormat.Json`) is a
+  *formatting* guarantee, not a *shape* guarantee; schema enforcement would decode-constrain
+  the model to an exact shape (enums, required fields, numeric types) and let us drop
+  defensive parsing like the markdown-fence strip in `AITranslationService.cs:88`. Explicitly
+  **not pursued**: plain JSON mode has run ~7 months in production with zero observed parse
+  failures, so this solves a problem that hasn't appeared. It's also gated by per-provider
+  support (OpenAI/Azure native strict schema; Anthropic only via forced tool use;
+  OpenRouter/local model-dependent), so a real implementation would be per-provider with
+  graceful fallback. **Revisit trigger:** if adding weaker models (via OpenRouter/local) ever
+  produces parse failures on the structured calls. No tracking issue filed — no observed
+  problem.
 - Per-connection vision-capability flag — the existing `FeatureTestService` vision probe
   already validates this at test time.
 - MEAI OpenTelemetry/logging middleware (see Telemetry decision).
