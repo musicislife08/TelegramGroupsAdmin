@@ -289,13 +289,14 @@ Anthropic = 4   // appended
   awareness).
 
 ### Model discovery
-- `AIServiceFactory.FetchModelsAsync`: `Anthropic` branch lists models via the official
-  Anthropic models endpoint (Anthropic exposes `GET /v1/models`). Prefer the official SDK's
-  models-listing service if it surfaces one (confirm the exact method during implementation,
-  e.g. `client.Models.List()`); otherwise call `GET https://api.anthropic.com/v1/models`
-  directly with Anthropic auth headers (`x-api-key: <key>`, `anthropic-version: <date>`) and
-  parse the `{ data: [{ id, display_name, created_at }] }` shape into `AIModelInfo`. Mirrors
-  "query the API for the model list" as done for OpenAI, with provider-specific auth.
+- `AIServiceFactory.FetchModelsAsync`: `Anthropic` branch calls
+  `GET https://api.anthropic.com/v1/models` directly with Anthropic auth headers
+  (`x-api-key: <key>`, `anthropic-version: <date>`) and parses the
+  `{ data: [{ id, display_name, created_at }] }` shape into `AIModelInfo`. The raw REST call
+  is **preferred over the SDK's native models-listing service** specifically to keep model
+  discovery off the SDK's beta surface (see Risk 5) — `FetchModelsAsync` already uses
+  `HttpClient` directly for every other provider, so this is consistent. Mirrors "query the
+  API for the model list" as done for OpenAI, with provider-specific auth.
 
 ### UI
 - Add an "Anthropic (Claude)" provider item to `AddAIConnectionDialog.razor` with helper
@@ -331,12 +332,18 @@ Anthropic = 4   // appended
    Forces ~8 mechanical test-literal suffix edits (covered by the hybrid contract).
 4. **Token counts `long?` → `int?`.** Safe for realistic token volumes; clamp/cast in
    `CreateResult`.
-5. **Anthropic package — beta + disambiguation.** Use the **official `Anthropic` SDK v10+**
-   (`12.24.1`). It is documented beta: breaking changes may land in minor/patch releases, so
-   pin the exact version and expect occasional upgrade friction. Do not confuse with
-   `Anthropic.SDK` (tghamm community) or `tryAGI.Anthropic` (former `Anthropic` ≤3.x).
-   Acceptable risk here: Anthropic is a new, optional provider on a single-instance
-   deployment, not load-bearing.
+5. **Anthropic package — beta, but minimally exposed.** Use the **official `Anthropic` SDK
+   v10+** (`12.24.1`), documented beta (breaking changes may land in minor/patch). **Our
+   exposure to that churn is near-zero**: we touch only two of the SDK's native symbols —
+   the `AnthropicClient` constructor and the `.AsIChatClient(model)` bridge — and everything
+   downstream is the **GA-stable `Microsoft.Extensions.AI.Abstractions` `IChatClient`
+   contract** the SDK conforms to. The `IChatService` boundary further confines any breakage
+   to `BuildClient`. So this beta dependency is safe to track with the rest for our use
+   cases; pin the exact version and the only realistic upgrade cost is the occasional
+   two-line `BuildClient` fix. The one spot with genuine native-surface exposure is model
+   discovery (see commit 3) — prefer the raw REST `/v1/models` call over the SDK's native
+   listing to keep even that insulated. Do not confuse with `Anthropic.SDK` (tghamm
+   community) or `tryAGI.Anthropic` (former `Anthropic` ≤3.x).
 6. **`TreatWarningsAsErrors`.** The AI project treats warnings as errors; the obsolete
    `AsChatClient` would fail the build — `AsIChatClient` is mandatory.
 
