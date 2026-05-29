@@ -15,12 +15,6 @@ public class AIServiceFactory : IAIServiceFactory
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<AIServiceFactory> _logger;
 
-    // JSON options for API responses
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNameCaseInsensitive = true
-    };
-
     public AIServiceFactory(
         ISystemConfigRepository configRepository,
         IHttpClientFactory httpClientFactory,
@@ -207,7 +201,7 @@ public class AIServiceFactory : IAIServiceFactory
             }
 
             var content = await response.Content.ReadAsStringAsync(cancellationToken);
-            var modelsResponse = JsonSerializer.Deserialize<OpenAIModelsResponse>(content, JsonOptions);
+            var modelsResponse = JsonSerializer.Deserialize<OpenAIModelsResponse>(content, AIJsonDefaults.CaseInsensitive);
 
             // Return ALL models - no filtering (UI handles capability filtering)
             return modelsResponse?.Data?
@@ -239,7 +233,7 @@ public class AIServiceFactory : IAIServiceFactory
         }
 
         var content = await response.Content.ReadAsStringAsync(cancellationToken);
-        var ollamaResponse = JsonSerializer.Deserialize<OllamaModelsResponse>(content, JsonOptions);
+        var ollamaResponse = JsonSerializer.Deserialize<OllamaModelsResponse>(content, AIJsonDefaults.CaseInsensitive);
 
         return ollamaResponse?.Models?
             .Select(m => new AIModelInfo
@@ -280,7 +274,7 @@ public class AIServiceFactory : IAIServiceFactory
             }
 
             var content = await response.Content.ReadAsStringAsync(cancellationToken);
-            var modelsResponse = JsonSerializer.Deserialize<AnthropicModelsResponse>(content, JsonOptions);
+            var modelsResponse = JsonSerializer.Deserialize<AnthropicModelsResponse>(content, AIJsonDefaults.CaseInsensitive);
 
             return modelsResponse?.Data?
                 .Select(m => new AIModelInfo { Id = m.Id })

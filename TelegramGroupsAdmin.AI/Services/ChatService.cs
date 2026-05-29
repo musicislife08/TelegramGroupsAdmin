@@ -15,15 +15,17 @@ namespace TelegramGroupsAdmin.AI.Services;
 
 /// <summary>
 /// Implementation of IChatService using Microsoft.Extensions.AI (IChatClient).
-/// Supports OpenAI, Azure OpenAI, and OpenAI-compatible local endpoints.
+/// Supports OpenAI, Azure OpenAI, OpenAI-compatible local endpoints, OpenRouter,
+/// and Anthropic (Claude).
 /// Clients use the OpenAI SDK's default shared transport
 /// (<see cref="System.ClientModel.Primitives.HttpClientPipelineTransport.Shared"/>),
 /// so the underlying HTTP handler is pooled across all clients automatically.
-/// The static cache, keyed by connection + model + key, persists across scoped
+/// The static cache, keyed by connection + model + endpoint, persists across scoped
 /// instances for reuse. Evicted clients are disposed defensively
-/// (IChatClient : IDisposable) — Dispose is a no-op for the OpenAI/Azure MEAI
-/// clients today, but providers whose clients hold resources (e.g. the Anthropic
-/// client added later) rely on it.
+/// (IChatClient : IDisposable), but in practice Dispose is a verified no-op for
+/// every provider today: the MEAI adapters (OpenAIChatClient, AnthropicChatClient)
+/// don't own the underlying SDK client's transport and don't forward Dispose to it.
+/// The call is kept as a cheap safety measure should a future adapter own resources.
 /// </summary>
 public class ChatService : IChatService
 {
@@ -32,6 +34,10 @@ public class ChatService : IChatService
     // Cache bounds: expected <10 entries (connections × models). Entries are
     // disposed on eviction via InvalidateCache().
     private static readonly ConcurrentDictionary<string, CachedClient> ClientCache = new();
+
+    // Cache name reported to CacheMetrics for hit/miss accounting.
+    private const string CacheName = "chat_client";
+
     private readonly ISystemConfigRepository _configRepository;
     private readonly ILogger<ChatService> _logger;
     private readonly ApiMetrics _apiMetrics;
@@ -432,15 +438,10 @@ public class ChatService : IChatService
 
         var cacheKey = GenerateCacheKey(connection, testFeatureConfig);
 
-        if (ClientCache.TryGetValue(cacheKey, out var cachedClient))
+        var created = false;
+        var cachedClient = ClientCache.GetOrAdd(cacheKey, _ =>
         {
-            _cacheMetrics.RecordHit("chat_client");
-            return cachedClient;
-        }
-
-        _cacheMetrics.RecordMiss("chat_client");
-        cachedClient = ClientCache.GetOrAdd(cacheKey, _ =>
-        {
+            created = true;
             var client = BuildClient(connection, testFeatureConfig, apiKey);
             var modelId = connection.Provider == AIProviderType.AzureOpenAI
                 ? azureDeploymentName ?? model
@@ -451,6 +452,11 @@ public class ChatService : IChatService
 
             return new CachedClient(client, modelId);
         });
+
+        if (created)
+            _cacheMetrics.RecordMiss(CacheName);
+        else
+            _cacheMetrics.RecordHit(CacheName);
 
         return cachedClient;
     }
@@ -484,32 +490,27 @@ public class ChatService : IChatService
 
         var cacheKey = GenerateCacheKey(connection, featureConfig);
 
-        var conn = connection;
-        var featConfig = featureConfig;
-        var key = apiKey;
-
         try
         {
-            if (ClientCache.TryGetValue(cacheKey, out var cachedClient))
+            var created = false;
+            var cachedClient = ClientCache.GetOrAdd(cacheKey, _ =>
             {
-                _cacheMetrics.RecordHit("chat_client");
-            }
+                created = true;
+                var client = BuildClient(connection, featureConfig, apiKey);
+                var modelId = connection.Provider == AIProviderType.AzureOpenAI
+                    ? featureConfig.AzureDeploymentName ?? featureConfig.Model
+                    : featureConfig.Model;
+
+                _logger.LogDebug("Created and cached client for connection {ConnectionId}, model {Model}",
+                    connection.Id, modelId);
+
+                return new CachedClient(client, modelId);
+            });
+
+            if (created)
+                _cacheMetrics.RecordMiss(CacheName);
             else
-            {
-                _cacheMetrics.RecordMiss("chat_client");
-                cachedClient = ClientCache.GetOrAdd(cacheKey, _ =>
-                {
-                    var client = BuildClient(conn, featConfig, key);
-                    var modelId = conn.Provider == AIProviderType.AzureOpenAI
-                        ? featConfig.AzureDeploymentName ?? featConfig.Model
-                        : featConfig.Model;
-
-                    _logger.LogDebug("Created and cached client for connection {ConnectionId}, model {Model}",
-                        conn.Id, modelId);
-
-                    return new CachedClient(client, modelId);
-                });
-            }
+                _cacheMetrics.RecordHit(CacheName);
 
             return new ClientLookupResult(cachedClient, featureConfig);
         }

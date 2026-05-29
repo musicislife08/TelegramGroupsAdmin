@@ -6,17 +6,12 @@ namespace TelegramGroupsAdmin.AI.Services;
 
 /// <summary>
 /// AI-based translation service for detecting and translating foreign language content
-/// Uses IChatService for multi-provider support (OpenAI, Azure OpenAI, local models)
+/// Uses IChatService for multi-provider support (OpenAI, Azure OpenAI, OpenAI-compatible, OpenRouter, Anthropic)
 /// </summary>
 public class AITranslationService : IAITranslationService
 {
     private readonly IChatService _chatService;
     private readonly ILogger<AITranslationService> _logger;
-
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNameCaseInsensitive = true
-    };
 
     public AITranslationService(
         IChatService chatService,
@@ -93,7 +88,7 @@ public class AITranslationService : IAITranslationService
             }
 
             // Parse the JSON response
-            var translationResult = JsonSerializer.Deserialize<TranslationApiResult>(content, JsonOptions);
+            var translationResult = JsonSerializer.Deserialize<TranslationApiResult>(content, AIJsonDefaults.CaseInsensitive);
             if (translationResult == null)
             {
                 _logger.LogWarning("Failed to parse AI translation result: {Content}", content);
