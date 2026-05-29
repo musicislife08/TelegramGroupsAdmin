@@ -11,7 +11,7 @@ public static class AIProviderConfigMappings
         {
             Connections = data.Connections.Select(c => c.ToModel()).ToList(),
             Features = data.Features.ToDictionary(
-                kvp => Enum.Parse<AIFeatureType>(kvp.Key),
+                kvp => (AIFeatureType)kvp.Key,
                 kvp => kvp.Value.ToModel())
         };
     }
@@ -22,7 +22,7 @@ public static class AIProviderConfigMappings
         {
             Connections = model.Connections.Select(c => c.ToData()).ToList(),
             Features = model.Features.ToDictionary(
-                kvp => kvp.Key.ToString(),
+                kvp => (int)kvp.Key,
                 kvp => kvp.Value.ToData())
         };
     }

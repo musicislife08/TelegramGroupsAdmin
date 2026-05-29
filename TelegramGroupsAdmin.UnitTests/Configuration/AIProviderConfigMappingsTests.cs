@@ -75,32 +75,30 @@ public class AIProviderConfigMappingsTests
     }
 
     [Test]
-    public void BackwardRead_DomainSerializedJson_DeserializesViaDtoToEquivalentModel()
+    public void ToData_SerializesFeatureKeysAsIntegers()
     {
-        // Simulates a row stored by the OLD code path (domain model serialized directly).
-        var original = BuildPopulatedModel();
-        var storedJson = JsonSerializer.Serialize(original, JsonOptions);
+        // The whole point of the DTO: feature keys persist as ints ("0".."5"), NOT enum
+        // names. This is what makes a future AIFeatureType rename (#282) migration-free.
+        var json = JsonSerializer.Serialize(BuildPopulatedModel().ToData(), JsonOptions);
 
-        // New read path: deserialize into the DTO, then map to model.
-        var viaDto = JsonSerializer.Deserialize<AIProviderConfigData>(storedJson, JsonOptions)!.ToModel();
-
-        Assert.That(viaDto.Connections, Has.Count.EqualTo(original.Connections.Count));
-        Assert.That(viaDto.Connections[0].Provider, Is.EqualTo(AIProviderType.OpenAI));
-        Assert.That(viaDto.Connections[1].Provider, Is.EqualTo(AIProviderType.AzureOpenAI));
-        Assert.That(viaDto.Features, Has.Count.EqualTo(6));
-        Assert.That(viaDto.Features[AIFeatureType.SpamDetection].Temperature, Is.EqualTo(0.3));
-        Assert.That(viaDto.Features[AIFeatureType.ProfileScan].RequiresVision, Is.True);
+        Assert.That(json, Does.Contain("\"0\":"));   // SpamDetection
+        Assert.That(json, Does.Contain("\"5\":"));   // ProfileScan
+        Assert.That(json, Does.Not.Contain("SpamDetection"));
+        Assert.That(json, Does.Not.Contain("ProfileScan"));
     }
 
     [Test]
-    public void NewWritePath_SerializesIdenticallyToOldDomainPath()
+    public void IntKeyedJson_RoundTripsThroughDtoToModel()
     {
-        // Proves no data migration: old write (domain) and new write (DTO) produce the same JSON.
-        var original = BuildPopulatedModel();
+        // New stored format (int keys) reads back through the DTO to the domain model.
+        var stored = JsonSerializer.Serialize(BuildPopulatedModel().ToData(), JsonOptions);
 
-        var oldJson = JsonSerializer.Serialize(original, JsonOptions);
-        var newJson = JsonSerializer.Serialize(original.ToData(), JsonOptions);
+        var model = JsonSerializer.Deserialize<AIProviderConfigData>(stored, JsonOptions)!.ToModel();
 
-        Assert.That(newJson, Is.EqualTo(oldJson));
+        Assert.That(model.Features, Has.Count.EqualTo(6));
+        Assert.That(model.Features[AIFeatureType.SpamDetection].Model, Is.EqualTo("gpt-4o"));
+        Assert.That(model.Features[AIFeatureType.SpamDetection].Temperature, Is.EqualTo(0.3));
+        Assert.That(model.Features[AIFeatureType.ProfileScan].RequiresVision, Is.True);
+        Assert.That(model.Connections[1].Provider, Is.EqualTo(AIProviderType.AzureOpenAI));
     }
 }

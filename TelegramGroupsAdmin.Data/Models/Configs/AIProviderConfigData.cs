@@ -3,8 +3,8 @@ namespace TelegramGroupsAdmin.Data.Models.Configs;
 /// <summary>
 /// Data layer representation of AIProviderConfig for EF Core JSON column mapping.
 /// Maps to business model via ToModel/ToDto extensions.
-/// Note: AIFeatureType enum keys serialize as named strings in JSONB (e.g., "SpamDetection"),
-/// matching the domain model's Dictionary&lt;AIFeatureType, AIFeatureConfig&gt; serialization.
+/// Note: feature keys are stored as the integer values of the AIFeatureType enum
+/// (e.g., 0 = SpamDetection), so renaming an enum member never orphans stored config.
 /// </summary>
 public class AIProviderConfigData
 {
@@ -15,15 +15,15 @@ public class AIProviderConfigData
 
     /// <summary>
     /// Per-feature configuration (connection + model + params).
-    /// String keys match the named-string serialization of AIFeatureType enum values.
+    /// Integer keys are the AIFeatureType enum values (0..5).
     /// </summary>
-    public Dictionary<string, AIFeatureConfigData> Features { get; set; } = new()
+    public Dictionary<int, AIFeatureConfigData> Features { get; set; } = new()
     {
-        ["SpamDetection"] = new(),
-        ["Translation"] = new(),
-        ["ImageAnalysis"] = new() { RequiresVision = true },
-        ["VideoAnalysis"] = new() { RequiresVision = true },
-        ["PromptBuilder"] = new(),
-        ["ProfileScan"] = new() { RequiresVision = true }
+        [0] = new(), // SpamDetection
+        [1] = new(), // Translation
+        [2] = new() { RequiresVision = true }, // ImageAnalysis
+        [3] = new() { RequiresVision = true }, // VideoAnalysis
+        [4] = new(), // PromptBuilder
+        [5] = new() { RequiresVision = true } // ProfileScan
     };
 }
