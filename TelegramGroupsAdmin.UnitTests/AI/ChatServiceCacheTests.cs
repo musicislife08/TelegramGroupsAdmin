@@ -49,4 +49,20 @@ public class ChatServiceCacheTests
         fakeClient.Received(1).Dispose();
         Assert.That(cache.Contains(key), Is.False);
     }
+
+    [Test]
+    public void InvalidateCache_WithNullConnectionId_DisposesAllClientsAndClearsCache()
+    {
+        var clientA = Substitute.For<IChatClient>();
+        var clientB = Substitute.For<IChatClient>();
+        var cache = GetCache();
+        cache["conn-a|OpenAI|gpt-4o|||"] = NewCachedClient(clientA);
+        cache["conn-b|Anthropic|claude-opus-4|||"] = NewCachedClient(clientB);
+
+        CreateService().InvalidateCache(); // null connectionId = clear everything
+
+        clientA.Received(1).Dispose();
+        clientB.Received(1).Dispose();
+        Assert.That(cache.Count, Is.EqualTo(0));
+    }
 }

@@ -87,6 +87,29 @@ public class AIProviderConfigMappingsTests
     }
 
     [Test]
+    [TestCase(AIProviderType.OpenAI, 0)]
+    [TestCase(AIProviderType.AzureOpenAI, 1)]
+    [TestCase(AIProviderType.OpenAICompatible, 2)]
+    [TestCase(AIProviderType.OpenRouter, 3)]
+    [TestCase(AIProviderType.Anthropic, 4)]
+    public void ToData_PinsProviderEnumToIntValue_AndRoundTrips(AIProviderType provider, int expectedStored)
+    {
+        // The mapping casts (int)Provider on the way down and (AIProviderType)int on the way
+        // back. Pinning each numeric value catches an accidental enum-ordinal shift that would
+        // silently remap stored connections (e.g. an OpenRouter connection read back as Anthropic).
+        var model = new AIProviderConfig
+        {
+            Connections = [new AIConnection { Id = "c", Provider = provider, Enabled = true }]
+        };
+
+        var data = model.ToData();
+        Assert.That(data.Connections[0].Provider, Is.EqualTo(expectedStored));
+
+        var back = data.ToModel();
+        Assert.That(back.Connections[0].Provider, Is.EqualTo(provider));
+    }
+
+    [Test]
     public void IntKeyedJson_RoundTripsThroughDtoToModel()
     {
         // New stored format (int keys) reads back through the DTO to the domain model.
