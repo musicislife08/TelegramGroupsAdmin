@@ -1,9 +1,11 @@
+using System.ClientModel;
+using System.ClientModel.Primitives;
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using Azure.AI.OpenAI;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
-using Microsoft.SemanticKernel;
-using Microsoft.SemanticKernel.ChatCompletion;
-using Microsoft.SemanticKernel.Connectors.OpenAI;
+using OpenAI;
 using TelegramGroupsAdmin.Configuration.Models;
 using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.Core;
@@ -12,33 +14,35 @@ using TelegramGroupsAdmin.Core.Metrics;
 namespace TelegramGroupsAdmin.AI.Services;
 
 /// <summary>
-/// Implementation of IChatService using Microsoft Semantic Kernel
-/// Supports OpenAI, Azure OpenAI, and OpenAI-compatible local endpoints
-/// Static kernel cache persists across scoped instances for efficiency
+/// Implementation of IChatService using Microsoft.Extensions.AI (IChatClient).
+/// Supports OpenAI, Azure OpenAI, and OpenAI-compatible local endpoints.
+/// Static client cache persists across scoped instances for reuse; evicted
+/// clients are disposed (IChatClient : IDisposable).
 /// </summary>
-public class SemanticKernelChatService : IChatService
+public class ChatService : IChatService
 {
-    // Static cache - persists across scoped instances for kernel reuse.
-    // Thread safety: ConcurrentDictionary + GetOrAdd provides atomic access even when
-    // multiple scoped instances (from different HTTP requests) access simultaneously.
-    // Cache bounds: Expected <10 entries in homelab use (connections × models configured).
-    // Unbounded growth is not a concern - entries only added when new connection/model combos
-    // are configured, and InvalidateCache() clears entries when connections are modified.
-    private static readonly ConcurrentDictionary<string, CachedKernel> KernelCache = new();
+    // Static cache - persists across scoped instances for client reuse.
+    // Thread safety: ConcurrentDictionary + GetOrAdd provides atomic access.
+    // Cache bounds: expected <10 entries (connections × models). Entries are
+    // disposed on eviction via InvalidateCache().
+    private static readonly ConcurrentDictionary<string, CachedClient> ClientCache = new();
     private readonly ISystemConfigRepository _configRepository;
-    private readonly ILogger<SemanticKernelChatService> _logger;
+    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly ILogger<ChatService> _logger;
     private readonly ApiMetrics _apiMetrics;
     private readonly CacheMetrics _cacheMetrics;
 
-    public static int CachedKernelCount => KernelCache.Count;
+    public static int CachedClientCount => ClientCache.Count;
 
-    public SemanticKernelChatService(
+    public ChatService(
         ISystemConfigRepository configRepository,
-        ILogger<SemanticKernelChatService> logger,
+        IHttpClientFactory httpClientFactory,
+        ILogger<ChatService> logger,
         ApiMetrics apiMetrics,
         CacheMetrics cacheMetrics)
     {
         _configRepository = configRepository;
+        _httpClientFactory = httpClientFactory;
         _logger = logger;
         _apiMetrics = apiMetrics;
         _cacheMetrics = cacheMetrics;
@@ -52,38 +56,35 @@ public class SemanticKernelChatService : IChatService
         ChatCompletionOptions? options = null,
         CancellationToken cancellationToken = default)
     {
-        var lookupResult = await GetOrCreateKernelAsync(feature, cancellationToken);
+        var lookupResult = await GetOrCreateClientAsync(feature, cancellationToken);
         if (lookupResult == null)
         {
             _logger.LogDebug("Feature {Feature} is not configured, skipping AI call", feature);
             return null;
         }
 
-        var kernelInfo = lookupResult.Kernel;
+        var clientInfo = lookupResult.Client;
         var featureConfig = lookupResult.FeatureConfig;
 
         var stopwatch = Stopwatch.StartNew();
         try
         {
-            var chatHistory = new ChatHistory();
-            chatHistory.AddSystemMessage(systemPrompt);
-            chatHistory.AddUserMessage(userPrompt);
+            var messages = new List<ChatMessage>
+            {
+                new(ChatRole.System, systemPrompt),
+                new(ChatRole.User, userPrompt)
+            };
 
-            // Apply feature config defaults for settings not specified by caller
             var effectiveOptions = ApplyFeatureConfigDefaults(options, featureConfig);
-            var executionSettings = CreateExecutionSettings(effectiveOptions);
+            var chatOptions = CreateChatOptions(effectiveOptions);
 
-            var response = await kernelInfo.ChatService.GetChatMessageContentAsync(
-                chatHistory,
-                executionSettings,
-                kernel: kernelInfo.Kernel,
-                cancellationToken: cancellationToken);
+            var response = await clientInfo.Client.GetResponseAsync(messages, chatOptions, cancellationToken);
 
             stopwatch.Stop();
-            var result = CreateResult(response, kernelInfo.ModelId);
+            var result = CreateResult(response, clientInfo.ModelId);
             _apiMetrics.RecordOpenAiCall(
                 feature.ToString(),
-                kernelInfo.ModelId,
+                clientInfo.ModelId,
                 result?.PromptTokens ?? 0,
                 result?.CompletionTokens ?? 0,
                 stopwatch.Elapsed.TotalMilliseconds,
@@ -96,12 +97,12 @@ public class SemanticKernelChatService : IChatService
             stopwatch.Stop();
             _apiMetrics.RecordOpenAiCall(
                 feature.ToString(),
-                kernelInfo.ModelId,
+                clientInfo.ModelId,
                 0, 0,
                 stopwatch.Elapsed.TotalMilliseconds,
                 success: false);
             _logger.LogError(ex, "Error getting chat completion from {Model} for feature {Feature}",
-                kernelInfo.ModelId, feature);
+                clientInfo.ModelId, feature);
             throw; // Let caller handle the exception
         }
     }
@@ -116,42 +117,35 @@ public class SemanticKernelChatService : IChatService
         ChatCompletionOptions? options = null,
         CancellationToken cancellationToken = default)
     {
-        var lookupResult = await GetOrCreateKernelAsync(feature, cancellationToken);
+        var lookupResult = await GetOrCreateClientAsync(feature, cancellationToken);
         if (lookupResult == null)
         {
             _logger.LogDebug("Feature {Feature} is not configured, skipping AI vision call", feature);
             return null;
         }
 
-        var kernelInfo = lookupResult.Kernel;
+        var clientInfo = lookupResult.Client;
         var featureConfig = lookupResult.FeatureConfig;
 
         var stopwatch = Stopwatch.StartNew();
         try
         {
-            var chatHistory = new ChatHistory();
-            chatHistory.AddSystemMessage(systemPrompt);
+            var messages = new List<ChatMessage>
+            {
+                new(ChatRole.System, systemPrompt),
+                new(ChatRole.User, [new TextContent(userPrompt), new DataContent(imageData, mimeType)])
+            };
 
-            // Create message with both text and image
-            var imageContent = new ImageContent(imageData, mimeType);
-            var textContent = new TextContent(userPrompt);
-            chatHistory.AddUserMessage([textContent, imageContent]);
-
-            // Apply feature config defaults for settings not specified by caller
             var effectiveOptions = ApplyFeatureConfigDefaults(options, featureConfig);
-            var executionSettings = CreateExecutionSettings(effectiveOptions);
+            var chatOptions = CreateChatOptions(effectiveOptions);
 
-            var response = await kernelInfo.ChatService.GetChatMessageContentAsync(
-                chatHistory,
-                executionSettings,
-                kernel: kernelInfo.Kernel,
-                cancellationToken: cancellationToken);
+            var response = await clientInfo.Client.GetResponseAsync(messages, chatOptions, cancellationToken);
 
             stopwatch.Stop();
-            var result = CreateResult(response, kernelInfo.ModelId);
+            var result = CreateResult(response, clientInfo.ModelId);
             _apiMetrics.RecordOpenAiCall(
                 feature.ToString(),
-                kernelInfo.ModelId,
+                clientInfo.ModelId,
                 result?.PromptTokens ?? 0,
                 result?.CompletionTokens ?? 0,
                 stopwatch.Elapsed.TotalMilliseconds,
@@ -164,12 +158,12 @@ public class SemanticKernelChatService : IChatService
             stopwatch.Stop();
             _apiMetrics.RecordOpenAiCall(
                 feature.ToString(),
-                kernelInfo.ModelId,
+                clientInfo.ModelId,
                 0, 0,
                 stopwatch.Elapsed.TotalMilliseconds,
                 success: false);
             _logger.LogError(ex, "Error getting vision completion from {Model} for feature {Feature}",
-                kernelInfo.ModelId, feature);
+                clientInfo.ModelId, feature);
             throw; // Let caller handle the exception
         }
     }
@@ -183,47 +177,41 @@ public class SemanticKernelChatService : IChatService
         ChatCompletionOptions? options = null,
         CancellationToken cancellationToken = default)
     {
-        var lookupResult = await GetOrCreateKernelAsync(feature, cancellationToken);
+        var lookupResult = await GetOrCreateClientAsync(feature, cancellationToken);
         if (lookupResult == null)
         {
             _logger.LogDebug("Feature {Feature} is not configured, skipping AI multi-image vision call", feature);
             return null;
         }
 
-        var kernelInfo = lookupResult.Kernel;
+        var clientInfo = lookupResult.Client;
         var featureConfig = lookupResult.FeatureConfig;
 
         var stopwatch = Stopwatch.StartNew();
         try
         {
-            var chatHistory = new ChatHistory();
-            chatHistory.AddSystemMessage(systemPrompt);
-
-            // Build message with text + all images
-            var contentItems = new ChatMessageContentItemCollection
-            {
-                new TextContent(userPrompt)
-            };
+            var contents = new List<AIContent> { new TextContent(userPrompt) };
             foreach (var image in images)
             {
-                contentItems.Add(new ImageContent(image.Data, image.MimeType));
+                contents.Add(new DataContent(image.Data, image.MimeType));
             }
-            chatHistory.AddUserMessage(contentItems);
+
+            var messages = new List<ChatMessage>
+            {
+                new(ChatRole.System, systemPrompt),
+                new(ChatRole.User, contents)
+            };
 
             var effectiveOptions = ApplyFeatureConfigDefaults(options, featureConfig);
-            var executionSettings = CreateExecutionSettings(effectiveOptions);
+            var chatOptions = CreateChatOptions(effectiveOptions);
 
-            var response = await kernelInfo.ChatService.GetChatMessageContentAsync(
-                chatHistory,
-                executionSettings,
-                kernel: kernelInfo.Kernel,
-                cancellationToken: cancellationToken);
+            var response = await clientInfo.Client.GetResponseAsync(messages, chatOptions, cancellationToken);
 
             stopwatch.Stop();
-            var result = CreateResult(response, kernelInfo.ModelId);
+            var result = CreateResult(response, clientInfo.ModelId);
             _apiMetrics.RecordOpenAiCall(
                 feature.ToString(),
-                kernelInfo.ModelId,
+                clientInfo.ModelId,
                 result?.PromptTokens ?? 0,
                 result?.CompletionTokens ?? 0,
                 stopwatch.Elapsed.TotalMilliseconds,
@@ -236,12 +224,12 @@ public class SemanticKernelChatService : IChatService
             stopwatch.Stop();
             _apiMetrics.RecordOpenAiCall(
                 feature.ToString(),
-                kernelInfo.ModelId,
+                clientInfo.ModelId,
                 0, 0,
                 stopwatch.Elapsed.TotalMilliseconds,
                 success: false);
             _logger.LogError(ex, "Error getting multi-image vision completion from {Model} for feature {Feature}",
-                kernelInfo.ModelId, feature);
+                clientInfo.ModelId, feature);
             throw;
         }
     }
@@ -276,18 +264,25 @@ public class SemanticKernelChatService : IChatService
     {
         if (connectionId == null)
         {
-            KernelCache.Clear();
-            _logger.LogDebug("Cleared all cached AI kernels");
+            foreach (var entry in ClientCache.Values)
+            {
+                entry.Client.Dispose();
+            }
+            ClientCache.Clear();
+            _logger.LogDebug("Cleared all cached AI chat clients");
         }
         else
         {
             // Remove all cache entries for this connection (keys are delimited with "|")
-            var keysToRemove = KernelCache.Keys.Where(k => k.StartsWith(connectionId + "|")).ToList();
+            var keysToRemove = ClientCache.Keys.Where(k => k.StartsWith(connectionId + "|")).ToList();
             foreach (var key in keysToRemove)
             {
-                KernelCache.TryRemove(key, out _);
+                if (ClientCache.TryRemove(key, out var removed))
+                {
+                    removed.Client.Dispose();
+                }
             }
-            _logger.LogDebug("Invalidated cached AI kernel for connection {ConnectionId}", connectionId);
+            _logger.LogDebug("Invalidated cached AI chat client for connection {ConnectionId}", connectionId);
         }
     }
 
@@ -301,62 +296,36 @@ public class SemanticKernelChatService : IChatService
         ChatCompletionOptions? options = null,
         CancellationToken cancellationToken = default)
     {
-        var kernelInfo = await GetOrCreateTestKernelAsync(connectionId, model, azureDeploymentName, cancellationToken);
-        if (kernelInfo == null)
+        var clientInfo = await GetOrCreateTestClientAsync(connectionId, model, azureDeploymentName, cancellationToken);
+        if (clientInfo == null)
         {
-            // Debug level - specific reason already logged at Warning level by GetOrCreateTestKernelAsync
-            _logger.LogDebug("Test kernel not available for connection {ConnectionId}, model {Model}",
+            _logger.LogDebug("Test client not available for connection {ConnectionId}, model {Model}",
                 connectionId, model);
             return null;
         }
 
         try
         {
-            _logger.LogDebug("Making test completion call to {Model}", kernelInfo.ModelId);
+            _logger.LogDebug("Making test completion call to {Model}", clientInfo.ModelId);
 
-            var chatHistory = new ChatHistory();
-            chatHistory.AddSystemMessage(systemPrompt);
-            chatHistory.AddUserMessage(userPrompt);
+            var messages = new List<ChatMessage>
+            {
+                new(ChatRole.System, systemPrompt),
+                new(ChatRole.User, userPrompt)
+            };
 
-            var executionSettings = CreateExecutionSettings(options);
+            var chatOptions = CreateChatOptions(options);
 
-            var response = await kernelInfo.ChatService.GetChatMessageContentAsync(
-                chatHistory,
-                executionSettings,
-                kernel: kernelInfo.Kernel,
-                cancellationToken: cancellationToken);
+            var response = await clientInfo.Client.GetResponseAsync(messages, chatOptions, cancellationToken);
 
-            // Detailed response logging for debugging
-            _logger.LogDebug("SK Response - Content: '{Content}', ModelId: {ModelId}, Role: {Role}, ItemCount: {ItemCount}",
-                response.Content ?? "(null)",
+            _logger.LogDebug("MEAI Response - Text: '{Text}', ModelId: {ModelId}, FinishReason: {FinishReason}",
+                response.Text.Length > QueryConstants.DefaultLogTruncationLength
+                    ? response.Text[..QueryConstants.DefaultLogTruncationLength]
+                    : response.Text,
                 response.ModelId ?? "(null)",
-                response.Role.ToString(),
-                response.Items.Count);
+                response.FinishReason?.ToString() ?? "(null)");
 
-            if (response.Items.Count > 0)
-            {
-                foreach (var item in response.Items)
-                {
-                    _logger.LogDebug("SK Response Item - Type: {Type}, ToString: {Value}",
-                        item.GetType().Name, item.ToString()?[..Math.Min(item.ToString()?.Length ?? 0, QueryConstants.DefaultLogTruncationLength)]);
-                }
-            }
-
-            // Log metadata to find hidden errors
-            if (response.Metadata != null)
-            {
-                foreach (var kvp in response.Metadata)
-                {
-                    _logger.LogDebug("SK Metadata - {Key}: {Value}",
-                        kvp.Key, kvp.Value?.ToString()?[..Math.Min(kvp.Value?.ToString()?.Length ?? 0, QueryConstants.MaxMetadataLogLength)] ?? "(null)");
-                }
-            }
-            else
-            {
-                _logger.LogDebug("SK Response has no metadata");
-            }
-
-            var result = CreateResult(response, kernelInfo.ModelId);
+            var result = CreateResult(response, clientInfo.ModelId);
             _logger.LogDebug("Test completion returned: Content={HasContent}, Tokens={Tokens}",
                 !string.IsNullOrEmpty(result?.Content), result?.TotalTokens);
 
@@ -365,7 +334,7 @@ public class SemanticKernelChatService : IChatService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Test completion failed for {Model}: {Message}",
-                kernelInfo.ModelId, ex.Message);
+                clientInfo.ModelId, ex.Message);
             throw;
         }
     }
@@ -382,11 +351,10 @@ public class SemanticKernelChatService : IChatService
         ChatCompletionOptions? options = null,
         CancellationToken cancellationToken = default)
     {
-        var kernelInfo = await GetOrCreateTestKernelAsync(connectionId, model, azureDeploymentName, cancellationToken);
-        if (kernelInfo == null)
+        var clientInfo = await GetOrCreateTestClientAsync(connectionId, model, azureDeploymentName, cancellationToken);
+        if (clientInfo == null)
         {
-            // Debug level - specific reason already logged at Warning level by GetOrCreateTestKernelAsync
-            _logger.LogDebug("Test kernel not available for vision call, connection {ConnectionId}, model {Model}",
+            _logger.LogDebug("Test client not available for vision call, connection {ConnectionId}, model {Model}",
                 connectionId, model);
             return null;
         }
@@ -394,25 +362,19 @@ public class SemanticKernelChatService : IChatService
         try
         {
             _logger.LogDebug("Making test vision call to {Model} with {ImageSize} bytes",
-                kernelInfo.ModelId, imageData.Length);
+                clientInfo.ModelId, imageData.Length);
 
-            var chatHistory = new ChatHistory();
-            chatHistory.AddSystemMessage(systemPrompt);
+            var messages = new List<ChatMessage>
+            {
+                new(ChatRole.System, systemPrompt),
+                new(ChatRole.User, [new TextContent(userPrompt), new DataContent(imageData, mimeType)])
+            };
 
-            // Create message with both text and image
-            var imageContent = new ImageContent(imageData, mimeType);
-            var textContent = new TextContent(userPrompt);
-            chatHistory.AddUserMessage([textContent, imageContent]);
+            var chatOptions = CreateChatOptions(options);
 
-            var executionSettings = CreateExecutionSettings(options);
+            var response = await clientInfo.Client.GetResponseAsync(messages, chatOptions, cancellationToken);
 
-            var response = await kernelInfo.ChatService.GetChatMessageContentAsync(
-                chatHistory,
-                executionSettings,
-                kernel: kernelInfo.Kernel,
-                cancellationToken: cancellationToken);
-
-            var result = CreateResult(response, kernelInfo.ModelId);
+            var result = CreateResult(response, clientInfo.ModelId);
             _logger.LogDebug("Test vision returned: Content={HasContent}, Tokens={Tokens}",
                 !string.IsNullOrEmpty(result?.Content), result?.TotalTokens);
 
@@ -421,16 +383,16 @@ public class SemanticKernelChatService : IChatService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Test vision call failed for {Model}: {Message}",
-                kernelInfo.ModelId, ex.Message);
+                clientInfo.ModelId, ex.Message);
             throw;
         }
     }
 
     /// <summary>
-    /// Get or create a kernel for testing a specific connection+model combo
-    /// Does not use feature config - uses provided model/deployment directly
+    /// Get or create a client for testing a specific connection+model combo.
+    /// Does not use feature config - uses provided model/deployment directly.
     /// </summary>
-    private async Task<CachedKernel?> GetOrCreateTestKernelAsync(
+    private async Task<CachedClient?> GetOrCreateTestClientAsync(
         string connectionId,
         string model,
         string? azureDeploymentName,
@@ -449,7 +411,6 @@ public class SemanticKernelChatService : IChatService
         var apiKeys = await _configRepository.GetApiKeysAsync(cancellationToken);
         var apiKey = apiKeys?.GetAIConnectionKey(connection.Id);
 
-        // Validate API key if required
         if (connection.Provider != AIProviderType.LocalOpenAI || connection.LocalRequiresApiKey)
         {
             if (string.IsNullOrWhiteSpace(apiKey))
@@ -459,7 +420,6 @@ public class SemanticKernelChatService : IChatService
             }
         }
 
-        // Create a temporary feature config for the test
         var testFeatureConfig = new AIFeatureConfig
         {
             ConnectionId = connectionId,
@@ -467,38 +427,35 @@ public class SemanticKernelChatService : IChatService
             AzureDeploymentName = azureDeploymentName
         };
 
-        // Generate cache key for test kernel
         var cacheKey = GenerateCacheKey(connection, testFeatureConfig, apiKey);
 
-        // Check cache first for hit/miss tracking, then use GetOrAdd for thread safety
-        if (KernelCache.TryGetValue(cacheKey, out var cachedKernel))
+        if (ClientCache.TryGetValue(cacheKey, out var cachedClient))
         {
-            _cacheMetrics.RecordHit("kernel");
-            return cachedKernel;
+            _cacheMetrics.RecordHit("chat_client");
+            return cachedClient;
         }
 
-        _cacheMetrics.RecordMiss("kernel");
-        cachedKernel = KernelCache.GetOrAdd(cacheKey, _ =>
+        _cacheMetrics.RecordMiss("chat_client");
+        cachedClient = ClientCache.GetOrAdd(cacheKey, _ =>
         {
-            var kernel = BuildKernel(connection, testFeatureConfig, apiKey);
-            var chatService = kernel.GetRequiredService<IChatCompletionService>();
+            var client = BuildClient(connection, testFeatureConfig, apiKey);
             var modelId = connection.Provider == AIProviderType.AzureOpenAI
                 ? azureDeploymentName ?? model
                 : model;
 
-            _logger.LogDebug("Created and cached test kernel for connection {ConnectionId}, model {Model}",
+            _logger.LogDebug("Created and cached test client for connection {ConnectionId}, model {Model}",
                 connection.Id, modelId);
 
-            return new CachedKernel(kernel, chatService, modelId);
+            return new CachedClient(client, modelId);
         });
 
-        return cachedKernel;
+        return cachedClient;
     }
 
     /// <summary>
-    /// Get or create a cached Kernel for the specified feature
+    /// Get or create a cached IChatClient for the specified feature.
     /// </summary>
-    private async Task<KernelLookupResult?> GetOrCreateKernelAsync(AIFeatureType feature, CancellationToken cancellationToken)
+    private async Task<ClientLookupResult?> GetOrCreateClientAsync(AIFeatureType feature, CancellationToken cancellationToken)
     {
         var config = await _configRepository.GetAIProviderConfigAsync(cancellationToken);
         if (config == null) return null;
@@ -513,7 +470,6 @@ public class SemanticKernelChatService : IChatService
         var apiKeys = await _configRepository.GetApiKeysAsync(cancellationToken);
         var apiKey = apiKeys?.GetAIConnectionKey(connection.Id);
 
-        // Validate API key if required
         if (connection.Provider != AIProviderType.LocalOpenAI || connection.LocalRequiresApiKey)
         {
             if (string.IsNullOrWhiteSpace(apiKey))
@@ -523,90 +479,80 @@ public class SemanticKernelChatService : IChatService
             }
         }
 
-        // Generate cache key based on connection + model + relevant config
         var cacheKey = GenerateCacheKey(connection, featureConfig, apiKey);
 
-        // Use GetOrAdd for thread-safe atomic cache access
-        // Capture variables for the closure
         var conn = connection;
         var featConfig = featureConfig;
         var key = apiKey;
 
         try
         {
-            if (KernelCache.TryGetValue(cacheKey, out var cachedKernel))
+            if (ClientCache.TryGetValue(cacheKey, out var cachedClient))
             {
-                _cacheMetrics.RecordHit("kernel");
+                _cacheMetrics.RecordHit("chat_client");
             }
             else
             {
-                _cacheMetrics.RecordMiss("kernel");
-                cachedKernel = KernelCache.GetOrAdd(cacheKey, _ =>
+                _cacheMetrics.RecordMiss("chat_client");
+                cachedClient = ClientCache.GetOrAdd(cacheKey, _ =>
                 {
-                    var kernel = BuildKernel(conn, featConfig, key);
-                    var chatService = kernel.GetRequiredService<IChatCompletionService>();
+                    var client = BuildClient(conn, featConfig, key);
                     var modelId = conn.Provider == AIProviderType.AzureOpenAI
                         ? featConfig.AzureDeploymentName ?? featConfig.Model
                         : featConfig.Model;
 
-                    _logger.LogDebug("Created and cached kernel for connection {ConnectionId}, model {Model}",
+                    _logger.LogDebug("Created and cached client for connection {ConnectionId}, model {Model}",
                         conn.Id, modelId);
 
-                    return new CachedKernel(kernel, chatService, modelId);
+                    return new CachedClient(client, modelId);
                 });
             }
 
-            // Return kernel with feature config so caller can use config defaults (Temperature, MaxTokens)
-            return new KernelLookupResult(cachedKernel, featureConfig);
+            return new ClientLookupResult(cachedClient, featureConfig);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to create kernel for connection {ConnectionId}", connection.Id);
+            _logger.LogError(ex, "Failed to create client for connection {ConnectionId}", connection.Id);
             throw;
         }
     }
 
     /// <summary>
     /// Generate a cache key that changes when relevant config changes.
-    /// Uses full key string to avoid hash collisions - cache size is small (typically &lt;10 entries).
     /// </summary>
     /// <remarks>
-    /// MaxTokens and Temperature are intentionally NOT included in the cache key because they are
-    /// per-request execution settings passed to GetChatMessageContentAsync(), not kernel configuration.
-    /// The kernel/client can be reused across requests with different token limits and temperatures.
+    /// MaxTokens and Temperature are intentionally NOT included - they are per-request
+    /// ChatOptions, not client configuration; the client is reused across requests.
     /// </remarks>
     private static string GenerateCacheKey(AIConnection connection, AIFeatureConfig featureConfig, string? apiKey)
     {
-        // Use full key to avoid hash collisions - cache has few entries
-        // API key included so kernel is rebuilt if key changes
         return string.Join("|",
             connection.Id,
             connection.Provider.ToString(),
             featureConfig.Model ?? "",
             featureConfig.AzureDeploymentName ?? "",
             connection.AzureEndpoint ?? "",
-            connection.AzureApiVersion ?? "",
             connection.LocalEndpoint ?? "",
             apiKey ?? "");
     }
 
     /// <summary>
-    /// Build a Semantic Kernel for the given connection and feature config
+    /// Build an IChatClient for the given connection and feature config.
+    /// All clients share the pooled HTTP handler via IHttpClientFactory.
     /// </summary>
-    private static Kernel BuildKernel(AIConnection connection, AIFeatureConfig featureConfig, string? apiKey)
+    private IChatClient BuildClient(AIConnection connection, AIFeatureConfig featureConfig, string? apiKey)
     {
-        var builder = Kernel.CreateBuilder();
-
         switch (connection.Provider)
         {
             case AIProviderType.OpenAI:
                 if (string.IsNullOrWhiteSpace(apiKey))
                     throw new InvalidOperationException("OpenAI API key is required");
 
-                builder.AddOpenAIChatCompletion(
-                    modelId: featureConfig.Model,
-                    apiKey: apiKey);
-                break;
+                return new OpenAIClient(
+                        new ApiKeyCredential(apiKey),
+                        new OpenAIClientOptions { Transport = new HttpClientPipelineTransport(_httpClientFactory.CreateClient()) })
+                    .GetChatClient(featureConfig.Model)
+                    .AsIChatClient();
 
             case AIProviderType.AzureOpenAI:
                 if (string.IsNullOrWhiteSpace(apiKey))
@@ -616,12 +562,12 @@ public class SemanticKernelChatService : IChatService
                 if (string.IsNullOrWhiteSpace(featureConfig.AzureDeploymentName))
                     throw new InvalidOperationException("Azure deployment name is required");
 
-                builder.AddAzureOpenAIChatCompletion(
-                    deploymentName: featureConfig.AzureDeploymentName,
-                    endpoint: connection.AzureEndpoint,
-                    apiKey: apiKey,
-                    apiVersion: connection.AzureApiVersion);
-                break;
+                return new AzureOpenAIClient(
+                        new Uri(connection.AzureEndpoint),
+                        new ApiKeyCredential(apiKey),
+                        new AzureOpenAIClientOptions { Transport = new HttpClientPipelineTransport(_httpClientFactory.CreateClient()) })
+                    .GetChatClient(featureConfig.AzureDeploymentName)
+                    .AsIChatClient();
 
             case AIProviderType.LocalOpenAI:
                 if (string.IsNullOrWhiteSpace(connection.LocalEndpoint))
@@ -630,17 +576,19 @@ public class SemanticKernelChatService : IChatService
                 // Ollama and other keyless providers - use placeholder API key
                 var localApiKey = string.IsNullOrWhiteSpace(apiKey) ? "not-required" : apiKey;
 
-                builder.AddOpenAIChatCompletion(
-                    modelId: featureConfig.Model,
-                    apiKey: localApiKey,
-                    endpoint: new Uri(connection.LocalEndpoint));
-                break;
+                return new OpenAIClient(
+                        new ApiKeyCredential(localApiKey),
+                        new OpenAIClientOptions
+                        {
+                            Endpoint = new Uri(connection.LocalEndpoint),
+                            Transport = new HttpClientPipelineTransport(_httpClientFactory.CreateClient())
+                        })
+                    .GetChatClient(featureConfig.Model)
+                    .AsIChatClient();
 
             default:
                 throw new InvalidOperationException($"Unsupported AI provider type: {connection.Provider}");
         }
-
-        return builder.Build();
     }
 
     /// <summary>
@@ -651,7 +599,6 @@ public class SemanticKernelChatService : IChatService
     {
         return new ChatCompletionOptions
         {
-            // Use caller value if specified, otherwise use feature config default
             MaxTokens = options?.MaxTokens ?? featureConfig.MaxTokens,
             Temperature = options?.Temperature ?? featureConfig.Temperature,
             JsonMode = options?.JsonMode ?? false
@@ -659,73 +606,51 @@ public class SemanticKernelChatService : IChatService
     }
 
     /// <summary>
-    /// Create execution settings from options
+    /// Create MEAI ChatOptions from our options.
     /// </summary>
-    private static OpenAIPromptExecutionSettings CreateExecutionSettings(ChatCompletionOptions? options)
+    private static ChatOptions CreateChatOptions(ChatCompletionOptions? options)
     {
-        var settings = new OpenAIPromptExecutionSettings();
+        var chatOptions = new ChatOptions();
 
         if (options?.MaxTokens.HasValue == true)
-            settings.MaxTokens = options.MaxTokens.Value;
+            chatOptions.MaxOutputTokens = options.MaxTokens.Value;
 
         if (options?.Temperature.HasValue == true)
-            settings.Temperature = options.Temperature.Value;
+            chatOptions.Temperature = options.Temperature.Value;
 
         if (options?.JsonMode == true)
-            settings.ResponseFormat = "json_object";
+            chatOptions.ResponseFormat = ChatResponseFormat.Json;
 
-        return settings;
+        return chatOptions;
     }
 
     /// <summary>
-    /// Create result from SK response
+    /// Create result from the MEAI ChatResponse.
     /// </summary>
-    private static ChatCompletionResult? CreateResult(ChatMessageContent response, string fallbackModelId)
+    private static ChatCompletionResult? CreateResult(ChatResponse response, string fallbackModelId)
     {
-        var content = response.Content;
+        var content = response.Text;
         if (string.IsNullOrEmpty(content))
             return null;
-
-        int? totalTokens = null;
-        int? promptTokens = null;
-        int? completionTokens = null;
-        string? finishReason = null;
-
-        if (response.Metadata != null)
-        {
-            if (response.Metadata.TryGetValue("Usage", out var usageObj) &&
-                usageObj is OpenAI.Chat.ChatTokenUsage usage)
-            {
-                totalTokens = usage.TotalTokenCount;
-                promptTokens = usage.InputTokenCount;
-                completionTokens = usage.OutputTokenCount;
-            }
-
-            if (response.Metadata.TryGetValue("FinishReason", out var finishObj) &&
-                finishObj is OpenAI.Chat.ChatFinishReason reason)
-            {
-                finishReason = reason.ToString();
-            }
-        }
 
         return new ChatCompletionResult
         {
             Content = content,
             Model = response.ModelId ?? fallbackModelId,
-            TotalTokens = totalTokens,
-            PromptTokens = promptTokens,
-            CompletionTokens = completionTokens,
-            FinishReason = finishReason
+            TotalTokens = response.Usage?.TotalTokenCount,
+            PromptTokens = response.Usage?.InputTokenCount,
+            CompletionTokens = response.Usage?.OutputTokenCount,
+            FinishReason = response.FinishReason?.ToString()
         };
     }
 
     /// <summary>
-    /// Cached kernel with associated services
+    /// Cached IChatClient with its resolved model id.
     /// </summary>
-    private sealed record CachedKernel(Kernel Kernel, IChatCompletionService ChatService, string ModelId);
+    private sealed record CachedClient(IChatClient Client, string ModelId);
 
     /// <summary>
-    /// Kernel lookup result including feature config defaults for execution settings
+    /// Client lookup result including feature config defaults for ChatOptions.
     /// </summary>
-    private sealed record KernelLookupResult(CachedKernel Kernel, AIFeatureConfig FeatureConfig);
+    private sealed record ClientLookupResult(CachedClient Client, AIFeatureConfig FeatureConfig);
 }

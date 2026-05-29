@@ -27,11 +27,6 @@ public class AIConnectionData
     public string? AzureEndpoint { get; set; }
 
     /// <summary>
-    /// Azure OpenAI API version
-    /// </summary>
-    public string? AzureApiVersion { get; set; } = "2024-10-21";
-
-    /// <summary>
     /// Local endpoint URL for OpenAI-compatible providers
     /// </summary>
     public string? LocalEndpoint { get; set; }

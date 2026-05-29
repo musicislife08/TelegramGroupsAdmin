@@ -117,12 +117,12 @@
                                  Variant="Variant.Outlined"
                                  Min="100"
                                  Style="flex: 1;" />
-                <MudNumericField T="double"
+                <MudNumericField T="float"
                                  Value="@FeatureConfig.Temperature"
                                  ValueChanged="@OnTemperatureChanged"
                                  Label="Temperature"
                                  Variant="Variant.Outlined"
-                                 Min="0.0" Max="2.0" Step="0.1"
+                                 Min="0.0f" Max="2.0f" Step="0.1f"
                                  Format="F1"
                                  Style="flex: 1;" />
             </MudStack>
@@ -288,7 +288,7 @@
         _testResult = null; // Clear test result - config changed, must re-test
     }
 
-    private void OnTemperatureChanged(double value)
+    private void OnTemperatureChanged(float value)
     {
         FeatureConfig.Temperature = value;
         _testResult = null; // Clear test result - config changed, must re-test

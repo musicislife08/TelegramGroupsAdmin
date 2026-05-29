@@ -14,13 +14,11 @@
     <PackageReference Include="coverlet.collector" />
     <PackageReference Include="Humanizer" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
-    <PackageReference Include="Microsoft.SemanticKernel.Abstractions" />
     <PackageReference Include="MudBlazor" />
     <PackageReference Include="NSubstitute" />
     <PackageReference Include="NUnit" />
     <PackageReference Include="NUnit.Analyzers" />
     <PackageReference Include="NUnit3TestAdapter" />
-    <PackageReference Include="Microsoft.SemanticKernel" />
     <PackageReference Include="WireMock.Net" />
   </ItemGroup>
 

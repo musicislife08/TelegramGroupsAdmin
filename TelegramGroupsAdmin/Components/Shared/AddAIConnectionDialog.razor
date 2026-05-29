@@ -122,8 +122,6 @@
             Id = _connectionId.Trim().ToLowerInvariant(),
             Provider = _provider,
             Enabled = _enabled,
-            // Set defaults based on provider type
-            AzureApiVersion = _provider == AIProviderType.AzureOpenAI ? "2024-10-21" : null,
             LocalRequiresApiKey = false
         };
 

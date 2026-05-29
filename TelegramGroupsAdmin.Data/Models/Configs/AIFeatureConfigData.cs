@@ -23,7 +23,7 @@ public class AIFeatureConfigData
     /// <summary>
     /// Temperature for API requests (0.0-2.0)
     /// </summary>
-    public double Temperature { get; set; } = 0.2;
+    public float Temperature { get; set; } = 1.0f;
 
     /// <summary>
     /// Azure deployment name (required for AzureOpenAI connections)

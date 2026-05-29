@@ -2,7 +2,7 @@
 
 ## Project Role
 
-Owns AI service abstractions and implementations: chat completion via Semantic Kernel, AI-based translation, AI feature factories, and AI feature test runners.
+Owns AI service abstractions and implementations: chat completion via Microsoft.Extensions.AI (IChatClient), AI-based translation, AI feature factories, and AI feature test runners.
 
 ## Dependencies
 
@@ -12,5 +12,5 @@ Consumed by: `Telegram`, `Host` (`TelegramGroupsAdmin`).
 ## Design Rules
 
 - All AI services are `Scoped` (matching the lifetime of `ISystemConfigRepository`, which they consume).
-- The Semantic Kernel kernel cache in `SemanticKernelChatService` is `static` and persists across scoped instances — do not turn it into instance state.
-- This project owns the `Microsoft.SemanticKernel` package reference. Do not add it to `Core` or anywhere else.
+- The IChatClient cache in `ChatService` is `static` and persists across scoped instances — do not turn it into instance state. Evicted clients are disposed (IChatClient : IDisposable).
+- This project owns the `Microsoft.Extensions.AI*` package references. Do not add them to `Core` or anywhere else.

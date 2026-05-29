@@ -92,11 +92,11 @@ public sealed class MemoryMetrics
             () => bayesClassifier.GetMetadata()?.HamVocabularySize ?? 0,
             description: "Number of unique words in the Bayes ham vocabulary");
 
-        // --- Semantic Kernel cache (static) ---
+        // --- Chat client cache (static) ---
         meter.CreateObservableGauge(
-            "tga.cache.kernel.count",
-            () => SemanticKernelChatService.CachedKernelCount,
-            description: "Number of cached Semantic Kernel instances");
+            "tga.cache.chat_client.count",
+            () => ChatService.CachedClientCount,
+            description: "Number of cached Microsoft.Extensions.AI IChatClient instances");
 
         // --- Native memory gap (RSS minus GC committed) ---
         // Stable gap = WTelegram + ML.NET + Kestrel SSL baseline.

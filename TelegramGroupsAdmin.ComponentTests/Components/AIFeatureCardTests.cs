@@ -29,7 +29,7 @@ public class AIFeatureCardTests : MudBlazorTestContext
         string model = "gpt-4o-mini",
         string? azureDeploymentName = null,
         int maxTokens = 500,
-        double temperature = 0.7)
+        float temperature = 0.7f)
     {
         var config = new AIFeatureConfig
         {

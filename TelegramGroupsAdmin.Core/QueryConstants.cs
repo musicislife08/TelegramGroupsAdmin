@@ -18,13 +18,13 @@ public static class QueryConstants
     public const int DefaultWebNotificationLimit = 20;
 
     /// <summary>
-    /// Default maximum length for truncated log output in SemanticKernelChatService.
+    /// Default maximum length for truncated log output in ChatService.
     /// Used when logging response items to prevent excessive log verbosity.
     /// </summary>
     public const int DefaultLogTruncationLength = 200;
 
     /// <summary>
-    /// Maximum length for metadata value truncation in SemanticKernelChatService.
+    /// Maximum length for metadata value truncation in ChatService.
     /// Used when logging SK response metadata to prevent log overflow.
     /// </summary>
     public const int MaxMetadataLogLength = 500;
