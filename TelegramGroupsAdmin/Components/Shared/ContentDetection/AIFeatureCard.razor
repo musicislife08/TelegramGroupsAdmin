@@ -364,7 +364,8 @@
         {
             AIProviderType.OpenAI => "Using OpenAI API (api.openai.com)",
             AIProviderType.AzureOpenAI => $"Using Azure OpenAI at {SelectedConnection.AzureEndpoint ?? "(not configured)"}",
-            AIProviderType.LocalOpenAI => $"Using local endpoint at {SelectedConnection.LocalEndpoint ?? "(not configured)"}",
+            AIProviderType.OpenAICompatible => $"Using local endpoint at {SelectedConnection.LocalEndpoint ?? "(not configured)"}",
+            AIProviderType.OpenRouter => "Using OpenRouter (openrouter.ai)",
             _ => ""
         };
     }
@@ -373,7 +374,8 @@
     {
         AIProviderType.OpenAI => Icons.Material.Filled.Cloud,
         AIProviderType.AzureOpenAI => Icons.Material.Filled.CloudQueue,
-        AIProviderType.LocalOpenAI => Icons.Material.Filled.Computer,
+        AIProviderType.OpenAICompatible => Icons.Material.Filled.Computer,
+        AIProviderType.OpenRouter => Icons.Material.Filled.Hub,
         _ => Icons.Material.Filled.Psychology
     };
 
@@ -381,7 +383,8 @@
     {
         AIProviderType.OpenAI => "OpenAI",
         AIProviderType.AzureOpenAI => "Azure",
-        AIProviderType.LocalOpenAI => "Local",
+        AIProviderType.OpenAICompatible => "Compatible",
+        AIProviderType.OpenRouter => "OpenRouter",
         _ => provider.ToString()
     };
 }

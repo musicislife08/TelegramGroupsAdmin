@@ -8,15 +8,20 @@ public enum AIProviderType
     /// <summary>
     /// OpenAI API (api.openai.com)
     /// </summary>
-    OpenAI,
+    OpenAI = 0,
 
     /// <summary>
     /// Azure OpenAI Service (custom endpoint + deployment)
     /// </summary>
-    AzureOpenAI,
+    AzureOpenAI = 1,
 
     /// <summary>
-    /// Local/OpenAI-compatible endpoints (Ollama, LM Studio, vLLM)
+    /// OpenAI-compatible endpoints (Ollama, LM Studio, vLLM, …)
     /// </summary>
-    LocalOpenAI
+    OpenAICompatible = 2,
+
+    /// <summary>
+    /// OpenRouter aggregator (https://openrouter.ai/api/v1)
+    /// </summary>
+    OpenRouter = 3
 }

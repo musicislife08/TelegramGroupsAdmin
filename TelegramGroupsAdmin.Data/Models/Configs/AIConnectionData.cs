@@ -2,7 +2,7 @@ namespace TelegramGroupsAdmin.Data.Models.Configs;
 
 /// <summary>
 /// Data layer representation of AIConnection for EF Core JSON column mapping.
-/// Note: AIProviderType enum stored as int (0=OpenAI, 1=AzureOpenAI, 2=LocalOpenAI)
+/// Note: AIProviderType enum stored as int (0=OpenAI, 1=AzureOpenAI, 2=OpenAICompatible, 3=OpenRouter)
 /// </summary>
 public class AIConnectionData
 {

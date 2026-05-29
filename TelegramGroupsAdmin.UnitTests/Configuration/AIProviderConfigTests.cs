@@ -265,7 +265,7 @@ public class AIProviderConfigTests
             Connections =
             [
                 new AIConnection { Provider = AIProviderType.AzureOpenAI },
-                new AIConnection { Provider = AIProviderType.LocalOpenAI }
+                new AIConnection { Provider = AIProviderType.OpenAICompatible }
             ]
         };
 
@@ -277,7 +277,7 @@ public class AIProviderConfigTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(deserialized!.Connections[0].Provider, Is.EqualTo(AIProviderType.AzureOpenAI));
-            Assert.That(deserialized.Connections[1].Provider, Is.EqualTo(AIProviderType.LocalOpenAI));
+            Assert.That(deserialized.Connections[1].Provider, Is.EqualTo(AIProviderType.OpenAICompatible));
         }
     }
 
@@ -351,7 +351,7 @@ public class AIProviderConfigTests
             [
                 new AIConnection
                 {
-                    Provider = AIProviderType.LocalOpenAI,
+                    Provider = AIProviderType.OpenAICompatible,
                     LocalEndpoint = "http://localhost:11434/v1",
                     LocalRequiresApiKey = true
                 }

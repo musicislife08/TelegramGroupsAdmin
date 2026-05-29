@@ -141,7 +141,7 @@ public class AIProviderConfigIntegrationTests
                 new AIConnection
                 {
                     Id = "local-ollama",
-                    Provider = AIProviderType.LocalOpenAI,
+                    Provider = AIProviderType.OpenAICompatible,
                     Enabled = true,
                     LocalEndpoint = "http://localhost:11434/v1",
                     LocalRequiresApiKey = false
@@ -227,7 +227,7 @@ public class AIProviderConfigIntegrationTests
                 new AIConnection
                 {
                     Id = "local",
-                    Provider = AIProviderType.LocalOpenAI,
+                    Provider = AIProviderType.OpenAICompatible,
                     Enabled = true,
                     LocalEndpoint = "http://localhost:11434/v1"
                 }
@@ -371,7 +371,7 @@ public class AIProviderConfigIntegrationTests
                 new AIConnection
                 {
                     Id = "local",
-                    Provider = AIProviderType.LocalOpenAI,
+                    Provider = AIProviderType.OpenAICompatible,
                     Enabled = true,
                     LocalEndpoint = "http://localhost:11434/v1",
                     AvailableModels =
@@ -547,7 +547,7 @@ public class AIProviderConfigIntegrationTests
                 new AIConnection
                 {
                     Id = "local",
-                    Provider = AIProviderType.LocalOpenAI,
+                    Provider = AIProviderType.OpenAICompatible,
                     Enabled = true,
                     LocalEndpoint = "http://localhost:11434"
                 }
@@ -607,7 +607,7 @@ public class AIProviderConfigIntegrationTests
                 new AIConnection
                 {
                     Id = "custom",
-                    Provider = AIProviderType.LocalOpenAI,
+                    Provider = AIProviderType.OpenAICompatible,
                     Enabled = true,
                     LocalEndpoint = "http://localhost:8080/v1?api_version=2024-01-01&timeout=30"
                 }

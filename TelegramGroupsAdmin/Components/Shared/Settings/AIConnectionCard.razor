@@ -37,7 +37,7 @@
                          Placeholder="https://your-resource.openai.azure.com/"
                          HelperText="Azure OpenAI Service endpoint URL" />
         }
-        else if (Connection.Provider == AIProviderType.LocalOpenAI)
+        else if (Connection.Provider == AIProviderType.OpenAICompatible)
         {
             <MudTextField @bind-Value="_localEndpoint"
                          Label="Endpoint URL"
@@ -57,7 +57,7 @@
                      InputType="@(_showApiKey ? InputType.Text : InputType.Password)"
                      Placeholder="@GetApiKeyPlaceholder(Connection.Provider)"
                      HelperText="@GetApiKeyHelperText(Connection.Provider)"
-                     Disabled="@(Connection.Provider == AIProviderType.LocalOpenAI && !_localRequiresApiKey)"
+                     Disabled="@(Connection.Provider == AIProviderType.OpenAICompatible && !_localRequiresApiKey)"
                      Adornment="Adornment.End"
                      AdornmentIcon="@(_showApiKey ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
                      OnAdornmentClick="@(() => _showApiKey = !_showApiKey)" />
@@ -65,7 +65,7 @@
         <!-- Status & Actions -->
         @{
             var hasKey = !string.IsNullOrWhiteSpace(_apiKey);
-            var isReady = _enabled && (hasKey || (Connection.Provider == AIProviderType.LocalOpenAI && !_localRequiresApiKey));
+            var isReady = _enabled && (hasKey || (Connection.Provider == AIProviderType.OpenAICompatible && !_localRequiresApiKey));
         }
         <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
             <MudChip T="string"
@@ -164,7 +164,8 @@
     {
         AIProviderType.OpenAI => "OpenAI (api.openai.com)",
         AIProviderType.AzureOpenAI => "Azure OpenAI Service",
-        AIProviderType.LocalOpenAI => "Local / OpenAI-compatible",
+        AIProviderType.OpenAICompatible => "OpenAI-compatible",
+        AIProviderType.OpenRouter => "OpenRouter",
         _ => provider.ToString()
     };
 
@@ -172,7 +173,8 @@
     {
         AIProviderType.OpenAI => Icons.Material.Filled.Cloud,
         AIProviderType.AzureOpenAI => Icons.Material.Filled.CloudQueue,
-        AIProviderType.LocalOpenAI => Icons.Material.Filled.Computer,
+        AIProviderType.OpenAICompatible => Icons.Material.Filled.Computer,
+        AIProviderType.OpenRouter => Icons.Material.Filled.Hub,
         _ => Icons.Material.Filled.Psychology
     };
 
@@ -180,7 +182,8 @@
     {
         AIProviderType.OpenAI => "sk-...",
         AIProviderType.AzureOpenAI => "Azure API key",
-        AIProviderType.LocalOpenAI => "Optional API key",
+        AIProviderType.OpenAICompatible => "Optional API key",
+        AIProviderType.OpenRouter => "sk-or-...",
         _ => "API key"
     };
 
@@ -188,7 +191,8 @@
     {
         AIProviderType.OpenAI => "Get your API key from https://platform.openai.com/api-keys",
         AIProviderType.AzureOpenAI => "Azure OpenAI Service API key from Azure Portal",
-        AIProviderType.LocalOpenAI => "Leave empty if your provider doesn't require authentication",
+        AIProviderType.OpenAICompatible => "Leave empty if your provider doesn't require authentication",
+        AIProviderType.OpenRouter => "Get your API key from https://openrouter.ai/keys",
         _ => ""
     };
 }

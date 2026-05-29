@@ -250,7 +250,7 @@ public class ChatService : IChatService
             return false;
 
         // Check API key for non-local providers
-        if (connection.Provider != AIProviderType.LocalOpenAI || connection.LocalRequiresApiKey)
+        if (connection.Provider != AIProviderType.OpenAICompatible || connection.LocalRequiresApiKey)
         {
             var apiKeys = await _configRepository.GetApiKeysAsync(cancellationToken);
             var apiKey = apiKeys?.GetAIConnectionKey(connection.Id);
@@ -413,7 +413,7 @@ public class ChatService : IChatService
         var apiKeys = await _configRepository.GetApiKeysAsync(cancellationToken);
         var apiKey = apiKeys?.GetAIConnectionKey(connection.Id);
 
-        if (connection.Provider != AIProviderType.LocalOpenAI || connection.LocalRequiresApiKey)
+        if (connection.Provider != AIProviderType.OpenAICompatible || connection.LocalRequiresApiKey)
         {
             if (string.IsNullOrWhiteSpace(apiKey))
             {
@@ -472,7 +472,7 @@ public class ChatService : IChatService
         var apiKeys = await _configRepository.GetApiKeysAsync(cancellationToken);
         var apiKey = apiKeys?.GetAIConnectionKey(connection.Id);
 
-        if (connection.Provider != AIProviderType.LocalOpenAI || connection.LocalRequiresApiKey)
+        if (connection.Provider != AIProviderType.OpenAICompatible || connection.LocalRequiresApiKey)
         {
             if (string.IsNullOrWhiteSpace(apiKey))
             {
@@ -570,7 +570,7 @@ public class ChatService : IChatService
                     .GetChatClient(featureConfig.AzureDeploymentName)
                     .AsIChatClient();
 
-            case AIProviderType.LocalOpenAI:
+            case AIProviderType.OpenAICompatible:
                 if (string.IsNullOrWhiteSpace(connection.LocalEndpoint))
                     throw new InvalidOperationException("Local endpoint is required");
 
@@ -580,6 +580,20 @@ public class ChatService : IChatService
                 return new OpenAIClient(
                         new ApiKeyCredential(localApiKey),
                         new OpenAIClientOptions { Endpoint = new Uri(connection.LocalEndpoint) })
+                    .GetChatClient(featureConfig.Model)
+                    .AsIChatClient();
+
+            case AIProviderType.OpenRouter:
+                if (string.IsNullOrWhiteSpace(apiKey))
+                    throw new InvalidOperationException("OpenRouter API key is required");
+
+                var openRouterEndpoint = string.IsNullOrWhiteSpace(connection.LocalEndpoint)
+                    ? "https://openrouter.ai/api/v1"
+                    : connection.LocalEndpoint;
+
+                return new OpenAIClient(
+                        new ApiKeyCredential(apiKey),
+                        new OpenAIClientOptions { Endpoint = new Uri(openRouterEndpoint) })
                     .GetChatClient(featureConfig.Model)
                     .AsIChatClient();
 

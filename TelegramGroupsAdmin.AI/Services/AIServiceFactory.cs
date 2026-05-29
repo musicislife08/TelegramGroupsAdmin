@@ -140,9 +140,14 @@ public class AIServiceFactory : IAIServiceFactory
         var apiKey = apiKeys?.GetAIConnectionKey(connection.Id);
 
         // Determine endpoint based on provider
-        var endpoint = connection.Provider == AIProviderType.OpenAI
-            ? "https://api.openai.com"
-            : connection.LocalEndpoint!;
+        var endpoint = connection.Provider switch
+        {
+            AIProviderType.OpenAI => "https://api.openai.com",
+            AIProviderType.OpenRouter => string.IsNullOrWhiteSpace(connection.LocalEndpoint)
+                ? "https://openrouter.ai/api/v1"
+                : connection.LocalEndpoint,
+            _ => connection.LocalEndpoint!
+        };
 
         return await FetchOpenAICompatibleModelsAsync(endpoint, apiKey, cancellationToken);
     }

@@ -54,7 +54,8 @@ public class AIConnectionCardTests : MudBlazorTestContext
     [Test]
     [TestCase(AIProviderType.OpenAI, "OpenAI")]
     [TestCase(AIProviderType.AzureOpenAI, "Azure OpenAI")]
-    [TestCase(AIProviderType.LocalOpenAI, "Local")]
+    [TestCase(AIProviderType.OpenAICompatible, "OpenAI-compatible")]
+    [TestCase(AIProviderType.OpenRouter, "OpenRouter")]
     public void DisplaysProviderName(AIProviderType provider, string expectedText)
     {
         // Arrange
@@ -142,7 +143,7 @@ public class AIConnectionCardTests : MudBlazorTestContext
     {
         // Arrange
         var connection = CreateConnection(
-            provider: AIProviderType.LocalOpenAI,
+            provider: AIProviderType.OpenAICompatible,
             localEndpoint: "http://localhost:11434/v1");
 
         // Act
@@ -194,7 +195,7 @@ public class AIConnectionCardTests : MudBlazorTestContext
     {
         // Arrange
         var connection = CreateConnection(
-            provider: AIProviderType.LocalOpenAI,
+            provider: AIProviderType.OpenAICompatible,
             localRequiresApiKey: false);
 
         // Act
@@ -245,7 +246,7 @@ public class AIConnectionCardTests : MudBlazorTestContext
     {
         // Arrange
         var connection = CreateConnection(
-            provider: AIProviderType.LocalOpenAI,
+            provider: AIProviderType.OpenAICompatible,
             enabled: true,
             localRequiresApiKey: false);
 
