@@ -430,7 +430,7 @@ public class ChatService : IChatService
             AzureDeploymentName = azureDeploymentName
         };
 
-        var cacheKey = GenerateCacheKey(connection, testFeatureConfig, apiKey);
+        var cacheKey = GenerateCacheKey(connection, testFeatureConfig);
 
         if (ClientCache.TryGetValue(cacheKey, out var cachedClient))
         {
@@ -482,7 +482,7 @@ public class ChatService : IChatService
             }
         }
 
-        var cacheKey = GenerateCacheKey(connection, featureConfig, apiKey);
+        var cacheKey = GenerateCacheKey(connection, featureConfig);
 
         var conn = connection;
         var featConfig = featureConfig;
@@ -526,8 +526,14 @@ public class ChatService : IChatService
     /// <remarks>
     /// MaxTokens and Temperature are intentionally NOT included - they are per-request
     /// ChatOptions, not client configuration; the client is reused across requests.
+    ///
+    /// The API key is intentionally NOT included either. Including a secret in a long-lived
+    /// static dictionary key would pin the plaintext in process memory for the app lifetime.
+    /// A key can only change via AIProviderSettings.SaveConnectionAsync, which always calls
+    /// InvalidateCache(connection.Id) - so rotation is handled by eviction, not by key churn.
+    /// (Guarded by AIProviderSettingsTests.SaveConnection_InvalidatesChatClientCache*.)
     /// </remarks>
-    private static string GenerateCacheKey(AIConnection connection, AIFeatureConfig featureConfig, string? apiKey)
+    private static string GenerateCacheKey(AIConnection connection, AIFeatureConfig featureConfig)
     {
         return string.Join("|",
             connection.Id,
@@ -535,8 +541,7 @@ public class ChatService : IChatService
             featureConfig.Model ?? "",
             featureConfig.AzureDeploymentName ?? "",
             connection.AzureEndpoint ?? "",
-            connection.LocalEndpoint ?? "",
-            apiKey ?? "");
+            connection.LocalEndpoint ?? "");
     }
 
     /// <summary>

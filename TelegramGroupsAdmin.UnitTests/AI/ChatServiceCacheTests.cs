@@ -40,7 +40,8 @@ public class ChatServiceCacheTests
     {
         var fakeClient = Substitute.For<IChatClient>();
         var cache = GetCache();
-        var key = "dispose-test|OpenAI|gpt-4o||||";
+        // Key shape: id|provider|model|azureDeployment|azureEndpoint|localEndpoint (no api key segment)
+        var key = "dispose-test|OpenAI|gpt-4o|||";
         cache[key] = NewCachedClient(fakeClient);
 
         CreateService().InvalidateCache("dispose-test");
