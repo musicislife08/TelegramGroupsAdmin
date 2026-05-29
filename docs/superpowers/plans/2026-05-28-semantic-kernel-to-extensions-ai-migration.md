@@ -19,10 +19,12 @@
 ### Commit 1 — AI config Data-DTO/mapping
 | Action | File | Responsibility |
 |---|---|---|
-| Create | `TelegramGroupsAdmin.Configuration/Mappings/AIProviderConfigMappings.cs` | `ToData()`/`ToModel()` for the four AI config domain↔DTO pairs |
-| Modify | `TelegramGroupsAdmin.Data/Models/Configs/AIProviderConfigData.cs` | Add missing `ProfileScan` (key 5) default |
+| Create | `TelegramGroupsAdmin.Configuration/Mappings/AIProviderConfigMappings.cs` | `ToData()`/`ToModel()` for the four pairs; `Features` keys `(int)`↔`(AIFeatureType)` |
+| Modify | `TelegramGroupsAdmin.Data/Models/Configs/AIProviderConfigData.cs` | Int-keyed `Features` dict; add missing `ProfileScan` (key 5) default |
 | Modify | `TelegramGroupsAdmin.Configuration/Repositories/SystemConfigRepository.cs` | Route AI config get/save through the DTO + mapping |
-| Create | `TelegramGroupsAdmin.UnitTests/Configuration/AIProviderConfigMappingsTests.cs` | Round-trip + backward-read coverage |
+| Create | `TelegramGroupsAdmin.Data/Migrations/<ts>_RemapAIFeatureConfigKeysToInt.cs` | One-time JSONB remap of stored feature keys: names → ints |
+| Create | `TelegramGroupsAdmin.UnitTests/Configuration/AIProviderConfigMappingsTests.cs` | Round-trip + int-key wire-format coverage |
+| Create | `TelegramGroupsAdmin.IntegrationTests/Configuration/AIFeatureKeyMigrationTests.cs` | Verifies the name→int conversion on a seeded row |
 
 ### Commit 2 — SK → MEAI swap
 | Action | File | Responsibility |
@@ -70,7 +72,9 @@
 
 ## Commit 1 — Wire AI config through the Data-DTO/mapping layer
 
-**Why first:** AI config is the one config never wired through the `*Data`/`*Mappings` layer that #453/PR #465 established. `SystemConfigRepository` serializes the domain `AIProviderConfig` directly. Wiring it (mirroring the in-file `UserApiConfig` pattern) is behavior-preserving (numeric enum keys/values + matching property names ⇒ no data migration) and makes commit 2's `*Data` edits live. See the spec's "Persistence-layer gap".
+**Why first:** AI config is the one config never wired through the `*Data`/`*Mappings` layer that #453/PR #465 established. `SystemConfigRepository` serializes the domain `AIProviderConfig` directly, and makes commit 2's `*Data` edits live. See the spec's "Persistence-layer gap".
+
+**Critical correction (verified empirically 2026-05-28):** `System.Text.Json` serializes the `AIFeatureType`-keyed `Features` dictionary with **enum-name keys** (`{"SpamDetection": …}`), *not* numeric keys — confirmed by a throwaway probe. Existing production data therefore stores feature keys as names. This violates the project's "enums are always ints" rule, whose purpose is rename-safety: today renaming an `AIFeatureType` member (the open #282, SpamDetection→ContentDetection) would silently orphan stored config. This commit corrects that by storing feature keys as **ints** (matching the approved spec, which specifies numeric keys), via an int-keyed DTO + a one-time data migration of the single global config row (`chat_id = 0`). No back-compat shim (per project rules) — the migration rewrites the row once. The `Provider` field (an enum *value*) already serializes as an int and is unaffected.
 
 ### Task 1.1: Fix the `AIProviderConfigData` default drift
 
@@ -322,41 +326,41 @@ public class AIProviderConfigMappingsTests
     }
 
     [Test]
-    public void BackwardRead_DomainSerializedJson_DeserializesViaDtoToEquivalentModel()
+    public void ToData_SerializesFeatureKeysAsIntegers()
     {
-        // Simulates a row stored by the OLD code path (domain model serialized directly).
-        var original = BuildPopulatedModel();
-        var storedJson = JsonSerializer.Serialize(original, JsonOptions);
+        // The whole point of the DTO: feature keys persist as ints ("0".."5"), NOT enum
+        // names. This is what makes a future AIFeatureType rename (#282) migration-free.
+        var json = JsonSerializer.Serialize(BuildPopulatedModel().ToData(), JsonOptions);
 
-        // New read path: deserialize into the DTO, then map to model.
-        var viaDto = JsonSerializer.Deserialize<AIProviderConfigData>(storedJson, JsonOptions)!.ToModel();
-
-        Assert.That(viaDto.Connections, Has.Count.EqualTo(original.Connections.Count));
-        Assert.That(viaDto.Connections[0].Provider, Is.EqualTo(AIProviderType.OpenAI));
-        Assert.That(viaDto.Connections[1].Provider, Is.EqualTo(AIProviderType.AzureOpenAI));
-        Assert.That(viaDto.Features, Has.Count.EqualTo(6));
-        Assert.That(viaDto.Features[AIFeatureType.SpamDetection].Temperature, Is.EqualTo(0.3));
-        Assert.That(viaDto.Features[AIFeatureType.ProfileScan].RequiresVision, Is.True);
+        Assert.That(json, Does.Contain("\"0\":"));   // SpamDetection
+        Assert.That(json, Does.Contain("\"5\":"));   // ProfileScan
+        Assert.That(json, Does.Not.Contain("SpamDetection"));
+        Assert.That(json, Does.Not.Contain("ProfileScan"));
     }
 
     [Test]
-    public void NewWritePath_SerializesIdenticallyToOldDomainPath()
+    public void IntKeyedJson_RoundTripsThroughDtoToModel()
     {
-        // Proves no data migration: old write (domain) and new write (DTO) produce the same JSON.
-        var original = BuildPopulatedModel();
+        // New stored format (int keys) reads back through the DTO to the domain model.
+        var stored = JsonSerializer.Serialize(BuildPopulatedModel().ToData(), JsonOptions);
 
-        var oldJson = JsonSerializer.Serialize(original, JsonOptions);
-        var newJson = JsonSerializer.Serialize(original.ToData(), JsonOptions);
+        var model = JsonSerializer.Deserialize<AIProviderConfigData>(stored, JsonOptions)!.ToModel();
 
-        Assert.That(newJson, Is.EqualTo(oldJson));
+        Assert.That(model.Features, Has.Count.EqualTo(6));
+        Assert.That(model.Features[AIFeatureType.SpamDetection].Model, Is.EqualTo("gpt-4o"));
+        Assert.That(model.Features[AIFeatureType.SpamDetection].Temperature, Is.EqualTo(0.3));
+        Assert.That(model.Features[AIFeatureType.ProfileScan].RequiresVision, Is.True);
+        Assert.That(model.Connections[1].Provider, Is.EqualTo(AIProviderType.AzureOpenAI));
     }
 }
 ```
 
-- [ ] **Step 2: Run the tests — expect failures only if mapping is wrong**
+> Note: there is deliberately **no** "serializes identically to the old domain path" test — the old path wrote enum-*name* keys and the new path writes *int* keys; they are intentionally different, which is exactly why the data migration (Task 1.5) is required. Existing name-keyed rows are converted by that migration, covered by an integration test there.
+
+- [ ] **Step 2: Run the tests**
 
 Run: `dotnet test TelegramGroupsAdmin.UnitTests --filter FullyQualifiedName~AIProviderConfigMappingsTests`
-Expected: All three pass. If `NewWritePath_SerializesIdenticallyToOldDomainPath` fails, the DTO and domain shapes diverge (a property name or type mismatch) — fix the mapping/DTO before continuing, do not adjust the assertion.
+Expected: all three pass. `ToData_SerializesFeatureKeysAsIntegers` is the load-bearing one — if it finds `SpamDetection` in the JSON, the DTO is still name-keyed; fix the DTO/mapping to use `Dictionary<int, AIFeatureConfigData>` with `(int)`/`(AIFeatureType)` key casts.
 
 ### Task 1.4: Route the repository through the mapping
 
@@ -402,10 +406,114 @@ with:
 Run: `dotnet test TelegramGroupsAdmin.UnitTests --filter FullyQualifiedName~AIProviderConfig`
 Expected: `AIProviderConfigTests`, `AIProviderConfigMappingsTests` pass.
 
-Run: `dotnet test TelegramGroupsAdmin.IntegrationTests --filter FullyQualifiedName~AIProviderConfigIntegrationTests`
-Expected: green (round-trip through the DB is preserved).
+Run: `dotnet test TelegramGroupsAdmin.IntegrationTests --filter FullyQualifiedName~AIProviderConfigIntegrationTests` (background — slow Testcontainers suite)
+Expected: green. These tests write via the repository (now int-keyed) and read back, so they round-trip cleanly. The *existing-data* (name→int) conversion is validated separately in Task 1.5.
 
-### Task 1.5: Commit
+### Task 1.5: Data migration — convert stored feature keys from names to ints
+
+**Files:**
+- Create: `TelegramGroupsAdmin.Data/Migrations/<timestamp>_RemapAIFeatureConfigKeysToInt.cs` (via `dotnet ef`)
+- Create: `TelegramGroupsAdmin.IntegrationTests/Configuration/AIFeatureKeyMigrationTests.cs`
+
+Existing production data stores the `features` object with enum-*name* keys (`{"SpamDetection": …}`). The int-keyed DTO cannot deserialize those (`"SpamDetection"` is not an `int` key). A one-time migration rewrites the single global config row. No back-compat read shim (per project rules).
+
+- [ ] **Step 1: Generate an empty migration**
+
+Run: `dotnet ef migrations add RemapAIFeatureConfigKeysToInt -p TelegramGroupsAdmin.Data -s TelegramGroupsAdmin`
+This produces an empty `Up`/`Down` (no model change — the DTO is serialized into a JSONB string column, not an EF entity). Verify it generated cleanly; if `dotnet ef` reports pending model changes unrelated to this work, STOP and report — do not bundle unrelated schema drift.
+
+- [ ] **Step 2: Fill in the Up/Down with the JSONB key remap**
+
+Edit the generated migration so `Up` rewrites name keys → int keys and `Down` reverses it. The column is `configs.ai_provider_config` (jsonb); AI config is the global row but the `WHERE` guard covers any row that has a `features` object. Both directions are idempotent (already-correct keys fall through the `ELSE`):
+
+```csharp
+public partial class RemapAIFeatureConfigKeysToInt : Migration
+{
+    protected override void Up(MigrationBuilder migrationBuilder)
+    {
+        migrationBuilder.Sql("""
+            UPDATE configs
+            SET ai_provider_config = jsonb_set(
+                ai_provider_config,
+                '{features}',
+                (
+                    SELECT COALESCE(jsonb_object_agg(
+                        CASE elem.key
+                            WHEN 'SpamDetection' THEN '0'
+                            WHEN 'Translation'   THEN '1'
+                            WHEN 'ImageAnalysis' THEN '2'
+                            WHEN 'VideoAnalysis' THEN '3'
+                            WHEN 'PromptBuilder' THEN '4'
+                            WHEN 'ProfileScan'   THEN '5'
+                            ELSE elem.key
+                        END, elem.value), '{}'::jsonb)
+                    FROM jsonb_each(ai_provider_config -> 'features') AS elem
+                ))
+            WHERE ai_provider_config IS NOT NULL
+              AND ai_provider_config ? 'features';
+            """);
+    }
+
+    protected override void Down(MigrationBuilder migrationBuilder)
+    {
+        migrationBuilder.Sql("""
+            UPDATE configs
+            SET ai_provider_config = jsonb_set(
+                ai_provider_config,
+                '{features}',
+                (
+                    SELECT COALESCE(jsonb_object_agg(
+                        CASE elem.key
+                            WHEN '0' THEN 'SpamDetection'
+                            WHEN '1' THEN 'Translation'
+                            WHEN '2' THEN 'ImageAnalysis'
+                            WHEN '3' THEN 'VideoAnalysis'
+                            WHEN '4' THEN 'PromptBuilder'
+                            WHEN '5' THEN 'ProfileScan'
+                            ELSE elem.key
+                        END, elem.value), '{}'::jsonb)
+                    FROM jsonb_each(ai_provider_config -> 'features') AS elem
+                ))
+            WHERE ai_provider_config IS NOT NULL
+              AND ai_provider_config ? 'features';
+            """);
+    }
+}
+```
+
+Review the generated file per the Data project's CLAUDE.md (no DROP/CREATE, no `DISABLE TRIGGER ALL` — this is a pure `UPDATE`, so neither applies). Keep the whole statement in the single `Sql(...)` call for transactional atomicity.
+
+- [ ] **Step 3: Write an integration test for the conversion (TDD)**
+
+Write `TelegramGroupsAdmin.IntegrationTests/Configuration/AIFeatureKeyMigrationTests.cs`. It seeds a `configs` row with OLD name-keyed JSON, executes the same remap SQL, and asserts the keys became ints and values survived. Use the existing integration-test base/fixture pattern in that project (match how sibling tests obtain a `DbContext`/connection against the Testcontainers Postgres — read one sibling test first to mirror setup/teardown exactly):
+
+```csharp
+// Mirror the existing fixture/base used by AIProviderConfigIntegrationTests for
+// container + DbContext acquisition. Pseudocode for the body:
+//
+// 1. Insert a configs row (chat_id = 0) with ai_provider_config =
+//    '{"connections":[],"features":{"SpamDetection":{"model":"gpt-4o","maxTokens":600,
+//      "temperature":0.2,"requiresVision":false,"connectionId":null,"azureDeploymentName":null},
+//      "ProfileScan":{"model":"gpt-4o-mini","maxTokens":500,"temperature":0.2,
+//      "requiresVision":true,"connectionId":null,"azureDeploymentName":null}}}'
+//    via ExecuteSqlRawAsync.
+// 2. Execute the EXACT Up SQL from the migration via ExecuteSqlRawAsync.
+// 3. Read ai_provider_config back; assert the features object now has keys "0" and "5"
+//    and NOT "SpamDetection"/"ProfileScan", and that a value (e.g. maxTokens 600) survived.
+// 4. Then assert it now deserializes through the int-keyed DTO:
+//    JsonSerializer.Deserialize<AIProviderConfigData>(json, opts).ToModel() yields
+//    Features[AIFeatureType.SpamDetection].MaxTokens == 600.
+```
+
+The reviewer/implementer must flesh this out against the real fixture; the assertions above are the contract. Keep the seeded JSON's property names camelCased to match `_jsonOptions`.
+
+- [ ] **Step 4: Apply migrations locally and run the migration test**
+
+Run: `dotnet run --project TelegramGroupsAdmin --migrate-only` (applies migrations to the local dev DB and exits cleanly).
+Run: `dotnet test TelegramGroupsAdmin.IntegrationTests --filter FullyQualifiedName~AIFeatureKeyMigrationTests` (background — Testcontainers).
+Expected: migration applies without error; the conversion test passes.
+
+### Task 1.6: Commit
 
 - [ ] **Step 1: Build the whole solution**
 
@@ -418,18 +526,25 @@ Expected: Build succeeded, no warnings (warnings-as-errors on the AI project).
 git add TelegramGroupsAdmin.Configuration/Mappings/AIProviderConfigMappings.cs \
         TelegramGroupsAdmin.Data/Models/Configs/AIProviderConfigData.cs \
         TelegramGroupsAdmin.Configuration/Repositories/SystemConfigRepository.cs \
-        TelegramGroupsAdmin.UnitTests/Configuration/AIProviderConfigMappingsTests.cs
+        TelegramGroupsAdmin.Data/Migrations/ \
+        TelegramGroupsAdmin.UnitTests/Configuration/AIProviderConfigMappingsTests.cs \
+        TelegramGroupsAdmin.IntegrationTests/Configuration/AIFeatureKeyMigrationTests.cs
 git commit -F- <<'EOF'
 refactor(config): wire AI provider config through Data-DTO/mapping layer
 
-Finishes the #453 / PR #465 sweep for the one config it missed. AI config
-was serializing the domain AIProviderConfig directly; route it through
+Finishes the #453 / PR #465 sweep for the one config it missed. AI config was
+serializing the domain AIProviderConfig directly; route it through
 AIProviderConfigData + a new AIProviderConfigMappings, mirroring the
 UserApiConfig pattern in the same repository.
 
-Behavior-preserving, no data migration: enum values serialize as numbers and
-AIFeatureType dictionary keys as numeric strings, so existing stored JSON
-round-trips. Also restores the ProfileScan (key 5) default the DTO was missing.
+Also corrects a latent persistence bug: System.Text.Json serialized the
+AIFeatureType-keyed Features dictionary with enum-NAME keys ("SpamDetection"),
+which welds stored config to member names and would break on an AIFeatureType
+rename (#282). The DTO now stores feature keys as ints ("0".."5") per the
+project's enums-are-ints rule; a one-time data migration rewrites the existing
+global config row (name keys -> int keys, idempotent). Provider (an enum value)
+already serialized as an int. Restores the ProfileScan (key 5) default the DTO
+was missing.
 
 Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 EOF
@@ -2120,7 +2235,7 @@ EOF
 - [ ] Full AI suites green: `dotnet test TelegramGroupsAdmin.UnitTests --filter FullyQualifiedName~AI` and the ComponentTests AI filters.
 - [ ] Integration: `dotnet test TelegramGroupsAdmin.IntegrationTests --filter FullyQualifiedName~AIProviderConfigIntegrationTests` (background — suite is slow; see context-keep "Run tests in background").
 - [ ] Manual smoke via Settings UI "Test" flow against a real OpenRouter key and a real Anthropic key: add connection → refresh models → run a completion → run a vision call where supported. (Cannot be automated — requires live keys.)
-- [ ] No EF migration generated (enum stored as int; rename preserved value 2; config-mapping rewire wire-identical).
+- [ ] Exactly one EF migration exists (`RemapAIFeatureConfigKeysToInt`, commit 1 — converts stored AIFeatureType keys names→ints). The `AIProviderType` rename in commit 3 needs no migration (value 2 preserved). The temperature/token type changes need no migration (JSON number format unchanged).
 - [ ] Open PR to `develop` with `Closes #481`? No — #481 is prompt caching, out of scope. File a tracking issue for the AI config-mapping gap referencing #453, and link it in the PR body. PR body lists the four commits and notes the discovery.
 
 ## Follow-on issues to file (not in this PR)
