@@ -1,8 +1,8 @@
 # Migrate Semantic Kernel → Microsoft.Extensions.AI, add OpenRouter & Anthropic providers
 
 **Date:** 2026-05-28
-**Status:** Design approved, pending spec review
-**Delivery:** Single PR (`develop` target), three commits
+**Status:** Design approved; updated with the config-mapping discovery (see "Persistence-layer gap" below)
+**Delivery:** Single PR (`develop` target), four commits
 
 ## Summary
 
@@ -11,6 +11,11 @@ Replace the `Microsoft.SemanticKernel`-backed chat implementation with
 AI providers: **OpenRouter** (OpenAI-compatible aggregator) and **Anthropic** (Claude,
 direct). The migration is contained behind the existing `IChatService` interface, so no
 downstream consumer changes.
+
+A prerequisite surfaced while planning: AI config is the one config that was never wired
+through the Data-DTO/mapping layer that issue #453 established for every other config, so the
+spec's planned `*Data` edits would have been inert. Commit 1 closes that gap (behavior-preserving,
+no migration); commits 2–4 are the migration and new providers. See "Persistence-layer gap".
 
 ## Motivation
 
@@ -37,11 +42,14 @@ downstream consumer changes.
   `InvalidateCache(connectionId?)`.
 - AI services are all `Scoped` (matching `ISystemConfigRepository`); the kernel cache is
   `static` and persists across scoped instances.
-- Provider config lives in the `configs` table as JSONB. `AIProviderType` is stored as an
-  **int** at the data layer (`AIConnectionData.Provider` is `int`, mapped to the enum at the
-  repository boundary). No `JsonStringEnumConverter` is registered on the config
-  serializer, so even the in-domain serialization is integer-based. **Renaming an enum
-  member is therefore a pure code change with no data migration.**
+- Provider config lives in the `configs` table as a JSONB column (`configs.ai_provider_config`,
+  global row `chat_id = 0`). `AIProviderType` is stored as an **int** because
+  `System.Text.Json` serializes the domain enum numerically — **no `JsonStringEnumConverter`
+  is registered** on the config serializer (camelCase property naming, otherwise default). The
+  `AIFeatureType`-keyed `Features` dictionary likewise serializes its keys as the numeric value
+  (STJ's default for enum dictionary keys). **Renaming an enum member is therefore a pure code
+  change with no data migration.** (Note: this is the *domain* model serializing directly —
+  the Data-layer `*Data` DTOs are not on the path today; see "Persistence-layer gap" below.)
 
 ### Current `AIProviderType`
 
@@ -54,6 +62,39 @@ public enum AIProviderType
 }
 ```
 
+### Persistence-layer gap (discovered 2026-05-28)
+
+AI config is the **one config that never got wired through the Data-DTO/mapping layer** that
+issue [#453](https://github.com/musicislife08/TelegramGroupsAdmin/issues/453) (shipped in PR
+#465, commit `e48e8b96`) established for every other config. #453's "Affected Configs" table
+enumerated Welcome / Log / WarningSystem / BotProtection / TelegramBot /
+ServiceMessageDeletion / BanCelebration — **`AIProviderConfig` was never listed**, so the sweep
+skipped it. No open issue currently tracks the gap.
+
+Concretely, in `SystemConfigRepository`:
+- `GetAIProviderConfigAsync` (`:598`) does `JsonSerializer.Deserialize<AIProviderConfig>(...)`
+  — deserializes straight to the **domain** model.
+- `SaveAIProviderConfigAsync` (`:614`) does `JsonSerializer.Serialize(config, ...)` — serializes
+  the **domain** model straight to JSON.
+
+The Data-layer DTOs `AIProviderConfigData`, `AIConnectionData`, `AIFeatureConfigData`,
+`AIModelInfoData` exist with the correct shape but are **referenced nowhere** — they're unwired,
+exactly as Welcome/Log/etc. were before #465. The reference for the correct pattern lives in the
+*same file*: `UserApiConfig` reads via `Deserialize<UserApiConfigData>(...)?.ToModel()` (`:448`)
+and writes via `config.ToData()` → serialize (`:464`).
+
+Consequence for this migration: the spec's planned edits to `AIConnectionData` /
+`AIFeatureConfigData` (drop `AzureApiVersion`, `Temperature` → `float`) would be **inert** until
+the mapping is wired. So this PR wires it first (commit 1), making those edits live. The DTOs
+have also drifted: `AIProviderConfigData.Features` defaults to keys `0–4` and is **missing
+`ProfileScan` (key 5)** that the domain `AIProviderConfig.Features` carries — fixed as part of
+wiring.
+
+**Wire-compatibility (no data migration):** the domain model and the DTOs serialize identically
+— enum values as numbers (`Provider` 0/1/2), `Features` dictionary keys as numeric strings
+(`"0".."5"`), and matching camelCased property names. Existing stored JSON round-trips cleanly
+through `Deserialize<AIProviderConfigData>().ToModel()`.
+
 ## Package facts (verified against NuGet + Microsoft Learn, 2026-05-28)
 
 | Package | Version to pin | Status | Role |
@@ -62,7 +103,7 @@ public enum AIProviderType
 | `Microsoft.Extensions.AI.OpenAI` | `10.6.0` | GA | `AsIChatClient()` bridge for OpenAI + OpenAI-compatible |
 | `OpenAI` | `2.10.0` | GA | official SDK; provides `OpenAIClient`/`ChatClient` (transitive via above; pin explicitly) |
 | `Azure.AI.OpenAI` | `2.1.0` | GA | `AzureOpenAIClient` for the Azure path |
-| `Anthropic` | `12.24.1` | **official Anthropic SDK, beta** (versioned 10+) | implements `IChatClient` via `AsIChatClient(model)`; commit 3 only |
+| `Anthropic` | `12.24.1` | **official Anthropic SDK, beta** (versioned 10+) | implements `IChatClient` via `AsIChatClient(model)`; commit 4 only |
 
 **Remove:** `Microsoft.SemanticKernel` (1.74.0), `Microsoft.SemanticKernel.Abstractions` (1.74.0).
 
@@ -75,7 +116,7 @@ public enum AIProviderType
 - `ChatOptions.Temperature` is `float?`. Rather than cast at the boundary, the **temperature
   type is changed to `float` across the whole chain** (options, feature config, data layer,
   UI) so the abstraction speaks the same type as its implementation. See the dedicated
-  temperature-type subsection in commit 1. No data migration (JSON has one number type).
+  temperature-type subsection in commit 2. No data migration (JSON has one number type).
 - `ChatOptions.MaxOutputTokens` is `int?` (maps cleanly from `MaxTokens`).
 - `ChatOptions.ResponseFormat = ChatResponseFormat.Json` replaces the SK `"json_object"`
   string for JSON mode.
@@ -97,18 +138,65 @@ public enum AIProviderType
 - Azure api-version: **no longer pinned.** The 2.x `AzureOpenAIClient` defaults to the
   latest service version the SDK knows about, and that default advances with each SDK
   upgrade — i.e. it floats. The `AzureApiVersion` field (config, data, UI, cache key) is
-  **removed** rather than mapped to the SDK's version enum. See commit 1 and Risks.
+  **removed** rather than mapped to the SDK's version enum. See commit 2 and Risks.
 
 ## Guiding principle
 
 `IChatService`, `ChatCompletionResult`, `ChatCompletionOptions`, `ImageInput`, and every
-consumer of those types are **unchanged** by commit 1. The migration is confined to the
-implementation behind `IChatService` plus provider-config plumbing. New providers in
-commits 2–3 are additive.
+consumer of those types are **unchanged** by the SK→MEAI swap (commit 2). The migration is
+confined to the implementation behind `IChatService` plus provider-config plumbing. Commit 1
+(config-mapping rewire) is also behind the repository boundary — no consumer sees it. New
+providers in commits 3–4 are additive.
 
 ---
 
-## Commit 1 — Swap SK → MEAI (refactor; no logic changes)
+## Commit 1 — Wire AI config through the Data-DTO/mapping layer (prerequisite)
+
+Finishes the #453 / PR #465 sweep for the one config it missed. **Behavior-preserving — no data
+migration** (wire-compatibility proven in "Persistence-layer gap" above). This commit makes the
+`*Data` edits in commit 2 (temperature type, `AzureApiVersion` removal) *live* rather than inert,
+and brings AI config in line with the established `UserApiConfig` pattern.
+
+### Mapping
+- Create `TelegramGroupsAdmin.Configuration/Mappings/AIProviderConfigMappings.cs` in the C#
+  `extension(...)` style used by the sibling mapping files (`TelegramBotConfigMappings`,
+  `UserApiConfigMappings`). Provide `ToData()` / `ToModel()` for all four pairs:
+  - `AIProviderConfig` ↔ `AIProviderConfigData`
+    - `Connections`: map each element through the `AIConnection` ↔ `AIConnectionData` mapping.
+    - `Features`: translate `Dictionary<AIFeatureType, AIFeatureConfig>` ↔
+      `Dictionary<int, AIFeatureConfigData>` via `(int)key` / `(AIFeatureType)key`.
+  - `AIConnection` ↔ `AIConnectionData` — Id, `Provider` (`(int)` / `(AIProviderType)`), Enabled,
+    AzureEndpoint, AzureApiVersion, LocalEndpoint, LocalRequiresApiKey, AvailableModels (mapped),
+    ModelsLastFetched. *(In commit 2 the `AzureApiVersion` line is removed from both the model
+    and this mapping when the field is dropped.)*
+  - `AIFeatureConfig` ↔ `AIFeatureConfigData` — ConnectionId, Model, MaxTokens, Temperature,
+    AzureDeploymentName, RequiresVision.
+  - `AIModelInfo` ↔ `AIModelInfoData` — Id, SizeBytes.
+
+### Repository routing
+- `SystemConfigRepository.GetAIProviderConfigAsync` (`:598`):
+  `JsonSerializer.Deserialize<AIProviderConfigData>(configRecord.AIProviderConfig, _jsonOptions)?.ToModel()`.
+- `SystemConfigRepository.SaveAIProviderConfigAsync` (`:614`):
+  `var data = config.ToData(); var jsonConfig = JsonSerializer.Serialize(data, _jsonOptions);`.
+- Mirrors `GetUserApiConfigAsync` (`:448`) / `SaveUserApiConfigAsync` (`:464`) in the same file.
+
+### DTO drift fix
+- `AIProviderConfigData.Features` default: add the missing `[5] = new() { RequiresVision = true }`
+  (`ProfileScan`) so the DTO default matches the domain `AIProviderConfig.Features` default.
+
+### Verification
+- New `AIProviderConfigMappingsTests` (UnitTests): round-trip a fully-populated
+  `AIProviderConfig` (multiple connections, all six `AIFeatureType` features) through
+  `ToData().ToModel()` and assert field-by-field equality.
+- Backward-read assertion (the real no-migration proof): take a domain-serialized JSON blob,
+  `Deserialize<AIProviderConfigData>(...).ToModel()`, and assert it equals the original model —
+  proving existing stored JSON reads cleanly through the new path.
+- Existing `AIProviderConfigTests` / `AIProviderConfigIntegrationTests` stay green.
+- Commit message: `refactor(config): wire AI provider config through Data-DTO/mapping layer`.
+
+---
+
+## Commit 2 — Swap SK → MEAI (refactor; no logic changes)
 
 ### Package surface
 - `Directory.Packages.props`: remove the two `Microsoft.SemanticKernel*` versions; add
@@ -183,8 +271,8 @@ Files:
   `float = 1.0f` (persisted JSONB; **no migration** — JSON has one number type, and the new
   default only affects feature configs that have never had a temperature explicitly set;
   existing stored values are preserved on read).
-- The `AIFeatureConfig` ↔ `AIFeatureConfigData` mapping assigns `Temperature` directly —
-  both `float`, no cast.
+- The `AIFeatureConfig` ↔ `AIFeatureConfigData` mapping in `AIProviderConfigMappings.cs`
+  (created in commit 1) assigns `Temperature` directly — both `float`, no cast.
 - `TelegramGroupsAdmin/Components/Shared/ContentDetection/AIFeatureCard.razor:120,291`:
   the bound `MudNumericField` becomes `T="float"` (its `Min`/`Max`/`Step` attribute values
   become `float`); `OnTemperatureChanged(double value)` → `(float value)`. The UI keeps
@@ -214,7 +302,8 @@ the field everywhere:
 - `TelegramGroupsAdmin.Data/Models/Configs/AIConnectionData.cs:32`: delete the property
   (old stored JSONB keeps an `azureApiVersion` key; System.Text.Json ignores it on read —
   no migration).
-- The `AIConnection` ↔ `AIConnectionData` mapping: drop the `AzureApiVersion` assignment.
+- `AIProviderConfigMappings.cs` (from commit 1): drop the `AzureApiVersion` assignment from
+  the `AIConnection` ↔ `AIConnectionData` mapping.
 - `ChatService.GenerateCacheKey` (was `SemanticKernelChatService.cs:588`): remove the
   `AzureApiVersion` key component.
 - Azure client construction: no `apiVersion` argument (was `SemanticKernelChatService.cs:623`).
@@ -258,7 +347,7 @@ alias (per project rules); any Grafana panel querying the old tag value or gauge
 updated to match.
 
 ### Verification (hybrid contract)
-No logic changes in commit 1, so green tests prove parity. The only test edits are mechanical
+No logic changes in commit 2, so green tests prove parity. The only test edits are mechanical
 reflections of the type swap and the default constant:
 - Behavioral AI tests **must pass with no change to assertion intent**: `AIContentCheckTests`,
   `ExamEvaluationServiceTests`, `ProfileScoringEngineTests` (UnitTests),
@@ -281,7 +370,7 @@ reflections of the type swap and the default constant:
 
 ---
 
-## Commit 2 — Rename `LocalOpenAI` → `OpenAICompatible`, add OpenRouter
+## Commit 3 — Rename `LocalOpenAI` → `OpenAICompatible`, add OpenRouter
 
 ### Enum
 ```csharp
@@ -324,7 +413,7 @@ public enum AIProviderType
 
 ---
 
-## Commit 3 — Anthropic (Claude), direct
+## Commit 4 — Anthropic (Claude), direct
 
 ### Enum
 ```csharp
@@ -404,7 +493,7 @@ Anthropic = 4   // appended
 
 1. **`IChatClient` disposal leak.** The single genuinely-new behavior. If eviction does not
    dispose, the underlying `OpenAIClient`/HTTP pipeline leaks. Covered by the disposal
-   change in commit 1; worth an explicit test that `InvalidateCache` disposes.
+   change in commit 2; worth an explicit test that `InvalidateCache` disposes.
 2. **Azure api-version no longer pinned.** The stored `AzureApiVersion` pin is removed; the
    2.x SDK's default service version applies and floats with SDK upgrades (matches the
    "keep up with the SDK" cadence). Behavior change only for a deployment that deliberately
@@ -412,11 +501,11 @@ Anthropic = 4   // appended
    default is the intended behavior. The version-pinning *knob* is gone; full per-version
    control is not a goal (re-add via a future issue if ever needed).
 3. **`double` → `float` temperature type change.** Done end-to-end (no cast); see the
-   commit-1 temperature subsection. No data migration; behavior-preserving on the wire.
+   commit-2 temperature subsection. No data migration; behavior-preserving on the wire.
    Forces ~8 mechanical test-literal suffix edits (covered by the hybrid contract).
 4. **Token counts adopt `long?` (no cast).** `ChatCompletionResult` token fields and
    `ApiMetrics.RecordOpenAiCall` move to `long`/`long?` to match `UsageDetails`. Implicit
-   widening means no other code or tests change. See the commit-1 token-counts subsection.
+   widening means no other code or tests change. See the commit-2 token-counts subsection.
 5. **Anthropic package — beta, but minimally exposed.** Use the **official `Anthropic` SDK
    v10+** (`12.24.1`), documented beta (breaking changes may land in minor/patch). **Our
    exposure to that churn is near-zero**: we touch only two of the SDK's native symbols —
@@ -426,27 +515,41 @@ Anthropic = 4   // appended
    to `BuildClient`. So this beta dependency is safe to track with the rest for our use
    cases; pin the exact version and the only realistic upgrade cost is the occasional
    two-line `BuildClient` fix. The one spot with genuine native-surface exposure is model
-   discovery (see commit 3) — prefer the raw REST `/v1/models` call over the SDK's native
+   discovery (see commit 4) — prefer the raw REST `/v1/models` call over the SDK's native
    listing to keep even that insulated. Do not confuse with `Anthropic.SDK` (tghamm
    community) or `tryAGI.Anthropic` (former `Anthropic` ≤3.x).
 6. **`TreatWarningsAsErrors`.** The AI project treats warnings as errors; the obsolete
    `AsChatClient` would fail the build — `AsIChatClient` is mandatory.
+7. **Config-mapping rewire (commit 1).** Routing `AIProviderConfig` through the `*Data` DTOs is
+   the one place existing production JSON gets re-parsed via a new type. Wire-compatibility is
+   argued in "Persistence-layer gap" (numeric enum keys/values, matching property names), but
+   the safety net is the commit-1 backward-read test: deserialize a domain-shaped blob into
+   `AIProviderConfigData` and assert `.ToModel()` equals the original. A field that fails to
+   round-trip surfaces there, not in production. Keep the `*Data` shapes in lockstep with the
+   domain models on every later edit (the commit-2 `*Data` edits do exactly this).
 
 ## Verification plan
 
 - Per-commit: `dotnet build` clean (warnings-as-errors) and the AI test suite green at each
   commit (each commit independently builds + passes).
-- Commit 1: behavioral AI tests pass with unchanged assertion intent; the only test edits
+- Commit 1: `AIProviderConfigMappingsTests` round-trip + backward-read assertions pass;
+  existing `AIProviderConfigTests` / `AIProviderConfigIntegrationTests` stay green (proves the
+  mapping is behavior-preserving).
+- Commit 2: behavioral AI tests pass with unchanged assertion intent; the only test edits
   are the mechanical `double`→`float` suffixes and the default-constant test
   (`_Is0Point2` → `_Is1Point0`); test-leak audit agent reports no SK-type changes.
-- Commits 2–3: manual smoke via the Settings UI "Test" flow against a real OpenRouter key
+- Commits 3–4: manual smoke via the Settings UI "Test" flow against a real OpenRouter key
   and a real Anthropic key (model refresh + a completion + a vision call where supported).
-- Migrations: none required (enum stored as int; rename preserves value 2).
+- Migrations: none required (enum stored as int; rename preserves value 2; the config-mapping
+  rewire is wire-identical — see "Persistence-layer gap").
 
 ## Commit sequence (single PR → `develop`)
 
-1. `refactor(ai): replace Semantic Kernel with Microsoft.Extensions.AI`
+1. `refactor(config): wire AI provider config through Data-DTO/mapping layer`
+   — finishes the #453 sweep for AI config (the one it missed); behavior-preserving, no
+   migration. Prerequisite that makes the commit-2 `*Data` edits live.
+2. `refactor(ai): replace Semantic Kernel with Microsoft.Extensions.AI`
    — also carries the temperature `double`→`float` type change and the `0.2`→`1.0` default
    constant (both noted in the commit body; neither is a logic change).
-2. `feat(ai): rename LocalOpenAI provider to OpenAICompatible and add OpenRouter`
-3. `feat(ai): add Anthropic (Claude) provider`
+3. `feat(ai): rename LocalOpenAI provider to OpenAICompatible and add OpenRouter`
+4. `feat(ai): add Anthropic (Claude) provider`
