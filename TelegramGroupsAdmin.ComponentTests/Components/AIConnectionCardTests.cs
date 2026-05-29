@@ -20,7 +20,6 @@ public class AIConnectionCardTests : MudBlazorTestContext
         AIProviderType provider = AIProviderType.OpenAI,
         bool enabled = true,
         string? azureEndpoint = null,
-        string? azureApiVersion = null,
         string? localEndpoint = null,
         bool localRequiresApiKey = false)
     {
@@ -30,7 +29,6 @@ public class AIConnectionCardTests : MudBlazorTestContext
             Provider = provider,
             Enabled = enabled,
             AzureEndpoint = azureEndpoint,
-            AzureApiVersion = azureApiVersion,
             LocalEndpoint = localEndpoint,
             LocalRequiresApiKey = localRequiresApiKey
         };
@@ -56,7 +54,9 @@ public class AIConnectionCardTests : MudBlazorTestContext
     [Test]
     [TestCase(AIProviderType.OpenAI, "OpenAI")]
     [TestCase(AIProviderType.AzureOpenAI, "Azure OpenAI")]
-    [TestCase(AIProviderType.LocalOpenAI, "Local")]
+    [TestCase(AIProviderType.OpenAICompatible, "OpenAI-compatible")]
+    [TestCase(AIProviderType.OpenRouter, "OpenRouter")]
+    [TestCase(AIProviderType.Anthropic, "Anthropic (Claude)")]
     public void DisplaysProviderName(AIProviderType provider, string expectedText)
     {
         // Arrange
@@ -112,8 +112,7 @@ public class AIConnectionCardTests : MudBlazorTestContext
         // Arrange
         var connection = CreateConnection(
             provider: AIProviderType.AzureOpenAI,
-            azureEndpoint: "https://my-resource.openai.azure.com/",
-            azureApiVersion: "2024-02-01");
+            azureEndpoint: "https://my-resource.openai.azure.com/");
 
         // Act
         var cut = Render<AIConnectionCard>(p => p
@@ -122,7 +121,6 @@ public class AIConnectionCardTests : MudBlazorTestContext
 
         // Assert - Azure-specific fields should be visible
         Assert.That(cut.Markup, Does.Contain("Azure Endpoint"));
-        Assert.That(cut.Markup, Does.Contain("API Version"));
     }
 
     [Test]
@@ -146,7 +144,7 @@ public class AIConnectionCardTests : MudBlazorTestContext
     {
         // Arrange
         var connection = CreateConnection(
-            provider: AIProviderType.LocalOpenAI,
+            provider: AIProviderType.OpenAICompatible,
             localEndpoint: "http://localhost:11434/v1");
 
         // Act
@@ -198,7 +196,7 @@ public class AIConnectionCardTests : MudBlazorTestContext
     {
         // Arrange
         var connection = CreateConnection(
-            provider: AIProviderType.LocalOpenAI,
+            provider: AIProviderType.OpenAICompatible,
             localRequiresApiKey: false);
 
         // Act
@@ -249,7 +247,7 @@ public class AIConnectionCardTests : MudBlazorTestContext
     {
         // Arrange
         var connection = CreateConnection(
-            provider: AIProviderType.LocalOpenAI,
+            provider: AIProviderType.OpenAICompatible,
             enabled: true,
             localRequiresApiKey: false);
 

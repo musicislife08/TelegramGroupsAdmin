@@ -134,7 +134,7 @@
                 await ConfigRepository.SaveApiKeysAsync(_apiKeys);
             }
 
-            // Invalidate cached kernel for this connection so changes take effect immediately
+            // Invalidate cached chat client for this connection so changes take effect immediately
             ChatService.InvalidateCache(args.Connection.Id);
 
             await LogAuditAsync(args.Connection);
@@ -198,7 +198,7 @@
             await ConfigRepository.SaveAIProviderConfigAsync(_config);
             await ConfigRepository.SaveApiKeysAsync(_apiKeys);
 
-            // Invalidate cached kernel for deleted connection
+            // Invalidate cached chat client for deleted connection
             ChatService.InvalidateCache(connection.Id);
 
             var actor = WebUser!.ToActor();

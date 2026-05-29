@@ -25,10 +25,22 @@
                         <span>Azure OpenAI Service</span>
                     </MudStack>
                 </MudSelectItem>
-                <MudSelectItem Value="AIProviderType.LocalOpenAI">
+                <MudSelectItem Value="AIProviderType.OpenAICompatible">
                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                         <MudIcon Icon="@Icons.Material.Filled.Computer" Size="Size.Small" />
-                        <span>Local / OpenAI-Compatible</span>
+                        <span>OpenAI-Compatible (Ollama, LM Studio, vLLM, …)</span>
+                    </MudStack>
+                </MudSelectItem>
+                <MudSelectItem Value="AIProviderType.OpenRouter">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudIcon Icon="@Icons.Material.Filled.Hub" Size="Size.Small" />
+                        <span>OpenRouter</span>
+                    </MudStack>
+                </MudSelectItem>
+                <MudSelectItem Value="AIProviderType.Anthropic">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudIcon Icon="@Icons.Material.Filled.Psychology" Size="Size.Small" />
+                        <span>Anthropic (Claude)</span>
                     </MudStack>
                 </MudSelectItem>
             </MudSelect>
@@ -122,8 +134,6 @@
             Id = _connectionId.Trim().ToLowerInvariant(),
             Provider = _provider,
             Enabled = _enabled,
-            // Set defaults based on provider type
-            AzureApiVersion = _provider == AIProviderType.AzureOpenAI ? "2024-10-21" : null,
             LocalRequiresApiKey = false
         };
 
@@ -134,7 +144,9 @@
     {
         AIProviderType.OpenAI => "Standard OpenAI API - requires API key from platform.openai.com",
         AIProviderType.AzureOpenAI => "Azure OpenAI Service - requires endpoint URL and API key from Azure Portal",
-        AIProviderType.LocalOpenAI => "Ollama, LM Studio, vLLM, or other OpenAI-compatible APIs",
+        AIProviderType.OpenAICompatible => "Ollama, LM Studio, vLLM, or other OpenAI-compatible APIs",
+        AIProviderType.OpenRouter => "OpenRouter aggregator - requires an API key from openrouter.ai",
+        AIProviderType.Anthropic => "Anthropic Claude - requires an API key from console.anthropic.com",
         _ => ""
     };
 
@@ -142,7 +154,9 @@
     {
         AIProviderType.OpenAI => "openai-main",
         AIProviderType.AzureOpenAI => "azure-prod",
-        AIProviderType.LocalOpenAI => "local-ollama",
+        AIProviderType.OpenAICompatible => "local-ollama",
+        AIProviderType.OpenRouter => "openrouter-main",
+        AIProviderType.Anthropic => "anthropic-main",
         _ => "my-connection"
     };
 }

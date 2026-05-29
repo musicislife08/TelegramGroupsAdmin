@@ -36,12 +36,8 @@
                          Variant="Variant.Outlined"
                          Placeholder="https://your-resource.openai.azure.com/"
                          HelperText="Azure OpenAI Service endpoint URL" />
-            <MudTextField @bind-Value="_azureApiVersion"
-                         Label="API Version"
-                         Variant="Variant.Outlined"
-                         HelperText="e.g., 2024-02-01" />
         }
-        else if (Connection.Provider == AIProviderType.LocalOpenAI)
+        else if (Connection.Provider == AIProviderType.OpenAICompatible)
         {
             <MudTextField @bind-Value="_localEndpoint"
                          Label="Endpoint URL"
@@ -61,7 +57,7 @@
                      InputType="@(_showApiKey ? InputType.Text : InputType.Password)"
                      Placeholder="@GetApiKeyPlaceholder(Connection.Provider)"
                      HelperText="@GetApiKeyHelperText(Connection.Provider)"
-                     Disabled="@(Connection.Provider == AIProviderType.LocalOpenAI && !_localRequiresApiKey)"
+                     Disabled="@(Connection.Provider == AIProviderType.OpenAICompatible && !_localRequiresApiKey)"
                      Adornment="Adornment.End"
                      AdornmentIcon="@(_showApiKey ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
                      OnAdornmentClick="@(() => _showApiKey = !_showApiKey)" />
@@ -69,7 +65,7 @@
         <!-- Status & Actions -->
         @{
             var hasKey = !string.IsNullOrWhiteSpace(_apiKey);
-            var isReady = _enabled && (hasKey || (Connection.Provider == AIProviderType.LocalOpenAI && !_localRequiresApiKey));
+            var isReady = _enabled && (hasKey || (Connection.Provider == AIProviderType.OpenAICompatible && !_localRequiresApiKey));
         }
         <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
             <MudChip T="string"
@@ -116,7 +112,6 @@
     // Local state for editing (copied from Connection on init)
     private bool _enabled;
     private string? _azureEndpoint;
-    private string? _azureApiVersion;
     private string? _localEndpoint;
     private bool _localRequiresApiKey;
     private string? _apiKey;
@@ -128,7 +123,6 @@
         // Copy connection values to local state for editing
         _enabled = Connection.Enabled;
         _azureEndpoint = Connection.AzureEndpoint;
-        _azureApiVersion = Connection.AzureApiVersion;
         _localEndpoint = Connection.LocalEndpoint;
         _localRequiresApiKey = Connection.LocalRequiresApiKey;
         _apiKey = InitialApiKey;
@@ -149,7 +143,6 @@
             // Update connection with local state
             Connection.Enabled = _enabled;
             Connection.AzureEndpoint = _azureEndpoint;
-            Connection.AzureApiVersion = _azureApiVersion;
             Connection.LocalEndpoint = _localEndpoint;
             Connection.LocalRequiresApiKey = _localRequiresApiKey;
 
@@ -171,7 +164,9 @@
     {
         AIProviderType.OpenAI => "OpenAI (api.openai.com)",
         AIProviderType.AzureOpenAI => "Azure OpenAI Service",
-        AIProviderType.LocalOpenAI => "Local / OpenAI-compatible",
+        AIProviderType.OpenAICompatible => "OpenAI-compatible",
+        AIProviderType.OpenRouter => "OpenRouter",
+        AIProviderType.Anthropic => "Anthropic (Claude)",
         _ => provider.ToString()
     };
 
@@ -179,7 +174,9 @@
     {
         AIProviderType.OpenAI => Icons.Material.Filled.Cloud,
         AIProviderType.AzureOpenAI => Icons.Material.Filled.CloudQueue,
-        AIProviderType.LocalOpenAI => Icons.Material.Filled.Computer,
+        AIProviderType.OpenAICompatible => Icons.Material.Filled.Computer,
+        AIProviderType.OpenRouter => Icons.Material.Filled.Hub,
+        AIProviderType.Anthropic => Icons.Material.Filled.Psychology,
         _ => Icons.Material.Filled.Psychology
     };
 
@@ -187,7 +184,9 @@
     {
         AIProviderType.OpenAI => "sk-...",
         AIProviderType.AzureOpenAI => "Azure API key",
-        AIProviderType.LocalOpenAI => "Optional API key",
+        AIProviderType.OpenAICompatible => "Optional API key",
+        AIProviderType.OpenRouter => "sk-or-...",
+        AIProviderType.Anthropic => "sk-ant-...",
         _ => "API key"
     };
 
@@ -195,7 +194,9 @@
     {
         AIProviderType.OpenAI => "Get your API key from https://platform.openai.com/api-keys",
         AIProviderType.AzureOpenAI => "Azure OpenAI Service API key from Azure Portal",
-        AIProviderType.LocalOpenAI => "Leave empty if your provider doesn't require authentication",
+        AIProviderType.OpenAICompatible => "Leave empty if your provider doesn't require authentication",
+        AIProviderType.OpenRouter => "Get your API key from https://openrouter.ai/keys",
+        AIProviderType.Anthropic => "Get your API key from https://console.anthropic.com/settings/keys",
         _ => ""
     };
 }

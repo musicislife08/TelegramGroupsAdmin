@@ -14,17 +14,17 @@ public record ChatCompletionResult
     /// <summary>
     /// Total tokens used (prompt + completion) if available
     /// </summary>
-    public int? TotalTokens { get; init; }
+    public long? TotalTokens { get; init; }
 
     /// <summary>
     /// Prompt tokens used if available
     /// </summary>
-    public int? PromptTokens { get; init; }
+    public long? PromptTokens { get; init; }
 
     /// <summary>
     /// Completion tokens used if available
     /// </summary>
-    public int? CompletionTokens { get; init; }
+    public long? CompletionTokens { get; init; }
 
     /// <summary>
     /// Model that was used for the completion

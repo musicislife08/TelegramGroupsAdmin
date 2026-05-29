@@ -2,7 +2,7 @@ namespace TelegramGroupsAdmin.AI.Services;
 
 /// <summary>
 /// Service for translating text using AI for language analysis
-/// Supports multiple AI providers via Semantic Kernel
+/// Supports multiple AI providers via IChatService
 /// </summary>
 public interface IAITranslationService
 {

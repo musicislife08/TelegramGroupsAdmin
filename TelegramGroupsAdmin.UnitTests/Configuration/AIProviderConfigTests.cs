@@ -68,13 +68,13 @@ public class AIProviderConfigTests
     }
 
     [Test]
-    public void AIFeatureConfig_DefaultTemperature_Is0Point2()
+    public void AIFeatureConfig_DefaultTemperature_Is1Point0()
     {
         // Act
         var config = new AIProviderConfig();
 
         // Assert
-        Assert.That(config.Features[AIFeatureType.SpamDetection].Temperature, Is.EqualTo(0.2));
+        Assert.That(config.Features[AIFeatureType.SpamDetection].Temperature, Is.EqualTo(1.0f));
     }
 
     [Test]
@@ -144,16 +144,6 @@ public class AIProviderConfigTests
 
         // Assert
         Assert.That(connection.Enabled, Is.False);
-    }
-
-    [Test]
-    public void AIConnection_DefaultAzureApiVersion_Is2024_10_21()
-    {
-        // Act
-        var connection = new AIConnection();
-
-        // Assert - Updated to 2024-10-21 (supported by Semantic Kernel 1.45.0)
-        Assert.That(connection.AzureApiVersion, Is.EqualTo("2024-10-21"));
     }
 
     [Test]
@@ -228,7 +218,7 @@ public class AIProviderConfigTests
                     ConnectionId = "openai-prod",
                     Model = "gpt-4o",
                     MaxTokens = 1000,
-                    Temperature = 0.5
+                    Temperature = 0.5f
                 }
             }
         };
@@ -275,7 +265,7 @@ public class AIProviderConfigTests
             Connections =
             [
                 new AIConnection { Provider = AIProviderType.AzureOpenAI },
-                new AIConnection { Provider = AIProviderType.LocalOpenAI }
+                new AIConnection { Provider = AIProviderType.OpenAICompatible }
             ]
         };
 
@@ -287,7 +277,7 @@ public class AIProviderConfigTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(deserialized!.Connections[0].Provider, Is.EqualTo(AIProviderType.AzureOpenAI));
-            Assert.That(deserialized.Connections[1].Provider, Is.EqualTo(AIProviderType.LocalOpenAI));
+            Assert.That(deserialized.Connections[1].Provider, Is.EqualTo(AIProviderType.OpenAICompatible));
         }
     }
 
@@ -335,8 +325,7 @@ public class AIProviderConfigTests
                 new AIConnection
                 {
                     Provider = AIProviderType.AzureOpenAI,
-                    AzureEndpoint = "https://my-resource.openai.azure.com",
-                    AzureApiVersion = "2024-10-01"
+                    AzureEndpoint = "https://my-resource.openai.azure.com"
                 }
             ]
         };
@@ -349,7 +338,6 @@ public class AIProviderConfigTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(deserialized!.Connections[0].AzureEndpoint, Is.EqualTo("https://my-resource.openai.azure.com"));
-            Assert.That(deserialized.Connections[0].AzureApiVersion, Is.EqualTo("2024-10-01"));
         }
     }
 
@@ -363,7 +351,7 @@ public class AIProviderConfigTests
             [
                 new AIConnection
                 {
-                    Provider = AIProviderType.LocalOpenAI,
+                    Provider = AIProviderType.OpenAICompatible,
                     LocalEndpoint = "http://localhost:11434/v1",
                     LocalRequiresApiKey = true
                 }

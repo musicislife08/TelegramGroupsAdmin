@@ -15,7 +15,7 @@ namespace TelegramGroupsAdmin.UnitTests.ContentDetection;
 
 /// <summary>
 /// Tests for AIContentCheckV2 with V2 scoring model (0.0-5.0 points)
-/// Renamed from OpenAIContentCheckTests after Semantic Kernel refactoring.
+/// Renamed from OpenAIContentCheckTests in an earlier refactor.
 /// </summary>
 [TestFixture]
 public class AIContentCheckTests

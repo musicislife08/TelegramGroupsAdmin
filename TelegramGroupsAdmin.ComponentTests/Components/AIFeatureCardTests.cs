@@ -29,7 +29,7 @@ public class AIFeatureCardTests : MudBlazorTestContext
         string model = "gpt-4o-mini",
         string? azureDeploymentName = null,
         int maxTokens = 500,
-        double temperature = 0.7)
+        float temperature = 0.7f)
     {
         var config = new AIFeatureConfig
         {
@@ -68,6 +68,7 @@ public class AIFeatureCardTests : MudBlazorTestContext
     [TestCase(AIFeatureType.ImageAnalysis, "Image Analysis")]
     [TestCase(AIFeatureType.VideoAnalysis, "Video Analysis")]
     [TestCase(AIFeatureType.PromptBuilder, "Prompt Builder")]
+    [TestCase(AIFeatureType.ProfileScan, "Profile Scan")]
     public void DisplaysFeatureName(AIFeatureType featureType, string expectedName)
     {
         // Arrange
@@ -89,6 +90,7 @@ public class AIFeatureCardTests : MudBlazorTestContext
     [TestCase(AIFeatureType.SpamDetection, "AI-powered text spam")]
     [TestCase(AIFeatureType.Translation, "translation")]
     [TestCase(AIFeatureType.ImageAnalysis, "Vision API")]
+    [TestCase(AIFeatureType.ProfileScan, "Vision API")]
     public void DisplaysFeatureDescription(AIFeatureType featureType, string expectedText)
     {
         // Arrange
@@ -109,6 +111,7 @@ public class AIFeatureCardTests : MudBlazorTestContext
     [Test]
     [TestCase(AIFeatureType.ImageAnalysis)]
     [TestCase(AIFeatureType.VideoAnalysis)]
+    [TestCase(AIFeatureType.ProfileScan)]
     public void ShowsVisionChip_ForVisionFeatures(AIFeatureType featureType)
     {
         // Arrange
