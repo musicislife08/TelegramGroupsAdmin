@@ -2,7 +2,7 @@ namespace TelegramGroupsAdmin.Data.Models.Configs;
 
 /// <summary>
 /// Data layer representation of AIProviderConfig for EF Core JSON column mapping.
-/// Maps to business model via ToModel/ToDto extensions.
+/// Maps to business model via ToModel/ToData extensions.
 /// Note: feature keys are stored as the integer values of the AIFeatureType enum
 /// (e.g., 0 = SpamDetection), so renaming an enum member never orphans stored config.
 /// </summary>

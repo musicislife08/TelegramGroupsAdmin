@@ -21,7 +21,12 @@ public class AIFeatureKeyMigrationTests
         WriteIndented = false
     };
 
-    // The EXACT Up SQL from 20260529065637_RemapAIFeatureConfigKeysToInt.
+    // Intentionally mirrors 20260529065637_RemapAIFeatureConfigKeysToInt.Up verbatim.
+    // This is a deliberate independent-verification copy, NOT accidental drift: EF migrations
+    // must stay self-contained and immutable (a migration that referenced shared/mutable SQL
+    // could have its historical meaning change retroactively), so the test keeps its own copy
+    // rather than extracting a shared constant. If that migration's Up SQL ever changes, this
+    // copy must be updated by hand to match.
     private const string UpSql = """
         UPDATE configs
         SET ai_provider_config = jsonb_set(
