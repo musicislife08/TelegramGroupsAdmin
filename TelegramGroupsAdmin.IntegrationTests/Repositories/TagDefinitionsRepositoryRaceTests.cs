@@ -16,9 +16,10 @@ namespace TelegramGroupsAdmin.IntegrationTests.Repositories;
 /// DbUpdateException (unique violation on tag_name) and that the resulting database
 /// state is correct (one row, correct count).
 ///
-/// Also verifies the concurrent-decrement invariant: parallel DecrementUsageAsync calls
-/// lose no updates (final count == start minus the number of guarded decrements) and the
-/// count is clamped at zero — it never goes negative even when decremented past zero.
+/// Also verifies the DecrementUsageAsync invariants against canonical golden rows:
+/// the no-lost-update guarantee (N concurrent decrements from a seeded high-count tag,
+/// 'power-user' at usage_count = 20, land exactly on 0) and clamp-at-zero (decrementing
+/// the real zero-count canonical tag, 'tester', never drives the count negative).
 /// </summary>
 [TestFixture]
 public class TagDefinitionsRepositoryRaceTests
@@ -30,7 +31,10 @@ public class TagDefinitionsRepositoryRaceTests
     public async Task SetUp()
     {
         _testHelper = new MigrationTestHelper();
-        await _testHelper.CreateDatabaseFromEmptyTemplateAsync();
+        // Golden template: decrement tests assert against canonical tag_definitions rows
+        // ('power-user', 'tester'). The Create/Increment tests use unique Guid tag names,
+        // so the presence of canonical rows does not affect them.
+        await _testHelper.CreateDatabaseFromGoldenTemplateAsync();
 
         var services = new ServiceCollection();
 
@@ -153,28 +157,22 @@ public class TagDefinitionsRepositoryRaceTests
     // ============================================================================
 
     [Test]
-    public async Task DecrementUsageAsync_ConcurrentCalls_FinalCountClampedAtZero()
+    public async Task DecrementUsageAsync_ConcurrentCalls_NoLostUpdates()
     {
-        // Arrange — seed the tag with usage_count = 20
+        // Asserts the no-lost-update invariant against a known canonical row.
+        // 'power-user' is seeded in canonical with usage_count = 20 specifically so the
+        // race window is meaningful; only the count matters here, not row content.
+        const string tagName = "power-user";
         var contextFactory = _serviceProvider!.GetRequiredService<IDbContextFactory<AppDbContext>>();
-        var tagName = $"dec-race-{Guid.NewGuid():N}";
 
-        // Seed directly (not via SUT write methods): a concurrent-mutation race test needs an
-        // isolated, destructively-mutated row, so canonical extension isn't feasible here.
-        await using (var seedCtx = await contextFactory.CreateDbContextAsync())
+        int startCount;
+        await using (var readCtx = await contextFactory.CreateDbContextAsync())
         {
-            seedCtx.TagDefinitions.Add(new Data.Models.TagDefinitionDto
-            {
-                TagName = tagName,
-                Color = Data.Models.TagColor.Primary,
-                UsageCount = 20,
-                CreatedAt = DateTimeOffset.UtcNow
-            });
-            await seedCtx.SaveChangesAsync();
+            startCount = (await readCtx.TagDefinitions.AsNoTracking().FirstAsync(t => t.TagName == tagName)).UsageCount;
         }
+        Assert.That(startCount, Is.GreaterThan(0), "canonical seed precondition");
 
-        const int concurrentCalls = 20;
-        var tasks = Enumerable.Range(0, concurrentCalls)
+        var tasks = Enumerable.Range(0, startCount)
             .Select(_ => Task.Run(async () =>
             {
                 await using var scope = _serviceProvider!.CreateAsyncScope();
@@ -183,10 +181,9 @@ public class TagDefinitionsRepositoryRaceTests
             }))
             .ToArray();
 
-        // Act
         await Task.WhenAll(tasks);
 
-        // Assert — 20 increments minus 20 concurrent decrements, no lost updates
+        // startCount concurrent decrements from startCount must land exactly on 0 (no lost updates).
         await using var ctx = await contextFactory.CreateDbContextAsync();
         var def = await ctx.TagDefinitions.AsNoTracking().FirstAsync(t => t.TagName == tagName);
         Assert.That(def.UsageCount, Is.EqualTo(0));
@@ -195,31 +192,16 @@ public class TagDefinitionsRepositoryRaceTests
     [Test]
     public async Task DecrementUsageAsync_WhenCountIsZero_StaysAtZero()
     {
-        // Arrange — fresh tag, usage_count = 0
-        var contextFactory = _serviceProvider!.GetRequiredService<IDbContextFactory<AppDbContext>>();
-        var tagName = $"dec-zero-{Guid.NewGuid():N}";
+        // 'tester' is a real canonical tag already at usage_count = 0 — decrementing must clamp, not go negative.
+        const string tagName = "tester";
 
-        // Seed directly (not via SUT write methods): a concurrent-mutation race test needs an
-        // isolated, destructively-mutated row, so canonical extension isn't feasible here.
-        await using (var seedCtx = await contextFactory.CreateDbContextAsync())
+        await using (var scope = _serviceProvider!.CreateAsyncScope())
         {
-            seedCtx.TagDefinitions.Add(new Data.Models.TagDefinitionDto
-            {
-                TagName = tagName,
-                Color = Data.Models.TagColor.Primary,
-                UsageCount = 0,
-                CreatedAt = DateTimeOffset.UtcNow
-            });
-            await seedCtx.SaveChangesAsync();
+            var repo = scope.ServiceProvider.GetRequiredService<ITagDefinitionsRepository>();
+            await repo.DecrementUsageAsync(tagName, cancellationToken: CancellationToken.None);
         }
 
-        await using var scope = _serviceProvider!.CreateAsyncScope();
-        var repo = scope.ServiceProvider.GetRequiredService<ITagDefinitionsRepository>();
-
-        // Act
-        await repo.DecrementUsageAsync(tagName, cancellationToken: CancellationToken.None);
-
-        // Assert — never goes negative
+        var contextFactory = _serviceProvider!.GetRequiredService<IDbContextFactory<AppDbContext>>();
         await using var ctx = await contextFactory.CreateDbContextAsync();
         var def = await ctx.TagDefinitions.AsNoTracking().FirstAsync(t => t.TagName == tagName);
         Assert.That(def.UsageCount, Is.EqualTo(0));

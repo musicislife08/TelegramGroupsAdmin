@@ -35,7 +35,7 @@ Origin: prod DB snapshot from 2026-04-30. Bootstrap pipeline (full detail in `do
 | 09 | prompt_versions | 1 | Single Main Chat synthetic row; tests build version history via SUT. |
 | 10 | recovery_codes | 0 | Empty by design. |
 | 11 | stop_words | 17 | Reference data. |
-| 12 | tag_definitions | 6 | Reference data. |
+| 12 | tag_definitions | 7 | Reference data (6 prod-derived) + 1 synthetic `power-user` (usage_count 20) for the concurrent-decrement race test. |
 | 13 | username_blacklist | 2 | 1 enabled + 1 disabled, both Exact match. |
 | 14 | domain_filters | 0 | Empty by design. |
 | 15 | image_training_samples | 0 | Empty by design (no payloads carried). |
