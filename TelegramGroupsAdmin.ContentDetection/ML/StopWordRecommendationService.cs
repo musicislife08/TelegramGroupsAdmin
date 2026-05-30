@@ -338,7 +338,7 @@ public class StopWordRecommendationService : IStopWordRecommendationService
                 }
                 catch (JsonException ex)
                 {
-                    _logger.LogWarning(ex, "Failed to parse check results JSON during stop word analysis; skipping malformed record");
+                    _logger.LogWarning(ex, "Failed to parse check results JSON for detection result {DetectionResultId} during stop word analysis; skipping malformed record", result.Id);
                     continue;
                 }
 
