@@ -625,9 +625,9 @@ public class VideoFrameExtractionService : IVideoFrameExtractionService
                 return 128.0; // Normal brightness (middle of 0-255 range)
             }
         }
-        catch
+        catch (Exception ex)
         {
-            // Default to normal brightness if analysis fails
+            _logger.LogWarning(ex, "Frame brightness analysis failed for {FramePath}; defaulting to 128.0", framePath);
             return 128.0;
         }
     }

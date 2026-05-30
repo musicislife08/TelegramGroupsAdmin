@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Utilities;
@@ -249,7 +250,15 @@ public class AnalyticsRepository : IAnalyticsRepository
 
     private List<CheckResult> ParseCheckResults(string? json)
     {
-        return CheckResultsSerializer.Deserialize(json ?? string.Empty);
+        try
+        {
+            return CheckResultsSerializer.Deserialize(json ?? string.Empty);
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogWarning(ex, "Failed to parse check results JSON during analytics aggregation; treating as no checks");
+            return [];
+        }
     }
 
     private class AlgorithmStatsAccumulator
