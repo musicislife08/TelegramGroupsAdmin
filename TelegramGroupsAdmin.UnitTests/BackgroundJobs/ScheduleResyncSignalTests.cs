@@ -29,4 +29,20 @@ public class ScheduleResyncSignalTests
         using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
         Assert.ThrowsAsync<OperationCanceledException>(async () => await signal.WaitAsync(cts.Token));
     }
+
+    [Test]
+    public async Task RequestResync_ConcurrentCalls_NeverThrow()
+    {
+        var signal = new ScheduleResyncSignal();
+        var exceptions = new System.Collections.Concurrent.ConcurrentBag<Exception>();
+
+        var tasks = Enumerable.Range(0, 100).Select(_ => Task.Run(() =>
+        {
+            try { signal.RequestResync(); }
+            catch (Exception ex) { exceptions.Add(ex); }
+        })).ToArray();
+        await Task.WhenAll(tasks);
+
+        Assert.That(exceptions, Is.Empty, "Concurrent RequestResync must never throw");
+    }
 }

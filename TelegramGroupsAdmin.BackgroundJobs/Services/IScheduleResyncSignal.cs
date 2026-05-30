@@ -17,16 +17,25 @@ public interface IScheduleResyncSignal
     Task WaitAsync(CancellationToken cancellationToken);
 }
 
-public sealed class ScheduleResyncSignal : IScheduleResyncSignal, IDisposable
+internal sealed class ScheduleResyncSignal : IScheduleResyncSignal, IDisposable
 {
     private readonly SemaphoreSlim _signal = new(0, 1);
 
     public void RequestResync()
     {
-        // CurrentCount == 0 means no pending wake-up; release to signal one.
-        // CurrentCount == 1 means a resync is already pending — skip (coalescing).
-        if (_signal.CurrentCount == 0)
+        // SemaphoreSlim(maxCount=1): Release() throws SemaphoreFullException when already
+        // signaled. That means a resync is already pending — coalescing is the desired
+        // behavior, so the exception is intentionally swallowed. (A CurrentCount check is a
+        // TOCTOU race under concurrent callers, hence try/catch.)
+        try
+        {
             _signal.Release();
+        }
+        // slopwatch-ignore: SW003 Intentional empty catch: SemaphoreFullException means a resync is already pending, so coalescing the duplicate request is the desired behavior.
+        catch (SemaphoreFullException)
+        {
+            // Intentional: resync already pending (coalescing).
+        }
     }
 
     public Task WaitAsync(CancellationToken cancellationToken) => _signal.WaitAsync(cancellationToken);

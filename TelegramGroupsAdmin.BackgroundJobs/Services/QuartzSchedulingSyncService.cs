@@ -17,7 +17,6 @@ public class QuartzSchedulingSyncService(
     IQuartzScheduleSynchronizer synchronizer,
     IScheduleResyncSignal resyncSignal) : BackgroundService
 {
-
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         logger.LogInformation("QuartzSchedulingSyncService starting...");
