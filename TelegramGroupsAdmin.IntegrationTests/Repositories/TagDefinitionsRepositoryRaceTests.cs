@@ -10,11 +10,15 @@ using TelegramGroupsAdmin.Telegram.Repositories;
 namespace TelegramGroupsAdmin.IntegrationTests.Repositories;
 
 /// <summary>
-/// Integration tests for TagDefinitionsRepository concurrent-insert race conditions.
+/// Integration tests for TagDefinitionsRepository concurrent race conditions.
 ///
 /// Verifies that concurrent calls to CreateAsync and IncrementUsageAsync do not throw
 /// DbUpdateException (unique violation on tag_name) and that the resulting database
 /// state is correct (one row, correct count).
+///
+/// Also verifies the concurrent-decrement invariant: parallel DecrementUsageAsync calls
+/// lose no updates (final count == start minus the number of guarded decrements) and the
+/// count is clamped at zero — it never goes negative even when decremented past zero.
 /// </summary>
 [TestFixture]
 public class TagDefinitionsRepositoryRaceTests
@@ -151,17 +155,23 @@ public class TagDefinitionsRepositoryRaceTests
     [Test]
     public async Task DecrementUsageAsync_ConcurrentCalls_FinalCountClampedAtZero()
     {
-        // Arrange — create the tag and raise usage_count to 20
-        await using var setupScope = _serviceProvider!.CreateAsyncScope();
-        var setupRepo = setupScope.ServiceProvider.GetRequiredService<ITagDefinitionsRepository>();
-        var tagName = $"dec-race-{Guid.NewGuid():N}";
-        await setupRepo.CreateAsync(tagName, TagColor.Primary, CancellationToken.None);
-        for (var i = 0; i < 20; i++)
-        {
-            await setupRepo.IncrementUsageAsync(tagName, CancellationToken.None);
-        }
-
+        // Arrange — seed the tag with usage_count = 20
         var contextFactory = _serviceProvider!.GetRequiredService<IDbContextFactory<AppDbContext>>();
+        var tagName = $"dec-race-{Guid.NewGuid():N}";
+
+        // Seed directly (not via SUT write methods): a concurrent-mutation race test needs an
+        // isolated, destructively-mutated row, so canonical extension isn't feasible here.
+        await using (var seedCtx = await contextFactory.CreateDbContextAsync())
+        {
+            seedCtx.TagDefinitions.Add(new Data.Models.TagDefinitionDto
+            {
+                TagName = tagName,
+                Color = Data.Models.TagColor.Primary,
+                UsageCount = 20,
+                CreatedAt = DateTimeOffset.UtcNow
+            });
+            await seedCtx.SaveChangesAsync();
+        }
 
         const int concurrentCalls = 20;
         var tasks = Enumerable.Range(0, concurrentCalls)
@@ -169,7 +179,7 @@ public class TagDefinitionsRepositoryRaceTests
             {
                 await using var scope = _serviceProvider!.CreateAsyncScope();
                 var scopedRepo = scope.ServiceProvider.GetRequiredService<ITagDefinitionsRepository>();
-                await scopedRepo.DecrementUsageAsync(tagName, CancellationToken.None);
+                await scopedRepo.DecrementUsageAsync(tagName, cancellationToken: CancellationToken.None);
             }))
             .ToArray();
 
@@ -186,16 +196,30 @@ public class TagDefinitionsRepositoryRaceTests
     public async Task DecrementUsageAsync_WhenCountIsZero_StaysAtZero()
     {
         // Arrange — fresh tag, usage_count = 0
-        await using var setupScope = _serviceProvider!.CreateAsyncScope();
-        var setupRepo = setupScope.ServiceProvider.GetRequiredService<ITagDefinitionsRepository>();
+        var contextFactory = _serviceProvider!.GetRequiredService<IDbContextFactory<AppDbContext>>();
         var tagName = $"dec-zero-{Guid.NewGuid():N}";
-        await setupRepo.CreateAsync(tagName, TagColor.Primary, CancellationToken.None);
+
+        // Seed directly (not via SUT write methods): a concurrent-mutation race test needs an
+        // isolated, destructively-mutated row, so canonical extension isn't feasible here.
+        await using (var seedCtx = await contextFactory.CreateDbContextAsync())
+        {
+            seedCtx.TagDefinitions.Add(new Data.Models.TagDefinitionDto
+            {
+                TagName = tagName,
+                Color = Data.Models.TagColor.Primary,
+                UsageCount = 0,
+                CreatedAt = DateTimeOffset.UtcNow
+            });
+            await seedCtx.SaveChangesAsync();
+        }
+
+        await using var scope = _serviceProvider!.CreateAsyncScope();
+        var repo = scope.ServiceProvider.GetRequiredService<ITagDefinitionsRepository>();
 
         // Act
-        await setupRepo.DecrementUsageAsync(tagName, CancellationToken.None);
+        await repo.DecrementUsageAsync(tagName, cancellationToken: CancellationToken.None);
 
         // Assert — never goes negative
-        var contextFactory = _serviceProvider!.GetRequiredService<IDbContextFactory<AppDbContext>>();
         await using var ctx = await contextFactory.CreateDbContextAsync();
         var def = await ctx.TagDefinitions.AsNoTracking().FirstAsync(t => t.TagName == tagName);
         Assert.That(def.UsageCount, Is.EqualTo(0));
