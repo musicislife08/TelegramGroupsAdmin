@@ -8,7 +8,7 @@ public class ScheduleResyncSignalTests
     [Test]
     public async Task RequestResync_ThenWaitAsync_Completes()
     {
-        var signal = new ScheduleResyncSignal();
+        using var signal = new ScheduleResyncSignal();
 
         signal.RequestResync();
 
@@ -19,7 +19,7 @@ public class ScheduleResyncSignalTests
     [Test]
     public async Task RequestResync_CalledTwiceBeforeWait_Coalesces()
     {
-        var signal = new ScheduleResyncSignal();
+        using var signal = new ScheduleResyncSignal();
 
         signal.RequestResync();
         signal.RequestResync(); // must not throw; collapses into one pending wake
@@ -33,7 +33,7 @@ public class ScheduleResyncSignalTests
     [Test]
     public async Task RequestResync_ConcurrentCalls_NeverThrow()
     {
-        var signal = new ScheduleResyncSignal();
+        using var signal = new ScheduleResyncSignal();
         var exceptions = new System.Collections.Concurrent.ConcurrentBag<Exception>();
 
         var tasks = Enumerable.Range(0, 100).Select(_ => Task.Run(() =>

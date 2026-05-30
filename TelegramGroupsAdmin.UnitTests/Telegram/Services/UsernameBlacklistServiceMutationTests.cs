@@ -37,7 +37,7 @@ public class UsernameBlacklistServiceMutationTests
             BlacklistMatchType.Exact,
             notes: "test notes",
             actor: actor,
-            ct: CancellationToken.None);
+            cancellationToken: CancellationToken.None);
 
         Assert.That(id, Is.EqualTo(42L));
 
