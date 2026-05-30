@@ -37,6 +37,9 @@ public static class ServiceCollectionExtensions
 
         // Note: RetryJobListener is registered by Quartz via AddJobListener<T>() below
 
+        // Shared wake-up signal decoupling the config writer from the sync worker (replaces the concrete cast).
+        services.AddSingleton<IScheduleResyncSignal, ScheduleResyncSignal>();
+
         // Register the Quartz schedule synchronizer (holds the sync business logic).
         // The hosted worker below is a thin shell that drives this service.
         services.AddSingleton<IQuartzScheduleSynchronizer, QuartzScheduleSynchronizer>();
