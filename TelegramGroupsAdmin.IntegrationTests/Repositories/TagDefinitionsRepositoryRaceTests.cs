@@ -143,4 +143,61 @@ public class TagDefinitionsRepositoryRaceTests
         var count = await ctx.TagDefinitions.CountAsync(t => t.TagName == tagName);
         Assert.That(count, Is.EqualTo(1));
     }
+
+    // ============================================================================
+    // DecrementUsageAsync Race Tests
+    // ============================================================================
+
+    [Test]
+    public async Task DecrementUsageAsync_ConcurrentCalls_FinalCountClampedAtZero()
+    {
+        // Arrange — create the tag and raise usage_count to 20
+        await using var setupScope = _serviceProvider!.CreateAsyncScope();
+        var setupRepo = setupScope.ServiceProvider.GetRequiredService<ITagDefinitionsRepository>();
+        var tagName = $"dec-race-{Guid.NewGuid():N}";
+        await setupRepo.CreateAsync(tagName, TagColor.Primary, CancellationToken.None);
+        for (var i = 0; i < 20; i++)
+        {
+            await setupRepo.IncrementUsageAsync(tagName, CancellationToken.None);
+        }
+
+        var contextFactory = _serviceProvider!.GetRequiredService<IDbContextFactory<AppDbContext>>();
+
+        const int concurrentCalls = 20;
+        var tasks = Enumerable.Range(0, concurrentCalls)
+            .Select(_ => Task.Run(async () =>
+            {
+                await using var scope = _serviceProvider!.CreateAsyncScope();
+                var scopedRepo = scope.ServiceProvider.GetRequiredService<ITagDefinitionsRepository>();
+                await scopedRepo.DecrementUsageAsync(tagName, CancellationToken.None);
+            }))
+            .ToArray();
+
+        // Act
+        await Task.WhenAll(tasks);
+
+        // Assert — 20 increments minus 20 concurrent decrements, no lost updates
+        await using var ctx = await contextFactory.CreateDbContextAsync();
+        var def = await ctx.TagDefinitions.AsNoTracking().FirstAsync(t => t.TagName == tagName);
+        Assert.That(def.UsageCount, Is.EqualTo(0));
+    }
+
+    [Test]
+    public async Task DecrementUsageAsync_WhenCountIsZero_StaysAtZero()
+    {
+        // Arrange — fresh tag, usage_count = 0
+        await using var setupScope = _serviceProvider!.CreateAsyncScope();
+        var setupRepo = setupScope.ServiceProvider.GetRequiredService<ITagDefinitionsRepository>();
+        var tagName = $"dec-zero-{Guid.NewGuid():N}";
+        await setupRepo.CreateAsync(tagName, TagColor.Primary, CancellationToken.None);
+
+        // Act
+        await setupRepo.DecrementUsageAsync(tagName, CancellationToken.None);
+
+        // Assert — never goes negative
+        var contextFactory = _serviceProvider!.GetRequiredService<IDbContextFactory<AppDbContext>>();
+        await using var ctx = await contextFactory.CreateDbContextAsync();
+        var def = await ctx.TagDefinitions.AsNoTracking().FirstAsync(t => t.TagName == tagName);
+        Assert.That(def.UsageCount, Is.EqualTo(0));
+    }
 }
