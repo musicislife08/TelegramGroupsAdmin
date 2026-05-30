@@ -60,9 +60,9 @@ public class UsernameBlacklistService(
         await auditService.LogEventAsync(
             AuditEventType.BlacklistEntryAdded,
             actor,
-            actor,
-            pattern,
-            ct);
+            target: null,
+            value: pattern,
+            cancellationToken: ct);
 
         return id;
     }
@@ -74,7 +74,7 @@ public class UsernameBlacklistService(
         {
             await auditService.LogEventAsync(
                 AuditEventType.BlacklistEntryRemoved,
-                actor, actor, pattern, ct);
+                actor, target: null, value: pattern, cancellationToken: ct);
         }
         return deleted;
     }
@@ -87,7 +87,7 @@ public class UsernameBlacklistService(
             var eventType = enabled
                 ? AuditEventType.BlacklistEntryEnabled
                 : AuditEventType.BlacklistEntryDisabled;
-            await auditService.LogEventAsync(eventType, actor, actor, pattern, ct);
+            await auditService.LogEventAsync(eventType, actor, target: null, value: pattern, cancellationToken: ct);
         }
         return updated;
     }
@@ -99,7 +99,7 @@ public class UsernameBlacklistService(
         {
             await auditService.LogEventAsync(
                 AuditEventType.BlacklistEntryNotesChanged,
-                actor, actor, pattern, ct);
+                actor, target: null, value: pattern, cancellationToken: ct);
         }
         return updated;
     }

@@ -52,7 +52,7 @@ public class UsernameBlacklistServiceMutationTests
         await _audit.Received(1).LogEventAsync(
             AuditEventType.BlacklistEntryAdded,
             actor,
-            actor,
+            Arg.Is<Actor?>(t => t == null),
             "spam-pattern",
             Arg.Any<CancellationToken>());
     }
@@ -68,7 +68,7 @@ public class UsernameBlacklistServiceMutationTests
         Assert.That(result, Is.True);
         await _audit.Received(1).LogEventAsync(
             AuditEventType.BlacklistEntryRemoved,
-            actor, actor, "test-pattern",
+            actor, Arg.Is<Actor?>(t => t == null), "test-pattern",
             Arg.Any<CancellationToken>());
     }
 
@@ -97,7 +97,7 @@ public class UsernameBlacklistServiceMutationTests
         Assert.That(result, Is.True);
         await _audit.Received(1).LogEventAsync(
             AuditEventType.BlacklistEntryEnabled,
-            actor, actor, "test-pattern",
+            actor, Arg.Is<Actor?>(t => t == null), "test-pattern",
             Arg.Any<CancellationToken>());
     }
 
@@ -112,7 +112,7 @@ public class UsernameBlacklistServiceMutationTests
         Assert.That(result, Is.True);
         await _audit.Received(1).LogEventAsync(
             AuditEventType.BlacklistEntryDisabled,
-            actor, actor, "test-pattern",
+            actor, Arg.Is<Actor?>(t => t == null), "test-pattern",
             Arg.Any<CancellationToken>());
     }
 
@@ -141,7 +141,7 @@ public class UsernameBlacklistServiceMutationTests
         Assert.That(result, Is.True);
         await _audit.Received(1).LogEventAsync(
             AuditEventType.BlacklistEntryNotesChanged,
-            actor, actor, "test-pattern",
+            actor, Arg.Is<Actor?>(t => t == null), "test-pattern",
             Arg.Any<CancellationToken>());
     }
 
