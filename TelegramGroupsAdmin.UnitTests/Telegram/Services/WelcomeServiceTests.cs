@@ -3,6 +3,7 @@ using NSubstitute;
 using global::Telegram.Bot.Types;
 using global::Telegram.Bot.Types.Enums;
 using global::Telegram.Bot.Types.ReplyMarkups;
+using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Models.Welcome;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
@@ -164,11 +165,20 @@ public class WelcomeServiceTests
             .SyncBanToChatAsync(Arg.Any<SyncBanIntent>(), Arg.Any<CancellationToken>())
             .Returns(new ModerationResult { Success = true });
 
-        // SendAndSaveMessageAsync returns a minimal Message so verifyingMessageId is set
+        // SendAndSaveMessageAsync returns a minimal Message so verifyingMessageId is set (string overload)
         _messageService
             .SendAndSaveMessageAsync(
                 Arg.Any<long>(), Arg.Any<string>(),
                 Arg.Any<ParseMode?>(),
+                Arg.Any<ReplyParameters?>(),
+                Arg.Any<InlineKeyboardMarkup?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new Message { Id = 42, Chat = new Chat { Id = TestChatId } });
+
+        // SendAndSaveMessageAsync returns a minimal Message so verifyingMessageId is set (entity overload)
+        _messageService
+            .SendAndSaveMessageAsync(
+                Arg.Any<long>(), Arg.Any<TelegramMessage>(),
                 Arg.Any<ReplyParameters?>(),
                 Arg.Any<InlineKeyboardMarkup?>(),
                 Arg.Any<CancellationToken>())
@@ -594,8 +604,7 @@ public class WelcomeServiceTests
 
         _messageService
             .SendAndSaveMessageAsync(
-                Arg.Any<long>(), Arg.Any<string>(),
-                Arg.Any<ParseMode?>(),
+                Arg.Any<long>(), Arg.Any<TelegramMessage>(),
                 Arg.Any<ReplyParameters?>(),
                 Arg.Any<InlineKeyboardMarkup?>(),
                 Arg.Any<CancellationToken>())
@@ -604,11 +613,10 @@ public class WelcomeServiceTests
         // Act
         await _sut.HandleChatMemberUpdateAsync(CreateJoinUpdate(), CancellationToken.None);
 
-        // Assert — announcement sent as HTML containing the configured body
+        // Assert — announcement sent via entity overload containing the configured body text
         await _messageService.Received(1).SendAndSaveMessageAsync(
             chatId: TestChatId,
-            text: Arg.Is<string>(s => s.Contains("hello")),
-            parseMode: ParseMode.Html,
+            message: Arg.Is<TelegramMessage>(m => m.Text.Contains("hello")),
             replyParameters: Arg.Any<ReplyParameters?>(),
             replyMarkup: Arg.Any<InlineKeyboardMarkup?>(),
             cancellationToken: Arg.Any<CancellationToken>());
@@ -646,10 +654,9 @@ public class WelcomeServiceTests
         // Act
         await _sut.HandleChatMemberUpdateAsync(CreateJoinUpdate(), CancellationToken.None);
 
-        // Assert — no announcement posted, no delete scheduled
+        // Assert — no announcement posted (entity overload), no delete scheduled
         await _messageService.DidNotReceive().SendAndSaveMessageAsync(
-            Arg.Any<long>(), Arg.Any<string>(),
-            Arg.Any<ParseMode?>(),
+            Arg.Any<long>(), Arg.Any<TelegramMessage>(),
             Arg.Any<ReplyParameters?>(),
             Arg.Any<InlineKeyboardMarkup?>(),
             Arg.Any<CancellationToken>());
@@ -686,8 +693,7 @@ public class WelcomeServiceTests
 
         _messageService
             .SendAndSaveMessageAsync(
-                Arg.Any<long>(), Arg.Any<string>(),
-                Arg.Any<ParseMode?>(),
+                Arg.Any<long>(), Arg.Any<TelegramMessage>(),
                 Arg.Any<ReplyParameters?>(),
                 Arg.Any<InlineKeyboardMarkup?>(),
                 Arg.Any<CancellationToken>())
@@ -696,11 +702,10 @@ public class WelcomeServiceTests
         // Act
         await _sut.HandleChatMemberUpdateAsync(CreateJoinUpdate(), CancellationToken.None);
 
-        // Assert — announcement IS posted and delete IS scheduled at 0s delay.
+        // Assert — announcement IS posted via entity overload and delete IS scheduled at 0s delay.
         await _messageService.Received(1).SendAndSaveMessageAsync(
             chatId: TestChatId,
-            text: Arg.Any<string>(),
-            parseMode: ParseMode.Html,
+            message: Arg.Any<TelegramMessage>(),
             replyParameters: Arg.Any<ReplyParameters?>(),
             replyMarkup: Arg.Any<InlineKeyboardMarkup?>(),
             cancellationToken: Arg.Any<CancellationToken>());
@@ -738,10 +743,9 @@ public class WelcomeServiceTests
         // Act
         await _sut.HandleChatMemberUpdateAsync(CreateJoinUpdate(), CancellationToken.None);
 
-        // Assert — toggle OFF → no announcement posted, no delete scheduled.
+        // Assert — toggle OFF → no announcement posted (entity overload), no delete scheduled.
         await _messageService.DidNotReceive().SendAndSaveMessageAsync(
-            Arg.Any<long>(), Arg.Any<string>(),
-            Arg.Any<ParseMode?>(),
+            Arg.Any<long>(), Arg.Any<TelegramMessage>(),
             Arg.Any<ReplyParameters?>(),
             Arg.Any<InlineKeyboardMarkup?>(),
             Arg.Any<CancellationToken>());
@@ -780,7 +784,7 @@ public class WelcomeServiceTests
 
     #endregion
 
-    #region Bypass announcement substitution + HTML encoding (regression cover for Task 14 / CWE-79)
+    #region Bypass announcement substitution via entity builder (migration from ParseMode.Html)
 
     /// <summary>
     /// Seeds WelcomeConfig with TrustedBypass enabled and the given templates,
@@ -801,7 +805,7 @@ public class WelcomeServiceTests
         };
         _configService.GetEffectiveWelcomeAsync(Arg.Any<long>()).Returns(config);
 
-        // Return a non-null Message so the delete-schedule branch runs.
+        // Return a non-null Message so the delete-schedule branch runs (string overload).
         _messageService
             .SendAndSaveMessageAsync(
                 Arg.Any<long>(), Arg.Any<string>(),
@@ -810,37 +814,60 @@ public class WelcomeServiceTests
                 Arg.Any<InlineKeyboardMarkup?>(),
                 Arg.Any<CancellationToken>())
             .Returns(new Message { Id = 9001, Chat = new Chat { Id = TestChatId } });
+
+        // Return a non-null Message so the delete-schedule branch runs (entity overload).
+        _messageService
+            .SendAndSaveMessageAsync(
+                Arg.Any<long>(), Arg.Any<TelegramMessage>(),
+                Arg.Any<ReplyParameters?>(),
+                Arg.Any<InlineKeyboardMarkup?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new Message { Id = 9001, Chat = new Chat { Id = TestChatId } });
     }
 
     [Test]
-    public async Task PostBypassAnnouncement_Substitutes_Username_AsEncodedMention_Trusted()
+    public async Task PostBypassAnnouncement_Substitutes_Username_AsTextMentionEntity_Trusted()
     {
-        // Arrange: trusted user with username "alice", templates use {username}
+        // Arrange: trusted user with username "alice", template uses {username}. After migration
+        // the mention is expressed as a TextMention entity — NOT embedded as @alice in the text.
         SetupTrustedBypass(
             adminTemplate: TrustedBypassConfig.UsernameVariable + " arrived",
             trustedTemplate: TrustedBypassConfig.UsernameVariable + " arrived");
         _bypassResolver.ResolveAsync(Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<CancellationToken>())
             .Returns(new BypassResolution(BypassDecision.Trusted, "Trusted user"));
 
+        TelegramMessage? capturedMessage = null;
+        _messageService
+            .SendAndSaveMessageAsync(
+                Arg.Any<long>(),
+                Arg.Do<TelegramMessage>(m => capturedMessage = m),
+                Arg.Any<ReplyParameters?>(),
+                Arg.Any<InlineKeyboardMarkup?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new Message { Id = 9001, Chat = new Chat { Id = TestChatId } });
+
         await _sut.HandleChatMemberUpdateAsync(
             CreateJoinUpdate(userId: 1L, username: "alice", firstName: "Alice"),
             CancellationToken.None);
 
-        // @alice (username path fires; HTML encoding is a no-op for [A-Za-z0-9_] usernames
-        //  but the encoder is still on the path — the assertion confirms the @mention shape).
-        await _messageService.Received(1).SendAndSaveMessageAsync(
-            Arg.Any<long>(),
-            Arg.Is<string>(t => t.Contains("@alice") && t.Contains("arrived")),
-            Arg.Is<ParseMode?>(m => m == ParseMode.Html),
-            Arg.Any<ReplyParameters?>(),
-            Arg.Any<InlineKeyboardMarkup?>(),
-            Arg.Any<CancellationToken>());
+        Assert.That(capturedMessage, Is.Not.Null);
+        // The literal "arrived" suffix is in the text
+        Assert.That(capturedMessage!.Text, Does.Contain(" arrived"));
+        // A TextMention entity exists for user 1
+        Assert.That(
+            capturedMessage.Entities,
+            Has.Some.Matches<MessageEntity>(e =>
+                e.Type == MessageEntityType.TextMention && e.User!.Id == 1L));
+        // No raw @mention or HTML in the text
+        Assert.That(capturedMessage.Text, Does.Not.Contain("@alice"));
+        Assert.That(capturedMessage.Text, Does.Not.Contain("<a href"));
     }
 
     [Test]
-    public async Task PostBypassAnnouncement_Substitutes_ChatName_Encoded()
+    public async Task PostBypassAnnouncement_Substitutes_ChatName_AsPlainText()
     {
-        // Arrange: trusted bypass with hostile chat title containing HTML
+        // Arrange: trusted bypass with a chat title that previously needed HTML-encoding.
+        // After migration there is no HTML parser, so the title appears verbatim in the text.
         SetupTrustedBypass(
             adminTemplate: "Joined " + TrustedBypassConfig.ChatNameVariable,
             trustedTemplate: "Joined " + TrustedBypassConfig.ChatNameVariable);
@@ -848,38 +875,107 @@ public class WelcomeServiceTests
             .Returns(new BypassResolution(BypassDecision.Trusted, "Trusted user"));
 
         var update = CreateJoinUpdate(chatId: 99L, chatTitle: "<b>pwn</b>");
+
+        TelegramMessage? capturedMessage = null;
+        _messageService
+            .SendAndSaveMessageAsync(
+                Arg.Any<long>(),
+                Arg.Do<TelegramMessage>(m => capturedMessage = m),
+                Arg.Any<ReplyParameters?>(),
+                Arg.Any<InlineKeyboardMarkup?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new Message { Id = 9002, Chat = new Chat { Id = 99L } });
+
         await _sut.HandleChatMemberUpdateAsync(update, CancellationToken.None);
 
-        // Chat title must be HTML-encoded in the outgoing text
-        await _messageService.Received(1).SendAndSaveMessageAsync(
-            Arg.Any<long>(),
-            Arg.Is<string>(t => t.Contains("&lt;b&gt;pwn&lt;/b&gt;") && !t.Contains("<b>pwn</b>")),
-            Arg.Any<ParseMode?>(),
-            Arg.Any<ReplyParameters?>(),
-            Arg.Any<InlineKeyboardMarkup?>(),
-            Arg.Any<CancellationToken>());
+        Assert.That(capturedMessage, Is.Not.Null);
+        // Chat title appears verbatim — no HTML parser, no encoding needed
+        Assert.That(capturedMessage!.Text, Does.Contain("<b>pwn</b>"),
+            "Chat title is plain text — no HTML encoding applied");
+        Assert.That(capturedMessage.Text, Does.Not.Contain("&lt;b&gt;"),
+            "No HTML entity escaping in entity-based messages");
     }
 
     [Test]
-    public async Task PostBypassAnnouncement_HostileFirstName_IsEncoded_InTextMention()
+    public async Task PostBypassAnnouncement_UserWithNoUsername_UsesTextMentionEntity()
     {
-        // Arrange: user with NO username, hostile first name — display-name path fires
+        // Arrange: user with NO username — mention entity still carries the hostile first name
+        // as display text inside the entity, not as raw text/HTML in the message body.
         SetupTrustedBypass(
             adminTemplate: TrustedBypassConfig.UsernameVariable + " joined",
             trustedTemplate: TrustedBypassConfig.UsernameVariable + " joined");
         _bypassResolver.ResolveAsync(Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<CancellationToken>())
             .Returns(new BypassResolution(BypassDecision.Trusted, "Trusted user"));
 
+        TelegramMessage? capturedMessage = null;
+        _messageService
+            .SendAndSaveMessageAsync(
+                Arg.Any<long>(),
+                Arg.Do<TelegramMessage>(m => capturedMessage = m),
+                Arg.Any<ReplyParameters?>(),
+                Arg.Any<InlineKeyboardMarkup?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new Message { Id = 9003, Chat = new Chat { Id = TestChatId } });
+
         var update = CreateJoinUpdate(userId: 7L, username: null, firstName: "<b>FAKE ADMIN</b>");
         await _sut.HandleChatMemberUpdateAsync(update, CancellationToken.None);
 
-        // The hostile first name must land encoded inside the text-mention anchor tag
-        await _messageService.Received(1).SendAndSaveMessageAsync(
+        Assert.That(capturedMessage, Is.Not.Null);
+        // A TextMention entity exists for user 7 — no HTML anchor tag in the raw text
+        Assert.That(
+            capturedMessage!.Entities,
+            Has.Some.Matches<MessageEntity>(e =>
+                e.Type == MessageEntityType.TextMention && e.User!.Id == 7L),
+            "TextMention entity required for user without username");
+        Assert.That(capturedMessage.Text, Does.Not.Contain("<a href"),
+            "No raw HTML anchor tag in entity-based message");
+    }
+
+    [Test]
+    public async Task PostBypassAnnouncement_UsesEntityOverload_WithTextMentionForUser()
+    {
+        // Arrange: trusted bypass with a user that has a username. After migration the
+        // announcement must be sent via the TelegramMessage entity overload, carry a
+        // TextMention entity for the user, and not contain any raw HTML <a href> markup.
+        SetupTrustedBypass(
+            adminTemplate: TrustedBypassConfig.UsernameVariable + " arrived",
+            trustedTemplate: TrustedBypassConfig.UsernameVariable + " arrived");
+        _bypassResolver.ResolveAsync(Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<CancellationToken>())
+            .Returns(new BypassResolution(BypassDecision.Trusted, "Trusted user"));
+
+        TelegramMessage? capturedMessage = null;
+        _messageService
+            .SendAndSaveMessageAsync(
+                Arg.Any<long>(),
+                Arg.Do<TelegramMessage>(m => capturedMessage = m),
+                Arg.Any<ReplyParameters?>(),
+                Arg.Any<InlineKeyboardMarkup?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new Message { Id = 9099, Chat = new Chat { Id = TestChatId } });
+
+        await _sut.HandleChatMemberUpdateAsync(
+            CreateJoinUpdate(userId: 1L, username: "alice", firstName: "Alice"),
+            CancellationToken.None);
+
+        // Entity overload was called and captured a message
+        Assert.That(capturedMessage, Is.Not.Null, "Entity overload of SendAndSaveMessageAsync must be called");
+
+        // Text must not contain hand-built HTML mention markup
+        Assert.That(capturedMessage!.Text, Does.Not.Contain("<a href"),
+            "No raw HTML anchor tags — mention is expressed via entity");
+
+        // Must contain a TextMention entity pointing to the correct user id
+        Assert.That(
+            capturedMessage.Entities,
+            Has.Some.Matches<MessageEntity>(e =>
+                e.Type == MessageEntityType.TextMention && e.User!.Id == 1L),
+            "TextMention entity required for the bypassing user");
+
+        // String+ParseMode overload must NOT be called for the announcement
+        await _messageService.DidNotReceive().SendAndSaveMessageAsync(
             Arg.Any<long>(),
-            Arg.Is<string>(t =>
-                t.Contains("&lt;b&gt;FAKE ADMIN&lt;/b&gt;") &&
-                !t.Contains("<b>FAKE ADMIN</b>")),
-            Arg.Any<ParseMode?>(),
+            Arg.Any<string>(),
+            Arg.Is<ParseMode?>(p => p == ParseMode.Html),
             Arg.Any<ReplyParameters?>(),
             Arg.Any<InlineKeyboardMarkup?>(),
             Arg.Any<CancellationToken>());
@@ -906,8 +1002,7 @@ public class WelcomeServiceTests
         //       Substitute.For<ILogger<WelcomeService>>() and pass it to the WelcomeService ctor.
         await _messageService.Received(1).SendAndSaveMessageAsync(
             Arg.Any<long>(),
-            Arg.Is<string>(t => t.Length <= TrustedBypassConfig.MaxAnnouncementTemplateLength),
-            Arg.Any<ParseMode?>(),
+            Arg.Is<TelegramMessage>(m => m.Text.Length <= TrustedBypassConfig.MaxAnnouncementTemplateLength),
             Arg.Any<ReplyParameters?>(),
             Arg.Any<InlineKeyboardMarkup?>(),
             Arg.Any<CancellationToken>());
@@ -932,8 +1027,7 @@ public class WelcomeServiceTests
 
         _messageService
             .SendAndSaveMessageAsync(
-                Arg.Any<long>(), Arg.Any<string>(),
-                Arg.Any<ParseMode?>(),
+                Arg.Any<long>(), Arg.Any<TelegramMessage>(),
                 Arg.Any<ReplyParameters?>(),
                 Arg.Any<InlineKeyboardMarkup?>(),
                 Arg.Any<CancellationToken>())
@@ -964,8 +1058,7 @@ public class WelcomeServiceTests
         await _sut.HandleChatMemberUpdateAsync(CreateJoinUpdate(), CancellationToken.None);
 
         await _messageService.DidNotReceive().SendAndSaveMessageAsync(
-            Arg.Any<long>(), Arg.Any<string>(),
-            Arg.Any<ParseMode?>(),
+            Arg.Any<long>(), Arg.Any<TelegramMessage>(),
             Arg.Any<ReplyParameters?>(),
             Arg.Any<InlineKeyboardMarkup?>(),
             Arg.Any<CancellationToken>());
@@ -994,10 +1087,9 @@ public class WelcomeServiceTests
 
         await _sut.HandleChatMemberUpdateAsync(CreateJoinUpdate(), CancellationToken.None);
 
-        // Announcement silenced when Enabled=false.
+        // Announcement silenced when Enabled=false (entity overload).
         await _messageService.DidNotReceive().SendAndSaveMessageAsync(
-            Arg.Any<long>(), Arg.Any<string>(),
-            Arg.Any<ParseMode?>(),
+            Arg.Any<long>(), Arg.Any<TelegramMessage>(),
             Arg.Any<ReplyParameters?>(),
             Arg.Any<InlineKeyboardMarkup?>(),
             Arg.Any<CancellationToken>());

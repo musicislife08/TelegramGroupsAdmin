@@ -3,6 +3,7 @@ using NSubstitute;
 using global::Telegram.Bot.Types;
 using global::Telegram.Bot.Types.Enums;
 using global::Telegram.Bot.Types.ReplyMarkups;
+using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Models.Welcome;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
@@ -167,11 +168,20 @@ public class WelcomeServiceBlacklistTests
             .BanUserAsync(Arg.Any<BanIntent>(), Arg.Any<CancellationToken>())
             .Returns(new ModerationResult { Success = true });
 
-        // SendAndSaveMessageAsync returns a minimal Message so verifyingMessageId is set
+        // SendAndSaveMessageAsync returns a minimal Message so verifyingMessageId is set (string overload)
         _messageService
             .SendAndSaveMessageAsync(
                 Arg.Any<long>(), Arg.Any<string>(),
                 Arg.Any<ParseMode?>(),
+                Arg.Any<ReplyParameters?>(),
+                Arg.Any<InlineKeyboardMarkup?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new Message { Id = 42, Chat = new Chat { Id = TestChatId } });
+
+        // SendAndSaveMessageAsync returns a minimal Message so verifyingMessageId is set (entity overload)
+        _messageService
+            .SendAndSaveMessageAsync(
+                Arg.Any<long>(), Arg.Any<TelegramMessage>(),
                 Arg.Any<ReplyParameters?>(),
                 Arg.Any<InlineKeyboardMarkup?>(),
                 Arg.Any<CancellationToken>())
