@@ -102,8 +102,9 @@ public class TelegramApiClient : ITelegramApiClient
         string text,
         ParseMode? parseMode = null,
         InlineKeyboardMarkup? replyMarkup = null,
+        IReadOnlyList<MessageEntity>? entities = null,
         CancellationToken ct = default)
-        => _client.EditMessageText(chatId, messageId, text, parseMode: parseMode ?? default, replyMarkup: replyMarkup, cancellationToken: ct);
+        => _client.EditMessageText(chatId, messageId, text, parseMode: parseMode ?? default, replyMarkup: replyMarkup, entities: entities, cancellationToken: ct);
 
     public Task<Message> EditMessageCaptionAsync(
         long chatId,

@@ -1,6 +1,7 @@
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
+using TelegramGroupsAdmin.Core.Utilities;
 
 namespace TelegramGroupsAdmin.Telegram.Services.Bot;
 
@@ -35,6 +36,17 @@ public interface IBotMessageService
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Edit message via bot AND save edit history to message_edits table.
+    /// Entity-based overload — sends text + entities with no parse_mode.
+    /// </summary>
+    Task<Message> EditAndUpdateMessageAsync(
+        long chatId,
+        int messageId,
+        TelegramMessage message,
+        InlineKeyboardMarkup? replyMarkup = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Delete message via bot AND mark as deleted in database.
     /// Gracefully handles cases where message is already deleted from Telegram.
     /// </summary>
@@ -64,6 +76,17 @@ public interface IBotMessageService
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Send message via bot AND save to messages table.
+    /// Entity-based overload — sends text + entities with no parse_mode.
+    /// </summary>
+    Task<Message> SendAndSaveMessageAsync(
+        long chatId,
+        TelegramMessage message,
+        ReplyParameters? replyParameters = null,
+        InlineKeyboardMarkup? replyMarkup = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Send an animation (GIF) to a chat AND save to message history.
     /// Used for ban celebrations and other GIF content that should appear in message history.
     /// </summary>
@@ -72,5 +95,15 @@ public interface IBotMessageService
         InputFile animation,
         string? caption = null,
         ParseMode? parseMode = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Send an animation (GIF) to a chat AND save to message history.
+    /// Entity-based caption overload — degrades to plain text (SendAnimation has no caption_entities in this client surface).
+    /// </summary>
+    Task<Message> SendAndSaveAnimationAsync(
+        long chatId,
+        InputFile animation,
+        TelegramMessage caption,
         CancellationToken cancellationToken = default);
 }

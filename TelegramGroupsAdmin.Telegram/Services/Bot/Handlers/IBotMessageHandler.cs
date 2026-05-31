@@ -60,6 +60,7 @@ public interface IBotMessageHandler
         string text,
         ParseMode? parseMode = null,
         InlineKeyboardMarkup? replyMarkup = null,
+        IReadOnlyList<MessageEntity>? entities = null,
         CancellationToken ct = default);
 
     /// <summary>Edit a message caption.</summary>

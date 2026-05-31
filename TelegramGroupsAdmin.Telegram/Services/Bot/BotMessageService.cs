@@ -42,7 +42,6 @@ public class BotMessageService(
         InlineKeyboardMarkup? replyMarkup = null,
         CancellationToken cancellationToken = default)
     {
-        // Send message via handler
         var sentMessage = await messageHandler.SendAsync(
             chatId: chatId,
             text: text,
@@ -52,6 +51,46 @@ public class BotMessageService(
             ct: cancellationToken);
         apiMetrics.RecordTelegramApiCall("send_message", success: true);
 
+        await SaveSentMessageAsync(sentMessage, chatId, text, replyParameters, cancellationToken);
+        return sentMessage;
+    }
+
+    /// <summary>
+    /// Send message via bot AND save to messages table.
+    /// Entity-based overload — sends text + entities with no parse_mode.
+    /// </summary>
+    public async Task<Message> SendAndSaveMessageAsync(
+        long chatId,
+        TelegramMessage message,
+        ReplyParameters? replyParameters = null,
+        InlineKeyboardMarkup? replyMarkup = null,
+        CancellationToken cancellationToken = default)
+    {
+        var sentMessage = await messageHandler.SendAsync(
+            chatId: chatId,
+            text: message.Text,
+            parseMode: null,
+            replyParameters: replyParameters,
+            replyMarkup: replyMarkup,
+            entities: message.Entities,
+            ct: cancellationToken);
+        apiMetrics.RecordTelegramApiCall("send_message", success: true);
+
+        await SaveSentMessageAsync(sentMessage, chatId, message.Text, replyParameters, cancellationToken);
+        return sentMessage;
+    }
+
+    /// <summary>
+    /// Shared helper: upserts the bot user and inserts the sent message into message history.
+    /// Called by both send overloads to avoid duplicating save logic.
+    /// </summary>
+    private async Task SaveSentMessageAsync(
+        Message sentMessage,
+        long chatId,
+        string text,
+        ReplyParameters? replyParameters,
+        CancellationToken cancellationToken)
+    {
         // Get bot user info (cached in singleton IBotIdentityCache via IBotUserService)
         var botInfo = await userService.GetMeAsync(cancellationToken);
 
@@ -116,8 +155,6 @@ public class BotMessageService(
             sentMessage.MessageId,
             chatId,
             replyParameters?.MessageId);
-
-        return sentMessage;
     }
 
     /// <summary>
@@ -132,16 +169,6 @@ public class BotMessageService(
         InlineKeyboardMarkup? replyMarkup = null,
         CancellationToken cancellationToken = default)
     {
-        // Get old message from database for edit history
-        var oldMessage = await messageRepo.GetMessageAsync(messageId, chatId, cancellationToken);
-        if (oldMessage == null)
-        {
-            throw new InvalidOperationException($"Message {messageId} not found in database");
-        }
-
-        var oldText = oldMessage.MessageText;
-
-        // Edit message via handler
         var editedMessage = await messageHandler.EditTextAsync(
             chatId: chatId,
             messageId: messageId,
@@ -151,16 +178,65 @@ public class BotMessageService(
             ct: cancellationToken);
         apiMetrics.RecordTelegramApiCall("edit_message", success: true);
 
+        await SaveEditedMessageAsync(editedMessage, chatId, messageId, text, cancellationToken);
+        return editedMessage;
+    }
+
+    /// <summary>
+    /// Edit message via bot AND save edit history to message_edits table.
+    /// Entity-based overload — sends text + entities with no parse_mode.
+    /// </summary>
+    public async Task<Message> EditAndUpdateMessageAsync(
+        long chatId,
+        int messageId,
+        TelegramMessage message,
+        InlineKeyboardMarkup? replyMarkup = null,
+        CancellationToken cancellationToken = default)
+    {
+        var editedMessage = await messageHandler.EditTextAsync(
+            chatId: chatId,
+            messageId: messageId,
+            text: message.Text,
+            parseMode: null,
+            replyMarkup: replyMarkup,
+            entities: message.Entities,
+            ct: cancellationToken);
+        apiMetrics.RecordTelegramApiCall("edit_message", success: true);
+
+        await SaveEditedMessageAsync(editedMessage, chatId, messageId, message.Text, cancellationToken);
+        return editedMessage;
+    }
+
+    /// <summary>
+    /// Shared helper: loads the old message record, saves an edit record, and updates the messages table.
+    /// Called by both edit overloads to avoid duplicating save-history logic.
+    /// </summary>
+    private async Task SaveEditedMessageAsync(
+        Message editedMessage,
+        long chatId,
+        int messageId,
+        string newText,
+        CancellationToken cancellationToken)
+    {
+        // Get old message from database for edit history
+        var oldMessage = await messageRepo.GetMessageAsync(messageId, chatId, cancellationToken);
+        if (oldMessage == null)
+        {
+            throw new InvalidOperationException($"Message {messageId} not found in database");
+        }
+
+        var oldText = oldMessage.MessageText;
+
         var editDate = editedMessage.EditDate.HasValue
             ? new DateTimeOffset(editedMessage.EditDate.Value, TimeSpan.Zero) // DateTime (UTC) → DateTimeOffset
             : DateTimeOffset.UtcNow; // Fallback if Telegram doesn't provide EditDate
 
         // Extract URLs and calculate content hashes
         var oldUrls = UrlUtilities.ExtractUrls(oldText);
-        var newUrls = UrlUtilities.ExtractUrls(text);
+        var newUrls = UrlUtilities.ExtractUrls(newText);
 
         var oldContentHash = HashUtilities.ComputeContentHash(oldText ?? "", oldUrls != null ? JsonSerializer.Serialize(oldUrls) : "");
-        var newContentHash = HashUtilities.ComputeContentHash(text ?? "", newUrls != null ? JsonSerializer.Serialize(newUrls) : "");
+        var newContentHash = HashUtilities.ComputeContentHash(newText ?? "", newUrls != null ? JsonSerializer.Serialize(newUrls) : "");
 
         // Save edit history to message_edits table
         var editRecord = new MessageEditRecord(
@@ -168,7 +244,7 @@ public class BotMessageService(
             MessageId: messageId,
             ChatId: chatId,
             OldText: oldText,
-            NewText: text,
+            NewText: newText,
             EditDate: editDate,
             OldContentHash: oldContentHash,
             NewContentHash: newContentHash
@@ -179,7 +255,7 @@ public class BotMessageService(
         // Update message in messages table with new text and edit date
         var updatedMessage = oldMessage with
         {
-            MessageText = text,
+            MessageText = newText,
             EditDate = editDate,
             Urls = newUrls != null ? JsonSerializer.Serialize(newUrls) : null,
             ContentHash = newContentHash
@@ -191,8 +267,6 @@ public class BotMessageService(
             "Edited bot message {MessageId} (chat: {ChatId}) and saved edit history",
             messageId,
             chatId);
-
-        return editedMessage;
     }
 
     /// <summary>
@@ -431,4 +505,17 @@ public class BotMessageService(
 
         return sentMessage;
     }
+
+    /// <summary>
+    /// Send an animation (GIF) to a chat AND save to message history.
+    /// Entity-based caption overload — degrades to plain caption text because
+    /// SendAnimation has no caption_entities parameter in this client surface.
+    /// </summary>
+    public Task<Message> SendAndSaveAnimationAsync(
+        long chatId,
+        InputFile animation,
+        TelegramMessage caption,
+        CancellationToken cancellationToken = default) =>
+        // IBotMessageHandler.SendAnimationAsync has no caption_entities; use the text only.
+        SendAndSaveAnimationAsync(chatId, animation, caption.Text, parseMode: null, cancellationToken);
 }

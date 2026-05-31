@@ -278,6 +278,7 @@ public class BotMessageServiceTests
             Arg.Any<string>(),
             Arg.Any<ParseMode?>(),
             Arg.Any<InlineKeyboardMarkup?>(),
+            Arg.Any<IReadOnlyList<MessageEntity>?>(),
             Arg.Any<CancellationToken>()
         ).Returns(editedMessage);
 
@@ -317,6 +318,7 @@ public class BotMessageServiceTests
             Arg.Any<string>(),
             Arg.Any<ParseMode?>(),
             Arg.Any<InlineKeyboardMarkup?>(),
+            Arg.Any<IReadOnlyList<MessageEntity>?>(),
             Arg.Any<CancellationToken>()
         ).Returns(editedMessage);
 
