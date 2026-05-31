@@ -58,13 +58,20 @@ public class ReportCommand(
         {
             var existingReporterName = existingReport.ReportedByUserName ?? "System";
             return new CommandResult(
-                TelegramMessage.Plain(
-                    $"ℹ️ This message has already been reported.\n\n" +
-                    $"📋 Report #{existingReport.Id}\n" +
-                    $"👤 Reported by: {existingReporterName}\n" +
-                    $"📅 Reported: {existingReport.ReportedAt:g}\n" +
-                    $"📊 Status: {existingReport.Status}\n\n" +
-                    $"Admins will review the report shortly."),
+                new TelegramMessageBuilder()
+                    .Text("ℹ️ This message has already been reported.")
+                    .LineBreak().LineBreak()
+                    .Text($"📋 Report #{existingReport.Id}")
+                    .LineBreak()
+                    .Text("👤 Reported by: ")
+                    .Text(existingReporterName)
+                    .LineBreak()
+                    .Text($"📅 Reported: {existingReport.ReportedAt:g}")
+                    .LineBreak()
+                    .Text($"📊 Status: {existingReport.Status}")
+                    .LineBreak().LineBreak()
+                    .Italic("Admins will review the report shortly.")
+                    .Build(),
                 DeleteCommandMessage,
                 DeleteResponseAfterSeconds);
         }
@@ -103,10 +110,14 @@ public class ReportCommand(
             reportedUser.Username);
 
         return new CommandResult(
-            TelegramMessage.Plain(
-                $"✅ Message reported for admin review (Report #{result.ReportId})\n" +
-                $"Reported user: @{reportedUser.Username ?? reportedUser.Id.ToString()}\n\n" +
-                $"Admins will be notified shortly."),
+            new TelegramMessageBuilder()
+                .Text($"✅ Message reported for admin review (Report #{result.ReportId})")
+                .LineBreak()
+                .Text("Reported user: ")
+                .Mention(new UserIdentity(reportedUser.Id, reportedUser.FirstName, reportedUser.LastName, reportedUser.Username))
+                .LineBreak().LineBreak()
+                .Italic("Admins will be notified shortly.")
+                .Build(),
             DeleteCommandMessage,
             DeleteResponseAfterSeconds);
     }
