@@ -148,20 +148,15 @@ public class StartCommand : IBotCommand
 
         // Send main welcome message in DM
         var chatName = chat.Title ?? "the chat";
-        // Use HTML mention format to create clickable user tag
-        var username = message.From.Username != null
-            ? $"<a href=\"tg://user?id={message.From.Id}\">@{message.From.Username}</a>"
-            : $"<a href=\"tg://user?id={message.From.Id}\">{message.From.FirstName}</a>";
-
-        var messageText = config.MainWelcomeMessage
-            .Replace("{username}", username)
-            .Replace("{chat_name}", chatName)
-            .Replace("{timeout}", config.TimeoutSeconds.ToString());
+        var welcomeMessage = BuildWelcomeMessage(
+            config.MainWelcomeMessage,
+            new UserIdentity(message.From.Id, message.From.FirstName, message.From.LastName, message.From.Username),
+            chatName,
+            config.TimeoutSeconds);
 
         await _messageService.SendAndSaveMessageAsync(
             chatId: message.Chat.Id,
-            text: messageText,
-            parseMode: ParseMode.Html,
+            message: welcomeMessage,
             cancellationToken: cancellationToken);
 
         // Send Accept button in separate message (will be deleted after click)
@@ -276,6 +271,70 @@ public class StartCommand : IBotCommand
 
         // Empty result - the exam service sends the first question
         return new CommandResult(TelegramMessage.Plain(string.Empty), DeleteCommandMessage, DeleteResponseAfterSeconds);
+    }
+
+    /// <summary>
+    /// Splits an admin-configured welcome template on the <c>{username}</c>, <c>{chat_name}</c>,
+    /// and <c>{timeout}</c> placeholders and builds a <see cref="TelegramMessage"/> using
+    /// <see cref="TelegramMessageBuilder"/>. Each literal segment becomes a <c>.Text()</c> call;
+    /// <c>{username}</c> becomes a <c>.Mention(user)</c> entity; <c>{chat_name}</c> becomes
+    /// <c>.Text(chatName)</c>; <c>{timeout}</c> becomes <c>.Text(timeoutSeconds.ToString())</c>.
+    /// Placeholders may appear in any order and any number of times.
+    /// </summary>
+    internal static TelegramMessage BuildWelcomeMessage(
+        string template,
+        UserIdentity user,
+        string chatName,
+        int timeoutSeconds)
+    {
+        const string usernamePlaceholder = "{username}";
+        const string chatNamePlaceholder = "{chat_name}";
+        const string timeoutPlaceholder = "{timeout}";
+
+        var builder = new TelegramMessageBuilder();
+        var remaining = template.AsSpan();
+
+        while (!remaining.IsEmpty)
+        {
+            var usernameIdx = remaining.IndexOf(usernamePlaceholder, StringComparison.Ordinal);
+            var chatNameIdx = remaining.IndexOf(chatNamePlaceholder, StringComparison.Ordinal);
+            var timeoutIdx = remaining.IndexOf(timeoutPlaceholder, StringComparison.Ordinal);
+
+            // No placeholders left — emit the remainder as plain text.
+            if (usernameIdx < 0 && chatNameIdx < 0 && timeoutIdx < 0)
+            {
+                builder.Text(remaining.ToString());
+                break;
+            }
+
+            // Find which placeholder appears earliest (ignoring absent ones).
+            int firstIdx = int.MaxValue;
+            if (usernameIdx >= 0 && usernameIdx < firstIdx) firstIdx = usernameIdx;
+            if (chatNameIdx >= 0 && chatNameIdx < firstIdx) firstIdx = chatNameIdx;
+            if (timeoutIdx >= 0 && timeoutIdx < firstIdx) firstIdx = timeoutIdx;
+
+            // Emit the literal prefix before the first placeholder.
+            if (firstIdx > 0)
+                builder.Text(remaining[..firstIdx].ToString());
+
+            if (firstIdx == usernameIdx)
+            {
+                builder.Mention(user);
+                remaining = remaining[(firstIdx + usernamePlaceholder.Length)..];
+            }
+            else if (firstIdx == chatNameIdx)
+            {
+                builder.Text(chatName);
+                remaining = remaining[(firstIdx + chatNamePlaceholder.Length)..];
+            }
+            else
+            {
+                builder.Text(timeoutSeconds.ToString());
+                remaining = remaining[(firstIdx + timeoutPlaceholder.Length)..];
+            }
+        }
+
+        return builder.Build();
     }
 
     /// <summary>
