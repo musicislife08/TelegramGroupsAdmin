@@ -1,6 +1,4 @@
 using System.Text;
-using Telegram.Bot.Types;
-using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
 
@@ -23,16 +21,11 @@ internal static class NotificationRenderer
     /// </summary>
     public static TelegramMessage ToTelegramMessage(NotificationPayload payload)
     {
-        var sb = new StringBuilder();
-        var entities = new List<MessageEntity>();
-
-        AppendBold(sb, entities, payload.Subject);
-        sb.AppendLine();
-        sb.AppendLine();
-
-        RenderBlocksTelegram(sb, entities, payload.Blocks);
-
-        return new TelegramMessage(sb.ToString().TrimEnd(), entities);
+        var builder = new TelegramMessageBuilder();
+        builder.Bold(payload.Subject).LineBreak().LineBreak();
+        RenderBlocksTelegram(builder, payload.Blocks);
+        var msg = builder.Build();
+        return new TelegramMessage(msg.Text.TrimEnd(), msg.Entities);
     }
 
     /// <summary>
@@ -57,7 +50,7 @@ internal static class NotificationRenderer
 </head>
 <body>
     <div class=""container"">");
-        sb.AppendLine($"        <h2>{TelegramHtmlEncoder.Encode(payload.Subject)}</h2>");
+        sb.AppendLine($"        <h2>{EncodeHtml(payload.Subject)}</h2>");
         RenderBlocksEmail(sb, payload.Blocks);
         sb.AppendLine(@"        <div class=""footer"">
             <p>This is an automated notification from TelegramGroupsAdmin.</p>
@@ -84,71 +77,34 @@ internal static class NotificationRenderer
 
     // ── Telegram entity-based rendering ──
 
-    private static void RenderBlocksTelegram(
-        StringBuilder sb, List<MessageEntity> entities, IReadOnlyList<ContentBlock> blocks)
+    private static void RenderBlocksTelegram(TelegramMessageBuilder builder, IReadOnlyList<ContentBlock> blocks)
     {
         foreach (var block in blocks)
         {
             switch (block)
             {
                 case TextBlock text:
-                    sb.AppendLine(text.Text);
+                    builder.Text(text.Text).LineBreak();
                     break;
 
                 case FieldList fieldList:
                     foreach (var field in fieldList.Fields)
                     {
-                        AppendBold(sb, entities, $"{field.Label}:");
-                        sb.Append(' ');
+                        builder.Bold($"{field.Label}:").Text(" ");
                         if (field.User is { } u)
-                            AppendUserMention(sb, entities, field.Value, u);
+                            builder.Mention(u);
                         else
-                            sb.Append(field.Value);
-                        sb.AppendLine();
+                            builder.Text(field.Value);
+                        builder.LineBreak();
                     }
                     break;
 
                 case SectionBlock section:
-                    sb.AppendLine();
-                    AppendBold(sb, entities, section.Header);
-                    sb.AppendLine();
-                    RenderBlocksTelegram(sb, entities, section.Content);
+                    builder.LineBreak().Bold(section.Header).LineBreak();
+                    RenderBlocksTelegram(builder, section.Content);
                     break;
             }
         }
-    }
-
-    private static void AppendBold(StringBuilder sb, List<MessageEntity> entities, string text)
-    {
-        var offset = sb.Length;
-        sb.Append(text);
-        entities.Add(new MessageEntity
-        {
-            Type = MessageEntityType.Bold,
-            Offset = offset,
-            Length = text.Length
-        });
-    }
-
-    private static void AppendUserMention(
-        StringBuilder sb, List<MessageEntity> entities, string displayText, UserIdentity user)
-    {
-        var offset = sb.Length;
-        sb.Append(displayText);
-        entities.Add(new MessageEntity
-        {
-            Type = MessageEntityType.TextMention,
-            Offset = offset,
-            Length = displayText.Length,
-            User = new User
-            {
-                Id = user.Id,
-                IsBot = false,
-                FirstName = user.FirstName ?? string.Empty,
-                LastName = user.LastName,
-                Username = user.Username
-            }
-        });
     }
 
     // ── Email HTML rendering ──
@@ -160,19 +116,19 @@ internal static class NotificationRenderer
             switch (block)
             {
                 case TextBlock text:
-                    sb.AppendLine($"        <p>{TelegramHtmlEncoder.Encode(text.Text)}</p>");
+                    sb.AppendLine($"        <p>{EncodeHtml(text.Text)}</p>");
                     break;
 
                 case FieldList fieldList:
                     foreach (var field in fieldList.Fields)
                     {
                         // User mentions aren't clickable in email — render as plain text
-                        sb.AppendLine($"        <div class=\"field\"><span class=\"field-label\">{TelegramHtmlEncoder.Encode(field.Label)}:</span> {TelegramHtmlEncoder.Encode(field.Value)}</div>");
+                        sb.AppendLine($"        <div class=\"field\"><span class=\"field-label\">{EncodeHtml(field.Label)}:</span> {EncodeHtml(field.Value)}</div>");
                     }
                     break;
 
                 case SectionBlock section:
-                    sb.AppendLine($"        <h3>{TelegramHtmlEncoder.Encode(section.Header)}</h3>");
+                    sb.AppendLine($"        <h3>{EncodeHtml(section.Header)}</h3>");
                     RenderBlocksEmail(sb, section.Content);
                     break;
             }
@@ -207,4 +163,8 @@ internal static class NotificationRenderer
         }
     }
 
+    // ── Helpers ──
+
+    private static string EncodeHtml(string? value) =>
+        string.IsNullOrEmpty(value) ? string.Empty : System.Net.WebUtility.HtmlEncode(value);
 }
