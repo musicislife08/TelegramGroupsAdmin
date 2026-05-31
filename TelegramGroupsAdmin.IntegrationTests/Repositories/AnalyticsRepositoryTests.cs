@@ -652,6 +652,54 @@ public class AnalyticsRepositoryTests
             "At least one method should have contributed to FP from correction data");
     }
 
+    [Test]
+    public async Task GetDetectionMethodComparison_WhenRowHasUndeserializableJson_SkipsRowAndStillReturnsStats()
+    {
+        // Regression guard for #495: AnalyticsRepository.ParseCheckResults must catch
+        // JsonException from CheckResultsSerializer.Deserialize, log it, and treat the row
+        // as "no checks" — never let a single corrupt row abort the whole aggregation.
+        //
+        // Realistic corruption shape: a legacy V1-era row where CheckName is a JSON *string*
+        // ("Bayes") rather than its integer ordinal. CheckResult.CheckName is a bare enum and
+        // DeserializeOptions registers no JsonStringEnumConverter, so System.Text.Json rejects
+        // the string token with a JsonException. This is exactly the shape migration
+        // 20260307182307_FixCheckResultsJsonCheckNameType was written to repair, so it stands in
+        // for any pre-migration row that guard missed. (A bare "[1,2,3]" would also throw but is
+        // unreachable — the only writer, CheckResultsSerializer.Serialize, can't emit it.)
+        //
+        // TEST-DATA RULE EXCEPTION: this directly mutates one canonical detection_result's
+        // check_results_json via raw SQL instead of going through a GoldenMutatePlanBuilder verb.
+        // The golden dataset is scrubbed real prod data and so cannot carry deserialization-breaking
+        // JSON by construction; a reusable builder verb for a single caller would be YAGNI. No rows
+        // are added or removed — only one existing in-window row's column value is overwritten.
+        // The column is JSONB, so the payload must be valid JSON of the wrong *shape*, not malformed.
+        const string legacyStringEnumJson =
+            """{"Checks":[{"CheckName":"Bayes","Score":3.5,"Abstained":false,"Details":"legacy V1 string-enum row","ProcessingTimeMs":1.0}]}""";
+
+        await using (var ctx = _testHelper.GetDbContext())
+        {
+            // DrId_FpAuto is an in-window (today 00:01 after the SetUp shift), non-manual row
+            // that carries populated check_results_json — so it is visited by the aggregation loop.
+            await ctx.Database.ExecuteSqlRawAsync(
+                "UPDATE detection_results SET check_results_json = {0}::jsonb WHERE id = {1}",
+                legacyStringEnumJson, GoldenDatasetConstants.Analytics.DrId_FpAuto);
+        }
+
+        var startDate = DateTimeOffset.UtcNow.AddDays(-7);
+        var endDate = DateTimeOffset.UtcNow.AddDays(1);
+
+        // Act — without the #495 catch this throws JsonException; with it, the corrupt row is
+        // skipped and the remaining well-formed rows still aggregate.
+        var stats = await _analyticsRepository.GetDetectionMethodComparisonAsync(
+            startDate, endDate, DefaultTimeZoneId);
+
+        // Assert
+        Assert.That(stats, Is.Not.Null);
+        Assert.That(stats.Count, Is.GreaterThan(0),
+            "Undeserializable JSON in one row must be logged and skipped (not propagated); "
+            + "the other in-window rows must still produce method stats");
+    }
+
     #endregion
 
     #region Welcome System Analytics Tests
