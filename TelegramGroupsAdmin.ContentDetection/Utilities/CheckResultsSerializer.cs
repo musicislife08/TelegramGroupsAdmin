@@ -48,15 +48,8 @@ public static class CheckResultsSerializer
         if (string.IsNullOrWhiteSpace(json))
             return [];
 
-        try
-        {
-            var results = JsonSerializer.Deserialize<CheckResults>(json, DeserializeOptions);
+        var results = JsonSerializer.Deserialize<CheckResults>(json, DeserializeOptions);
 
-            return results?.Checks ?? [];
-        }
-        catch
-        {
-            return [];
-        }
+        return results?.Checks ?? [];
     }
 }

@@ -45,7 +45,7 @@ public class UsernameBlacklistService(
         BlacklistMatchType matchType,
         string? notes,
         Actor actor,
-        CancellationToken ct = default)
+        CancellationToken cancellationToken = default)
     {
         var entry = new UsernameBlacklistEntry(
             Id: 0,
@@ -55,51 +55,51 @@ public class UsernameBlacklistService(
             CreatedAt: DateTimeOffset.UtcNow,
             Notes: notes);
 
-        var id = await repository.AddEntryAsync(entry, ct);
+        var id = await repository.AddEntryAsync(entry, cancellationToken);
 
         await auditService.LogEventAsync(
             AuditEventType.BlacklistEntryAdded,
             actor,
-            actor,
-            pattern,
-            ct);
+            target: null,
+            value: pattern,
+            cancellationToken: cancellationToken);
 
         return id;
     }
 
-    public async Task<bool> DeleteEntryAsync(long id, string pattern, Actor actor, CancellationToken ct = default)
+    public async Task<bool> DeleteEntryAsync(long id, string pattern, Actor actor, CancellationToken cancellationToken = default)
     {
-        var deleted = await repository.DeleteEntryAsync(id, ct);
+        var deleted = await repository.DeleteEntryAsync(id, cancellationToken);
         if (deleted)
         {
             await auditService.LogEventAsync(
                 AuditEventType.BlacklistEntryRemoved,
-                actor, actor, pattern, ct);
+                actor, target: null, value: pattern, cancellationToken: cancellationToken);
         }
         return deleted;
     }
 
-    public async Task<bool> SetEnabledAsync(long id, string pattern, bool enabled, Actor actor, CancellationToken ct = default)
+    public async Task<bool> SetEnabledAsync(long id, string pattern, bool enabled, Actor actor, CancellationToken cancellationToken = default)
     {
-        var updated = await repository.SetEnabledAsync(id, enabled, ct);
+        var updated = await repository.SetEnabledAsync(id, enabled, cancellationToken);
         if (updated)
         {
             var eventType = enabled
                 ? AuditEventType.BlacklistEntryEnabled
                 : AuditEventType.BlacklistEntryDisabled;
-            await auditService.LogEventAsync(eventType, actor, actor, pattern, ct);
+            await auditService.LogEventAsync(eventType, actor, target: null, value: pattern, cancellationToken: cancellationToken);
         }
         return updated;
     }
 
-    public async Task<bool> UpdateNotesAsync(long id, string pattern, string? notes, Actor actor, CancellationToken ct = default)
+    public async Task<bool> UpdateNotesAsync(long id, string pattern, string? notes, Actor actor, CancellationToken cancellationToken = default)
     {
-        var updated = await repository.UpdateNotesAsync(id, notes, ct);
+        var updated = await repository.UpdateNotesAsync(id, notes, cancellationToken);
         if (updated)
         {
             await auditService.LogEventAsync(
                 AuditEventType.BlacklistEntryNotesChanged,
-                actor, actor, pattern, ct);
+                actor, target: null, value: pattern, cancellationToken: cancellationToken);
         }
         return updated;
     }

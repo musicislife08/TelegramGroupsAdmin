@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Utilities;
@@ -175,6 +176,7 @@ public class AnalyticsRepository : IAnalyticsRepository
             .Where(dr => dr.CheckResultsJson != null) // Only rows with individual check data
             .Select(dr => new
             {
+                dr.Id,
                 dr.MessageId,
                 dr.CheckResultsJson,
                 dr.IsSpam
@@ -195,7 +197,7 @@ public class AnalyticsRepository : IAnalyticsRepository
 
         foreach (var detection in allDetections)
         {
-            var checks = ParseCheckResults(detection.CheckResultsJson);
+            var checks = ParseCheckResults(detection.CheckResultsJson, detection.Id);
             accuracyLookup.TryGetValue(detection.MessageId, out var accuracy);
             var isFalsePositive = accuracy?.IsFalsePositive ?? false;
             var isFalseNegative = accuracy?.IsFalseNegative ?? false;
@@ -247,9 +249,19 @@ public class AnalyticsRepository : IAnalyticsRepository
         return result;
     }
 
-    private List<CheckResult> ParseCheckResults(string? json)
+    private List<CheckResult> ParseCheckResults(string? json, long detectionResultId)
     {
-        return CheckResultsSerializer.Deserialize(json ?? string.Empty);
+        try
+        {
+            return CheckResultsSerializer.Deserialize(json ?? string.Empty);
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogWarning(ex,
+                "Failed to parse check results JSON for detection result {DetectionResultId} during analytics aggregation; treating as no checks",
+                detectionResultId);
+            return [];
+        }
     }
 
     private class AlgorithmStatsAccumulator

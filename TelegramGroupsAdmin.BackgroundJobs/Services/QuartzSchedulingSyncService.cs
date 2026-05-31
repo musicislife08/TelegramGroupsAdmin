@@ -14,10 +14,9 @@ public class QuartzSchedulingSyncService(
     ILogger<QuartzSchedulingSyncService> logger,
     ISchedulerFactory schedulerFactory,
     IBackgroundJobConfigService jobConfigService,
-    IQuartzScheduleSynchronizer synchronizer) : BackgroundService
+    IQuartzScheduleSynchronizer synchronizer,
+    IScheduleResyncSignal resyncSignal) : BackgroundService
 {
-    private readonly SemaphoreSlim _resyncSignal = new(0, 1);
-
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         logger.LogInformation("QuartzSchedulingSyncService starting...");
@@ -36,15 +35,6 @@ public class QuartzSchedulingSyncService(
             // Update NextRunAt for all jobs after initial sync
             await synchronizer.UpdateNextRunTimesAsync(scheduler, stoppingToken);
 
-            // Register this service with BackgroundJobConfigService for live re-sync notifications.
-            // Registered after the initial sync so a config change that races startup doesn't
-            // queue a spurious immediate re-sync before the loop is even entered.
-            if (jobConfigService is BackgroundJobConfigService configService)
-            {
-                configService.SetSyncService(this);
-                logger.LogDebug("Registered with BackgroundJobConfigService for live config re-sync");
-            }
-
             logger.LogInformation("QuartzSchedulingSyncService initial sync complete - listening for config changes");
 
             // Wait for config change notifications (event-driven re-sync)
@@ -52,8 +42,8 @@ public class QuartzSchedulingSyncService(
             {
                 try
                 {
-                    // Block until TriggerResync() is called or cancellation requested
-                    await _resyncSignal.WaitAsync(stoppingToken);
+                    // Block until a re-sync is requested or cancellation is requested
+                    await resyncSignal.WaitAsync(stoppingToken);
 
                     logger.LogInformation("Config change detected - re-syncing job schedules");
 
@@ -80,35 +70,9 @@ public class QuartzSchedulingSyncService(
         }
     }
 
-    /// <summary>
-    /// Trigger immediate re-sync of job schedules from database.
-    /// Called by BackgroundJobConfigService after configuration changes.
-    /// </summary>
-    public void TriggerResync()
-    {
-        // Release the semaphore to wake up the monitoring loop
-        // Try-catch handles concurrent calls (semaphore maxCount=1)
-        try
-        {
-            _resyncSignal.Release();
-            logger.LogDebug("Config re-sync triggered");
-        }
-        catch (SemaphoreFullException)
-        {
-            // Resync already pending, no action needed
-            logger.LogDebug("Resync already pending, ignoring duplicate trigger");
-        }
-    }
-
     public override async Task StopAsync(CancellationToken cancellationToken)
     {
         logger.LogInformation("QuartzSchedulingSyncService stopping...");
         await base.StopAsync(cancellationToken);
-    }
-
-    public override void Dispose()
-    {
-        _resyncSignal.Dispose();
-        base.Dispose();
     }
 }

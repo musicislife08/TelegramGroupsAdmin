@@ -133,24 +133,12 @@ public class TagDefinitionsRepository : ITagDefinitionsRepository
         var normalizedTag = NormalizeTagName(tagName);
 
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var definition = await context.TagDefinitions
-            .FirstOrDefaultAsync(td => td.TagName == normalizedTag, cancellationToken);
 
-        if (definition == null)
-        {
-            _logger.LogWarning("Tag definition not found for decrement: {TagName}", normalizedTag);
-            return;
-        }
-
-        if (definition.UsageCount > 0)
-        {
-            definition.UsageCount--;
-            await context.SaveChangesAsync(cancellationToken);
-        }
-        else
-        {
-            _logger.LogWarning("Usage count already 0 for tag: {TagName}", normalizedTag);
-        }
+        // Atomic, clamp-at-zero: the WHERE guard makes a decrement at 0 a no-op,
+        // so concurrent callers can never lose an update or drive the count negative.
+        await context.TagDefinitions
+            .Where(t => t.TagName == normalizedTag && t.UsageCount > 0)
+            .ExecuteUpdateAsync(s => s.SetProperty(t => t.UsageCount, t => t.UsageCount - 1), cancellationToken);
     }
 
     public async Task<bool> ExistsAsync(string tagName, CancellationToken cancellationToken = default)

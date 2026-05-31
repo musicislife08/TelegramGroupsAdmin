@@ -49,6 +49,9 @@ public class BackgroundJobConfigPersistenceTests
         var mockScheduleConverter = Substitute.For<IQuartzScheduleConverter>();
         services.AddSingleton(mockScheduleConverter);
 
+        // IScheduleResyncSignal is required by BackgroundJobConfigService; signal behavior isn't under test here.
+        services.AddSingleton(Substitute.For<IScheduleResyncSignal>());
+
         // Add BackgroundJobConfigService
         services.AddScoped<IBackgroundJobConfigService, BackgroundJobConfigService>();
 

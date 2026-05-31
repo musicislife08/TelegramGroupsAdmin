@@ -10,11 +10,16 @@ using TelegramGroupsAdmin.Telegram.Repositories;
 namespace TelegramGroupsAdmin.IntegrationTests.Repositories;
 
 /// <summary>
-/// Integration tests for TagDefinitionsRepository concurrent-insert race conditions.
+/// Integration tests for TagDefinitionsRepository concurrent race conditions.
 ///
 /// Verifies that concurrent calls to CreateAsync and IncrementUsageAsync do not throw
 /// DbUpdateException (unique violation on tag_name) and that the resulting database
 /// state is correct (one row, correct count).
+///
+/// Also verifies the DecrementUsageAsync invariants against canonical golden rows:
+/// the no-lost-update guarantee (N concurrent decrements from a seeded high-count tag,
+/// 'power-user' at usage_count = 20, land exactly on 0) and clamp-at-zero (decrementing
+/// the real zero-count canonical tag, 'tester', never drives the count negative).
 /// </summary>
 [TestFixture]
 public class TagDefinitionsRepositoryRaceTests
@@ -26,7 +31,10 @@ public class TagDefinitionsRepositoryRaceTests
     public async Task SetUp()
     {
         _testHelper = new MigrationTestHelper();
-        await _testHelper.CreateDatabaseFromEmptyTemplateAsync();
+        // Golden template: decrement tests assert against canonical tag_definitions rows
+        // ('power-user', 'tester'). The Create/Increment tests use unique Guid tag names,
+        // so the presence of canonical rows does not affect them.
+        await _testHelper.CreateDatabaseFromGoldenTemplateAsync();
 
         var services = new ServiceCollection();
 
@@ -142,5 +150,60 @@ public class TagDefinitionsRepositoryRaceTests
 
         var count = await ctx.TagDefinitions.CountAsync(t => t.TagName == tagName);
         Assert.That(count, Is.EqualTo(1));
+    }
+
+    // ============================================================================
+    // DecrementUsageAsync Race Tests
+    // ============================================================================
+
+    [Test]
+    public async Task DecrementUsageAsync_ConcurrentCalls_NoLostUpdates()
+    {
+        // Asserts the no-lost-update invariant against a known canonical row.
+        // 'power-user' is seeded in canonical with usage_count = 20 specifically so the
+        // race window is meaningful; only the count matters here, not row content.
+        const string tagName = "power-user";
+        var contextFactory = _serviceProvider!.GetRequiredService<IDbContextFactory<AppDbContext>>();
+
+        int startCount;
+        await using (var readCtx = await contextFactory.CreateDbContextAsync())
+        {
+            startCount = (await readCtx.TagDefinitions.AsNoTracking().FirstAsync(t => t.TagName == tagName)).UsageCount;
+        }
+        Assert.That(startCount, Is.GreaterThan(0), "canonical seed precondition");
+
+        var tasks = Enumerable.Range(0, startCount)
+            .Select(_ => Task.Run(async () =>
+            {
+                await using var scope = _serviceProvider!.CreateAsyncScope();
+                var scopedRepo = scope.ServiceProvider.GetRequiredService<ITagDefinitionsRepository>();
+                await scopedRepo.DecrementUsageAsync(tagName, cancellationToken: CancellationToken.None);
+            }))
+            .ToArray();
+
+        await Task.WhenAll(tasks);
+
+        // startCount concurrent decrements from startCount must land exactly on 0 (no lost updates).
+        await using var ctx = await contextFactory.CreateDbContextAsync();
+        var def = await ctx.TagDefinitions.AsNoTracking().FirstAsync(t => t.TagName == tagName);
+        Assert.That(def.UsageCount, Is.EqualTo(0));
+    }
+
+    [Test]
+    public async Task DecrementUsageAsync_WhenCountIsZero_StaysAtZero()
+    {
+        // 'tester' is a real canonical tag already at usage_count = 0 — decrementing must clamp, not go negative.
+        const string tagName = "tester";
+
+        await using (var scope = _serviceProvider!.CreateAsyncScope())
+        {
+            var repo = scope.ServiceProvider.GetRequiredService<ITagDefinitionsRepository>();
+            await repo.DecrementUsageAsync(tagName, cancellationToken: CancellationToken.None);
+        }
+
+        var contextFactory = _serviceProvider!.GetRequiredService<IDbContextFactory<AppDbContext>>();
+        await using var ctx = await contextFactory.CreateDbContextAsync();
+        var def = await ctx.TagDefinitions.AsNoTracking().FirstAsync(t => t.TagName == tagName);
+        Assert.That(def.UsageCount, Is.EqualTo(0));
     }
 }
