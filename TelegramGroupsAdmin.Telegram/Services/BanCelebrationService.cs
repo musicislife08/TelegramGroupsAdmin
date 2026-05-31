@@ -127,7 +127,7 @@ public class BanCelebrationService(
                 banCount);
 
             // Send the GIF to the chat
-            var sentMessage = await SendGifToChatAsync(chat, gif, chatCaption, cancellationToken);
+            var sentMessage = await SendGifToChatAsync(chat, gif, TelegramMessage.Plain(chatCaption), cancellationToken);
             if (sentMessage == null)
             {
                 return false;
@@ -239,7 +239,7 @@ public class BanCelebrationService(
     private async Task<Message?> SendGifToChatAsync(
         ChatIdentity chat,
         BanCelebrationGif gif,
-        string caption,
+        TelegramMessage caption,
         CancellationToken cancellationToken)
     {
         try
@@ -256,7 +256,6 @@ public class BanCelebrationService(
                         chat.Id,
                         inputFile,
                         caption,
-                        ParseMode.Markdown,
                         cancellationToken);
                 }
                 catch (Exception ex) when (IsInvalidFileIdError(ex))
@@ -286,7 +285,6 @@ public class BanCelebrationService(
                 chat.Id,
                 localInputFile,
                 caption,
-                ParseMode.Markdown,
                 cancellationToken);
         }
         catch (Exception ex)
