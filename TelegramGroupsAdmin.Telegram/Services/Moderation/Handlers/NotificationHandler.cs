@@ -12,6 +12,9 @@ using TelegramGroupsAdmin.Telegram.Services.Notifications;
 
 namespace TelegramGroupsAdmin.Telegram.Services.Moderation.Handlers;
 
+// Internal record for invite link data collected per chat (used only by NotificationHandler)
+internal sealed record InviteLink(string DisplayName, string Url);
+
 /// <summary>
 /// Domain expert for all moderation-related notifications.
 /// Handles both user DM notifications and admin notifications via NotificationService.
@@ -125,14 +128,20 @@ public class NotificationHandler : INotificationHandler
     /// <returns>True if the notification was sent successfully.</returns>
     private async Task<bool> SendWarningNotificationAsync(UserIdentity user, int warningCount, string? reason, CancellationToken cancellationToken)
     {
-        var message = $"⚠️ <b>Warning Issued</b>\n\n" +
-                      $"You have received a warning.\n\n" +
-                      $"<b>Reason:</b> {TelegramHtmlEncoder.Encode(reason)}\n" +
-                      $"<b>Total Warnings:</b> {warningCount}\n\n" +
-                      $"Please review the group rules and avoid similar behavior in the future.\n\n" +
-                      $"💡 Use /mystatus to check your current status.";
+        var tm = new TelegramMessageBuilder()
+            .Text("⚠️ ").Bold("Warning Issued").LineBreak()
+            .LineBreak()
+            .Text("You have received a warning.").LineBreak()
+            .LineBreak()
+            .Bold("Reason:").Text($" {reason ?? ""}").LineBreak()
+            .Bold("Total Warnings:").Text($" {warningCount}").LineBreak()
+            .LineBreak()
+            .Text("Please review the group rules and avoid similar behavior in the future.").LineBreak()
+            .LineBreak()
+            .Text("💡 Use /mystatus to check your current status.")
+            .Build();
 
-        var notification = new Notification("warning", message);
+        var notification = new Notification("warning", tm.Text, tm);
         var result = await _notificationOrchestrator.SendTelegramDmAsync(user.Id, notification, cancellationToken);
 
         if (result.Success)
@@ -161,21 +170,28 @@ public class NotificationHandler : INotificationHandler
         var allChats = await _managedChatsRepository.GetAllChatsAsync(cancellationToken: cancellationToken);
         var activeChats = allChats.Where(c => c.IsActive && !c.IsDeleted).ToList();
 
-        // Build notification message
-        var notificationMessage = $"⏱️ <b>You have been temporarily banned</b>\n\n" +
-                          $"<b>Reason:</b> {TelegramHtmlEncoder.Encode(reason)}\n" +
-                          $"<b>Duration:</b> {TimeSpanUtilities.FormatDuration(duration)}\n" +
-                          $"<b>Expires:</b> {expiresAt:yyyy-MM-dd HH:mm} UTC\n\n" +
-                          $"You will be automatically unbanned after this time.";
+        var builder = new TelegramMessageBuilder()
+            .Text("⏱️ ").Bold("You have been temporarily banned").LineBreak()
+            .LineBreak()
+            .Bold("Reason:").Text($" {reason ?? ""}").LineBreak()
+            .Bold("Duration:").Text($" {TimeSpanUtilities.FormatDuration(duration)}").LineBreak()
+            .Bold("Expires:").Text($" {expiresAt:yyyy-MM-dd HH:mm} UTC").LineBreak()
+            .LineBreak()
+            .Text("You will be automatically unbanned after this time.");
 
-        // Collect invite links for all active chats
-        var inviteLinkSection = await BuildInviteLinkSectionAsync(activeChats, cancellationToken);
-        if (!string.IsNullOrEmpty(inviteLinkSection))
+        // Collect invite links for all active chats and append as clickable entities
+        var inviteLinks = await CollectInviteLinksAsync(activeChats, cancellationToken);
+        if (inviteLinks.Count > 0)
         {
-            notificationMessage += $"\n\n**Rejoin Links:**\n{inviteLinkSection}";
+            builder.LineBreak().LineBreak().Bold("Rejoin Links:").LineBreak();
+            foreach (var link in inviteLinks)
+            {
+                builder.Text("• ").Link(link.DisplayName, link.Url).LineBreak();
+            }
         }
 
-        var notification = new Notification("tempban", notificationMessage);
+        var tm = builder.Build();
+        var notification = new Notification("tempban", tm.Text, tm);
         var result = await _notificationOrchestrator.SendTelegramDmAsync(user.Id, notification, cancellationToken);
 
         if (result.Success)
@@ -212,25 +228,24 @@ public class NotificationHandler : INotificationHandler
     }
 
     /// <summary>
-    /// Build invite link section for rejoin notifications.
-    /// Uses cached SDK Chat objects (populated by health checks on startup).
+    /// Collect invite links for the given active chats.
+    /// Returns one <see cref="InviteLink"/> per chat that has a valid link.
     /// </summary>
-    private async Task<string> BuildInviteLinkSectionAsync(
+    private async Task<List<InviteLink>> CollectInviteLinksAsync(
         List<ManagedChatRecord> activeChats,
         CancellationToken cancellationToken)
     {
-        var inviteLinks = new List<string>();
+        var inviteLinks = new List<InviteLink>();
 
         foreach (var managedChat in activeChats)
         {
             try
             {
-                var inviteLink = await _chatService.GetInviteLinkAsync(managedChat.Identity, cancellationToken);
-                if (!string.IsNullOrEmpty(inviteLink))
+                var url = await _chatService.GetInviteLinkAsync(managedChat.Identity, cancellationToken);
+                if (!string.IsNullOrEmpty(url))
                 {
-                    // Use chat name from managed chat record, or fall back to chatId
-                    var chatDisplayName = managedChat.Identity.ChatName ?? managedChat.Identity.Id.ToString();
-                    inviteLinks.Add($"• [{chatDisplayName}]({inviteLink})");
+                    var displayName = managedChat.Identity.ChatName ?? managedChat.Identity.Id.ToString();
+                    inviteLinks.Add(new InviteLink(displayName, url));
                 }
             }
             catch (Exception ex)
@@ -241,7 +256,7 @@ public class NotificationHandler : INotificationHandler
             }
         }
 
-        return inviteLinks.Count > 0 ? string.Join("\n", inviteLinks) : string.Empty;
+        return inviteLinks;
     }
 
     /// <inheritdoc />
@@ -319,16 +334,24 @@ public class NotificationHandler : INotificationHandler
     {
         try
         {
-            // Build violation list
-            var violationList = string.Join("\n", violations.Select((v, i) => $"{i + 1}. {TelegramHtmlEncoder.Encode(v)}"));
+            var builder = new TelegramMessageBuilder()
+                .Text("⚠️ ").Bold("Message Removed").LineBreak()
+                .LineBreak()
+                .Text("Your message was deleted due to security policy violations:").LineBreak()
+                .LineBreak();
 
-            var message = $"⚠️ <b>Message Removed</b>\n\n" +
-                          $"Your message was deleted due to security policy violations:\n\n" +
-                          $"{violationList}\n\n" +
-                          $"These checks apply to all users regardless of trust status.\n\n" +
-                          $"💡 If you believe this was a mistake, please contact an admin.";
+            for (var i = 0; i < violations.Count; i++)
+            {
+                builder.Text($"{i + 1}. ").Text(violations[i]).LineBreak();
+            }
 
-            var notification = new Notification("critical_violation", message);
+            builder.LineBreak()
+                .Text("These checks apply to all users regardless of trust status.").LineBreak()
+                .LineBreak()
+                .Text("💡 If you believe this was a mistake, please contact an admin.");
+
+            var tm = builder.Build();
+            var notification = new Notification("critical_violation", tm.Text, tm);
             var result = await _notificationOrchestrator.SendTelegramDmAsync(user.Id, notification, cancellationToken);
 
             if (result.Success)

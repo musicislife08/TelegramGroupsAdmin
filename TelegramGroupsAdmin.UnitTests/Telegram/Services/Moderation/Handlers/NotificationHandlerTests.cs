@@ -421,13 +421,44 @@ public class NotificationHandlerTests
         // Act
         await _handler.NotifyUserWarningAsync(user, warningCount: 3, reason: "Repeated spam");
 
-        // Assert — message includes count and escaped reason
+        // Assert — plain-text Message (no HTML tags) and entity payload with reason
         await _mockNotificationOrchestrator.Received(1).SendTelegramDmAsync(
             user.Id,
             Arg.Is<Notification>(n =>
-                n.Message.Contains("<b>Total Warnings:</b> 3") &&
-                n.Message.Contains("Repeated spam")),
+                n.Message.Contains("Total Warnings: 3") &&
+                n.Message.Contains("Repeated spam") &&
+                !n.Message.Contains("<b>") &&
+                !n.Message.Contains("&lt;")),
             Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task NotifyUserWarningAsync_CarriesEntityPayload_WithBoldHeaderAndPlainReason()
+    {
+        // Arrange
+        var user = new UserIdentity(12345L, "Test", "User", "test_user");
+        Notification? capturedNotification = null;
+
+        _mockNotificationOrchestrator.SendTelegramDmAsync(
+                user.Id,
+                Arg.Do<Notification>(n => capturedNotification = n),
+                Arg.Any<CancellationToken>())
+            .Returns(new DeliveryResult(true));
+
+        // Act
+        await _handler.NotifyUserWarningAsync(user, warningCount: 1, reason: "No <HTML> & special chars");
+
+        // Assert — entity payload is non-null and contains a Bold entity; reason is plain (no HTML-encoded chars)
+        Assert.That(capturedNotification, Is.Not.Null);
+        Assert.That(capturedNotification!.Telegram, Is.Not.Null, "Notification.Telegram should carry entity payload");
+        Assert.That(capturedNotification.Telegram!.Entities, Is.Not.Empty, "Entity list should not be empty");
+        Assert.That(
+            capturedNotification.Telegram.Entities.Any(e => e.Type == global::Telegram.Bot.Types.Enums.MessageEntityType.Bold),
+            Is.True, "Entity list should contain at least one Bold entity (header)");
+        // The plain-text Message (403-queue fallback) must not contain HTML entities
+        Assert.That(capturedNotification.Message, Does.Not.Contain("&lt;"), "Message should not contain HTML-encoded chars");
+        Assert.That(capturedNotification.Message, Does.Contain("No <HTML> & special chars"),
+            "Reason is embedded as-is in plain text (no encoding)");
     }
 
     [Test]
@@ -522,12 +553,13 @@ public class NotificationHandlerTests
         // Act
         await _handler.NotifyUserTempBanAsync(user, duration, expiresAt, reason: "Spamming links");
 
-        // Assert — message includes reason
+        // Assert — plain-text Message (no HTML tags) includes reason
         await _mockNotificationOrchestrator.Received(1).SendTelegramDmAsync(
             user.Id,
             Arg.Is<Notification>(n =>
                 n.Message.Contains("Spamming links") &&
-                n.Message.Contains("<b>Reason:</b>")),
+                n.Message.Contains("Reason:") &&
+                !n.Message.Contains("<b>")),
             Arg.Any<CancellationToken>());
     }
 

@@ -56,11 +56,10 @@ public class MyStatusCommand : IBotCommand
         // If command was sent in a group chat, send DM instead (privacy-first)
         if (message.Chat.Type != ChatType.Private)
         {
-            // Send status via DM notification system.
-            // The notification channel currently carries plain text; use the rendered
-            // plain text (no entity markup) so nothing leaks raw formatting.
+            // Send status via DM notification system with the full entity payload
+            // so bold formatting renders in the DM.
             var statusMessage = await BuildStatusMessageAsync(telegramUserId, cancellationToken);
-            var notification = new Notification("mystatus", statusMessage.Text);
+            var notification = new Notification("mystatus", statusMessage.Text, statusMessage);
 
             var result = await _notificationOrchestrator.SendTelegramDmAsync(
                 telegramUserId,
