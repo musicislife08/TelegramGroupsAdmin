@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
@@ -48,13 +49,13 @@ public class WarnCommand : IBotCommand
     {
         if (message.ReplyToMessage == null)
         {
-            return new CommandResult("❌ Please reply to a message from the user to warn.", DeleteCommandMessage, DeleteResponseAfterSeconds);
+            return new CommandResult(TelegramMessage.Plain("❌ Please reply to a message from the user to warn."), DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
 
         var targetUser = message.ReplyToMessage.From;
         if (targetUser == null)
         {
-            return new CommandResult("❌ Could not identify target user.", DeleteCommandMessage, DeleteResponseAfterSeconds);
+            return new CommandResult(TelegramMessage.Plain("❌ Could not identify target user."), DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
 
         using var scope = _serviceProvider.CreateScope();
@@ -64,7 +65,7 @@ public class WarnCommand : IBotCommand
         var isAdmin = await chatAdminsRepository.IsAdminAsync(message.Chat.Id, targetUser.Id, cancellationToken);
         if (isAdmin)
         {
-            return new CommandResult("❌ Cannot warn chat admins.", DeleteCommandMessage, DeleteResponseAfterSeconds);
+            return new CommandResult(TelegramMessage.Plain("❌ Cannot warn chat admins."), DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
 
         var reason = args.Length > 0 ? string.Join(" ", args) : "No reason provided";
@@ -92,7 +93,7 @@ public class WarnCommand : IBotCommand
 
             if (!result.Success)
             {
-                return new CommandResult($"❌ Failed to issue warning: {result.ErrorMessage}", DeleteCommandMessage, DeleteResponseAfterSeconds);
+                return new CommandResult(TelegramMessage.Plain($"❌ Failed to issue warning: {result.ErrorMessage}"), DeleteCommandMessage, DeleteResponseAfterSeconds);
             }
 
             // Notify user of warning via DM (preferred) or chat mention (fallback)
@@ -130,13 +131,13 @@ public class WarnCommand : IBotCommand
                 response += $"\n\n🚫 Auto-ban triggered! User has been banned from {result.ChatsAffected} chat(s).";
             }
 
-            return new CommandResult(response, DeleteCommandMessage, DeleteResponseAfterSeconds);
+            return new CommandResult(TelegramMessage.Plain(response), DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to warn {User}",
                 targetUser.ToLogDebug());
-            return new CommandResult($"❌ Failed to issue warning: {ex.Message}", DeleteCommandMessage, DeleteResponseAfterSeconds);
+            return new CommandResult(TelegramMessage.Plain($"❌ Failed to issue warning: {ex.Message}"), DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
     }
 }

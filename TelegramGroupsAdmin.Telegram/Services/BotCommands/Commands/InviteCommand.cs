@@ -7,6 +7,7 @@ using TelegramGroupsAdmin.Configuration.Models;
 using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
+using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
@@ -50,7 +51,7 @@ public class InviteCommand : IBotCommand
         if (message.Chat.Type is not (ChatType.Group or ChatType.Supergroup))
         {
             return new CommandResult(
-                "❌ This command only works in group chats.",
+                TelegramMessage.Plain("❌ This command only works in group chats."),
                 DeleteCommandMessage,
                 DeleteResponseAfterSeconds);
         }
@@ -68,7 +69,7 @@ public class InviteCommand : IBotCommand
         if (!config.Enabled)
         {
             return new CommandResult(
-                "❌ The /invite command is disabled in this chat.",
+                TelegramMessage.Plain("❌ The /invite command is disabled in this chat."),
                 config.DeleteCommandMessage,
                 config.DeleteResponseAfterSeconds);
         }
@@ -84,7 +85,7 @@ public class InviteCommand : IBotCommand
                 message.Chat.Title ?? "Unknown");
 
             return new CommandResult(
-                "❌ Unable to get invite link. The bot may need admin permissions to export invite links.",
+                TelegramMessage.Plain("❌ Unable to get invite link. The bot may need admin permissions to export invite links."),
                 config.DeleteCommandMessage,
                 config.DeleteResponseAfterSeconds);
         }
@@ -96,14 +97,16 @@ public class InviteCommand : IBotCommand
             chatId,
             message.Chat.Title ?? "Unknown");
 
+        var inviteMessage = new TelegramMessageBuilder()
+            .Text("🔗 ").Bold("Invite Link").LineBreak()
+            .LineBreak()
+            .Text(inviteLink).LineBreak()
+            .LineBreak()
+            .Italic($"This message will auto-delete in {config.DeleteResponseAfterSeconds} seconds")
+            .Build();
+
         return new CommandResult(
-            $$"""
-              🔗 *Invite Link*
-
-              {{inviteLink}}
-
-              _This message will auto-delete in {{config.DeleteResponseAfterSeconds}} seconds_
-              """,
+            inviteMessage,
             config.DeleteCommandMessage,
             config.DeleteResponseAfterSeconds);
     }

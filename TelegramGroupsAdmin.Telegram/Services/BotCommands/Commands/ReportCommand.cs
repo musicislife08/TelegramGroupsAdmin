@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Repositories;
+using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Extensions;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
@@ -31,7 +32,7 @@ public class ReportCommand(
     {
         if (message.ReplyToMessage == null)
         {
-            return new CommandResult("❌ Please reply to the message you want to report.", DeleteCommandMessage, DeleteResponseAfterSeconds);
+            return new CommandResult(TelegramMessage.Plain("❌ Please reply to the message you want to report."), DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
 
         var reportedMessage = message.ReplyToMessage;
@@ -40,7 +41,7 @@ public class ReportCommand(
 
         if (reportedUser == null || reporter == null)
         {
-            return new CommandResult("❌ Could not identify users.", DeleteCommandMessage, DeleteResponseAfterSeconds);
+            return new CommandResult(TelegramMessage.Plain("❌ Could not identify users."), DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
 
         using var scope = serviceProvider.CreateScope();
@@ -57,12 +58,13 @@ public class ReportCommand(
         {
             var existingReporterName = existingReport.ReportedByUserName ?? "System";
             return new CommandResult(
-                $"ℹ️ This message has already been reported.\n\n" +
-                $"📋 Report #{existingReport.Id}\n" +
-                $"👤 Reported by: {existingReporterName}\n" +
-                $"📅 Reported: {existingReport.ReportedAt:g}\n" +
-                $"📊 Status: {existingReport.Status}\n\n" +
-                $"_Admins will review the report shortly._",
+                TelegramMessage.Plain(
+                    $"ℹ️ This message has already been reported.\n\n" +
+                    $"📋 Report #{existingReport.Id}\n" +
+                    $"👤 Reported by: {existingReporterName}\n" +
+                    $"📅 Reported: {existingReport.ReportedAt:g}\n" +
+                    $"📊 Status: {existingReport.Status}\n\n" +
+                    $"Admins will review the report shortly."),
                 DeleteCommandMessage,
                 DeleteResponseAfterSeconds);
         }
@@ -101,9 +103,10 @@ public class ReportCommand(
             reportedUser.Username);
 
         return new CommandResult(
-            $"✅ Message reported for admin review (Report #{result.ReportId})\n" +
-            $"Reported user: @{reportedUser.Username ?? reportedUser.Id.ToString()}\n\n" +
-            $"_Admins will be notified shortly._",
+            TelegramMessage.Plain(
+                $"✅ Message reported for admin review (Report #{result.ReportId})\n" +
+                $"Reported user: @{reportedUser.Username ?? reportedUser.Id.ToString()}\n\n" +
+                $"Admins will be notified shortly."),
             DeleteCommandMessage,
             DeleteResponseAfterSeconds);
     }

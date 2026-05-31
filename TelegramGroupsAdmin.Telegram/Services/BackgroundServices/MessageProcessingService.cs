@@ -78,15 +78,14 @@ public partial class MessageProcessingService(
                 try
                 {
                     var commandResult = await commandRouter.RouteCommandAsync(message, cancellationToken);
-                    if (commandResult?.Response != null && !string.IsNullOrWhiteSpace(commandResult.Response))
+                    if (commandResult != null && !string.IsNullOrWhiteSpace(commandResult.Message.Text))
                     {
                         // Use BotMessageService to save bot response to database
                         using var scope = scopeFactory.CreateScope();
                         var botMessageService = scope.ServiceProvider.GetRequiredService<IBotMessageService>();
                         await botMessageService.SendAndSaveMessageAsync(
                             message.Chat.Id,
-                            commandResult.Response,
-                            parseMode: commandResult.ParseMode ?? ParseMode.Markdown,
+                            commandResult.Message,
                             cancellationToken: cancellationToken);
                     }
                 }
@@ -360,14 +359,13 @@ public partial class MessageProcessingService(
                     if (commandResult != null)
                     {
                         // Send response if there is one (and it's not empty)
-                        if (commandResult.Response != null && !string.IsNullOrWhiteSpace(commandResult.Response))
+                        if (!string.IsNullOrWhiteSpace(commandResult.Message.Text))
                         {
                             // Use BotMessageService to save bot response to database
                             var botMessageService = messageScope.ServiceProvider.GetRequiredService<IBotMessageService>();
                             var responseMessage = await botMessageService.SendAndSaveMessageAsync(
                                 message.Chat.Id,
-                                commandResult.Response,
-                                parseMode: commandResult.ParseMode ?? ParseMode.Markdown,
+                                commandResult.Message,
                                 replyParameters: new ReplyParameters { MessageId = message.MessageId },
                                 cancellationToken: cancellationToken);
 
