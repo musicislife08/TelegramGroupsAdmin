@@ -52,6 +52,51 @@ public sealed class TelegramMessageBuilder
         return this;
     }
 
+    /// <summary>
+    /// Append an admin-authored template, substituting placeholder tokens via builder actions.
+    /// Each entry in <paramref name="substitutions"/> maps a literal token (e.g. "{username}")
+    /// to an action that appends its replacement (e.g. <c>b =&gt; b.Mention(user)</c>). Literal
+    /// text between tokens is appended verbatim, and — critically — any token NOT present in the
+    /// map is passed through as literal text (never dropped), so a mistyped placeholder renders
+    /// visibly rather than vanishing. Tokens are matched left-to-right by earliest occurrence.
+    /// </summary>
+    public TelegramMessageBuilder AppendTemplate(
+        string template,
+        IReadOnlyDictionary<string, Action<TelegramMessageBuilder>> substitutions)
+    {
+        var remaining = template.AsSpan();
+        while (!remaining.IsEmpty)
+        {
+            var bestIdx = -1;
+            string? bestKey = null;
+            foreach (var key in substitutions.Keys)
+            {
+                var idx = remaining.IndexOf(key, StringComparison.Ordinal);
+                if (idx < 0) continue;
+                if (bestIdx == -1 || idx < bestIdx || (idx == bestIdx && key.Length > bestKey!.Length))
+                {
+                    bestIdx = idx;
+                    bestKey = key;
+                }
+            }
+
+            // No known token remains — emit the rest verbatim (unknown tokens fall through here).
+            if (bestIdx < 0)
+            {
+                Text(remaining.ToString());
+                break;
+            }
+
+            if (bestIdx > 0)
+                Text(remaining[..bestIdx].ToString());
+
+            substitutions[bestKey!](this);
+            remaining = remaining[(bestIdx + bestKey!.Length)..];
+        }
+
+        return this;
+    }
+
     public TelegramMessage Build() => new(_sb.ToString(), [.. _entities]);
 
     private TelegramMessageBuilder Styled(string text, MessageEntityType type)

@@ -68,4 +68,69 @@ public class TelegramMessageBuilderTests
         var msg = new TelegramMessageBuilder().Text("a").LineBreak().Text("b").Build();
         Assert.That(msg.Text, Is.EqualTo("a\nb"));
     }
+
+    [Test]
+    public void AppendTemplate_substitutes_known_tokens_via_actions()
+    {
+        var user = new UserIdentity(7, "Sofi", null, "sofi");
+        var msg = new TelegramMessageBuilder()
+            .AppendTemplate("Welcome {username} to {chat_name}!", new Dictionary<string, Action<TelegramMessageBuilder>>
+            {
+                ["{username}"] = b => b.Mention(user),
+                ["{chat_name}"] = b => b.Text("The Group"),
+            })
+            .Build();
+
+        Assert.That(msg.Text, Is.EqualTo("Welcome Sofi to The Group!"));
+        Assert.That(msg.Entities, Has.Count.EqualTo(1));
+        var e = msg.Entities[0];
+        Assert.That(e.Type, Is.EqualTo(MessageEntityType.TextMention));
+        Assert.That(e.Offset, Is.EqualTo("Welcome ".Length));
+        Assert.That(e.Length, Is.EqualTo("Sofi".Length));
+        Assert.That(e.User!.Id, Is.EqualTo(7));
+    }
+
+    [Test]
+    public void AppendTemplate_passes_unknown_token_through_as_literal_text()
+    {
+        // A mistyped placeholder ({usernam}) is not in the map — it must survive verbatim,
+        // never be dropped, so it renders visibly for the admin to spot.
+        var msg = new TelegramMessageBuilder()
+            .AppendTemplate("Hi {usernam}, welcome", new Dictionary<string, Action<TelegramMessageBuilder>>
+            {
+                ["{username}"] = b => b.Text("Sofi"),
+            })
+            .Build();
+
+        Assert.That(msg.Text, Is.EqualTo("Hi {usernam}, welcome"));
+        Assert.That(msg.Entities, Is.Empty);
+    }
+
+    [Test]
+    public void AppendTemplate_matches_tokens_left_to_right_regardless_of_map_order()
+    {
+        var msg = new TelegramMessageBuilder()
+            .AppendTemplate("{b}{a}", new Dictionary<string, Action<TelegramMessageBuilder>>
+            {
+                ["{a}"] = x => x.Text("A"),
+                ["{b}"] = x => x.Text("B"),
+            })
+            .Build();
+
+        Assert.That(msg.Text, Is.EqualTo("BA"));
+    }
+
+    [Test]
+    public void AppendTemplate_with_no_tokens_emits_template_verbatim()
+    {
+        var msg = new TelegramMessageBuilder()
+            .AppendTemplate("plain text, no tokens", new Dictionary<string, Action<TelegramMessageBuilder>>
+            {
+                ["{username}"] = b => b.Text("Sofi"),
+            })
+            .Build();
+
+        Assert.That(msg.Text, Is.EqualTo("plain text, no tokens"));
+        Assert.That(msg.Entities, Is.Empty);
+    }
 }
