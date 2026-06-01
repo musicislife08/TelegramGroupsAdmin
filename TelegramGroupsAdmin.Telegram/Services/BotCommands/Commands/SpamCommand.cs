@@ -108,6 +108,6 @@ public class SpamCommand : IBotCommand
 
         // Silent mode: No chat feedback, message and command simply disappear
         // Admins see action through DM notifications if enabled
-        return new CommandResult(TelegramMessage.Plain(string.Empty), DeleteCommandMessage, DeleteResponseAfterSeconds);
+        return new CommandResult(TelegramMessage.Empty, DeleteCommandMessage, DeleteResponseAfterSeconds);
     }
 }

@@ -520,12 +520,6 @@ public class BotDmService(
                 // log consumers see the same template strings as before the refactor.
                 switch (mediaErrorVariant)
                 {
-                    case DmMediaLogVariant.Media:
-                        logger.LogError(ex, "Failed to send DM with media to {User}", user.ToLogDebug());
-                        break;
-                    case DmMediaLogVariant.Keyboard:
-                        logger.LogError(ex, "Failed to send DM with keyboard to {User}", user.ToLogDebug());
-                        break;
                     case DmMediaLogVariant.EntitiesMediaKeyboard:
                         logger.LogError(ex, "Failed to send DM with entities/media/keyboard to {User}", user.ToLogDebug());
                         break;

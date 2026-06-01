@@ -18,7 +18,7 @@ namespace TelegramGroupsAdmin.UnitTests.Telegram.Services.Notifications;
 /// Test Coverage (3 tests):
 /// - When Telegram payload is set: delegates to SendDmWithEntitiesAsync with that payload's text and entities
 /// - When Telegram payload is null: delegates to SendDmWithEntitiesAsync with Message and empty entities
-/// - When Telegram payload is null: does NOT call SendDmWithQueueAsync with ParseMode.Html
+/// - When Telegram payload is null: passes empty entities to SendDmWithEntitiesAsync (no ParseMode.Html path)
 /// </summary>
 [TestFixture]
 public class TelegramDmChannelTests

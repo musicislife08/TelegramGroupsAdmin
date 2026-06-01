@@ -48,7 +48,7 @@ public class MyStatusCommand : IBotCommand
     {
         if (message.From == null)
         {
-            return new CommandResult(TelegramMessage.Plain(string.Empty), DeleteCommandMessage, DeleteResponseAfterSeconds);
+            return new CommandResult(TelegramMessage.Empty, DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
 
         var telegramUserId = message.From.Id;
@@ -69,7 +69,7 @@ public class MyStatusCommand : IBotCommand
             if (result.Success)
             {
                 // Silently delete command message, DM sent successfully
-                return new CommandResult(TelegramMessage.Plain(string.Empty), DeleteCommandMessage, DeleteResponseAfterSeconds);
+                return new CommandResult(TelegramMessage.Empty, DeleteCommandMessage, DeleteResponseAfterSeconds);
             }
             else
             {

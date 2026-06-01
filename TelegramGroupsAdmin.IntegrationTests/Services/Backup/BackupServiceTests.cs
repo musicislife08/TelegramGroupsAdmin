@@ -5,7 +5,6 @@ using Microsoft.Extensions.Logging;
 using Microsoft.IO;
 using NSubstitute;
 using Telegram.Bot.Types;
-using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
 using TelegramGroupsAdmin.BackgroundJobs.Services.Backup;
 using TelegramGroupsAdmin.Core.Models;
