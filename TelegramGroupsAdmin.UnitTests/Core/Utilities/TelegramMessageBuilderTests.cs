@@ -121,6 +121,24 @@ public class TelegramMessageBuilderTests
     }
 
     [Test]
+    public void AppendTemplate_prefers_longer_key_when_tokens_share_an_offset()
+    {
+        // {username} and {username_extra} both match at offset 0. The greedy tie-break must pick
+        // the LONGER key, so {username_extra}'s substitution wins and {username}'s never runs.
+        var msg = new TelegramMessageBuilder()
+            .AppendTemplate("{username_extra} hi", new Dictionary<string, Action<TelegramMessageBuilder>>
+            {
+                ["{username}"] = b => b.Text("SHORT"),
+                ["{username_extra}"] = b => b.Text("LONG"),
+            })
+            .Build();
+
+        Assert.That(msg.Text, Is.EqualTo("LONG hi"));
+        Assert.That(msg.Text, Does.Contain("LONG"));
+        Assert.That(msg.Text, Does.Not.Contain("SHORT"));
+    }
+
+    [Test]
     public void AppendTemplate_with_no_tokens_emits_template_verbatim()
     {
         var msg = new TelegramMessageBuilder()

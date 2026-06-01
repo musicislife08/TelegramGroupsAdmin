@@ -174,6 +174,24 @@ public class TelegramEntityRendererTests
     }
 
     [Test]
+    public void Overlapping_entity_is_skipped_so_only_the_first_renders()
+    {
+        // Two overlapping entities: Bold at [0,4] and Italic at [2,6]. The renderer processes the
+        // bold span first (cursor advances to 4), then the italic entity starts at offset 2 < cursor,
+        // so the documented `if (entity.Offset < cursor) continue;` skips it. Bold renders; italic does not.
+        var text = "abcdef";
+        var bold = new MessageEntity { Type = MessageEntityType.Bold, Offset = 0, Length = 4 };
+        var italic = new MessageEntity { Type = MessageEntityType.Italic, Offset = 2, Length = 4 };
+        var msg = new TelegramMessage(text, [bold, italic]);
+
+        var html = TelegramEntityRenderer.ToHtml(msg);
+
+        Assert.That(html, Is.EqualTo("<b>abcd</b>ef"));
+        Assert.That(html, Does.Contain("<b>"));
+        Assert.That(html, Does.Not.Contain("<i>"));
+    }
+
+    [Test]
     public void Strikethrough_entity_html_encodes_inner_text()
     {
         var inner = "bad & good";
