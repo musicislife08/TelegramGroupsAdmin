@@ -8,6 +8,7 @@ using Telegram.Bot.Types.ReplyMarkups;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Core.Repositories;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
@@ -93,8 +94,16 @@ public class ExamFlowServiceTests
         var dmSuccessResult = new DmDeliveryResult { DmSent = true, MessageId = 1 };
         _mockDmService.SendDmWithKeyboardAsync(
                 Arg.Any<UserIdentity>(),
-                Arg.Any<string>(),
+                Arg.Any<TelegramMessage>(),
                 Arg.Any<InlineKeyboardMarkup>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(dmSuccessResult));
+
+        _mockDmService.SendDmAsync(
+                Arg.Any<UserIdentity>(),
+                Arg.Any<TelegramMessage>(),
+                Arg.Any<long?>(),
+                Arg.Any<int?>(),
                 Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(dmSuccessResult));
 

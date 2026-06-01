@@ -1,4 +1,3 @@
-using System.Net;
 using System.Text;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
@@ -65,6 +64,19 @@ public static class TelegramEntityRenderer
         _ => Encode(inner),
     };
 
-    private static string Encode(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : WebUtility.HtmlEncode(value);
+    // Encode only the HTML-significant characters. WebUtility.HtmlEncode would also turn every
+    // non-ASCII rune (emoji, Cyrillic, CJK) into a numeric entity, bloating the preview markup —
+    // Telegram messages are full of such text. Escaping &, <, >, " is sufficient to keep text
+    // content and double-quoted attribute values XSS-safe while leaving Unicode readable.
+    private static string Encode(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return string.Empty;
+
+        return value
+            .Replace("&", "&amp;")
+            .Replace("<", "&lt;")
+            .Replace(">", "&gt;")
+            .Replace("\"", "&quot;");
+    }
 }

@@ -434,8 +434,8 @@ public class BanCelebrationServiceTests
         // Enable DM welcome mode (required for DM delivery)
         await EnableDmWelcomeMode(TestChatId);
 
-        _mockDmService!.SendDmWithMediaAsync(
-            Arg.Any<UserIdentity>(), Arg.Any<string>(), Arg.Any<string>(),
+        _mockDmService!.SendDmWithMediaEntitiesAsync(
+            Arg.Any<UserIdentity>(), Arg.Any<string>(), Arg.Any<TelegramMessage>(),
             Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>()
         ).Returns(new DmDeliveryResult { DmSent = true });
 
@@ -444,8 +444,8 @@ public class BanCelebrationServiceTests
             new ChatIdentity(TestChatId, TestChatName), new UserIdentity(TestUserId, TestUserName, null, null), isAutoBan: true);
 
         // Assert - DM delivery was attempted
-        await _mockDmService!.Received(1).SendDmWithMediaAsync(
-            Arg.Is<UserIdentity>(u => u.Id == TestUserId), "ban_celebration", Arg.Any<string>(),
+        await _mockDmService!.Received(1).SendDmWithMediaEntitiesAsync(
+            Arg.Is<UserIdentity>(u => u.Id == TestUserId), "ban_celebration", Arg.Any<TelegramMessage>(),
             Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }
 
@@ -461,8 +461,8 @@ public class BanCelebrationServiceTests
             new ChatIdentity(TestChatId, TestChatName), new UserIdentity(TestUserId, TestUserName, null, null), isAutoBan: true);
 
         // Assert - DM delivery was NOT attempted
-        await _mockDmService!.DidNotReceive().SendDmWithMediaAsync(
-            Arg.Any<UserIdentity>(), Arg.Any<string>(), Arg.Any<string>(),
+        await _mockDmService!.DidNotReceive().SendDmWithMediaEntitiesAsync(
+            Arg.Any<UserIdentity>(), Arg.Any<string>(), Arg.Any<TelegramMessage>(),
             Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }
 
@@ -479,8 +479,8 @@ public class BanCelebrationServiceTests
             new ChatIdentity(TestChatId, TestChatName), new UserIdentity(TestUserId, TestUserName, null, null), isAutoBan: true);
 
         // Assert - DM delivery was NOT attempted (no DM mode enabled)
-        await _mockDmService!.DidNotReceive().SendDmWithMediaAsync(
-            Arg.Any<UserIdentity>(), Arg.Any<string>(), Arg.Any<string>(),
+        await _mockDmService!.DidNotReceive().SendDmWithMediaEntitiesAsync(
+            Arg.Any<UserIdentity>(), Arg.Any<string>(), Arg.Any<TelegramMessage>(),
             Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }
 
@@ -492,8 +492,8 @@ public class BanCelebrationServiceTests
         await EnableBanCelebration(TestChatId, sendToBannedUser: true);
         await EnableDmWelcomeMode(TestChatId);
 
-        _mockDmService!.SendDmWithMediaAsync(
-            Arg.Any<UserIdentity>(), Arg.Any<string>(), Arg.Any<string>(),
+        _mockDmService!.SendDmWithMediaEntitiesAsync(
+            Arg.Any<UserIdentity>(), Arg.Any<string>(), Arg.Any<TelegramMessage>(),
             Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>()
         ).Returns(new DmDeliveryResult { DmSent = false, Failed = true, ErrorMessage = "User blocked bot" });
 
