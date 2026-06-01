@@ -955,3 +955,69 @@ Expected: all green.
 - **Out-of-scope honored:** `WebBotMessagingService`, #158, and email/plain-text channels are untouched (email keeps `EncodeHtml`).
 - **Type consistency:** `TelegramMessage` (Text/Entities/Plain), `TelegramMessageBuilder` (Text/Bold/Italic/Code/Pre/Link/Mention/LineBreak/Build), `Mention(UserIdentity)`, `SendAndSaveMessageAsync(long, TelegramMessage, ...)`, `SendDmWithEntitiesAsync(user, type, text, entities, ct)` used consistently across tasks.
 - **Open item flagged for the executor:** confirm `UserIdentity.From(User)` exists (Task 7) and the admin model's user property names (Task 10) at implementation time; both have explicit fallbacks in-task.
+
+---
+
+# Phase 7 — Entity round-trip completion (compose / send / display)
+
+Added after Phase 6 review. Goal restated by the user: *demonstrate that every path
+needing entities has a proper way to use them.* Close the loop — **compose**
+(`TelegramMessageBuilder` + `AppendTemplate`), **send** (entity DM/chat transport), and
+**display** (`TelegramEntityRenderer` → preview) — and delete the remaining MarkdownV2 /
+`FormatMention` / `EscapeMarkdownV2` paths so one model remains everywhere.
+
+Recon confirmed (no surprises): the only Blazor consumer of the message builders is
+`ExamConfigEditor.razor` (×2, expects `string` today); `WelcomeMessageBuilder`'s
+`FormatWrongUserWarning`/`FormatVerifyingMessage`/`FormatProfileHoldMessage` are already
+dead in production; `FormatWelcomeMessage` is a CHAT send fed by a `FormatMention` site;
+`SendDmWithQueueAsync`/`SendDmWithMediaAndKeyboardAsync` have zero production callers;
+`SendDmWithMediaAsync`'s only caller is `BanCelebrationService`.
+
+## Task 17 — `AppendTemplate` (compose)
+- `TelegramMessageBuilder.AppendTemplate(string template, IReadOnlyDictionary<string, Action<TelegramMessageBuilder>> map)`.
+  Earliest-match walk; **unknown `{tokens}` pass through as literal text (never dropped)**.
+- Refactor `StartCommand.BuildWelcomeMessage` and `WelcomeService.BuildBypassAnnouncementMessage` onto it.
+- Tests incl. unknown-token-stays-literal.
+
+## Task 18 — `TelegramEntityRenderer.ToHtml` (display)
+- New Core pure function: linear walk over UTF-16 offsets, HTML-encode literals then wrap
+  entity spans (`<b>/<i>/<code>/<pre>/<a href>`, `text_mention` → styled `<span>`). Flat,
+  in-order entities assumed (documented).
+- Tests incl. **bad-token round-trip**: `AppendTemplate` with an unknown `{token}` → `ToHtml`
+  renders it as normal text.
+
+## Task 19 — Template builders return `TelegramMessage`
+- `ExamMessageBuilder.FormatMcQuestion/FormatOpenEndedQuestion`: return `TelegramMessage`,
+  take `UserIdentity`, build directly.
+- `WelcomeMessageBuilder.FormatExamIntro/FormatRulesConfirmation/FormatWelcomeMessage`:
+  return `TelegramMessage`, take `UserIdentity`, via `AppendTemplate`.
+  `FormatDmAcceptanceConfirmation` stays `string`. Update builder unit tests.
+
+## Task 20 — Entity DM transport
+- `IBotDmService`/`BotDmService`: `SendDmAsync(UserIdentity, TelegramMessage, fallbackChatId?, autoDeleteSeconds?, ct)`
+  (canonical) + thin `string` forwarder; `SendDmWithKeyboardAsync(UserIdentity, TelegramMessage, keyboard, ct)`
+  + forwarder; new `SendDmWithMediaEntitiesAsync(UserIdentity, type, TelegramMessage, photo?, video?, ct)`.
+  Entity-aware fallback-to-chat. Tests.
+
+## Task 21 — Call-site migration
+- `ExamFlowService`: drop the 3 `FormatMention`, pass `UserIdentity`, mention sends use entity overloads.
+- `WelcomeService`: `FormatWelcomeMessage` (chat) via entity `EditAndUpdateMessageAsync`;
+  `FormatRulesConfirmation` (DM) via entity `SendDmAsync`. Drop the 2 `FormatMention`.
+- `BanCelebrationService` DM caption → `SendDmWithMediaEntitiesAsync` with `TelegramMessage.Plain` (drop `EscapeMarkdownV2`).
+
+## Task 22 — Preview onto the renderer
+- `TelegramMessagePreview.razor`: `TelegramMessage Message` param rendered via
+  `@((MarkupString)TelegramEntityRenderer.ToHtml(Message))`. Remove `PreviewText`,
+  `ShowWarning`, `ValidVariables`, `HasInvalidVariables`. Update component tests.
+- Migrate preview call sites: `ExamConfigEditor.razor` (×2), `WelcomeSystemConfig.razor` (×4)
+  build a sample `TelegramMessage` via the shared builders.
+
+## Task 23 — Dead-code sweep + guard tighten
+- Delete `FormatMention` (+tests), `EscapeMarkdownV2` (+tests),
+  `SendDmWithQueueAsync`/`SendDmWithMediaAsync`/`SendDmWithMediaAndKeyboardAsync`
+  (+tests + `BackupServiceTests` fake stubs), the 3 dead `WelcomeMessageBuilder` methods (+tests).
+- Tighten `ParseModeUsageGuardTests` to ban `ParseMode.MarkdownV2` everywhere (drop the `BotDmService` exception).
+- Full build + unit + integration suites green.
+
+**Out of scope** (separate template systems, not `FormatMention` sites): `BanCelebrationService.ReplacePlaceholders`
+caption text, `LanguageWarningHandler`, UI-only `.Replace` previews in ban-celebration dialogs.
