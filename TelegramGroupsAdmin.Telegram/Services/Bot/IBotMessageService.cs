@@ -95,11 +95,12 @@ public interface IBotMessageService
         InputFile animation,
         string? caption = null,
         ParseMode? parseMode = null,
+        IReadOnlyList<MessageEntity>? captionEntities = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Send an animation (GIF) to a chat AND save to message history.
-    /// Entity-based caption overload — degrades to plain text (SendAnimation has no caption_entities in this client surface).
+    /// Entity-based caption overload — forwards the caption's entities as caption_entities.
     /// </summary>
     Task<Message> SendAndSaveAnimationAsync(
         long chatId,

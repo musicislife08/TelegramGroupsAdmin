@@ -433,6 +433,7 @@ public class BotMessageServiceTests
             Arg.Any<ParseMode?>(),
             Arg.Any<ReplyParameters?>(),
             Arg.Any<InlineKeyboardMarkup?>(),
+            Arg.Any<IReadOnlyList<MessageEntity>?>(),
             Arg.Any<CancellationToken>()
         ).Returns(sentMessage);
 

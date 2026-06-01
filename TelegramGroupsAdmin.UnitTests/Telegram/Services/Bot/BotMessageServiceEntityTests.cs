@@ -189,9 +189,9 @@ public class BotMessageServiceEntityTests
     #region SendAndSaveAnimationAsync — TelegramMessage caption overload
 
     [Test]
-    public async Task SendAndSaveAnimationAsync_with_TelegramMessage_caption_sends_plain_text()
+    public async Task SendAndSaveAnimationAsync_with_TelegramMessage_caption_forwards_entities_and_no_parse_mode()
     {
-        // Arrange — animation overload degrades to plain text (no caption_entities in SendAnimation)
+        // Arrange — animation overload forwards caption_entities to the handler
         var animation = InputFile.FromFileId("anim_file_id");
         var sentMessage = new Message
         {
@@ -213,6 +213,7 @@ public class BotMessageServiceEntityTests
                 parseMode: Arg.Any<ParseMode?>(),
                 replyParameters: Arg.Any<ReplyParameters?>(),
                 replyMarkup: Arg.Any<InlineKeyboardMarkup?>(),
+                captionEntities: Arg.Any<IReadOnlyList<MessageEntity>?>(),
                 ct: Arg.Any<CancellationToken>())
             .ReturnsForAnyArgs(sentMessage);
 
@@ -221,7 +222,7 @@ public class BotMessageServiceEntityTests
         // Act
         var result = await _service.SendAndSaveAnimationAsync(42, animation, captionMsg);
 
-        // Assert — plain text passed, parse_mode null (graceful degradation; SendAnimation has no caption_entities)
+        // Assert — caption text + entities forwarded, parse_mode null (entities and parse_mode are mutually exclusive)
         await _handler.Received(1).SendAnimationAsync(
             chatId: 42,
             animation: Arg.Any<InputFile>(),
@@ -229,6 +230,8 @@ public class BotMessageServiceEntityTests
             parseMode: null,
             replyParameters: Arg.Any<ReplyParameters?>(),
             replyMarkup: Arg.Any<InlineKeyboardMarkup?>(),
+            captionEntities: Arg.Is<IReadOnlyList<MessageEntity>?>(e =>
+                e != null && e.Count == 1 && e[0].Type == MessageEntityType.Bold),
             ct: Arg.Any<CancellationToken>());
         Assert.That(result.Id, Is.EqualTo(5));
     }

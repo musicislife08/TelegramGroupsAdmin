@@ -428,6 +428,7 @@ public class BotMessageService(
         InputFile animation,
         string? caption = null,
         ParseMode? parseMode = null,
+        IReadOnlyList<MessageEntity>? captionEntities = null,
         CancellationToken cancellationToken = default)
     {
         // Send animation via handler
@@ -436,6 +437,7 @@ public class BotMessageService(
             animation: animation,
             caption: caption,
             parseMode: parseMode,
+            captionEntities: captionEntities,
             ct: cancellationToken);
         apiMetrics.RecordTelegramApiCall("send_animation", success: true);
 
@@ -508,14 +510,19 @@ public class BotMessageService(
 
     /// <summary>
     /// Send an animation (GIF) to a chat AND save to message history.
-    /// Entity-based caption overload — degrades to plain caption text because
-    /// SendAnimation has no caption_entities parameter in this client surface.
+    /// Entity-based caption overload — forwards the caption's entities as
+    /// caption_entities (parse_mode stays null, the two are mutually exclusive).
     /// </summary>
     public Task<Message> SendAndSaveAnimationAsync(
         long chatId,
         InputFile animation,
         TelegramMessage caption,
         CancellationToken cancellationToken = default) =>
-        // IBotMessageHandler.SendAnimationAsync has no caption_entities; use the text only.
-        SendAndSaveAnimationAsync(chatId, animation, caption.Text, parseMode: null, cancellationToken);
+        SendAndSaveAnimationAsync(
+            chatId,
+            animation,
+            caption.Text,
+            parseMode: null,
+            captionEntities: caption.Entities,
+            cancellationToken);
 }

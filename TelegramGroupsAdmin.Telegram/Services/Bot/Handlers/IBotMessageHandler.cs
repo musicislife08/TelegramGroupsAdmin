@@ -51,6 +51,7 @@ public interface IBotMessageHandler
         ParseMode? parseMode = null,
         ReplyParameters? replyParameters = null,
         InlineKeyboardMarkup? replyMarkup = null,
+        IReadOnlyList<MessageEntity>? captionEntities = null,
         CancellationToken ct = default);
 
     /// <summary>Edit a text message.</summary>

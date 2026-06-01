@@ -897,6 +897,7 @@ public class BanCelebrationServiceTests
             Arg.Any<InputFile>(),
             Arg.Any<string>(),
             Arg.Any<ParseMode?>(),
+            Arg.Any<IReadOnlyList<MessageEntity>?>(),
             Arg.Any<CancellationToken>());
     }
 
