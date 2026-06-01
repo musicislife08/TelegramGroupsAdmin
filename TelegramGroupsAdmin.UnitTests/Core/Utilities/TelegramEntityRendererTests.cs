@@ -1,4 +1,6 @@
 using NUnit.Framework;
+using Telegram.Bot.Types;
+using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
 
@@ -36,7 +38,31 @@ public class TelegramEntityRendererTests
 
         Assert.That(
             TelegramEntityRenderer.ToHtml(msg),
-            Is.EqualTo("<i>note</i> <code>x=1</code> <a href=\"https://example.com/a?b=1&amp;c=2\">docs</a>"));
+            Is.EqualTo("<i>note</i> <code>x=1</code> <a href=\"https://example.com/a?b=1&amp;c=2\" rel=\"noopener noreferrer\">docs</a>"));
+    }
+
+    [Test]
+    public void Text_link_with_javascript_scheme_renders_inner_text_only()
+    {
+        var msg = new TelegramMessageBuilder().Link("click me", "javascript:alert(1)").Build();
+
+        var html = TelegramEntityRenderer.ToHtml(msg);
+
+        Assert.That(html, Is.EqualTo("click me"));
+        Assert.That(html, Does.Not.Contain("<a"));
+        Assert.That(html, Does.Not.Contain("javascript:"));
+    }
+
+    [Test]
+    public void Text_link_with_data_scheme_renders_inner_text_only()
+    {
+        var msg = new TelegramMessageBuilder().Link("click me", "data:text/html,<script>alert(1)</script>").Build();
+
+        var html = TelegramEntityRenderer.ToHtml(msg);
+
+        Assert.That(html, Is.EqualTo("click me"));
+        Assert.That(html, Does.Not.Contain("<a"));
+        Assert.That(html, Does.Not.Contain("data:"));
     }
 
     [Test]
@@ -88,5 +114,77 @@ public class TelegramEntityRendererTests
 
         Assert.That(html, Is.EqualTo("Hi {usernam}, welcome to The Group"));
         Assert.That(html, Does.Contain("{usernam}"));
+    }
+
+    [Test]
+    public void Underline_entity_wraps_its_span_in_u_tag()
+    {
+        // Build a TelegramMessage directly: TelegramMessageBuilder has no public Underline method,
+        // so we construct the entity by hand and use the Append overload to re-anchor offsets.
+        var inner = "important";
+        var entity = new MessageEntity
+        {
+            Type = MessageEntityType.Underline,
+            Offset = 0,
+            Length = inner.Length
+        };
+        var msg = new TelegramMessage(inner, [entity]);
+
+        Assert.That(TelegramEntityRenderer.ToHtml(msg), Is.EqualTo("<u>important</u>"));
+    }
+
+    [Test]
+    public void Strikethrough_entity_wraps_its_span_in_s_tag()
+    {
+        var inner = "deleted text";
+        var entity = new MessageEntity
+        {
+            Type = MessageEntityType.Strikethrough,
+            Offset = 0,
+            Length = inner.Length
+        };
+        var msg = new TelegramMessage(inner, [entity]);
+
+        Assert.That(TelegramEntityRenderer.ToHtml(msg), Is.EqualTo("<s>deleted text</s>"));
+    }
+
+    [Test]
+    public void Pre_entity_wraps_its_span_in_pre_tag()
+    {
+        // TelegramMessageBuilder.Pre is public, so we can use the builder here.
+        var msg = new TelegramMessageBuilder().Pre("code block").Build();
+
+        Assert.That(TelegramEntityRenderer.ToHtml(msg), Is.EqualTo("<pre>code block</pre>"));
+    }
+
+    [Test]
+    public void Underline_entity_html_encodes_inner_text()
+    {
+        // Inner text containing HTML-significant characters must be encoded, not injected.
+        var inner = "a < b";
+        var entity = new MessageEntity
+        {
+            Type = MessageEntityType.Underline,
+            Offset = 0,
+            Length = inner.Length
+        };
+        var msg = new TelegramMessage(inner, [entity]);
+
+        Assert.That(TelegramEntityRenderer.ToHtml(msg), Is.EqualTo("<u>a &lt; b</u>"));
+    }
+
+    [Test]
+    public void Strikethrough_entity_html_encodes_inner_text()
+    {
+        var inner = "bad & good";
+        var entity = new MessageEntity
+        {
+            Type = MessageEntityType.Strikethrough,
+            Offset = 0,
+            Length = inner.Length
+        };
+        var msg = new TelegramMessage(inner, [entity]);
+
+        Assert.That(TelegramEntityRenderer.ToHtml(msg), Is.EqualTo("<s>bad &amp; good</s>"));
     }
 }

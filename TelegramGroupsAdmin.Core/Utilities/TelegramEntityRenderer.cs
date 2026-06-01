@@ -39,9 +39,9 @@ public static class TelegramEntityRenderer
                 continue;
 
             if (entity.Offset > cursor)
-                sb.Append(Encode(text.Substring(cursor, entity.Offset - cursor)));
+                sb.Append(Encode(text[cursor..entity.Offset]));
 
-            sb.Append(Wrap(entity, text.Substring(entity.Offset, entity.Length)));
+            sb.Append(Wrap(entity, text[entity.Offset..(entity.Offset + entity.Length)]));
             cursor = entity.Offset + entity.Length;
         }
 
@@ -59,10 +59,23 @@ public static class TelegramEntityRenderer
         MessageEntityType.Strikethrough => $"<s>{Encode(inner)}</s>",
         MessageEntityType.Code => $"<code>{Encode(inner)}</code>",
         MessageEntityType.Pre => $"<pre>{Encode(inner)}</pre>",
-        MessageEntityType.TextLink => $"<a href=\"{Encode(entity.Url)}\">{Encode(inner)}</a>",
+        MessageEntityType.TextLink => IsSafeUrl(entity.Url)
+            ? $"<a href=\"{Encode(entity.Url)}\" rel=\"noopener noreferrer\">{Encode(inner)}</a>"
+            : Encode(inner),
         MessageEntityType.TextMention => $"<span class=\"tg-mention\">{Encode(inner)}</span>",
         _ => Encode(inner),
     };
+
+    // A TextLink href is rendered into the preview verbatim, so a javascript:/data: URL would be a
+    // latent XSS vector. Only emit an anchor for an absolute URL whose scheme is on the allowlist;
+    // anything else falls back to encoded inner text with no anchor. mailto:/tg: parse as absolute
+    // URIs with those exact schemes.
+    private static readonly string[] AllowedSchemes = ["http", "https", "mailto", "tg"];
+
+    private static bool IsSafeUrl(string? url) =>
+        !string.IsNullOrEmpty(url)
+        && Uri.TryCreate(url, UriKind.Absolute, out var uri)
+        && AllowedSchemes.Contains(uri.Scheme);
 
     // Encode only the HTML-significant characters. WebUtility.HtmlEncode would also turn every
     // non-ASCII rune (emoji, Cyrillic, CJK) into a numeric entity, bloating the preview markup —

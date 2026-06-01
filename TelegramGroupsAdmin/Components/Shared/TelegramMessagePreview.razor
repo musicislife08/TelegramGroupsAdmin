@@ -145,7 +145,7 @@
 @code {
     /// <summary>The entity-based message to render — the same TelegramMessage type that is sent to Telegram.</summary>
     [Parameter, EditorRequired]
-    public TelegramMessage Message { get; set; } = TelegramMessage.Plain(string.Empty);
+    public TelegramMessage Message { get; set; } = null!;
 
     [Parameter]
     public bool ShowUserCommand { get; set; } = true;
