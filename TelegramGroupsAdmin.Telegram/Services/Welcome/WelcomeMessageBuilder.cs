@@ -1,132 +1,81 @@
 using Humanizer;
+using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Utilities;
 
 namespace TelegramGroupsAdmin.Telegram.Services.Welcome;
 
 /// <summary>
-/// Pure static functions for building welcome message text.
-/// No side effects, no Telegram API dependencies - 100% testable.
+/// Pure static functions for building welcome messages as entity-based <see cref="TelegramMessage"/>s.
+/// Admin-authored templates carry <c>{username}</c>, <c>{chat_name}</c>, and <c>{timeout}</c> tokens;
+/// <see cref="TelegramMessageBuilder.AppendTemplate"/> substitutes them (username → clickable
+/// <c>text_mention</c>) and passes any mistyped token through as literal text so it renders visibly.
 /// </summary>
 public static class WelcomeMessageBuilder
 {
     /// <summary>
-    /// Formats the welcome message with variable substitution.
-    /// Uses MainWelcomeMessage for ChatAcceptDeny mode, DmChatTeaserMessage for DM-based modes (DmWelcome, EntranceExam).
+    /// Formats the welcome message. Uses DmChatTeaserMessage for DM-based modes (DmWelcome,
+    /// EntranceExam) and MainWelcomeMessage for ChatAcceptDeny.
     /// </summary>
-    /// <param name="config">Welcome configuration containing message templates</param>
-    /// <param name="username">User's @username or first name if no username</param>
-    /// <param name="chatName">Display name of the chat</param>
-    /// <returns>Formatted message text with all variables substituted</returns>
-    public static string FormatWelcomeMessage(
+    public static TelegramMessage FormatWelcomeMessage(
         WelcomeConfig config,
-        string username,
+        UserIdentity user,
         string chatName)
     {
-        // DM-based modes (DmWelcome, EntranceExam) show teaser in group, main content in DM
-        // ChatAcceptDeny shows main message directly in group
         var template = config.Mode is WelcomeMode.DmWelcome or WelcomeMode.EntranceExam
             ? config.DmChatTeaserMessage
             : config.MainWelcomeMessage;
 
-        return SubstituteVariables(template, username, chatName, config.TimeoutSeconds);
+        return BuildFromTemplate(template, user, chatName, config.TimeoutSeconds);
     }
 
     /// <summary>
-    /// Formats the rules confirmation message sent after user accepts.
-    /// Uses MainWelcomeMessage with a confirmation footer appended.
+    /// Formats the rules confirmation message sent after a user accepts (MainWelcomeMessage plus footer).
     /// </summary>
-    /// <param name="config">Welcome configuration containing message templates</param>
-    /// <param name="username">User's @username or first name if no username</param>
-    /// <param name="chatName">Display name of the chat</param>
-    /// <returns>Formatted message with confirmation footer</returns>
-    public static string FormatRulesConfirmation(
+    public static TelegramMessage FormatRulesConfirmation(
         WelcomeConfig config,
-        string username,
+        UserIdentity user,
         string chatName)
-    {
-        var baseMessage = SubstituteVariables(
-            config.MainWelcomeMessage,
-            username,
-            chatName,
-            config.TimeoutSeconds);
-
-        return baseMessage + "\n\n✅ You're all set! You can now participate in the chat.";
-    }
+        => new TelegramMessageBuilder()
+            .AppendTemplate(config.MainWelcomeMessage, Substitutions(user, chatName, config.TimeoutSeconds))
+            .Text("\n\n✅ You're all set! You can now participate in the chat.")
+            .Build();
 
     /// <summary>
-    /// Formats the DM acceptance confirmation message.
-    /// Sent to user in DM after they accept rules via deep link.
+    /// Formats the DM acceptance confirmation message. No user mention, so plain text.
     /// </summary>
-    /// <param name="chatName">Display name of the chat</param>
-    /// <returns>Confirmation message text</returns>
     public static string FormatDmAcceptanceConfirmation(string chatName)
-    {
-        return $"✅ Welcome! You can now participate in {chatName}.";
-    }
+        => $"✅ Welcome! You can now participate in {chatName}.";
 
     /// <summary>
-    /// Formats the warning message shown when wrong user clicks a button.
+    /// Formats the exam intro message (MainWelcomeMessage with substitution) shown in EntranceExam
+    /// mode as the first DM before questions. No footer, no buttons.
     /// </summary>
-    /// <param name="username">Username of the user who clicked incorrectly</param>
-    /// <returns>Warning message text</returns>
-    public static string FormatWrongUserWarning(string username)
-    {
-        return $"{username}, ⚠️ this button is not for you. Only the mentioned user can respond.";
-    }
-
-    /// <summary>
-    /// Formats the verifying message shown while security checks run.
-    /// This message is displayed briefly (~2s) while CAS/impersonation checks execute.
-    /// </summary>
-    /// <param name="username">User's @username or first name</param>
-    /// <returns>Verifying message text</returns>
-    public static string FormatVerifyingMessage(string username)
-    {
-        return $"{username} ⏳ Verifying...";
-    }
-
-    /// <summary>
-    /// Formats the exam intro message (MainWelcomeMessage with variable substitution).
-    /// Used in EntranceExam mode as the first DM message before questions.
-    /// No footer, no buttons - just the rules/guidelines.
-    /// </summary>
-    /// <param name="config">Welcome configuration containing message templates</param>
-    /// <param name="username">User's @username or first name if no username</param>
-    /// <param name="chatName">Display name of the chat</param>
-    /// <returns>Formatted message text with variables substituted</returns>
-    public static string FormatExamIntro(
+    public static TelegramMessage FormatExamIntro(
         WelcomeConfig config,
-        string username,
+        UserIdentity user,
         string chatName)
-    {
-        return SubstituteVariables(
-            config.MainWelcomeMessage,
-            username,
-            chatName,
-            config.TimeoutSeconds);
-    }
+        => BuildFromTemplate(config.MainWelcomeMessage, user, chatName, config.TimeoutSeconds);
 
-    /// <summary>
-    /// Formats the profile hold message shown when a user's profile is held for admin review.
-    /// The user remains muted until an admin acts on the profile scan alert.
-    /// </summary>
-    /// <param name="username">User's @username or first name</param>
-    /// <returns>Profile hold message text</returns>
-    public static string FormatProfileHoldMessage(string username)
-    {
-        return $"{username} ⏳ Your profile is under admin review. Please wait...";
-    }
-
-    private static string SubstituteVariables(
+    private static TelegramMessage BuildFromTemplate(
         string template,
-        string username,
+        UserIdentity user,
+        string chatName,
+        int timeoutSeconds)
+        => new TelegramMessageBuilder()
+            .AppendTemplate(template, Substitutions(user, chatName, timeoutSeconds))
+            .Build();
+
+    private static Dictionary<string, Action<TelegramMessageBuilder>> Substitutions(
+        UserIdentity user,
         string chatName,
         int timeoutSeconds)
     {
         var formattedTimeout = TimeSpan.FromSeconds(timeoutSeconds).Humanize(precision: 2);
-
-        return template
-            .Replace("{username}", username)
-            .Replace("{chat_name}", chatName)
-            .Replace("{timeout}", formattedTimeout);
+        return new Dictionary<string, Action<TelegramMessageBuilder>>
+        {
+            ["{username}"] = b => b.Mention(user),
+            ["{chat_name}"] = b => b.Text(chatName),
+            ["{timeout}"] = b => b.Text(formattedTimeout),
+        };
     }
 }

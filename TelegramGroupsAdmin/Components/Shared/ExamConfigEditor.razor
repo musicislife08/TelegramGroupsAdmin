@@ -372,7 +372,7 @@
 
         var q = Config.McQuestions[0];
         var questionText = string.IsNullOrEmpty(q.Question) ? "(Question text)" : q.Question;
-        return ExamMessageBuilder.FormatMcQuestion("@SampleUser", 1, Config.McQuestions.Count, questionText);
+        return ExamMessageBuilder.FormatMcQuestion(new UserIdentity(0, "SampleUser", null, null), 1, Config.McQuestions.Count, questionText).Text;
     }
 
     private string[][] GetMcAnswerButtons()
@@ -389,6 +389,6 @@
         if (string.IsNullOrEmpty(Config?.OpenEndedQuestion))
             return "(No question configured)";
 
-        return ExamMessageBuilder.FormatOpenEndedQuestion("@SampleUser", Config.OpenEndedQuestion);
+        return ExamMessageBuilder.FormatOpenEndedQuestion(new UserIdentity(0, "SampleUser", null, null), Config.OpenEndedQuestion).Text;
     }
 }

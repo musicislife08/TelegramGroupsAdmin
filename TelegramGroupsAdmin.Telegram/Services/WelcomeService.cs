@@ -192,7 +192,6 @@ public class WelcomeService(
             await RestrictUserPermissionsAsync(chatMemberUpdate.Chat, user, cancellationToken);
 
             // Step 4: Send verifying message
-            var username = TelegramDisplayName.FormatMention(user);
             var verifyingMessage = await messageService.SendAndSaveMessageAsync(
                 chatId: chatMemberUpdate.Chat.Id,
                 message: new TelegramMessageBuilder()
@@ -496,7 +495,7 @@ public class WelcomeService(
             // Welcome ENABLED: Update verifying message to full welcome content
             var chatInfo = await chatService.GetChatAsync(chatMemberUpdate.Chat.Id, cancellationToken);
             var chatName = chatInfo.Title ?? "this chat";
-            var messageText = WelcomeMessageBuilder.FormatWelcomeMessage(config, username, chatName);
+            var welcomeMessage = WelcomeMessageBuilder.FormatWelcomeMessage(config, UserIdentity.From(user), chatName);
 
             // Build keyboard based on welcome mode
             InlineKeyboardMarkup keyboard;
@@ -519,7 +518,7 @@ public class WelcomeService(
             await messageService.EditAndUpdateMessageAsync(
                 chatId: chatMemberUpdate.Chat.Id,
                 messageId: verifyingMessageId.Value,
-                message: TelegramMessage.Plain(messageText),
+                message: welcomeMessage,
                 replyMarkup: keyboard,
                 cancellationToken: cancellationToken);
 
@@ -1372,15 +1371,14 @@ public class WelcomeService(
         CancellationToken cancellationToken = default)
     {
         var chatName = chat.Title ?? "this chat";
-        var username = TelegramDisplayName.FormatMention(user);
 
         // Use extracted builder for rules confirmation message (includes footer)
-        var dmText = WelcomeMessageBuilder.FormatRulesConfirmation(config, username, chatName);
+        var dmMessage = WelcomeMessageBuilder.FormatRulesConfirmation(config, UserIdentity.From(user), chatName);
 
         // Delegate to DmDeliveryService with chat fallback and 30-second auto-delete
         var result = await dmDeliveryService.SendDmAsync(
             user: UserIdentity.From(user),
-            messageText: dmText,
+            message: dmMessage,
             fallbackChatId: chat.Id,
             autoDeleteSeconds: 30,
             cancellationToken: cancellationToken);
