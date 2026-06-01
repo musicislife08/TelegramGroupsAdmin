@@ -1,7 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Telegram.Bot.Exceptions;
 using Telegram.Bot.Types;
-using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
 using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
@@ -107,27 +106,6 @@ public class BotDmService(
         }
     }
 
-    public Task<DmDeliveryResult> SendDmWithQueueAsync(
-        UserIdentity user,
-        string notificationType,
-        string messageText,
-        ParseMode parseMode = ParseMode.MarkdownV2,
-        CancellationToken cancellationToken = default)
-    {
-        return TrySendWithQueueAsync(
-            user,
-            notificationType,
-            queuedText: messageText,
-            sendAction: _ => messageHandler.SendAsync(
-                chatId: user.Id,
-                text: messageText,
-                parseMode: parseMode,
-                ct: cancellationToken),
-            cancellationToken,
-            logStyle: DmLogStyle.Queue,
-            networkErrorAware: true);
-    }
-
     /// <summary>
     /// Send fallback message in chat with optional auto-delete
     /// </summary>
@@ -202,139 +180,6 @@ public class BotDmService(
                 ErrorMessage = $"Fallback failed: {ex.Message}"
             };
         }
-    }
-
-    public Task<DmDeliveryResult> SendDmWithMediaAsync(
-        UserIdentity user,
-        string notificationType,
-        string messageText,
-        string? photoPath = null,
-        string? videoPath = null,
-        CancellationToken cancellationToken = default)
-    {
-        // Media variants log success internally (messages differ for photo/video/text paths).
-        // The helper therefore skips the default success log and delegates entirely to sendAction.
-        return TrySendWithQueueAsync(
-            user,
-            notificationType,
-            queuedText: messageText,
-            sendAction: async identity =>
-            {
-                var hasMedia = !string.IsNullOrWhiteSpace(photoPath) || !string.IsNullOrWhiteSpace(videoPath);
-
-                if (hasMedia)
-                {
-                    if (!string.IsNullOrWhiteSpace(photoPath) && File.Exists(photoPath))
-                    {
-                        await using var photoStream = File.OpenRead(photoPath);
-                        await messageHandler.SendPhotoAsync(
-                            chatId: identity.Id,
-                            photo: InputFile.FromStream(photoStream, Path.GetFileName(photoPath)),
-                            caption: messageText,
-                            parseMode: ParseMode.MarkdownV2,
-                            ct: cancellationToken);
-
-                        logger.LogInformation("DM with photo sent successfully to {User}", identity.ToLogInfo());
-                    }
-                    else if (!string.IsNullOrWhiteSpace(videoPath) && File.Exists(videoPath))
-                    {
-                        await using var videoStream = File.OpenRead(videoPath);
-                        await messageHandler.SendVideoAsync(
-                            chatId: identity.Id,
-                            video: InputFile.FromStream(videoStream, Path.GetFileName(videoPath)),
-                            caption: messageText,
-                            parseMode: ParseMode.MarkdownV2,
-                            ct: cancellationToken);
-
-                        logger.LogInformation("DM with video sent successfully to {User}", identity.ToLogInfo());
-                    }
-                    else
-                    {
-                        logger.LogWarning("Media file not found (photo: {PhotoPath}, video: {VideoPath}), sending text-only DM to {User}",
-                            photoPath, videoPath, identity.ToLogDebug());
-
-                        await messageHandler.SendAsync(
-                            chatId: identity.Id,
-                            text: messageText,
-                            parseMode: ParseMode.MarkdownV2,
-                            ct: cancellationToken);
-                    }
-                }
-                else
-                {
-                    await messageHandler.SendAsync(
-                        chatId: identity.Id,
-                        text: messageText,
-                        parseMode: ParseMode.MarkdownV2,
-                        ct: cancellationToken);
-
-                    logger.LogInformation("DM sent successfully to {User}", identity.ToLogInfo());
-                }
-            },
-            cancellationToken,
-            logStyle: DmLogStyle.Media,
-            mediaErrorVariant: DmMediaLogVariant.Media,
-            networkErrorAware: false);
-    }
-
-    public Task<DmDeliveryResult> SendDmWithMediaAndKeyboardAsync(
-        UserIdentity user,
-        string notificationType,
-        string messageText,
-        string? photoPath = null,
-        string? videoPath = null,
-        InlineKeyboardMarkup? keyboard = null,
-        ParseMode parseMode = ParseMode.MarkdownV2,
-        CancellationToken cancellationToken = default)
-    {
-        return TrySendWithQueueAsync(
-            user,
-            notificationType,
-            queuedText: messageText,
-            sendAction: async identity =>
-            {
-                if (!string.IsNullOrWhiteSpace(photoPath) && File.Exists(photoPath))
-                {
-                    await using var photoStream = File.OpenRead(photoPath);
-                    await messageHandler.SendPhotoAsync(
-                        chatId: identity.Id,
-                        photo: InputFile.FromStream(photoStream, Path.GetFileName(photoPath)),
-                        caption: messageText,
-                        parseMode: parseMode,
-                        replyMarkup: keyboard,
-                        ct: cancellationToken);
-
-                    logger.LogInformation("DM with photo and keyboard sent successfully to {User}", identity.ToLogInfo());
-                }
-                else if (!string.IsNullOrWhiteSpace(videoPath) && File.Exists(videoPath))
-                {
-                    await using var videoStream = File.OpenRead(videoPath);
-                    await messageHandler.SendVideoAsync(
-                        chatId: identity.Id,
-                        video: InputFile.FromStream(videoStream, Path.GetFileName(videoPath)),
-                        caption: messageText,
-                        parseMode: parseMode,
-                        replyMarkup: keyboard,
-                        ct: cancellationToken);
-
-                    logger.LogInformation("DM with video and keyboard sent successfully to {User}", identity.ToLogInfo());
-                }
-                else
-                {
-                    await messageHandler.SendAsync(
-                        chatId: identity.Id,
-                        text: messageText,
-                        parseMode: parseMode,
-                        replyMarkup: keyboard,
-                        ct: cancellationToken);
-
-                    logger.LogInformation("DM with keyboard sent successfully to {User}", identity.ToLogInfo());
-                }
-            },
-            cancellationToken,
-            logStyle: DmLogStyle.Media,
-            mediaErrorVariant: DmMediaLogVariant.Keyboard,
-            networkErrorAware: false);
     }
 
     public async Task<Message> EditDmTextAsync(

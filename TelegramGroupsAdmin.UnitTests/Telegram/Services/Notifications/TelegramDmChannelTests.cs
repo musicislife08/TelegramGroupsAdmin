@@ -99,7 +99,7 @@ public class TelegramDmChannelTests
     }
 
     [Test]
-    public async Task SendAsync_WithoutTelegramPayload_NeverCallsSendDmWithQueueAsyncWithHtml()
+    public async Task SendAsync_WithoutTelegramPayload_SendsPlainTextViaEntities()
     {
         // Arrange
         const long recipientId = 77777L;
@@ -116,12 +116,13 @@ public class TelegramDmChannelTests
         // Act
         await _channel.SendAsync(recipientId.ToString(), notification);
 
-        // Assert — ParseMode.Html is gone; the old queue overload is NOT called
-        await _mockDmService.DidNotReceive().SendDmWithQueueAsync(
+        // Assert — no parse_mode anywhere: the channel routes through the entity send with the
+        // plain message text and an empty entity list.
+        await _mockDmService.Received(1).SendDmWithEntitiesAsync(
             Arg.Any<UserIdentity>(),
-            Arg.Any<string>(),
-            Arg.Any<string>(),
-            ParseMode.Html,
+            "warning",
+            "Some message",
+            Arg.Is<IReadOnlyList<MessageEntity>>(e => e.Count == 0),
             Arg.Any<CancellationToken>());
     }
 }

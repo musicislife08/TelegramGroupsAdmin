@@ -1,6 +1,8 @@
 @using TelegramGroupsAdmin.Telegram.Models
 @using TelegramGroupsAdmin.Telegram.Extensions
 @using TelegramGroupsAdmin.Telegram.Services.Welcome
+@using TelegramGroupsAdmin.Core.Models
+@using TelegramGroupsAdmin.Core.Utilities
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 
@@ -363,14 +365,14 @@
     }
 
     // Preview helper methods - use ExamMessageBuilder to ensure preview matches actual messages
-    private string GetMcQuestionPreview()
+    private TelegramMessage GetMcQuestionPreview()
     {
         if (Config?.McQuestions == null || Config.McQuestions.Count == 0)
-            return "(No questions configured)";
+            return TelegramMessage.Plain("(No questions configured)");
 
         var q = Config.McQuestions[0];
         var questionText = string.IsNullOrEmpty(q.Question) ? "(Question text)" : q.Question;
-        return ExamMessageBuilder.FormatMcQuestion(new UserIdentity(0, "SampleUser", null, null), 1, Config.McQuestions.Count, questionText).Text;
+        return ExamMessageBuilder.FormatMcQuestion(new UserIdentity(0, "SampleUser", null, null), 1, Config.McQuestions.Count, questionText);
     }
 
     private string[][] GetMcAnswerButtons()
@@ -382,11 +384,11 @@
         return answers.Select((a, i) => new[] { $"{(char)('A' + i)}) {(string.IsNullOrEmpty(a) ? "(Answer)" : a)}" }).ToArray();
     }
 
-    private string GetOpenEndedPreview()
+    private TelegramMessage GetOpenEndedPreview()
     {
         if (string.IsNullOrEmpty(Config?.OpenEndedQuestion))
-            return "(No question configured)";
+            return TelegramMessage.Plain("(No question configured)");
 
-        return ExamMessageBuilder.FormatOpenEndedQuestion(new UserIdentity(0, "SampleUser", null, null), Config.OpenEndedQuestion).Text;
+        return ExamMessageBuilder.FormatOpenEndedQuestion(new UserIdentity(0, "SampleUser", null, null), Config.OpenEndedQuestion);
     }
 }

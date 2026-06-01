@@ -319,9 +319,9 @@ public class BanCelebrationService(
                 return;
             }
 
-            // Build the DM caption (uses "You" grammar)
-            // Escape for MarkdownV2 since DmDeliveryService uses that parse mode
-            var dmCaption = TelegramTextUtilities.EscapeMarkdownV2(
+            // Build the DM caption (uses "You" grammar). Entity-based, no parse mode — the banned
+            // user's grammar token is plain text, matching the chat caption.
+            var dmCaption = TelegramMessage.Plain(
                 ReplacePlaceholders(caption.DmText, "You", chat.ChatName ?? chat.Id.ToString(), banCount));
 
             // Get the full path to the GIF
@@ -333,7 +333,7 @@ public class BanCelebrationService(
             }
 
             // Determine if it's a video or image for the DM service
-            // The DM service uses SendDmWithMediaAsync which accepts photo/video paths
+            // The DM service uses SendDmWithMediaEntitiesAsync which accepts photo/video paths
             // For GIFs/animations, we'll use the video path parameter
             var extension = Path.GetExtension(fullPath).ToLowerInvariant();
             string? photoPath = null;
@@ -348,7 +348,7 @@ public class BanCelebrationService(
                 photoPath = fullPath;
             }
 
-            var result = await dmDeliveryService.SendDmWithMediaAsync(
+            var result = await dmDeliveryService.SendDmWithMediaEntitiesAsync(
                 bannedUser,
                 "ban_celebration",
                 dmCaption,

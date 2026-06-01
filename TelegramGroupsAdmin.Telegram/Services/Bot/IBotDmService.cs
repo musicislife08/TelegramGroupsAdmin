@@ -1,5 +1,4 @@
 using Telegram.Bot.Types;
-using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
@@ -44,43 +43,6 @@ public interface IBotDmService
         TelegramMessage message,
         long? fallbackChatId = null,
         int? autoDeleteSeconds = null,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Attempt to send a DM to a user. If DM fails (403), queues notification for later delivery.
-    /// Updates bot_dm_enabled flag automatically.
-    /// </summary>
-    Task<DmDeliveryResult> SendDmWithQueueAsync(
-        UserIdentity user,
-        string notificationType,
-        string messageText,
-        ParseMode parseMode = ParseMode.MarkdownV2,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Attempt to send a DM with optional media (photo or video) to a user.
-    /// If DM fails (403), queues notification for later delivery.
-    /// </summary>
-    Task<DmDeliveryResult> SendDmWithMediaAsync(
-        UserIdentity user,
-        string notificationType,
-        string messageText,
-        string? photoPath = null,
-        string? videoPath = null,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Attempt to send a DM with optional media and inline keyboard buttons.
-    /// If DM fails (403), queues notification for later delivery (without buttons).
-    /// </summary>
-    Task<DmDeliveryResult> SendDmWithMediaAndKeyboardAsync(
-        UserIdentity user,
-        string notificationType,
-        string messageText,
-        string? photoPath = null,
-        string? videoPath = null,
-        InlineKeyboardMarkup? keyboard = null,
-        ParseMode parseMode = ParseMode.MarkdownV2,
         CancellationToken cancellationToken = default);
 
     /// <summary>
