@@ -3,11 +3,10 @@ using System.Text.RegularExpressions;
 namespace TelegramGroupsAdmin.UnitTests.Architecture;
 
 /// <summary>
-/// Regression guard: ensures no app-level Telegram sends use ParseMode.Markdown or ParseMode.Html.
-///
-/// Allowed exceptions (deliberately deferred):
-///   - ParseMode.MarkdownV2 in BotDmService.cs and IBotDmService.cs (media DM path, correct EscapeMarkdownV2 caller)
-///   - Comment lines (// /// *) referencing old approaches for documentation purposes
+/// Regression guard: ensures no production Telegram send uses any parse_mode. Everything renders
+/// via entity-based <c>TelegramMessage</c> composition, so <c>ParseMode.Markdown</c> (V1),
+/// <c>ParseMode.MarkdownV2</c>, and <c>ParseMode.Html</c> are all banned in production code.
+/// Comment lines (// /// *) referencing old approaches for documentation are ignored.
 ///
 /// If this test fails, the failure message lists every offending file:line so the violation is actionable.
 /// </summary>
@@ -26,7 +25,6 @@ public class ParseModeUsageGuardTests
 
         foreach (var file in EnumerateProductionCsFiles(root))
         {
-            var fileName = Path.GetFileName(file);
             var lines = File.ReadAllLines(file);
 
             for (var i = 0; i < lines.Length; i++)
@@ -46,14 +44,9 @@ public class ParseModeUsageGuardTests
                 if (line.Contains("ParseMode.Html"))
                     offenders.Add($"{file}:{i + 1} (ParseMode.Html)");
 
-                // ParseMode.MarkdownV2 — allowed only in BotDmService.cs and IBotDmService.cs
-                // (the deferred media DM transport path whose one caller still escapes correctly)
-                if (line.Contains("ParseMode.MarkdownV2")
-                    && fileName != "BotDmService.cs"
-                    && fileName != "IBotDmService.cs")
-                {
-                    offenders.Add($"{file}:{i + 1} (ParseMode.MarkdownV2 outside BotDmService / IBotDmService)");
-                }
+                // ParseMode.MarkdownV2 — disallowed everywhere; all DM transport is entity-based now
+                if (line.Contains("ParseMode.MarkdownV2"))
+                    offenders.Add($"{file}:{i + 1} (ParseMode.MarkdownV2)");
             }
         }
 

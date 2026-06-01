@@ -55,46 +55,4 @@ public static class TelegramDisplayName
         return userId.HasValue ? $"User {userId}" : "Unknown User";
     }
 
-    /// <summary>
-    /// Gets mention-style name for Telegram bot messages. Uses @username when available.
-    /// Priority: @Username → FullName (First + Last) → User {id}
-    /// </summary>
-    /// <param name="user">Telegram User object (nullable)</param>
-    /// <returns>Formatted name suitable for Telegram bot messages (with @ prefix when username available)</returns>
-    /// <remarks>
-    /// Use this for bot command responses where @username creates a clickable mention.
-    /// For guaranteed clickable mentions (even without username), use HTML text mentions:
-    /// &lt;a href="tg://user?id=123"&gt;DisplayName&lt;/a&gt;
-    /// </remarks>
-    public static string FormatMention(User? user)
-    {
-        if (user == null) return "Unknown User";
-        return FormatMention(user.FirstName, user.LastName, user.Username, user.Id);
-    }
-
-    /// <summary>
-    /// Gets mention-style name for Telegram bot messages. Uses @username when available.
-    /// Priority: @Username → FullName (First + Last) → User {id}
-    /// </summary>
-    public static string FormatMention(Models.UserIdentity user)
-        => FormatMention(user.FirstName, user.LastName, user.Username, user.Id);
-
-    /// <summary>
-    /// Gets mention-style name for Telegram bot messages (internal implementation).
-    /// Callers should use the UserIdentity or Telegram User overloads instead.
-    /// </summary>
-    private static string FormatMention(string? firstName, string? lastName, string? username, long? userId = null)
-    {
-        // @username creates clickable mention in Telegram
-        if (!string.IsNullOrWhiteSpace(username))
-            return $"@{username}";
-
-        var fullName = string.Join(" ", new[] { firstName, lastName }
-            .Where(s => !string.IsNullOrWhiteSpace(s)));
-
-        if (!string.IsNullOrWhiteSpace(fullName))
-            return fullName;
-
-        return userId.HasValue ? $"User {userId}" : "Unknown User";
-    }
 }
