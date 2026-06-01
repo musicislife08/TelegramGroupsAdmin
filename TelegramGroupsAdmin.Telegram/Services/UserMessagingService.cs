@@ -35,7 +35,7 @@ public class UserMessagingService : IUserMessagingService
     public async Task<MessageSendResult> SendToUserAsync(
         long userId,
         Chat chat,
-        string messageText,
+        TelegramMessage message,
         int? replyToMessageId = null,
         CancellationToken cancellationToken = default)
     {
@@ -49,7 +49,7 @@ public class UserMessagingService : IUserMessagingService
             // Try DM via IBotDmService (no fallback - we'll handle mention fallback ourselves)
             var dmResult = await _dmService.SendDmAsync(
                 user: user != null ? UserIdentity.From(user) : UserIdentity.FromId(userId),
-                messageText: messageText,
+                message: message,
                 fallbackChatId: null,
                 cancellationToken: cancellationToken);
 
@@ -58,7 +58,7 @@ public class UserMessagingService : IUserMessagingService
                 _logger.LogInformation(
                     "Sent DM to user {User}: {MessagePreview}",
                     user.ToLogInfo(userId),
-                    messageText.Length > 50 ? messageText[..50] + "..." : messageText);
+                    message.Text.Length > 50 ? message.Text[..50] + "..." : message.Text);
 
                 return new MessageSendResult(userId, Success: true, MessageDeliveryMethod.PrivateDm);
             }
@@ -70,13 +70,13 @@ public class UserMessagingService : IUserMessagingService
         }
 
         // Fallback: Send as chat mention
-        return await SendChatMentionAsync(userId, chat, messageText, replyToMessageId, cancellationToken);
+        return await SendChatMentionAsync(userId, chat, message, replyToMessageId, cancellationToken);
     }
 
     public async Task<List<MessageSendResult>> SendToMultipleUsersAsync(
         List<long> userIds,
         Chat chat,
-        string messageText,
+        TelegramMessage message,
         int? replyToMessageId = null,
         CancellationToken cancellationToken = default)
     {
@@ -94,7 +94,7 @@ public class UserMessagingService : IUserMessagingService
                 // Try DM via IBotDmService
                 var dmResult = await _dmService.SendDmAsync(
                     user: user != null ? UserIdentity.From(user) : UserIdentity.FromId(userId),
-                    messageText: messageText,
+                    message: message,
                     fallbackChatId: null,
                     cancellationToken: cancellationToken);
 
@@ -103,7 +103,7 @@ public class UserMessagingService : IUserMessagingService
                     _logger.LogInformation(
                         "Sent DM to user {User}: {MessagePreview}",
                         user.ToLogInfo(userId),
-                        messageText.Length > 50 ? messageText[..50] + "..." : messageText);
+                        message.Text.Length > 50 ? message.Text[..50] + "..." : message.Text);
 
                     results.Add(new MessageSendResult(userId, Success: true, MessageDeliveryMethod.PrivateDm));
                 }
@@ -131,7 +131,7 @@ public class UserMessagingService : IUserMessagingService
                     if (i > 0) builder.Text(", ");
                     builder.Mention(failedDmUsers[i].User);
                 }
-                builder.Text(":").LineBreak().LineBreak().Text(messageText);
+                builder.Text(":").LineBreak().LineBreak().Append(message);
 
                 await _messageService.SendAndSaveMessageAsync(
                     chatId: chat.Id,
@@ -180,7 +180,7 @@ public class UserMessagingService : IUserMessagingService
     private async Task<MessageSendResult> SendChatMentionAsync(
         long userId,
         Chat chat,
-        string messageText,
+        TelegramMessage message,
         int? replyToMessageId,
         CancellationToken cancellationToken)
     {
@@ -189,15 +189,15 @@ public class UserMessagingService : IUserMessagingService
 
         try
         {
-            var message = new TelegramMessageBuilder()
+            var mentionMessage = new TelegramMessageBuilder()
                 .Mention(new UserIdentity(userId, user?.FirstName, user?.LastName, user?.Username))
                 .Text(": ")
-                .Text(messageText)
+                .Append(message)
                 .Build();
 
             await _messageService.SendAndSaveMessageAsync(
                 chatId: chat.Id,
-                message: message,
+                message: mentionMessage,
                 replyParameters: replyToMessageId.HasValue
                     ? new ReplyParameters { MessageId = replyToMessageId.Value }
                     : null,

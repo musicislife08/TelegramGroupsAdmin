@@ -97,6 +97,32 @@ public sealed class TelegramMessageBuilder
         return this;
     }
 
+    /// <summary>
+    /// Append a pre-rendered <see cref="TelegramMessage"/>: its text is appended verbatim and each
+    /// of its entities is re-anchored by shifting its offset by the current builder length (the
+    /// length before the text was appended). <see cref="MessageEntity"/> is a mutable class, so the
+    /// originals are never mutated — fresh instances are constructed copying every property.
+    /// </summary>
+    public TelegramMessageBuilder Append(TelegramMessage message)
+    {
+        var baseOffset = _sb.Length;
+        _sb.Append(message.Text);
+        foreach (var entity in message.Entities)
+        {
+            _entities.Add(new MessageEntity
+            {
+                Type = entity.Type,
+                Offset = baseOffset + entity.Offset,
+                Length = entity.Length,
+                Url = entity.Url,
+                User = entity.User,
+                Language = entity.Language,
+                CustomEmojiId = entity.CustomEmojiId
+            });
+        }
+        return this;
+    }
+
     public TelegramMessage Build() => new(_sb.ToString(), [.. _entities]);
 
     private TelegramMessageBuilder Styled(string text, MessageEntityType type)

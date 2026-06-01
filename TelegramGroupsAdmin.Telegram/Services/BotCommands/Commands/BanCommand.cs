@@ -169,7 +169,7 @@ public class BanCommand : IBotCommand
 
         // Return null message - selection will be handled by callback handler
         // Don't delete command message yet (callback handler will delete both)
-        return new CommandResult(TelegramMessage.Plain(string.Empty), false, null);
+        return new CommandResult(TelegramMessage.Empty, false, null);
     }
 
     /// <summary>
@@ -209,16 +209,13 @@ public class BanCommand : IBotCommand
 
             // Notify user of ban via DM (preferred) or chat mention (fallback)
             var chatName = message.Chat.Title ?? message.Chat.Username ?? "this chat";
-            var banNotification = $"🚫 **You have been banned**\n\n" +
-                                 $"**Chat:** {chatName}\n" +
-                                 $"**Reason:** {ModerationConstants.DefaultBanReason}\n" +
-                                 $"**Chats affected:** {result.ChatsAffected}\n\n" +
-                                 $"If you believe this was a mistake, you may appeal by contacting the chat administrators.";
+            var banNotification = BanNotificationMessage.Build(
+                chatName, ModerationConstants.DefaultBanReason, result.ChatsAffected);
 
             var messageResult = await _messagingService.SendToUserAsync(
                 userId: targetIdentity.Id,
                 chat: message.Chat,
-                messageText: banNotification,
+                message: banNotification,
                 replyToMessageId: null, // Don't reply to trigger message for bans
                 cancellationToken: cancellationToken);
 
@@ -234,7 +231,7 @@ public class BanCommand : IBotCommand
                 result.ChatsAffected, ModerationConstants.DefaultBanReason, deliveryMethod, result.TrustRemoved);
 
             // Silent mode: No chat feedback, command message simply disappears
-            return new CommandResult(TelegramMessage.Plain(string.Empty), DeleteCommandMessage, DeleteResponseAfterSeconds);
+            return new CommandResult(TelegramMessage.Empty, DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
         catch (Exception ex)
         {

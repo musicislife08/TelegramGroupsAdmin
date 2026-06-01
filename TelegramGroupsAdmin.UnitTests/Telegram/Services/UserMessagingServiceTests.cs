@@ -108,13 +108,12 @@ public class UserMessagingServiceTests
             .Returns(user2);
 
         var chat = MakeChat();
-        const string messageText = "Please check this.";
 
         // Act
         var results = await _sut.SendToMultipleUsersAsync(
             [TestUserId1, TestUserId2],
             chat,
-            messageText);
+            TelegramMessage.Plain("Please check this."));
 
         // Assert: entity overload called once, with exactly 2 TextMention entities
         await _mockMessageService
@@ -154,7 +153,7 @@ public class UserMessagingServiceTests
         var chat = MakeChat();
 
         // Act
-        await _sut.SendToMultipleUsersAsync([TestUserId1], chat, "Hello!");
+        await _sut.SendToMultipleUsersAsync([TestUserId1], chat, TelegramMessage.Plain("Hello!"));
 
         // Assert: exactly 1 TextMention entity in the sent message
         await _mockMessageService
@@ -180,15 +179,16 @@ public class UserMessagingServiceTests
         _mockDmService
             .SendDmAsync(
                 user: Arg.Any<UserIdentity>(),
-                messageText: Arg.Any<string>(),
+                message: Arg.Any<TelegramMessage>(),
                 fallbackChatId: Arg.Any<long?>(),
+                autoDeleteSeconds: Arg.Any<int?>(),
                 cancellationToken: Arg.Any<CancellationToken>())
             .Returns(new DmDeliveryResult { DmSent = false, Failed = true });
 
         var chat = MakeChat();
 
         // Act
-        await _sut.SendToMultipleUsersAsync([TestUserId1], chat, "Fallback mention.");
+        await _sut.SendToMultipleUsersAsync([TestUserId1], chat, TelegramMessage.Plain("Fallback mention."));
 
         // Assert: entity overload was used for the fallback path
         await _mockMessageService
@@ -217,7 +217,7 @@ public class UserMessagingServiceTests
         var chat = MakeChat();
 
         // Act
-        var result = await _sut.SendToUserAsync(TestUserId1, chat, "Check this.");
+        var result = await _sut.SendToUserAsync(TestUserId1, chat, TelegramMessage.Plain("Check this."));
 
         // Assert: entity overload called
         await _mockMessageService
@@ -256,15 +256,16 @@ public class UserMessagingServiceTests
         _mockDmService
             .SendDmAsync(
                 user: Arg.Any<UserIdentity>(),
-                messageText: Arg.Any<string>(),
+                message: Arg.Any<TelegramMessage>(),
                 fallbackChatId: Arg.Any<long?>(),
+                autoDeleteSeconds: Arg.Any<int?>(),
                 cancellationToken: Arg.Any<CancellationToken>())
             .Returns(new DmDeliveryResult { DmSent = false, Failed = true });
 
         var chat = MakeChat();
 
         // Act
-        var result = await _sut.SendToUserAsync(TestUserId1, chat, "Fallback text.");
+        var result = await _sut.SendToUserAsync(TestUserId1, chat, TelegramMessage.Plain("Fallback text."));
 
         // Assert: entity overload used on fallback
         await _mockMessageService

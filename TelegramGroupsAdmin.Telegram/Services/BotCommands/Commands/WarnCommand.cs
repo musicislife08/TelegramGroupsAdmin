@@ -98,21 +98,25 @@ public class WarnCommand : IBotCommand
 
             // Notify user of warning via DM (preferred) or chat mention (fallback)
             var chatName = message.Chat.Title ?? message.Chat.Username ?? "this chat";
-            var warningNotification = $"⚠️ **Warning Issued**\n\n" +
-                                     $"**Chat:** {chatName}\n" +
-                                     $"**Reason:** {reason}\n" +
-                                     $"**Total Warnings:** {result.WarningCount}\n\n" +
-                                     $"Please review the group rules.";
+            var warningBuilder = new TelegramMessageBuilder()
+                .Text("⚠️ ").Bold("Warning Issued").LineBreak().LineBreak()
+                .Bold("Chat: ").Text(chatName).LineBreak()
+                .Bold("Reason: ").Text(reason).LineBreak()
+                .Bold("Total Warnings: ").Text(result.WarningCount.ToString()).LineBreak().LineBreak()
+                .Text("Please review the group rules.");
 
             if (result.AutoBanTriggered)
             {
-                warningNotification += $"\n\n🚫 **Auto-ban triggered!** You have been banned from {result.ChatsAffected} chat(s) due to excessive warnings.";
+                warningBuilder
+                    .LineBreak().LineBreak()
+                    .Text("🚫 ").Bold("Auto-ban triggered!")
+                    .Text($" You have been banned from {result.ChatsAffected} chat(s) due to excessive warnings.");
             }
 
             var messageResult = await _messagingService.SendToUserAsync(
                 userId: targetUser.Id,
                 chat: message.Chat,
-                messageText: warningNotification,
+                message: warningBuilder.Build(),
                 replyToMessageId: message.ReplyToMessage.MessageId,
                 cancellationToken: cancellationToken);
 

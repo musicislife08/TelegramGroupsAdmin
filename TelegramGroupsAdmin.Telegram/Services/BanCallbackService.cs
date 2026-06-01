@@ -141,16 +141,13 @@ public class BanCallbackService : IBanCallbackService
                 // Send ban notification to user (resolve from scope since IUserMessagingService is Scoped)
                 var messagingService = scope.ServiceProvider.GetRequiredService<IUserMessagingService>();
                 var chatName = callbackQuery.Message?.Chat.Title ?? "this chat";
-                var banNotification = $"🚫 **You have been banned**\n\n" +
-                                     $"**Chat:** {chatName}\n" +
-                                     $"**Reason:** {ModerationConstants.DefaultBanReason}\n" +
-                                     $"**Chats affected:** {result.ChatsAffected}\n\n" +
-                                     $"If you believe this was a mistake, you may appeal by contacting the chat administrators.";
+                var banNotification = BanNotificationMessage.Build(
+                    chatName, ModerationConstants.DefaultBanReason, result.ChatsAffected);
 
                 await messagingService.SendToUserAsync(
                     userId: targetUserId,
                     chat: callbackQuery.Message!.Chat,
-                    messageText: banNotification,
+                    message: banNotification,
                     replyToMessageId: null,
                     cancellationToken: cancellationToken);
             }
