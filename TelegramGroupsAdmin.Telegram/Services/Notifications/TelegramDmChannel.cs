@@ -1,14 +1,12 @@
 using Microsoft.Extensions.Logging;
-using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 
 namespace TelegramGroupsAdmin.Telegram.Services.Notifications;
 
 /// <summary>
 /// Telegram DM notification channel - delegates to DmDeliveryService for actual delivery.
-/// When the notification carries a <see cref="Notification.Telegram"/> entity payload, sends
-/// it via <c>SendDmWithEntitiesAsync</c> (no parse_mode). Otherwise sends the plain-text
-/// <see cref="Notification.Message"/> with an empty entity list — also no parse_mode.
+/// Sends <see cref="Notification.Message"/> via <c>SendDmWithEntitiesAsync</c> using its text
+/// and entities (no parse_mode). A plain message carries an empty entity list.
 /// </summary>
 public class TelegramDmChannel : INotificationChannel
 {
@@ -37,27 +35,13 @@ public class TelegramDmChannel : INotificationChannel
             return new DeliveryResult(false, "Invalid recipient format");
         }
 
-        // Prefer entity-based rendering when available; fall back to plain text (no parse_mode).
-        // Using SendDmWithEntitiesAsync for both paths means ParseMode.Html is gone entirely.
-        string text;
-        IReadOnlyList<MessageEntity> entities;
-
-        if (notification.Telegram is { } tm)
-        {
-            text = tm.Text;
-            entities = tm.Entities;
-        }
-        else
-        {
-            text = notification.Message;
-            entities = [];
-        }
-
+        // Entity-based rendering only — ParseMode.Html is gone entirely. A plain message
+        // carries an empty entity list, so a single send path covers both cases.
         var result = await _dmDeliveryService.SendDmWithEntitiesAsync(
             Core.Models.UserIdentity.FromId(telegramUserId),
             notification.Type,
-            text,
-            entities,
+            notification.Message.Text,
+            notification.Message.Entities,
             cancellationToken);
 
         return new DeliveryResult(

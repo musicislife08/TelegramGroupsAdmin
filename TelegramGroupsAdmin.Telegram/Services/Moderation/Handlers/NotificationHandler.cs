@@ -141,7 +141,7 @@ public class NotificationHandler : INotificationHandler
             .Text("💡 Use /mystatus to check your current status.")
             .Build();
 
-        var notification = new Notification("warning", tm.Text, tm);
+        var notification = new Notification("warning", tm);
         var result = await _notificationOrchestrator.SendTelegramDmAsync(user.Id, notification, cancellationToken);
 
         if (result.Success)
@@ -191,7 +191,7 @@ public class NotificationHandler : INotificationHandler
         }
 
         var tm = builder.Build();
-        var notification = new Notification("tempban", tm.Text, tm);
+        var notification = new Notification("tempban", tm);
         var result = await _notificationOrchestrator.SendTelegramDmAsync(user.Id, notification, cancellationToken);
 
         if (result.Success)
@@ -351,7 +351,7 @@ public class NotificationHandler : INotificationHandler
                 .Text("💡 If you believe this was a mistake, please contact an admin.");
 
             var tm = builder.Build();
-            var notification = new Notification("critical_violation", tm.Text, tm);
+            var notification = new Notification("critical_violation", tm);
             var result = await _notificationOrchestrator.SendTelegramDmAsync(user.Id, notification, cancellationToken);
 
             if (result.Success)

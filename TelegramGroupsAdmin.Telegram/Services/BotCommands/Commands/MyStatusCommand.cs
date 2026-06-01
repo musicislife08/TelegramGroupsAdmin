@@ -59,7 +59,7 @@ public class MyStatusCommand : IBotCommand
             // Send status via DM notification system with the full entity payload
             // so bold formatting renders in the DM.
             var statusMessage = await BuildStatusMessageAsync(telegramUserId, cancellationToken);
-            var notification = new Notification("mystatus", statusMessage.Text, statusMessage);
+            var notification = new Notification("mystatus", statusMessage);
 
             var result = await _notificationOrchestrator.SendTelegramDmAsync(
                 telegramUserId,

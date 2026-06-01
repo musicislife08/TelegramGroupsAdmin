@@ -11,14 +11,14 @@ using TelegramGroupsAdmin.Telegram.Services.Notifications;
 namespace TelegramGroupsAdmin.UnitTests.Telegram.Services.Notifications;
 
 /// <summary>
-/// Unit tests for TelegramDmChannel — verifies that the channel routes to entities
-/// when Notification.Telegram is set, and falls back to plain text otherwise.
+/// Unit tests for TelegramDmChannel — verifies that the channel sends the notification's
+/// TelegramMessage via SendDmWithEntitiesAsync using its text and entities.
 /// ParseMode.Html is no longer used by this channel.
 ///
 /// Test Coverage (3 tests):
-/// - When Telegram payload is set: delegates to SendDmWithEntitiesAsync with that payload's text and entities
-/// - When Telegram payload is null: delegates to SendDmWithEntitiesAsync with Message and empty entities
-/// - When Telegram payload is null: passes empty entities to SendDmWithEntitiesAsync (no ParseMode.Html path)
+/// - With an entity payload: delegates to SendDmWithEntitiesAsync with that message's text and entities
+/// - With a plain message (TelegramMessage.Plain): delegates with the text and empty entities
+/// - With a plain message: passes empty entities to SendDmWithEntitiesAsync (no ParseMode.Html path)
 /// </summary>
 [TestFixture]
 public class TelegramDmChannelTests
@@ -37,7 +37,7 @@ public class TelegramDmChannelTests
     }
 
     [Test]
-    public async Task SendAsync_WithTelegramPayload_CallsEntitiesOverloadWithPayloadTextAndEntities()
+    public async Task SendAsync_WithEntityPayload_CallsEntitiesOverloadWithMessageTextAndEntities()
     {
         // Arrange
         const long recipientId = 12345L;
@@ -45,8 +45,7 @@ public class TelegramDmChannelTests
         {
             new() { Type = MessageEntityType.Bold, Offset = 0, Length = 7 }
         };
-        var telegramMessage = new TelegramMessage("Warning!", entities);
-        var notification = new Notification("warning", "Warning!", telegramMessage);
+        var notification = new Notification("warning", new TelegramMessage("Warning!", entities));
 
         _mockDmService.SendDmWithEntitiesAsync(
                 Arg.Any<UserIdentity>(),
@@ -70,12 +69,11 @@ public class TelegramDmChannelTests
     }
 
     [Test]
-    public async Task SendAsync_WithoutTelegramPayload_CallsEntitiesOverloadWithMessageAndEmptyEntities()
+    public async Task SendAsync_WithPlainMessage_CallsEntitiesOverloadWithTextAndEmptyEntities()
     {
         // Arrange
         const long recipientId = 99999L;
-        var notification = new Notification("critical_violation", "Plain fallback text");
-        // Telegram is null (default)
+        var notification = new Notification("critical_violation", TelegramMessage.Plain("Plain fallback text"));
 
         _mockDmService.SendDmWithEntitiesAsync(
                 Arg.Any<UserIdentity>(),
@@ -99,11 +97,11 @@ public class TelegramDmChannelTests
     }
 
     [Test]
-    public async Task SendAsync_WithoutTelegramPayload_SendsPlainTextViaEntities()
+    public async Task SendAsync_WithPlainMessage_SendsPlainTextViaEntities()
     {
         // Arrange
         const long recipientId = 77777L;
-        var notification = new Notification("warning", "Some message");
+        var notification = new Notification("warning", TelegramMessage.Plain("Some message"));
 
         _mockDmService.SendDmWithEntitiesAsync(
                 Arg.Any<UserIdentity>(),
