@@ -2,6 +2,7 @@ using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Utilities;
 
 namespace TelegramGroupsAdmin.Telegram.Services.Bot;
 
@@ -29,6 +30,18 @@ public interface IBotDmService
     Task<DmDeliveryResult> SendDmAsync(
         UserIdentity user,
         string messageText,
+        long? fallbackChatId = null,
+        int? autoDeleteSeconds = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Entity-based <see cref="SendDmAsync(UserIdentity, string, long?, int?, CancellationToken)"/>:
+    /// sends pre-rendered text + entities (no parse_mode), preserving the 403 fallback-to-chat and
+    /// auto-delete semantics. Canonical overload; the string overload forwards here.
+    /// </summary>
+    Task<DmDeliveryResult> SendDmAsync(
+        UserIdentity user,
+        TelegramMessage message,
         long? fallbackChatId = null,
         int? autoDeleteSeconds = null,
         CancellationToken cancellationToken = default);
@@ -113,6 +126,16 @@ public interface IBotDmService
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Entity-based DM with an inline keyboard (no parse_mode). Does NOT queue on failure.
+    /// Canonical overload; the string overload forwards here.
+    /// </summary>
+    Task<DmDeliveryResult> SendDmWithKeyboardAsync(
+        UserIdentity user,
+        TelegramMessage message,
+        InlineKeyboardMarkup keyboard,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Attempt to send a DM using pre-rendered text + entities (no parse_mode).
     /// For admin notifications that need text_mention entities so user mentions are
     /// clickable even when the recipient has never interacted with the mentioned user.
@@ -123,6 +146,18 @@ public interface IBotDmService
         string notificationType,
         string text,
         IReadOnlyList<MessageEntity> entities,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Attempt to send a DM with media and an entity-based caption (no parse_mode, no keyboard).
+    /// If DM fails (403), queues the text for later delivery (without media/entities).
+    /// </summary>
+    Task<DmDeliveryResult> SendDmWithMediaEntitiesAsync(
+        UserIdentity user,
+        string notificationType,
+        TelegramMessage message,
+        string? photoPath = null,
+        string? videoPath = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>

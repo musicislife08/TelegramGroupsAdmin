@@ -5,6 +5,7 @@ using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
 using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Core.JobPayloads;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using static TelegramGroupsAdmin.Core.BackgroundJobs.DeduplicationKeys;
@@ -31,9 +32,17 @@ public class BotDmService(
     ILogger<BotDmService> logger) : IBotDmService
 {
 
-    public async Task<DmDeliveryResult> SendDmAsync(
+    public Task<DmDeliveryResult> SendDmAsync(
         UserIdentity user,
         string messageText,
+        long? fallbackChatId = null,
+        int? autoDeleteSeconds = null,
+        CancellationToken cancellationToken = default)
+        => SendDmAsync(user, TelegramMessage.Plain(messageText), fallbackChatId, autoDeleteSeconds, cancellationToken);
+
+    public async Task<DmDeliveryResult> SendDmAsync(
+        UserIdentity user,
+        TelegramMessage message,
         long? fallbackChatId = null,
         int? autoDeleteSeconds = null,
         CancellationToken cancellationToken = default)
@@ -42,7 +51,8 @@ public class BotDmService(
         {
             var sentMessage = await messageHandler.SendAsync(
                 chatId: user.Id,
-                text: messageText,
+                text: message.Text,
+                entities: message.Entities,
                 ct: cancellationToken);
 
             logger.LogInformation("DM sent successfully to {User}", user.ToLogInfo());
@@ -70,7 +80,7 @@ public class BotDmService(
             {
                 return await SendFallbackToChatAsync(
                     fallbackChatId.Value,
-                    messageText,
+                    message,
                     autoDeleteSeconds,
                     cancellationToken);
             }
@@ -123,7 +133,7 @@ public class BotDmService(
     /// </summary>
     private async Task<DmDeliveryResult> SendFallbackToChatAsync(
         long chatId,
-        string messageText,
+        TelegramMessage message,
         int? autoDeleteSeconds,
         CancellationToken cancellationToken)
     {
@@ -134,7 +144,8 @@ public class BotDmService(
         {
             var fallbackMessage = await messageHandler.SendAsync(
                 chatId: chatId,
-                text: messageText,
+                text: message.Text,
+                entities: message.Entities,
                 ct: cancellationToken);
 
             logger.LogInformation(
@@ -376,9 +387,17 @@ public class BotDmService(
     }
 
     /// <inheritdoc />
-    public async Task<DmDeliveryResult> SendDmWithKeyboardAsync(
+    public Task<DmDeliveryResult> SendDmWithKeyboardAsync(
         UserIdentity user,
         string messageText,
+        InlineKeyboardMarkup keyboard,
+        CancellationToken cancellationToken = default)
+        => SendDmWithKeyboardAsync(user, TelegramMessage.Plain(messageText), keyboard, cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<DmDeliveryResult> SendDmWithKeyboardAsync(
+        UserIdentity user,
+        TelegramMessage message,
         InlineKeyboardMarkup keyboard,
         CancellationToken cancellationToken = default)
     {
@@ -386,8 +405,9 @@ public class BotDmService(
         {
             var sentMessage = await messageHandler.SendAsync(
                 chatId: user.Id,
-                text: messageText,
+                text: message.Text,
                 replyMarkup: keyboard,
+                entities: message.Entities,
                 ct: cancellationToken);
 
             logger.LogDebug(
@@ -460,6 +480,24 @@ public class BotDmService(
             logStyle: DmLogStyle.Queue,
             networkErrorAware: true);
     }
+
+    /// <inheritdoc />
+    public Task<DmDeliveryResult> SendDmWithMediaEntitiesAsync(
+        UserIdentity user,
+        string notificationType,
+        TelegramMessage message,
+        string? photoPath = null,
+        string? videoPath = null,
+        CancellationToken cancellationToken = default)
+        => SendDmWithMediaAndKeyboardEntitiesAsync(
+            user,
+            notificationType,
+            message.Text,
+            message.Entities,
+            photoPath,
+            videoPath,
+            keyboard: null,
+            cancellationToken: cancellationToken);
 
     /// <inheritdoc />
     public Task<DmDeliveryResult> SendDmWithMediaAndKeyboardEntitiesAsync(
