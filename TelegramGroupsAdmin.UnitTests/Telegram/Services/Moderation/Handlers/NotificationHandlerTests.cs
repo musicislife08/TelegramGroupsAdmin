@@ -139,6 +139,37 @@ public class NotificationHandlerTests
     }
 
     [Test]
+    public async Task NotifyUserCriticalViolationAsync_CarriesEntityPayload_WithBoldHeader()
+    {
+        // Arrange
+        var user = new UserIdentity(12345L, "Test", "User", "test_user");
+        var violations = new List<string> { "Blocked URL detected" };
+        Notification? capturedNotification = null;
+
+        _mockNotificationOrchestrator.SendTelegramDmAsync(
+                user.Id,
+                Arg.Do<Notification>(n => capturedNotification = n),
+                Arg.Any<CancellationToken>())
+            .Returns(new DeliveryResult(true));
+
+        // Act
+        await _handler.NotifyUserCriticalViolationAsync(user, violations);
+
+        // Assert — entity payload is non-null and contains at least one Bold entity (header)
+        Assert.That(capturedNotification, Is.Not.Null);
+        Assert.That(capturedNotification!.Telegram, Is.Not.Null,
+            "Notification.Telegram should carry an entity payload for critical violation");
+        Assert.That(capturedNotification.Telegram!.Entities, Is.Not.Empty,
+            "Entity list should not be empty");
+        Assert.That(
+            capturedNotification.Telegram.Entities.Any(e => e.Type == global::Telegram.Bot.Types.Enums.MessageEntityType.Bold),
+            Is.True, "Entity list should contain at least one Bold entity (header span)");
+        // The plain-text Message (403-queue fallback) should not contain HTML markup
+        Assert.That(capturedNotification.Message, Does.Not.Contain("<b>"),
+            "Plain-text fallback must not contain HTML markup");
+    }
+
+    [Test]
     public async Task NotifyUserCriticalViolationAsync_DeliveryFails_ReturnsFailedResult()
     {
         // Arrange
@@ -605,6 +636,41 @@ public class NotificationHandlerTests
             Assert.That(result.Success, Is.False);
             Assert.That(result.ErrorMessage, Does.Contain("DB connection lost"));
         }
+    }
+
+    [Test]
+    public async Task NotifyUserTempBanAsync_CarriesEntityPayload_WithBoldHeader()
+    {
+        // Arrange
+        var user = new UserIdentity(12345L, "Test", "User", "test_user");
+        var duration = TimeSpan.FromHours(6);
+        var expiresAt = DateTimeOffset.UtcNow.Add(duration);
+        Notification? capturedNotification = null;
+
+        _mockManagedChatsRepository.GetAllChatsAsync(cancellationToken: Arg.Any<CancellationToken>())
+            .Returns(new List<ManagedChatRecord>());
+
+        _mockNotificationOrchestrator.SendTelegramDmAsync(
+                user.Id,
+                Arg.Do<Notification>(n => capturedNotification = n),
+                Arg.Any<CancellationToken>())
+            .Returns(new DeliveryResult(true));
+
+        // Act
+        await _handler.NotifyUserTempBanAsync(user, duration, expiresAt, reason: "Spamming");
+
+        // Assert — entity payload is non-null and contains at least one Bold entity (header)
+        Assert.That(capturedNotification, Is.Not.Null);
+        Assert.That(capturedNotification!.Telegram, Is.Not.Null,
+            "Notification.Telegram should carry an entity payload for temp-ban");
+        Assert.That(capturedNotification.Telegram!.Entities, Is.Not.Empty,
+            "Entity list should not be empty");
+        Assert.That(
+            capturedNotification.Telegram.Entities.Any(e => e.Type == global::Telegram.Bot.Types.Enums.MessageEntityType.Bold),
+            Is.True, "Entity list should contain at least one Bold entity (e.g. the header or field labels)");
+        // The plain-text Message (403-queue fallback) should not leak HTML tags
+        Assert.That(capturedNotification.Message, Does.Not.Contain("<b>"),
+            "Plain-text fallback must not contain HTML markup");
     }
 
     #endregion
