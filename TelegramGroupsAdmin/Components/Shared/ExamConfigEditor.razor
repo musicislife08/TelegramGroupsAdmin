@@ -125,9 +125,8 @@
                     Preview (In DM):
                 </MudText>
                 <TelegramMessagePreview
-                    PreviewText="@GetMcQuestionPreview()"
+                    Message="@GetMcQuestionPreview()"
                     ShowUserCommand="false"
-                    ShowWarning="false"
                     Buttons="@GetMcAnswerButtons()" />
             }
             else
@@ -217,9 +216,8 @@
                     Preview (In DM):
                 </MudText>
                 <TelegramMessagePreview
-                    PreviewText="@GetOpenEndedPreview()"
+                    Message="@GetOpenEndedPreview()"
                     ShowUserCommand="false"
-                    ShowWarning="false"
                     Buttons="@(Array.Empty<string[]>())" />
                 <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">
                     User sends their answer as a message
