@@ -705,61 +705,19 @@ public class WelcomeService(
     }
 
     /// <summary>
-    /// Splits an admin-configured announcement template on the <c>{username}</c> and
-    /// <c>{chat_name}</c> variable placeholders and builds a <see cref="TelegramMessage"/>
-    /// using <see cref="TelegramMessageBuilder"/>. Each literal segment between variables
-    /// becomes a <c>.Text()</c> call; <c>{username}</c> becomes a <c>.Mention(user)</c>
-    /// entity; <c>{chat_name}</c> becomes a <c>.Text(chat.Title)</c> call. Variables may
-    /// appear in any order and any number of times in the template.
+    /// Builds the trusted-bypass announcement (<c>{username}</c> → clickable
+    /// <c>text_mention</c>, <c>{chat_name}</c> → text) via the shared
+    /// <see cref="WelcomeMessageBuilder"/> so the production send and the admin live-preview
+    /// render identically. No HTML parser is involved — no CWE-79 surface.
     /// </summary>
     private static TelegramMessage BuildBypassAnnouncementMessage(
         string template,
         User user,
         Chat chat)
-    {
-        var userIdentity = UserIdentity.From(user);
-        var chatTitle = chat.Title ?? string.Empty;
-
-        // Walk the template left-to-right, emitting literal segments and variable substitutions
-        // in the order they appear.
-        var builder = new TelegramMessageBuilder();
-        var remaining = template.AsSpan();
-
-        while (!remaining.IsEmpty)
-        {
-            var usernameIdx = remaining.IndexOf(TrustedBypassConfig.UsernameVariable, StringComparison.Ordinal);
-            var chatNameIdx = remaining.IndexOf(TrustedBypassConfig.ChatNameVariable, StringComparison.Ordinal);
-
-            // Neither variable present — emit the rest as plain text.
-            if (usernameIdx < 0 && chatNameIdx < 0)
-            {
-                builder.Text(remaining.ToString());
-                break;
-            }
-
-            // Determine which variable appears first.
-            bool usernameFirst =
-                usernameIdx >= 0 &&
-                (chatNameIdx < 0 || usernameIdx <= chatNameIdx);
-
-            if (usernameFirst)
-            {
-                if (usernameIdx > 0)
-                    builder.Text(remaining[..usernameIdx].ToString());
-                builder.Mention(userIdentity);
-                remaining = remaining[(usernameIdx + TrustedBypassConfig.UsernameVariable.Length)..];
-            }
-            else
-            {
-                if (chatNameIdx > 0)
-                    builder.Text(remaining[..chatNameIdx].ToString());
-                builder.Text(chatTitle);
-                remaining = remaining[(chatNameIdx + TrustedBypassConfig.ChatNameVariable.Length)..];
-            }
-        }
-
-        return builder.Build();
-    }
+        => WelcomeMessageBuilder.BuildBypassTemplate(
+            template,
+            UserIdentity.From(user),
+            chat.Title ?? string.Empty);
 
     public async Task HandleCallbackQueryAsync(
         CallbackQuery callbackQuery,

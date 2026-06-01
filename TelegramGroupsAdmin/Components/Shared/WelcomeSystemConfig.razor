@@ -1,11 +1,12 @@
-@using Humanizer
 @using TelegramGroupsAdmin.Components.Shared.Settings
 @using TelegramGroupsAdmin.Configuration
 @using TelegramGroupsAdmin.Configuration.Models.Welcome
+@using TelegramGroupsAdmin.Core.Models
 @using TelegramGroupsAdmin.Core.Services
 @using TelegramGroupsAdmin.Core.Utilities
 @using TelegramGroupsAdmin.Telegram.Extensions
 @using TelegramGroupsAdmin.Telegram.Models
+@using TelegramGroupsAdmin.Telegram.Services.Welcome
 @using TelegramGroupsAdmin.Configuration.Services
 @inject IConfigService ConfigService
 @inject ISnackbar Snackbar
@@ -627,44 +628,44 @@
         Snackbar.Add("Defaults loaded. Click 'Save Configuration' to apply.", Severity.Info);
     }
 
+    // Sample user for live previews. Mirrors ExamConfigEditor's convention so the preview renders
+    // a real clickable text_mention entity (works even for usernameless users) — exactly what
+    // production produces — instead of a literal "@SampleUser" string.
+    private static readonly UserIdentity SampleUser = new(0, "SampleUser", null, null);
+
     private TelegramMessage GetPreviewText(string? template)
     {
         if (string.IsNullOrEmpty(template)) return TelegramMessage.Plain("(empty template)");
 
-        // Replace valid variables with sample data. Any mistyped {token} survives verbatim and
-        // renders visibly in the preview, so no separate "invalid variable" warning is needed.
-        var timeoutSeconds = _config?.TimeoutSeconds ?? 60;
-        var formattedTimeout = TimeSpan.FromSeconds(timeoutSeconds).Humanize(precision: 2);
-
-        var preview = template
-            .Replace("{username}", "@SampleUser")
-            .Replace("{chat_name}", "Sample Chat Group")
-            .Replace("{timeout}", formattedTimeout);
-
-        return TelegramMessage.Plain(preview);
+        // Render through the SAME builder production uses. {username} becomes a clickable mention
+        // entity, {timeout} is humanized, and any mistyped {token} survives verbatim (rendered
+        // visibly), so no separate "invalid variable" warning is needed.
+        return WelcomeMessageBuilder.BuildFromTemplate(
+            template,
+            SampleUser,
+            "Sample Chat Group",
+            _config?.TimeoutSeconds ?? 60);
     }
 
     /// <summary>
-    /// Preview helper for bypass announcement templates.
-    /// Substitutes only {username} and {chat_name} (TrustedBypassConfig's supported variables)
-    /// using caller-provided example values so the Admin and Trusted previews can differ.
+    /// Preview helper for bypass announcement templates. Routes through the shared
+    /// <see cref="WelcomeMessageBuilder.BuildBypassTemplate"/> production path so {username}
+    /// renders as a real clickable mention. The example name distinguishes the Admin vs Trusted
+    /// preview cards.
     /// </summary>
     private static TelegramMessage GetBypassPreviewText(string? template, string exampleUsername)
-    {
-        if (string.IsNullOrEmpty(template)) return TelegramMessage.Plain("(empty template)");
-
-        var preview = template
-            .Replace(TrustedBypassConfig.UsernameVariable, exampleUsername)
-            .Replace(TrustedBypassConfig.ChatNameVariable, "Example Chat");
-
-        return TelegramMessage.Plain(preview);
-    }
+        => string.IsNullOrEmpty(template)
+            ? TelegramMessage.Plain("(empty template)")
+            : WelcomeMessageBuilder.BuildBypassTemplate(
+                template,
+                new UserIdentity(0, exampleUsername, null, null),
+                "Example Chat");
 
     private static TelegramMessage GetAdminBypassPreviewText(string? template)
-        => GetBypassPreviewText(template, "@example_admin");
+        => GetBypassPreviewText(template, "example_admin");
 
     private static TelegramMessage GetTrustedBypassPreviewText(string? template)
-        => GetBypassPreviewText(template, "@example_trusted");
+        => GetBypassPreviewText(template, "example_trusted");
 
     private async Task InsertVariable(string variable)
     {

@@ -56,7 +56,13 @@ public static class WelcomeMessageBuilder
         string chatName)
         => BuildFromTemplate(config.MainWelcomeMessage, user, chatName, config.TimeoutSeconds);
 
-    private static TelegramMessage BuildFromTemplate(
+    /// <summary>
+    /// Builds a welcome template (<c>{username}</c> → clickable <c>text_mention</c>,
+    /// <c>{chat_name}</c> → text, <c>{timeout}</c> → humanized duration) from a raw template
+    /// string. Used by the deep-link welcome send and the admin live-preview so both render
+    /// through the identical substitution path.
+    /// </summary>
+    public static TelegramMessage BuildFromTemplate(
         string template,
         UserIdentity user,
         string chatName,
@@ -65,7 +71,25 @@ public static class WelcomeMessageBuilder
             .AppendTemplate(template, Substitutions(user, chatName, timeoutSeconds))
             .Build();
 
-    private static Dictionary<string, Action<TelegramMessageBuilder>> Substitutions(
+    /// <summary>
+    /// Builds a trusted-bypass announcement template. Only <c>{username}</c> (clickable
+    /// <c>text_mention</c>) and <c>{chat_name}</c> (text) are substituted — bypass templates
+    /// carry no <c>{timeout}</c>. Used by both the production announcement send and the admin
+    /// live-preview so they render identically.
+    /// </summary>
+    public static TelegramMessage BuildBypassTemplate(
+        string template,
+        UserIdentity user,
+        string chatName)
+        => new TelegramMessageBuilder()
+            .AppendTemplate(template, new Dictionary<string, Action<TelegramMessageBuilder>>
+            {
+                ["{username}"] = b => b.Mention(user),
+                ["{chat_name}"] = b => b.Text(chatName),
+            })
+            .Build();
+
+    private static IReadOnlyDictionary<string, Action<TelegramMessageBuilder>> Substitutions(
         UserIdentity user,
         string chatName,
         int timeoutSeconds)
