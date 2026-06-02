@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using System.Text.RegularExpressions;
 using Telegram.Bot.Types;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Metrics;
@@ -84,39 +85,20 @@ public partial class CommandRouter
             using var scope = _serviceProvider.CreateScope();
             var command = scope.ServiceProvider.GetRequiredKeyedService<IBotCommand>(commandName);
 
-            // Get actual permission level for all commands
-            var actualPermissionLevel = await GetPermissionLevelAsync(message.Chat.Id, message.From.Id, cancellationToken);
+            // Resolve the user's effective tier in this chat (web tier ⊕ chat-admin status).
+            var permissionLevel = await GetPermissionLevelAsync(message.Chat.Id, message.From.Id, cancellationToken);
 
-            // Special cases: /link, /start, /report, /help, and /invite bypass permission checks (accessible to everyone)
-            // BUT they still receive actual permission level for context (e.g., /help shows correct commands)
-            var bypassPermissionCheck = commandName is "link" or "start" or "report" or "help" or "invite";
-            var permissionLevel = bypassPermissionCheck ? Math.Max(actualPermissionLevel, command.MinPermissionLevel) : actualPermissionLevel;
-
-            // Check permission
-            if (!bypassPermissionCheck && permissionLevel < command.MinPermissionLevel)
+            // Gate: public commands are PermissionLevel.Member (the floor) so they never fail this.
+            if (permissionLevel < command.MinPermissionLevel)
             {
                 _logger.LogWarning(
-                    "User {User} attempted to use command /{Command} without sufficient permissions (has {UserLevel}, needs {RequiredLevel})",
+                    "User {User} attempted /{Command} without sufficient permission (has {UserLevel}, needs {RequiredLevel})",
                     TelegramDisplayName.Format(message.From.FirstName, message.From.LastName, message.From.Username, message.From.Id),
                     commandName, permissionLevel, command.MinPermissionLevel);
 
-                // Build appropriate message based on permission level and required level
-                string permissionMessage;
-                if (permissionLevel == -1 && command.MinPermissionLevel >= 1)
-                {
-                    // Regular user trying to use admin command
-                    permissionMessage = "❌ This command is only available to group administrators.";
-                }
-                else if (permissionLevel == -1)
-                {
-                    // Regular user trying to use a regular command (shouldn't happen with /help, /report exceptions)
-                    permissionMessage = "❌ You don't have permission to use this command.";
-                }
-                else
-                {
-                    // Linked user without sufficient permission level
-                    permissionMessage = $"❌ Insufficient permissions. This command requires {GetPermissionName(command.MinPermissionLevel)} level.";
-                }
+                var permissionMessage = command.MinPermissionLevel >= PermissionLevel.Admin
+                    ? "❌ This command is only available to group administrators."
+                    : "❌ You don't have permission to use this command.";
 
                 return new CommandResult(TelegramMessage.Plain(permissionMessage), true); // Auto-delete permission denied messages
             }
@@ -149,9 +131,8 @@ public partial class CommandRouter
     /// <summary>
     /// Get all available commands for a user's permission level
     /// </summary>
-    public IEnumerable<IBotCommand> GetAvailableCommands(int permissionLevel)
+    public IEnumerable<IBotCommand> GetAvailableCommands(PermissionLevel permissionLevel)
     {
-        // Create a scope to resolve commands (they're Scoped)
         using var scope = _serviceProvider.CreateScope();
 
         var commands = new List<IBotCommand>();
@@ -168,51 +149,24 @@ public partial class CommandRouter
     }
 
     /// <summary>
-    /// Get permission level for a Telegram user
-    /// Priority order:
-    /// 1. Linked web app user → their permission level (0-2, global across all chats)
-    /// 2. Telegram group creator → Owner (2, per-chat only)
-    /// 3. Telegram group admin → Admin (1, per-chat only)
-    /// 4. Not linked and not admin → -1 (no permission)
+    /// Resolves a Telegram user's effective permission tier in a specific chat via
+    /// <see cref="PermissionResolver"/>: their stored web tier (global) combined with their
+    /// Telegram admin/creator status in this chat (chat-scoped Admin).
     /// </summary>
-    private async Task<int> GetPermissionLevelAsync(long chatId, long telegramId, CancellationToken cancellationToken = default)
+    private async Task<PermissionLevel> GetPermissionLevelAsync(long chatId, long telegramId, CancellationToken cancellationToken = default)
     {
         using var scope = _serviceProvider.CreateScope();
 
-        // Check web app linking FIRST (global permissions, works in all chats)
-        // Optimized: Single query with JOIN instead of 2 separate queries
         var mappingRepository = scope.ServiceProvider.GetRequiredService<ITelegramUserMappingRepository>();
-        var permissionLevel = await mappingRepository.GetPermissionLevelByTelegramIdAsync(telegramId, cancellationToken);
+        var webTier = await mappingRepository.GetPermissionLevelByTelegramIdAsync(telegramId, cancellationToken);
 
-        if (permissionLevel.HasValue)
-        {
-            _logger.LogDebug("User {TelegramId} is linked to web app user with {PermissionLevel} permissions (global)",
-                telegramId, permissionLevel.Value);
-            return (int)permissionLevel.Value; // 0=Admin, 1=GlobalAdmin, 2=Owner (global)
-        }
-
-        // Check Telegram admin permissions (cached, per-chat only)
         var chatAdminsRepository = scope.ServiceProvider.GetRequiredService<IChatAdminsRepository>();
-        var adminPermissionLevel = await chatAdminsRepository.GetPermissionLevelAsync(chatId, telegramId, cancellationToken);
+        var isChatAdmin = await chatAdminsRepository.IsAdminAsync(chatId, telegramId, cancellationToken);
 
-        if (adminPermissionLevel > -1)
-        {
-            var roleName = adminPermissionLevel == 2 ? "creator" : "admin";
-            _logger.LogDebug("User {TelegramId} is Telegram {Role} in chat {ChatId}, granting {Level} permissions (per-chat)",
-                telegramId, roleName, chatId, adminPermissionLevel);
-            return adminPermissionLevel; // 1=Admin or 2=Creator (per-chat)
-        }
-
-        // Not linked and not admin
-        _logger.LogDebug("User {TelegramId} has no permissions in chat {ChatId}", telegramId, chatId);
-        return -1;
+        var effective = PermissionResolver.Resolve(webTier, isChatAdmin);
+        _logger.LogDebug(
+            "Resolved permission for {TelegramId} in chat {ChatId}: {Tier} (web={WebTier}, chatAdmin={IsChatAdmin})",
+            telegramId, chatId, effective, webTier, isChatAdmin);
+        return effective;
     }
-
-    private static string GetPermissionName(int level) => level switch
-    {
-        0 => "Admin",
-        1 => "GlobalAdmin",
-        2 => "Owner",
-        _ => "Unknown"
-    };
 }

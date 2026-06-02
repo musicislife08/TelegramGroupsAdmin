@@ -249,7 +249,7 @@ public class TelegramBotPollingHost(
         {
             // Register commands with different scopes based on permission levels
 
-            // Default scope - commands for all users (Admin level 0)
+            // Default scope - public commands for all users (Member tier)
             var defaultCommands = commandRouter.GetAvailableCommands(permissionLevel: CommandConstants.DefaultCommandPermissionLevel)
                 .Select(cmd => new BotCommand
                 {
@@ -263,7 +263,7 @@ public class TelegramBotPollingHost(
                 scope: new BotCommandScopeDefault(),
                 cancellationToken: cancellationToken);
 
-            // Admin scope - commands for group admins (Admin level 1+)
+            // Admin scope - adds moderation commands for group admins (Admin tier)
             var adminCommands = commandRouter.GetAvailableCommands(permissionLevel: CommandConstants.AdminCommandPermissionLevel)
                 .Select(cmd => new BotCommand
                 {
