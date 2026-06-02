@@ -76,4 +76,9 @@ public static class AuthenticationConstants
     /// Authorization policy name for global admin or owner access.
     /// </summary>
     public const string PolicyGlobalAdminOrOwner = "GlobalAdminOrOwner";
+
+    /// <summary>
+    /// Authorization policy name for owner-only access (infra/system settings).
+    /// </summary>
+    public const string PolicyOwnerOnly = "OwnerOnly";
 }
