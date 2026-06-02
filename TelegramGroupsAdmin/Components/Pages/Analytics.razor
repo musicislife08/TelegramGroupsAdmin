@@ -12,41 +12,45 @@
     <MudText Typo="Typo.body1" Class="mb-4">Deep-dive statistics and trends across all managed chats</MudText>
 
     <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" TabPanelsClass="pa-6" ActivePanelIndex="_activeTabIndex" ActivePanelIndexChanged="OnTabChanged">
-        <MudTabPanel Text="Content Detection" Icon="@Icons.Material.Filled.Shield">
-            <ContentDetectionAnalytics />
-        </MudTabPanel>
+        @if (_canSeeGlobalAnalytics)
+        {
+            <MudTabPanel Text="Content Detection" Icon="@Icons.Material.Filled.Shield">
+                <ContentDetectionAnalytics />
+            </MudTabPanel>
+        }
 
         <MudTabPanel Text="Message Trends" Icon="@Icons.Material.Filled.TrendingUp">
             <MessageTrends />
         </MudTabPanel>
 
-        <MudTabPanel Text="Performance" Icon="@Icons.Material.Filled.Speed">
-            <MudAlert Severity="Severity.Info" Class="mb-4">Performance metrics show global statistics across all chats to evaluate overall spam detection effectiveness.</MudAlert>
-            <PerformanceMetrics />
-        </MudTabPanel>
+        @if (_canSeeGlobalAnalytics)
+        {
+            <MudTabPanel Text="Performance" Icon="@Icons.Material.Filled.Speed">
+                <MudAlert Severity="Severity.Info" Class="mb-4">Performance metrics show global statistics across all chats to evaluate overall spam detection effectiveness.</MudAlert>
+                <PerformanceMetrics />
+            </MudTabPanel>
 
-        <MudTabPanel Text="Welcome Analytics" Icon="@Icons.Material.Filled.People">
-            <MudAlert Severity="Severity.Info" Class="mb-4">Welcome system metrics track user onboarding success rates, join trends, and per-chat performance.</MudAlert>
-            <WelcomeAnalytics />
-        </MudTabPanel>
+            <MudTabPanel Text="Welcome Analytics" Icon="@Icons.Material.Filled.People">
+                <MudAlert Severity="Severity.Info" Class="mb-4">Welcome system metrics track user onboarding success rates, join trends, and per-chat performance.</MudAlert>
+                <WelcomeAnalytics />
+            </MudTabPanel>
+        }
     </MudTabs>
 </MudContainer>
 
 @code {
+    [CascadingParameter] private WebUserIdentity? WebUser { get; set; }
+
     private int _activeTabIndex;
+    private bool _canSeeGlobalAnalytics;
 
     protected override void OnInitialized()
     {
+        _canSeeGlobalAnalytics = WebUser?.IsGlobalAdminOrHigher ?? false;
+
         // Parse URL fragment for tab selection
         var fragment = new Uri(Navigation.Uri).Fragment.TrimStart('#');
-        _activeTabIndex = fragment switch
-        {
-            "detection" or "spam" => 0,  // Support both for backwards compatibility
-            "trends" => 1,
-            "performance" => 2,
-            "welcome" => 3,
-            _ => 0
-        };
+        _activeTabIndex = FragmentToIndex(fragment);
 
         Navigation.LocationChanged += OnLocationChanged;
     }
@@ -54,14 +58,7 @@
     private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
     {
         var fragment = new Uri(e.Location).Fragment.TrimStart('#');
-        var newIndex = fragment switch
-        {
-            "detection" or "spam" => 0,  // Support both for backwards compatibility
-            "trends" => 1,
-            "performance" => 2,
-            "welcome" => 3,
-            _ => 0
-        };
+        var newIndex = FragmentToIndex(fragment);
 
         if (newIndex != _activeTabIndex)
         {
@@ -73,8 +70,31 @@
     private void OnTabChanged(int index)
     {
         _activeTabIndex = index;
+        Navigation.NavigateTo($"/analytics#{IndexToFragment(index)}", false);
+    }
 
-        var fragment = index switch
+    // For Admin only Message Trends renders (index 0). For GlobalAdmin+ all four render in declared order.
+    private int FragmentToIndex(string fragment)
+    {
+        if (!_canSeeGlobalAnalytics)
+            return 0; // Only Message Trends is visible
+
+        return fragment switch
+        {
+            "detection" or "spam" => 0,  // Support both for backwards compatibility
+            "trends" => 1,
+            "performance" => 2,
+            "welcome" => 3,
+            _ => 0
+        };
+    }
+
+    private string IndexToFragment(int index)
+    {
+        if (!_canSeeGlobalAnalytics)
+            return "trends"; // Only Message Trends is visible
+
+        return index switch
         {
             0 => "detection",
             1 => "trends",
@@ -82,8 +102,6 @@
             3 => "welcome",
             _ => "detection"
         };
-
-        Navigation.NavigateTo($"/analytics#{fragment}", false);
     }
 
     public void Dispose()
