@@ -14,31 +14,28 @@ namespace TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
 public class UnbanCommand : IBotCommand
 {
     private readonly ILogger<UnbanCommand> _logger;
-    private readonly IServiceProvider _serviceProvider;
     private readonly IBotModerationService _moderationService;
 
     public string Name => "unban";
     public string Description => "Remove ban from user";
     public string Usage => "/unban (reply to message)";
-    public int MinPermissionLevel => 1; // Admin required
+    public PermissionLevel MinPermissionLevel => PermissionLevel.Admin; // chat admin or higher
     public bool RequiresReply => true;
     public bool DeleteCommandMessage => false; // Keep visible for confirmation
     public int? DeleteResponseAfterSeconds => null;
 
     public UnbanCommand(
         ILogger<UnbanCommand> logger,
-        IServiceProvider serviceProvider,
         IBotModerationService moderationService)
     {
         _logger = logger;
-        _serviceProvider = serviceProvider;
         _moderationService = moderationService;
     }
 
     public async Task<CommandResult> ExecuteAsync(
         Message message,
         string[] args,
-        int userPermissionLevel,
+        PermissionLevel userPermission,
         CancellationToken cancellationToken = default)
     {
         if (message.ReplyToMessage == null)

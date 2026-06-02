@@ -1,3 +1,5 @@
+using TelegramGroupsAdmin.Core.Models;
+
 namespace TelegramGroupsAdmin.Telegram.Constants;
 
 /// <summary>
@@ -15,13 +17,9 @@ public static class CommandConstants
     /// </summary>
     public static readonly TimeSpan DefaultMuteDuration = TimeSpan.FromMinutes(5);
 
-    /// <summary>
-    /// Minimum permission level for default commands (regular users)
-    /// </summary>
-    public const int DefaultCommandPermissionLevel = 0;
+    /// <summary>Tier whose command set is registered in the default (all-users) Telegram scope.</summary>
+    public const PermissionLevel DefaultCommandPermissionLevel = PermissionLevel.Member;
 
-    /// <summary>
-    /// Minimum permission level for admin commands
-    /// </summary>
-    public const int AdminCommandPermissionLevel = 1;
+    /// <summary>Tier whose command set is registered in the group-admin Telegram scope.</summary>
+    public const PermissionLevel AdminCommandPermissionLevel = PermissionLevel.Admin;
 }

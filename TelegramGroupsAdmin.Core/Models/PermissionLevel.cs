@@ -7,6 +7,10 @@ namespace TelegramGroupsAdmin.Core.Models;
 /// </summary>
 public enum PermissionLevel
 {
+    /// <summary>No privileges — regular member. Computed at request time; never persisted.</summary>
+    [Display(Name = "Member")]
+    Member = -1,
+
     /// <summary>Chat-scoped moderation - Can view/moderate only chats they're Telegram admin in, read-only global settings, edit per-chat overrides</summary>
     [Display(Name = "Admin")]
     Admin = 0,

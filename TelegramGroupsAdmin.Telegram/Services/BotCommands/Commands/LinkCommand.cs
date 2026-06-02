@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Repositories;
 
@@ -14,7 +15,7 @@ public class LinkCommand : IBotCommand
     public string Name => "link";
     public string Description => "Link your Telegram account to web app";
     public string Usage => "/link <token>";
-    public int MinPermissionLevel => 0; // Anyone can link
+    public PermissionLevel MinPermissionLevel => PermissionLevel.Member; // everyone
     public bool RequiresReply => false;
     public bool DeleteCommandMessage => true; // Delete for security (contains token)
     public int? DeleteResponseAfterSeconds => null;
@@ -30,7 +31,7 @@ public class LinkCommand : IBotCommand
     public async Task<CommandResult> ExecuteAsync(
         Message message,
         string[] args,
-        int userPermissionLevel,
+        PermissionLevel userPermission,
         CancellationToken cancellationToken = default)
     {
         // Validate token argument

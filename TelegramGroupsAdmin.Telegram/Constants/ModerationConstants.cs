@@ -11,11 +11,6 @@ public static class ModerationConstants
     public static readonly TimeSpan DefaultWarningExpiry = TimeSpan.FromDays(90);
 
     /// <summary>
-    /// Minimum permission level required for admin commands (0 = regular user, 1 = admin, 2 = owner)
-    /// </summary>
-    public const int AdminPermissionLevel = 1;
-
-    /// <summary>
     /// Number of chats affected when operation succeeds (single chat operations)
     /// </summary>
     public const int SingleChatSuccess = 1;

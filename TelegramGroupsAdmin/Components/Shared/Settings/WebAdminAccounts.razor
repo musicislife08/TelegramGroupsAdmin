@@ -76,7 +76,7 @@
                 </MudTd>
                 <MudTd DataLabel="Permission Level">
                     <MudChip T="string" Size="Size.Small" Color="@GetPermissionColor((PermissionLevel)context.PermissionLevelInt)">
-                        @GetPermissionName((PermissionLevel)context.PermissionLevelInt)
+                        @((PermissionLevel)context.PermissionLevelInt).GetDisplayName()
                     </MudChip>
                 </MudTd>
                 <MudTd DataLabel="Status">
@@ -289,7 +289,7 @@
             try
             {
                 await UserManagementService.UpdatePermissionLevelAsync(user.WebUser.Id, (int)newLevel, WebUser!.Id, (int)WebUser!.PermissionLevel);
-                Snackbar.Add($"Updated {user.WebUser.Email} to {GetPermissionName(newLevel)}", Severity.Success);
+                Snackbar.Add($"Updated {user.WebUser.Email} to {newLevel.GetDisplayName()}", Severity.Success);
                 await LoadUsersAsync();
             }
             catch (Exception ex)
@@ -382,14 +382,6 @@
             }
         }
     }
-
-    private static string GetPermissionName(PermissionLevel level) => level switch
-    {
-        PermissionLevel.Admin => "Admin",
-        PermissionLevel.GlobalAdmin => "GlobalAdmin",
-        PermissionLevel.Owner => "Owner",
-        _ => "Unknown"
-    };
 
     private static Color GetPermissionColor(PermissionLevel level) => level switch
     {

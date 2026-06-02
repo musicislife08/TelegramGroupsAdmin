@@ -1,4 +1,6 @@
+using Microsoft.Extensions.DependencyInjection;
 using Telegram.Bot.Types;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
@@ -10,24 +12,6 @@ public class HelpCommand : IBotCommand
 {
     private readonly IServiceProvider _serviceProvider;
 
-    // Static metadata for all commands (avoids reflection complexity with DI)
-    // Note: /start is excluded - it's only for deep links and DMs
-    private static readonly List<CommandMetadata> _commandMetadata =
-    [
-        new("report", "Report message for admin review", 0),
-        new("invite", "Get invite link for this chat", -1),
-        new("link", "Link your Telegram account to web app", 1),
-        new("spam", "Mark message as spam and delete it", 1),
-        new("ban", "Ban user from all managed chats", 1),
-        new("tempban", "Temporarily ban user with auto-unrestriction", 1),
-        new("trust", "Whitelist user (bypass spam detection)", 1),
-        new("unban", "Remove ban from user", 1),
-        new("warn", "Issue warning to user", 1),
-        new("delete", "[TEST] Delete a message", 1)
-    ];
-
-    private record CommandMetadata(string Name, string Description, int MinPermissionLevel);
-
     public HelpCommand(IServiceProvider serviceProvider)
     {
         _serviceProvider = serviceProvider;
@@ -36,7 +20,7 @@ public class HelpCommand : IBotCommand
     public string Name => "help";
     public string Description => "Show available commands";
     public string Usage => "/help";
-    public int MinPermissionLevel => 0; // Everyone can see help
+    public PermissionLevel MinPermissionLevel => PermissionLevel.Member; // everyone
     public bool RequiresReply => false;
     public bool DeleteCommandMessage => false; // Keep visible for reference
     public int? DeleteResponseAfterSeconds => 30; // Auto-delete help response after 30 seconds
@@ -44,40 +28,39 @@ public class HelpCommand : IBotCommand
     public Task<CommandResult> ExecuteAsync(
         Message message,
         string[] args,
-        int userPermissionLevel,
+        PermissionLevel userPermission,
         CancellationToken cancellationToken = default)
     {
+        using var scope = _serviceProvider.CreateScope();
+        var available = CommandNames.All
+            .Select(name => scope.ServiceProvider.GetRequiredKeyedService<IBotCommand>(name))
+            .Where(c => c.Name != "start")                  // /start is deep-link/DM-only, not listed
+            .Where(c => c.MinPermissionLevel <= userPermission)
+            .OrderBy(c => c.Name)
+            .ToList();
+
+        var publicCommands = available.Where(c => c.MinPermissionLevel < PermissionLevel.Admin).ToList();
+        var adminCommands = available.Where(c => c.MinPermissionLevel >= PermissionLevel.Admin).ToList();
+
         var builder = new TelegramMessageBuilder()
             .Text("🤖 ").Bold("TelegramGroupsAdmin Bot").LineBreak()
             .LineBreak();
 
-        var availableCommands = _commandMetadata
-            .Where(c => c.MinPermissionLevel <= userPermissionLevel)
-            .ToList();
-
-        // Group by permission level
-        var readOnlyCommands = availableCommands.Where(c => c.MinPermissionLevel == 0).ToList();
-        var adminCommands = availableCommands.Where(c => c.MinPermissionLevel >= 1).ToList();
-
-        // Show Admin commands (including self)
-        AppendCommandLine(builder, GetCommandEmoji("help"), "help", Description);
-
-        foreach (var cmd in readOnlyCommands)
+        foreach (var c in publicCommands)
         {
-            AppendCommandLine(builder, GetCommandEmoji(cmd.Name), cmd.Name, cmd.Description);
+            AppendCommandLine(builder, GetCommandEmoji(c.Name), c.Name, c.Description);
         }
 
-        // Show Admin commands
-        if (adminCommands.Any() && userPermissionLevel >= 1)
+        if (adminCommands.Count > 0 && userPermission >= PermissionLevel.Admin)
         {
             builder.LineBreak().Bold("Admin Commands:").LineBreak();
-            foreach (var cmd in adminCommands)
+            foreach (var c in adminCommands)
             {
-                AppendCommandLine(builder, GetCommandEmoji(cmd.Name), cmd.Name, cmd.Description);
+                AppendCommandLine(builder, GetCommandEmoji(c.Name), c.Name, c.Description);
             }
         }
 
-        builder.LineBreak().Italic($"Permission: {GetPermissionName(userPermissionLevel)}");
+        builder.LineBreak().Italic($"Permission: {userPermission.GetDisplayName()}");
 
         return Task.FromResult(new CommandResult(builder.Build(), DeleteCommandMessage, DeleteResponseAfterSeconds));
     }
@@ -95,6 +78,10 @@ public class HelpCommand : IBotCommand
         "start" => "👋",
         "report" => "📢",
         "invite" => "🔗",
+        "link" => "🔑",
+        "mystatus" => "👤",
+        "mute" => "🔇",
+        "delete" => "🗑️",
         "spam" => "🚫",
         "ban" => "⛔",
         "tempban" => "⏱️",
@@ -102,13 +89,5 @@ public class HelpCommand : IBotCommand
         "unban" => "🔓",
         "warn" => "⚠️",
         _ => "🔹"
-    };
-
-    private static string GetPermissionName(int level) => level switch
-    {
-        0 => "Admin",
-        1 => "GlobalAdmin",
-        2 => "Owner",
-        _ => "Unknown"
     };
 }

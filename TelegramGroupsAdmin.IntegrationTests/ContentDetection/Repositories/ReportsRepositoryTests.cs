@@ -350,20 +350,54 @@ public class ReportsRepositoryTests
     }
 
     [Test]
-    public async Task GetPendingCountAsync_ReturnsCorrectCount()
+    public async Task GetPendingCountAsync_WithGlobalChatId_CountsAllPending()
     {
-        // Arrange
+        // Arrange — reports in different chats
         await _repository!.InsertContentReportAsync(CreateTestReport(messageId: 1));
         await _repository.InsertContentReportAsync(CreateTestReport(messageId: 2));
         var reviewedId = await _repository.InsertContentReportAsync(CreateTestReport(messageId: 3));
 
         await _repository.UpdateStatusAsync(reviewedId, ReportStatus.Reviewed, "admin", "Spam");
 
-        // Act
-        var count = await _repository.GetPendingCountAsync();
+        // Act — [0] (GlobalChatId) means global / no filter
+        var count = await _repository.GetPendingCountAsync(new long[] { 0L });
+
+        // Assert — 2 pending, 1 reviewed (excluded)
+        Assert.That(count, Is.EqualTo(2));
+    }
+
+    [Test]
+    public async Task GetPendingCountAsync_WithChatIdCollection_CountsOnlyThoseChats()
+    {
+        // Arrange — pending reports across three chats
+        const long chatA = -1001000000001;
+        const long chatB = -1001000000002;
+        const long chatC = -1001000000003;
+
+        await _repository!.InsertContentReportAsync(CreateTestReport(messageId: 1, chatId: chatA));
+        await _repository.InsertContentReportAsync(CreateTestReport(messageId: 2, chatId: chatA));
+        await _repository.InsertContentReportAsync(CreateTestReport(messageId: 3, chatId: chatB));
+        await _repository.InsertContentReportAsync(CreateTestReport(messageId: 4, chatId: chatC)); // excluded
+
+        // Act — count pending only in A and B
+        var count = await _repository.GetPendingCountAsync(new[] { chatA, chatB });
+
+        // Assert — 2 in A + 1 in B, C excluded
+        Assert.That(count, Is.EqualTo(3));
+    }
+
+    [Test]
+    public async Task GetPendingCountAsync_WithEmptyChatIdCollection_ReturnsZero()
+    {
+        // Arrange — seed some pending reports
+        await _repository!.InsertContentReportAsync(CreateTestReport(messageId: 10, chatId: -1001000000010));
+        await _repository.InsertContentReportAsync(CreateTestReport(messageId: 11, chatId: -1001000000011));
+
+        // Act — empty collection ⇒ no accessible chats ⇒ 0 rows (not global)
+        var count = await _repository.GetPendingCountAsync(Array.Empty<long>());
 
         // Assert
-        Assert.That(count, Is.EqualTo(2));
+        Assert.That(count, Is.EqualTo(0));
     }
 
     #endregion

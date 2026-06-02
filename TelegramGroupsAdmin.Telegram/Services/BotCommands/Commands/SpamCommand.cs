@@ -22,7 +22,7 @@ public class SpamCommand : IBotCommand
     public string Name => "spam";
     public string Description => "Mark message as spam and delete it";
     public string Usage => "/spam (reply to message)";
-    public int MinPermissionLevel => 1; // Admin required
+    public PermissionLevel MinPermissionLevel => PermissionLevel.Admin; // chat admin or higher
     public bool RequiresReply => true;
     public bool DeleteCommandMessage => true; // Clean up moderation command
     public int? DeleteResponseAfterSeconds => null;
@@ -40,7 +40,7 @@ public class SpamCommand : IBotCommand
     public async Task<CommandResult> ExecuteAsync(
         Message message,
         string[] args,
-        int userPermissionLevel,
+        PermissionLevel userPermission,
         CancellationToken cancellationToken = default)
     {
         if (message.ReplyToMessage == null)

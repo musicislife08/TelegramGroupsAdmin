@@ -29,7 +29,7 @@ public class BanCommand : IBotCommand
     public string Name => "ban";
     public string Description => "Ban user from all managed chats";
     public string Usage => "/ban (reply) | /ban @username | /ban <user_id> | /ban <name>";
-    public int MinPermissionLevel => 1; // Admin required
+    public PermissionLevel MinPermissionLevel => PermissionLevel.Admin; // chat admin or higher
     public bool RequiresReply => false; // Now supports multiple input methods
     public bool DeleteCommandMessage => true; // Clean up moderation command
     public int? DeleteResponseAfterSeconds => null;
@@ -51,7 +51,7 @@ public class BanCommand : IBotCommand
     public async Task<CommandResult> ExecuteAsync(
         Message message,
         string[] args,
-        int userPermissionLevel,
+        PermissionLevel userPermission,
         CancellationToken cancellationToken = default)
     {
         UserIdentity? targetIdentity = null;

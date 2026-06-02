@@ -24,7 +24,7 @@ public class TempBanCommand : IBotCommand
     public string Name => "tempban";
     public string Description => "Temporarily ban user with auto-unrestriction";
     public string Usage => "/tempban (reply to message) <5m|1h|24h> [reason]";
-    public int MinPermissionLevel => ModerationConstants.AdminPermissionLevel; // Admin required
+    public PermissionLevel MinPermissionLevel => PermissionLevel.Admin; // chat admin or higher
     public bool RequiresReply => true;
     public bool DeleteCommandMessage => true; // Clean up moderation command
     public int? DeleteResponseAfterSeconds => null;
@@ -42,7 +42,7 @@ public class TempBanCommand : IBotCommand
     public async Task<CommandResult> ExecuteAsync(
         Message message,
         string[] args,
-        int userPermissionLevel,
+        PermissionLevel userPermission,
         CancellationToken cancellationToken = default)
     {
         if (message.ReplyToMessage == null)

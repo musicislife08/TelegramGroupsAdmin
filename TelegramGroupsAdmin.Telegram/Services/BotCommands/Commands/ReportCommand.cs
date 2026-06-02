@@ -19,7 +19,7 @@ public class ReportCommand(
     public string Name => "report";
     public string Description => "Report message for admin review";
     public string Usage => "/report (reply to message)";
-    public int MinPermissionLevel => 0; // Anyone can report
+    public PermissionLevel MinPermissionLevel => PermissionLevel.Member; // everyone
     public bool RequiresReply => true;
     public bool DeleteCommandMessage => false; // Keep visible for confirmation
     public int? DeleteResponseAfterSeconds => null;
@@ -27,7 +27,7 @@ public class ReportCommand(
     public async Task<CommandResult> ExecuteAsync(
         Message message,
         string[] args,
-        int userPermissionLevel,
+        PermissionLevel userPermission,
         CancellationToken cancellationToken = default)
     {
         if (message.ReplyToMessage == null)

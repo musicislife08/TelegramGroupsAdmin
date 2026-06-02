@@ -86,7 +86,7 @@ public class AuthCookieService : IAuthCookieService
         {
             new(ClaimTypes.NameIdentifier, user.Id),
             new(ClaimTypes.Email, user.Email ?? ""),
-            new(ClaimTypes.Role, GetRoleName(user.PermissionLevel)),
+            new(ClaimTypes.Role, user.PermissionLevel.GetDisplayName()),
             new(CustomClaimTypes.PermissionLevel, ((int)user.PermissionLevel).ToString())
         };
 
@@ -95,14 +95,4 @@ public class AuthCookieService : IAuthCookieService
         return new ClaimsPrincipal(identity);
     }
 
-    /// <summary>
-    /// Converts permission level enum to role name string.
-    /// </summary>
-    private static string GetRoleName(PermissionLevel permissionLevel) => permissionLevel switch
-    {
-        PermissionLevel.Admin => "Admin",
-        PermissionLevel.GlobalAdmin => "GlobalAdmin",
-        PermissionLevel.Owner => "Owner",
-        _ => "Admin" // Default to lowest permission level
-    };
 }

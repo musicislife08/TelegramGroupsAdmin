@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
@@ -8,7 +9,7 @@ using TelegramGroupsAdmin.Telegram.Services.Bot;
 namespace TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
 
 /// <summary>
-/// /delete - TEMPORARY TEST COMMAND - Delete a message (testing Telegram.Bot API)
+/// /delete - Delete the message you reply to.
 /// </summary>
 public class DeleteCommand : IBotCommand
 {
@@ -16,9 +17,9 @@ public class DeleteCommand : IBotCommand
     private readonly IServiceProvider _serviceProvider;
 
     public string Name => "delete";
-    public string Description => "[TEST] Delete a message";
+    public string Description => "Delete the replied-to message";
     public string Usage => "/delete (reply to message)";
-    public int MinPermissionLevel => 1; // Admin required
+    public PermissionLevel MinPermissionLevel => PermissionLevel.Admin; // chat admin or higher
     public bool RequiresReply => true;
     public bool DeleteCommandMessage => true; // Clean up command message
     public int? DeleteResponseAfterSeconds => null;
@@ -34,7 +35,7 @@ public class DeleteCommand : IBotCommand
     public async Task<CommandResult> ExecuteAsync(
         Message message,
         string[] args,
-        int userPermissionLevel,
+        PermissionLevel userPermission,
         CancellationToken cancellationToken = default)
     {
         if (message.ReplyToMessage == null)
@@ -56,12 +57,12 @@ public class DeleteCommand : IBotCommand
                 cancellationToken);
 
             _logger.LogInformation(
-                "DELETE TEST: {Admin} deleted message {MessageId} in {Chat}",
-                message.From.ToLogInfo(),
+                "Deleted message {MessageId} in {Chat} by {Admin}",
                 targetMessage.MessageId,
-                message.Chat.ToLogInfo());
+                message.Chat.ToLogInfo(),
+                message.From.ToLogInfo());
 
-            return new CommandResult(TelegramMessage.Plain("✅ Message deleted successfully!\n\nThis is a temporary test command."), DeleteCommandMessage, DeleteResponseAfterSeconds);
+            return new CommandResult(TelegramMessage.Plain("✅ Message deleted successfully!"), DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
         catch (Exception ex)
         {

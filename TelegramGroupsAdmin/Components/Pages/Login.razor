@@ -177,7 +177,7 @@
             {
                 new(ClaimTypes.NameIdentifier, result.UserId!),
                 new(ClaimTypes.Email, result.Email!),
-                new(ClaimTypes.Role, GetRoleName(result.PermissionLevel!.Value)),
+                new(ClaimTypes.Role, result.PermissionLevel!.Value.GetDisplayName()),
                 new(CustomClaimTypes.PermissionLevel, ((int)result.PermissionLevel.Value).ToString())
             };
 
@@ -204,14 +204,6 @@
             Logger.LogError(ex, "Unexpected error during login for email {Email}", Model.Email);
         }
     }
-
-    private static string GetRoleName(PermissionLevel permissionLevel) => permissionLevel switch
-    {
-        PermissionLevel.Admin => "Admin",
-        PermissionLevel.GlobalAdmin => "GlobalAdmin",
-        PermissionLevel.Owner => "Owner",
-        _ => "Admin"
-    };
 
     public class LoginModel
     {

@@ -87,7 +87,7 @@ public static class ServiceCollectionExtensions
             services.AddAuthorizationBuilder()
                 .AddPolicy(AuthenticationConstants.PolicyGlobalAdminOrOwner, policy =>
                     policy.RequireRole("GlobalAdmin", "Owner"))
-                .AddPolicy("OwnerOnly", policy =>
+                .AddPolicy(AuthenticationConstants.PolicyOwnerOnly, policy =>
                     policy.RequireRole("Owner"));
 
             services.AddCascadingAuthenticationState();

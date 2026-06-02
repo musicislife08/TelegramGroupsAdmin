@@ -6,6 +6,7 @@ using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.IntegrationTests.TestData;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
 using UiModels = TelegramGroupsAdmin.Telegram.Models;
 
@@ -121,7 +122,7 @@ public class TelegramUserRepositoryTests
         // Search by old username — should find the user via username_history join
         var (items, totalCount) = await _repository!.GetPagedUsersAsync(
             UiModels.UserListFilter.Active, skip: 0, take: 10,
-            searchText: "old_name", chatIds: null,
+            searchText: "old_name", chatIds: new List<long> { 0L }, // GlobalChatId ⇒ no chat filter
             sortLabel: null, sortDescending: false);
 
         Assert.That(totalCount, Is.EqualTo(1));
@@ -145,7 +146,7 @@ public class TelegramUserRepositoryTests
         // Search by old first name — should find the user via username_history join
         var (items, totalCount) = await _repository!.GetPagedUsersAsync(
             UiModels.UserListFilter.Active, skip: 0, take: 10,
-            searchText: "OldFirst", chatIds: null,
+            searchText: "OldFirst", chatIds: new List<long> { 0L }, // GlobalChatId ⇒ no chat filter
             sortLabel: null, sortDescending: false);
 
         Assert.That(totalCount, Is.EqualTo(1));
@@ -166,11 +167,85 @@ public class TelegramUserRepositoryTests
             await historyRepo.InsertAsync(userId, "historic_handle", "Present", "User");
         }
 
-        // Tab counts filtered by the old name must include the user in the active count
+        // GlobalChatId (0) ⇒ global / no filter; tab counts should include the seeded user in the active count.
         var counts = await _repository!.GetUserTabCountsAsync(
-            chatIds: null, searchText: "historic_handle");
+            chatIds: new List<long> { 0L }, searchText: "historic_handle");
 
         Assert.That(counts.ActiveCount, Is.GreaterThanOrEqualTo(1));
+    }
+
+    [Test]
+    public async Task GetUserTabCountsAsync_WithEmptyChatIds_ReturnsZeroCounts()
+    {
+        // Empty list ⇒ no accessible chats ⇒ nothing visible (0 rows, not global).
+        var counts = await _repository!.GetUserTabCountsAsync(
+            chatIds: new List<long>(), searchText: null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(counts.ActiveCount, Is.EqualTo(0));
+            Assert.That(counts.TrustedCount, Is.EqualTo(0));
+            Assert.That(counts.BannedCount, Is.EqualTo(0));
+        }
+    }
+
+    [Test]
+    public async Task GetPagedUsersAsync_WithEmptyChatIds_ReturnsNothing()
+    {
+        // Empty list ⇒ no accessible chats ⇒ 0 items (not global).
+        var (items, totalCount) = await _repository!.GetPagedUsersAsync(
+            UiModels.UserListFilter.Active, skip: 0, take: 50,
+            searchText: null, chatIds: new List<long>(),
+            sortLabel: null, sortDescending: false);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(totalCount, Is.EqualTo(0));
+            Assert.That(items, Is.Empty);
+        }
+    }
+
+    [Test]
+    public async Task GetPagedUsersAsync_WithGlobalChatId_ReturnsRows()
+    {
+        // [0] (GlobalChatId) ⇒ global / no filter ⇒ canonical active users are returned.
+        var (items, totalCount) = await _repository!.GetPagedUsersAsync(
+            UiModels.UserListFilter.Active, skip: 0, take: 50,
+            searchText: null, chatIds: new List<long> { 0L },
+            sortLabel: null, sortDescending: false);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(totalCount, Is.GreaterThan(0));
+            Assert.That(items, Is.Not.Empty);
+        }
+    }
+
+    [Test]
+    public async Task GetPagedUsersAsync_WithSpecificChatId_ReturnsOnlyThatChatsUsers()
+    {
+        // Scope to MainChat: the prolific canonical ham author (messages in MainChat) is included.
+        var (mainChatItems, mainChatTotal) = await _repository!.GetPagedUsersAsync(
+            UiModels.UserListFilter.Active, skip: 0, take: 1000,
+            searchText: null, chatIds: new List<long> { GoldenDatasetConstants.Chats.MainChatId },
+            sortLabel: null, sortDescending: false);
+
+        // Scope to a chat with no messages from anyone ⇒ no users.
+        const long emptyChatId = -100099999999999L;
+        var (emptyChatItems, emptyChatTotal) = await _repository.GetPagedUsersAsync(
+            UiModels.UserListFilter.Active, skip: 0, take: 1000,
+            searchText: null, chatIds: new List<long> { emptyChatId },
+            sortLabel: null, sortDescending: false);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(mainChatTotal, Is.GreaterThan(0));
+            Assert.That(mainChatItems.Any(u => u.TelegramUserId == TopHamAuthorId), Is.True,
+                "Top MainChat ham author should be visible when scoped to MainChat");
+            Assert.That(emptyChatTotal, Is.EqualTo(0),
+                "A chat with no messages yields no scoped users");
+            Assert.That(emptyChatItems, Is.Empty);
+        }
     }
 
     [Test]
@@ -225,7 +300,7 @@ public class TelegramUserRepositoryTests
 
         var (items, totalCount) = await _repository!.GetPagedUsersAsync(
             UiModels.UserListFilter.Active, skip: 0, take: 10,
-            searchText: "unique_old_handle", chatIds: null,
+            searchText: "unique_old_handle", chatIds: new List<long> { 0L }, // GlobalChatId ⇒ no chat filter
             sortLabel: null, sortDescending: false);
 
         Assert.Multiple(() =>

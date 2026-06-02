@@ -10,12 +10,6 @@ namespace TelegramGroupsAdmin.Telegram.Repositories;
 public interface IChatAdminsRepository
 {
     /// <summary>
-    /// Get admin permission level for a specific user in a specific chat
-    /// Returns 2 if creator, 1 if admin, -1 if not admin/not found
-    /// </summary>
-    Task<int> GetPermissionLevelAsync(long chatId, long telegramId, CancellationToken cancellationToken = default);
-
-    /// <summary>
     /// Check if user is an active admin in the specified chat
     /// </summary>
     Task<bool> IsAdminAsync(long chatId, long telegramId, CancellationToken cancellationToken = default);
