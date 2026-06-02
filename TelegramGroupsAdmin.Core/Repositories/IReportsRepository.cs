@@ -45,6 +45,15 @@ public interface IReportsRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Get count of pending reports restricted to the given set of chats.
+    /// An empty collection applies no chat filter (counts all pending).
+    /// </summary>
+    Task<int> GetPendingCountAsync(
+        IReadOnlyCollection<long> chatIds,
+        ReportType? type = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Update report status and reviewer info.
     /// </summary>
     Task UpdateStatusAsync(

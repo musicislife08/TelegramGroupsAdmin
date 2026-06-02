@@ -366,6 +366,40 @@ public class ReportsRepositoryTests
         Assert.That(count, Is.EqualTo(2));
     }
 
+    [Test]
+    public async Task GetPendingCountAsync_WithChatIdCollection_CountsOnlyThoseChats()
+    {
+        // Arrange — pending reports across three chats
+        const long chatA = -1001000000001;
+        const long chatB = -1001000000002;
+        const long chatC = -1001000000003;
+
+        await _repository!.InsertContentReportAsync(CreateTestReport(messageId: 1, chatId: chatA));
+        await _repository.InsertContentReportAsync(CreateTestReport(messageId: 2, chatId: chatA));
+        await _repository.InsertContentReportAsync(CreateTestReport(messageId: 3, chatId: chatB));
+        await _repository.InsertContentReportAsync(CreateTestReport(messageId: 4, chatId: chatC)); // excluded
+
+        // Act — count pending only in A and B
+        var count = await _repository.GetPendingCountAsync(new[] { chatA, chatB });
+
+        // Assert — 2 in A + 1 in B, C excluded
+        Assert.That(count, Is.EqualTo(3));
+    }
+
+    [Test]
+    public async Task GetPendingCountAsync_WithEmptyChatIdCollection_CountsAllPending()
+    {
+        // Arrange
+        await _repository!.InsertContentReportAsync(CreateTestReport(messageId: 10, chatId: -1001000000010));
+        await _repository.InsertContentReportAsync(CreateTestReport(messageId: 11, chatId: -1001000000011));
+
+        // Act — empty collection means "no chat filter" (count all pending)
+        var count = await _repository.GetPendingCountAsync(Array.Empty<long>());
+
+        // Assert
+        Assert.That(count, Is.EqualTo(2));
+    }
+
     #endregion
 
     #region Test Helpers

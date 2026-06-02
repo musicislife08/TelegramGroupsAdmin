@@ -120,6 +120,26 @@ public class ReportsRepository : IReportsRepository
         return await query.CountAsync(cancellationToken);
     }
 
+    public async Task<int> GetPendingCountAsync(
+        IReadOnlyCollection<long> chatIds,
+        ReportType? type = null,
+        CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        var query = context.Reports
+            .AsNoTracking()
+            .Where(r => r.Status == (int)ReportStatus.Pending);
+
+        if (chatIds.Count > 0)
+            query = query.Where(r => chatIds.Contains(r.ChatId));
+
+        if (type.HasValue)
+            query = query.Where(r => r.Type == (short)type.Value);
+
+        return await query.CountAsync(cancellationToken);
+    }
+
     public async Task UpdateStatusAsync(
         long reportId,
         ReportStatus status,
