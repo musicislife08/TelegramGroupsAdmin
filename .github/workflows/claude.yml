@@ -44,5 +44,5 @@ jobs:
           # prompt: 'Update the pull request description to include a summary of changes.'
 
           # System prompt applied to all @claude interactions
-          claude_args: '--system-prompt "IMPORTANT: Never use # followed by a number (e.g. #1, #2, #3) when numbering findings or list items in comments. GitHub renders these as issue/PR links, which pollutes unrelated issues with cross-references. Use 1., 2., 3. or Finding 1:, Finding 2: etc. instead."'
+          claude_args: '--system-prompt "IMPORTANT: Never use # followed by a number (e.g. #1, #2, #3) when numbering findings or list items in comments. GitHub renders these as issue/PR links, which pollutes unrelated issues with cross-references. Use 1., 2., 3. or Finding 1:, Finding 2: etc. instead." --allowed-tools "Read,Grep,Glob,Bash(gh issue view:*),Bash(gh search:*),Bash(gh issue list:*),Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*)"'
 
