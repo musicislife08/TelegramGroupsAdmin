@@ -24,7 +24,7 @@ public class WarnCommand : IBotCommand
     public string Name => "warn";
     public string Description => "Issue warning to user (auto-ban after threshold)";
     public string Usage => "/warn (reply to message) [reason]";
-    public int MinPermissionLevel => 1; // Admin required
+    public PermissionLevel MinPermissionLevel => PermissionLevel.Admin; // chat admin or higher
     public bool RequiresReply => true;
     public bool DeleteCommandMessage => false; // Keep visible as public warning
     public int? DeleteResponseAfterSeconds => null;
@@ -44,7 +44,7 @@ public class WarnCommand : IBotCommand
     public async Task<CommandResult> ExecuteAsync(
         Message message,
         string[] args,
-        int userPermissionLevel,
+        PermissionLevel userPermission,
         CancellationToken cancellationToken = default)
     {
         if (message.ReplyToMessage == null)

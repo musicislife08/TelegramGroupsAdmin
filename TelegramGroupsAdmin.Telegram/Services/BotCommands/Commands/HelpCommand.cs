@@ -1,4 +1,5 @@
 using Telegram.Bot.Types;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
@@ -36,7 +37,7 @@ public class HelpCommand : IBotCommand
     public string Name => "help";
     public string Description => "Show available commands";
     public string Usage => "/help";
-    public int MinPermissionLevel => 0; // Everyone can see help
+    public PermissionLevel MinPermissionLevel => PermissionLevel.Member; // everyone
     public bool RequiresReply => false;
     public bool DeleteCommandMessage => false; // Keep visible for reference
     public int? DeleteResponseAfterSeconds => 30; // Auto-delete help response after 30 seconds
@@ -44,7 +45,7 @@ public class HelpCommand : IBotCommand
     public Task<CommandResult> ExecuteAsync(
         Message message,
         string[] args,
-        int userPermissionLevel,
+        PermissionLevel userPermission,
         CancellationToken cancellationToken = default)
     {
         var builder = new TelegramMessageBuilder()
@@ -52,7 +53,7 @@ public class HelpCommand : IBotCommand
             .LineBreak();
 
         var availableCommands = _commandMetadata
-            .Where(c => c.MinPermissionLevel <= userPermissionLevel)
+            .Where(c => c.MinPermissionLevel <= userPermission)
             .ToList();
 
         // Group by permission level
@@ -68,7 +69,7 @@ public class HelpCommand : IBotCommand
         }
 
         // Show Admin commands
-        if (adminCommands.Any() && userPermissionLevel >= 1)
+        if (adminCommands.Any() && userPermission >= 1)
         {
             builder.LineBreak().Bold("Admin Commands:").LineBreak();
             foreach (var cmd in adminCommands)
@@ -77,7 +78,7 @@ public class HelpCommand : IBotCommand
             }
         }
 
-        builder.LineBreak().Italic($"Permission: {GetPermissionName(userPermissionLevel)}");
+        builder.LineBreak().Italic($"Permission: {GetPermissionName(userPermission)}");
 
         return Task.FromResult(new CommandResult(builder.Build(), DeleteCommandMessage, DeleteResponseAfterSeconds));
     }

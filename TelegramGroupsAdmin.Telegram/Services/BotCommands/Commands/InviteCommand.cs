@@ -28,7 +28,7 @@ public class InviteCommand : IBotCommand
     public string Name => "invite";
     public string Description => "Get invite link for this chat";
     public string Usage => "/invite";
-    public int MinPermissionLevel => -1; // Everyone can use this
+    public PermissionLevel MinPermissionLevel => PermissionLevel.Member; // everyone
     public bool RequiresReply => false;
     public bool DeleteCommandMessage => true; // Default, overridden by config
     public int? DeleteResponseAfterSeconds => 30; // Default, overridden by config
@@ -44,7 +44,7 @@ public class InviteCommand : IBotCommand
     public async Task<CommandResult> ExecuteAsync(
         Message message,
         string[] args,
-        int userPermissionLevel,
+        PermissionLevel userPermission,
         CancellationToken cancellationToken = default)
     {
         // Only works in groups/supergroups

@@ -23,7 +23,7 @@ public class TrustCommand : IBotCommand
     public string Name => "trust";
     public string Description => "Toggle trust status (bypass spam detection)";
     public string Usage => "/trust (reply to message) OR /trust <username>";
-    public int MinPermissionLevel => 1; // Admin required
+    public PermissionLevel MinPermissionLevel => PermissionLevel.Admin; // chat admin or higher
     public bool RequiresReply => false;
     public bool DeleteCommandMessage => false; // Keep visible for confirmation
     public int? DeleteResponseAfterSeconds => null;
@@ -41,7 +41,7 @@ public class TrustCommand : IBotCommand
     public async Task<CommandResult> ExecuteAsync(
         Message message,
         string[] args,
-        int userPermissionLevel,
+        PermissionLevel userPermission,
         CancellationToken cancellationToken = default)
     {
         User? targetUser = null;

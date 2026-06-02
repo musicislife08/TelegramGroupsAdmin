@@ -23,7 +23,7 @@ public class MuteCommand : IBotCommand
     public string Name => "mute";
     public string Description => "Temporarily mute user with auto-unmute";
     public string Usage => "/mute (reply to message) <5m|1h|24h> [reason]";
-    public int MinPermissionLevel => ModerationConstants.AdminPermissionLevel; // Admin required
+    public PermissionLevel MinPermissionLevel => PermissionLevel.Admin; // chat admin or higher
     public bool RequiresReply => true;
     public bool DeleteCommandMessage => true; // Clean up moderation command
     public int? DeleteResponseAfterSeconds => null;
@@ -41,7 +41,7 @@ public class MuteCommand : IBotCommand
     public async Task<CommandResult> ExecuteAsync(
         Message message,
         string[] args,
-        int userPermissionLevel,
+        PermissionLevel userPermission,
         CancellationToken cancellationToken = default)
     {
         if (message.ReplyToMessage == null)

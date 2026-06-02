@@ -52,7 +52,7 @@ public class StartCommand : IBotCommand
     public string Name => "start";
     public string Description => "Start conversation with bot";
     public string Usage => "/start [deeplink_payload]";
-    public int MinPermissionLevel => 0; // Everyone can use
+    public PermissionLevel MinPermissionLevel => PermissionLevel.Member; // everyone
     public bool RequiresReply => false;
     public bool DeleteCommandMessage => false;
     public int? DeleteResponseAfterSeconds => null;
@@ -60,7 +60,7 @@ public class StartCommand : IBotCommand
     public async Task<CommandResult> ExecuteAsync(
         Message message,
         string[] args,
-        int userPermissionLevel,
+        PermissionLevel userPermission,
         CancellationToken cancellationToken = default)
     {
         // Only respond to /start in private DMs, ignore in group chats

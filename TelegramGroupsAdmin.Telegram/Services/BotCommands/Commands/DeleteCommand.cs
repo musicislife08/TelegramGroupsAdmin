@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
@@ -18,7 +19,7 @@ public class DeleteCommand : IBotCommand
     public string Name => "delete";
     public string Description => "[TEST] Delete a message";
     public string Usage => "/delete (reply to message)";
-    public int MinPermissionLevel => 1; // Admin required
+    public PermissionLevel MinPermissionLevel => PermissionLevel.Admin; // chat admin or higher
     public bool RequiresReply => true;
     public bool DeleteCommandMessage => true; // Clean up command message
     public int? DeleteResponseAfterSeconds => null;
@@ -34,7 +35,7 @@ public class DeleteCommand : IBotCommand
     public async Task<CommandResult> ExecuteAsync(
         Message message,
         string[] args,
-        int userPermissionLevel,
+        PermissionLevel userPermission,
         CancellationToken cancellationToken = default)
     {
         if (message.ReplyToMessage == null)

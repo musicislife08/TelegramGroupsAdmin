@@ -35,7 +35,7 @@ public class MyStatusCommand : IBotCommand
     public string Name => "mystatus";
     public string Description => "Check your warning count, trust status, and other info (DM only)";
     public string Usage => "/mystatus";
-    public int MinPermissionLevel => 0; // Everyone can use
+    public PermissionLevel MinPermissionLevel => PermissionLevel.Member; // everyone
     public bool RequiresReply => false;
     public bool DeleteCommandMessage => true; // Delete command for privacy
     public int? DeleteResponseAfterSeconds => null;
@@ -43,7 +43,7 @@ public class MyStatusCommand : IBotCommand
     public async Task<CommandResult> ExecuteAsync(
         Message message,
         string[] args,
-        int userPermissionLevel,
+        PermissionLevel userPermission,
         CancellationToken cancellationToken = default)
     {
         if (message.From == null)

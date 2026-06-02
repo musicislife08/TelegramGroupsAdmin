@@ -20,7 +20,7 @@ public class UnbanCommand : IBotCommand
     public string Name => "unban";
     public string Description => "Remove ban from user";
     public string Usage => "/unban (reply to message)";
-    public int MinPermissionLevel => 1; // Admin required
+    public PermissionLevel MinPermissionLevel => PermissionLevel.Admin; // chat admin or higher
     public bool RequiresReply => true;
     public bool DeleteCommandMessage => false; // Keep visible for confirmation
     public int? DeleteResponseAfterSeconds => null;
@@ -38,7 +38,7 @@ public class UnbanCommand : IBotCommand
     public async Task<CommandResult> ExecuteAsync(
         Message message,
         string[] args,
-        int userPermissionLevel,
+        PermissionLevel userPermission,
         CancellationToken cancellationToken = default)
     {
         if (message.ReplyToMessage == null)
