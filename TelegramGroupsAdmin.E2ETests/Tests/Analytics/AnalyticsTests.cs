@@ -90,6 +90,58 @@ public class AnalyticsTests : SharedAuthenticatedTestBase
     }
 
     [Test]
+    public async Task Analytics_Admin_SeesOnlyMessageTrends()
+    {
+        // Arrange - login as Admin (chat-scoped permission)
+        await LoginAsAdminAsync();
+
+        // Act - navigate to analytics page
+        await _analyticsPage.NavigateAsync();
+
+        // Assert - the three global/leaky tabs are hidden (#509); only Message Trends renders.
+        var tabNames = await _analyticsPage.GetTabNamesAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(tabNames, Does.Contain("Message Trends"),
+                "Admin should see the Message Trends tab");
+            Assert.That(tabNames, Does.Not.Contain("Content Detection"),
+                "Admin should NOT see the Content Detection tab");
+            Assert.That(tabNames, Does.Not.Contain("Performance"),
+                "Admin should NOT see the Performance tab");
+            Assert.That(tabNames, Does.Not.Contain("Welcome Analytics"),
+                "Admin should NOT see the Welcome Analytics tab");
+        }
+    }
+
+    [Test]
+    public async Task Analytics_GlobalAdmin_SeesAllFourTabs()
+    {
+        // Arrange - login as GlobalAdmin
+        await LoginAsGlobalAdminAsync();
+
+        // Act - navigate to analytics page
+        await _analyticsPage.NavigateAsync();
+
+        // Assert - GlobalAdmin sees all four tabs
+        var tabNames = await _analyticsPage.GetTabNamesAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(tabNames, Has.Count.EqualTo(4),
+                "GlobalAdmin should see exactly four tabs");
+            Assert.That(tabNames, Does.Contain("Content Detection"),
+                "GlobalAdmin should see the Content Detection tab");
+            Assert.That(tabNames, Does.Contain("Message Trends"),
+                "GlobalAdmin should see the Message Trends tab");
+            Assert.That(tabNames, Does.Contain("Performance"),
+                "GlobalAdmin should see the Performance tab");
+            Assert.That(tabNames, Does.Contain("Welcome Analytics"),
+                "GlobalAdmin should see the Welcome Analytics tab");
+        }
+    }
+
+    [Test]
     public async Task Analytics_ContentDetectionTab_IsDefaultActive()
     {
         // Arrange - login as Owner

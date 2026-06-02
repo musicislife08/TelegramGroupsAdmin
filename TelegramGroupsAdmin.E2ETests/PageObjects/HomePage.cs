@@ -212,10 +212,31 @@ public class HomePage
 
     /// <summary>
     /// Checks if the Recent Activity section is visible.
+    /// Only GlobalAdmin/Owner see this panel (gated on _canSeeGlobalStats).
     /// </summary>
     public async Task<bool> IsActivityFeedVisibleAsync()
     {
         return await _page.Locator("text=Recent Activity").IsVisibleAsync();
+    }
+
+    /// <summary>
+    /// Checks if the Total Messages stat card is visible.
+    /// Only GlobalAdmin/Owner see this global stat card (gated on _canSeeGlobalStats).
+    /// </summary>
+    public async Task<bool> IsTotalMessagesCardVisibleAsync()
+    {
+        var statItem = _page.Locator(".mud-grid-item").Filter(new() { HasText = "Total Messages" });
+        return await statItem.IsVisibleAsync();
+    }
+
+    /// <summary>
+    /// Checks if the Pending Reports stat card is visible.
+    /// This scoped card is shown for all permission tiers (Admin, GlobalAdmin, Owner).
+    /// </summary>
+    public async Task<bool> IsPendingReportsCardVisibleAsync()
+    {
+        var statItem = _page.Locator(".mud-grid-item").Filter(new() { HasText = "Pending Reports" });
+        return await statItem.IsVisibleAsync();
     }
 
     /// <summary>

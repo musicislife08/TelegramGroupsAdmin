@@ -185,9 +185,15 @@ public class DashboardTests : AuthenticatedTestBase
         await _homePage.NavigateAsync();
         await _homePage.WaitForLoadAsync();
 
-        // Assert - Admin can view dashboard
-        Assert.That(await _homePage.AreStatsVisibleAsync(), Is.True,
-            "Admin should be able to view dashboard stats");
+        // Assert - Admin sees the scoped Overview (scoped cards present), not the global stats.
+        // Cross-chat-leak fix (#510): Admin no longer sees global message stats.
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(await _homePage.IsPendingReportsCardVisibleAsync(), Is.True,
+                "Admin should see the scoped Pending Reports card");
+            Assert.That(await _homePage.IsTotalMessagesCardVisibleAsync(), Is.False,
+                "Admin should NOT see the global Total Messages card");
+        }
     }
 
     [Test]
@@ -203,6 +209,48 @@ public class DashboardTests : AuthenticatedTestBase
         // Assert - GlobalAdmin can view dashboard
         Assert.That(await _homePage.AreStatsVisibleAsync(), Is.True,
             "GlobalAdmin should be able to view dashboard stats");
+    }
+
+    [Test]
+    public async Task Dashboard_Admin_HidesGlobalWidgets_ShowsScopedCards()
+    {
+        // Arrange - login as Admin (chat-scoped permission)
+        await LoginAsAdminAsync();
+
+        // Act
+        await _homePage.NavigateAsync();
+        await _homePage.WaitForLoadAsync();
+
+        // Assert - Admin sees scoped cards but NOT global widgets (#510 cross-chat-leak fix).
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(await _homePage.IsPendingReportsCardVisibleAsync(), Is.True,
+                "Admin should see the scoped Pending Reports card");
+            Assert.That(await _homePage.IsTotalMessagesCardVisibleAsync(), Is.False,
+                "Admin should NOT see the global Total Messages card");
+            Assert.That(await _homePage.IsActivityFeedVisibleAsync(), Is.False,
+                "Admin should NOT see the global Recent Activity panel");
+        }
+    }
+
+    [Test]
+    public async Task Dashboard_GlobalAdmin_ShowsAllWidgets()
+    {
+        // Arrange - login as GlobalAdmin
+        await LoginAsGlobalAdminAsync();
+
+        // Act
+        await _homePage.NavigateAsync();
+        await _homePage.WaitForLoadAsync();
+
+        // Assert - GlobalAdmin sees the global widgets (full dashboard).
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(await _homePage.IsTotalMessagesCardVisibleAsync(), Is.True,
+                "GlobalAdmin should see the global Total Messages card");
+            Assert.That(await _homePage.IsActivityFeedVisibleAsync(), Is.True,
+                "GlobalAdmin should see the global Recent Activity panel");
+        }
     }
 
     #region Enhanced Dashboard Tests (#173)
