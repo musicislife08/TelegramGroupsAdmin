@@ -9,6 +9,9 @@ namespace TelegramGroupsAdmin.Core.Models;
 /// </summary>
 public static class PermissionLevelExtensions
 {
+    /// <summary>
+    /// Returns the <see cref="DisplayAttribute.Name"/> for the given tier, falling back to the enum name.
+    /// </summary>
     public static string GetDisplayName(this PermissionLevel level)
     {
         var member = typeof(PermissionLevel).GetMember(level.ToString()).FirstOrDefault();
