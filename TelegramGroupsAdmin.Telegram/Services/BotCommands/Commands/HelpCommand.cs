@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
@@ -9,23 +10,12 @@ namespace TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
 /// </summary>
 public class HelpCommand : IBotCommand
 {
-    // Static metadata for all commands (avoids reflection complexity with DI)
-    // Note: /start is excluded - it's only for deep links and DMs
-    private static readonly List<CommandMetadata> _commandMetadata =
-    [
-        new("report", "Report message for admin review", PermissionLevel.Member),
-        new("invite", "Get invite link for this chat", PermissionLevel.Member),
-        new("link", "Link your Telegram account to web app", PermissionLevel.Member),
-        new("spam", "Mark message as spam and delete it", PermissionLevel.Admin),
-        new("ban", "Ban user from all managed chats", PermissionLevel.Admin),
-        new("tempban", "Temporarily ban user with auto-unrestriction", PermissionLevel.Admin),
-        new("trust", "Whitelist user (bypass spam detection)", PermissionLevel.Admin),
-        new("unban", "Remove ban from user", PermissionLevel.Admin),
-        new("warn", "Issue warning to user", PermissionLevel.Admin),
-        new("delete", "[TEST] Delete a message", PermissionLevel.Admin)
-    ];
+    private readonly IServiceProvider _serviceProvider;
 
-    private record CommandMetadata(string Name, string Description, PermissionLevel MinPermissionLevel);
+    public HelpCommand(IServiceProvider serviceProvider)
+    {
+        _serviceProvider = serviceProvider;
+    }
 
     public string Name => "help";
     public string Description => "Show available commands";
@@ -41,31 +31,32 @@ public class HelpCommand : IBotCommand
         PermissionLevel userPermission,
         CancellationToken cancellationToken = default)
     {
+        using var scope = _serviceProvider.CreateScope();
+        var available = CommandNames.All
+            .Select(name => scope.ServiceProvider.GetRequiredKeyedService<IBotCommand>(name))
+            .Where(c => c.Name != "start")                  // /start is deep-link/DM-only, not listed
+            .Where(c => c.MinPermissionLevel <= userPermission)
+            .OrderBy(c => c.Name)
+            .ToList();
+
+        var publicCommands = available.Where(c => c.MinPermissionLevel < PermissionLevel.Admin).ToList();
+        var adminCommands = available.Where(c => c.MinPermissionLevel >= PermissionLevel.Admin).ToList();
+
         var builder = new TelegramMessageBuilder()
             .Text("🤖 ").Bold("TelegramGroupsAdmin Bot").LineBreak()
             .LineBreak();
 
-        var availableCommands = _commandMetadata
-            .Where(c => c.MinPermissionLevel <= userPermission)
-            .ToList();
-
-        var publicCommands = availableCommands.Where(c => c.MinPermissionLevel < PermissionLevel.Admin).ToList();
-        var adminCommands = availableCommands.Where(c => c.MinPermissionLevel >= PermissionLevel.Admin).ToList();
-
-        // Show /help itself plus the public commands
-        AppendCommandLine(builder, GetCommandEmoji("help"), "help", Description);
-        foreach (var cmd in publicCommands)
+        foreach (var c in publicCommands)
         {
-            AppendCommandLine(builder, GetCommandEmoji(cmd.Name), cmd.Name, cmd.Description);
+            AppendCommandLine(builder, GetCommandEmoji(c.Name), c.Name, c.Description);
         }
 
-        // Show Admin commands only to admins
-        if (adminCommands.Any() && userPermission >= PermissionLevel.Admin)
+        if (adminCommands.Count > 0 && userPermission >= PermissionLevel.Admin)
         {
             builder.LineBreak().Bold("Admin Commands:").LineBreak();
-            foreach (var cmd in adminCommands)
+            foreach (var c in adminCommands)
             {
-                AppendCommandLine(builder, GetCommandEmoji(cmd.Name), cmd.Name, cmd.Description);
+                AppendCommandLine(builder, GetCommandEmoji(c.Name), c.Name, c.Description);
             }
         }
 
@@ -87,6 +78,10 @@ public class HelpCommand : IBotCommand
         "start" => "👋",
         "report" => "📢",
         "invite" => "🔗",
+        "link" => "🔑",
+        "mystatus" => "👤",
+        "mute" => "🔇",
+        "delete" => "🗑️",
         "spam" => "🚫",
         "ban" => "⛔",
         "tempban" => "⏱️",
