@@ -14,7 +14,6 @@ namespace TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
 public class UnbanCommand : IBotCommand
 {
     private readonly ILogger<UnbanCommand> _logger;
-    private readonly IServiceProvider _serviceProvider;
     private readonly IBotModerationService _moderationService;
 
     public string Name => "unban";
@@ -27,11 +26,9 @@ public class UnbanCommand : IBotCommand
 
     public UnbanCommand(
         ILogger<UnbanCommand> logger,
-        IServiceProvider serviceProvider,
         IBotModerationService moderationService)
     {
         _logger = logger;
-        _serviceProvider = serviceProvider;
         _moderationService = moderationService;
     }
 

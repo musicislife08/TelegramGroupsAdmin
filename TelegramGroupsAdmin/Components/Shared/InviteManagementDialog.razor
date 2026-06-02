@@ -46,7 +46,7 @@
                     </MudTd>
                     <MudTd DataLabel="Created">@FormatDate(context.CreatedAt)</MudTd>
                     <MudTd DataLabel="Permission">
-                        <MudChip T="string" Size="Size.Small" Color="@GetPermissionColor((int)context.PermissionLevel)">
+                        <MudChip T="string" Size="Size.Small" Color="@GetPermissionColor(context.PermissionLevel)">
                             @context.PermissionLevel.GetDisplayName()
                         </MudChip>
                     </MudTd>
@@ -226,11 +226,11 @@
         MudDialog?.Close(DialogResult.Ok(true));
     }
 
-    private static Color GetPermissionColor(int level) => level switch
+    private static Color GetPermissionColor(PermissionLevel level) => level switch
     {
-        0 => Color.Primary,
-        1 => Color.Info,
-        2 => Color.Secondary,
+        PermissionLevel.Admin => Color.Primary,
+        PermissionLevel.GlobalAdmin => Color.Info,
+        PermissionLevel.Owner => Color.Secondary,
         _ => Color.Error
     };
 
