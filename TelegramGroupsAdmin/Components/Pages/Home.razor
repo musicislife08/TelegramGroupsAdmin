@@ -3,6 +3,7 @@
 @using TelegramGroupsAdmin.Core.Repositories
 @using TelegramGroupsAdmin.Telegram.Models
 @using TelegramGroupsAdmin.Telegram.Services
+@using TelegramGroupsAdmin.Telegram.Repositories
 @using TelegramGroupsAdmin.Core.Utilities
 @using TelegramGroupsAdmin.Models.Analytics
 @using TelegramGroupsAdmin.Repositories
@@ -12,6 +13,7 @@
 @inject IReportsRepository ReportsRepository
 @inject IUserActionsRepository UserActionsRepository
 @inject ITelegramUserManagementService UserManagementService
+@inject IManagedChatsRepository ManagedChatsRepository
 @inject NavigationManager Navigation
 @inject ILogger<Home> Logger
 @attribute [Authorize]
@@ -27,73 +29,79 @@
     }
 
     @* Stats Summary *@
-    @if (_stats != null)
+    @if (!_loading)
     {
         <MudPaper Class="pa-4 mb-4" Elevation="2">
             <MudText Typo="Typo.h6" Class="mb-3">Overview</MudText>
             <MudGrid>
-                @* Row 1: Core message stats *@
-                <MudItem xs="12" sm="6" md="3">
-                    <MudStack AlignItems="AlignItems.Center">
-                        <MudIcon Icon="@Icons.Material.Filled.Message" Size="Size.Large" Color="Color.Primary" />
-                        <MudText Typo="Typo.h5">@_stats.TotalMessages</MudText>
-                        <MudText Typo="Typo.caption" Color="Color.Secondary">Total Messages</MudText>
-                    </MudStack>
-                </MudItem>
-                <MudItem xs="12" sm="6" md="3">
-                    <MudStack AlignItems="AlignItems.Center">
-                        <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Large" Color="Color.Secondary" />
-                        <MudText Typo="Typo.h5">@_stats.UniqueUsers</MudText>
-                        <MudText Typo="Typo.caption" Color="Color.Secondary">Unique Users</MudText>
-                    </MudStack>
-                </MudItem>
-                <MudItem xs="12" sm="6" md="3">
-                    <MudStack AlignItems="AlignItems.Center">
-                        <MudIcon Icon="@Icons.Material.Filled.Image" Size="Size.Large" Color="Color.Info" />
-                        <MudText Typo="Typo.h5">@_stats.PhotoCount</MudText>
-                        <MudText Typo="Typo.caption" Color="Color.Secondary">Images</MudText>
-                    </MudStack>
-                </MudItem>
-                <MudItem xs="12" sm="6" md="3">
-                    <MudStack AlignItems="AlignItems.Center">
-                        <MudIcon Icon="@Icons.Material.Filled.Update" Size="Size.Large" Color="Color.Tertiary" />
-                        <MudText Typo="Typo.h5">@GetTimeRangeDisplay()</MudText>
-                        <MudText Typo="Typo.caption" Color="Color.Secondary">Data Range</MudText>
-                    </MudStack>
-                </MudItem>
+                @* Row 1: Core message stats — GlobalAdmin/Owner only *@
+                @if (_canSeeGlobalStats && _stats != null)
+                {
+                    <MudItem xs="12" sm="6" md="3">
+                        <MudStack AlignItems="AlignItems.Center">
+                            <MudIcon Icon="@Icons.Material.Filled.Message" Size="Size.Large" Color="Color.Primary" />
+                            <MudText Typo="Typo.h5">@_stats.TotalMessages</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Total Messages</MudText>
+                        </MudStack>
+                    </MudItem>
+                    <MudItem xs="12" sm="6" md="3">
+                        <MudStack AlignItems="AlignItems.Center">
+                            <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Large" Color="Color.Secondary" />
+                            <MudText Typo="Typo.h5">@_stats.UniqueUsers</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Unique Users</MudText>
+                        </MudStack>
+                    </MudItem>
+                    <MudItem xs="12" sm="6" md="3">
+                        <MudStack AlignItems="AlignItems.Center">
+                            <MudIcon Icon="@Icons.Material.Filled.Image" Size="Size.Large" Color="Color.Info" />
+                            <MudText Typo="Typo.h5">@_stats.PhotoCount</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Images</MudText>
+                        </MudStack>
+                    </MudItem>
+                    <MudItem xs="12" sm="6" md="3">
+                        <MudStack AlignItems="AlignItems.Center">
+                            <MudIcon Icon="@Icons.Material.Filled.Update" Size="Size.Large" Color="Color.Tertiary" />
+                            <MudText Typo="Typo.h5">@GetTimeRangeDisplay()</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Data Range</MudText>
+                        </MudStack>
+                    </MudItem>
+                }
 
                 @* Row 2: Detection and moderation stats *@
-                <MudItem xs="12" sm="6" md="3">
-                    <MudStack AlignItems="AlignItems.Center">
-                        <MudIcon Icon="@Icons.Material.Filled.Warning" Size="Size.Large" Color="Color.Error" />
-                        <MudText Typo="Typo.h5">@(_dailySpamSummary?.TodaySpamCount ?? 0)</MudText>
-                        @if (_dailySpamSummary?.HasYesterdayData == true)
-                        {
-                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                                @if (_dailySpamSummary.IsImproving)
-                                {
-                                    <MudIcon Icon="@Icons.Material.Filled.TrendingDown" Size="Size.Small" Color="Color.Success" />
-                                    <MudText Typo="Typo.caption" Color="Color.Success">
-                                        @Math.Abs(_dailySpamSummary.SpamCountChange!.Value) less
-                                    </MudText>
-                                }
-                                else if (_dailySpamSummary.IsWorsening)
-                                {
-                                    <MudIcon Icon="@Icons.Material.Filled.TrendingUp" Size="Size.Small" Color="Color.Error" />
-                                    <MudText Typo="Typo.caption" Color="Color.Error">
-                                        @_dailySpamSummary.SpamCountChange!.Value more
-                                    </MudText>
-                                }
-                                else
-                                {
-                                    <MudIcon Icon="@Icons.Material.Filled.TrendingFlat" Size="Size.Small" Color="Color.Default" />
-                                    <MudText Typo="Typo.caption" Color="Color.Secondary">same</MudText>
-                                }
-                            </MudStack>
-                        }
-                        <MudText Typo="Typo.caption" Color="Color.Secondary">Spam Today</MudText>
-                    </MudStack>
-                </MudItem>
+                @if (_canSeeGlobalStats)
+                {
+                    <MudItem xs="12" sm="6" md="3">
+                        <MudStack AlignItems="AlignItems.Center">
+                            <MudIcon Icon="@Icons.Material.Filled.Warning" Size="Size.Large" Color="Color.Error" />
+                            <MudText Typo="Typo.h5">@(_dailySpamSummary?.TodaySpamCount ?? 0)</MudText>
+                            @if (_dailySpamSummary?.HasYesterdayData == true)
+                            {
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                    @if (_dailySpamSummary.IsImproving)
+                                    {
+                                        <MudIcon Icon="@Icons.Material.Filled.TrendingDown" Size="Size.Small" Color="Color.Success" />
+                                        <MudText Typo="Typo.caption" Color="Color.Success">
+                                            @Math.Abs(_dailySpamSummary.SpamCountChange!.Value) less
+                                        </MudText>
+                                    }
+                                    else if (_dailySpamSummary.IsWorsening)
+                                    {
+                                        <MudIcon Icon="@Icons.Material.Filled.TrendingUp" Size="Size.Small" Color="Color.Error" />
+                                        <MudText Typo="Typo.caption" Color="Color.Error">
+                                            @_dailySpamSummary.SpamCountChange!.Value more
+                                        </MudText>
+                                    }
+                                    else
+                                    {
+                                        <MudIcon Icon="@Icons.Material.Filled.TrendingFlat" Size="Size.Small" Color="Color.Default" />
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">same</MudText>
+                                    }
+                                </MudStack>
+                            }
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Spam Today</MudText>
+                        </MudStack>
+                    </MudItem>
+                }
                 <MudItem xs="12" sm="6" md="3">
                     <MudStack AlignItems="AlignItems.Center">
                         <MudIcon Icon="@Icons.Material.Filled.Block" Size="Size.Large" Color="Color.Error" />
@@ -162,40 +170,43 @@
             </MudPaper>
         </MudItem>
 
-        <MudItem xs="12" md="6">
-            <MudPaper Class="pa-4 mb-4" Elevation="2" Style="height: 100%;">
-                <MudText Typo="Typo.h6" Class="mb-3">Recent Activity</MudText>
-                @if (_recentActions == null || _recentActions.Count == 0)
-                {
-                    <MudText Typo="Typo.body2" Color="Color.Secondary">No recent moderation activity</MudText>
-                }
-                else
-                {
-                    <MudList T="UserActionRecord" Dense="true">
-                        @foreach (var action in _recentActions.Take(5))
-                        {
-                            <MudListItem Icon="@GetActionIcon(action.ActionType)"
-                                         IconColor="@GetActionColor(action.ActionType)">
-                                <MudStack Spacing="0">
-                                    <MudText Typo="Typo.body2">
-                                        <strong>@action.ActionType</strong> @action.TargetDisplayName
-                                    </MudText>
-                                    <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                        @DateTimeUtilities.FormatRelativeTimeCompact(action.IssuedAt) by @action.IssuedBy.DisplayName
-                                    </MudText>
-                                </MudStack>
-                            </MudListItem>
-                        }
-                    </MudList>
-                    @if (_recentActions.Count > 5)
+        @if (_canSeeGlobalStats)
+        {
+            <MudItem xs="12" md="6">
+                <MudPaper Class="pa-4 mb-4" Elevation="2" Style="height: 100%;">
+                    <MudText Typo="Typo.h6" Class="mb-3">Recent Activity</MudText>
+                    @if (_recentActions == null || _recentActions.Count == 0)
                     {
-                        <MudLink Href="/moderation" Typo="Typo.caption" Class="mt-2">
-                            View all @_recentActions.Count actions →
-                        </MudLink>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">No recent moderation activity</MudText>
                     }
-                }
-            </MudPaper>
-        </MudItem>
+                    else
+                    {
+                        <MudList T="UserActionRecord" Dense="true">
+                            @foreach (var action in _recentActions.Take(5))
+                            {
+                                <MudListItem Icon="@GetActionIcon(action.ActionType)"
+                                             IconColor="@GetActionColor(action.ActionType)">
+                                    <MudStack Spacing="0">
+                                        <MudText Typo="Typo.body2">
+                                            <strong>@action.ActionType</strong> @action.TargetDisplayName
+                                        </MudText>
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                            @DateTimeUtilities.FormatRelativeTimeCompact(action.IssuedAt) by @action.IssuedBy.DisplayName
+                                        </MudText>
+                                    </MudStack>
+                                </MudListItem>
+                            }
+                        </MudList>
+                        @if (_recentActions.Count > 5)
+                        {
+                            <MudLink Href="/moderation" Typo="Typo.caption" Class="mt-2">
+                                View all @_recentActions.Count actions →
+                            </MudLink>
+                        }
+                    }
+                </MudPaper>
+            </MudItem>
+        }
     </MudGrid>
 
     @if (_stats is { TotalMessages: 0 })
@@ -210,8 +221,12 @@
     private const int MaxRecentActivityItems = 10;
     private const string DefaultTimeZoneId = "America/New_York";
 
+    [CascadingParameter] private WebUserIdentity? WebUser { get; set; }
+
+    private bool _canSeeGlobalStats;
+    private List<long> _accessibleChatIds = [];
+
     private HistoryStats? _stats;
-    private SpamSummaryStats? _detectionStats;
     private DailySpamSummary? _dailySpamSummary;
     private List<UserActionRecord>? _recentActions;
     private int _pendingReportsCount;
@@ -239,27 +254,39 @@
 
         try
         {
-            // Load all dashboard data in parallel for fast loading
-            var statsTask = MessageStatsService.GetStatsAsync();
-            var detectionStatsTask = MessageStatsService.GetDetectionStatsAsync();
-            var dailySpamTask = AnalyticsRepository.GetDailySpamSummaryAsync(DefaultTimeZoneId);
-            var pendingReportsTask = ReportsRepository.GetPendingCountAsync();
-            var recentActionsTask = UserActionsRepository.GetRecentAsync(MaxRecentActivityItems);
-            var tabCountsTask = UserManagementService.GetUserTabCountsAsync(chatIds: null, searchText: null);
+            _canSeeGlobalStats = WebUser?.IsGlobalAdminOrHigher ?? false;
+            _accessibleChatIds = _canSeeGlobalStats || WebUser is null
+                ? []
+                : (await ManagedChatsRepository.GetUserAccessibleChatsAsync(WebUser.Id, WebUser.PermissionLevel))
+                    .Select(c => c.Identity.Id)
+                    .ToList();
 
-            await Task.WhenAll(
-                statsTask,
-                detectionStatsTask,
-                dailySpamTask,
-                pendingReportsTask,
-                recentActionsTask,
-                tabCountsTask);
+            // Scoped widgets (always shown) — restricted to accessible chats for non-global viewers.
+            var pendingReportsTask = _canSeeGlobalStats
+                ? ReportsRepository.GetPendingCountAsync()
+                : ReportsRepository.GetPendingCountAsync(_accessibleChatIds);
+            var tabCountsTask = UserManagementService.GetUserTabCountsAsync(
+                chatIds: _canSeeGlobalStats ? null : _accessibleChatIds, searchText: null);
 
-            _stats = await statsTask;
-            _detectionStats = await detectionStatsTask;
-            _dailySpamSummary = await dailySpamTask;
+            if (_canSeeGlobalStats)
+            {
+                // Global widgets — GlobalAdmin/Owner only (hidden for Admin; proper per-chat scoping is #510).
+                var statsTask = MessageStatsService.GetStatsAsync();
+                var dailySpamTask = AnalyticsRepository.GetDailySpamSummaryAsync(DefaultTimeZoneId);
+                var recentActionsTask = UserActionsRepository.GetRecentAsync(MaxRecentActivityItems);
+
+                await Task.WhenAll(pendingReportsTask, tabCountsTask, statsTask, dailySpamTask, recentActionsTask);
+
+                _stats = await statsTask;
+                _dailySpamSummary = await dailySpamTask;
+                _recentActions = await recentActionsTask;
+            }
+            else
+            {
+                await Task.WhenAll(pendingReportsTask, tabCountsTask);
+            }
+
             _pendingReportsCount = await pendingReportsTask;
-            _recentActions = await recentActionsTask;
 
             var tabCounts = await tabCountsTask;
             _trustedUsersCount = tabCounts.TrustedCount;
