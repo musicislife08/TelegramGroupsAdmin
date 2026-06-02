@@ -64,6 +64,24 @@ Consequences (all conformant with the model):
 - A native Telegram **creator** → **Admin** (not Owner).
 - A **GlobalAdmin/Owner** → their tier in **every** chat, administered or not.
 
+### Performance note (resolver ordering)
+
+The resolver does up to two DB lookups (web mapping, then `chat_admins`); neither is
+cached today, and it runs **only on slash-commands** (guarded by `IsCommand` in
+`MessageProcessingService`), not per message — so it is not a throughput hot path.
+
+We deliberately keep the **accurate, web-tier-first** ordering rather than a
+"chat-admin-first, skip the web lookup" short-circuit. The short-circuit would save one
+query for non-web chat admins, but would mislabel a Global/Owner web user who is *also* a
+chat admin of a chat as "Admin" in that chat — re-introducing a smaller form of the very
+#507 bug this work fixes (e.g., the Owner is a chat admin/creator in ~19 chats and would
+show "Admin" in most of them).
+
+If lower latency is ever wanted without sacrificing accuracy, the safe lever is to run the
+two lookups **concurrently** (`Task.WhenAll`) or fold them into one joined query — not to
+reorder-and-skip. A fully unified single-source lookup would be a larger storage-layer
+change and is explicitly out of scope here (worth revisiting later).
+
 ### Reference implementation already in the codebase
 
 `ManagedChatsRepository.GetUserAccessibleChatsAsync` already implements the scope rule
@@ -101,6 +119,14 @@ A `+1` renumber to a contiguous `Member=0` ladder was considered and **rejected*
 permission-column migration is high-risk (a silent off-by-one is a security incident)
 for a purely cosmetic gain, since the enum is the single source of truth either way.
 
+**No orphaned enum.** The solution has exactly one permission enum (`PermissionLevel`);
+unification *extends* it (adds `Member`) and adopts it on the bot side, rather than
+collapsing two enums into one. So nothing is deleted *as an enum*. What is removed are the
+redundant **bare-int** artifacts the unification replaces — most notably
+`ModerationConstants.AdminPermissionLevel = 1` (an obsolete magic int that encodes the old
+scale where Admin was `1`; under the unified enum Admin is `0`, so moderation commands
+declare `PermissionLevel.Admin` directly and the constant is deleted).
+
 ## Architecture changes
 
 ### Bot side (Telegram)
@@ -118,7 +144,8 @@ for a purely cosmetic gain, since the enum is the single source of truth either 
      `PermissionLevel.Member`,
    - moderation commands (`ban`, `spam`, `mute`, `tempban`, `trust`, `unban`, `warn`,
      `delete`) → `PermissionLevel.Admin`.
-   (`ModerationConstants.AdminPermissionLevel` updated accordingly.)
+   (`ModerationConstants.AdminPermissionLevel = 1` is **deleted** — moderation commands
+   declare `PermissionLevel.Admin` directly.)
 3. **Uniform gating.** Gate on `effectiveTier >= command.MinPermissionLevel` (enum
    comparison). Because public commands require `Member`, everyone passes them naturally —
    the existing `bypassPermissionCheck`/`Math.Max` special-case (`CommandRouter.cs:92–93`)
@@ -143,10 +170,17 @@ for a purely cosmetic gain, since the enum is the single source of truth either 
 
 ### Interim leak containment (proper fix deferred — see *Out of Scope*)
 
-9. **`/analytics` gated to GlobalAdmin+.** `Analytics.razor` `[Authorize]` →
-   `[Authorize(Policy = PolicyGlobalAdminOrOwner)]`. Stops the cross-chat data leak from
-   the unscoped widgets (`ContentDetectionAnalytics`, `WelcomeAnalytics`,
-   `PerformanceMetrics`, `SpamTrendComparison`) for Admin-tier users.
+9. **`/analytics` — hide only the leaky tabs for Admin (not a page gate).** The page has
+   four tabs; **Message Trends is already correctly chat-scoped** (`MessageTrends` uses
+   `GetUserAccessibleChatsAsync`) and stays visible to Admins. The three leaky tabs —
+   **Content Detection, Performance, Welcome** (`ContentDetectionAnalytics`,
+   `PerformanceMetrics`, `WelcomeAnalytics`, plus `SpamTrendComparison`) — are
+   **conditionally rendered only for `WebUser.IsGlobalAdminOrHigher`**. Their
+   `MudTabPanel`s are *not emitted* for Admins, so the unscoped repository methods are
+   never invoked on their behalf → leak contained without removing Admins' working
+   analytics. `Analytics.razor` keeps `[Authorize]` (all authenticated); the `/analytics`
+   nav link stays visible to everyone. (This supersedes the earlier "gate the whole page"
+   idea — gating would have discarded the already-correct Message Trends tab.)
 10. **Dashboard (`Home.razor`, route `/`) — scope cheap, hide the rest for Admin.** The
     landing page can't be gated. For **Admin** tier:
     - **Scope** pending-reports count and user-tab-counts to the user's accessible chat
@@ -168,7 +202,7 @@ for a purely cosmetic gain, since the enum is the single source of truth either 
 | 2 | Creator → `2` (Owner-equiv) instead of Admin | `ChatAdminsRepository.cs:42` | resolver (Arch §1) |
 | 3 | Bare-int flatten → `/help` mislabels chat admin/creator | `CommandRouter.cs:88–93`, `HelpCommand.cs:80` | enum + name source (§1, §4) |
 | 4 | Web-Admin in unadministered chat resolves to stored `0` not Member | `CommandRouter.cs:178–209` | resolver (§1) |
-| 5–8 | `/analytics` widgets query globally (cross-chat leak) | `Analytics.razor` + `AnalyticsRepository`/`DetectionResultsRepository` | **interim gate (§9)**; proper fix in follow-up issue |
+| 5–8 | `/analytics` widgets query globally (cross-chat leak) | `Analytics.razor` + `AnalyticsRepository`/`DetectionResultsRepository` | **interim: hide 3 leaky tabs for Admin (§9)**; proper fix in follow-up issue |
 | 9 | Magic int `< 2` for Owner | `NotificationPreferencesCard.razor:331` | §5 |
 | 10 | Magic int `>= 1` for GlobalAdmin | `NavMenu.razor:55` | §5 |
 | 11 | `"OwnerOnly"` bare string literal | `ServiceCollectionExtensions.cs:90` | §6 |
@@ -177,10 +211,10 @@ for a purely cosmetic gain, since the enum is the single source of truth either 
 
 ## Out of Scope (new follow-up issue)
 
-**"Per-chat scope analytics & detection data"** — fix deviations #5–#8 properly and
-remove the interim `/analytics` gate + un-hide the dashboard widgets. This is deferred
-because it requires **DB view migrations**, which would otherwise pull migration risk into
-this migration-free PR:
+**"Per-chat scope analytics & detection data"** — fix deviations #5–#8 properly: scope the
+three leaky analytics tabs' repository methods, **un-hide those tabs for Admin**, and
+un-hide the dashboard widgets. This is deferred because it requires **DB view migrations**,
+which would otherwise pull migration risk into this migration-free PR:
 - `detection_accuracy` view (feeds `PerformanceMetrics`) has **no `chat_id`** column.
 - `hourly_detection_stats` and the spam-trend aggregates **pre-aggregate without
   `chat_id`** — scoping them changes the view grain (row cardinality), rippling into
@@ -214,8 +248,12 @@ Also out of scope: any change to the persisted `users.permission_level` represen
 - [ ] Magic-int permission comparisons (`< 2`, `>= 1`) are replaced with enum comparisons;
       `OwnerOnly` is referenced via `AuthenticationConstants.PolicyOwnerOnly`;
       `Audit.razor` uses the policy attribute.
-- [ ] `/analytics` is gated to GlobalAdmin+; the dashboard scopes pending-reports and
-      user-tab-counts for Admins and hides the global-aggregate widgets from Admins.
+- [ ] On `/analytics`, an Admin sees **only the Message Trends tab** (Content Detection,
+      Performance, Welcome tabs are not rendered for Admin); GlobalAdmin/Owner see all
+      four. The page stays `[Authorize]`; the nav link stays visible to all.
+- [ ] The dashboard scopes pending-reports and user-tab-counts for Admins and hides the
+      global-aggregate widgets (message stats, spam-today, recent-activity) from Admins,
+      keeping a non-empty scoped stats grid; GlobalAdmin/Owner dashboard unchanged.
 - [ ] Existing web authorization behavior (infra Owner-only, account mgmt GlobalAdmin+,
       page gates) is unchanged/verified.
 - [ ] A new issue is filed for the analytics/detection per-chat scoping follow-up.
@@ -231,8 +269,38 @@ Also out of scope: any change to the persisted `users.permission_level` represen
 - **Integration:** a web-Admin linked to a TG account that admins chat X can run `/ban` in
   X and is denied in chat Y; an unlinked GlobalAdmin (the unlinked-global-admin case) — confirm the
   *operational* expectation is documented (link required) and not masked by code.
-- **Web:** verify `/analytics` returns 403 for Admin, 200 for GlobalAdmin+; dashboard shows
-  scoped pending-reports count for an Admin and hides global widgets.
+- **Web (component):** verify the dashboard renders scoped pending-reports for an Admin and
+  omits the global widgets; verify `Analytics.razor` emits only the Message Trends tab for
+  Admin and all four for GlobalAdmin+.
+
+### E2E (Playwright) — existing suite impact
+
+**Important:** the default E2E user is **`PermissionLevel.Admin`**
+(`TestUserBuilder._permissionLevel`), and tests authenticate per-tier via
+`LoginAsAdminAsync` / `LoginAsGlobalAdminAsync` / `LoginAsOwnerAsync`. The Admin-tier
+changes therefore directly touch Admin-authenticated tests.
+
+Tests to **update**:
+- `DashboardTests.Dashboard_AccessibleByAdmin` — currently asserts `AreStatsVisibleAsync`
+  (`.mud-paper .mud-grid`). Adjust to assert the *scoped* cards (Pending Reports) are shown
+  and the global ones (Total Messages / Spam Today / Recent Activity) are **not** — and keep
+  the stats grid non-empty so the locator still resolves.
+
+Tests expected to **still pass** (verify):
+- `AnalyticsTests.Analytics_PageLoads_ForAdmin` — asserts the tab *container* is visible;
+  Message Trends still renders for Admin, so this should remain green. Confirm
+  `IsTabsVisibleAsync` doesn't require a leaky tab.
+- `PermissionBoundaryTests` (nav menu) — survives iff the `NavMenu` `level >= 1` →
+  `>= PermissionLevel.GlobalAdmin` refactor is behavior-preserving.
+- `NavigationTests` — first-run redirect tests, unaffected.
+- `AnalyticsTests`/`DashboardTests` GlobalAdmin & Owner cases — those tiers keep full access.
+
+Tests to **add**:
+- `Analytics_Admin_SeesOnlyMessageTrends` — Admin: Message Trends tab present; Content
+  Detection / Performance / Welcome tabs absent. `Analytics_GlobalAdmin_SeesAllFourTabs`.
+- `Dashboard_Admin_HidesGlobalWidgets_ShowsPendingReports` — Admin: Pending Reports + Active
+  Bans + Trusted Users visible (scoped); Total Messages / Spam Today / Recent Activity
+  hidden. `Dashboard_GlobalAdmin_ShowsAllWidgets`.
 
 ## Risks
 
