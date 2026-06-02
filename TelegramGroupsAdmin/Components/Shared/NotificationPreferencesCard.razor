@@ -166,7 +166,7 @@
     public string UserId { get; set; } = string.Empty;
 
     [Parameter]
-    public int UserPermissionLevel { get; set; }
+    public PermissionLevel UserPermissionLevel { get; set; }
 
     private NotificationConfig? _config;
     private bool _hasTelegramLinked;
@@ -328,7 +328,7 @@
         foreach (var eventType in Enum.GetValues<NotificationEventType>())
         {
             // Owner-only events hidden for non-owners
-            if (IsOwnerOnlyEvent(eventType) && UserPermissionLevel < 2)
+            if (IsOwnerOnlyEvent(eventType) && UserPermissionLevel < PermissionLevel.Owner)
                 continue;
             yield return eventType;
         }

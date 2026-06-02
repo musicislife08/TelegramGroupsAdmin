@@ -52,7 +52,7 @@
             {
                 // Admin=0, GlobalAdmin=1, Owner=2
                 // GlobalAdmin and Owner can see Settings, Audit, Chat Management
-                _isGlobalAdminOrOwner = level >= 1;
+                _isGlobalAdminOrOwner = (PermissionLevel)level >= PermissionLevel.GlobalAdmin;
             }
         }
     }
