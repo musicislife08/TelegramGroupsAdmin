@@ -9,30 +9,23 @@ namespace TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
 /// </summary>
 public class HelpCommand : IBotCommand
 {
-    private readonly IServiceProvider _serviceProvider;
-
     // Static metadata for all commands (avoids reflection complexity with DI)
     // Note: /start is excluded - it's only for deep links and DMs
     private static readonly List<CommandMetadata> _commandMetadata =
     [
-        new("report", "Report message for admin review", 0),
-        new("invite", "Get invite link for this chat", -1),
-        new("link", "Link your Telegram account to web app", 1),
-        new("spam", "Mark message as spam and delete it", 1),
-        new("ban", "Ban user from all managed chats", 1),
-        new("tempban", "Temporarily ban user with auto-unrestriction", 1),
-        new("trust", "Whitelist user (bypass spam detection)", 1),
-        new("unban", "Remove ban from user", 1),
-        new("warn", "Issue warning to user", 1),
-        new("delete", "[TEST] Delete a message", 1)
+        new("report", "Report message for admin review", PermissionLevel.Member),
+        new("invite", "Get invite link for this chat", PermissionLevel.Member),
+        new("link", "Link your Telegram account to web app", PermissionLevel.Member),
+        new("spam", "Mark message as spam and delete it", PermissionLevel.Admin),
+        new("ban", "Ban user from all managed chats", PermissionLevel.Admin),
+        new("tempban", "Temporarily ban user with auto-unrestriction", PermissionLevel.Admin),
+        new("trust", "Whitelist user (bypass spam detection)", PermissionLevel.Admin),
+        new("unban", "Remove ban from user", PermissionLevel.Admin),
+        new("warn", "Issue warning to user", PermissionLevel.Admin),
+        new("delete", "[TEST] Delete a message", PermissionLevel.Admin)
     ];
 
-    private record CommandMetadata(string Name, string Description, int MinPermissionLevel);
-
-    public HelpCommand(IServiceProvider serviceProvider)
-    {
-        _serviceProvider = serviceProvider;
-    }
+    private record CommandMetadata(string Name, string Description, PermissionLevel MinPermissionLevel);
 
     public string Name => "help";
     public string Description => "Show available commands";
@@ -56,20 +49,18 @@ public class HelpCommand : IBotCommand
             .Where(c => c.MinPermissionLevel <= userPermission)
             .ToList();
 
-        // Group by permission level
-        var readOnlyCommands = availableCommands.Where(c => c.MinPermissionLevel == 0).ToList();
-        var adminCommands = availableCommands.Where(c => c.MinPermissionLevel >= 1).ToList();
+        var publicCommands = availableCommands.Where(c => c.MinPermissionLevel < PermissionLevel.Admin).ToList();
+        var adminCommands = availableCommands.Where(c => c.MinPermissionLevel >= PermissionLevel.Admin).ToList();
 
-        // Show Admin commands (including self)
+        // Show /help itself plus the public commands
         AppendCommandLine(builder, GetCommandEmoji("help"), "help", Description);
-
-        foreach (var cmd in readOnlyCommands)
+        foreach (var cmd in publicCommands)
         {
             AppendCommandLine(builder, GetCommandEmoji(cmd.Name), cmd.Name, cmd.Description);
         }
 
-        // Show Admin commands
-        if (adminCommands.Any() && userPermission >= 1)
+        // Show Admin commands only to admins
+        if (adminCommands.Any() && userPermission >= PermissionLevel.Admin)
         {
             builder.LineBreak().Bold("Admin Commands:").LineBreak();
             foreach (var cmd in adminCommands)
@@ -78,7 +69,7 @@ public class HelpCommand : IBotCommand
             }
         }
 
-        builder.LineBreak().Italic($"Permission: {GetPermissionName(userPermission)}");
+        builder.LineBreak().Italic($"Permission: {userPermission.GetDisplayName()}");
 
         return Task.FromResult(new CommandResult(builder.Build(), DeleteCommandMessage, DeleteResponseAfterSeconds));
     }
@@ -103,13 +94,5 @@ public class HelpCommand : IBotCommand
         "unban" => "🔓",
         "warn" => "⚠️",
         _ => "🔹"
-    };
-
-    private static string GetPermissionName(int level) => level switch
-    {
-        0 => "Admin",
-        1 => "GlobalAdmin",
-        2 => "Owner",
-        _ => "Unknown"
     };
 }

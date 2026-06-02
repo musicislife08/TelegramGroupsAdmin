@@ -111,7 +111,7 @@ public class ReportCommandTests
             .Returns(new ReportCreationResult(ReportId: 7));
 
         // Act
-        var result = await _command.ExecuteAsync(message, [], userPermissionLevel: 0);
+        var result = await _command.ExecuteAsync(message, [], userPermission: PermissionLevel.Admin);
 
         // Assert: text contains the report number
         Assert.That(result.Message.Text, Does.Contain("Report #7"));
