@@ -22,6 +22,16 @@ public class PermissionLevelTests
     }
 
     [Test]
+    public void GetDisplayName_UndefinedValue_FailsClosedToMember()
+    {
+        // Defense-in-depth: an unknown tier (e.g., a future int that would map to a HIGHER
+        // privilege) must resolve to the no-privilege floor — never a stringified int and
+        // never a privileged role. The role-claim path (AuthCookieService/Login) depends on this.
+        var undefined = (PermissionLevel)99;
+        Assert.That(undefined.GetDisplayName(), Is.EqualTo("Member"));
+    }
+
+    [Test]
     public void StoredTiers_KeepExistingIntValues()
     {
         // Web claims/policies depend on these — must not change.

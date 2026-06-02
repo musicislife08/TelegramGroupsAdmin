@@ -50,7 +50,7 @@
             var permissionClaim = user.FindFirst(CustomClaimTypes.PermissionLevel);
             if (permissionClaim != null && int.TryParse(permissionClaim.Value, out var level))
             {
-                // Admin=0, GlobalAdmin=1, Owner=2
+                // Member=-1, Admin=0, GlobalAdmin=1, Owner=2
                 // GlobalAdmin and Owner can see Settings, Audit, Chat Management
                 _isGlobalAdminOrOwner = (PermissionLevel)level >= PermissionLevel.GlobalAdmin;
             }
