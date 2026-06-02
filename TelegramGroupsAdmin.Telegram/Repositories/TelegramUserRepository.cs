@@ -6,6 +6,7 @@ using TelegramGroupsAdmin.Core;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Core.Extensions;
+using TelegramGroupsAdmin.Telegram.Constants;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using DataModels = TelegramGroupsAdmin.Data.Models;
 using UiModels = TelegramGroupsAdmin.Telegram.Models;
@@ -640,10 +641,12 @@ public class TelegramUserRepository : ITelegramUserRepository
         // Build base queryable (exclude system user)
         var baseQuery = context.TelegramUsers.AsNoTracking().Where(u => u.TelegramUserId != 0);
 
-        // Apply chatIds filter
-        if (chatIds is { Count: > 0 })
+        // Apply chatIds filter.
+        // Contains GlobalChatId (0) ⇒ global / no filter. Empty or null ⇒ nothing (0 rows).
+        var scopeIds = chatIds ?? [];
+        if (!scopeIds.Contains(ModerationConstants.GlobalChatId))
         {
-            baseQuery = baseQuery.Where(u => context.Messages.Any(m => m.UserId == u.TelegramUserId && chatIds.Contains(m.ChatId)));
+            baseQuery = baseQuery.Where(u => context.Messages.Any(m => m.UserId == u.TelegramUserId && scopeIds.Contains(m.ChatId)));
         }
 
         // Apply search text filter

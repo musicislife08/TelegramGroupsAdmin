@@ -101,26 +101,6 @@ public class ReportsRepository : IReportsRepository
     }
 
     public async Task<int> GetPendingCountAsync(
-        long? chatId = null,
-        ReportType? type = null,
-        CancellationToken cancellationToken = default)
-    {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-
-        var query = context.Reports
-            .AsNoTracking()
-            .Where(r => r.Status == (int)ReportStatus.Pending);
-
-        if (chatId.HasValue)
-            query = query.Where(r => r.ChatId == chatId.Value);
-
-        if (type.HasValue)
-            query = query.Where(r => r.Type == (short)type.Value);
-
-        return await query.CountAsync(cancellationToken);
-    }
-
-    public async Task<int> GetPendingCountAsync(
         IReadOnlyCollection<long> chatIds,
         ReportType? type = null,
         CancellationToken cancellationToken = default)
@@ -131,7 +111,8 @@ public class ReportsRepository : IReportsRepository
             .AsNoTracking()
             .Where(r => r.Status == (int)ReportStatus.Pending);
 
-        if (chatIds.Count > 0)
+        // Empty ⇒ no chats (0 rows). A collection containing 0 (GlobalChatId) ⇒ global / no filter.
+        if (!chatIds.Contains(0L)) // 0L == GlobalChatId
             query = query.Where(r => chatIds.Contains(r.ChatId));
 
         if (type.HasValue)

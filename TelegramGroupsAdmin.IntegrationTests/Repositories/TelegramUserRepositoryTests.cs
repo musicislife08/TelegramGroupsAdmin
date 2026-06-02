@@ -166,11 +166,26 @@ public class TelegramUserRepositoryTests
             await historyRepo.InsertAsync(userId, "historic_handle", "Present", "User");
         }
 
-        // Tab counts filtered by the old name must include the user in the active count
+        // GlobalChatId (0) ⇒ global / no filter; tab counts should include the seeded user in the active count.
         var counts = await _repository!.GetUserTabCountsAsync(
-            chatIds: null, searchText: "historic_handle");
+            chatIds: new List<long> { 0L }, searchText: "historic_handle");
 
         Assert.That(counts.ActiveCount, Is.GreaterThanOrEqualTo(1));
+    }
+
+    [Test]
+    public async Task GetUserTabCountsAsync_WithEmptyChatIds_ReturnsZeroCounts()
+    {
+        // Empty list ⇒ no accessible chats ⇒ nothing visible (0 rows, not global).
+        var counts = await _repository!.GetUserTabCountsAsync(
+            chatIds: new List<long>(), searchText: null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(counts.ActiveCount, Is.EqualTo(0));
+            Assert.That(counts.TrustedCount, Is.EqualTo(0));
+            Assert.That(counts.BannedCount, Is.EqualTo(0));
+        }
     }
 
     [Test]

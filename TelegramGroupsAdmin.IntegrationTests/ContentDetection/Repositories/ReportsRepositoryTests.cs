@@ -350,19 +350,19 @@ public class ReportsRepositoryTests
     }
 
     [Test]
-    public async Task GetPendingCountAsync_ReturnsCorrectCount()
+    public async Task GetPendingCountAsync_WithGlobalChatId_CountsAllPending()
     {
-        // Arrange
+        // Arrange — reports in different chats
         await _repository!.InsertContentReportAsync(CreateTestReport(messageId: 1));
         await _repository.InsertContentReportAsync(CreateTestReport(messageId: 2));
         var reviewedId = await _repository.InsertContentReportAsync(CreateTestReport(messageId: 3));
 
         await _repository.UpdateStatusAsync(reviewedId, ReportStatus.Reviewed, "admin", "Spam");
 
-        // Act
-        var count = await _repository.GetPendingCountAsync();
+        // Act — [0] (GlobalChatId) means global / no filter
+        var count = await _repository.GetPendingCountAsync(new long[] { 0L });
 
-        // Assert
+        // Assert — 2 pending, 1 reviewed (excluded)
         Assert.That(count, Is.EqualTo(2));
     }
 
@@ -387,17 +387,17 @@ public class ReportsRepositoryTests
     }
 
     [Test]
-    public async Task GetPendingCountAsync_WithEmptyChatIdCollection_CountsAllPending()
+    public async Task GetPendingCountAsync_WithEmptyChatIdCollection_ReturnsZero()
     {
-        // Arrange
+        // Arrange — seed some pending reports
         await _repository!.InsertContentReportAsync(CreateTestReport(messageId: 10, chatId: -1001000000010));
         await _repository.InsertContentReportAsync(CreateTestReport(messageId: 11, chatId: -1001000000011));
 
-        // Act — empty collection means "no chat filter" (count all pending)
+        // Act — empty collection ⇒ no accessible chats ⇒ 0 rows (not global)
         var count = await _repository.GetPendingCountAsync(Array.Empty<long>());
 
         // Assert
-        Assert.That(count, Is.EqualTo(2));
+        Assert.That(count, Is.EqualTo(0));
     }
 
     #endregion

@@ -4,6 +4,7 @@
 @using TelegramGroupsAdmin.Telegram.Models
 @using TelegramGroupsAdmin.Telegram.Services
 @using TelegramGroupsAdmin.Telegram.Repositories
+@using TelegramGroupsAdmin.Telegram.Constants
 @using TelegramGroupsAdmin.Core.Utilities
 @using TelegramGroupsAdmin.Models.Analytics
 @using TelegramGroupsAdmin.Repositories
@@ -262,11 +263,13 @@
                     .ToList();
 
             // Scoped widgets (always shown) — restricted to accessible chats for non-global viewers.
-            var pendingReportsTask = _canSeeGlobalStats
-                ? ReportsRepository.GetPendingCountAsync()
-                : ReportsRepository.GetPendingCountAsync(_accessibleChatIds);
-            var tabCountsTask = UserManagementService.GetUserTabCountsAsync(
-                chatIds: _canSeeGlobalStats ? null : _accessibleChatIds, searchText: null);
+            // GlobalAdmin/Owner ⇒ [GlobalChatId] means "no filter" (all pending). Admin ⇒ exact chat list
+            // (may be empty ⇒ 0 rows if the admin has no accessible chats yet).
+            var globalScope = new List<long> { ModerationConstants.GlobalChatId };
+            var scope = _canSeeGlobalStats ? globalScope : _accessibleChatIds;
+
+            var pendingReportsTask = ReportsRepository.GetPendingCountAsync(scope);
+            var tabCountsTask = UserManagementService.GetUserTabCountsAsync(scope, searchText: null);
 
             if (_canSeeGlobalStats)
             {
