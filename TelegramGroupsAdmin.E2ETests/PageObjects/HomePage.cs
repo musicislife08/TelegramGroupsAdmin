@@ -1,4 +1,5 @@
 using Microsoft.Playwright;
+using static Microsoft.Playwright.Assertions;
 
 namespace TelegramGroupsAdmin.E2ETests.PageObjects;
 
@@ -237,6 +238,64 @@ public class HomePage
     {
         var statItem = _page.Locator(".mud-grid-item").Filter(new() { HasText = "Pending Reports" });
         return await statItem.IsVisibleAsync();
+    }
+
+    // The greyed placeholder rendered in global cards for an Admin shows this
+    // caption (Home.razor) instead of a numeric value, plus a Lock icon.
+    private const string GlobalAdminOnlyCaption = "GlobalAdmin only";
+
+    // The Recent Activity panel placeholder caption shown for an Admin (Home.razor).
+    private const string ActivityPlaceholderCaption = "Requires GlobalAdmin to view";
+
+    /// <summary>
+    /// Returns true when the Total Messages card is rendered as the greyed
+    /// "GlobalAdmin only" placeholder (Lock icon + caption, no numeric value).
+    /// Uses a web-first assertion as the sync point before reading state so the
+    /// card has rendered. The data-leak guarantee is that an Admin sees the
+    /// caption and NO <c>.mud-typography-h5</c> numeric value.
+    /// </summary>
+    public async Task<bool> IsTotalMessagesGreyedPlaceholderAsync()
+    {
+        var card = _page.Locator(".mud-grid-item").Filter(new() { HasText = "Total Messages" });
+        await Expect(card).ToBeVisibleAsync(new() { Timeout = 10000 });
+
+        var hasPlaceholderCaption =
+            await card.GetByText(GlobalAdminOnlyCaption).CountAsync() > 0;
+        var hasNumericValue = await card.Locator(".mud-typography-h5").CountAsync() > 0;
+
+        return hasPlaceholderCaption && !hasNumericValue;
+    }
+
+    /// <summary>
+    /// Returns the numeric Total Messages value (the <c>.mud-typography-h5</c>
+    /// text) when the card shows real data, or <c>null</c> when the card is
+    /// rendered as the greyed "GlobalAdmin only" placeholder (no numeric value).
+    /// </summary>
+    public async Task<string?> GetTotalMessagesValueOrNullAsync()
+    {
+        var card = _page.Locator(".mud-grid-item").Filter(new() { HasText = "Total Messages" });
+        await Expect(card).ToBeVisibleAsync(new() { Timeout = 10000 });
+
+        var value = card.Locator(".mud-typography-h5");
+        if (await value.CountAsync() == 0)
+        {
+            return null;
+        }
+
+        return await value.TextContentAsync();
+    }
+
+    /// <summary>
+    /// Returns true when the Recent Activity panel is rendered as the greyed
+    /// placeholder ("Requires GlobalAdmin to view") rather than a real activity
+    /// list. Web-first assertion is the sync point before reading state.
+    /// </summary>
+    public async Task<bool> IsActivityFeedPlaceholderAsync()
+    {
+        var panel = _page.Locator(".mud-paper").Filter(new() { HasText = "Recent Activity" });
+        await Expect(panel).ToBeVisibleAsync(new() { Timeout = 10000 });
+
+        return await panel.GetByText(ActivityPlaceholderCaption).CountAsync() > 0;
     }
 
     /// <summary>

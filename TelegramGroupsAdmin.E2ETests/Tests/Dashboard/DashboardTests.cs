@@ -185,14 +185,16 @@ public class DashboardTests : AuthenticatedTestBase
         await _homePage.NavigateAsync();
         await _homePage.WaitForLoadAsync();
 
-        // Assert - Admin sees the scoped Overview (scoped cards present), not the global stats.
-        // Cross-chat-leak fix (#510): Admin no longer sees global message stats.
+        // Assert - Admin sees the scoped Overview cards AND the global card shells,
+        // but the global cards are greyed placeholders with no data (interim UX).
         using (Assert.EnterMultipleScope())
         {
             Assert.That(await _homePage.IsPendingReportsCardVisibleAsync(), Is.True,
                 "Admin should see the scoped Pending Reports card");
-            Assert.That(await _homePage.IsTotalMessagesCardVisibleAsync(), Is.False,
-                "Admin should NOT see the global Total Messages card");
+            Assert.That(await _homePage.IsTotalMessagesCardVisibleAsync(), Is.True,
+                "Admin should see the global Total Messages card shell");
+            Assert.That(await _homePage.IsTotalMessagesGreyedPlaceholderAsync(), Is.True,
+                "Admin's Total Messages card should be the greyed 'GlobalAdmin only' placeholder");
         }
     }
 
@@ -212,7 +214,7 @@ public class DashboardTests : AuthenticatedTestBase
     }
 
     [Test]
-    public async Task Dashboard_Admin_HidesGlobalWidgets_ShowsScopedCards()
+    public async Task Dashboard_Admin_GlobalWidgetsGreyed_ScopedCardsReal()
     {
         // Arrange - login as Admin (chat-scoped permission)
         await LoginAsAdminAsync();
@@ -221,15 +223,33 @@ public class DashboardTests : AuthenticatedTestBase
         await _homePage.NavigateAsync();
         await _homePage.WaitForLoadAsync();
 
-        // Assert - Admin sees scoped cards but NOT global widgets (#510 cross-chat-leak fix).
+        // Assert - interim cross-chat-leak UX: the global card/panel shells render
+        // for an Admin but are greyed placeholders with NO data, while scoped cards
+        // (Pending Reports) show real values. The data-leak guarantee is that the
+        // Admin sees the "GlobalAdmin only" placeholder and no numeric global value.
         using (Assert.EnterMultipleScope())
         {
+            // Global Total Messages card: shell present but greyed placeholder, no numeric value.
+            Assert.That(await _homePage.IsTotalMessagesCardVisibleAsync(), Is.True,
+                "Admin should see the global Total Messages card shell");
+            Assert.That(await _homePage.IsTotalMessagesGreyedPlaceholderAsync(), Is.True,
+                "Admin's Total Messages card should be the greyed 'GlobalAdmin only' placeholder");
+            Assert.That(await _homePage.GetTotalMessagesValueOrNullAsync(), Is.Null,
+                "Admin's Total Messages card must NOT show a numeric value");
+
+            // Global Recent Activity panel: present but the greyed placeholder, not a real list.
+            Assert.That(await _homePage.IsActivityFeedVisibleAsync(), Is.True,
+                "Admin should see the Recent Activity panel shell");
+            Assert.That(await _homePage.IsActivityFeedPlaceholderAsync(), Is.True,
+                "Admin's Recent Activity panel should show the GlobalAdmin placeholder, not a real list");
+            Assert.That(await _homePage.GetActivityFeedItemCountAsync(), Is.EqualTo(0),
+                "Admin's Recent Activity panel must NOT render real activity items");
+
+            // Scoped card shows a real value for Admin.
             Assert.That(await _homePage.IsPendingReportsCardVisibleAsync(), Is.True,
                 "Admin should see the scoped Pending Reports card");
-            Assert.That(await _homePage.IsTotalMessagesCardVisibleAsync(), Is.False,
-                "Admin should NOT see the global Total Messages card");
-            Assert.That(await _homePage.IsActivityFeedVisibleAsync(), Is.False,
-                "Admin should NOT see the global Recent Activity panel");
+            Assert.That(await _homePage.GetPendingReportsCountAsync(), Is.Not.Null.And.Not.Empty,
+                "Admin's scoped Pending Reports card should show a real value");
         }
     }
 
@@ -243,13 +263,22 @@ public class DashboardTests : AuthenticatedTestBase
         await _homePage.NavigateAsync();
         await _homePage.WaitForLoadAsync();
 
-        // Assert - GlobalAdmin sees the global widgets (full dashboard).
+        // Assert - GlobalAdmin sees the global widgets with real data (full dashboard):
+        // Total Messages shows a real numeric value (not the placeholder) and Recent
+        // Activity is the real panel (not the placeholder).
         using (Assert.EnterMultipleScope())
         {
             Assert.That(await _homePage.IsTotalMessagesCardVisibleAsync(), Is.True,
                 "GlobalAdmin should see the global Total Messages card");
+            Assert.That(await _homePage.IsTotalMessagesGreyedPlaceholderAsync(), Is.False,
+                "GlobalAdmin's Total Messages card should NOT be the greyed placeholder");
+            Assert.That(await _homePage.GetTotalMessagesValueOrNullAsync(), Is.Not.Null.And.Not.Empty,
+                "GlobalAdmin's Total Messages card should show a real numeric value");
+
             Assert.That(await _homePage.IsActivityFeedVisibleAsync(), Is.True,
                 "GlobalAdmin should see the global Recent Activity panel");
+            Assert.That(await _homePage.IsActivityFeedPlaceholderAsync(), Is.False,
+                "GlobalAdmin's Recent Activity panel should be the real panel, not the placeholder");
         }
     }
 

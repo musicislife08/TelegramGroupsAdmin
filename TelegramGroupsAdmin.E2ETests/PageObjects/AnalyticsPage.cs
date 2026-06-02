@@ -131,6 +131,30 @@ public class AnalyticsPage
     }
 
     /// <summary>
+    /// Locates the clickable tab element (button) for the given tab name.
+    /// MudBlazor renders each tab as a <c>.mud-tab</c> element; a disabled
+    /// <c>MudTabPanel</c> adds the <c>mud-disabled</c> class to this element.
+    /// </summary>
+    private ILocator TabButton(string tabName) =>
+        _page.GetByRole(AriaRole.Tab, new() { Name = tabName });
+
+    /// <summary>
+    /// Checks whether the tab with the given name is rendered but disabled.
+    /// MudBlazor marks a disabled <c>MudTabPanel</c> tab with the
+    /// <c>mud-disabled</c> CSS class on the <c>.mud-tab</c> element.
+    /// Web-first <see cref="Assertions.Expect(ILocator)"/> is used as the sync
+    /// point so the tab is rendered before its class list is inspected.
+    /// </summary>
+    public async Task<bool> IsTabDisabledAsync(string tabName)
+    {
+        var tab = TabButton(tabName);
+        await Expect(tab).ToBeVisibleAsync(new() { Timeout = 10000 });
+
+        var classAttr = await tab.GetAttributeAsync("class");
+        return classAttr is not null && classAttr.Split(' ').Contains("mud-disabled");
+    }
+
+    /// <summary>
     /// Checks if the Content Detection tab is active.
     /// </summary>
     public Task<bool> IsContentDetectionTabActiveAsync() => IsTabActiveAsync("Content Detection");

@@ -90,7 +90,7 @@ public class AnalyticsTests : SharedAuthenticatedTestBase
     }
 
     [Test]
-    public async Task Analytics_Admin_SeesOnlyMessageTrends()
+    public async Task Analytics_Admin_SeesAllTabs_GlobalOnesDisabled()
     {
         // Arrange - login as Admin (chat-scoped permission)
         await LoginAsAdminAsync();
@@ -98,19 +98,41 @@ public class AnalyticsTests : SharedAuthenticatedTestBase
         // Act - navigate to analytics page
         await _analyticsPage.NavigateAsync();
 
-        // Assert - the three global/leaky tabs are hidden (#509); only Message Trends renders.
+        // Assert - interim cross-chat-leak UX: all four tab shells render, but the
+        // three global tabs are DISABLED/greyed (mud-disabled) so an Admin cannot
+        // open them and no global data component mounts. Message Trends is the only
+        // enabled tab and is forced active for Admin.
         var tabNames = await _analyticsPage.GetTabNamesAsync();
 
         using (Assert.EnterMultipleScope())
         {
+            Assert.That(tabNames, Has.Count.EqualTo(4),
+                "Admin should still see all four tab shells");
+            Assert.That(tabNames, Does.Contain("Content Detection"),
+                "Admin should see the Content Detection tab shell");
             Assert.That(tabNames, Does.Contain("Message Trends"),
                 "Admin should see the Message Trends tab");
-            Assert.That(tabNames, Does.Not.Contain("Content Detection"),
-                "Admin should NOT see the Content Detection tab");
-            Assert.That(tabNames, Does.Not.Contain("Performance"),
-                "Admin should NOT see the Performance tab");
-            Assert.That(tabNames, Does.Not.Contain("Welcome Analytics"),
-                "Admin should NOT see the Welcome Analytics tab");
+            Assert.That(tabNames, Does.Contain("Performance"),
+                "Admin should see the Performance tab shell");
+            Assert.That(tabNames, Does.Contain("Welcome Analytics"),
+                "Admin should see the Welcome Analytics tab shell");
+        }
+
+        using (Assert.EnterMultipleScope())
+        {
+            // The three global tabs must be disabled (mud-disabled on the .mud-tab element).
+            Assert.That(await _analyticsPage.IsTabDisabledAsync("Content Detection"), Is.True,
+                "Admin: Content Detection tab should be disabled/greyed");
+            Assert.That(await _analyticsPage.IsTabDisabledAsync("Performance"), Is.True,
+                "Admin: Performance tab should be disabled/greyed");
+            Assert.That(await _analyticsPage.IsTabDisabledAsync("Welcome Analytics"), Is.True,
+                "Admin: Welcome Analytics tab should be disabled/greyed");
+
+            // Message Trends stays enabled and is the active tab for Admin.
+            Assert.That(await _analyticsPage.IsTabDisabledAsync("Message Trends"), Is.False,
+                "Admin: Message Trends tab should remain enabled");
+            Assert.That(await _analyticsPage.IsMessageTrendsTabActiveAsync(), Is.True,
+                "Admin: Message Trends should be the active tab");
         }
     }
 
@@ -123,7 +145,7 @@ public class AnalyticsTests : SharedAuthenticatedTestBase
         // Act - navigate to analytics page
         await _analyticsPage.NavigateAsync();
 
-        // Assert - GlobalAdmin sees all four tabs
+        // Assert - GlobalAdmin sees all four tabs, all ENABLED (none greyed/disabled).
         var tabNames = await _analyticsPage.GetTabNamesAsync();
 
         using (Assert.EnterMultipleScope())
@@ -138,6 +160,18 @@ public class AnalyticsTests : SharedAuthenticatedTestBase
                 "GlobalAdmin should see the Performance tab");
             Assert.That(tabNames, Does.Contain("Welcome Analytics"),
                 "GlobalAdmin should see the Welcome Analytics tab");
+        }
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(await _analyticsPage.IsTabDisabledAsync("Content Detection"), Is.False,
+                "GlobalAdmin: Content Detection tab should be enabled");
+            Assert.That(await _analyticsPage.IsTabDisabledAsync("Message Trends"), Is.False,
+                "GlobalAdmin: Message Trends tab should be enabled");
+            Assert.That(await _analyticsPage.IsTabDisabledAsync("Performance"), Is.False,
+                "GlobalAdmin: Performance tab should be enabled");
+            Assert.That(await _analyticsPage.IsTabDisabledAsync("Welcome Analytics"), Is.False,
+                "GlobalAdmin: Welcome Analytics tab should be enabled");
         }
     }
 
