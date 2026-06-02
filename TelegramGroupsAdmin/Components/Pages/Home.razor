@@ -35,43 +35,88 @@
         <MudPaper Class="pa-4 mb-4" Elevation="2">
             <MudText Typo="Typo.h6" Class="mb-3">Overview</MudText>
             <MudGrid>
-                @* Row 1: Core message stats — GlobalAdmin/Owner only *@
-                @if (_canSeeGlobalStats && _stats != null)
-                {
-                    <MudItem xs="12" sm="6" md="3">
+                @* Row 1: Core message stats — GlobalAdmin/Owner only; greyed shell for Admin *@
+                <MudItem xs="12" sm="6" md="3">
+                    @if (_canSeeGlobalStats && _stats != null)
+                    {
                         <MudStack AlignItems="AlignItems.Center">
                             <MudIcon Icon="@Icons.Material.Filled.Message" Size="Size.Large" Color="Color.Primary" />
                             <MudText Typo="Typo.h5">@_stats.TotalMessages</MudText>
                             <MudText Typo="Typo.caption" Color="Color.Secondary">Total Messages</MudText>
                         </MudStack>
-                    </MudItem>
-                    <MudItem xs="12" sm="6" md="3">
+                    }
+                    else
+                    {
+                        <MudStack AlignItems="AlignItems.Center" Style="opacity:0.45">
+                            <MudIcon Icon="@Icons.Material.Filled.Message" Size="Size.Large" Color="Color.Default" />
+                            <MudIcon Icon="@Icons.Material.Filled.Lock" Size="Size.Small" Color="Color.Default" />
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Total Messages</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">GlobalAdmin only</MudText>
+                        </MudStack>
+                    }
+                </MudItem>
+                <MudItem xs="12" sm="6" md="3">
+                    @if (_canSeeGlobalStats && _stats != null)
+                    {
                         <MudStack AlignItems="AlignItems.Center">
                             <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Large" Color="Color.Secondary" />
                             <MudText Typo="Typo.h5">@_stats.UniqueUsers</MudText>
                             <MudText Typo="Typo.caption" Color="Color.Secondary">Unique Users</MudText>
                         </MudStack>
-                    </MudItem>
-                    <MudItem xs="12" sm="6" md="3">
+                    }
+                    else
+                    {
+                        <MudStack AlignItems="AlignItems.Center" Style="opacity:0.45">
+                            <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Large" Color="Color.Default" />
+                            <MudIcon Icon="@Icons.Material.Filled.Lock" Size="Size.Small" Color="Color.Default" />
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Unique Users</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">GlobalAdmin only</MudText>
+                        </MudStack>
+                    }
+                </MudItem>
+                <MudItem xs="12" sm="6" md="3">
+                    @if (_canSeeGlobalStats && _stats != null)
+                    {
                         <MudStack AlignItems="AlignItems.Center">
                             <MudIcon Icon="@Icons.Material.Filled.Image" Size="Size.Large" Color="Color.Info" />
                             <MudText Typo="Typo.h5">@_stats.PhotoCount</MudText>
                             <MudText Typo="Typo.caption" Color="Color.Secondary">Images</MudText>
                         </MudStack>
-                    </MudItem>
-                    <MudItem xs="12" sm="6" md="3">
+                    }
+                    else
+                    {
+                        <MudStack AlignItems="AlignItems.Center" Style="opacity:0.45">
+                            <MudIcon Icon="@Icons.Material.Filled.Image" Size="Size.Large" Color="Color.Default" />
+                            <MudIcon Icon="@Icons.Material.Filled.Lock" Size="Size.Small" Color="Color.Default" />
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Images</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">GlobalAdmin only</MudText>
+                        </MudStack>
+                    }
+                </MudItem>
+                <MudItem xs="12" sm="6" md="3">
+                    @if (_canSeeGlobalStats && _stats != null)
+                    {
                         <MudStack AlignItems="AlignItems.Center">
                             <MudIcon Icon="@Icons.Material.Filled.Update" Size="Size.Large" Color="Color.Tertiary" />
                             <MudText Typo="Typo.h5">@GetTimeRangeDisplay()</MudText>
                             <MudText Typo="Typo.caption" Color="Color.Secondary">Data Range</MudText>
                         </MudStack>
-                    </MudItem>
-                }
+                    }
+                    else
+                    {
+                        <MudStack AlignItems="AlignItems.Center" Style="opacity:0.45">
+                            <MudIcon Icon="@Icons.Material.Filled.Update" Size="Size.Large" Color="Color.Default" />
+                            <MudIcon Icon="@Icons.Material.Filled.Lock" Size="Size.Small" Color="Color.Default" />
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Data Range</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">GlobalAdmin only</MudText>
+                        </MudStack>
+                    }
+                </MudItem>
 
-                @* Row 2: Detection and moderation stats *@
-                @if (_canSeeGlobalStats)
-                {
-                    <MudItem xs="12" sm="6" md="3">
+                @* Row 2: Detection and moderation stats — Spam Today greyed for Admin *@
+                <MudItem xs="12" sm="6" md="3">
+                    @if (_canSeeGlobalStats)
+                    {
                         <MudStack AlignItems="AlignItems.Center">
                             <MudIcon Icon="@Icons.Material.Filled.Warning" Size="Size.Large" Color="Color.Error" />
                             <MudText Typo="Typo.h5">@(_dailySpamSummary?.TodaySpamCount ?? 0)</MudText>
@@ -101,8 +146,17 @@
                             }
                             <MudText Typo="Typo.caption" Color="Color.Secondary">Spam Today</MudText>
                         </MudStack>
-                    </MudItem>
-                }
+                    }
+                    else
+                    {
+                        <MudStack AlignItems="AlignItems.Center" Style="opacity:0.45">
+                            <MudIcon Icon="@Icons.Material.Filled.Warning" Size="Size.Large" Color="Color.Default" />
+                            <MudIcon Icon="@Icons.Material.Filled.Lock" Size="Size.Small" Color="Color.Default" />
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Spam Today</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">GlobalAdmin only</MudText>
+                        </MudStack>
+                    }
+                </MudItem>
                 <MudItem xs="12" sm="6" md="3">
                     <MudStack AlignItems="AlignItems.Center">
                         <MudIcon Icon="@Icons.Material.Filled.Block" Size="Size.Large" Color="Color.Error" />
@@ -171,11 +225,11 @@
             </MudPaper>
         </MudItem>
 
-        @if (_canSeeGlobalStats)
-        {
-            <MudItem xs="12" md="6">
-                <MudPaper Class="pa-4 mb-4" Elevation="2" Style="height: 100%;">
-                    <MudText Typo="Typo.h6" Class="mb-3">Recent Activity</MudText>
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4 mb-4" Elevation="2" Style="height: 100%;">
+                <MudText Typo="Typo.h6" Class="mb-3">Recent Activity</MudText>
+                @if (_canSeeGlobalStats)
+                {
                     @if (_recentActions == null || _recentActions.Count == 0)
                     {
                         <MudText Typo="Typo.body2" Color="Color.Secondary">No recent moderation activity</MudText>
@@ -205,9 +259,16 @@
                             </MudLink>
                         }
                     }
-                </MudPaper>
-            </MudItem>
-        }
+                }
+                else
+                {
+                    <MudStack AlignItems="AlignItems.Center" Class="py-4" Style="opacity:0.45">
+                        <MudIcon Icon="@Icons.Material.Filled.Lock" Size="Size.Large" Color="Color.Default" />
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Requires GlobalAdmin to view</MudText>
+                    </MudStack>
+                }
+            </MudPaper>
+        </MudItem>
     </MudGrid>
 
     @if (_stats is { TotalMessages: 0 })

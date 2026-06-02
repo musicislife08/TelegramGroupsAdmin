@@ -12,29 +12,32 @@
     <MudText Typo="Typo.body1" Class="mb-4">Deep-dive statistics and trends across all managed chats</MudText>
 
     <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" TabPanelsClass="pa-6" ActivePanelIndex="_activeTabIndex" ActivePanelIndexChanged="OnTabChanged">
-        @if (_canSeeGlobalAnalytics)
-        {
-            <MudTabPanel Text="Content Detection" Icon="@Icons.Material.Filled.Shield">
+        <MudTabPanel Text="Content Detection" Icon="@Icons.Material.Filled.Shield" Disabled="@(!_canSeeGlobalAnalytics)">
+            @if (_canSeeGlobalAnalytics)
+            {
                 <ContentDetectionAnalytics />
-            </MudTabPanel>
-        }
+            }
+        </MudTabPanel>
 
         <MudTabPanel Text="Message Trends" Icon="@Icons.Material.Filled.TrendingUp">
             <MessageTrends />
         </MudTabPanel>
 
-        @if (_canSeeGlobalAnalytics)
-        {
-            <MudTabPanel Text="Performance" Icon="@Icons.Material.Filled.Speed">
+        <MudTabPanel Text="Performance" Icon="@Icons.Material.Filled.Speed" Disabled="@(!_canSeeGlobalAnalytics)">
+            @if (_canSeeGlobalAnalytics)
+            {
                 <MudAlert Severity="Severity.Info" Class="mb-4">Performance metrics show global statistics across all chats to evaluate overall spam detection effectiveness.</MudAlert>
                 <PerformanceMetrics />
-            </MudTabPanel>
+            }
+        </MudTabPanel>
 
-            <MudTabPanel Text="Welcome Analytics" Icon="@Icons.Material.Filled.People">
+        <MudTabPanel Text="Welcome Analytics" Icon="@Icons.Material.Filled.People" Disabled="@(!_canSeeGlobalAnalytics)">
+            @if (_canSeeGlobalAnalytics)
+            {
                 <MudAlert Severity="Severity.Info" Class="mb-4">Welcome system metrics track user onboarding success rates, join trends, and per-chat performance.</MudAlert>
                 <WelcomeAnalytics />
-            </MudTabPanel>
-        }
+            }
+        </MudTabPanel>
     </MudTabs>
 </MudContainer>
 
@@ -52,6 +55,10 @@
         var fragment = new Uri(Navigation.Uri).Fragment.TrimStart('#');
         _activeTabIndex = FragmentToIndex(fragment);
 
+        // Admin can only use Message Trends (index 1); disabled tabs must not be active
+        if (!_canSeeGlobalAnalytics && _activeTabIndex != 1)
+            _activeTabIndex = 1;
+
         Navigation.LocationChanged += OnLocationChanged;
     }
 
@@ -59,6 +66,10 @@
     {
         var fragment = new Uri(e.Location).Fragment.TrimStart('#');
         var newIndex = FragmentToIndex(fragment);
+
+        // Admin must stay on Message Trends regardless of fragment
+        if (!_canSeeGlobalAnalytics && newIndex != 1)
+            newIndex = 1;
 
         if (newIndex != _activeTabIndex)
         {
@@ -73,36 +84,23 @@
         Navigation.NavigateTo($"/analytics#{IndexToFragment(index)}", false);
     }
 
-    // For Admin only Message Trends renders (index 0). For GlobalAdmin+ all four render in declared order.
-    private int FragmentToIndex(string fragment)
+    private int FragmentToIndex(string fragment) => fragment switch
     {
-        if (!_canSeeGlobalAnalytics)
-            return 0; // Only Message Trends is visible
+        "detection" => 0,
+        "trends" => 1,
+        "performance" => 2,
+        "welcome" => 3,
+        _ => 0
+    };
 
-        return fragment switch
-        {
-            "detection" or "spam" => 0,  // Support both for backwards compatibility
-            "trends" => 1,
-            "performance" => 2,
-            "welcome" => 3,
-            _ => 0
-        };
-    }
-
-    private string IndexToFragment(int index)
+    private string IndexToFragment(int index) => index switch
     {
-        if (!_canSeeGlobalAnalytics)
-            return "trends"; // Only Message Trends is visible
-
-        return index switch
-        {
-            0 => "detection",
-            1 => "trends",
-            2 => "performance",
-            3 => "welcome",
-            _ => "detection"
-        };
-    }
+        0 => "detection",
+        1 => "trends",
+        2 => "performance",
+        3 => "welcome",
+        _ => "detection"
+    };
 
     public void Dispose()
     {
