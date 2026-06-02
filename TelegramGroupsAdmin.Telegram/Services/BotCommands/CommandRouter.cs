@@ -96,11 +96,11 @@ public partial class CommandRouter
                     TelegramDisplayName.Format(message.From.FirstName, message.From.LastName, message.From.Username, message.From.Id),
                     commandName, permissionLevel, command.MinPermissionLevel);
 
-                var permissionMessage = command.MinPermissionLevel >= PermissionLevel.Admin
-                    ? "❌ This command is only available to group administrators."
-                    : "❌ You don't have permission to use this command.";
-
-                return new CommandResult(TelegramMessage.Plain(permissionMessage), true); // Auto-delete permission denied messages
+                // Every gated command requires Admin (moderation); public commands are Member (the floor)
+                // and can never reach this branch, so the only denial is "needs admin".
+                return new CommandResult(
+                    TelegramMessage.Plain("❌ This command is only available to group administrators."),
+                    true); // Auto-delete permission denied messages
             }
 
             // Check reply requirement
