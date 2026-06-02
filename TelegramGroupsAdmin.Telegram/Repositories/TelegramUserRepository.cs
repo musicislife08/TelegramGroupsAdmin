@@ -462,10 +462,12 @@ public class TelegramUserRepository : ITelegramUserRepository
                 break;
         }
 
-        // Apply chatIds filter (Admin users have scoped access via messages table)
-        if (chatIds is { Count: > 0 })
+        // Apply chatIds filter (Admin users have scoped access via messages table).
+        // Contains GlobalChatId (0) ⇒ global / no filter. Empty (or null) ⇒ nothing.
+        var scopeIds = chatIds ?? [];
+        if (!scopeIds.Contains(ModerationConstants.GlobalChatId))
         {
-            query = query.Where(u => context.Messages.Any(m => m.UserId == u.TelegramUserId && chatIds.Contains(m.ChatId)));
+            query = query.Where(u => context.Messages.Any(m => m.UserId == u.TelegramUserId && scopeIds.Contains(m.ChatId)));
         }
 
         // Apply search text filter
