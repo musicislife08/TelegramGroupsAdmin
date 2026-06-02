@@ -327,10 +327,10 @@ public class NotificationPreferencesCardTests : NotificationPreferencesCardTestC
     [Test]
     public void HidesOwnerOnlyEvents_ForAdmin()
     {
-        // Arrange & Act - Admin level (1)
+        // Arrange & Act - Admin tier (non-owner)
         var cut = Render<NotificationPreferencesCard>(p => p
             .Add(x => x.UserId, "test-user-id")
-            .Add(x => x.UserPermissionLevel, PermissionLevel.GlobalAdmin));
+            .Add(x => x.UserPermissionLevel, PermissionLevel.Admin));
 
         // Assert - Should not show owner-only events
         // Note: The actual text in the checkbox is "Backup Failed (Owners)"
