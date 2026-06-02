@@ -5,11 +5,11 @@ using Microsoft.Extensions.Logging;
 using Microsoft.IO;
 using NSubstitute;
 using Telegram.Bot.Types;
-using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
 using TelegramGroupsAdmin.BackgroundJobs.Services.Backup;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
+using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Data.Constants;
 using TelegramGroupsAdmin.Data.Services;
 using TelegramGroupsAdmin.Telegram.Models;
@@ -953,34 +953,6 @@ public class BackupServiceTests
             CancellationToken cancellationToken = default)
             => Task.FromResult(SuccessResult);
 
-        public Task<DmDeliveryResult> SendDmWithQueueAsync(
-            UserIdentity user,
-            string notificationType,
-            string messageText,
-            ParseMode parseMode = ParseMode.MarkdownV2,
-            CancellationToken cancellationToken = default)
-            => Task.FromResult(SuccessResult);
-
-        public Task<DmDeliveryResult> SendDmWithMediaAsync(
-            UserIdentity user,
-            string notificationType,
-            string messageText,
-            string? photoPath = null,
-            string? videoPath = null,
-            CancellationToken cancellationToken = default)
-            => Task.FromResult(SuccessResult);
-
-        public Task<DmDeliveryResult> SendDmWithMediaAndKeyboardAsync(
-            UserIdentity user,
-            string notificationType,
-            string messageText,
-            string? photoPath = null,
-            string? videoPath = null,
-            InlineKeyboardMarkup? keyboard = null,
-            ParseMode parseMode = ParseMode.MarkdownV2,
-            CancellationToken cancellationToken = default)
-            => Task.FromResult(SuccessResult);
-
         public Task<Message> EditDmTextAsync(
             long dmChatId,
             int messageId,
@@ -1015,6 +987,30 @@ public class BackupServiceTests
             string notificationType,
             string text,
             IReadOnlyList<MessageEntity> entities,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult(SuccessResult);
+
+        public Task<DmDeliveryResult> SendDmAsync(
+            UserIdentity user,
+            TelegramMessage message,
+            long? fallbackChatId = null,
+            int? autoDeleteSeconds = null,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult(SuccessResult);
+
+        public Task<DmDeliveryResult> SendDmWithKeyboardAsync(
+            UserIdentity user,
+            TelegramMessage message,
+            InlineKeyboardMarkup keyboard,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult(SuccessResult);
+
+        public Task<DmDeliveryResult> SendDmWithMediaEntitiesAsync(
+            UserIdentity user,
+            string notificationType,
+            TelegramMessage message,
+            string? photoPath = null,
+            string? videoPath = null,
             CancellationToken cancellationToken = default)
             => Task.FromResult(SuccessResult);
 

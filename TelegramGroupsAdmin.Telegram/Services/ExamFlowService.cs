@@ -191,11 +191,10 @@ public class ExamFlowService : IExamFlowService
             var sessionId = await sessionRepo.CreateSessionAsync(chat, UserIdentity.From(user), expiresAt, cancellationToken);
 
             // Send exam intro (MainWelcomeMessage) first - rules/guidelines without buttons
-            var username = TelegramDisplayName.FormatMention(user);
             var chatName = chat.ChatName ?? "the group";
 
-            var introText = WelcomeMessageBuilder.FormatExamIntro(config, username, chatName);
-            await _dmService.SendDmAsync(UserIdentity.From(user), introText, cancellationToken: cancellationToken);
+            var introMessage = WelcomeMessageBuilder.FormatExamIntro(config, UserIdentity.From(user), chatName);
+            await _dmService.SendDmAsync(UserIdentity.From(user), introMessage, cancellationToken: cancellationToken);
 
             // Then send first question to DM
             int messageId;
@@ -592,8 +591,7 @@ public class ExamFlowService : IExamFlowService
         int totalQuestions,
         CancellationToken cancellationToken)
     {
-        var username = TelegramDisplayName.FormatMention(user);
-        var text = ExamMessageBuilder.FormatMcQuestion(username, questionIndex + 1, totalQuestions, question.Question);
+        var text = ExamMessageBuilder.FormatMcQuestion(UserIdentity.From(user), questionIndex + 1, totalQuestions, question.Question);
 
         // Build keyboard with shuffled answers
         var buttons = new List<InlineKeyboardButton[]>();
@@ -619,8 +617,7 @@ public class ExamFlowService : IExamFlowService
         ExamConfig examConfig,
         CancellationToken cancellationToken)
     {
-        var username = TelegramDisplayName.FormatMention(user);
-        var text = ExamMessageBuilder.FormatOpenEndedQuestion(username, examConfig.OpenEndedQuestion!);
+        var text = ExamMessageBuilder.FormatOpenEndedQuestion(UserIdentity.From(user), examConfig.OpenEndedQuestion!);
 
         // Exam questions are always sent to DMs (no keyboard for open-ended)
         var result = await _dmService.SendDmAsync(UserIdentity.From(user), text, cancellationToken: cancellationToken);

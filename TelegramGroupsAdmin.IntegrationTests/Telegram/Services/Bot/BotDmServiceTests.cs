@@ -220,10 +220,10 @@ public class BotDmServiceTests
 
     #endregion
 
-    #region SendDmWithQueueAsync Tests
+    #region SendDmWithEntitiesAsync Tests
 
     [Test]
-    public async Task SendDmWithQueueAsync_Success_SetsBotDmEnabledTrue()
+    public async Task SendDmWithEntitiesAsync_Success_SetsBotDmEnabledTrue()
     {
         // Arrange
         _mockMessageHandler.SendAsync(
@@ -237,10 +237,11 @@ public class BotDmServiceTests
         ).Returns(TelegramTestFactory.CreateMessage(messageId: 999, chatId: TestUserId));
 
         // Act
-        var result = await _service!.SendDmWithQueueAsync(
+        var result = await _service!.SendDmWithEntitiesAsync(
             UserIdentity.FromId(TestUserId),
             "test_notification",
-            "Test message");
+            "Test message",
+            []);
 
         // Assert
         using (Assert.EnterMultipleScope())
@@ -255,7 +256,7 @@ public class BotDmServiceTests
     }
 
     [Test]
-    public async Task SendDmWithQueueAsync_Blocked403_QueuesNotificationForLater()
+    public async Task SendDmWithEntitiesAsync_Blocked403_QueuesNotificationForLater()
     {
         // Arrange
         _mockMessageHandler.SendAsync(
@@ -269,10 +270,11 @@ public class BotDmServiceTests
         ).ThrowsAsync(new ApiRequestException("Forbidden", 403));
 
         // Act
-        var result = await _service!.SendDmWithQueueAsync(
+        var result = await _service!.SendDmWithEntitiesAsync(
             UserIdentity.FromId(TestUserId),
             "report_resolved",
-            "Your report was resolved!");
+            "Your report was resolved!",
+            []);
 
         // Assert
         using (Assert.EnterMultipleScope())

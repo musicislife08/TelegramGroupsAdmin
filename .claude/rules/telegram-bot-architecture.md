@@ -18,7 +18,7 @@ paths:
 - `IBotUserService`: GetMeAsync, GetChatMemberAsync, IsAdminAsync
 - `IBotMediaService`: GetFileAsync, DownloadFileAsync, GetUserPhotoAsync, GetChatIconAsync
 - `IBotModerationService`: BanAsync, UnbanAsync, RestrictAsync, KickAsync
-- `IBotDmService`: SendDmAsync, SendDmWithQueueAsync, SendDmWithMediaAsync
+- `IBotDmService`: SendDmAsync, SendDmWithKeyboardAsync, SendDmWithEntitiesAsync, SendDmWithMediaEntitiesAsync, SendDmWithMediaAndKeyboardEntitiesAsync
 
 ## Singleton + Scoped Pattern
 Handlers are Scoped. If service is Singleton, create scope:

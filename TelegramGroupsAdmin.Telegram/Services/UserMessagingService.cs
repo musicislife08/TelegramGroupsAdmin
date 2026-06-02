@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
-using Telegram.Bot.Types.Enums;
+using Telegram.Bot.Types.ReplyMarkups;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
@@ -34,7 +35,7 @@ public class UserMessagingService : IUserMessagingService
     public async Task<MessageSendResult> SendToUserAsync(
         long userId,
         Chat chat,
-        string messageText,
+        TelegramMessage message,
         int? replyToMessageId = null,
         CancellationToken cancellationToken = default)
     {
@@ -47,8 +48,8 @@ public class UserMessagingService : IUserMessagingService
         {
             // Try DM via IBotDmService (no fallback - we'll handle mention fallback ourselves)
             var dmResult = await _dmService.SendDmAsync(
-                user: user != null ? Core.Models.UserIdentity.From(user) : Core.Models.UserIdentity.FromId(userId),
-                messageText: messageText,
+                user: user != null ? UserIdentity.From(user) : UserIdentity.FromId(userId),
+                message: message,
                 fallbackChatId: null,
                 cancellationToken: cancellationToken);
 
@@ -57,7 +58,7 @@ public class UserMessagingService : IUserMessagingService
                 _logger.LogInformation(
                     "Sent DM to user {User}: {MessagePreview}",
                     user.ToLogInfo(userId),
-                    messageText.Length > 50 ? messageText[..50] + "..." : messageText);
+                    message.Text.Length > 50 ? message.Text[..50] + "..." : message.Text);
 
                 return new MessageSendResult(userId, Success: true, MessageDeliveryMethod.PrivateDm);
             }
@@ -69,18 +70,18 @@ public class UserMessagingService : IUserMessagingService
         }
 
         // Fallback: Send as chat mention
-        return await SendChatMentionAsync(userId, chat, messageText, replyToMessageId, cancellationToken);
+        return await SendChatMentionAsync(userId, chat, message, replyToMessageId, cancellationToken);
     }
 
     public async Task<List<MessageSendResult>> SendToMultipleUsersAsync(
         List<long> userIds,
         Chat chat,
-        string messageText,
+        TelegramMessage message,
         int? replyToMessageId = null,
         CancellationToken cancellationToken = default)
     {
         var results = new List<MessageSendResult>();
-        var failedDmUsers = new List<(long UserId, string Mention)>();
+        var failedDmUsers = new List<(long UserId, UserIdentity User)>();
 
         // Try to send DMs to all users who have it enabled
         foreach (var userId in userIds)
@@ -92,8 +93,8 @@ public class UserMessagingService : IUserMessagingService
             {
                 // Try DM via IBotDmService
                 var dmResult = await _dmService.SendDmAsync(
-                    user: user != null ? Core.Models.UserIdentity.From(user) : Core.Models.UserIdentity.FromId(userId),
-                    messageText: messageText,
+                    user: user != null ? UserIdentity.From(user) : UserIdentity.FromId(userId),
+                    message: message,
                     fallbackChatId: null,
                     cancellationToken: cancellationToken);
 
@@ -102,22 +103,20 @@ public class UserMessagingService : IUserMessagingService
                     _logger.LogInformation(
                         "Sent DM to user {User}: {MessagePreview}",
                         user.ToLogInfo(userId),
-                        messageText.Length > 50 ? messageText[..50] + "..." : messageText);
+                        message.Text.Length > 50 ? message.Text[..50] + "..." : message.Text);
 
                     results.Add(new MessageSendResult(userId, Success: true, MessageDeliveryMethod.PrivateDm));
                 }
                 else
                 {
                     // DM failed - add to batch mention list
-                    var userMention = TelegramDisplayName.FormatMention(new Core.Models.UserIdentity(userId, user?.FirstName, user?.LastName, user?.Username));
-                    failedDmUsers.Add((userId, userMention));
+                    failedDmUsers.Add((userId, new UserIdentity(userId, user?.FirstName, user?.LastName, user?.Username)));
                 }
             }
             else
             {
                 // User doesn't have DM enabled, add to batch mention list
-                var userMention = TelegramDisplayName.FormatMention(new Core.Models.UserIdentity(userId, user?.FirstName, user?.LastName, user?.Username));
-                failedDmUsers.Add((userId, userMention));
+                failedDmUsers.Add((userId, new UserIdentity(userId, user?.FirstName, user?.LastName, user?.Username)));
             }
         }
 
@@ -126,13 +125,17 @@ public class UserMessagingService : IUserMessagingService
         {
             try
             {
-                var mentions = string.Join(", ", failedDmUsers.Select(u => u.Mention));
-                var chatMessage = $"{mentions}:\n\n{messageText}";
+                var builder = new TelegramMessageBuilder();
+                for (var i = 0; i < failedDmUsers.Count; i++)
+                {
+                    if (i > 0) builder.Text(", ");
+                    builder.Mention(failedDmUsers[i].User);
+                }
+                builder.Text(":").LineBreak().LineBreak().Append(message);
 
                 await _messageService.SendAndSaveMessageAsync(
                     chatId: chat.Id,
-                    text: chatMessage,
-                    parseMode: ParseMode.Markdown,
+                    message: builder.Build(),
                     replyParameters: replyToMessageId.HasValue
                         ? new ReplyParameters { MessageId = replyToMessageId.Value }
                         : null,
@@ -177,7 +180,7 @@ public class UserMessagingService : IUserMessagingService
     private async Task<MessageSendResult> SendChatMentionAsync(
         long userId,
         Chat chat,
-        string messageText,
+        TelegramMessage message,
         int? replyToMessageId,
         CancellationToken cancellationToken)
     {
@@ -186,13 +189,15 @@ public class UserMessagingService : IUserMessagingService
 
         try
         {
-            var userMention = TelegramDisplayName.FormatMention(new Core.Models.UserIdentity(userId, user?.FirstName, user?.LastName, user?.Username));
-            var chatMessage = $"{userMention}: {messageText}";
+            var mentionMessage = new TelegramMessageBuilder()
+                .Mention(new UserIdentity(userId, user?.FirstName, user?.LastName, user?.Username))
+                .Text(": ")
+                .Append(message)
+                .Build();
 
             await _messageService.SendAndSaveMessageAsync(
                 chatId: chat.Id,
-                text: chatMessage,
-                parseMode: ParseMode.Markdown,
+                message: mentionMessage,
                 replyParameters: replyToMessageId.HasValue
                     ? new ReplyParameters { MessageId = replyToMessageId.Value }
                     : null,

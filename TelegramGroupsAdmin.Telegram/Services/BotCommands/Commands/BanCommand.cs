@@ -4,6 +4,7 @@ using Telegram.Bot.Types;
 using Telegram.Bot.Types.ReplyMarkups;
 using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Constants;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
@@ -65,7 +66,7 @@ public class BanCommand : IBotCommand
         {
             if (message.ReplyToMessage.From == null)
             {
-                return new CommandResult("❌ Could not identify target user.", DeleteCommandMessage, DeleteResponseAfterSeconds);
+                return new CommandResult(TelegramMessage.Plain("❌ Could not identify target user."), DeleteCommandMessage, DeleteResponseAfterSeconds);
             }
 
             targetIdentity = UserIdentity.From(message.ReplyToMessage.From);
@@ -82,7 +83,7 @@ public class BanCommand : IBotCommand
                 var user = await userRepository.GetByTelegramIdAsync(userId, cancellationToken);
                 if (user == null)
                 {
-                    return new CommandResult($"❌ User ID {userId} not found.", DeleteCommandMessage, DeleteResponseAfterSeconds);
+                    return new CommandResult(TelegramMessage.Plain($"❌ User ID {userId} not found."), DeleteCommandMessage, DeleteResponseAfterSeconds);
                 }
                 targetIdentity = UserIdentity.From(user);
             }
@@ -93,7 +94,7 @@ public class BanCommand : IBotCommand
                 var user = await userRepository.GetByUsernameAsync(username, cancellationToken);
                 if (user == null)
                 {
-                    return new CommandResult($"❌ User @{username} not found.", DeleteCommandMessage, DeleteResponseAfterSeconds);
+                    return new CommandResult(TelegramMessage.Plain($"❌ User @{username} not found."), DeleteCommandMessage, DeleteResponseAfterSeconds);
                 }
                 targetIdentity = UserIdentity.From(user);
             }
@@ -105,7 +106,7 @@ public class BanCommand : IBotCommand
 
                 if (matches.Count == 0)
                 {
-                    return new CommandResult($"❌ No users found matching '{searchText}'.", DeleteCommandMessage, DeleteResponseAfterSeconds);
+                    return new CommandResult(TelegramMessage.Plain($"❌ No users found matching '{searchText}'."), DeleteCommandMessage, DeleteResponseAfterSeconds);
                 }
 
                 if (matches.Count == 1)
@@ -123,7 +124,7 @@ public class BanCommand : IBotCommand
         else
         {
             return new CommandResult(
-                "❌ Reply to a message OR use: /ban @username | /ban <id> | /ban <name>",
+                TelegramMessage.Plain("❌ Reply to a message OR use: /ban @username | /ban <id> | /ban <name>"),
                 DeleteCommandMessage,
                 DeleteResponseAfterSeconds);
         }
@@ -132,7 +133,7 @@ public class BanCommand : IBotCommand
         var isAdmin = await chatAdminsRepository.IsAdminAsync(message.Chat.Id, targetIdentity!.Id, cancellationToken);
         if (isAdmin)
         {
-            return new CommandResult("❌ Cannot ban chat admins.", DeleteCommandMessage, DeleteResponseAfterSeconds);
+            return new CommandResult(TelegramMessage.Plain("❌ Cannot ban chat admins."), DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
 
         // Execute ban
@@ -168,7 +169,7 @@ public class BanCommand : IBotCommand
 
         // Return null message - selection will be handled by callback handler
         // Don't delete command message yet (callback handler will delete both)
-        return new CommandResult(null, false, null);
+        return new CommandResult(TelegramMessage.Empty, false, null);
     }
 
     /// <summary>
@@ -203,21 +204,18 @@ public class BanCommand : IBotCommand
 
             if (!result.Success)
             {
-                return new CommandResult($"❌ Failed to ban user: {result.ErrorMessage}", DeleteCommandMessage, DeleteResponseAfterSeconds);
+                return new CommandResult(TelegramMessage.Plain($"❌ Failed to ban user: {result.ErrorMessage}"), DeleteCommandMessage, DeleteResponseAfterSeconds);
             }
 
             // Notify user of ban via DM (preferred) or chat mention (fallback)
             var chatName = message.Chat.Title ?? message.Chat.Username ?? "this chat";
-            var banNotification = $"🚫 **You have been banned**\n\n" +
-                                 $"**Chat:** {chatName}\n" +
-                                 $"**Reason:** {ModerationConstants.DefaultBanReason}\n" +
-                                 $"**Chats affected:** {result.ChatsAffected}\n\n" +
-                                 $"If you believe this was a mistake, you may appeal by contacting the chat administrators.";
+            var banNotification = BanNotificationMessage.Build(
+                chatName, ModerationConstants.DefaultBanReason, result.ChatsAffected);
 
             var messageResult = await _messagingService.SendToUserAsync(
                 userId: targetIdentity.Id,
                 chat: message.Chat,
-                messageText: banNotification,
+                message: banNotification,
                 replyToMessageId: null, // Don't reply to trigger message for bans
                 cancellationToken: cancellationToken);
 
@@ -233,12 +231,12 @@ public class BanCommand : IBotCommand
                 result.ChatsAffected, ModerationConstants.DefaultBanReason, deliveryMethod, result.TrustRemoved);
 
             // Silent mode: No chat feedback, command message simply disappears
-            return new CommandResult(null, DeleteCommandMessage, DeleteResponseAfterSeconds);
+            return new CommandResult(TelegramMessage.Empty, DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to ban {User}", targetIdentity.ToLogDebug());
-            return new CommandResult($"❌ Failed to ban user: {ex.Message}", DeleteCommandMessage, DeleteResponseAfterSeconds);
+            return new CommandResult(TelegramMessage.Plain($"❌ Failed to ban user: {ex.Message}"), DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
     }
 

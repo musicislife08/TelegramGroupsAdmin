@@ -520,16 +520,21 @@ public class WelcomeSystemConfigTests : WelcomeSystemConfigTestContext
         // Act
         var cut = Render<WelcomeSystemConfig>();
 
-        // Assert - both section headers + labels are rendered, and the preview
-        // component substitutes the distinct example usernames.
+        // Assert - both section headers + labels are rendered, and each preview renders {username}
+        // through the real WelcomeMessageBuilder path: a clickable text_mention (rendered as a
+        // tg-mention span carrying the distinct example display name, NOT a literal "@name" string).
         cut.WaitForAssertion(() =>
         {
             Assert.That(cut.Markup, Does.Contain("Admin Bypass Announcement"));
             Assert.That(cut.Markup, Does.Contain("Trusted User Announcement"));
             Assert.That(cut.Markup, Does.Contain("Template (admin)"));
             Assert.That(cut.Markup, Does.Contain("Template (trusted)"));
-            Assert.That(cut.Markup, Does.Contain("@example_admin"));
-            Assert.That(cut.Markup, Does.Contain("@example_trusted"));
+            Assert.That(cut.Markup, Does.Contain("tg-mention"));
+            Assert.That(cut.Markup, Does.Contain("example_admin"));
+            Assert.That(cut.Markup, Does.Contain("example_trusted"));
+            // The mention renders the display name only — no literal "@" prefix.
+            Assert.That(cut.Markup, Does.Not.Contain("@example_admin"));
+            Assert.That(cut.Markup, Does.Not.Contain("@example_trusted"));
         });
     }
 

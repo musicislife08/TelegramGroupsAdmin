@@ -46,13 +46,13 @@ public class MuteCommand : IBotCommand
     {
         if (message.ReplyToMessage == null)
         {
-            return new CommandResult("❌ Please reply to a message from the user to mute.", DeleteCommandMessage, DeleteResponseAfterSeconds);
+            return new CommandResult(TelegramMessage.Plain("❌ Please reply to a message from the user to mute."), DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
 
         var targetUser = message.ReplyToMessage.From;
         if (targetUser == null)
         {
-            return new CommandResult("❌ Could not identify target user.", DeleteCommandMessage, DeleteResponseAfterSeconds);
+            return new CommandResult(TelegramMessage.Plain("❌ Could not identify target user."), DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
 
         using var scope = _serviceProvider.CreateScope();
@@ -62,7 +62,7 @@ public class MuteCommand : IBotCommand
         var isAdmin = await chatAdminsRepository.IsAdminAsync(message.Chat.Id, targetUser.Id, cancellationToken);
         if (isAdmin)
         {
-            return new CommandResult("❌ Cannot mute chat admins.", DeleteCommandMessage, DeleteResponseAfterSeconds);
+            return new CommandResult(TelegramMessage.Plain("❌ Cannot mute chat admins."), DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
 
         // Parse duration (default 5 minutes if not specified or invalid)
@@ -109,7 +109,7 @@ public class MuteCommand : IBotCommand
 
             if (!result.Success)
             {
-                return new CommandResult($"❌ Failed to mute user: {result.ErrorMessage}", DeleteCommandMessage, DeleteResponseAfterSeconds);
+                return new CommandResult(TelegramMessage.Plain($"❌ Failed to mute user: {result.ErrorMessage}"), DeleteCommandMessage, DeleteResponseAfterSeconds);
             }
 
             // Build success message
@@ -124,13 +124,13 @@ public class MuteCommand : IBotCommand
                 message.From.ToLogInfo(),
                 result.ChatsAffected, duration, reason);
 
-            return new CommandResult(response, DeleteCommandMessage, DeleteResponseAfterSeconds);
+            return new CommandResult(TelegramMessage.Plain(response), DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to mute {User}",
                 targetUser.ToLogDebug());
-            return new CommandResult($"❌ Failed to mute user: {ex.Message}", DeleteCommandMessage, DeleteResponseAfterSeconds);
+            return new CommandResult(TelegramMessage.Plain($"❌ Failed to mute user: {ex.Message}"), DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
     }
 

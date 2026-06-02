@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
+using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 
@@ -38,7 +39,7 @@ public class DeleteCommand : IBotCommand
     {
         if (message.ReplyToMessage == null)
         {
-            return new CommandResult("❌ Please reply to the message you want to delete.", DeleteCommandMessage, DeleteResponseAfterSeconds);
+            return new CommandResult(TelegramMessage.Plain("❌ Please reply to the message you want to delete."), DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
 
         var targetMessage = message.ReplyToMessage;
@@ -60,13 +61,13 @@ public class DeleteCommand : IBotCommand
                 targetMessage.MessageId,
                 message.Chat.ToLogInfo());
 
-            return new CommandResult("✅ Message deleted successfully!\n\n_This is a temporary test command._", DeleteCommandMessage, DeleteResponseAfterSeconds);
+            return new CommandResult(TelegramMessage.Plain("✅ Message deleted successfully!\n\nThis is a temporary test command."), DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to delete message {MessageId} in {Chat}",
                 targetMessage.MessageId, message.Chat.ToLogDebug());
-            return new CommandResult($"❌ Failed to delete message: {ex.Message}", DeleteCommandMessage, DeleteResponseAfterSeconds);
+            return new CommandResult(TelegramMessage.Plain($"❌ Failed to delete message: {ex.Message}"), DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
     }
 }

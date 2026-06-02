@@ -1,10 +1,12 @@
-@using Humanizer
 @using TelegramGroupsAdmin.Components.Shared.Settings
 @using TelegramGroupsAdmin.Configuration
 @using TelegramGroupsAdmin.Configuration.Models.Welcome
+@using TelegramGroupsAdmin.Core.Models
 @using TelegramGroupsAdmin.Core.Services
+@using TelegramGroupsAdmin.Core.Utilities
 @using TelegramGroupsAdmin.Telegram.Extensions
 @using TelegramGroupsAdmin.Telegram.Models
+@using TelegramGroupsAdmin.Telegram.Services.Welcome
 @using TelegramGroupsAdmin.Configuration.Services
 @inject IConfigService ConfigService
 @inject ISnackbar Snackbar
@@ -249,9 +251,8 @@
                                                       Disabled="!_config.TrustedBypass.Enabled"
                                                       HelperText="@($"Optional variables: {TrustedBypassConfig.UsernameVariable}, {TrustedBypassConfig.ChatNameVariable}. Rendered message is subject to Telegram's 4096-byte limit.")" />
                                         <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2 mb-1">Live Preview (In Chat):</MudText>
-                                        <TelegramMessagePreview PreviewText="@GetAdminBypassPreviewText(_config.TrustedBypass.AnnouncementMessageAdmin)"
-                                                                ShowUserCommand="false"
-                                                                ShowWarning="true" />
+                                        <TelegramMessagePreview Message="@GetAdminBypassPreviewText(_config.TrustedBypass.AnnouncementMessageAdmin)"
+                                                                ShowUserCommand="false" />
                                     </MudItem>
                                     <MudItem xs="12">
                                         <MudText Typo="Typo.subtitle2" Class="mt-2 mb-1">Trusted User Announcement</MudText>
@@ -264,9 +265,8 @@
                                                       Disabled="!_config.TrustedBypass.Enabled"
                                                       HelperText="@($"Optional variables: {TrustedBypassConfig.UsernameVariable}, {TrustedBypassConfig.ChatNameVariable}. Rendered message is subject to Telegram's 4096-byte limit.")" />
                                         <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2 mb-1">Live Preview (In Chat):</MudText>
-                                        <TelegramMessagePreview PreviewText="@GetTrustedBypassPreviewText(_config.TrustedBypass.AnnouncementMessageTrusted)"
-                                                                ShowUserCommand="false"
-                                                                ShowWarning="true" />
+                                        <TelegramMessagePreview Message="@GetTrustedBypassPreviewText(_config.TrustedBypass.AnnouncementMessageTrusted)"
+                                                                ShowUserCommand="false" />
                                     </MudItem>
                                     <MudItem xs="12" md="4">
                                         <MudNumericField T="int"
@@ -373,9 +373,8 @@
                     </MudItem>
                     <MudItem xs="12" lg="6">
                         <MudText Typo="Typo.caption" Class="mud-text-secondary mb-2">Live Preview (In Chat):</MudText>
-                        <TelegramMessagePreview PreviewText="@GetPreviewText(_config.DmChatTeaserMessage)"
+                        <TelegramMessagePreview Message="@GetPreviewText(_config.DmChatTeaserMessage)"
                                                ShowUserCommand="false"
-                                               ShowWarning="true"
                                                Buttons="@GetDmTeaserButtons()" />
                         <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">
                             Button text: "@_config.DmButtonText"
@@ -446,9 +445,8 @@
                     <MudText Typo="Typo.caption" Class="mud-text-secondary mb-2">
                         Live Preview (@(_config.Mode == WelcomeMode.ChatAcceptDeny ? "In Chat" : "In DM")):
                     </MudText>
-                    <TelegramMessagePreview PreviewText="@GetPreviewText(_config.MainWelcomeMessage)"
+                    <TelegramMessagePreview Message="@GetPreviewText(_config.MainWelcomeMessage)"
                                            ShowUserCommand="@(_config.Mode != WelcomeMode.ChatAcceptDeny)"
-                                           ShowWarning="true"
                                            Buttons="@GetMainWelcomeButtons()" />
                 </MudItem>
 
@@ -630,57 +628,44 @@
         Snackbar.Add("Defaults loaded. Click 'Save Configuration' to apply.", Severity.Info);
     }
 
-    private string GetPreviewText(string? template)
+    // Sample user for live previews. Mirrors ExamConfigEditor's convention so the preview renders
+    // a real clickable text_mention entity (works even for usernameless users) — exactly what
+    // production produces — instead of a literal "@SampleUser" string.
+    private static readonly UserIdentity SampleUser = new(0, "SampleUser", null, null);
+
+    private TelegramMessage GetPreviewText(string? template)
     {
-        if (string.IsNullOrEmpty(template)) return "(empty template)";
+        if (string.IsNullOrEmpty(template)) return TelegramMessage.Plain("(empty template)");
 
-        var preview = template;
-
-        // Replace valid variables with sample data
-        var timeoutSeconds = _config?.TimeoutSeconds ?? 60;
-        var formattedTimeout = TimeSpan.FromSeconds(timeoutSeconds).Humanize(precision: 2);
-
-        preview = preview.Replace("{username}", "@SampleUser");
-        preview = preview.Replace("{chat_name}", "Sample Chat Group");
-        preview = preview.Replace("{timeout}", formattedTimeout);
-
-        // Highlight invalid/incomplete variables
-        var invalidVariablePattern = System.Text.RegularExpressions.Regex.Matches(preview, @"\{[^}]*\}");
-        if (invalidVariablePattern.Count > 0)
-        {
-            preview += "\n\n⚠️ Warning: Invalid variables remain in preview";
-        }
-
-        return preview;
+        // Render through the SAME builder production uses. {username} becomes a clickable mention
+        // entity, {timeout} is humanized, and any mistyped {token} survives verbatim (rendered
+        // visibly), so no separate "invalid variable" warning is needed.
+        return WelcomeMessageBuilder.BuildFromTemplate(
+            template,
+            SampleUser,
+            "Sample Chat Group",
+            _config?.TimeoutSeconds ?? 60);
     }
 
     /// <summary>
-    /// Preview helper for bypass announcement templates.
-    /// Substitutes only {username} and {chat_name} (TrustedBypassConfig's supported variables)
-    /// using caller-provided example values so the Admin and Trusted previews can differ.
+    /// Preview helper for bypass announcement templates. Routes through the shared
+    /// <see cref="WelcomeMessageBuilder.BuildBypassTemplate"/> production path so {username}
+    /// renders as a real clickable mention. The example name distinguishes the Admin vs Trusted
+    /// preview cards.
     /// </summary>
-    private static string GetBypassPreviewText(string? template, string exampleUsername)
-    {
-        if (string.IsNullOrEmpty(template)) return "(empty template)";
+    private static TelegramMessage GetBypassPreviewText(string? template, string exampleUsername)
+        => string.IsNullOrEmpty(template)
+            ? TelegramMessage.Plain("(empty template)")
+            : WelcomeMessageBuilder.BuildBypassTemplate(
+                template,
+                new UserIdentity(0, exampleUsername, null, null),
+                "Example Chat");
 
-        var preview = template
-            .Replace(TrustedBypassConfig.UsernameVariable, exampleUsername)
-            .Replace(TrustedBypassConfig.ChatNameVariable, "Example Chat");
+    private static TelegramMessage GetAdminBypassPreviewText(string? template)
+        => GetBypassPreviewText(template, "example_admin");
 
-        var invalidVariablePattern = System.Text.RegularExpressions.Regex.Matches(preview, @"\{[^}]*\}");
-        if (invalidVariablePattern.Count > 0)
-        {
-            preview += "\n\n⚠️ Warning: Invalid variables remain in preview";
-        }
-
-        return preview;
-    }
-
-    private static string GetAdminBypassPreviewText(string? template)
-        => GetBypassPreviewText(template, "@example_admin");
-
-    private static string GetTrustedBypassPreviewText(string? template)
-        => GetBypassPreviewText(template, "@example_trusted");
+    private static TelegramMessage GetTrustedBypassPreviewText(string? template)
+        => GetBypassPreviewText(template, "example_trusted");
 
     private async Task InsertVariable(string variable)
     {

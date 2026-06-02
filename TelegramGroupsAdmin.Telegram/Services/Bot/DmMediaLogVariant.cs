@@ -7,7 +7,5 @@ namespace TelegramGroupsAdmin.Telegram.Services.Bot;
 /// </summary>
 internal enum DmMediaLogVariant
 {
-    Media,
-    Keyboard,
     EntitiesMediaKeyboard
 }

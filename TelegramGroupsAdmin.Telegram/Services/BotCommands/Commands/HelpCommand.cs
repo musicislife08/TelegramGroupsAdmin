@@ -1,5 +1,5 @@
-using System.Text;
 using Telegram.Bot.Types;
+using TelegramGroupsAdmin.Core.Utilities;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
 
@@ -47,8 +47,9 @@ public class HelpCommand : IBotCommand
         int userPermissionLevel,
         CancellationToken cancellationToken = default)
     {
-        var sb = new StringBuilder();
-        sb.AppendLine("🤖 *TelegramGroupsAdmin Bot*\n");
+        var builder = new TelegramMessageBuilder()
+            .Text("🤖 ").Bold("TelegramGroupsAdmin Bot").LineBreak()
+            .LineBreak();
 
         var availableCommands = _commandMetadata
             .Where(c => c.MinPermissionLevel <= userPermissionLevel)
@@ -59,28 +60,33 @@ public class HelpCommand : IBotCommand
         var adminCommands = availableCommands.Where(c => c.MinPermissionLevel >= 1).ToList();
 
         // Show Admin commands (including self)
-        sb.AppendLine($"{GetCommandEmoji("help")} `/help` - {Description}");
+        AppendCommandLine(builder, GetCommandEmoji("help"), "help", Description);
 
         foreach (var cmd in readOnlyCommands)
         {
-            var emoji = GetCommandEmoji(cmd.Name);
-            sb.AppendLine($"{emoji} `/{cmd.Name}` - {cmd.Description}");
+            AppendCommandLine(builder, GetCommandEmoji(cmd.Name), cmd.Name, cmd.Description);
         }
 
         // Show Admin commands
         if (adminCommands.Any() && userPermissionLevel >= 1)
         {
-            sb.AppendLine("\n*Admin Commands:*");
+            builder.LineBreak().Bold("Admin Commands:").LineBreak();
             foreach (var cmd in adminCommands)
             {
-                var emoji = GetCommandEmoji(cmd.Name);
-                sb.AppendLine($"{emoji} `/{cmd.Name}` - {cmd.Description}");
+                AppendCommandLine(builder, GetCommandEmoji(cmd.Name), cmd.Name, cmd.Description);
             }
         }
 
-        sb.AppendLine($"\n_Permission: {GetPermissionName(userPermissionLevel)}_");
+        builder.LineBreak().Italic($"Permission: {GetPermissionName(userPermissionLevel)}");
 
-        return Task.FromResult(new CommandResult(sb.ToString(), DeleteCommandMessage, DeleteResponseAfterSeconds));
+        return Task.FromResult(new CommandResult(builder.Build(), DeleteCommandMessage, DeleteResponseAfterSeconds));
+    }
+
+    private static void AppendCommandLine(TelegramMessageBuilder builder, string emoji, string command, string description)
+    {
+        builder
+            .Text($"{emoji} ").Code($"/{command}").Text($" - {description}")
+            .LineBreak();
     }
 
     private static string GetCommandEmoji(string commandName) => commandName switch

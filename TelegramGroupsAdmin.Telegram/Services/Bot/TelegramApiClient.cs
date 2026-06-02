@@ -93,8 +93,9 @@ public class TelegramApiClient : ITelegramApiClient
         ParseMode? parseMode = null,
         ReplyParameters? replyParameters = null,
         InlineKeyboardMarkup? replyMarkup = null,
+        IReadOnlyList<MessageEntity>? captionEntities = null,
         CancellationToken ct = default)
-        => _client.SendAnimation(chatId, animation, caption: caption, parseMode: parseMode ?? default, replyParameters: replyParameters, replyMarkup: replyMarkup, cancellationToken: ct);
+        => _client.SendAnimation(chatId, animation, caption: caption, parseMode: parseMode ?? default, replyParameters: replyParameters, replyMarkup: replyMarkup, captionEntities: captionEntities, cancellationToken: ct);
 
     public Task<Message> EditMessageTextAsync(
         long chatId,
@@ -102,8 +103,9 @@ public class TelegramApiClient : ITelegramApiClient
         string text,
         ParseMode? parseMode = null,
         InlineKeyboardMarkup? replyMarkup = null,
+        IReadOnlyList<MessageEntity>? entities = null,
         CancellationToken ct = default)
-        => _client.EditMessageText(chatId, messageId, text, parseMode: parseMode ?? default, replyMarkup: replyMarkup, cancellationToken: ct);
+        => _client.EditMessageText(chatId, messageId, text, parseMode: parseMode ?? default, replyMarkup: replyMarkup, entities: entities, cancellationToken: ct);
 
     public Task<Message> EditMessageCaptionAsync(
         long chatId,

@@ -1,205 +1,98 @@
+using NUnit.Framework;
+using Telegram.Bot.Types;
+using Telegram.Bot.Types.Enums;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Services.Welcome;
 
 namespace TelegramGroupsAdmin.UnitTests.Telegram.Services.Welcome;
 
 /// <summary>
-/// Test suite for ExamMessageBuilder static methods.
-/// Tests pure message formatting logic for exam questions.
-/// All tests are pure function tests - no mocks, no Telegram API.
+/// Tests for ExamMessageBuilder — entity-based messages whose text_mention drives both the live DM
+/// and the config-editor preview. The mention display name comes from TelegramDisplayName.Format
+/// (first/last name, no @), so a user named "Test" renders as "Test".
 /// </summary>
 [TestFixture]
 public class ExamMessageBuilderTests
 {
-    #region FormatMcQuestion Tests
+    private static readonly UserIdentity TestUser = new(123, "Test", null, "testuser");
 
     [Test]
-    public void FormatMcQuestion_FormatsCorrectly()
+    public void FormatOpenEndedQuestion_MentionsUser_AndIncludesQuestion()
     {
-        // Act
-        var result = ExamMessageBuilder.FormatMcQuestion(
-            username: "@testuser",
-            questionNumber: 1,
-            totalQuestions: 3,
-            questionText: "What is the capital of France?");
+        var result = ExamMessageBuilder.FormatOpenEndedQuestion(TestUser, "What is your favorite color?");
 
-        // Assert
-        Assert.That(result, Does.Contain("@testuser"));
-        Assert.That(result, Does.Contain("Question 1/3"));
-        Assert.That(result, Does.Contain("What is the capital of France?"));
+        Assert.That(result.Text, Does.Contain("Test"));
+        Assert.That(result.Text, Does.Contain("What is your favorite color?"));
+        Assert.That(result.Entities, Has.Some.Matches<MessageEntity>(
+            e => e.Type == MessageEntityType.TextMention && e.User!.Id == 123));
     }
 
     [Test]
-    public void FormatMcQuestion_IncludesEmoji()
+    public void FormatOpenEndedQuestion_IncludesInstructions()
     {
-        // Act
-        var result = ExamMessageBuilder.FormatMcQuestion(
-            username: "John",
-            questionNumber: 2,
-            totalQuestions: 4,
-            questionText: "Test question");
+        var result = ExamMessageBuilder.FormatOpenEndedQuestion(TestUser, "What is your favorite color?");
 
-        // Assert - should have pencil emoji
-        Assert.That(result, Does.StartWith("📝"));
+        Assert.That(result.Text, Does.Contain("please answer this question"));
     }
 
     [Test]
-    public void FormatMcQuestion_LastQuestion_ShowsCorrectCount()
+    public void FormatMcQuestion_MentionsUser_AsTextMention()
     {
-        // Act
-        var result = ExamMessageBuilder.FormatMcQuestion(
-            username: "@user",
-            questionNumber: 4,
-            totalQuestions: 4,
-            questionText: "Final question");
+        var result = ExamMessageBuilder.FormatMcQuestion(TestUser, 1, 3, "What is 2+2?");
 
-        // Assert
-        Assert.That(result, Does.Contain("Question 4/4"));
+        Assert.That(result.Text, Does.Contain("Test"));
+        Assert.That(result.Entities, Has.Some.Matches<MessageEntity>(
+            e => e.Type == MessageEntityType.TextMention && e.User!.Id == 123));
     }
 
     [Test]
-    public void FormatMcQuestion_PreservesSpecialCharactersInQuestion()
+    public void FormatMcQuestion_IncludesQuestionNumber()
     {
-        // Act
-        var result = ExamMessageBuilder.FormatMcQuestion(
-            username: "@user",
-            questionNumber: 1,
-            totalQuestions: 1,
-            questionText: "What is 2 + 2? (Hint: it's < 5 & > 3)");
+        var result = ExamMessageBuilder.FormatMcQuestion(TestUser, 1, 3, "What is 2+2?");
 
-        // Assert
-        Assert.That(result, Does.Contain("What is 2 + 2? (Hint: it's < 5 & > 3)"));
+        Assert.That(result.Text, Does.Contain("1/3"));
     }
 
     [Test]
-    public void FormatMcQuestion_PreservesEmojiInQuestion()
+    public void FormatMcQuestion_IncludesQuestionText()
     {
-        // Act
-        var result = ExamMessageBuilder.FormatMcQuestion(
-            username: "@user",
-            questionNumber: 1,
-            totalQuestions: 1,
-            questionText: "What does 🚀 represent?");
+        var result = ExamMessageBuilder.FormatMcQuestion(TestUser, 1, 3, "What is 2+2?");
 
-        // Assert
-        Assert.That(result, Does.Contain("🚀"));
-    }
-
-    #endregion
-
-    #region FormatOpenEndedQuestion Tests
-
-    [Test]
-    public void FormatOpenEndedQuestion_FormatsCorrectly()
-    {
-        // Act
-        var result = ExamMessageBuilder.FormatOpenEndedQuestion(
-            username: "@testuser",
-            question: "Why do you want to join this group?");
-
-        // Assert
-        Assert.That(result, Does.Contain("@testuser"));
-        Assert.That(result, Does.Contain("Why do you want to join this group?"));
+        Assert.That(result.Text, Does.Contain("What is 2+2?"));
     }
 
     [Test]
-    public void FormatOpenEndedQuestion_IncludesEmoji()
+    public void FormatMcQuestion_DifferentNumbers()
     {
-        // Act
-        var result = ExamMessageBuilder.FormatOpenEndedQuestion(
-            username: "John",
-            question: "Test question");
+        var result = ExamMessageBuilder.FormatMcQuestion(TestUser, 2, 5, "Question text");
 
-        // Assert - should have pencil emoji
-        Assert.That(result, Does.StartWith("📝"));
+        Assert.That(result.Text, Does.Contain("2/5"));
     }
 
     [Test]
-    public void FormatOpenEndedQuestion_IncludesAnswerInstruction()
+    public void FormatOpenEndedQuestion_DifferentQuestions()
     {
-        // Act
-        var result = ExamMessageBuilder.FormatOpenEndedQuestion(
-            username: "@user",
-            question: "Describe yourself");
+        var result = ExamMessageBuilder.FormatOpenEndedQuestion(TestUser, "Different question?");
 
-        // Assert - should tell user to send their answer
-        Assert.That(result, Does.Contain("Send your answer below"));
+        Assert.That(result.Text, Does.Contain("Different question?"));
     }
 
     [Test]
-    public void FormatOpenEndedQuestion_PreservesMultilineQuestion()
+    public void FormatMcQuestion_FirstQuestion()
     {
-        // Arrange
-        var multilineQuestion = "Please answer the following:\n1. Your experience\n2. Your goals";
+        var result = ExamMessageBuilder.FormatMcQuestion(TestUser, 1, 1, "Only question");
 
-        // Act
-        var result = ExamMessageBuilder.FormatOpenEndedQuestion(
-            username: "@user",
-            question: multilineQuestion);
-
-        // Assert
-        Assert.That(result, Does.Contain("1. Your experience"));
-        Assert.That(result, Does.Contain("2. Your goals"));
+        Assert.That(result.Text, Does.Contain("1/1"));
     }
 
     [Test]
-    public void FormatOpenEndedQuestion_HandlesLongQuestion()
+    public void FormatMcQuestion_UsernamelessUser_StillClickableViaTextMention()
     {
-        // Arrange
-        var longQuestion = new string('x', 500);
+        var noUsername = new UserIdentity(999, "NoUser", null, null);
 
-        // Act
-        var result = ExamMessageBuilder.FormatOpenEndedQuestion(
-            username: "@user",
-            question: longQuestion);
+        var result = ExamMessageBuilder.FormatMcQuestion(noUsername, 1, 1, "Q");
 
-        // Assert - should include the full question
-        Assert.That(result, Does.Contain(longQuestion));
+        Assert.That(result.Entities, Has.Some.Matches<MessageEntity>(
+            e => e.Type == MessageEntityType.TextMention && e.User!.Id == 999));
     }
-
-    #endregion
-
-    #region Edge Cases
-
-    [Test]
-    public void FormatMcQuestion_EmptyUsername_IncludesInOutput()
-    {
-        // Act
-        var result = ExamMessageBuilder.FormatMcQuestion(
-            username: "",
-            questionNumber: 1,
-            totalQuestions: 1,
-            questionText: "Test");
-
-        // Assert - empty username is caller's responsibility, we just format it
-        Assert.That(result, Does.Contain("Question 1/1"));
-    }
-
-    [Test]
-    public void FormatOpenEndedQuestion_EmptyUsername_IncludesInOutput()
-    {
-        // Act
-        var result = ExamMessageBuilder.FormatOpenEndedQuestion(
-            username: "",
-            question: "Test");
-
-        // Assert - empty username is caller's responsibility
-        Assert.That(result, Does.Contain("Test"));
-    }
-
-    [Test]
-    public void FormatMcQuestion_EmptyQuestion_IncludesInOutput()
-    {
-        // Act
-        var result = ExamMessageBuilder.FormatMcQuestion(
-            username: "@user",
-            questionNumber: 1,
-            totalQuestions: 1,
-            questionText: "");
-
-        // Assert - empty question is caller's responsibility
-        Assert.That(result, Does.Contain("@user"));
-        Assert.That(result, Does.Contain("Question 1/1"));
-    }
-
-    #endregion
 }

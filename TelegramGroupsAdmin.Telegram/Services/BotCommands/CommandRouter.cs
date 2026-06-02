@@ -2,7 +2,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using System.Text.RegularExpressions;
 using Telegram.Bot.Types;
-using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Metrics;
@@ -13,7 +12,10 @@ namespace TelegramGroupsAdmin.Telegram.Services.BotCommands;
 /// <summary>
 /// Result of executing a bot command
 /// </summary>
-public record CommandResult(string? Response, bool DeleteCommandMessage, int? DeleteResponseAfterSeconds = null, ParseMode? ParseMode = null);
+public record CommandResult(
+    TelegramMessage Message,
+    bool DeleteCommandMessage,
+    int? DeleteResponseAfterSeconds = null);
 
 /// <summary>
 /// Routes bot commands to appropriate handlers with permission checking
@@ -73,7 +75,7 @@ public partial class CommandRouter
 
         if (!CommandNames.All.Contains(commandName))
         {
-            return new CommandResult("❌ Unknown command. Use /help to see available commands.", false);
+            return new CommandResult(TelegramMessage.Plain("❌ Unknown command. Use /help to see available commands."), false);
         }
 
         try
@@ -116,13 +118,13 @@ public partial class CommandRouter
                     permissionMessage = $"❌ Insufficient permissions. This command requires {GetPermissionName(command.MinPermissionLevel)} level.";
                 }
 
-                return new CommandResult(permissionMessage, true); // Auto-delete permission denied messages
+                return new CommandResult(TelegramMessage.Plain(permissionMessage), true); // Auto-delete permission denied messages
             }
 
             // Check reply requirement
             if (command.RequiresReply && message.ReplyToMessage == null)
             {
-                return new CommandResult($"❌ This command requires replying to a message.\n\nUsage: {command.Usage}", false);
+                return new CommandResult(TelegramMessage.Plain($"❌ This command requires replying to a message.\n\nUsage: {command.Usage}"), false);
             }
 
             // Execute command
@@ -140,7 +142,7 @@ public partial class CommandRouter
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error executing command /{Command} by {User}", commandName, message.From.ToLogDebug());
-            return new CommandResult($"❌ Error executing command: {ex.Message}", false);
+            return new CommandResult(TelegramMessage.Plain($"❌ Error executing command: {ex.Message}"), false);
         }
     }
 

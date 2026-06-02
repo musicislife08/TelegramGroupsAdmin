@@ -1,11 +1,12 @@
 using Microsoft.Extensions.Logging;
-using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 
 namespace TelegramGroupsAdmin.Telegram.Services.Notifications;
 
 /// <summary>
-/// Telegram DM notification channel - delegates to DmDeliveryService for actual delivery
+/// Telegram DM notification channel - delegates to DmDeliveryService for actual delivery.
+/// Sends <see cref="Notification.Message"/> via <c>SendDmWithEntitiesAsync</c> using its text
+/// and entities (no parse_mode). A plain message carries an empty entity list.
 /// </summary>
 public class TelegramDmChannel : INotificationChannel
 {
@@ -34,16 +35,15 @@ public class TelegramDmChannel : INotificationChannel
             return new DeliveryResult(false, "Invalid recipient format");
         }
 
-        // Delegate to DmDeliveryService with queue-on-failure behavior
-        // NotificationHandler formats messages in HTML (<b>, EscapeHtml), so use Html parse mode
-        var result = await _dmDeliveryService.SendDmWithQueueAsync(
+        // Entity-based rendering only — ParseMode.Html is gone entirely. A plain message
+        // carries an empty entity list, so a single send path covers both cases.
+        var result = await _dmDeliveryService.SendDmWithEntitiesAsync(
             Core.Models.UserIdentity.FromId(telegramUserId),
             notification.Type,
-            notification.Message,
-            ParseMode.Html,
+            notification.Message.Text,
+            notification.Message.Entities,
             cancellationToken);
 
-        // Convert DmDeliveryResult to DeliveryResult
         return new DeliveryResult(
             Success: result.DmSent,
             ErrorMessage: result.ErrorMessage);

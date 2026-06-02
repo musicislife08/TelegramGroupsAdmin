@@ -6,6 +6,7 @@ using Telegram.Bot.Types.ReplyMarkups;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
@@ -65,7 +66,7 @@ public class StartCommand : IBotCommand
         // Only respond to /start in private DMs, ignore in group chats
         if (message.Chat.Type != ChatType.Private)
         {
-            return new CommandResult(string.Empty, DeleteCommandMessage, DeleteResponseAfterSeconds); // Silently ignore /start in group chats
+            return new CommandResult(TelegramMessage.Empty, DeleteCommandMessage, DeleteResponseAfterSeconds); // Silently ignore /start in group chats
         }
 
         // User started a private conversation with the bot - enable DM notifications
@@ -92,9 +93,10 @@ public class StartCommand : IBotCommand
 
         // Default /start response
         return new CommandResult(
-            "👋 Welcome to TelegramGroupsAdmin Bot!\n\n" +
-            "This bot helps manage your Telegram groups with spam detection and moderation tools.\n\n" +
-            "Use /help to see available commands.",
+            TelegramMessage.Plain(
+                "👋 Welcome to TelegramGroupsAdmin Bot!\n\n" +
+                "This bot helps manage your Telegram groups with spam detection and moderation tools.\n\n" +
+                "Use /help to see available commands."),
             DeleteCommandMessage,
             DeleteResponseAfterSeconds);
     }
@@ -109,7 +111,7 @@ public class StartCommand : IBotCommand
         if (parts.Length != 3 || !long.TryParse(parts[1], out var chatId) || !long.TryParse(parts[2], out var targetUserId))
         {
             return new CommandResult(
-                "❌ Invalid deep link. Please use the button from the welcome message.",
+                TelegramMessage.Plain("❌ Invalid deep link. Please use the button from the welcome message."),
                 DeleteCommandMessage,
                 DeleteResponseAfterSeconds);
         }
@@ -118,7 +120,7 @@ public class StartCommand : IBotCommand
         if (message.From?.Id != targetUserId)
         {
             return new CommandResult(
-                "❌ This link is not for you. Please use the welcome link sent to you.",
+                TelegramMessage.Plain("❌ This link is not for you. Please use the welcome link sent to you."),
                 DeleteCommandMessage,
                 DeleteResponseAfterSeconds);
         }
@@ -132,7 +134,7 @@ public class StartCommand : IBotCommand
         catch (Exception)
         {
             return new CommandResult(
-                "❌ Unable to retrieve chat information. The bot may have been removed from the chat.",
+                TelegramMessage.Plain("❌ Unable to retrieve chat information. The bot may have been removed from the chat."),
                 DeleteCommandMessage,
                 DeleteResponseAfterSeconds);
         }
@@ -144,22 +146,19 @@ public class StartCommand : IBotCommand
         var config = await configService.GetEffectiveWelcomeAsync(chatId, cancellationToken)
                      ?? WelcomeConfig.Default;
 
-        // Send main welcome message in DM
+        // Send main welcome message in DM — built through the shared WelcomeMessageBuilder so the
+        // {username}/{chat_name}/{timeout} substitution (clickable mention, humanized timeout)
+        // matches every other welcome render path.
         var chatName = chat.Title ?? "the chat";
-        // Use HTML mention format to create clickable user tag
-        var username = message.From.Username != null
-            ? $"<a href=\"tg://user?id={message.From.Id}\">@{message.From.Username}</a>"
-            : $"<a href=\"tg://user?id={message.From.Id}\">{message.From.FirstName}</a>";
-
-        var messageText = config.MainWelcomeMessage
-            .Replace("{username}", username)
-            .Replace("{chat_name}", chatName)
-            .Replace("{timeout}", config.TimeoutSeconds.ToString());
+        var welcomeMessage = WelcomeMessageBuilder.BuildFromTemplate(
+            config.MainWelcomeMessage,
+            new UserIdentity(message.From.Id, message.From.FirstName, message.From.LastName, message.From.Username),
+            chatName,
+            config.TimeoutSeconds);
 
         await _messageService.SendAndSaveMessageAsync(
             chatId: message.Chat.Id,
-            text: messageText,
-            parseMode: ParseMode.Html,
+            message: welcomeMessage,
             cancellationToken: cancellationToken);
 
         // Send Accept button in separate message (will be deleted after click)
@@ -192,7 +191,7 @@ public class StartCommand : IBotCommand
         }
 
         // Don't return a message - the Accept button will trigger the final confirmation
-        return new CommandResult(string.Empty, DeleteCommandMessage, DeleteResponseAfterSeconds);
+        return new CommandResult(TelegramMessage.Empty, DeleteCommandMessage, DeleteResponseAfterSeconds);
     }
 
     /// <summary>
@@ -208,7 +207,7 @@ public class StartCommand : IBotCommand
         if (examPayload == null)
         {
             return new CommandResult(
-                "❌ Invalid exam link. Please use the button from the welcome message.",
+                TelegramMessage.Plain("❌ Invalid exam link. Please use the button from the welcome message."),
                 DeleteCommandMessage,
                 DeleteResponseAfterSeconds);
         }
@@ -217,7 +216,7 @@ public class StartCommand : IBotCommand
         if (message.From?.Id != examPayload.UserId)
         {
             return new CommandResult(
-                "❌ This exam link is not for you. Please use the button sent to you when you joined.",
+                TelegramMessage.Plain("❌ This exam link is not for you. Please use the button sent to you when you joined."),
                 DeleteCommandMessage,
                 DeleteResponseAfterSeconds);
         }
@@ -231,7 +230,7 @@ public class StartCommand : IBotCommand
         catch (Exception)
         {
             return new CommandResult(
-                "❌ Unable to retrieve chat information. The bot may have been removed from the chat.",
+                TelegramMessage.Plain("❌ Unable to retrieve chat information. The bot may have been removed from the chat."),
                 DeleteCommandMessage,
                 DeleteResponseAfterSeconds);
         }
@@ -245,7 +244,7 @@ public class StartCommand : IBotCommand
         if (config.Mode != WelcomeMode.EntranceExam || config.ExamConfig == null)
         {
             return new CommandResult(
-                "❌ Entrance exam is no longer configured for this chat.",
+                TelegramMessage.Plain("❌ Entrance exam is no longer configured for this chat."),
                 DeleteCommandMessage,
                 DeleteResponseAfterSeconds);
         }
@@ -262,7 +261,7 @@ public class StartCommand : IBotCommand
         if (!result.Success)
         {
             return new CommandResult(
-                "❌ Failed to start exam. Please try again or contact an admin.",
+                TelegramMessage.Plain("❌ Failed to start exam. Please try again or contact an admin."),
                 DeleteCommandMessage,
                 DeleteResponseAfterSeconds);
         }
@@ -273,7 +272,7 @@ public class StartCommand : IBotCommand
             chat.ToLogInfo());
 
         // Empty result - the exam service sends the first question
-        return new CommandResult(string.Empty, DeleteCommandMessage, DeleteResponseAfterSeconds);
+        return new CommandResult(TelegramMessage.Empty, DeleteCommandMessage, DeleteResponseAfterSeconds);
     }
 
     /// <summary>

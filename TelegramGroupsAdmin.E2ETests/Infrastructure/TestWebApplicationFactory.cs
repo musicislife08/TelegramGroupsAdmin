@@ -13,6 +13,7 @@ using TelegramGroupsAdmin.Configuration.Models;
 using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Services;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.AI.Services;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Services.Email;
@@ -110,14 +111,21 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
         // Mock IBotDmService for DM operations (exam flow, notifications, etc.)
         _mockBotDmService = Substitute.For<IBotDmService>();
 
-        // Configure SendDmAsync to return success
+        // Configure SendDmAsync to return success (string + entity overloads)
         _mockBotDmService.SendDmAsync(
                 Arg.Any<UserIdentity>(), Arg.Any<string>(), Arg.Any<long?>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns(new DmDeliveryResult { DmSent = true, Failed = false, MessageId = Random.Shared.Next(1, 100000) });
+        _mockBotDmService.SendDmAsync(
+                Arg.Any<UserIdentity>(), Arg.Any<TelegramMessage>(), Arg.Any<long?>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
+            .Returns(new DmDeliveryResult { DmSent = true, Failed = false, MessageId = Random.Shared.Next(1, 100000) });
 
         // Configure SendDmWithKeyboardAsync to return success with message ID (used for exam questions)
+        // Both string and entity (TelegramMessage) overloads — the migrated flow calls the entity one.
         _mockBotDmService.SendDmWithKeyboardAsync(
-                Arg.Any<UserIdentity>(), Arg.Any<string>(), Arg.Any<global::Telegram.Bot.Types.ReplyMarkups.InlineKeyboardMarkup>(), Arg.Any<CancellationToken>())
+                Arg.Any<UserIdentity>(), Arg.Any<string>(), Arg.Any<InlineKeyboardMarkup>(), Arg.Any<CancellationToken>())
+            .Returns(new DmDeliveryResult { DmSent = true, Failed = false, MessageId = Random.Shared.Next(1, 100000) });
+        _mockBotDmService.SendDmWithKeyboardAsync(
+                Arg.Any<UserIdentity>(), Arg.Any<TelegramMessage>(), Arg.Any<InlineKeyboardMarkup>(), Arg.Any<CancellationToken>())
             .Returns(new DmDeliveryResult { DmSent = true, Failed = false, MessageId = Random.Shared.Next(1, 100000) });
 
         // Configure DeleteDmMessageAsync to succeed (used after answering exam questions)

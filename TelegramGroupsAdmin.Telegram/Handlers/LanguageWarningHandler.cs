@@ -5,6 +5,7 @@ using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
@@ -104,7 +105,7 @@ public class LanguageWarningHandler
             await messagingService.SendToUserAsync(
                 userId: message.From.Id,
                 chat: message.Chat,
-                messageText: warningMessage,
+                message: TelegramMessage.Plain(warningMessage),
                 replyToMessageId: message.MessageId,
                 cancellationToken: cancellationToken);
 

@@ -192,11 +192,12 @@ public class WelcomeService(
             await RestrictUserPermissionsAsync(chatMemberUpdate.Chat, user, cancellationToken);
 
             // Step 4: Send verifying message
-            var username = TelegramDisplayName.FormatMention(user);
-            var verifyingText = WelcomeMessageBuilder.FormatVerifyingMessage(username);
             var verifyingMessage = await messageService.SendAndSaveMessageAsync(
                 chatId: chatMemberUpdate.Chat.Id,
-                text: verifyingText,
+                message: new TelegramMessageBuilder()
+                    .Mention(UserIdentity.From(user))
+                    .Text(" ⏳ Verifying...")
+                    .Build(),
                 cancellationToken: cancellationToken);
             verifyingMessageId = verifyingMessage.MessageId;
 
@@ -419,10 +420,12 @@ public class WelcomeService(
                     if (scanResult.Outcome == ProfileScanOutcome.HeldForReview)
                     {
                         // Update verifying message — user waits for admin + welcome gate
-                        var holdText = WelcomeMessageBuilder.FormatProfileHoldMessage(
-                            TelegramDisplayName.FormatMention(user));
+                        var holdMessage = new TelegramMessageBuilder()
+                            .Mention(UserIdentity.From(user))
+                            .Text(" ⏳ Your profile is under admin review. Please wait...")
+                            .Build();
                         await TryEditMessageAsync(
-                            chatMemberUpdate.Chat.Id, verifyingMessageId.Value, holdText, cancellationToken);
+                            chatMemberUpdate.Chat.Id, verifyingMessageId.Value, holdMessage, cancellationToken);
 
                         logger.LogInformation(
                             "{User} held for profile scan review (score {Score}), continuing welcome flow",
@@ -492,7 +495,7 @@ public class WelcomeService(
             // Welcome ENABLED: Update verifying message to full welcome content
             var chatInfo = await chatService.GetChatAsync(chatMemberUpdate.Chat.Id, cancellationToken);
             var chatName = chatInfo.Title ?? "this chat";
-            var messageText = WelcomeMessageBuilder.FormatWelcomeMessage(config, username, chatName);
+            var welcomeMessage = WelcomeMessageBuilder.FormatWelcomeMessage(config, UserIdentity.From(user), chatName);
 
             // Build keyboard based on welcome mode
             InlineKeyboardMarkup keyboard;
@@ -515,7 +518,7 @@ public class WelcomeService(
             await messageService.EditAndUpdateMessageAsync(
                 chatId: chatMemberUpdate.Chat.Id,
                 messageId: verifyingMessageId.Value,
-                text: messageText,
+                message: welcomeMessage,
                 replyMarkup: keyboard,
                 cancellationToken: cancellationToken);
 
@@ -609,11 +612,11 @@ public class WelcomeService(
         }
     }
 
-    private async Task TryEditMessageAsync(long chatId, int messageId, string text, CancellationToken cancellationToken)
+    private async Task TryEditMessageAsync(long chatId, int messageId, TelegramMessage message, CancellationToken cancellationToken)
     {
         try
         {
-            await messageService.EditAndUpdateMessageAsync(chatId, messageId, text, cancellationToken: cancellationToken);
+            await messageService.EditAndUpdateMessageAsync(chatId, messageId, message, cancellationToken: cancellationToken);
         }
         catch (Exception ex)
         {
@@ -626,10 +629,10 @@ public class WelcomeService(
     /// auto-deletion. No-op when the TrustedBypass toggle is disabled or the per-decision
     /// template is blank — those are the configured "disable announcement" signals.
     ///
-    /// Security: the user-controlled <c>{username}</c> and <c>{chat_name}</c> substitutions
-    /// are HTML-encoded via <see cref="TelegramHtmlEncoder"/> before interpolation into the
-    /// ParseMode.Html message body. This closes CWE-79 (stored HTML injection) where a
-    /// crafted first/last name or chat title could inject markup into the rendered message.
+    /// Security: <c>{username}</c> and <c>{chat_name}</c> substitutions are rendered as
+    /// Telegram <c>text_mention</c> entities / plain text segments via
+    /// <see cref="TelegramMessageBuilder"/>. No HTML parser is involved, eliminating the
+    /// CWE-79 (stored HTML injection) surface that the former ParseMode.Html path carried.
     /// </summary>
     private async Task PostBypassAnnouncementIfConfiguredAsync(
         Chat chat,
@@ -681,20 +684,11 @@ public class WelcomeService(
             TrustedBypassConfig.MinAnnouncementTtlSeconds,
             config.TrustedBypass.AnnouncementTtlSeconds);
 
-        // HTML-encode user-controlled substitutions before splicing them into the
-        // ParseMode.Html message (fixes CWE-79).
-        var mention = !string.IsNullOrWhiteSpace(user.Username)
-            ? $"@{TelegramHtmlEncoder.Encode(user.Username)}"
-            : $"<a href=\"tg://user?id={user.Id}\">{TelegramHtmlEncoder.Encode(TelegramDisplayName.Format(user))}</a>";
-
-        var text = template
-            .Replace(TrustedBypassConfig.UsernameVariable, mention)
-            .Replace(TrustedBypassConfig.ChatNameVariable, TelegramHtmlEncoder.Encode(chat.Title));
+        var announcementMessage = BuildBypassAnnouncementMessage(template, user, chat);
 
         var announcement = await messageService.SendAndSaveMessageAsync(
             chatId: chat.Id,
-            text: text,
-            parseMode: ParseMode.Html,
+            message: announcementMessage,
             cancellationToken: cancellationToken);
 
         var deletePayload = new DeleteMessagePayload(
@@ -709,6 +703,21 @@ public class WelcomeService(
             deduplicationKey: None,
             cancellationToken);
     }
+
+    /// <summary>
+    /// Builds the trusted-bypass announcement (<c>{username}</c> → clickable
+    /// <c>text_mention</c>, <c>{chat_name}</c> → text) via the shared
+    /// <see cref="WelcomeMessageBuilder"/> so the production send and the admin live-preview
+    /// render identically. No HTML parser is involved — no CWE-79 surface.
+    /// </summary>
+    private static TelegramMessage BuildBypassAnnouncementMessage(
+        string template,
+        User user,
+        Chat chat)
+        => WelcomeMessageBuilder.BuildBypassTemplate(
+            template,
+            UserIdentity.From(user),
+            chat.Title ?? string.Empty);
 
     public async Task HandleCallbackQueryAsync(
         CallbackQuery callbackQuery,
@@ -822,11 +831,12 @@ public class WelcomeService(
     {
         try
         {
-            var username = TelegramDisplayName.FormatMention(user);
-            var warningText = WelcomeMessageBuilder.FormatWrongUserWarning(username);
             var warningMsg = await messageService.SendAndSaveMessageAsync(
                 chatId: chatId,
-                text: warningText,
+                message: new TelegramMessageBuilder()
+                    .Mention(UserIdentity.From(user))
+                    .Text(", ⚠️ this button is not for you. Only the mentioned user can respond.")
+                    .Build(),
                 replyParameters: new ReplyParameters { MessageId = replyToMessageId },
                 cancellationToken: cancellationToken);
 
@@ -1098,9 +1108,11 @@ public class WelcomeService(
         else
         {
             // Profile gate still pending — update welcome message to show hold status
-            var holdText = WelcomeMessageBuilder.FormatProfileHoldMessage(
-                TelegramDisplayName.FormatMention(user));
-            await TryEditMessageAsync(chat.Id, welcomeMessageId, holdText, cancellationToken);
+            var holdMessage = new TelegramMessageBuilder()
+                .Mention(UserIdentity.From(user))
+                .Text(" ⏳ Your profile is under admin review. Please wait...")
+                .Build();
+            await TryEditMessageAsync(chat.Id, welcomeMessageId, holdMessage, cancellationToken);
 
             logger.LogInformation(
                 "{User} completed welcome in {Chat} but held for profile review",
@@ -1244,9 +1256,11 @@ public class WelcomeService(
         else
         {
             // Profile gate still pending — update group message and notify user in DM
-            var holdText = WelcomeMessageBuilder.FormatProfileHoldMessage(
-                TelegramDisplayName.FormatMention(user));
-            await TryEditMessageAsync(groupChatId, welcomeResponse.WelcomeMessageId, holdText, cancellationToken);
+            var holdMessage = new TelegramMessageBuilder()
+                .Mention(UserIdentity.From(user))
+                .Text(" ⏳ Your profile is under admin review. Please wait...")
+                .Build();
+            await TryEditMessageAsync(groupChatId, welcomeResponse.WelcomeMessageId, holdMessage, cancellationToken);
             await dmDeliveryService.SendDmAsync(UserIdentity.From(user),
                 "⏳ Your profile is under admin review. You'll be able to participate once approved.",
                 cancellationToken: cancellationToken);
@@ -1315,15 +1329,14 @@ public class WelcomeService(
         CancellationToken cancellationToken = default)
     {
         var chatName = chat.Title ?? "this chat";
-        var username = TelegramDisplayName.FormatMention(user);
 
         // Use extracted builder for rules confirmation message (includes footer)
-        var dmText = WelcomeMessageBuilder.FormatRulesConfirmation(config, username, chatName);
+        var dmMessage = WelcomeMessageBuilder.FormatRulesConfirmation(config, UserIdentity.From(user), chatName);
 
         // Delegate to DmDeliveryService with chat fallback and 30-second auto-delete
         var result = await dmDeliveryService.SendDmAsync(
             user: UserIdentity.From(user),
-            messageText: dmText,
+            message: dmMessage,
             fallbackChatId: chat.Id,
             autoDeleteSeconds: 30,
             cancellationToken: cancellationToken);

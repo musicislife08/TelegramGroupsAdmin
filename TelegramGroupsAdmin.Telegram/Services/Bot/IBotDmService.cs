@@ -1,7 +1,7 @@
 using Telegram.Bot.Types;
-using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Utilities;
 
 namespace TelegramGroupsAdmin.Telegram.Services.Bot;
 
@@ -34,40 +34,15 @@ public interface IBotDmService
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Attempt to send a DM to a user. If DM fails (403), queues notification for later delivery.
-    /// Updates bot_dm_enabled flag automatically.
+    /// Entity-based <see cref="SendDmAsync(UserIdentity, string, long?, int?, CancellationToken)"/>:
+    /// sends pre-rendered text + entities (no parse_mode), preserving the 403 fallback-to-chat and
+    /// auto-delete semantics. Canonical overload; the string overload forwards here.
     /// </summary>
-    Task<DmDeliveryResult> SendDmWithQueueAsync(
+    Task<DmDeliveryResult> SendDmAsync(
         UserIdentity user,
-        string notificationType,
-        string messageText,
-        ParseMode parseMode = ParseMode.MarkdownV2,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Attempt to send a DM with optional media (photo or video) to a user.
-    /// If DM fails (403), queues notification for later delivery.
-    /// </summary>
-    Task<DmDeliveryResult> SendDmWithMediaAsync(
-        UserIdentity user,
-        string notificationType,
-        string messageText,
-        string? photoPath = null,
-        string? videoPath = null,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Attempt to send a DM with optional media and inline keyboard buttons.
-    /// If DM fails (403), queues notification for later delivery (without buttons).
-    /// </summary>
-    Task<DmDeliveryResult> SendDmWithMediaAndKeyboardAsync(
-        UserIdentity user,
-        string notificationType,
-        string messageText,
-        string? photoPath = null,
-        string? videoPath = null,
-        InlineKeyboardMarkup? keyboard = null,
-        ParseMode parseMode = ParseMode.MarkdownV2,
+        TelegramMessage message,
+        long? fallbackChatId = null,
+        int? autoDeleteSeconds = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -113,6 +88,16 @@ public interface IBotDmService
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Entity-based DM with an inline keyboard (no parse_mode). Does NOT queue on failure.
+    /// Canonical overload; the string overload forwards here.
+    /// </summary>
+    Task<DmDeliveryResult> SendDmWithKeyboardAsync(
+        UserIdentity user,
+        TelegramMessage message,
+        InlineKeyboardMarkup keyboard,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Attempt to send a DM using pre-rendered text + entities (no parse_mode).
     /// For admin notifications that need text_mention entities so user mentions are
     /// clickable even when the recipient has never interacted with the mentioned user.
@@ -123,6 +108,18 @@ public interface IBotDmService
         string notificationType,
         string text,
         IReadOnlyList<MessageEntity> entities,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Attempt to send a DM with media and an entity-based caption (no parse_mode, no keyboard).
+    /// If DM fails (403), queues the text for later delivery (without media/entities).
+    /// </summary>
+    Task<DmDeliveryResult> SendDmWithMediaEntitiesAsync(
+        UserIdentity user,
+        string notificationType,
+        TelegramMessage message,
+        string? photoPath = null,
+        string? videoPath = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>

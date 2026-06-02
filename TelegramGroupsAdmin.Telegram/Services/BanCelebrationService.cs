@@ -1,7 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Telegram.Bot.Types;
-using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Models.Welcome;
 using TelegramGroupsAdmin.Core.Services;
@@ -127,7 +126,7 @@ public class BanCelebrationService(
                 banCount);
 
             // Send the GIF to the chat
-            var sentMessage = await SendGifToChatAsync(chat, gif, chatCaption, cancellationToken);
+            var sentMessage = await SendGifToChatAsync(chat, gif, TelegramMessage.Plain(chatCaption), cancellationToken);
             if (sentMessage == null)
             {
                 return false;
@@ -239,7 +238,7 @@ public class BanCelebrationService(
     private async Task<Message?> SendGifToChatAsync(
         ChatIdentity chat,
         BanCelebrationGif gif,
-        string caption,
+        TelegramMessage caption,
         CancellationToken cancellationToken)
     {
         try
@@ -256,7 +255,6 @@ public class BanCelebrationService(
                         chat.Id,
                         inputFile,
                         caption,
-                        ParseMode.Markdown,
                         cancellationToken);
                 }
                 catch (Exception ex) when (IsInvalidFileIdError(ex))
@@ -286,7 +284,6 @@ public class BanCelebrationService(
                 chat.Id,
                 localInputFile,
                 caption,
-                ParseMode.Markdown,
                 cancellationToken);
         }
         catch (Exception ex)
@@ -321,9 +318,9 @@ public class BanCelebrationService(
                 return;
             }
 
-            // Build the DM caption (uses "You" grammar)
-            // Escape for MarkdownV2 since DmDeliveryService uses that parse mode
-            var dmCaption = TelegramTextUtilities.EscapeMarkdownV2(
+            // Build the DM caption (uses "You" grammar). Entity-based, no parse mode — the banned
+            // user's grammar token is plain text, matching the chat caption.
+            var dmCaption = TelegramMessage.Plain(
                 ReplacePlaceholders(caption.DmText, "You", chat.ChatName ?? chat.Id.ToString(), banCount));
 
             // Get the full path to the GIF
@@ -335,7 +332,7 @@ public class BanCelebrationService(
             }
 
             // Determine if it's a video or image for the DM service
-            // The DM service uses SendDmWithMediaAsync which accepts photo/video paths
+            // The DM service uses SendDmWithMediaEntitiesAsync which accepts photo/video paths
             // For GIFs/animations, we'll use the video path parameter
             var extension = Path.GetExtension(fullPath).ToLowerInvariant();
             string? photoPath = null;
@@ -350,7 +347,7 @@ public class BanCelebrationService(
                 photoPath = fullPath;
             }
 
-            var result = await dmDeliveryService.SendDmWithMediaAsync(
+            var result = await dmDeliveryService.SendDmWithMediaEntitiesAsync(
                 bannedUser,
                 "ban_celebration",
                 dmCaption,

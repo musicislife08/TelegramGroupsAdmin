@@ -8,6 +8,7 @@ using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Models.Welcome;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Metrics;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
@@ -138,7 +139,7 @@ public class BanCelebrationServiceTests
     }
 
     /// <summary>
-    /// Helper to setup SendAndSaveAnimationAsync to return a Message with Animation.
+    /// Helper to setup SendAndSaveAnimationAsync (entity overload) to return a Message with Animation.
     /// Uses direct object initialization (Telegram.Bot types have settable properties).
     /// </summary>
     private void SetupSuccessfulSendAnimation(string fileId = "cached_file_id")
@@ -150,8 +151,7 @@ public class BanCelebrationServiceTests
         _mockMessageService.SendAndSaveAnimationAsync(
             Arg.Any<long>(),
             Arg.Any<InputFile>(),
-            Arg.Any<string>(),
-            Arg.Any<ParseMode>(),
+            Arg.Any<TelegramMessage>(),
             Arg.Any<CancellationToken>())
             .Returns(message);
     }
@@ -492,8 +492,7 @@ public class BanCelebrationServiceTests
         await _mockMessageService.Received(1).SendAndSaveAnimationAsync(
             123,
             Arg.Any<InputFile>(),
-            "SpammerBob banned from Test Group! Ban #42",
-            ParseMode.Markdown,
+            Arg.Is<TelegramMessage>(m => m.Text == "SpammerBob banned from Test Group! Ban #42"),
             Arg.Any<CancellationToken>());
     }
 
@@ -534,8 +533,7 @@ public class BanCelebrationServiceTests
         await _mockMessageService.Received(1).SendAndSaveAnimationAsync(
             123,
             Arg.Any<InputFile>(),
-            "Ban #0!",
-            ParseMode.Markdown,
+            Arg.Is<TelegramMessage>(m => m.Text == "Ban #0!"),
             Arg.Any<CancellationToken>());
     }
 
@@ -572,8 +570,7 @@ public class BanCelebrationServiceTests
             _mockMessageService.SendAndSaveAnimationAsync(
                 Arg.Any<long>(),
                 Arg.Any<InputFile>(),
-                Arg.Any<string>(),
-                Arg.Any<ParseMode>(),
+                Arg.Any<TelegramMessage>(),
                 Arg.Any<CancellationToken>())
                 .Returns(sentMessage);
 
@@ -652,8 +649,7 @@ public class BanCelebrationServiceTests
             _mockMessageService.SendAndSaveAnimationAsync(
                 Arg.Any<long>(),
                 Arg.Any<InputFile>(),
-                Arg.Any<string>(),
-                Arg.Any<ParseMode>(),
+                Arg.Any<TelegramMessage>(),
                 Arg.Any<CancellationToken>())
                 .Returns(
                     _ => throw new Exception("Bad Request: wrong file identifier/HTTP URL specified"),
@@ -672,8 +668,7 @@ public class BanCelebrationServiceTests
             await _mockMessageService.Received(2).SendAndSaveAnimationAsync(
                 Arg.Any<long>(),
                 Arg.Any<InputFile>(),
-                Arg.Any<string>(),
-                Arg.Any<ParseMode>(),
+                Arg.Any<TelegramMessage>(),
                 Arg.Any<CancellationToken>());
         }
         finally
@@ -724,8 +719,7 @@ public class BanCelebrationServiceTests
         _mockMessageService.SendAndSaveAnimationAsync(
             Arg.Any<long>(),
             Arg.Any<InputFile>(),
-            Arg.Any<string>(),
-            Arg.Any<ParseMode>(),
+            Arg.Any<TelegramMessage>(),
             Arg.Any<CancellationToken>())
             .ThrowsAsync(new Exception("Telegram API rate limited"));
 
@@ -770,9 +764,8 @@ public class BanCelebrationServiceTests
         await _mockMessageService.Received(1).SendAndSaveAnimationAsync(
             TestChatId,
             Arg.Any<InputFile>(),
-            Arg.Is<string>(s => s.Contains("[explicit username redacted]")
-                             && !s.Contains(TestBannedUser.DisplayName)),
-            ParseMode.Markdown,
+            Arg.Is<TelegramMessage>(m => m.Text.Contains("[explicit username redacted]")
+                                      && !m.Text.Contains(TestBannedUser.DisplayName)),
             Arg.Any<CancellationToken>());
     }
 
@@ -806,9 +799,8 @@ public class BanCelebrationServiceTests
         await _mockMessageService.Received(1).SendAndSaveAnimationAsync(
             TestChatId,
             Arg.Any<InputFile>(),
-            Arg.Is<string>(s => s.Contains(TestBannedUser.DisplayName)
-                             && !s.Contains("[explicit username redacted]")),
-            ParseMode.Markdown,
+            Arg.Is<TelegramMessage>(m => m.Text.Contains(TestBannedUser.DisplayName)
+                                      && !m.Text.Contains("[explicit username redacted]")),
             Arg.Any<CancellationToken>());
     }
 
@@ -830,9 +822,8 @@ public class BanCelebrationServiceTests
         await _mockMessageService.Received(1).SendAndSaveAnimationAsync(
             TestChatId,
             Arg.Any<InputFile>(),
-            Arg.Is<string>(s => s.Contains(TestBannedUser.DisplayName)
-                             && !s.Contains("[explicit username redacted]")),
-            ParseMode.Markdown,
+            Arg.Is<TelegramMessage>(m => m.Text.Contains(TestBannedUser.DisplayName)
+                                      && !m.Text.Contains("[explicit username redacted]")),
             Arg.Any<CancellationToken>());
     }
 
@@ -868,9 +859,45 @@ public class BanCelebrationServiceTests
         await _mockMessageService.Received(1).SendAndSaveAnimationAsync(
             TestChatId,
             Arg.Any<InputFile>(),
-            Arg.Is<string>(s => s.Contains(ProfileScanConfig.DefaultExplicitUsernameRedactionText)
-                             && !s.Contains(TestBannedUser.DisplayName)),
-            ParseMode.Markdown,
+            Arg.Is<TelegramMessage>(m => m.Text.Contains(ProfileScanConfig.DefaultExplicitUsernameRedactionText)
+                                      && !m.Text.Contains(TestBannedUser.DisplayName)),
+            Arg.Any<CancellationToken>());
+    }
+
+    #endregion
+
+    #region Entity Overload Tests
+
+    [Test]
+    public async Task SendBanCelebration_ChatGif_UsesEntityAnimationOverload_NotStringParseModeOverload()
+    {
+        // Arrange
+        SetupRepositoriesWithGifsAndCaptions(gifCount: 1, captionCount: 1);
+
+        var entityMessage = new TelegramMessage("Caption 1", []);
+        _mockMessageService.SendAndSaveAnimationAsync(
+                Arg.Any<long>(),
+                Arg.Any<InputFile>(),
+                Arg.Any<TelegramMessage>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new Message { Animation = new Animation { FileId = "file1" } });
+
+        // Act
+        var result = await _sut.SendBanCelebrationAsync(TestChat, TestBannedUser, isAutoBan: true);
+
+        // Assert — entity overload called, old string+ParseMode overload NOT called
+        Assert.That(result, Is.True);
+        await _mockMessageService.Received(1).SendAndSaveAnimationAsync(
+            Arg.Any<long>(),
+            Arg.Any<InputFile>(),
+            Arg.Any<TelegramMessage>(),
+            Arg.Any<CancellationToken>());
+        await _mockMessageService.DidNotReceive().SendAndSaveAnimationAsync(
+            Arg.Any<long>(),
+            Arg.Any<InputFile>(),
+            Arg.Any<string>(),
+            Arg.Any<ParseMode?>(),
+            Arg.Any<IReadOnlyList<MessageEntity>?>(),
             Arg.Any<CancellationToken>());
     }
 

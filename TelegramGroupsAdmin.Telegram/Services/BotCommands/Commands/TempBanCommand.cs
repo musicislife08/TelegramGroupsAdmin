@@ -47,13 +47,13 @@ public class TempBanCommand : IBotCommand
     {
         if (message.ReplyToMessage == null)
         {
-            return new CommandResult("❌ Please reply to a message from the user to temp ban.", DeleteCommandMessage);
+            return new CommandResult(TelegramMessage.Plain("❌ Please reply to a message from the user to temp ban."), DeleteCommandMessage);
         }
 
         var targetUser = message.ReplyToMessage.From;
         if (targetUser == null)
         {
-            return new CommandResult("❌ Could not identify target user.", DeleteCommandMessage);
+            return new CommandResult(TelegramMessage.Plain("❌ Could not identify target user."), DeleteCommandMessage);
         }
 
         using var scope = _serviceProvider.CreateScope();
@@ -63,7 +63,7 @@ public class TempBanCommand : IBotCommand
         var isAdmin = await chatAdminsRepository.IsAdminAsync(message.Chat.Id, targetUser.Id, cancellationToken);
         if (isAdmin)
         {
-            return new CommandResult("❌ Cannot temp ban chat admins.", DeleteCommandMessage);
+            return new CommandResult(TelegramMessage.Plain("❌ Cannot temp ban chat admins."), DeleteCommandMessage);
         }
 
         // Parse duration (default 1 hour if not specified or invalid)
@@ -110,7 +110,7 @@ public class TempBanCommand : IBotCommand
 
             if (!result.Success)
             {
-                return new CommandResult($"❌ Failed to temp ban user: {result.ErrorMessage}", DeleteCommandMessage);
+                return new CommandResult(TelegramMessage.Plain($"❌ Failed to temp ban user: {result.ErrorMessage}"), DeleteCommandMessage);
             }
 
             // Build success message (DM notification sent by ModerationActionService)
@@ -126,13 +126,13 @@ public class TempBanCommand : IBotCommand
                 result.ChatsAffected, duration, reason);
 
             // Return CommandResult with dynamic deletion time matching tempban duration
-            return new CommandResult(response, DeleteCommandMessage, (int)duration.TotalSeconds);
+            return new CommandResult(TelegramMessage.Plain(response), DeleteCommandMessage, (int)duration.TotalSeconds);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to temp ban {User}",
                 targetUser.ToLogDebug());
-            return new CommandResult($"❌ Failed to temp ban user: {ex.Message}", DeleteCommandMessage);
+            return new CommandResult(TelegramMessage.Plain($"❌ Failed to temp ban user: {ex.Message}"), DeleteCommandMessage);
         }
     }
 

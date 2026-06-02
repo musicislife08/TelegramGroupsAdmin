@@ -1,4 +1,5 @@
 using Telegram.Bot.Types;
+using TelegramGroupsAdmin.Core.Utilities;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 
@@ -13,14 +14,14 @@ public interface IUserMessagingService
     /// </summary>
     /// <param name="userId">Target user's Telegram ID</param>
     /// <param name="chat">Chat for fallback mention (required)</param>
-    /// <param name="messageText">Message to send</param>
+    /// <param name="message">Pre-rendered message (text + entities) to send</param>
     /// <param name="replyToMessageId">Optional message ID to reply to in chat fallback</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>True if message was sent successfully (either DM or fallback), false if both failed</returns>
     Task<MessageSendResult> SendToUserAsync(
         long userId,
         Chat chat,
-        string messageText,
+        TelegramMessage message,
         int? replyToMessageId = null,
         CancellationToken cancellationToken = default);
 
@@ -31,7 +32,7 @@ public interface IUserMessagingService
     Task<List<MessageSendResult>> SendToMultipleUsersAsync(
         List<long> userIds,
         Chat chat,
-        string messageText,
+        TelegramMessage message,
         int? replyToMessageId = null,
         CancellationToken cancellationToken = default);
 }
