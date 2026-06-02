@@ -332,14 +332,31 @@ public class NotificationPreferencesCardTests : NotificationPreferencesCardTestC
             .Add(x => x.UserId, "test-user-id")
             .Add(x => x.UserPermissionLevel, PermissionLevel.Admin));
 
-        // Assert - Should not show owner-only events
-        // Note: The actual text in the checkbox is "Backup Failed (Owners)"
-        // but non-owners won't see this option at all
+        // Assert - owner-only events must not appear for non-owners
         cut.WaitForAssertion(() =>
         {
-            // The Backup Failed option should not be visible for non-owners
-            // We check that the general structure renders
             Assert.That(cut.Markup, Does.Contain("Notification Preferences"));
+            Assert.That(cut.Markup, Does.Not.Contain("Backup Failed"));
+            Assert.That(cut.Markup, Does.Not.Contain("Chat Health Warning"));
+            Assert.That(cut.Markup, Does.Not.Contain("Chat Admin Changed"));
+        });
+    }
+
+    [Test]
+    public void HidesOwnerOnlyEvents_ForGlobalAdmin()
+    {
+        // Arrange & Act - GlobalAdmin tier (also a non-owner)
+        var cut = Render<NotificationPreferencesCard>(p => p
+            .Add(x => x.UserId, "test-user-id")
+            .Add(x => x.UserPermissionLevel, PermissionLevel.GlobalAdmin));
+
+        // Assert - GlobalAdmin is below Owner so owner-only events must be hidden
+        cut.WaitForAssertion(() =>
+        {
+            Assert.That(cut.Markup, Does.Contain("Notification Preferences"));
+            Assert.That(cut.Markup, Does.Not.Contain("Backup Failed"));
+            Assert.That(cut.Markup, Does.Not.Contain("Chat Health Warning"));
+            Assert.That(cut.Markup, Does.Not.Contain("Chat Admin Changed"));
         });
     }
 
