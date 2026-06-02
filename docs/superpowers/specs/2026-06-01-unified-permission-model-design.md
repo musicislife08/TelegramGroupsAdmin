@@ -209,9 +209,9 @@ declare `PermissionLevel.Admin` directly and the constant is deleted).
 | 12 | `Audit.razor` uses `Roles=` not `Policy` | `Audit.razor:11` | §7 |
 | 13 | 3 copies of role/permission-name mapping | `CommandRouter`, `HelpCommand`, `AuthCookieService`/`Login` | §4, §8 |
 
-## Out of Scope (new follow-up issue)
+## Out of Scope (follow-up issue #510)
 
-**"Per-chat scope analytics & detection data"** — fix deviations #5–#8 properly: scope the
+**"Per-chat scope analytics & detection data"** ([#510](https://github.com/musicislife08/TelegramGroupsAdmin/issues/510)) — fix deviations #5–#8 properly: scope the
 three leaky analytics tabs' repository methods, **un-hide those tabs for Admin**, and
 un-hide the dashboard widgets. This is deferred because it requires **DB view migrations**,
 which would otherwise pull migration risk into this migration-free PR:
