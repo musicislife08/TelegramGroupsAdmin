@@ -1,5 +1,5 @@
 @page "/tools"
-@attribute [Authorize(Policy = "GlobalAdminOrOwner")]
+@attribute [Authorize(Policy = AuthenticationConstants.PolicyGlobalAdminOrOwner)]
 @using TelegramGroupsAdmin.Components.Shared.ContentDetection
 
 <PageTitle>Tools</PageTitle>
