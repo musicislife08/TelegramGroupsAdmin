@@ -16,7 +16,7 @@ namespace TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
 
 /// <summary>
 /// /invite - Get invite link for current chat (for users in private groups)
-/// Permission level: -1 (everyone, including non-admins)
+/// Permission level: Member (everyone, including non-admins)
 /// Configurable: Global and per-chat enable/disable
 /// Auto-deletes: Command and response after 30 seconds (configurable)
 /// </summary>
