@@ -602,7 +602,12 @@
         _saving = true;
         try
         {
-            var actor = WebUser!.ToActor();
+            if (WebUser is null)
+            {
+                Snackbar.Add("Your session could not be verified. Please sign in again.", Severity.Error);
+                return;
+            }
+            var actor = WebUser.ToActor();
             await ConfigService.SaveWelcomeAsync(Chat?.Identity ?? ChatIdentity.FromId(0), _config, actor);
             Snackbar.Add($"Welcome configuration saved {(Chat != null ? $"for {Chat.Identity.ToLogInfo()}" : "globally")}", Severity.Success);
 

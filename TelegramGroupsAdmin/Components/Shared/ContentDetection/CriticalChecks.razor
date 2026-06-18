@@ -242,7 +242,12 @@
             StateHasChanged();
 
             // Save the entire config (which now includes AlwaysRun in each sub-config)
-            var actor = WebUser!.ToActor();
+            if (WebUser is null)
+            {
+                Snackbar.Add("Your session could not be verified. Please sign in again.", Severity.Error);
+                return;
+            }
+            var actor = WebUser.ToActor();
             await ConfigService.SaveContentDetectionAsync(new ChatIdentity(0, "Global"), _config, actor);
 
             Snackbar.Add("Critical checks configuration saved successfully", Severity.Success);
