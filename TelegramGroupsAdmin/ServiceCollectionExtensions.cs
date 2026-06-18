@@ -9,6 +9,7 @@ using Microsoft.IO;
 using MudBlazor.Services;
 using Polly;
 using Polly.RateLimiting;
+using TelegramGroupsAdmin.Auth;
 using TelegramGroupsAdmin.Constants;
 using TelegramGroupsAdmin.Data.Services;
 using TelegramGroupsAdmin.Services;
@@ -110,7 +111,7 @@ public static class ServiceCollectionExtensions
                     policy.RequireRole("Owner"));
 
             services.AddCascadingAuthenticationState();
-            services.AddScoped<AuthenticationStateProvider, ServerAuthenticationStateProvider>();
+            services.AddScoped<AuthenticationStateProvider, RevalidatingUserAuthenticationStateProvider>();
 
             // Auth cookie service for programmatic cookie generation (used by app and tests)
             services.AddScoped<TelegramGroupsAdmin.Services.Auth.IAuthCookieService, TelegramGroupsAdmin.Services.Auth.AuthCookieService>();
