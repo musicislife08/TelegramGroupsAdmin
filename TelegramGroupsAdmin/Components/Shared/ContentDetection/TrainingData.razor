@@ -1,9 +1,7 @@
-@using Microsoft.AspNetCore.Components.Authorization
 @using TelegramGroupsAdmin.ContentDetection.Repositories
 @using TelegramGroupsAdmin.ContentDetection.Models
 @using TelegramGroupsAdmin.Core.BackgroundJobs
 @inject IDetectionResultsRepository DetectionResultsRepository
-@inject AuthenticationStateProvider AuthStateProvider
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 @inject TelegramGroupsAdmin.Core.Services.IJobTriggerService JobTriggerService
@@ -165,6 +163,8 @@
 </MudContainer>
 
 @code {
+    [CascadingParameter] private WebUserIdentity? WebUser { get; set; }
+
     private List<DetectionResultRecord> _allSamples = [];
     private IEnumerable<DetectionResultRecord> _filteredSamples = new List<DetectionResultRecord>();
     private TrainingDataStats? _stats;
@@ -172,7 +172,6 @@
     private string _searchText = string.Empty;
     private string _typeFilter = "all";
     private string _sourceFilter = "all";
-    private string? _currentUserId;
     private HashSet<int> _conflictedMessageIds = [];
 
     // Translation toggle state per sample (Phase 4.20+: Show translations in training samples)
@@ -204,8 +203,6 @@
 
     protected override async Task OnInitializedAsync()
     {
-        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
-        _currentUserId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
         await LoadData();
     }
 
@@ -293,6 +290,12 @@
 
     private async Task AddTrainingSample()
     {
+        if (WebUser is null)
+        {
+            Snackbar.Add("Your session could not be verified. Please sign in again.", Severity.Error);
+            return;
+        }
+
         var dialog = await DialogService.ShowAsync<AddTrainingSampleDialog>("Add Training Sample");
         var result = await dialog.Result;
 
@@ -305,7 +308,7 @@
                     data.IsSpam,
                     data.Source,
                     data.Score,
-                    _currentUserId,
+                    WebUser.Id,
                     data.TranslatedText,
                     data.DetectedLanguage);
 
@@ -323,6 +326,12 @@
 
     private async Task EditTrainingSample(DetectionResultRecord sample)
     {
+        if (WebUser is null)
+        {
+            Snackbar.Add("Your session could not be verified. Please sign in again.", Severity.Error);
+            return;
+        }
+
         var parameters = new DialogParameters<EditTrainingSampleDialog>
         {
             { x => x.Sample, sample }
@@ -344,7 +353,7 @@
                     data.IsSpam,
                     data.Source,
                     data.Score,
-                    _currentUserId);
+                    WebUser.Id);
 
                 Snackbar.Add("Training sample updated successfully", Severity.Success);
                 await TriggerRetrainingAsync();

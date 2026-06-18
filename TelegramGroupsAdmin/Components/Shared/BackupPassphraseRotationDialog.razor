@@ -1,9 +1,7 @@
 @using TelegramGroupsAdmin.BackgroundJobs.Services.Backup
-@using Microsoft.AspNetCore.Components.Authorization
 @inject IPassphraseManagementService PassphraseService
 @inject ISnackbar Snackbar
 @inject IJSRuntime JsRuntime
-@inject AuthenticationStateProvider AuthStateProvider
 
 <MudDialog>
     <TitleContent>
@@ -150,6 +148,7 @@
 
 @code {
     [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+    [CascadingParameter] private WebUserIdentity? WebUser { get; set; }
     [Parameter] public string BackupDirectory { get; set; } = "/data/backups";
 
     private enum RotationStep
@@ -181,22 +180,13 @@
 
         try
         {
-            // Get current user ID (web user GUID string)
-            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
-
-            // Get user ID claim (ClaimTypes.NameIdentifier contains the GUID string)
-            var userIdClaim = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
-
-            if (userIdClaim == null)
+            if (WebUser is null)
             {
-                var availableClaims = string.Join(", ", authState.User.Claims.Select(c => c.Type));
-                throw new InvalidOperationException($"User ID claim not found. Available claims: {availableClaims}");
+                Snackbar.Add("Your session could not be verified. Please sign in again.", Severity.Error);
+                _isProcessing = false;
+                return;
             }
-
-            var userId = userIdClaim.Value; // Web user GUID string (e.g., "b388ee38-0ed3-4c09-9def-5715f9f07f56")
-
-            // Store userId for later when user confirms they saved the passphrase
-            _userId = userId;
+            _userId = WebUser.Id;
 
             // Use custom passphrase if provided, otherwise generate (but DON'T queue job yet!)
             if (_useCustomPassphrase)
