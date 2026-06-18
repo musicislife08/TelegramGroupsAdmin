@@ -1,9 +1,7 @@
 @using TelegramGroupsAdmin.Helpers
-@using Microsoft.AspNetCore.Components.Authorization
 @inject ITagDefinitionsRepository TagDefinitionsRepository
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
-@inject AuthenticationStateProvider AuthenticationStateProvider
 
 <MudStack Spacing="4">
     <MudPaper Class="pa-4">
@@ -94,15 +92,15 @@
 @code {
     private List<TagDefinition> _tags = [];
     private bool _loading = true;
-    private bool _canEdit;
+    [CascadingParameter] private WebUserIdentity? WebUser { get; set; }
+
+    // Preserves prior IsInRole("Admin")||IsInRole("Owner") semantics EXACTLY:
+    // grants edit to Admin and Owner only (NOT GlobalAdmin). The GlobalAdmin exclusion
+    // looks like a pre-existing bug — flagged for a separate decision, not changed here.
+    private bool _canEdit => WebUser?.PermissionLevel is PermissionLevel.Admin or PermissionLevel.Owner;
 
     protected override async Task OnInitializedAsync()
     {
-        // Check if user has Admin or Owner role
-        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-        var user = authState.User;
-        _canEdit = user.IsInRole("Admin") || user.IsInRole("Owner");
-
         await LoadTags();
     }
 
