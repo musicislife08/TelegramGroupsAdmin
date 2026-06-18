@@ -51,6 +51,10 @@ public class UserManagementService(IUserRepository userRepository, IAuditService
 
         await userRepository.UpdatePermissionLevelAsync(userId, permissionLevel, modifiedBy, cancellationToken);
 
+        // Rotate the security stamp so existing sessions for this user are invalidated
+        // (the permission change takes effect via forced re-login). Mirrors Reset2FaAsync.
+        await userRepository.UpdateSecurityStampAsync(userId, cancellationToken);
+
         // Audit log
         var permissionName = permissionLevel switch
         {
