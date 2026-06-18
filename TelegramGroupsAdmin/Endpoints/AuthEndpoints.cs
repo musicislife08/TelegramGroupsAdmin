@@ -69,7 +69,7 @@ public static class AuthEndpoints
             }
 
             // Sign in the user with cookie authentication (TOTP disabled by owner)
-            await authCookieService.SignInAsync(httpContext, new WebUserIdentity(result.UserId!, result.Email!, result.PermissionLevel!.Value), result.SecurityStamp!);
+            await authCookieService.SignInAsync(httpContext, new WebUserIdentity(result.UserId!, result.Email!, result.PermissionLevel!.Value), result.SecurityStamp ?? throw new InvalidOperationException("SecurityStamp must be set on a successful AuthResult before sign-in"));
 
             // Check if this is a browser request (has Accept: text/html)
             var acceptHeader = httpContext.Request.Headers.Accept.ToString();
@@ -167,7 +167,7 @@ public static class AuthEndpoints
             }
 
             // Sign in the user with cookie authentication
-            await authCookieService.SignInAsync(httpContext, new WebUserIdentity(result.UserId!, result.Email!, result.PermissionLevel!.Value), result.SecurityStamp!);
+            await authCookieService.SignInAsync(httpContext, new WebUserIdentity(result.UserId!, result.Email!, result.PermissionLevel!.Value), result.SecurityStamp ?? throw new InvalidOperationException("SecurityStamp must be set on a successful AuthResult before sign-in"));
 
             // Check if this is a browser request (has Accept: text/html)
             var acceptHeader = httpContext.Request.Headers.Accept.ToString();
@@ -216,7 +216,7 @@ public static class AuthEndpoints
             }
 
             // Sign in the user with cookie authentication
-            await authCookieService.SignInAsync(httpContext, new WebUserIdentity(result.UserId!, result.Email!, result.PermissionLevel!.Value), result.SecurityStamp!);
+            await authCookieService.SignInAsync(httpContext, new WebUserIdentity(result.UserId!, result.Email!, result.PermissionLevel!.Value), result.SecurityStamp ?? throw new InvalidOperationException("SecurityStamp must be set on a successful AuthResult before sign-in"));
 
             // Check if this is a browser request (has Accept: text/html)
             var acceptHeader = httpContext.Request.Headers.Accept.ToString();
