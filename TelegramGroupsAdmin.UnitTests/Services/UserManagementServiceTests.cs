@@ -21,13 +21,13 @@ public class UserManagementServiceTests
     }
 
     [Test]
-    public async Task UpdatePermissionLevelAsync_RotatesSecurityStamp()
+    public async Task UpdatePermissionLevelAsync_DelegatesToRepository()
     {
         // Act: modifier is Owner (level 2) downgrading a user to Admin (level 0)
         await _service.UpdatePermissionLevelAsync("target-user", permissionLevel: 0, modifiedBy: "owner-user", modifierPermissionLevel: 2);
 
-        // Assert
+        // Assert: the repository method now rotates the security stamp atomically within the
+        // same single-row UPDATE, so the service no longer makes a separate rotation call.
         await _userRepository.Received(1).UpdatePermissionLevelAsync("target-user", 0, "owner-user", Arg.Any<CancellationToken>());
-        await _userRepository.Received(1).UpdateSecurityStampAsync("target-user", Arg.Any<CancellationToken>());
     }
 }

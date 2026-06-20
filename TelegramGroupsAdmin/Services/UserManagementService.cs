@@ -51,10 +51,6 @@ public class UserManagementService(IUserRepository userRepository, IAuditService
 
         await userRepository.UpdatePermissionLevelAsync(userId, permissionLevel, modifiedBy, cancellationToken);
 
-        // Rotate the security stamp so existing sessions for this user are invalidated
-        // (the permission change takes effect via forced re-login). Mirrors Reset2FaAsync.
-        await userRepository.UpdateSecurityStampAsync(userId, cancellationToken);
-
         // Audit log
         var permissionName = permissionLevel switch
         {
@@ -87,14 +83,14 @@ public class UserManagementService(IUserRepository userRepository, IAuditService
 
     public async Task Reset2FaAsync(string userId, string modifiedBy, CancellationToken cancellationToken = default)
     {
-        // Reset TOTP (clears secret, disables TOTP, clears setup timestamp)
+        // Reset TOTP (clears secret, disables TOTP, clears setup timestamp).
+        // This also rotates the security stamp atomically, invalidating existing sessions.
+        // Runs BEFORE recovery-code deletion so the security-critical state is consistent
+        // even if the (different-table) cleanup fails.
         await userRepository.ResetTotpAsync(userId, cancellationToken);
 
         // Delete all recovery codes
         await userRepository.DeleteRecoveryCodesAsync(userId, cancellationToken);
-
-        // Update security stamp to invalidate existing sessions
-        await userRepository.UpdateSecurityStampAsync(userId, cancellationToken);
 
         // Audit log
         await auditLog.LogEventAsync(

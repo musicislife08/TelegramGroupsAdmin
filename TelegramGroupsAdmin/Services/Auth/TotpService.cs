@@ -117,11 +117,8 @@ public class TotpService(
             }
         }
 
-        // Enable TOTP
+        // Enable TOTP (also rotates the security stamp atomically, invalidating existing sessions)
         await userRepository.EnableTotpAsync(user.Id, cancellationToken);
-
-        // Update security stamp
-        await userRepository.UpdateSecurityStampAsync(user.Id, cancellationToken);
 
         logger.LogInformation("TOTP enabled for {User}", user.ToLogInfo());
 
@@ -189,9 +186,9 @@ public class TotpService(
             return false;
         }
 
-        // Disable TOTP without password check (keeps secret for re-enable)
+        // Disable TOTP without password check (keeps secret for re-enable).
+        // This also rotates the security stamp atomically, invalidating existing sessions.
         await userRepository.DisableTotpAsync(target.Id, cancellationToken);
-        await userRepository.UpdateSecurityStampAsync(target.Id, cancellationToken);
 
         logger.LogWarning("TOTP admin-disabled for {Target} by Owner {Admin}",
             target.ToLogDebug(),
@@ -227,9 +224,9 @@ public class TotpService(
             return false;
         }
 
-        // Enable TOTP (works even without secret - forces setup on next login)
+        // Enable TOTP (works even without secret - forces setup on next login).
+        // This also rotates the security stamp atomically, invalidating existing sessions.
         await userRepository.EnableTotpAsync(target.Id, cancellationToken);
-        await userRepository.UpdateSecurityStampAsync(target.Id, cancellationToken);
 
         logger.LogWarning("TOTP admin-enabled for {Target} by Owner {Admin}",
             target.ToLogDebug(),
@@ -265,9 +262,9 @@ public class TotpService(
             return false;
         }
 
-        // Reset TOTP completely (wipes secret, timestamp, and sets enabled=false)
+        // Reset TOTP completely (wipes secret, timestamp, and sets enabled=false).
+        // This also rotates the security stamp atomically, invalidating existing sessions.
         await userRepository.ResetTotpAsync(target.Id, cancellationToken);
-        await userRepository.UpdateSecurityStampAsync(target.Id, cancellationToken);
 
         logger.LogWarning("TOTP reset for {Target} by Owner {Admin}",
             target.ToLogDebug(),

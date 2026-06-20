@@ -238,6 +238,7 @@ public class UserRepository : IUserRepository
 
         entity.TotpEnabled = true;
         entity.TotpSetupStartedAt = null;
+        entity.SecurityStamp = Guid.NewGuid().ToString(); // Rotate stamp in the same UPDATE to invalidate existing sessions (forced re-login)
         await context.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation("Enabled TOTP for {User}", LogDisplayName.WebUserInfo(entity.Email, userId));
@@ -252,6 +253,7 @@ public class UserRepository : IUserRepository
         // IMPORTANT: Only set TotpEnabled=false, KEEP the secret and timestamp
         // This allows user to re-enable TOTP later without re-scanning QR code
         entity.TotpEnabled = false;
+        entity.SecurityStamp = Guid.NewGuid().ToString(); // Rotate stamp in the same UPDATE to invalidate existing sessions (forced re-login)
         await context.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation("Disabled TOTP for {User} (secret preserved)", LogDisplayName.WebUserInfo(entity.Email, userId));
@@ -266,6 +268,7 @@ public class UserRepository : IUserRepository
         entity.TotpSecret = null;
         entity.TotpEnabled = false;
         entity.TotpSetupStartedAt = null;
+        entity.SecurityStamp = Guid.NewGuid().ToString(); // Rotate stamp in the same UPDATE to invalidate existing sessions (forced re-login)
         await context.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation("Reset TOTP for {User}", LogDisplayName.WebUserInfo(entity.Email, userId));
@@ -394,6 +397,7 @@ public class UserRepository : IUserRepository
         entity.PermissionLevel = permissionLevel;
         entity.ModifiedBy = modifiedBy;
         entity.ModifiedAt = DateTimeOffset.UtcNow;
+        entity.SecurityStamp = Guid.NewGuid().ToString(); // Rotate stamp in the same UPDATE to invalidate existing sessions (forced re-login)
 
         await context.SaveChangesAsync(cancellationToken);
 
