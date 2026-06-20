@@ -1,4 +1,5 @@
 using Microsoft.Playwright;
+using static Microsoft.Playwright.Assertions;
 
 namespace TelegramGroupsAdmin.E2ETests.PageObjects.Settings;
 
@@ -13,7 +14,7 @@ public class SettingsPage
     // Selectors
     private const string PageTitle = ".mud-typography-h4";
     private const string LoadingIndicator = ".mud-progress-linear";
-    private const string NavMenu = ".mud-nav-menu";
+    private const string SettingsSidebarHeading = ".mud-typography-h6:has-text('Settings')";
     private const string AccessDeniedAlert = ".mud-alert-error";
 
     // Settings navigation links (in sidebar)
@@ -65,6 +66,15 @@ public class SettingsPage
         {
             // Loading indicator may have already disappeared
         }
+
+        // Wait for the settings sidebar heading to confirm the page body has rendered past the auth gate.
+        // The sidebar "Settings" h6 is always present for any authorised user (it lives outside the
+        // permission-gated nav links), so it is safe to wait on regardless of role.
+        var isAccessDenied = await _page.Locator(AccessDeniedAlert).IsVisibleAsync();
+        if (!isAccessDenied)
+        {
+            await Expect(_page.Locator(SettingsSidebarHeading).First).ToBeVisibleAsync(new() { Timeout = 15000 });
+        }
     }
 
     /// <summary>
@@ -88,11 +98,20 @@ public class SettingsPage
 
     /// <summary>
     /// Returns true if infrastructure settings links are visible (Owner only).
+    /// Uses auto-retrying assertion to avoid races after the render gate.
     /// </summary>
     public async Task<bool> AreInfrastructureSettingsVisibleAsync()
     {
         var generalSettings = _page.Locator(GeneralSettingsLink);
-        return await generalSettings.IsVisibleAsync();
+        try
+        {
+            await Expect(generalSettings).ToBeVisibleAsync(new() { Timeout = 5000 });
+            return true;
+        }
+        catch (PlaywrightException)
+        {
+            return false;
+        }
     }
 
     /// <summary>

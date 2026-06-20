@@ -67,3 +67,7 @@ tmp/
 
 # Local test/build logs
 logs/
+
+# Triage skill working artifacts (regenerated per /triage run)
+.triage-template.md
+.triage-body-*.md

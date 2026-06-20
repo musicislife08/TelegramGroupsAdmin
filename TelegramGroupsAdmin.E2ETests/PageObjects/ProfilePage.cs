@@ -40,14 +40,25 @@ public class ProfilePage
     {
         await _page.GotoAsync(BasePath);
         await Expect(_page.Locator(PageTitle)).ToBeVisibleAsync();
+        await WaitForLoadAsync();
     }
 
     /// <summary>
-    /// Waits for the page to fully load.
+    /// Waits for the page to fully load, including all content sections past the render gate.
     /// </summary>
     public async Task WaitForLoadAsync(int timeoutMs = 15000)
     {
         await Expect(_page.Locator(AccountInfoSection)).ToBeVisibleAsync(new() { Timeout = timeoutMs });
+        await Expect(_page.Locator(TotpSection)).ToBeVisibleAsync(new() { Timeout = timeoutMs });
+        await Expect(_page.Locator(TelegramLinkingSection)).ToBeVisibleAsync(new() { Timeout = timeoutMs });
+        // Wait for the Telegram section's content (table or empty state) to have rendered, not just the paper frame.
+        var telegramTable = _page.Locator($"{TelegramLinkingSection} .mud-table");
+        var telegramNoAccounts = _page.Locator($"{TelegramLinkingSection} .mud-alert");
+        await telegramTable.Or(telegramNoAccounts).WaitForAsync(new LocatorWaitForOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = timeoutMs
+        });
     }
 
     #endregion
@@ -601,9 +612,32 @@ public class ProfilePage
     {
         var unlinkButton = _page.Locator($"{TelegramLinkingSection} .mud-table-body tr").Nth(rowIndex)
             .GetByRole(AriaRole.Button, new() { Name = "Unlink" });
+        // Confirm the button is enabled before clicking — ensures the Blazor circuit is live and
+        // the row is fully interactive, not just painted.
+        await Expect(unlinkButton).ToBeEnabledAsync(new() { Timeout = 10000 });
         await unlinkButton.ClickAsync();
-        // Wait for snackbar to appear (indicates operation completed)
-        await Expect(_page.Locator(".mud-snackbar").First).ToBeVisibleAsync();
+        // Wait for snackbar to appear (indicates operation completed).
+        // If the circuit briefly dropped and swallowed the click, the button remains and we retry once.
+        var snackbarLocator = _page.Locator(".mud-snackbar").First;
+        try
+        {
+            await Expect(snackbarLocator).ToBeVisibleAsync(new() { Timeout = 10000 });
+        }
+        catch (PlaywrightException)
+        {
+            // Circuit may have reconnected without processing the click — retry if the row is still there.
+            if (await unlinkButton.IsVisibleAsync())
+            {
+                await Expect(unlinkButton).ToBeEnabledAsync(new() { Timeout = 10000 });
+                await unlinkButton.ClickAsync();
+                await Expect(snackbarLocator).ToBeVisibleAsync(new() { Timeout = 15000 });
+            }
+            else
+            {
+                // Row is gone — the unlink succeeded silently; re-throw to surface any other issue.
+                throw;
+            }
+        }
     }
 
     #endregion

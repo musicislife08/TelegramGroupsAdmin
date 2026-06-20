@@ -9,5 +9,6 @@ public record AuthResult(
     PermissionLevel? PermissionLevel,
     bool TotpEnabled,
     bool RequiresTotp,
-    string? ErrorMessage
+    string? ErrorMessage,
+    string? SecurityStamp = null
 );

@@ -11,6 +11,12 @@ public static class AuthenticationConstants
     public static readonly TimeSpan CookieExpiration = TimeSpan.FromDays(30);
 
     /// <summary>
+    /// How often an active Blazor circuit revalidates its session against the DB.
+    /// Full-page loads and SignalR reconnects revalidate via the HTTP-edge handler regardless.
+    /// </summary>
+    public static readonly TimeSpan RevalidationInterval = TimeSpan.FromMinutes(2);
+
+    /// <summary>
     /// Intermediate authentication token lifetime (5 minutes) for TOTP/recovery code flows.
     /// </summary>
     public static readonly TimeSpan IntermediateTokenLifetime = TimeSpan.FromMinutes(5);

@@ -1,7 +1,4 @@
-﻿@using Microsoft.AspNetCore.Components.Authorization
-@using TelegramGroupsAdmin.Auth
-@inject AuthenticationStateProvider AuthStateProvider
-
+﻿
 <MudNavMenu>
     @if (_isAuthenticated)
     {
@@ -34,28 +31,10 @@
 
 @code {
     [Inject] private NavigationManager Navigation { get; set; } = null!;
+    [CascadingParameter] private WebUserIdentity? WebUser { get; set; }
 
-    private bool _isAuthenticated;
-    private bool _isGlobalAdminOrOwner;
-
-    protected override async Task OnInitializedAsync()
-    {
-        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
-        var user = authState.User;
-
-        _isAuthenticated = user.Identity?.IsAuthenticated ?? false;
-
-        if (_isAuthenticated)
-        {
-            var permissionClaim = user.FindFirst(CustomClaimTypes.PermissionLevel);
-            if (permissionClaim != null && int.TryParse(permissionClaim.Value, out var level))
-            {
-                // Member=-1, Admin=0, GlobalAdmin=1, Owner=2
-                // GlobalAdmin and Owner can see Settings, Audit, Chat Management
-                _isGlobalAdminOrOwner = (PermissionLevel)level >= PermissionLevel.GlobalAdmin;
-            }
-        }
-    }
+    private bool _isAuthenticated => WebUser is not null;
+    private bool _isGlobalAdminOrOwner => WebUser?.IsGlobalAdminOrHigher ?? false;
 
     private void LogoutAsync()
     {
