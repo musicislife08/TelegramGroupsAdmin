@@ -1,13 +1,10 @@
 @page "/login"
 @using System.ComponentModel.DataAnnotations
-@using System.Security.Claims
-@using Microsoft.AspNetCore.Authentication
-@using Microsoft.AspNetCore.Authentication.Cookies
-@using TelegramGroupsAdmin.Auth
 @using TelegramGroupsAdmin.Helpers
 @using TelegramGroupsAdmin.Services
 @using TelegramGroupsAdmin.Services.Auth
 @inject IAuthService AuthService
+@inject IAuthCookieService AuthCookieService
 @inject IIntermediateAuthService IntermediateAuthService
 @inject IFeatureAvailabilityService FeatureAvailability
 @inject IHttpContextAccessor HttpContextAccessor
@@ -173,27 +170,13 @@
                 return;
             }
 
-            var claims = new List<Claim>
-            {
-                new(ClaimTypes.NameIdentifier, result.UserId!),
-                new(ClaimTypes.Email, result.Email!),
-                new(ClaimTypes.Role, result.PermissionLevel!.Value.GetDisplayName()),
-                new(CustomClaimTypes.PermissionLevel, ((int)result.PermissionLevel.Value).ToString())
-            };
-
-            var claimsIdentity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
-            var claimsPrincipal = new ClaimsPrincipal(claimsIdentity);
-
-            var authProperties = new AuthenticationProperties
-            {
-                IsPersistent = true,
-                ExpiresUtc = DateTimeOffset.UtcNow.AddDays(30)
-            };
-
-            await httpContext.SignInAsync(
-                CookieAuthenticationDefaults.AuthenticationScheme,
-                claimsPrincipal,
-                authProperties);
+            // Use the shared cookie service so the principal includes the security-stamp
+            // claim (single source of truth for cookie claims). A hand-rolled principal here
+            // would omit the stamp and be rejected by session revalidation on the next request.
+            await AuthCookieService.SignInAsync(
+                httpContext,
+                new WebUserIdentity(result.UserId!, result.Email!, result.PermissionLevel!.Value),
+                result.SecurityStamp ?? throw new InvalidOperationException("SecurityStamp must be set on a successful AuthResult before sign-in"));
 
             // Redirect using HttpContext (safeReturnUrl validated at top of try block)
             httpContext.Response.Redirect(safeReturnUrl);
