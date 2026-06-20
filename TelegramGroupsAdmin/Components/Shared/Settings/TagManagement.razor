@@ -94,10 +94,10 @@
     private bool _loading = true;
     [CascadingParameter] private WebUserIdentity? WebUser { get; set; }
 
-    // Preserves prior IsInRole("Admin")||IsInRole("Owner") semantics EXACTLY:
-    // grants edit to Admin and Owner only (NOT GlobalAdmin). The GlobalAdmin exclusion
-    // looks like a pre-existing bug — flagged for a separate decision, not changed here.
-    private bool _canEdit => WebUser?.PermissionLevel is PermissionLevel.Admin or PermissionLevel.Owner;
+    // Tag definitions are a global content setting (color preferences, not chat-scoped),
+    // so editing follows the content tier: GlobalAdmin or Owner. Chat-scoped Admins have
+    // read-only access to global settings. Matches Settings._canEditContent / CriticalChecks.
+    private bool _canEdit => WebUser?.IsGlobalAdminOrHigher ?? false;
 
     protected override async Task OnInitializedAsync()
     {
