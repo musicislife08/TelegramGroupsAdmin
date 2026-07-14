@@ -204,18 +204,25 @@ public class TableExportService
             {
                 var value = prop.GetValue(record);
 
-                // Check if this property has [ProtectedData] attribute and has a value
-                if (protectedProperties.Contains(prop) && value is string encryptedValue && !string.IsNullOrEmpty(encryptedValue))
+                // Check if this property has [ProtectedData] attribute and a non-empty value.
+                // Handles both string columns (e.g. phone_number) and byte[] columns (e.g.
+                // telegram session_data), which use the string vs byte[] IDataProtector overloads.
+                if (protectedProperties.Contains(prop) && value is string { Length: > 0 } or byte[] { Length: > 0 })
                 {
+                    // Get the purpose from the attribute
+                    var protectedDataAttr = prop.GetCustomAttribute<ProtectedDataAttribute>();
+                    var purpose = protectedDataAttr?.Purpose ?? "TgSpamPreFilter.TotpSecrets";
+                    var protector = _dataProtectionProvider.CreateProtector(purpose);
+
                     try
                     {
-                        // Get the purpose from the attribute
-                        var protectedDataAttr = prop.GetCustomAttribute<ProtectedDataAttribute>();
-                        var purpose = protectedDataAttr?.Purpose ?? "TgSpamPreFilter.TotpSecrets";
-
-                        // Decrypt using the correct protector for this purpose
-                        var protector = _dataProtectionProvider.CreateProtector(purpose);
-                        var decryptedValue = protector.Unprotect(encryptedValue);
+                        // Decrypt using the correct protector overload for this property type
+                        object decryptedValue = value switch
+                        {
+                            string s => protector.Unprotect(s),
+                            byte[] b => protector.Unprotect(b),
+                            _ => value
+                        };
                         prop.SetValue(recordCopy, decryptedValue);
                         _logger.LogDebug("Decrypted protected property {PropertyName} with purpose {Purpose}", prop.Name, purpose);
                     }

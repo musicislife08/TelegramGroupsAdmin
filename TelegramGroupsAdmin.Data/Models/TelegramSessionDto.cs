@@ -1,5 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using TelegramGroupsAdmin.Data.Attributes;
+using TelegramGroupsAdmin.Data.Constants;
 
 namespace TelegramGroupsAdmin.Data.Models;
 
@@ -42,15 +44,21 @@ public class TelegramSessionDto
     /// <summary>
     /// Phone number used for authentication (needed for session reconnect).
     /// Encrypted at rest via Data Protection (stored alongside session_data).
+    /// [ProtectedData] makes the backup pipeline decrypt this on export and re-encrypt it
+    /// with the target machine's key ring on restore (cross-machine portability, #517).
     /// </summary>
     [Column("phone_number")]
+    [ProtectedData(Purpose = DataProtectionPurposes.TelegramSession)]
     public string? PhoneNumber { get; set; }
 
     /// <summary>
     /// Encrypted MTProto session data (Data Protection encrypted bytes).
     /// WTelegram uses this to reconnect without re-authentication.
+    /// [ProtectedData] makes the backup pipeline decrypt this on export and re-encrypt it
+    /// with the target machine's key ring on restore (cross-machine portability, #517).
     /// </summary>
     [Column("session_data")]
+    [ProtectedData(Purpose = DataProtectionPurposes.TelegramSession)]
     public byte[] SessionData { get; set; } = [];
 
     /// <summary>
