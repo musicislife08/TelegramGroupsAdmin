@@ -130,7 +130,7 @@ public class ChatHealthRefreshOrchestratorTests
 
         // Assert: health cache was updated with error status for unreachable chat
         _healthCache.Received(1).SetHealth(ChatAId, Arg.Is<ChatHealthStatus>(h =>
-            !h.IsReachable && h.Status == ChatHealthStatusType.Error));
+            !h!.IsReachable && h.Status == ChatHealthStatusType.Error));
     }
 
     #endregion

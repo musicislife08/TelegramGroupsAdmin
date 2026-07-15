@@ -429,7 +429,7 @@ public class TelegramSessionManagerTests
         await _mockSessionRepo.Received(1).DeactivateSessionAsync(TestSessionId, Arg.Any<CancellationToken>());
         await _mockAuditService.Received(1).LogEventAsync(
             AuditEventType.TelegramAccountDisconnected,
-            Arg.Is<Actor>(a => a.Type == ActorType.WebUser && a.WebUserId == TestWebUserId),
+            Arg.Is<Actor>(a => a!.Type == ActorType.WebUser && a.WebUserId == TestWebUserId),
             Arg.Any<Actor?>(),
             Arg.Any<string?>(),
             Arg.Any<CancellationToken>());

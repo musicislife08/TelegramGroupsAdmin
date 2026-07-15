@@ -762,7 +762,7 @@ public class WelcomeSystemConfigTests : WelcomeSystemConfigTestContext
         await ConfigService.Received(1).SaveWelcomeAsync(
             Arg.Any<ChatIdentity>(),
             Arg.Is<WelcomeConfig>(c =>
-                c.JoinSecurity.ProfileScan.MaskExplicitUsername == false
+                c!.JoinSecurity.ProfileScan.MaskExplicitUsername == false
              && c.JoinSecurity.ProfileScan.ExplicitUsernameRedactionText == "custom redaction"),
             Arg.Any<Actor>(),
             Arg.Any<CancellationToken>());

@@ -314,7 +314,7 @@ public class WelcomeServiceBlacklistTests
         // Assert — BanUserAsync must be called with reason containing the pattern and correct executor
         await _moderationService.Received(1).BanUserAsync(
             Arg.Is<BanIntent>(b =>
-                b.User.Id == TestUserId &&
+                b!.User.Id == TestUserId &&
                 b.Reason.Contains("Scarlett Lux") &&
                 b.Executor == Actor.UsernameBlacklist),
             Arg.Any<CancellationToken>());

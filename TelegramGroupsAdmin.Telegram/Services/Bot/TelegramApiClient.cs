@@ -42,7 +42,7 @@ public class TelegramApiClient : ITelegramApiClient
         => _client.GetChat(chatId, ct);
 
     public Task<ChatMember[]> GetChatAdministratorsAsync(long chatId, CancellationToken ct = default)
-        => _client.GetChatAdministrators(chatId, ct);
+        => _client.GetChatAdministrators(chatId, cancellationToken: ct);
 
     public Task<string> ExportChatInviteLinkAsync(long chatId, CancellationToken ct = default)
         => _client.ExportChatInviteLink(chatId, ct);

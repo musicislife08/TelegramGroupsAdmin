@@ -222,7 +222,7 @@ public class ContentCheckCoordinatorTests
             CheckResults = []
         };
         _mockSpamDetectionEngine.CheckMessageAsync(
-                Arg.Is<SpamLibRequest>(r => r.IsUserTrusted && r.User.Id == request.User.Id),
+                Arg.Is<SpamLibRequest>(r => r!.IsUserTrusted && r.User.Id == request.User.Id),
                 Arg.Any<CancellationToken>())
             .Returns(detectionResult);
 
@@ -471,7 +471,7 @@ public class ContentCheckCoordinatorTests
         await _mockSpamDetectionEngine.Received(1)
             .CheckMessageAsync(
                 Arg.Is<SpamLibRequest>(r =>
-                    r.User.Id == request.User.Id &&
+                    r!.User.Id == request.User.Id &&
                     r.IsUserTrusted == false &&
                     r.IsUserAdmin == false),
                 Arg.Any<CancellationToken>());

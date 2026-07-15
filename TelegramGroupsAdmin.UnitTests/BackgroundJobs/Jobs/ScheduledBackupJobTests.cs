@@ -91,7 +91,7 @@ public class ScheduledBackupJobTests
         // Assert — backup service called with DB config values
         await _backupService.Received(1).CreateBackupWithRetentionAsync(
             "/custom/path",
-            Arg.Is<RetentionConfig>(r => r.RetainHourlyBackups == 48),
+            Arg.Is<RetentionConfig>(r => r!.RetainHourlyBackups == 48),
             Arg.Any<CancellationToken>());
     }
 
@@ -128,7 +128,7 @@ public class ScheduledBackupJobTests
         await _backupService.Received(1).CreateBackupWithRetentionAsync(
             Arg.Any<string>(),
             Arg.Is<RetentionConfig>(r =>
-                r.RetainHourlyBackups == 10 &&
+                r!.RetainHourlyBackups == 10 &&
                 r.RetainDailyBackups == 3 &&
                 r.RetainWeeklyBackups == 2 &&
                 r.RetainMonthlyBackups == 6 &&
@@ -168,7 +168,7 @@ public class ScheduledBackupJobTests
         await _backupService.Received(1).CreateBackupWithRetentionAsync(
             "/manual/path",
             Arg.Is<RetentionConfig>(r =>
-                r.RetainHourlyBackups == 99 &&
+                r!.RetainHourlyBackups == 99 &&
                 r.RetainDailyBackups == 14),
             Arg.Any<CancellationToken>());
     }
@@ -189,7 +189,7 @@ public class ScheduledBackupJobTests
         await _backupService.Received(1).CreateBackupWithRetentionAsync(
             BackupRetentionConstants.DefaultBackupDirectory,
             Arg.Is<RetentionConfig>(r =>
-                r.RetainHourlyBackups == 24 &&
+                r!.RetainHourlyBackups == 24 &&
                 r.RetainDailyBackups == 7 &&
                 r.RetainWeeklyBackups == 4 &&
                 r.RetainMonthlyBackups == 12 &&
@@ -213,7 +213,7 @@ public class ScheduledBackupJobTests
         await _backupService.Received(1).CreateBackupWithRetentionAsync(
             BackupRetentionConstants.DefaultBackupDirectory,
             Arg.Is<RetentionConfig>(r =>
-                r.RetainHourlyBackups == 24 &&
+                r!.RetainHourlyBackups == 24 &&
                 r.RetainDailyBackups == 7 &&
                 r.RetainWeeklyBackups == 4 &&
                 r.RetainMonthlyBackups == 12 &&
