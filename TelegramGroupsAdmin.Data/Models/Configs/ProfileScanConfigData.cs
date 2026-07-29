@@ -15,6 +15,8 @@ public class ProfileScanConfigData
 
     public bool ScanOnProfileChange { get; set; } = true;
 
+    public bool ScanOnFirstMessage { get; set; } = false;
+
     public bool MaskExplicitUsername { get; set; } = true;
 
     public string ExplicitUsernameRedactionText { get; set; } = "[explicit username redacted]";

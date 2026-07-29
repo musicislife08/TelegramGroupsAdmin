@@ -154,6 +154,7 @@ public static class WelcomeConfigMappings
             NotifyThreshold = data.NotifyThreshold,
             ScanOnJoin = data.ScanOnJoin,
             ScanOnProfileChange = data.ScanOnProfileChange,
+            ScanOnFirstMessage = data.ScanOnFirstMessage,
             MaskExplicitUsername = data.MaskExplicitUsername,
             ExplicitUsernameRedactionText = data.ExplicitUsernameRedactionText
         };
@@ -168,6 +169,7 @@ public static class WelcomeConfigMappings
             NotifyThreshold = model.NotifyThreshold,
             ScanOnJoin = model.ScanOnJoin,
             ScanOnProfileChange = model.ScanOnProfileChange,
+            ScanOnFirstMessage = model.ScanOnFirstMessage,
             MaskExplicitUsername = model.MaskExplicitUsername,
             ExplicitUsernameRedactionText = model.ExplicitUsernameRedactionText
         };

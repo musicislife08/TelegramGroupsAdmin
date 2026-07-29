@@ -74,4 +74,36 @@ public class WelcomeConfigMappingsTests
             Assert.That(data.TrustedBypass.AnnouncementTtlSeconds, Is.EqualTo(60));
         });
     }
+
+    [Test]
+    public void ProfileScanConfigData_ToModel_MapsScanOnFirstMessage()
+    {
+        var data = new ProfileScanConfigData { ScanOnFirstMessage = true };
+
+        var model = data.ToModel();
+
+        Assert.That(model.ScanOnFirstMessage, Is.True);
+    }
+
+    [Test]
+    public void ProfileScanConfig_ToData_MapsScanOnFirstMessage()
+    {
+        var model = new ProfileScanConfig { ScanOnFirstMessage = true };
+
+        var data = model.ToData();
+
+        Assert.That(data.ScanOnFirstMessage, Is.True);
+    }
+
+    [Test]
+    public void ProfileScanConfig_ScanOnFirstMessage_DefaultsToFalse()
+    {
+        // Default-off rollout: the absent scanOnFirstMessage key in existing
+        // configs rows must deserialize to disabled.
+        Assert.Multiple(() =>
+        {
+            Assert.That(new ProfileScanConfig().ScanOnFirstMessage, Is.False);
+            Assert.That(new ProfileScanConfigData().ScanOnFirstMessage, Is.False);
+        });
+    }
 }
