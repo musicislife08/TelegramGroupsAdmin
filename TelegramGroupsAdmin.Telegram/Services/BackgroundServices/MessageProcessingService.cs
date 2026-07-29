@@ -667,7 +667,8 @@ public partial class MessageProcessingService(
                 UpdatedAt: now
             );
             // Profile change detection: compare Bot API User fields against stored values
-            // New users (existingUser == null) get scanned on join, not here.
+            // New users (existingUser == null) are covered by the first-message scan below,
+            // not here.
             // Trusted/admin users are already skipped by contentCheckSkipReason.
             if (existingUser is not null
                 && contentCheckSkipReason == ContentCheckSkipReason.NotSkipped
@@ -705,7 +706,7 @@ public partial class MessageProcessingService(
                         UserIdentity.From(message.From),
                         ChatIdentity.From(message.Chat),
                         ProfileScanTrigger.ProfileChange,
-                        cancellationToken);
+                        ct: cancellationToken);
                 }
                 catch (Exception ex)
                 {
@@ -731,7 +732,7 @@ public partial class MessageProcessingService(
                     UserIdentity.From(message.From),
                     ChatIdentity.From(message.Chat),
                     ProfileScanTrigger.FirstMessage,
-                    cancellationToken);
+                    ct: cancellationToken);
 
                 if (firstMessageScan?.Outcome == ProfileScanOutcome.Banned)
                 {
