@@ -61,10 +61,10 @@ public class TelegramDmChannelTests
         // Assert
         Assert.That(result.Success, Is.True);
         await _mockDmService.Received(1).SendDmWithEntitiesAsync(
-            Arg.Is<UserIdentity>(u => u.Id == recipientId),
+            Arg.Is<UserIdentity>(u => u!.Id == recipientId),
             "warning",
             "Warning!",
-            Arg.Is<IReadOnlyList<MessageEntity>>(e => e.Count == 1 && e[0].Type == MessageEntityType.Bold),
+            Arg.Is<IReadOnlyList<MessageEntity>>(e => e!.Count == 1 && e[0].Type == MessageEntityType.Bold),
             Arg.Any<CancellationToken>());
     }
 
@@ -89,10 +89,10 @@ public class TelegramDmChannelTests
         // Assert — sent with plain text and NO entities
         Assert.That(result.Success, Is.True);
         await _mockDmService.Received(1).SendDmWithEntitiesAsync(
-            Arg.Is<UserIdentity>(u => u.Id == recipientId),
+            Arg.Is<UserIdentity>(u => u!.Id == recipientId),
             "critical_violation",
             "Plain fallback text",
-            Arg.Is<IReadOnlyList<MessageEntity>>(e => e.Count == 0),
+            Arg.Is<IReadOnlyList<MessageEntity>>(e => e!.Count == 0),
             Arg.Any<CancellationToken>());
     }
 
@@ -120,7 +120,7 @@ public class TelegramDmChannelTests
             Arg.Any<UserIdentity>(),
             "warning",
             "Some message",
-            Arg.Is<IReadOnlyList<MessageEntity>>(e => e.Count == 0),
+            Arg.Is<IReadOnlyList<MessageEntity>>(e => e!.Count == 0),
             Arg.Any<CancellationToken>());
     }
 }

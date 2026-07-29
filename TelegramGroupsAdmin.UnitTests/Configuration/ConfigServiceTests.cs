@@ -67,7 +67,7 @@ public class ConfigServiceTests
             AuditEventType.ConfigurationChanged,
             actor,
             target: null,
-            value: Arg.Is<string>(v => v.Contains("Welcome") && v.Contains("Test Chat")),
+            value: Arg.Is<string>(v => v!.Contains("Welcome") && v.Contains("Test Chat")),
             Arg.Any<CancellationToken>());
     }
 
@@ -84,7 +84,7 @@ public class ConfigServiceTests
             AuditEventType.ConfigurationChanged,
             actor,
             target: null,
-            value: Arg.Is<string>(v => v.Contains("deleted")),
+            value: Arg.Is<string>(v => v!.Contains("deleted")),
             Arg.Any<CancellationToken>());
     }
 
@@ -102,7 +102,7 @@ public class ConfigServiceTests
             AuditEventType.ConfigurationChanged,
             actor,
             Arg.Any<Actor?>(),
-            Arg.Is<string>(v => v.Contains("Welcome")),
+            Arg.Is<string>(v => v!.Contains("Welcome")),
             Arg.Any<CancellationToken>());
     }
 
@@ -124,7 +124,7 @@ public class ConfigServiceTests
             AuditEventType.ConfigurationChanged,
             actor,
             target: null,
-            value: Arg.Is<string>(v => v.Contains("Log")),
+            value: Arg.Is<string>(v => v!.Contains("Log")),
             Arg.Any<CancellationToken>());
     }
 
@@ -141,7 +141,7 @@ public class ConfigServiceTests
             AuditEventType.ConfigurationChanged,
             actor,
             target: null,
-            value: Arg.Is<string>(v => v.Contains("deleted")),
+            value: Arg.Is<string>(v => v!.Contains("deleted")),
             Arg.Any<CancellationToken>());
     }
 
@@ -163,7 +163,7 @@ public class ConfigServiceTests
             AuditEventType.ConfigurationChanged,
             actor,
             target: null,
-            value: Arg.Is<string>(v => v.Contains("BotProtection")),
+            value: Arg.Is<string>(v => v!.Contains("BotProtection")),
             Arg.Any<CancellationToken>());
     }
 
@@ -185,7 +185,7 @@ public class ConfigServiceTests
             AuditEventType.ConfigurationChanged,
             actor,
             target: null,
-            value: Arg.Is<string>(v => v.Contains("BanCelebration")),
+            value: Arg.Is<string>(v => v!.Contains("BanCelebration")),
             Arg.Any<CancellationToken>());
     }
 
@@ -240,7 +240,7 @@ public class ConfigServiceTests
             AuditEventType.ConfigurationChanged,
             actor,
             target: null,
-            value: Arg.Is<string>(v => v.Contains("ContentDetection") && v.Contains(chat.DisplayName)),
+            value: Arg.Is<string>(v => v!.Contains("ContentDetection") && v.Contains(chat.DisplayName)),
             Arg.Any<CancellationToken>());
     }
 
@@ -258,7 +258,7 @@ public class ConfigServiceTests
             AuditEventType.ConfigurationChanged,
             actor,
             target: null,
-            value: Arg.Is<string>(v => v.Contains("ContentDetection (deleted)") && v.Contains(chat.DisplayName)),
+            value: Arg.Is<string>(v => v!.Contains("ContentDetection (deleted)") && v.Contains(chat.DisplayName)),
             Arg.Any<CancellationToken>());
     }
 

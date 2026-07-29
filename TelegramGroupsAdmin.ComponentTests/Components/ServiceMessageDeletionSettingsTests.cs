@@ -330,7 +330,7 @@ public class ServiceMessageDeletionSettingsTests : ServiceMessageDeletionSetting
 
         // Assert - snackbar should be called
         Snackbar.Received().Add(
-            Arg.Is<string>(s => s.Contains("Defaults loaded")),
+            Arg.Is<string>(s => s!.Contains("Defaults loaded")),
             Arg.Any<Severity>(),
             Arg.Any<Action<SnackbarOptions>>(),
             Arg.Any<string>());

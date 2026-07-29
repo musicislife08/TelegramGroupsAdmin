@@ -457,7 +457,7 @@ public class UserDetailDialogTests : MudBlazorTestContext
         provider.WaitForAssertion(() =>
         {
             _mockSnackbar.Received().Add(
-                Arg.Is<string>(s => s.Contains("Error loading user detail")),
+                Arg.Is<string>(s => s!.Contains("Error loading user detail")),
                 Severity.Error);
         });
 

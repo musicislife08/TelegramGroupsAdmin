@@ -51,7 +51,7 @@ public class TelegramUserManagementServiceTests
     {
         // Arrange
         _mockUserRepo.GetByTelegramIdAsync(TestUserId, Arg.Any<CancellationToken>())
-            .ReturnsNull();
+            .Returns((TelegramUser?)null);
 
         var executor = Actor.FromSystem("Test");
 
@@ -84,7 +84,7 @@ public class TelegramUserManagementServiceTests
         await _mockUserRepo.Received(1).TrustUserAsync(
             TestUserId, Arg.Any<CancellationToken>());
         await _mockActionsRepo.Received(1).InsertAsync(
-            Arg.Is<UserActionRecord>(a => a.ActionType == UserActionType.Trust && a.UserId == TestUserId),
+            Arg.Is<UserActionRecord>(a => a!.ActionType == UserActionType.Trust && a.UserId == TestUserId),
             Arg.Any<CancellationToken>());
     }
 
@@ -107,7 +107,7 @@ public class TelegramUserManagementServiceTests
             TestUserId, Arg.Any<CancellationToken>());
         await _mockActionsRepo.Received(1).ExpireTrustsForUserAsync(TestUserId, Arg.Any<long?>(), Arg.Any<CancellationToken>());
         await _mockActionsRepo.Received(1).InsertAsync(
-            Arg.Is<UserActionRecord>(a => a.ActionType == UserActionType.Untrust && a.UserId == TestUserId),
+            Arg.Is<UserActionRecord>(a => a!.ActionType == UserActionType.Untrust && a.UserId == TestUserId),
             Arg.Any<CancellationToken>());
     }
 
@@ -162,7 +162,7 @@ public class TelegramUserManagementServiceTests
     {
         // Arrange
         _mockUserRepo.GetByTelegramIdAsync(TestUserId, Arg.Any<CancellationToken>())
-            .ReturnsNull();
+            .Returns((TelegramUser?)null);
 
         var executor = Actor.FromSystem("Test");
 
@@ -216,7 +216,7 @@ public class TelegramUserManagementServiceTests
         await _mockActionsRepo.Received(1).ExpireBansForUserAsync(
             TestUserId, null, Arg.Any<CancellationToken>());
         await _mockActionsRepo.Received(1).InsertAsync(
-            Arg.Is<UserActionRecord>(a => a.ActionType == UserActionType.Unban && a.UserId == TestUserId),
+            Arg.Is<UserActionRecord>(a => a!.ActionType == UserActionType.Unban && a.UserId == TestUserId),
             Arg.Any<CancellationToken>());
     }
 
@@ -240,7 +240,7 @@ public class TelegramUserManagementServiceTests
         Assert.That(result, Is.True);
         await _mockActionsRepo.Received(1).InsertAsync(
             Arg.Is<UserActionRecord>(a =>
-                a.ActionType == UserActionType.Unban &&
+                a!.ActionType == UserActionType.Unban &&
                 a.Reason == customReason),
             Arg.Any<CancellationToken>());
     }

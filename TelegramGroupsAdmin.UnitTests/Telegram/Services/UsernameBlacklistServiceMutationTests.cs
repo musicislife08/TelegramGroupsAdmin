@@ -43,7 +43,7 @@ public class UsernameBlacklistServiceMutationTests
 
         await _repo.Received(1).AddEntryAsync(
             Arg.Is<UsernameBlacklistEntry>(e =>
-                e.Pattern == "spam-pattern"
+                e!.Pattern == "spam-pattern"
                 && e.MatchType == BlacklistMatchType.Exact
                 && e.Notes == "test notes"
                 && e.Enabled == true),

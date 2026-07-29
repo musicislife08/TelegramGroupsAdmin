@@ -212,7 +212,7 @@ public class BanHandlerTests
         // Verify job was scheduled
         await _mockJobScheduler.Received(1).ScheduleJobAsync(
             "TempbanExpiry",
-            Arg.Is<TempbanExpiryJobPayload>(p => p.User.Id == userId),
+            Arg.Is<TempbanExpiryJobPayload>(p => p!.User.Id == userId),
             Arg.Any<int>(),
             Arg.Any<string?>(),
             Arg.Any<CancellationToken>());
@@ -278,7 +278,7 @@ public class BanHandlerTests
         // Verify default reason was used
         await _mockJobScheduler.Received(1).ScheduleJobAsync(
             Arg.Any<string>(),
-            Arg.Is<TempbanExpiryJobPayload>(p => p.Reason == "Temporary ban"),
+            Arg.Is<TempbanExpiryJobPayload>(p => p!.Reason == "Temporary ban"),
             Arg.Any<int>(),
             Arg.Any<string?>(),
             Arg.Any<CancellationToken>());

@@ -210,7 +210,7 @@ public class BotDmServiceTests
         await _mockJobScheduler.Received(1).ScheduleJobAsync(
             "DeleteMessage",
             Arg.Is<DeleteMessagePayload>(p =>
-                p.ChatId == TestChatId &&
+                p!.ChatId == TestChatId &&
                 p.MessageId == 888 &&
                 p.Reason == "dm_fallback"),
             delaySeconds: 30,

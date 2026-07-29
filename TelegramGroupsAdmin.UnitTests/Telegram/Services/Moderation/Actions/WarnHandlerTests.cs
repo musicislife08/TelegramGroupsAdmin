@@ -57,7 +57,7 @@ public class WarnHandlerTests
         // Verify warning was added via user repository
         await _mockUserRepository.Received(1).AddWarningAsync(
             userId,
-            Arg.Is<WarningEntry>(w => w.Reason == "Spam detected"),
+            Arg.Is<WarningEntry>(w => w!.Reason == "Spam detected"),
             Arg.Any<CancellationToken>());
     }
 
@@ -106,7 +106,7 @@ public class WarnHandlerTests
         await _mockUserRepository.Received(1).AddWarningAsync(
             userId,
             Arg.Is<WarningEntry>(w =>
-                w.ChatId == chatId &&
+                w!.ChatId == chatId &&
                 w.MessageId == messageId),
             Arg.Any<CancellationToken>());
     }
@@ -130,7 +130,7 @@ public class WarnHandlerTests
         // Verify warning was inserted with null reason
         await _mockUserRepository.Received(1).AddWarningAsync(
             userId,
-            Arg.Is<WarningEntry>(w => w.Reason == null),
+            Arg.Is<WarningEntry>(w => w!.Reason == null),
             Arg.Any<CancellationToken>());
     }
 
@@ -197,7 +197,7 @@ public class WarnHandlerTests
         await _mockUserRepository.Received(1).AddWarningAsync(
             userId,
             Arg.Is<WarningEntry>(w =>
-                w.ActorType == "web_user" &&
+                w!.ActorType == "web_user" &&
                 w.ActorId == "web-user-123"),
             Arg.Any<CancellationToken>());
     }
@@ -222,7 +222,7 @@ public class WarnHandlerTests
         await _mockUserRepository.Received(1).AddWarningAsync(
             userId,
             Arg.Is<WarningEntry>(w =>
-                w.ActorType == "telegram_user" &&
+                w!.ActorType == "telegram_user" &&
                 w.ActorId == "999"),
             Arg.Any<CancellationToken>());
     }
@@ -247,7 +247,7 @@ public class WarnHandlerTests
         await _mockUserRepository.Received(1).AddWarningAsync(
             userId,
             Arg.Is<WarningEntry>(w =>
-                w.ActorType == "system" &&
+                w!.ActorType == "system" &&
                 w.ActorId == "SpamDetection"),
             Arg.Any<CancellationToken>());
     }
@@ -270,7 +270,7 @@ public class WarnHandlerTests
         await _mockUserRepository.Received(1).AddWarningAsync(
             userId,
             Arg.Is<WarningEntry>(w =>
-                w.ExpiresAt != null &&
+                w!.ExpiresAt != null &&
                 w.ExpiresAt.Value > beforeCall.AddDays(89) &&
                 w.ExpiresAt.Value < beforeCall.AddDays(91)),
             Arg.Any<CancellationToken>());

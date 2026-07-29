@@ -233,7 +233,7 @@ public class WelcomeTimeoutJobTests
             .Received(1)
             .KickUserFromChatAsync(
                 Arg.Is<KickIntent>(intent =>
-                    intent.User.Id == WelcomeUserId
+                    intent!.User.Id == WelcomeUserId
                     && intent.Chat.Id == MainChatId),
                 Arg.Any<CancellationToken>());
 
@@ -416,7 +416,7 @@ public class WelcomeTimeoutJobTests
             .Received(1)
             .KickUserFromChatAsync(
                 Arg.Is<KickIntent>(intent =>
-                    intent.User.Id == WelcomeUserId
+                    intent!.User.Id == WelcomeUserId
                     && intent.Chat.Id == MainChatId),
                 Arg.Any<CancellationToken>());
     }

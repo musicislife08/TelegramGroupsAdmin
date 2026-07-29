@@ -780,7 +780,7 @@ public class ProfileScoringEngineTests
         // Assert — multi-image overload
         await _chatService.Received(1).GetVisionCompletionAsync(
             AIFeatureType.ProfileScan, Arg.Any<string>(), Arg.Any<string>(),
-            Arg.Is<IReadOnlyList<ImageInput>>(l => l.Count == 2),
+            Arg.Is<IReadOnlyList<ImageInput>>(l => l!.Count == 2),
             Arg.Any<ChatCompletionOptions?>(), Arg.Any<CancellationToken>());
     }
 
@@ -1007,7 +1007,7 @@ public class ProfileScoringEngineTests
         _chatService
             .GetCompletionAsync(
                 Arg.Any<AIFeatureType>(), Arg.Any<string>(),
-                Arg.Is<string>(prompt => prompt.Contains("url_metadata")),
+                Arg.Is<string>(prompt => prompt!.Contains("url_metadata")),
                 Arg.Any<ChatCompletionOptions?>(), Arg.Any<CancellationToken>())
             .Returns(AiResponse("""{"score": 4.5, "reason": "adult site URL", "signals_detected": ["adult_url_metadata"], "contains_nudity": false}"""));
 
@@ -1017,7 +1017,7 @@ public class ProfileScoringEngineTests
         // Assert — AI was called with a prompt containing URL metadata
         await _chatService.Received(1).GetCompletionAsync(
             AIFeatureType.ProfileScan, Arg.Any<string>(),
-            Arg.Is<string>(prompt => prompt.Contains("url_metadata")),
+            Arg.Is<string>(prompt => prompt!.Contains("url_metadata")),
             Arg.Any<ChatCompletionOptions?>(), Arg.Any<CancellationToken>());
         Assert.That(result.AiScore, Is.EqualTo(4.5m));
     }
@@ -1081,7 +1081,7 @@ public class ProfileScoringEngineTests
         _chatService
             .GetCompletionAsync(
                 Arg.Any<AIFeatureType>(), Arg.Any<string>(),
-                Arg.Is<string>(prompt => !prompt.Contains("url_metadata")),
+                Arg.Is<string>(prompt => !prompt!.Contains("url_metadata")),
                 Arg.Any<ChatCompletionOptions?>(), Arg.Any<CancellationToken>())
             .Returns(AiResponse("""{"score": 0.0, "reason": "clean", "signals_detected": [], "contains_nudity": false}"""));
 
@@ -1091,7 +1091,7 @@ public class ProfileScoringEngineTests
         // Assert — prompt without url_metadata section was used
         await _chatService.Received(1).GetCompletionAsync(
             AIFeatureType.ProfileScan, Arg.Any<string>(),
-            Arg.Is<string>(prompt => !prompt.Contains("url_metadata")),
+            Arg.Is<string>(prompt => !prompt!.Contains("url_metadata")),
             Arg.Any<ChatCompletionOptions?>(), Arg.Any<CancellationToken>());
     }
 }

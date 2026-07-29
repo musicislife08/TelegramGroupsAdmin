@@ -152,7 +152,7 @@ public class TrainingHandlerTests
         // Assert - Verify detection result created with correct field values
         await _mockDetectionRepo.Received(1).InsertAsync(
             Arg.Is<DetectionResultRecord>(dr =>
-                dr.MessageId == messageId &&
+                dr!.MessageId == messageId &&
                 dr.DetectionSource == SpamDetectionConstants.ManualDetectionSource &&
                 dr.DetectionMethod == SpamDetectionConstants.ManualDetectionMethod &&
                 dr.Reason == SpamDetectionConstants.ManualSpamReason &&
@@ -290,7 +290,7 @@ public class TrainingHandlerTests
             Arg.Any<int>(),
             Arg.Any<long>(),
             Arg.Any<TrainingLabel>(),
-            Arg.Is<Actor>(a => a.GetTelegramUserId() == telegramUserId), // Should extract from Actor
+            Arg.Is<Actor>(a => a!.GetTelegramUserId() == telegramUserId), // Should extract from Actor
             Arg.Any<string>(),
             Arg.Any<long?>(),
             Arg.Any<CancellationToken>());
@@ -364,7 +364,7 @@ public class TrainingHandlerTests
         // Assert - Detection result IS inserted (web admin override, not system)
         await _mockDetectionRepo.Received(1).InsertAsync(
             Arg.Is<DetectionResultRecord>(dr =>
-                dr.MessageId == messageId &&
+                dr!.MessageId == messageId &&
                 dr.DetectionSource == SpamDetectionConstants.ManualDetectionSource &&
                 dr.DetectionMethod == SpamDetectionConstants.ManualDetectionMethod &&
                 dr.Reason == SpamDetectionConstants.ManualSpamReason &&
