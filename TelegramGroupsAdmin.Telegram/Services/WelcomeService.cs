@@ -44,8 +44,7 @@ public class WelcomeService(
     ICasCheckService casCheckService,
     IUsernameBlacklistService usernameBlacklistService,
     TelegramPhotoService photoService,
-    IProfileScanService profileScanService,
-    ITelegramSessionManager sessionManager,
+    IProfileScanGate profileScanGate,
     IWelcomeAdmissionHandler admissionHandler,
     IWelcomeBypassResolver bypassResolver,
     IAuditHandler auditHandler,
@@ -393,54 +392,44 @@ public class WelcomeService(
                 welcomeMetrics.RecordSecurityCheck("photo_match", "skipped");
             }
 
-            // Step 9: Profile scan via User API (skip trusted users)
-            if (config.JoinSecurity.ProfileScan.Enabled
-                && config.JoinSecurity.ProfileScan.ScanOnJoin
-                && existingUser?.IsTrusted != true)
+            // Step 9: Profile scan via User API (eligibility owned by ProfileScanGate)
+            var scanResult = await profileScanGate.ScanIfEligibleAsync(
+                UserIdentity.From(user),
+                ChatIdentity.From(chatMemberUpdate.Chat),
+                ProfileScanTrigger.Join,
+                cancellationToken);
+
+            if (scanResult is not null)
             {
-                if (await sessionManager.HasAnyActiveSessionAsync(cancellationToken))
+                if (scanResult.Outcome == ProfileScanOutcome.Banned)
                 {
-                    var scanResult = await profileScanService.ScanUserProfileAsync(
-                        UserIdentity.From(user),
-                        ChatIdentity.From(chatMemberUpdate.Chat),
-                        cancellationToken);
+                    await TryDeleteMessageAsync(chatMemberUpdate.Chat.Id, verifyingMessageId.Value, cancellationToken);
 
-                    if (scanResult.Outcome == ProfileScanOutcome.Banned)
-                    {
-                        await TryDeleteMessageAsync(chatMemberUpdate.Chat.Id, verifyingMessageId.Value, cancellationToken);
-
-                        logger.LogInformation(
-                            "{User} auto-banned by profile scan (score {Score}), skipping welcome flow",
-                            user.ToLogInfo(), scanResult.Score);
-                        welcomeMetrics.RecordSecurityCheck("profile_scan", "fail");
-                        welcomeMetrics.RecordWelcomeOutcome("banned", Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
-                        return; // User already banned by ProfileScanService
-                    }
-
-                    if (scanResult.Outcome == ProfileScanOutcome.HeldForReview)
-                    {
-                        // Update verifying message — user waits for admin + welcome gate
-                        var holdMessage = new TelegramMessageBuilder()
-                            .Mention(UserIdentity.From(user))
-                            .Text(" ⏳ Your profile is under admin review. Please wait...")
-                            .Build();
-                        await TryEditMessageAsync(
-                            chatMemberUpdate.Chat.Id, verifyingMessageId.Value, holdMessage, cancellationToken);
-
-                        logger.LogInformation(
-                            "{User} held for profile scan review (score {Score}), continuing welcome flow",
-                            user.ToLogInfo(), scanResult.Score);
-                        // Fall through — exam will run below if configured (dual-gate: both must pass)
-                    }
-
-                    welcomeMetrics.RecordSecurityCheck("profile_scan", "pass");
+                    logger.LogInformation(
+                        "{User} auto-banned by profile scan (score {Score}), skipping welcome flow",
+                        user.ToLogInfo(), scanResult.Score);
+                    welcomeMetrics.RecordSecurityCheck("profile_scan", "fail");
+                    welcomeMetrics.RecordWelcomeOutcome("banned", Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
+                    return; // User already banned by ProfileScanService
                 }
-                else
+
+                if (scanResult.Outcome == ProfileScanOutcome.HeldForReview)
                 {
-                    logger.LogDebug("No User API session available, skipping profile scan for {User}",
-                        user.ToLogDebug());
-                    welcomeMetrics.RecordSecurityCheck("profile_scan", "skipped");
+                    // Update verifying message — user waits for admin + welcome gate
+                    var holdMessage = new TelegramMessageBuilder()
+                        .Mention(UserIdentity.From(user))
+                        .Text(" ⏳ Your profile is under admin review. Please wait...")
+                        .Build();
+                    await TryEditMessageAsync(
+                        chatMemberUpdate.Chat.Id, verifyingMessageId.Value, holdMessage, cancellationToken);
+
+                    logger.LogInformation(
+                        "{User} held for profile scan review (score {Score}), continuing welcome flow",
+                        user.ToLogInfo(), scanResult.Score);
+                    // Fall through — exam will run below if configured (dual-gate: both must pass)
                 }
+
+                welcomeMetrics.RecordSecurityCheck("profile_scan", "pass");
             }
             else
             {

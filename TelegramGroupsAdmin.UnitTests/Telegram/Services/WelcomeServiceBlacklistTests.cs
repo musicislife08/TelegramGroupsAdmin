@@ -51,8 +51,8 @@ public class WelcomeServiceBlacklistTests
     private IBotModerationService _moderationService = null!;
     private IJobScheduler _jobScheduler = null!;
     private ICasCheckService _casCheckService = null!;
-    private IProfileScanService _profileScanService = null!;
     private ITelegramSessionManager _sessionManager = null!;
+    private IProfileScanGate _profileScanGate = null!;
     private IWelcomeAdmissionHandler _admissionHandler = null!;
     private IUsernameBlacklistService _usernameBlacklistService = null!;
     private IWelcomeBypassResolver _bypassResolver = null!;
@@ -110,8 +110,8 @@ public class WelcomeServiceBlacklistTests
         _moderationService = Substitute.For<IBotModerationService>();
         _jobScheduler = Substitute.For<IJobScheduler>();
         _casCheckService = Substitute.For<ICasCheckService>();
-        _profileScanService = Substitute.For<IProfileScanService>();
         _sessionManager = Substitute.For<ITelegramSessionManager>();
+        _profileScanGate = Substitute.For<IProfileScanGate>();
         _admissionHandler = Substitute.For<IWelcomeAdmissionHandler>();
         _usernameBlacklistService = Substitute.For<IUsernameBlacklistService>();
         _bypassResolver = Substitute.For<IWelcomeBypassResolver>();
@@ -218,8 +218,7 @@ public class WelcomeServiceBlacklistTests
             _casCheckService,
             _usernameBlacklistService,
             _photoService,
-            _profileScanService,
-            _sessionManager,
+            _profileScanGate,
             _admissionHandler,
             _bypassResolver,
             _auditHandler,

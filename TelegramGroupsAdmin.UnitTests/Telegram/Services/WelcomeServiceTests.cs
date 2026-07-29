@@ -54,8 +54,8 @@ public class WelcomeServiceTests
     private IBotModerationService _moderationService = null!;
     private IJobScheduler _jobScheduler = null!;
     private ICasCheckService _casCheckService = null!;
-    private IProfileScanService _profileScanService = null!;
     private ITelegramSessionManager _sessionManager = null!;
+    private IProfileScanGate _profileScanGate = null!;
     private IWelcomeAdmissionHandler _admissionHandler = null!;
     private IUsernameBlacklistService _usernameBlacklistService = null!;
     private IWelcomeBypassResolver _bypassResolver = null!;
@@ -112,8 +112,8 @@ public class WelcomeServiceTests
         _moderationService = Substitute.For<IBotModerationService>();
         _jobScheduler = Substitute.For<IJobScheduler>();
         _casCheckService = Substitute.For<ICasCheckService>();
-        _profileScanService = Substitute.For<IProfileScanService>();
         _sessionManager = Substitute.For<ITelegramSessionManager>();
+        _profileScanGate = Substitute.For<IProfileScanGate>();
         _admissionHandler = Substitute.For<IWelcomeAdmissionHandler>();
         _usernameBlacklistService = Substitute.For<IUsernameBlacklistService>();
         _bypassResolver = Substitute.For<IWelcomeBypassResolver>();
@@ -205,8 +205,7 @@ public class WelcomeServiceTests
             _casCheckService,
             _usernameBlacklistService,
             _photoService,
-            _profileScanService,
-            _sessionManager,
+            _profileScanGate,
             _admissionHandler,
             _bypassResolver,
             _auditHandler,
@@ -325,8 +324,8 @@ public class WelcomeServiceTests
             Arg.Any<CancellationToken>());
 
         // Early-exit: profile scan must NOT be called
-        await _profileScanService.DidNotReceive().ScanUserProfileAsync(
-            Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<CancellationToken>());
+        await _profileScanGate.DidNotReceive().ScanIfEligibleAsync(
+            Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity?>(), Arg.Any<ProfileScanTrigger>(), Arg.Any<CancellationToken>());
     }
 
     #endregion
@@ -467,8 +466,8 @@ public class WelcomeServiceTests
             Arg.Any<UserIdentity>(), Arg.Any<TelegramGroupsAdmin.Configuration.Models.Welcome.CasConfig>(),
             Arg.Any<CancellationToken>());
 
-        await _profileScanService.DidNotReceive().ScanUserProfileAsync(
-            Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<CancellationToken>());
+        await _profileScanGate.DidNotReceive().ScanIfEligibleAsync(
+            Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity?>(), Arg.Any<ProfileScanTrigger>(), Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -567,8 +566,8 @@ public class WelcomeServiceTests
             Arg.Any<UserIdentity>(), Arg.Any<TelegramGroupsAdmin.Configuration.Models.Welcome.CasConfig>(),
             Arg.Any<CancellationToken>());
 
-        await _profileScanService.DidNotReceive().ScanUserProfileAsync(
-            Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<CancellationToken>());
+        await _profileScanGate.DidNotReceive().ScanIfEligibleAsync(
+            Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity?>(), Arg.Any<ProfileScanTrigger>(), Arg.Any<CancellationToken>());
 
         // User activated and bypass audited
         await _telegramUserRepository.Received(1).ActivateAsync(TestUserId, Arg.Any<CancellationToken>());
