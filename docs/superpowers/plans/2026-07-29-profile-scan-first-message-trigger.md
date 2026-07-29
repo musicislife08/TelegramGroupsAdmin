@@ -864,7 +864,6 @@ owns the whole eligibility decision, and its trusted check already covers truste
 admins. A join's service message is absorbed by the gate's never-scanned check or by the 60s
 freshness dedup inside `ScanUserProfileAsync`, so it needs no special case. The cost is one
 extra primary-key lookup per message, accepted deliberately in the spec.
-```
 
 - [ ] **Step 4: Short-circuit content detection**
 
