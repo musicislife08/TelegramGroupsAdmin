@@ -46,6 +46,9 @@ public sealed class ProfileScanGate(
         if (existingUser?.IsTrusted == true)
             return Skip("trusted", user, trigger);
 
+        if (existingUser?.ProfileScanExcluded == true)
+            return Skip("excluded", user, trigger);
+
         if (trigger == ProfileScanTrigger.FirstMessage && existingUser?.ProfileScannedAt is not null)
             return Skip("already_scanned", user, trigger);
 

@@ -96,6 +96,19 @@ public class ProfileScanGateTests
     }
 
     [Test]
+    public async Task FirstMessage_ProfileScanExcluded_Skips()
+    {
+        // ProfileScanService sets ProfileScanExcluded when it cannot resolve the
+        // user (deleted account, etc). Without honoring it here, such a user is
+        // re-admitted to the expensive scan path on every single message, forever.
+        SetUser(CreateUser(profileScannedAt: null, profileScanExcluded: true));
+
+        var result = await ScanAsync(ProfileScanTrigger.FirstMessage);
+
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
     public async Task FirstMessage_FlagDisabled_Skips()
     {
         var config = CreateConfig();
@@ -233,7 +246,8 @@ public class ProfileScanGateTests
 
     private static TelegramUser CreateUser(
         DateTimeOffset? profileScannedAt,
-        bool isTrusted = false)
+        bool isTrusted = false,
+        bool profileScanExcluded = false)
     {
         var now = DateTimeOffset.UtcNow;
         return new TelegramUser(
@@ -245,6 +259,7 @@ public class ProfileScanGateTests
             IsBot: false, IsTrusted: isTrusted, IsBanned: false,
             KickCount: 0, BotDmEnabled: false,
             FirstSeenAt: now, LastSeenAt: now, CreatedAt: now, UpdatedAt: now,
-            ProfileScannedAt: profileScannedAt);
+            ProfileScannedAt: profileScannedAt,
+            ProfileScanExcluded: profileScanExcluded);
     }
 }
