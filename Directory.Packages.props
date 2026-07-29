@@ -31,6 +31,12 @@
     <PackageVersion Include="Microsoft.AspNetCore.DataProtection.Extensions" Version="10.0.7" />
     <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.7" />
     <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.7" />
+    <!-- Transitive security pin: Microsoft.AspNetCore.OpenApi still pulls Microsoft.OpenApi
+         2.0.0, which carries GHSA-v5pm-xwqc-g5wc (high). 2.11.0 is the latest patched 2.x
+         (advisory fixed in 2.7.5). The 3.x line cannot be used: ASP.NET's OpenApi XML-comment
+         source generator assigns IOpenApiMediaType.Example, which became read-only in 3.x, so
+         3.x fails to compile the generated code. -->
+    <PackageVersion Include="Microsoft.OpenApi" Version="2.11.0" />
     <PackageVersion Include="Microsoft.Extensions.Caching.Hybrid" Version="10.5.0" />
     <PackageVersion Include="Microsoft.Extensions.Configuration" Version="10.0.7" />
     <PackageVersion Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.7" />
