@@ -22,7 +22,7 @@ public sealed class ProfileScanGate(
         ProfileScanTrigger trigger,
         CancellationToken ct)
     {
-        var welcomeConfig = await configService.GetEffectiveWelcomeAsync(chat?.Id ?? 0, ct);
+        var welcomeConfig = await configService.GetEffectiveWelcomeAsync(chat?.Id ?? 0, ct: ct);
         var config = welcomeConfig?.JoinSecurity?.ProfileScan;
 
         if (config is null || !config.Enabled)
@@ -41,7 +41,7 @@ public sealed class ProfileScanGate(
 
         // A null row means the user is not yet tracked: not trusted, never
         // scanned, so eligible. This is the common case for FirstMessage.
-        var existingUser = await userRepository.GetByTelegramIdAsync(user.Id, ct);
+        var existingUser = await userRepository.GetByTelegramIdAsync(user.Id, cancellationToken: ct);
 
         if (existingUser?.IsTrusted == true)
             return Skip("trusted", user, trigger);
@@ -49,14 +49,14 @@ public sealed class ProfileScanGate(
         if (trigger == ProfileScanTrigger.FirstMessage && existingUser?.ProfileScannedAt is not null)
             return Skip("already_scanned", user, trigger);
 
-        if (!await sessionManager.HasAnyActiveSessionAsync(ct))
+        if (!await sessionManager.HasAnyActiveSessionAsync(ct: ct))
             return Skip("no_session", user, trigger);
 
         logger.LogDebug(
             "Profile scan gate admitted {User} for trigger {Trigger}",
             user.ToLogDebug(), trigger);
 
-        return await profileScanService.ScanUserProfileAsync(user, chat, ct);
+        return await profileScanService.ScanUserProfileAsync(user, chat, ct: ct);
     }
 
     private ProfileScanResult? Skip(string reason, UserIdentity user, ProfileScanTrigger trigger)
