@@ -24,7 +24,6 @@ public class BackgroundJobNamesTests
             BackgroundJobNames.RotateBackupPassphrase,
             BackgroundJobNames.TempbanExpiry,
             BackgroundJobNames.WelcomeTimeout,
-            BackgroundJobNames.ProfileScan,
             BackgroundJobNames.ProfileRescan,
         };
 

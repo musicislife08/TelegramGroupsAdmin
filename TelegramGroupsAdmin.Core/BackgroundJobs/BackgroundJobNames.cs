@@ -111,12 +111,6 @@ public static class BackgroundJobNames
     /// </summary>
     public const string WelcomeTimeout = "WelcomeTimeout";
 
-    /// <summary>
-    /// On-demand profile scan triggered by profile diff detection or manual re-scan.
-    /// Quartz Job: ProfileScanJob
-    /// </summary>
-    public const string ProfileScan = "ProfileScan";
-
     // ============================================
     // Scheduled Jobs (cron-based, UI-configurable)
     // ============================================
