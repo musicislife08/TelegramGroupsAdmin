@@ -6,7 +6,7 @@
   <ItemGroup>
     <!-- UI / Web -->
     <PackageVersion Include="AngleSharp" Version="1.6.0" />
-    <PackageVersion Include="Blazor-ApexCharts" Version="6.1.0" />
+    <PackageVersion Include="Blazor-ApexCharts" Version="7.0.0" />
     <PackageVersion Include="bunit" Version="2.8.6" />
     <PackageVersion Include="MudBlazor" Version="9.7.0" />
 
