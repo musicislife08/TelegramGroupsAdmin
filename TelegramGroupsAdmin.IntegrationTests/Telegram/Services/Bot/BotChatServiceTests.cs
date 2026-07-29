@@ -350,6 +350,35 @@ public class BotChatServiceTests
 
     #endregion
 
+    #region RefreshChatAdminsAsync Trust Reconciliation Tests
+
+    [Test]
+    public async Task RefreshChatAdmins_ExistingAdminNotTrusted_ReconcilesTrust()
+    {
+        // Admin auto-trust originally fired only on the promotion event, so an
+        // admin promoted before that feature existed was never back-filled.
+        await SetAdminTrustAsync(WorkshopAlumniAdminId, isTrusted: false);
+
+        await RefreshAdminsAsync(WorkshopAlumniChatId, WorkshopAlumniAdminId);
+
+        var user = await GetTelegramUserAsync(WorkshopAlumniAdminId);
+        Assert.That(user!.IsTrusted, Is.True);
+    }
+
+    [Test]
+    public async Task RefreshChatAdmins_AdminAlreadyTrusted_DoesNotDuplicateTrustAction()
+    {
+        await SetAdminTrustAsync(WorkshopAlumniAdminId, isTrusted: true);
+        var before = await CountTrustActionsAsync(WorkshopAlumniAdminId);
+
+        await RefreshAdminsAsync(WorkshopAlumniChatId, WorkshopAlumniAdminId);
+
+        var after = await CountTrustActionsAsync(WorkshopAlumniAdminId);
+        Assert.That(after, Is.EqualTo(before));
+    }
+
+    #endregion
+
     #region Helper Methods
 
     private static User CreateBotUser() => new()
@@ -403,6 +432,52 @@ public class BotChatServiceTests
             ChatMemberStatus.Kicked => new ChatMemberBanned { User = user },
             _ => new ChatMemberMember { User = user }
         };
+    }
+
+    // Sets telegram_users.is_trusted for the given user via the repository.
+    private async Task SetAdminTrustAsync(long telegramUserId, bool isTrusted)
+    {
+        if (isTrusted)
+        {
+            await _userRepo!.TrustUserAsync(telegramUserId);
+        }
+        else
+        {
+            await _userRepo!.UntrustUserAsync(telegramUserId);
+        }
+    }
+
+    // Arranges the mocked IBotChatHandler to return adminUserId as an admin of chatId,
+    // then invokes the same public refresh entry point the fixture's other admin tests call.
+    private async Task RefreshAdminsAsync(long chatId, long adminUserId)
+    {
+        var adminUser = CreateUser(adminUserId, "ExistingAdmin");
+
+        _mockChatHandler.GetChatAsync(chatId, Arg.Any<CancellationToken>())
+            .Returns(TelegramTestFactory.CreateChatFullInfo(chatId, ChatType.Supergroup, WorkshopAlumniChatName));
+        _mockChatHandler.GetChatAdministratorsAsync(chatId, Arg.Any<CancellationToken>())
+            .Returns(new ChatMember[]
+            {
+                new ChatMemberAdministrator { User = adminUser }
+            });
+
+        await _service!.RefreshChatAdminsAsync(new ChatIdentity(chatId, WorkshopAlumniChatName));
+    }
+
+    // Reads the user row back through ITelegramUserRepository.GetByTelegramIdAsync.
+    private async Task<TelegramUser?> GetTelegramUserAsync(long telegramUserId)
+    {
+        return await _userRepo!.GetByTelegramIdAsync(telegramUserId);
+    }
+
+    // Counts user_actions rows with ActionType == UserActionType.Trust for the user.
+    private async Task<int> CountTrustActionsAsync(long telegramUserId)
+    {
+        await using var context = _testHelper!.GetDbContext();
+
+        return await context.UserActions
+            .Where(a => a.UserId == telegramUserId && a.ActionType == (int)UserActionType.Trust)
+            .CountAsync();
     }
 
     private async Task SeedManagedChat(long chatId, string chatName, bool isAdmin = true)

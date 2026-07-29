@@ -450,51 +450,62 @@ public class BotChatService(
             foreach (var admin in admins)
             {
                 // Ensure user exists in telegram_users first (FK constraint)
-                await userRepo.GetOrCreateAsync(UserIdentity.From(admin.User), admin.User.IsBot, ct);
+                var adminRecord = await userRepo.GetOrCreateAsync(
+                    UserIdentity.From(admin.User), admin.User.IsBot, ct);
 
                 var isCreator = admin.Status == ChatMemberStatus.Creator;
                 var wasNew = !cachedAdminIds.Contains(admin.User.Id);
+                var needsTrust = !adminRecord.IsTrusted;
 
                 await chatAdminsRepo.UpsertAsync(chat.Id, admin.User.Id, isCreator, ct);
 
                 adminNames.Add(admin.User.ToLogInfo() + (isCreator ? " (creator)" : ""));
 
-                if (wasNew)
+                if (wasNew || needsTrust)
                 {
                     var adminUser = UserIdentity.From(admin.User);
-                    logger.LogInformation(
-                        "New admin {Admin} promoted in {Chat}",
-                        adminUser.ToLogInfo(),
-                        chat.ToLogInfo());
 
-                    // AUTO-TRUST: Trust new admins globally
-                    try
+                    if (wasNew)
                     {
-                        var trustAction = new UserActionRecord(
-                            Id: 0,
-                            UserId: admin.User.Id,
-                            ActionType: UserActionType.Trust,
-                            MessageId: null,
-                            ChatId: null,
-                            IssuedBy: Actor.AutoTrust,
-                            IssuedAt: DateTimeOffset.UtcNow,
-                            ExpiresAt: null,
-                            Reason: $"Admin in chat {chat.Id}"
-                        );
-
-                        await userActionsRepo.InsertAsync(trustAction, ct);
-                        await userRepo.TrustUserAsync(admin.User.Id, ct);
-
                         logger.LogInformation(
-                            "Auto-trusted {User} - admin in {Chat}",
+                            "New admin {Admin} promoted in {Chat}",
                             adminUser.ToLogInfo(),
                             chat.ToLogInfo());
                     }
-                    catch (Exception ex)
+
+                    // AUTO-TRUST: Trust admins globally (newly discovered, or reconciling one
+                    // that was never back-filled - e.g. promoted before this feature existed,
+                    // or whose one-shot trust write previously failed).
+                    if (needsTrust)
                     {
-                        logger.LogError(ex, "Failed to auto-trust admin {User} in {Chat}",
-                            adminUser.ToLogDebug(),
-                            chat.ToLogDebug());
+                        try
+                        {
+                            var trustAction = new UserActionRecord(
+                                Id: 0,
+                                UserId: admin.User.Id,
+                                ActionType: UserActionType.Trust,
+                                MessageId: null,
+                                ChatId: null,
+                                IssuedBy: Actor.AutoTrust,
+                                IssuedAt: DateTimeOffset.UtcNow,
+                                ExpiresAt: null,
+                                Reason: $"Admin in chat {chat.Id}"
+                            );
+
+                            await userActionsRepo.InsertAsync(trustAction, ct);
+                            await userRepo.TrustUserAsync(admin.User.Id, ct);
+
+                            logger.LogInformation(
+                                "Auto-trusted {User} - admin in {Chat}",
+                                adminUser.ToLogInfo(),
+                                chat.ToLogInfo());
+                        }
+                        catch (Exception ex)
+                        {
+                            logger.LogError(ex, "Failed to auto-trust admin {User} in {Chat}",
+                                adminUser.ToLogDebug(),
+                                chat.ToLogDebug());
+                        }
                     }
                 }
             }
