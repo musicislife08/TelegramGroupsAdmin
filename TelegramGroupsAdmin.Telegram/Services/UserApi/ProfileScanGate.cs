@@ -54,6 +54,13 @@ public sealed class ProfileScanGate(
         if (chat is not null && await chatAdminsRepository.IsAdminAsync(chat.Id, user.Id, cancellationToken: ct))
             return Skip("admin", user, trigger);
 
+        // Neither the join trigger (bots are diverted to bot protection before
+        // reaching the scan) nor the bulk rescan predicate ever scans a bot.
+        // Without this check, FirstMessage would be the sole trigger able to
+        // scan and globally ban a legitimate third-party bot.
+        if (existingUser?.IsBot == true)
+            return Skip("bot", user, trigger);
+
         if (existingUser?.ProfileScanExcluded == true)
             return Skip("excluded", user, trigger);
 
