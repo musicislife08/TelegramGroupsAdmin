@@ -11,6 +11,7 @@ namespace TelegramGroupsAdmin.Telegram.Services.UserApi;
 public sealed class ProfileScanGate(
     IConfigService configService,
     ITelegramUserRepository userRepository,
+    IChatAdminsRepository chatAdminsRepository,
     ITelegramSessionManager sessionManager,
     IProfileScanService profileScanService,
     PipelineMetrics pipelineMetrics,
@@ -45,6 +46,13 @@ public sealed class ProfileScanGate(
 
         if (existingUser?.IsTrusted == true)
             return Skip("trusted", user, trigger);
+
+        // Chat-admin trust is only reconciled by ChatHealthCheck (~every 30
+        // minutes), so a newly promoted admin can be untrusted for a window
+        // after promotion. Without this check, such an admin posting inside
+        // that window would fall through to a scan that can globally ban them.
+        if (chat is not null && await chatAdminsRepository.IsAdminAsync(chat.Id, user.Id, cancellationToken: ct))
+            return Skip("admin", user, trigger);
 
         if (existingUser?.ProfileScanExcluded == true)
             return Skip("excluded", user, trigger);

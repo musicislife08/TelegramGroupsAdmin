@@ -23,6 +23,7 @@ public class ProfileScanGateTests
 
     private IConfigService _configService = null!;
     private ITelegramUserRepository _userRepository = null!;
+    private IChatAdminsRepository _chatAdminsRepository = null!;
 #pragma warning disable NUnit1032 // Mock doesn't need disposal
     private ITelegramSessionManager _sessionManager = null!;
 #pragma warning restore NUnit1032
@@ -34,12 +35,16 @@ public class ProfileScanGateTests
     {
         _configService = Substitute.For<IConfigService>();
         _userRepository = Substitute.For<ITelegramUserRepository>();
+        _chatAdminsRepository = Substitute.For<IChatAdminsRepository>();
         _sessionManager = Substitute.For<ITelegramSessionManager>();
         _profileScanService = Substitute.For<IProfileScanService>();
 
         // Defaults: everything enabled, session active, scan returns Clean.
         SetConfig(CreateConfig());
         _sessionManager.HasAnyActiveSessionAsync(Arg.Any<CancellationToken>()).Returns(true);
+        _chatAdminsRepository
+            .IsAdminAsync(Arg.Any<long>(), Arg.Any<long>(), Arg.Any<CancellationToken>())
+            .Returns(false);
         _profileScanService
             .ScanUserProfileAsync(Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity?>(), Arg.Any<CancellationToken>())
             .Returns(CreateScanResult());
@@ -47,6 +52,7 @@ public class ProfileScanGateTests
         _gate = new ProfileScanGate(
             _configService,
             _userRepository,
+            _chatAdminsRepository,
             _sessionManager,
             _profileScanService,
             new PipelineMetrics(),
