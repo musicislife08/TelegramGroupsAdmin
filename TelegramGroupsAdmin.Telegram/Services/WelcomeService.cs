@@ -397,7 +397,7 @@ public class WelcomeService(
                 UserIdentity.From(user),
                 ChatIdentity.From(chatMemberUpdate.Chat),
                 ProfileScanTrigger.Join,
-                cancellationToken);
+                ct: cancellationToken);
 
             if (scanResult is not null)
             {
