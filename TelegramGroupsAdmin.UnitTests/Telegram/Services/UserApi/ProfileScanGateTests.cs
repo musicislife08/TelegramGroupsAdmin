@@ -102,6 +102,49 @@ public class ProfileScanGateTests
     }
 
     [Test]
+    public async Task FirstMessage_UntrustedNeverScannedAdmin_Skips()
+    {
+        // A chat admin is only reconciled to IsTrusted every ~30 minutes by
+        // ChatHealthCheck. A newly promoted admin posting inside that window
+        // must not fall through to a scan that can globally ban them.
+        SetUser(CreateUser(profileScannedAt: null, isTrusted: false));
+        _chatAdminsRepository
+            .IsAdminAsync(TestChatId, TestUserId, Arg.Any<CancellationToken>())
+            .Returns(true);
+
+        var result = await ScanAsync(ProfileScanTrigger.FirstMessage);
+
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public async Task FirstMessage_UntrustedNeverScannedBot_Skips()
+    {
+        // Legitimate third-party bots (RSS/bridge/poll bots) are never scanned
+        // by the join or bulk-rescan triggers; FirstMessage must not be the
+        // one path that scans and can globally ban them.
+        SetUser(CreateUser(profileScannedAt: null, isTrusted: false, isBot: true));
+
+        var result = await ScanAsync(ProfileScanTrigger.FirstMessage);
+
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public async Task FirstMessage_NullUserRow_StillEligible_DespiteAdminAndBotChecks()
+    {
+        // Regression: adding admin/bot checks must null-lift exactly like the
+        // pre-existing IsTrusted check. A null user row (never tracked) is the
+        // central case this whole branch exists to fix; it must still be
+        // eligible, not accidentally short-circuited by the new checks.
+        SetUser(null);
+
+        var result = await ScanAsync(ProfileScanTrigger.FirstMessage);
+
+        Assert.That(result, Is.Not.Null);
+    }
+
+    [Test]
     public async Task FirstMessage_ProfileScanExcluded_Skips()
     {
         // ProfileScanService sets ProfileScanExcluded when it cannot resolve the
@@ -253,7 +296,8 @@ public class ProfileScanGateTests
     private static TelegramUser CreateUser(
         DateTimeOffset? profileScannedAt,
         bool isTrusted = false,
-        bool profileScanExcluded = false)
+        bool profileScanExcluded = false,
+        bool isBot = false)
     {
         var now = DateTimeOffset.UtcNow;
         return new TelegramUser(
@@ -262,7 +306,7 @@ public class ProfileScanGateTests
             FirstName: "Andrea",
             LastName: null,
             UserPhotoPath: null, PhotoHash: null, PhotoFileUniqueId: null,
-            IsBot: false, IsTrusted: isTrusted, IsBanned: false,
+            IsBot: isBot, IsTrusted: isTrusted, IsBanned: false,
             KickCount: 0, BotDmEnabled: false,
             FirstSeenAt: now, LastSeenAt: now, CreatedAt: now, UpdatedAt: now,
             ProfileScannedAt: profileScannedAt,
