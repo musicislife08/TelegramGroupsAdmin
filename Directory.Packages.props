@@ -72,6 +72,8 @@
 
     <!-- Observability -->
     <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.17.0" />
+    <!-- Version hold: no stable release of OpenTelemetry.Exporter.Prometheus.AspNetCore
+         exists yet; 1.15.3-beta.1 is the latest available. -->
     <PackageVersion Include="OpenTelemetry.Exporter.Prometheus.AspNetCore" Version="1.15.3-beta.1" />
     <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.17.0" />
     <PackageVersion Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.17.0" />
@@ -95,6 +97,9 @@
     <PackageVersion Include="Panlingo.LanguageIdentification.FastText" Version="0.8.0" />
     <PackageVersion Include="QRCoder" Version="1.8.0" />
     <PackageVersion Include="SendGrid" Version="9.29.3" />
+    <!-- Version hold: 4.0.0 enforces a build-time license key
+         (SixLaborsLicenseKey / sixlabors.lic) with no OSS opt-out.
+         Tracked by open issue #523. -->
     <PackageVersion Include="SixLabors.ImageSharp" Version="3.1.12" />
     <PackageVersion Include="System.IO.Hashing" Version="10.0.10" />
     <PackageVersion Include="Testably.Abstractions" Version="10.3.0" />
