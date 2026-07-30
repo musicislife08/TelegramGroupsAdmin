@@ -42,6 +42,26 @@ namespace TelegramGroupsAdmin.IntegrationTests.Telegram;
 /// the gate on the new-message path, with <see cref="ProfileScanTrigger.FirstMessage"/>.
 /// </para>
 ///
+/// <para><b>READ BEFORE DELETING EITHER TEST: the two tests are a matched pair, and neither
+/// proves correct-trigger wiring on its own.</b> <see cref="ProfileScanGate"/> does not forward
+/// the trigger to <see cref="IProfileScanService.ScanUserProfileAsync"/>, so the substituted scan
+/// service cannot observe <i>which</i> trigger caused a call — only that a call happened. Trigger
+/// identity is therefore established by the two tests <i>jointly</i>, from opposite sides, via the
+/// config flags each one enables:
+/// <list type="bullet">
+/// <item><description><see cref="HandleNewMessage_UntrustedUserNeverScanned_TriggersProfileScan"/>
+/// enables <c>ScanOnFirstMessage</c> ONLY (join and profile-change off), so a call site using any
+/// other trigger makes the gate decline and the expected call never arrives.</description></item>
+/// <item><description><see cref="HandleNewMessage_ScanOnFirstMessageDisabled_DoesNotScan"/>
+/// inverts it — join and profile-change on, <c>ScanOnFirstMessage</c> off — so a call site using
+/// any other trigger produces an unexpected call.</description></item>
+/// </list>
+/// The narrowed flags in the positive test are what let it discriminate at all; before that
+/// narrowing, mutating the production call site from <c>FirstMessage</c> to <c>Join</c> left the
+/// positive test passing. Deleting either test as "redundant", or widening the flags either test
+/// sets, silently gives up coverage of the exact property this fixture exists to guarantee.
+/// </para>
+///
 /// <para><b>Harness strategy.</b> <c>HandleNewMessageAsync</c> resolves 24 distinct services,
 /// seven of which are concrete handler classes whose non-virtual methods NSubstitute cannot
 /// intercept. The heaviest of those, <c>ContentDetectionOrchestrator</c> (the whole detection
@@ -206,7 +226,13 @@ public class MessageProcessingFirstMessageScanTests
     {
         // Reproduces the outage: an untrusted user with no join event and no prior scan
         // posts a message. Before the fix, no trigger fired and this user was never scanned.
-        await EnableFirstMessageScanAsync(scanOnFirstMessage: true);
+        //
+        // PAIRED WITH HandleNewMessage_ScanOnFirstMessageDisabled_DoesNotScan — see the
+        // class doc. ScanOnFirstMessage is the ONLY trigger enabled here, which is what makes
+        // this test discriminate on trigger identity: if the call site passed Join or
+        // ProfileChange, the gate would decline and the expected call would never arrive.
+        // Widening scanOnOtherTriggers to true would silently destroy that property.
+        await ConfigureProfileScanAsync(scanOnFirstMessage: true, scanOnOtherTriggers: false);
         await AssertUserIsUnknownAsync();
 
         await _sut.HandleNewMessageAsync(CreateGroupMessage(), CancellationToken.None);
@@ -220,18 +246,28 @@ public class MessageProcessingFirstMessageScanTests
     [Test]
     public async Task HandleNewMessage_ScanOnFirstMessageDisabled_DoesNotScan()
     {
-        // Proves the call site passes ProfileScanTrigger.FirstMessage and not some other
-        // trigger: ScanOnJoin and ScanOnProfileChange stay enabled, only the first-message
-        // flag is off, and the gate must decline.
+        // The inverse half of the pair, PAIRED WITH
+        // HandleNewMessage_UntrustedUserNeverScanned_TriggersProfileScan — see the class doc.
+        // ScanOnJoin and ScanOnProfileChange stay enabled and only the first-message flag is
+        // off, so any call site using a trigger other than FirstMessage produces a call that
+        // must not happen.
         //
         // MainChat is deactivated so content detection is skipped by the inactive-chat
-        // branch — without the Banned short-circuit, ContentDetectionOrchestrator would
-        // otherwise be resolved and drag in the whole AI/detection stack.
-        await EnableFirstMessageScanAsync(scanOnFirstMessage: false);
+        // branch — with no scan there is no Banned short-circuit, and
+        // ContentDetectionOrchestrator would otherwise be resolved and drag in the whole
+        // AI/detection stack.
+        await ConfigureProfileScanAsync(scanOnFirstMessage: false, scanOnOtherTriggers: true);
         await DeactivateMainChatAsync();
         await AssertUserIsUnknownAsync();
 
         await _sut.HandleNewMessageAsync(CreateGroupMessage(), CancellationToken.None);
+
+        // Positive control. HandleNewMessageAsync wraps the whole group-message path in a
+        // catch-all that only logs, so any unrelated failure upstream of the gate would also
+        // present as "no scan received" and pass the assertion below for the wrong reason.
+        // Message persistence happens earlier on the same path than the gate call, so a
+        // persisted row proves the SUT actually ran far enough to reach the gate decision.
+        await AssertMessageWasPersistedAsync();
 
         await _profileScanService.DidNotReceive().ScanUserProfileAsync(
             Arg.Any<UserIdentity>(),
@@ -244,7 +280,13 @@ public class MessageProcessingFirstMessageScanTests
     // ProfileScanConfig.ScanOnFirstMessage defaults to false, so the positive test has to
     // turn it on. Written through the real IConfigService for MainChat so the gate reads it
     // back off the same welcome_config JSONB column production uses.
-    private async Task EnableFirstMessageScanAsync(bool scanOnFirstMessage)
+    //
+    // The two flags are set in OPPOSITION by the two tests, and that opposition is what
+    // establishes trigger identity (see the class doc). scanOnOtherTriggers drives both
+    // ScanOnJoin and ScanOnProfileChange; neither of those code paths is reachable for this
+    // message (no join event, and no stored user row to diff against), so their only effect
+    // is on what the gate would admit if the call site named the wrong trigger.
+    private async Task ConfigureProfileScanAsync(bool scanOnFirstMessage, bool scanOnOtherTriggers)
     {
         using var scope = _serviceProvider.CreateScope();
         var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
@@ -254,17 +296,41 @@ public class MessageProcessingFirstMessageScanTests
                       ?? WelcomeConfig.Default;
 
         welcome.JoinSecurity.ProfileScan.Enabled = true;
-        welcome.JoinSecurity.ProfileScan.ScanOnJoin = true;
-        welcome.JoinSecurity.ProfileScan.ScanOnProfileChange = true;
+        welcome.JoinSecurity.ProfileScan.ScanOnJoin = scanOnOtherTriggers;
+        welcome.JoinSecurity.ProfileScan.ScanOnProfileChange = scanOnOtherTriggers;
         welcome.JoinSecurity.ProfileScan.ScanOnFirstMessage = scanOnFirstMessage;
 
         await configService.SaveWelcomeAsync(chat, welcome, Actor.SystemSeed);
 
-        // Confirm the flag actually landed — a silently-unpersisted flag would make the
+        // Confirm the flags actually landed — silently-unpersisted flags would make the
         // positive test fail for the wrong reason and the negative test pass vacuously.
         var effective = await configService.GetEffectiveWelcomeAsync(MainChatId);
-        Assert.That(effective?.JoinSecurity.ProfileScan.Enabled, Is.True);
-        Assert.That(effective?.JoinSecurity.ProfileScan.ScanOnFirstMessage, Is.EqualTo(scanOnFirstMessage));
+        var profileScan = effective?.JoinSecurity.ProfileScan;
+        Assert.That(profileScan, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(profileScan!.Enabled, Is.True);
+            Assert.That(profileScan.ScanOnFirstMessage, Is.EqualTo(scanOnFirstMessage));
+            Assert.That(profileScan.ScanOnJoin, Is.EqualTo(scanOnOtherTriggers));
+            Assert.That(profileScan.ScanOnProfileChange, Is.EqualTo(scanOnOtherTriggers));
+        }
+    }
+
+    // Forward-progress control for the negative test. The message row is written at
+    // MessageProcessingService.cs:556, well before the first-message gate call, so its
+    // presence proves the SUT was not killed by the catch-all somewhere upstream of the
+    // gate decision. Read back through the real IMessageHistoryRepository, whose
+    // GetMessageAsync uses only LEFT joins and applies no deleted-row filter, so it cannot
+    // return null for a row that exists.
+    private async Task AssertMessageWasPersistedAsync()
+    {
+        using var scope = _serviceProvider.CreateScope();
+        var messageRepository = scope.ServiceProvider.GetRequiredService<IMessageHistoryRepository>();
+
+        var persisted = await messageRepository.GetMessageAsync(TestMessageId, MainChatId);
+        Assert.That(persisted, Is.Not.Null,
+            "The message was never persisted, so HandleNewMessageAsync failed upstream of the "
+            + "profile-scan gate. The DidNotReceive assertion below would pass vacuously.");
     }
 
     // The precondition that defines the regression: this user has never been seen.
