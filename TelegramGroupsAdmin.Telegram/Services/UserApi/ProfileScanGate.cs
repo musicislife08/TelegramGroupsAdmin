@@ -38,7 +38,16 @@ public sealed class ProfileScanGate(
         };
 
         if (!triggerEnabled)
-            return Skip("trigger_disabled", user, trigger);
+        {
+            // Not recorded via Skip(): in the shipping configuration
+            // (ScanOnFirstMessage off) this fires on nearly every group
+            // message, which would drown the genuinely interesting skip
+            // reasons (dedup, no_session, excluded, ...) on dashboards.
+            logger.LogDebug(
+                "Profile scan gate skipped {User} for trigger {Trigger}: trigger_disabled",
+                user.ToLogDebug(), trigger);
+            return null;
+        }
 
         // A null row means the user is not yet tracked: not trusted, never
         // scanned, so eligible. This is the common case for FirstMessage.
