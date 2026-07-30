@@ -37,3 +37,4 @@ Use CSharperMcp tools (`find_symbol`, `find_references`, `get_diagnostics`) inst
 - No time estimates in docs or issues
 - MudBlazor v9 has breaking API changes — check context-keep memory before writing MudBlazor code
 - GitHub labels are custom — check context-keep memory before labeling issues/PRs
+- NSubstitute 6 matcher lambdas are nullable-annotated: `Arg.Is<T>(x => x.Prop == y)` needs a null-forgiving `!` on the first dereference (`x!.Prop`). Never use `?.` instead — it makes a null argument silently compare `false` in `Returns()` configuration instead of throwing.
