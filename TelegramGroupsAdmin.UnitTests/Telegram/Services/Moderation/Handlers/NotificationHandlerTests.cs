@@ -102,7 +102,7 @@ public class NotificationHandlerTests
         Assert.That(result.Success, Is.True);
         await _mockNotificationOrchestrator.Received(1).SendTelegramDmAsync(
             userId,
-            Arg.Is<Notification>(n => n.Type == "critical_violation"),
+            Arg.Is<Notification>(n => n!.Type == "critical_violation"),
             Arg.Any<CancellationToken>());
     }
 
@@ -132,7 +132,7 @@ public class NotificationHandlerTests
         await _mockNotificationOrchestrator.Received(1).SendTelegramDmAsync(
             userId,
             Arg.Is<Notification>(n =>
-                n.Message.Text.Contains("Blocked URL detected") &&
+                n!.Message.Text.Contains("Blocked URL detected") &&
                 n.Message.Text.Contains("Malware signature found") &&
                 n.Message.Text.Contains("Phishing link blocked")),
             Arg.Any<CancellationToken>());
@@ -207,8 +207,8 @@ public class NotificationHandlerTests
         // Assert — handler delegates to typed notification service
         Assert.That(result.Success, Is.True);
         await _mockNotificationService.Received(1).SendSpamBanNotificationAsync(
-            Arg.Is<ChatIdentity>(c => c.Id == 1001),
-            Arg.Is<UserIdentity>(u => u.Id == 3003),
+            Arg.Is<ChatIdentity>(c => c!.Id == 1001),
+            Arg.Is<UserIdentity>(u => u!.Id == 3003),
             Arg.Any<Actor?>(),
             Arg.Any<double>(),
             Arg.Any<double>(),
@@ -432,7 +432,7 @@ public class NotificationHandlerTests
         Assert.That(result.Success, Is.True);
         await _mockNotificationOrchestrator.Received(1).SendTelegramDmAsync(
             user.Id,
-            Arg.Is<Notification>(n => n.Type == "warning" && n.Message.Text.Contains("Warning Issued")),
+            Arg.Is<Notification>(n => n!.Type == "warning" && n.Message.Text.Contains("Warning Issued")),
             Arg.Any<CancellationToken>());
     }
 
@@ -454,7 +454,7 @@ public class NotificationHandlerTests
         await _mockNotificationOrchestrator.Received(1).SendTelegramDmAsync(
             user.Id,
             Arg.Is<Notification>(n =>
-                n.Message.Text.Contains("Total Warnings: 3") &&
+                n!.Message.Text.Contains("Total Warnings: 3") &&
                 n.Message.Text.Contains("Repeated spam") &&
                 !n.Message.Text.Contains("<b>") &&
                 !n.Message.Text.Contains("&lt;")),
@@ -557,7 +557,7 @@ public class NotificationHandlerTests
         Assert.That(result.Success, Is.True);
         await _mockNotificationOrchestrator.Received(1).SendTelegramDmAsync(
             user.Id,
-            Arg.Is<Notification>(n => n.Type == "tempban" && n.Message.Text.Contains("temporarily banned")),
+            Arg.Is<Notification>(n => n!.Type == "tempban" && n.Message.Text.Contains("temporarily banned")),
             Arg.Any<CancellationToken>());
     }
 
@@ -585,7 +585,7 @@ public class NotificationHandlerTests
         await _mockNotificationOrchestrator.Received(1).SendTelegramDmAsync(
             user.Id,
             Arg.Is<Notification>(n =>
-                n.Message.Text.Contains("Spamming links") &&
+                n!.Message.Text.Contains("Spamming links") &&
                 n.Message.Text.Contains("Reason:") &&
                 !n.Message.Text.Contains("<b>")),
             Arg.Any<CancellationToken>());

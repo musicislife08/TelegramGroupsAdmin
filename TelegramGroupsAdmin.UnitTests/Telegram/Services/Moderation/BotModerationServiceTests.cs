@@ -208,18 +208,18 @@ public class BotModerationServiceTests
 
         // Verify business rule: bans always revoke trust
         await _mockTrustHandler.Received(1).UntrustAsync(
-            Arg.Is<UserIdentity>(u => u.Id == userId),
+            Arg.Is<UserIdentity>(u => u!.Id == userId),
             executor,
             Arg.Is<string>(s => s!.Contains("ban")),
             Arg.Any<CancellationToken>());
 
         // Verify audit was logged
         await _mockAuditHandler.Received(1).LogBanAsync(
-            Arg.Is<UserIdentity>(u => u.Id == userId), executor, Arg.Any<string>(), Arg.Any<CancellationToken>());
+            Arg.Is<UserIdentity>(u => u!.Id == userId), executor, Arg.Any<string>(), Arg.Any<CancellationToken>());
 
         // Verify admins were notified
         await _mockNotificationHandler.Received(1).NotifyAdminsBanAsync(
-            Arg.Is<UserIdentity>(u => u.Id == userId), executor, Arg.Any<string>(), Arg.Any<ChatIdentity?>(), Arg.Any<CancellationToken>());
+            Arg.Is<UserIdentity>(u => u!.Id == userId), executor, Arg.Any<string>(), Arg.Any<ChatIdentity?>(), Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -336,7 +336,7 @@ public class BotModerationServiceTests
 
         // Verify auto-ban was triggered with Actor.AutoBan
         await _mockBanHandler.Received(1).BanAsync(
-            Arg.Is<UserIdentity>(u => u.Id == userId),
+            Arg.Is<UserIdentity>(u => u!.Id == userId),
             Actor.AutoBan,
             Arg.Is<string>(s => s!.Contains("threshold")),
             Arg.Any<int?>(),
@@ -406,7 +406,7 @@ public class BotModerationServiceTests
 
         // Verify user was notified about their warning
         await _mockNotificationHandler.Received(1).NotifyUserWarningAsync(
-            Arg.Is<UserIdentity>(u => u.Id == userId),
+            Arg.Is<UserIdentity>(u => u!.Id == userId),
             1, // warning count
             "Spam detected",
             Arg.Any<CancellationToken>());
@@ -465,7 +465,7 @@ public class BotModerationServiceTests
             Arg.Any<ChatIdentity>(), messageId, executor, Arg.Any<CancellationToken>());
 
         await _mockBanHandler.Received(1).BanAsync(
-            Arg.Is<UserIdentity>(u => u.Id == userId), executor, Arg.Any<string>(), Arg.Any<int?>(), Arg.Any<CancellationToken>());
+            Arg.Is<UserIdentity>(u => u!.Id == userId), executor, Arg.Any<string>(), Arg.Any<int?>(), Arg.Any<CancellationToken>());
 
         await _mockTrainingHandler.Received(1).CreateSpamSampleAsync(
             messageId, Arg.Any<ChatIdentity>(), executor, Arg.Any<CancellationToken>());
@@ -584,7 +584,7 @@ public class BotModerationServiceTests
 
         // Verify audit was logged
         await _mockAuditHandler.Received(1).LogTrustAsync(
-            Arg.Is<UserIdentity>(u => u.Id == userId), executor, "Verified user", Arg.Any<CancellationToken>());
+            Arg.Is<UserIdentity>(u => u!.Id == userId), executor, "Verified user", Arg.Any<CancellationToken>());
     }
 
     #endregion
@@ -624,7 +624,7 @@ public class BotModerationServiceTests
 
         // Verify trust was restored
         await _mockTrustHandler.Received(1).TrustAsync(
-            Arg.Is<UserIdentity>(u => u.Id == userId), executor, Arg.Any<string>(), Arg.Any<CancellationToken>());
+            Arg.Is<UserIdentity>(u => u!.Id == userId), executor, Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -693,7 +693,7 @@ public class BotModerationServiceTests
 
         // Verify user was notified about temp ban
         await _mockNotificationHandler.Received(1).NotifyUserTempBanAsync(
-            Arg.Is<UserIdentity>(u => u.Id == userId),
+            Arg.Is<UserIdentity>(u => u!.Id == userId),
             duration,
             Arg.Any<DateTimeOffset>(),
             "Temporary mute for spam",
@@ -768,7 +768,7 @@ public class BotModerationServiceTests
 
         // Verify user was notified even with partial success
         await _mockNotificationHandler.Received(1).NotifyUserTempBanAsync(
-            Arg.Is<UserIdentity>(u => u.Id == userId),
+            Arg.Is<UserIdentity>(u => u!.Id == userId),
             duration,
             Arg.Any<DateTimeOffset>(),
             Arg.Any<string>(),
@@ -1119,7 +1119,7 @@ public class BotModerationServiceTests
 
         // Verify: Ban was attempted
         await _mockBanHandler.Received(1).BanAsync(
-            Arg.Is<UserIdentity>(u => u.Id == userId), Actor.AutoBan, Arg.Any<string>(), Arg.Any<int?>(), Arg.Any<CancellationToken>());
+            Arg.Is<UserIdentity>(u => u!.Id == userId), Actor.AutoBan, Arg.Any<string>(), Arg.Any<int?>(), Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -1233,7 +1233,7 @@ public class BotModerationServiceTests
 
         // Verify audit record was created
         await _mockAuditHandler.Received(1).LogBanAsync(
-            Arg.Is<UserIdentity>(u => u.Id == 12345), Actor.AutoDetection, "Lazy ban sync", Arg.Any<CancellationToken>());
+            Arg.Is<UserIdentity>(u => u!.Id == 12345), Actor.AutoDetection, "Lazy ban sync", Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -1615,9 +1615,9 @@ public class BotModerationServiceTests
 
         // Assert - Report was created with the FileScanner system actor
         await _mockReportService.Received(1).CreateReportAsync(
-            Arg.Is<Report>(r => r.MessageId == messageId && r.Chat.Id == chatId),
+            Arg.Is<Report>(r => r!.MessageId == messageId && r.Chat.Id == chatId),
             telegramMessage,
-            Arg.Is<Actor>(a => a.Type == ActorType.System && a.SystemIdentifier == SystemActorIds.FileScanner),
+            Arg.Is<Actor>(a => a!.Type == ActorType.System && a.SystemIdentifier == SystemActorIds.FileScanner),
             Arg.Any<CancellationToken>());
     }
 
@@ -1656,7 +1656,7 @@ public class BotModerationServiceTests
         await _mockNotificationService.Received(1).SendMalwareDetectedAsync(
             Arg.Any<ChatIdentity>(),
             Arg.Any<UserIdentity>(),
-            Arg.Is<string>(details => details.Contains(malwareDetails)),
+            Arg.Is<string>(details => details!.Contains(malwareDetails)),
             Arg.Any<CancellationToken>());
     }
 
@@ -1803,8 +1803,8 @@ public class BotModerationServiceTests
 
         // Assert - User notification was sent with all violations
         await _mockNotificationHandler.Received(1).NotifyUserCriticalViolationAsync(
-            Arg.Is<UserIdentity>(u => u.Id == userId),
-            Arg.Is<List<string>>(v => v.Count == 2 && v.Contains("Blocked URL") && v.Contains("Suspicious file")),
+            Arg.Is<UserIdentity>(u => u!.Id == userId),
+            Arg.Is<List<string>>(v => v!.Count == 2 && v.Contains("Blocked URL") && v.Contains("Suspicious file")),
             Arg.Any<CancellationToken>());
     }
 
@@ -2136,7 +2136,7 @@ public class BotModerationServiceTests
         Assert.That(result.Success, Is.True);
 
         await _mockBanHandler.Received(1).BanAsync(
-            Arg.Is<UserIdentity>(u => u.Id == userId),
+            Arg.Is<UserIdentity>(u => u!.Id == userId),
             Arg.Any<Actor>(),
             Arg.Any<string?>(),
             Arg.Any<int?>(),
@@ -2182,7 +2182,7 @@ public class BotModerationServiceTests
         Assert.That(result.Success, Is.True);
 
         await _mockBanHandler.Received(1).BanAsync(
-            Arg.Is<UserIdentity>(u => u.Id == userId),
+            Arg.Is<UserIdentity>(u => u!.Id == userId),
             Arg.Any<Actor>(),
             Arg.Any<string?>(),
             Arg.Any<int?>(),
@@ -2226,8 +2226,8 @@ public class BotModerationServiceTests
 
         // Assert — ban celebration should fire because BanIntent.Chat carries the originating chat
         await _mockBanCelebrationService.Received(1).SendBanCelebrationAsync(
-            Arg.Is<ChatIdentity>(c => c.Id == TestChatId),
-            Arg.Is<UserIdentity>(u => u.Id == userId),
+            Arg.Is<ChatIdentity>(c => c!.Id == TestChatId),
+            Arg.Is<UserIdentity>(u => u!.Id == userId),
             Arg.Any<bool>(),
             Arg.Any<CancellationToken>());
     }

@@ -115,7 +115,7 @@ public class AdminMentionHandlerTests
                 chatId: ChatId,
                 message: Arg.Is<TelegramMessage>(m =>
                     // Bold entity present (Admin Alert header)
-                    m.Entities.Any(e => e.Type == MessageEntityType.Bold) &&
+                    m!.Entities.Any(e => e.Type == MessageEntityType.Bold) &&
                     // Exactly 2 TextMention entities
                     m.Entities.Count(e => e.Type == MessageEntityType.TextMention) == 2 &&
                     // Both correct user IDs
@@ -188,7 +188,7 @@ public class AdminMentionHandlerTests
             .SendAndSaveMessageAsync(
                 chatId: ChatId,
                 message: Arg.Is<TelegramMessage>(m =>
-                    m.Entities.Count(e => e.Type == MessageEntityType.TextMention) == 1 &&
+                    m!.Entities.Count(e => e.Type == MessageEntityType.TextMention) == 1 &&
                     m.Entities.First(e => e.Type == MessageEntityType.TextMention).User!.Id == Admin2Id),
                 replyParameters: Arg.Any<ReplyParameters?>(),
                 cancellationToken: Arg.Any<CancellationToken>());

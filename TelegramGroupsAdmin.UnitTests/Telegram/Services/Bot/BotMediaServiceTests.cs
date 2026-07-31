@@ -384,7 +384,7 @@ public class BotMediaServiceTests
             .Returns(callInfo =>
             {
                 var stream = callInfo.Arg<Stream>();
-                stream.Write(TestImageBytes);
+                stream!.Write(TestImageBytes);
                 return Task.CompletedTask;
             });
     }

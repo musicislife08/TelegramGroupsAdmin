@@ -268,7 +268,7 @@ public class FeatureAvailabilityServiceTests
         _mockLogger.Received(1).Log(
             LogLevel.Error,
             Arg.Any<EventId>(),
-            Arg.Is<object>(o => o.ToString()!.Contains("Failed to check AI provider configuration status")),
+            Arg.Is<object>(o => o!.ToString()!.Contains("Failed to check AI provider configuration status")),
             exception,
             Arg.Any<Func<object, Exception?, string>>());
     }
@@ -306,7 +306,7 @@ public class FeatureAvailabilityServiceTests
         _mockLogger.Received(1).Log(
             LogLevel.Error,
             Arg.Any<EventId>(),
-            Arg.Is<object>(o => o.ToString()!.Contains("Failed to check email configuration status")),
+            Arg.Is<object>(o => o!.ToString()!.Contains("Failed to check email configuration status")),
             exception,
             Arg.Any<Func<object, Exception?, string>>());
     }
@@ -344,7 +344,7 @@ public class FeatureAvailabilityServiceTests
         _mockLogger.Received(1).Log(
             LogLevel.Error,
             Arg.Any<EventId>(),
-            Arg.Is<object>(o => o.ToString()!.Contains("Failed to check VirusTotal configuration status")),
+            Arg.Is<object>(o => o!.ToString()!.Contains("Failed to check VirusTotal configuration status")),
             exception,
             Arg.Any<Func<object, Exception?, string>>());
     }

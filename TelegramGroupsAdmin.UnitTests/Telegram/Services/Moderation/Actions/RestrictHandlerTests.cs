@@ -81,7 +81,7 @@ public class RestrictHandlerTests
         await _mockApiClient.Received(1).RestrictChatMemberAsync(
             chatId,
             userId,
-            Arg.Is<ChatPermissions>(p => p.CanSendMessages == false),
+            Arg.Is<ChatPermissions>(p => p!.CanSendMessages == false),
             Arg.Any<DateTime?>(),
             Arg.Any<CancellationToken>());
     }

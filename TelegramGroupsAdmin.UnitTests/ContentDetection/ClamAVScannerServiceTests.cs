@@ -241,7 +241,7 @@ public class ClamAVScannerServiceTests
         _mockLogger.Received(1).Log(
             LogLevel.Information,
             Arg.Any<EventId>(),
-            Arg.Is<object>(o => o.ToString()!.Contains("ClamAV env var override active")),
+            Arg.Is<object>(o => o!.ToString()!.Contains("ClamAV env var override active")),
             Arg.Any<Exception?>(),
             Arg.Any<Func<object, Exception?, string>>());
 
@@ -252,7 +252,7 @@ public class ClamAVScannerServiceTests
         _mockLogger.Received(1).Log(
             LogLevel.Information,
             Arg.Any<EventId>(),
-            Arg.Is<object>(o => o.ToString()!.Contains("ClamAV env var override active")),
+            Arg.Is<object>(o => o!.ToString()!.Contains("ClamAV env var override active")),
             Arg.Any<Exception?>(),
             Arg.Any<Func<object, Exception?, string>>());
     }

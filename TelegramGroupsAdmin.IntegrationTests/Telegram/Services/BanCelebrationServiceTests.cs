@@ -445,7 +445,7 @@ public class BanCelebrationServiceTests
 
         // Assert - DM delivery was attempted
         await _mockDmService!.Received(1).SendDmWithMediaEntitiesAsync(
-            Arg.Is<UserIdentity>(u => u.Id == TestUserId), "ban_celebration", Arg.Any<TelegramMessage>(),
+            Arg.Is<UserIdentity>(u => u!.Id == TestUserId), "ban_celebration", Arg.Any<TelegramMessage>(),
             Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }
 
@@ -533,7 +533,7 @@ public class BanCelebrationServiceTests
         await _mockMessageService!.Received(1).SendAndSaveAnimationAsync(
             TestChatId,
             Arg.Any<InputFile>(),
-            Arg.Is<TelegramMessage>(m => m.Text.Contains("[explicit username redacted]")
+            Arg.Is<TelegramMessage>(m => m!.Text.Contains("[explicit username redacted]")
                                       && !m.Text.Contains(TestUserName)),
             Arg.Any<CancellationToken>());
     }
@@ -561,7 +561,7 @@ public class BanCelebrationServiceTests
         await _mockMessageService!.Received(1).SendAndSaveAnimationAsync(
             TestChatId,
             Arg.Any<InputFile>(),
-            Arg.Is<TelegramMessage>(m => m.Text.Contains(TestUserName)
+            Arg.Is<TelegramMessage>(m => m!.Text.Contains(TestUserName)
                                       && !m.Text.Contains("[explicit username redacted]")),
             Arg.Any<CancellationToken>());
     }
@@ -590,7 +590,7 @@ public class BanCelebrationServiceTests
         await _mockMessageService!.Received(1).SendAndSaveAnimationAsync(
             TestChatId,
             Arg.Any<InputFile>(),
-            Arg.Is<TelegramMessage>(m => m.Text.Contains(TestUserName)
+            Arg.Is<TelegramMessage>(m => m!.Text.Contains(TestUserName)
                                       && !m.Text.Contains("[explicit username redacted]")),
             Arg.Any<CancellationToken>());
     }
@@ -625,7 +625,7 @@ public class BanCelebrationServiceTests
         await _mockMessageService!.Received(1).SendAndSaveAnimationAsync(
             TestChatId,
             Arg.Any<InputFile>(),
-            Arg.Is<TelegramMessage>(m => m.Text.Contains(TestUserName)
+            Arg.Is<TelegramMessage>(m => m!.Text.Contains(TestUserName)
                                       && !m.Text.Contains("[explicit username redacted]")),
             Arg.Any<CancellationToken>());
     }

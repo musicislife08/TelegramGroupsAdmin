@@ -492,7 +492,7 @@ public class BanCelebrationServiceTests
         await _mockMessageService.Received(1).SendAndSaveAnimationAsync(
             123,
             Arg.Any<InputFile>(),
-            Arg.Is<TelegramMessage>(m => m.Text == "SpammerBob banned from Test Group! Ban #42"),
+            Arg.Is<TelegramMessage>(m => m!.Text == "SpammerBob banned from Test Group! Ban #42"),
             Arg.Any<CancellationToken>());
     }
 
@@ -533,7 +533,7 @@ public class BanCelebrationServiceTests
         await _mockMessageService.Received(1).SendAndSaveAnimationAsync(
             123,
             Arg.Any<InputFile>(),
-            Arg.Is<TelegramMessage>(m => m.Text == "Ban #0!"),
+            Arg.Is<TelegramMessage>(m => m!.Text == "Ban #0!"),
             Arg.Any<CancellationToken>());
     }
 
@@ -698,7 +698,7 @@ public class BanCelebrationServiceTests
         _mockLogger.Received().Log(
             LogLevel.Warning,
             Arg.Any<EventId>(),
-            Arg.Is<object>(o => o.ToString()!.Contains("Failed to send ban celebration")),
+            Arg.Is<object>(o => o!.ToString()!.Contains("Failed to send ban celebration")),
             Arg.Any<Exception>(),
             Arg.Any<Func<object, Exception?, string>>());
     }
@@ -764,7 +764,7 @@ public class BanCelebrationServiceTests
         await _mockMessageService.Received(1).SendAndSaveAnimationAsync(
             TestChatId,
             Arg.Any<InputFile>(),
-            Arg.Is<TelegramMessage>(m => m.Text.Contains("[explicit username redacted]")
+            Arg.Is<TelegramMessage>(m => m!.Text.Contains("[explicit username redacted]")
                                       && !m.Text.Contains(TestBannedUser.DisplayName)),
             Arg.Any<CancellationToken>());
     }
@@ -799,7 +799,7 @@ public class BanCelebrationServiceTests
         await _mockMessageService.Received(1).SendAndSaveAnimationAsync(
             TestChatId,
             Arg.Any<InputFile>(),
-            Arg.Is<TelegramMessage>(m => m.Text.Contains(TestBannedUser.DisplayName)
+            Arg.Is<TelegramMessage>(m => m!.Text.Contains(TestBannedUser.DisplayName)
                                       && !m.Text.Contains("[explicit username redacted]")),
             Arg.Any<CancellationToken>());
     }
@@ -822,7 +822,7 @@ public class BanCelebrationServiceTests
         await _mockMessageService.Received(1).SendAndSaveAnimationAsync(
             TestChatId,
             Arg.Any<InputFile>(),
-            Arg.Is<TelegramMessage>(m => m.Text.Contains(TestBannedUser.DisplayName)
+            Arg.Is<TelegramMessage>(m => m!.Text.Contains(TestBannedUser.DisplayName)
                                       && !m.Text.Contains("[explicit username redacted]")),
             Arg.Any<CancellationToken>());
     }
@@ -859,7 +859,7 @@ public class BanCelebrationServiceTests
         await _mockMessageService.Received(1).SendAndSaveAnimationAsync(
             TestChatId,
             Arg.Any<InputFile>(),
-            Arg.Is<TelegramMessage>(m => m.Text.Contains(ProfileScanConfig.DefaultExplicitUsernameRedactionText)
+            Arg.Is<TelegramMessage>(m => m!.Text.Contains(ProfileScanConfig.DefaultExplicitUsernameRedactionText)
                                       && !m.Text.Contains(TestBannedUser.DisplayName)),
             Arg.Any<CancellationToken>());
     }

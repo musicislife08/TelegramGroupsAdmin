@@ -202,7 +202,7 @@ public class UpdateRouterTests
         // Assert
         await _mockChatService.Received(1)
             .HandleBotMembershipUpdateAsync(
-                Arg.Is<ChatMemberUpdated>(m => m.Chat.Id == 12345),
+                Arg.Is<ChatMemberUpdated>(m => m!.Chat.Id == 12345),
                 Arg.Any<CancellationToken>());
     }
 
@@ -217,7 +217,7 @@ public class UpdateRouterTests
 
         // Assert - health refresh triggered for the chat
         await _mockHealthOrchestrator.Received(1)
-            .RefreshHealthForChatAsync(Arg.Is<ChatIdentity>(c => c.Id == 12345), Arg.Any<CancellationToken>());
+            .RefreshHealthForChatAsync(Arg.Is<ChatIdentity>(c => c!.Id == 12345), Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -270,11 +270,11 @@ public class UpdateRouterTests
         // Assert - both handlers called
         await _mockChatService.Received(1)
             .HandleAdminStatusChangeAsync(
-                Arg.Is<ChatMemberUpdated>(m => m.Chat.Id == 789),
+                Arg.Is<ChatMemberUpdated>(m => m!.Chat.Id == 789),
                 Arg.Any<CancellationToken>());
         await _mockWelcomeService.Received(1)
             .HandleChatMemberUpdateAsync(
-                Arg.Is<ChatMemberUpdated>(m => m.NewChatMember.User.Id == 999),
+                Arg.Is<ChatMemberUpdated>(m => m!.NewChatMember.User.Id == 999),
                 Arg.Any<CancellationToken>());
     }
 
@@ -326,7 +326,7 @@ public class UpdateRouterTests
         // Assert
         await _mockWelcomeService.Received(1)
             .HandleCallbackQueryAsync(
-                Arg.Is<CallbackQuery>(q => q.Id == "my-callback-id"),
+                Arg.Is<CallbackQuery>(q => q!.Id == "my-callback-id"),
                 Arg.Any<CancellationToken>());
     }
 
@@ -392,7 +392,7 @@ public class UpdateRouterTests
 
         // Assert
         await _mockReportCallbackService.Received(1).HandleCallbackAsync(
-            Arg.Is<CallbackQuery>(q => q.Data == "rev:12345:0"),
+            Arg.Is<CallbackQuery>(q => q!.Data == "rev:12345:0"),
             Arg.Any<CancellationToken>());
     }
 
@@ -423,7 +423,7 @@ public class UpdateRouterTests
 
         // Assert
         await _mockBanCallbackService.Received(1).HandleCallbackAsync(
-            Arg.Is<CallbackQuery>(q => q.Data == "ban:12345:confirm"),
+            Arg.Is<CallbackQuery>(q => q!.Data == "ban:12345:confirm"),
             Arg.Any<CancellationToken>());
     }
 
@@ -497,7 +497,7 @@ public class UpdateRouterTests
         // Assert - MyChatMember processed (first in priority), ChatMember skipped
         await _mockChatService.Received(1)
             .HandleBotMembershipUpdateAsync(
-                Arg.Is<ChatMemberUpdated>(m => m.Chat.Id == 111),
+                Arg.Is<ChatMemberUpdated>(m => m!.Chat.Id == 111),
                 Arg.Any<CancellationToken>());
         await _mockChatService.DidNotReceive()
             .HandleAdminStatusChangeAsync(Arg.Any<ChatMemberUpdated>(), Arg.Any<CancellationToken>());
@@ -519,7 +519,7 @@ public class UpdateRouterTests
         // Assert
         await _mockMessageProcessingService.Received(1)
             .HandleNewMessageAsync(
-                Arg.Is<Message>(m => m.MessageId == 12345),
+                Arg.Is<Message>(m => m!.MessageId == 12345),
                 Arg.Any<CancellationToken>());
     }
 
@@ -575,7 +575,7 @@ public class UpdateRouterTests
         // Assert
         await _mockMessageProcessingService.Received(1)
             .HandleEditedMessageAsync(
-                Arg.Is<Message>(m => m.MessageId == 67890),
+                Arg.Is<Message>(m => m!.MessageId == 67890),
                 Arg.Any<CancellationToken>());
     }
 

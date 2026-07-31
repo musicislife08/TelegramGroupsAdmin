@@ -311,7 +311,7 @@ public class WelcomeServiceTests
         // Assert — SyncBanToChatAsync must be called once with a SyncBanIntent
         await _moderationService.Received(1).SyncBanToChatAsync(
             Arg.Is<SyncBanIntent>(i =>
-                i.User.Id == TestUserId &&
+                i!.User.Id == TestUserId &&
                 i.Chat.Id == TestChatId),
             Arg.Any<CancellationToken>());
 
@@ -345,7 +345,7 @@ public class WelcomeServiceTests
         // Assert — restrict (mute) must be called exactly once via RestrictUserAsync
         await _moderationService.Received(1).RestrictUserAsync(
             Arg.Is<RestrictIntent>(i =>
-                i.User.Id == TestUserId &&
+                i!.User.Id == TestUserId &&
                 i.Chat != null &&
                 i.Chat.Id == TestChatId),
             Arg.Any<CancellationToken>());
@@ -616,7 +616,7 @@ public class WelcomeServiceTests
         // Assert — announcement sent via entity overload containing the configured body text
         await _messageService.Received(1).SendAndSaveMessageAsync(
             chatId: TestChatId,
-            message: Arg.Is<TelegramMessage>(m => m.Text.Contains("hello")),
+            message: Arg.Is<TelegramMessage>(m => m!.Text.Contains("hello")),
             replyParameters: Arg.Any<ReplyParameters?>(),
             replyMarkup: Arg.Any<InlineKeyboardMarkup?>(),
             cancellationToken: Arg.Any<CancellationToken>());
@@ -624,7 +624,7 @@ public class WelcomeServiceTests
         // And its auto-delete is scheduled
         await _jobScheduler.Received(1).ScheduleJobAsync(
             BackgroundJobNames.DeleteMessage,
-            Arg.Is<DeleteMessagePayload>(p => p.ChatId == TestChatId && p.MessageId == 5001),
+            Arg.Is<DeleteMessagePayload>(p => p!.ChatId == TestChatId && p.MessageId == 5001),
             Arg.Any<int>(),
             Arg.Any<string?>(),
             Arg.Any<CancellationToken>());
@@ -712,7 +712,7 @@ public class WelcomeServiceTests
 
         await _jobScheduler.Received(1).ScheduleJobAsync(
             BackgroundJobNames.DeleteMessage,
-            Arg.Is<DeleteMessagePayload>(p => p.ChatId == TestChatId && p.MessageId == 5002),
+            Arg.Is<DeleteMessagePayload>(p => p!.ChatId == TestChatId && p.MessageId == 5002),
             0,
             Arg.Any<string?>(),
             Arg.Any<CancellationToken>());
@@ -1002,7 +1002,7 @@ public class WelcomeServiceTests
         //       Substitute.For<ILogger<WelcomeService>>() and pass it to the WelcomeService ctor.
         await _messageService.Received(1).SendAndSaveMessageAsync(
             Arg.Any<long>(),
-            Arg.Is<TelegramMessage>(m => m.Text.Length <= TrustedBypassConfig.MaxAnnouncementTemplateLength),
+            Arg.Is<TelegramMessage>(m => m!.Text.Length <= TrustedBypassConfig.MaxAnnouncementTemplateLength),
             Arg.Any<ReplyParameters?>(),
             Arg.Any<InlineKeyboardMarkup?>(),
             Arg.Any<CancellationToken>());

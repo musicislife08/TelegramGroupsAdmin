@@ -96,7 +96,7 @@ public class ContentReportHandlerTests
 
         await _mockModerationService.Received(1).MarkAsSpamAndBanAsync(
             Arg.Is<SpamBanIntent>(i =>
-                i.User.Id == TestUserId &&
+                i!.User.Id == TestUserId &&
                 i.MessageId == TestMessageId &&
                 i.Chat.Id == TestChatId &&
                 i.Reason.Contains($"Report #{TestReportId}")),
@@ -159,9 +159,9 @@ public class ContentReportHandlerTests
 
         await _mockAuditService.Received(1).LogEventAsync(
             AuditEventType.ReportReviewed,
-            Arg.Is<Actor>(a => a.WebUserId == TestReviewerId),
-            Arg.Is<Actor>(a => a.TelegramUserId == TestUserId),
-            Arg.Is<string>(s => s.Contains("Marked as spam") && s.Contains($"report #{TestReportId}")),
+            Arg.Is<Actor>(a => a!.WebUserId == TestReviewerId),
+            Arg.Is<Actor>(a => a!.TelegramUserId == TestUserId),
+            Arg.Is<string>(s => s!.Contains("Marked as spam") && s.Contains($"report #{TestReportId}")),
             Arg.Any<CancellationToken>());
     }
 
@@ -348,7 +348,7 @@ public class ContentReportHandlerTests
 
         await _mockAuditService.Received(1).LogEventAsync(
             AuditEventType.ReportReviewed, Arg.Any<Actor>(), Arg.Any<Actor>(),
-            Arg.Is<string>(s => s.Contains("Warned user") && s.Contains("3 warnings total")),
+            Arg.Is<string>(s => s!.Contains("Warned user") && s.Contains("3 warnings total")),
             Arg.Any<CancellationToken>());
     }
 
@@ -401,9 +401,9 @@ public class ContentReportHandlerTests
 
         await _mockBotMessageService.Received(1).SendAndSaveMessageAsync(
             TestChatId,
-            Arg.Is<string>(s => s.Contains("reviewed") && s.Contains("no action")),
+            Arg.Is<string>(s => s!.Contains("reviewed") && s.Contains("no action")),
             parseMode: ParseMode.None,
-            replyParameters: Arg.Is<ReplyParameters>(r => r.MessageId == TestMessageId),
+            replyParameters: Arg.Is<ReplyParameters>(r => r!.MessageId == TestMessageId),
             cancellationToken: Arg.Any<CancellationToken>());
     }
 

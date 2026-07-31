@@ -65,7 +65,7 @@ public class JobPayloadHelperTests
         // Assert
         Assert.That(result, Is.Null);
         await _scheduler.Received(1).UnscheduleJob(
-            Arg.Is<TriggerKey>(k => k.Name == "test-trigger"),
+            Arg.Is<TriggerKey>(k => k!.Name == "test-trigger"),
             Arg.Any<CancellationToken>());
     }
 
@@ -84,7 +84,7 @@ public class JobPayloadHelperTests
         // Assert
         Assert.That(result, Is.Null);
         await _scheduler.Received(1).UnscheduleJob(
-            Arg.Is<TriggerKey>(k => k.Name == "test-trigger"),
+            Arg.Is<TriggerKey>(k => k!.Name == "test-trigger"),
             Arg.Any<CancellationToken>());
     }
 

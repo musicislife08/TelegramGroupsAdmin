@@ -85,7 +85,7 @@ public class TelegramBotClientFactoryTests
         _mockFactoryLogger.Received().Log(
             LogLevel.Information,
             Arg.Any<EventId>(),
-            Arg.Is<object>(o => o.ToString()!.Contains("token changed")),
+            Arg.Is<object>(o => o!.ToString()!.Contains("token changed")),
             Arg.Any<Exception?>(),
             Arg.Any<Func<object, Exception?, string>>());
     }

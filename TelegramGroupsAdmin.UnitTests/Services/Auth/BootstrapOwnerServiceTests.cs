@@ -87,7 +87,7 @@ public class BootstrapOwnerServiceTests
         Assert.That(result.Success, Is.True);
         await _userRepository.Received(1).CreateAsync(
             Arg.Is<UserRecord>(r =>
-                r.WebUser.PermissionLevel == PermissionLevel.Owner &&
+                r!.WebUser.PermissionLevel == PermissionLevel.Owner &&
                 r.WebUser.Email == ValidEmail &&
                 r.PasswordHash == HashedPassword &&
                 r.EmailVerified == true &&
@@ -362,7 +362,7 @@ public class BootstrapOwnerServiceTests
         Assert.That(result.Success, Is.True);
         await _auditService.Received(1).LogEventAsync(
             AuditEventType.UserRegistered,
-            Arg.Is<Actor>(a => a.SystemIdentifier == "bootstrap"),
+            Arg.Is<Actor>(a => a!.SystemIdentifier == "bootstrap"),
             Arg.Any<Actor?>(),
             Arg.Any<string?>(),
             cancellationToken: Arg.Any<CancellationToken>());

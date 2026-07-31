@@ -121,7 +121,7 @@ public class UserMessagingServiceTests
             .SendAndSaveMessageAsync(
                 chatId: TestChatId,
                 message: Arg.Is<TelegramMessage>(m =>
-                    m.Entities.Count(e => e.Type == MessageEntityType.TextMention) == 2),
+                    m!.Entities.Count(e => e.Type == MessageEntityType.TextMention) == 2),
                 replyParameters: Arg.Any<ReplyParameters?>(),
                 cancellationToken: Arg.Any<CancellationToken>());
 
@@ -161,7 +161,7 @@ public class UserMessagingServiceTests
             .SendAndSaveMessageAsync(
                 chatId: TestChatId,
                 message: Arg.Is<TelegramMessage>(m =>
-                    m.Entities.Count(e => e.Type == MessageEntityType.TextMention) == 1),
+                    m!.Entities.Count(e => e.Type == MessageEntityType.TextMention) == 1),
                 replyParameters: Arg.Any<ReplyParameters?>(),
                 cancellationToken: Arg.Any<CancellationToken>());
     }
@@ -196,7 +196,7 @@ public class UserMessagingServiceTests
             .SendAndSaveMessageAsync(
                 chatId: TestChatId,
                 message: Arg.Is<TelegramMessage>(m =>
-                    m.Entities.Count(e => e.Type == MessageEntityType.TextMention) == 1),
+                    m!.Entities.Count(e => e.Type == MessageEntityType.TextMention) == 1),
                 replyParameters: Arg.Any<ReplyParameters?>(),
                 cancellationToken: Arg.Any<CancellationToken>());
     }
@@ -225,7 +225,7 @@ public class UserMessagingServiceTests
             .SendAndSaveMessageAsync(
                 chatId: TestChatId,
                 message: Arg.Is<TelegramMessage>(m =>
-                    m.Entities.Count(e => e.Type == MessageEntityType.TextMention) == 1),
+                    m!.Entities.Count(e => e.Type == MessageEntityType.TextMention) == 1),
                 replyParameters: Arg.Any<ReplyParameters?>(),
                 cancellationToken: Arg.Any<CancellationToken>());
 
@@ -273,7 +273,7 @@ public class UserMessagingServiceTests
             .SendAndSaveMessageAsync(
                 chatId: TestChatId,
                 message: Arg.Is<TelegramMessage>(m =>
-                    m.Entities.Count(e => e.Type == MessageEntityType.TextMention) == 1),
+                    m!.Entities.Count(e => e.Type == MessageEntityType.TextMention) == 1),
                 replyParameters: Arg.Any<ReplyParameters?>(),
                 cancellationToken: Arg.Any<CancellationToken>());
 
