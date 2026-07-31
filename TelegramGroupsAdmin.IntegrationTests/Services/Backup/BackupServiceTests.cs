@@ -79,22 +79,40 @@ public class BackupServiceTests
         _testHelper = new MigrationTestHelper();
         await _testHelper.CreateDatabaseFromGoldenTemplateAsync();
 
-        // Set up dependency injection with test-specific services
-        var services = new ServiceCollection();
-
         // Use the session-shared DataProtection provider so encrypted-column ciphertext
         // written into golden_template (by LoadCanonicalAsync) can be decrypted here.
         _dataProtectionProvider = PostgresFixture.SharedDataProtectionProvider;
-        services.AddSingleton<IDataProtectionProvider>(_dataProtectionProvider);
+        _serviceProvider = BuildBackupServiceProvider(_testHelper.ConnectionString, _dataProtectionProvider);
+        _encryptionService = _serviceProvider.GetRequiredService<IBackupEncryptionService>();
+
+        // Create BackupService and PassphraseManagementService in a new scope (using interface)
+        var scope = _serviceProvider.CreateScope();
+        _backupService = scope.ServiceProvider.GetRequiredService<IBackupService>();
+        _passphraseService = scope.ServiceProvider.GetRequiredService<IPassphraseManagementService>();
+        _telegramUserRepository = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
+
+        // Set up default encryption config for all tests
+        await _passphraseService.SaveEncryptionConfigAsync("test-passphrase-12345");
+    }
+
+    /// <summary>
+    /// Builds a fully-wired BackupService DI container for the given connection string and
+    /// Data Protection key ring. Extracted so a test can stand up a *second* stack with a
+    /// different key ring (simulating a cross-machine restore onto a different key ring).
+    /// </summary>
+    private static ServiceProvider BuildBackupServiceProvider(string connectionString, IDataProtectionProvider dataProtectionProvider)
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton(dataProtectionProvider);
 
         // Add NpgsqlDataSource
-        var dataSourceBuilder = new Npgsql.NpgsqlDataSourceBuilder(_testHelper.ConnectionString);
+        var dataSourceBuilder = new Npgsql.NpgsqlDataSourceBuilder(connectionString);
         services.AddSingleton(dataSourceBuilder.Build());
 
-        // Add DbContextFactory (required by TelegramUserRepository)
+        // Add DbContextFactory (required by TelegramUserRepository / TelegramSessionRepository)
         services.AddDbContextFactory<Data.AppDbContext>((_, options) =>
         {
-            options.UseNpgsql(_testHelper.ConnectionString);
+            options.UseNpgsql(connectionString);
         });
 
         // Add logging with test-specific suppressions
@@ -134,20 +152,11 @@ public class BackupServiceTests
         services.AddScoped<TelegramGroupsAdmin.BackgroundJobs.Services.Backup.Handlers.TableExportService>();
         services.AddScoped<TelegramGroupsAdmin.BackgroundJobs.Services.Backup.Handlers.DependencyResolutionService>();
 
-        // Add TelegramUserRepository (write-SUT used for arrange steps)
+        // Add repositories used as write-SUTs in arrange steps
         services.AddScoped<ITelegramUserRepository, TelegramUserRepository>();
+        services.AddScoped<ITelegramSessionRepository, TelegramSessionRepository>();
 
-        _serviceProvider = services.BuildServiceProvider();
-        _encryptionService = _serviceProvider.GetRequiredService<IBackupEncryptionService>();
-
-        // Create BackupService and PassphraseManagementService in a new scope (using interface)
-        var scope = _serviceProvider.CreateScope();
-        _backupService = scope.ServiceProvider.GetRequiredService<IBackupService>();
-        _passphraseService = scope.ServiceProvider.GetRequiredService<IPassphraseManagementService>();
-        _telegramUserRepository = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
-
-        // Set up default encryption config for all tests
-        await _passphraseService.SaveEncryptionConfigAsync("test-passphrase-12345");
+        return services.BuildServiceProvider();
     }
 
     [TearDown]
@@ -524,6 +533,65 @@ public class BackupServiceTests
                 var decrypted = protector.Unprotect(config!.ApiKeys!);
                 Assert.That(decrypted, Contains.Substring("openai"),
                     "Decrypted API keys should contain original canonical test data");
+            }
+        }
+        finally
+        {
+            File.Delete(backupPath);
+        }
+    }
+
+    [Test]
+    public async Task RestoreAsync_OntoDifferentKeyRing_ShouldReEncryptTelegramSessionFields()
+    {
+        // Reproduces #517: telegram_sessions.session_data (byte[]) and phone_number (string) are
+        // encrypted out-of-band by TelegramSessionRepository under the TelegramSession purpose.
+        // Without [ProtectedData] on the DTO (and byte[] support in the backup handlers), export
+        // ships the SOURCE key-ring ciphertext verbatim and restore inserts it verbatim, so a
+        // restore onto a DIFFERENT key ring leaves the row undecryptable → CryptographicException.
+
+        // Arrange - seed an active session encrypted under the SOURCE key ring (Shared provider).
+        var sourceSessionRepo = _serviceProvider!.GetRequiredService<ITelegramSessionRepository>();
+        var originalSessionData = new byte[] { 0xDE, 0xAD, 0xBE, 0xEF, 0x00, 0x01, 0x02, 0x03 };
+        const string originalPhoneNumber = "+15555550199";
+        var webUserId = GoldenDatasetConstants.WebUsers.OwnerId;
+
+        await sourceSessionRepo.CreateSessionAsync(new TelegramSession
+        {
+            WebUserId = webUserId,
+            TelegramUserId = 9921676191756L,
+            DisplayName = "Cross-Machine Restore Test",
+            PhoneNumber = originalPhoneNumber,
+            SessionData = originalSessionData,
+            IsActive = true,
+            ConnectedAt = DateTimeOffset.UtcNow
+        }, CancellationToken.None);
+
+        // Export under the source key ring. Explicit passphrase so the envelope crypto doesn't
+        // depend on the DB passphrase (which is itself Data-Protection key-ring-bound).
+        const string passphrase = "cross-machine-pass-123";
+        var backupPath = await ExportBackupToTempFileAsync(passphrase);
+
+        // Build a SECOND stack on a DIFFERENT key ring — the "target machine".
+        var targetKeyRing = new EphemeralDataProtectionProvider();
+        await using var targetProvider = BuildBackupServiceProvider(_testHelper!.ConnectionString, targetKeyRing);
+        var targetBackupService = targetProvider.GetRequiredService<IBackupService>();
+        var targetSessionRepo = targetProvider.GetRequiredService<ITelegramSessionRepository>();
+
+        try
+        {
+            // Act - restore onto the target key ring, then read the session back under that ring.
+            await targetBackupService.RestoreAsync(backupPath, passphrase);
+            var restored = await targetSessionRepo.GetActiveSessionAsync(webUserId, CancellationToken.None);
+
+            // Assert - both encrypted columns decrypt cleanly under the target key ring.
+            Assert.That(restored, Is.Not.Null, "Active session should survive the restore");
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(restored!.SessionData, Is.EqualTo(originalSessionData),
+                    "byte[] session_data should be re-keyed to the target ring and decrypt to the original bytes");
+                Assert.That(restored.PhoneNumber, Is.EqualTo(originalPhoneNumber),
+                    "string phone_number should be re-keyed to the target ring and decrypt to the original value");
             }
         }
         finally

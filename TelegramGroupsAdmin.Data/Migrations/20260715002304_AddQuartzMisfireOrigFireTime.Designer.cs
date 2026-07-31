@@ -12,7 +12,7 @@ using TelegramGroupsAdmin.Data;
 namespace TelegramGroupsAdmin.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260729230045_AddQuartzMisfireOrigFireTime")]
+    [Migration("20260715002304_AddQuartzMisfireOrigFireTime")]
     partial class AddQuartzMisfireOrigFireTime
     {
         /// <inheritdoc />

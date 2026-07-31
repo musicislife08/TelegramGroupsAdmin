@@ -293,8 +293,10 @@ public class BackupService : IBackupService
         {
             var value = prop.GetValue(dto);
 
-            // Check if this property has [ProtectedData] attribute and has a value
-            if (protectedProperties.Contains(prop) && value is string decryptedValue && !string.IsNullOrEmpty(decryptedValue))
+            // Check if this property has [ProtectedData] attribute and a non-empty value.
+            // Handles both string columns (e.g. phone_number) and byte[] columns (e.g.
+            // telegram session_data), which use the string vs byte[] IDataProtector overloads.
+            if (protectedProperties.Contains(prop) && value is string { Length: > 0 } or byte[] { Length: > 0 })
             {
                 try
                 {
@@ -302,9 +304,14 @@ public class BackupService : IBackupService
                     var protectedDataAttr = prop.GetCustomAttribute<ProtectedDataAttribute>();
                     var purpose = protectedDataAttr?.Purpose ?? "TgSpamPreFilter.TotpSecrets";
 
-                    // Encrypt using the correct protector for this purpose
+                    // Encrypt using the correct protector overload for this property type
                     var protector = _dataProtectionProvider.CreateProtector(purpose);
-                    var encryptedValue = protector.Protect(decryptedValue);
+                    object encryptedValue = value switch
+                    {
+                        string s => protector.Protect(s),
+                        byte[] b => protector.Protect(b),
+                        _ => value
+                    };
                     prop.SetValue(encryptedDto, encryptedValue);
                     _logger.LogDebug("Encrypted protected property {PropertyName} with purpose {Purpose}", prop.Name, purpose);
                 }
