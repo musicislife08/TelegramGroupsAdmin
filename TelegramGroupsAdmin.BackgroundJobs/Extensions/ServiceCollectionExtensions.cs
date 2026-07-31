@@ -111,8 +111,6 @@ public static class ServiceCollectionExtensions
         q.AddJob<TempbanExpiryJob>(opts => opts.WithIdentity(BackgroundJobNames.TempbanExpiry).StoreDurably());
         q.AddJob<WelcomeTimeoutJob>(opts => opts.WithIdentity(BackgroundJobNames.WelcomeTimeout).StoreDurably());
 
-        q.AddJob<ProfileScanJob>(opts => opts.WithIdentity(BackgroundJobNames.ProfileScan).StoreDurably());
-
         // Note: Triggers will be created dynamically by QuartzSchedulingSyncService
         // based on database configuration (BackgroundJobConfig.Schedule)
     }

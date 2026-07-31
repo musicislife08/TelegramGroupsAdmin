@@ -5,9 +5,9 @@
   </PropertyGroup>
   <ItemGroup>
     <!-- UI / Web -->
-    <PackageVersion Include="AngleSharp" Version="1.5.2" />
-    <PackageVersion Include="Blazor-ApexCharts" Version="6.1.0" />
-    <PackageVersion Include="bunit" Version="2.7.2" />
+    <PackageVersion Include="AngleSharp" Version="1.6.0" />
+    <PackageVersion Include="Blazor-ApexCharts" Version="7.0.0" />
+    <PackageVersion Include="bunit" Version="2.8.6" />
     <PackageVersion Include="MudBlazor" Version="9.7.0" />
 
     <!-- Markdown -->
@@ -31,11 +31,12 @@
     <PackageVersion Include="Microsoft.AspNetCore.DataProtection.Extensions" Version="10.0.10" />
     <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.10" />
     <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.10" />
-    <!-- Transitive security pin: Microsoft.AspNetCore.OpenApi 10.0.10 pulls Microsoft.OpenApi 2.0.0
-         (GHSA-v5pm-xwqc-g5wc, high; affects <= 2.7.4). Pin latest patched 2.x. The 3.x line is NOT
-         usable here: ASP.NET's OpenApi source generator targets the 2.x API (assigns the now
-         read-only IOpenApiMediaType.Example), so 3.x fails the build until ASP.NET ships a 3.x build. -->
-    <PackageVersion Include="Microsoft.OpenApi" Version="2.10.0" />
+    <!-- Transitive security pin: Microsoft.AspNetCore.OpenApi still pulls Microsoft.OpenApi
+         2.0.0, which carries GHSA-v5pm-xwqc-g5wc (high). 2.11.0 is the latest patched 2.x
+         (advisory fixed in 2.7.5). The 3.x line cannot be used: ASP.NET's OpenApi XML-comment
+         source generator assigns IOpenApiMediaType.Example, which became read-only in 3.x, so
+         3.x fails to compile the generated code. -->
+    <PackageVersion Include="Microsoft.OpenApi" Version="2.11.0" />
     <PackageVersion Include="Microsoft.Extensions.Caching.Hybrid" Version="10.8.0" />
     <PackageVersion Include="Microsoft.Extensions.Configuration" Version="10.0.10" />
     <PackageVersion Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.10" />
@@ -49,33 +50,35 @@
     <!-- AI / ML -->
     <PackageVersion Include="Microsoft.Extensions.ML" Version="5.0.0" />
     <PackageVersion Include="Microsoft.ML" Version="5.0.0" />
-    <PackageVersion Include="Microsoft.Extensions.AI" Version="10.8.0" />
-    <PackageVersion Include="Microsoft.Extensions.AI.OpenAI" Version="10.8.0" />
+    <PackageVersion Include="Microsoft.Extensions.AI" Version="10.8.3" />
+    <PackageVersion Include="Microsoft.Extensions.AI.OpenAI" Version="10.8.3" />
     <PackageVersion Include="OpenAI" Version="2.12.0" />
     <PackageVersion Include="Azure.AI.OpenAI" Version="2.1.0" />
-    <PackageVersion Include="Anthropic" Version="12.35.1" />
+    <PackageVersion Include="Anthropic" Version="12.39.0" />
 
     <!-- Telegram -->
-    <PackageVersion Include="Telegram.Bot" Version="22.10.1.1" />
+    <PackageVersion Include="Telegram.Bot" Version="22.10.2.1" />
     <PackageVersion Include="WTelegramClient" Version="4.4.7" />
 
     <!-- Background Jobs -->
     <PackageVersion Include="AppAny.Quartz.EntityFrameworkCore.Migrations.PostgreSQL" Version="0.6.0" />
     <PackageVersion Include="HumanCron" Version="0.8.0" />
     <PackageVersion Include="HumanCron.Quartz" Version="0.8.0" />
-    <PackageVersion Include="Quartz" Version="3.18.2" />
-    <PackageVersion Include="Quartz.AspNetCore" Version="3.18.2" />
-    <PackageVersion Include="Quartz.Extensions.DependencyInjection" Version="3.18.2" />
-    <PackageVersion Include="Quartz.Extensions.Hosting" Version="3.18.2" />
-    <PackageVersion Include="Quartz.Serialization.SystemTextJson" Version="3.18.2" />
+    <PackageVersion Include="Quartz" Version="3.19.1" />
+    <PackageVersion Include="Quartz.AspNetCore" Version="3.19.1" />
+    <PackageVersion Include="Quartz.Extensions.DependencyInjection" Version="3.19.1" />
+    <PackageVersion Include="Quartz.Extensions.Hosting" Version="3.19.1" />
+    <PackageVersion Include="Quartz.Serialization.SystemTextJson" Version="3.19.1" />
 
     <!-- Observability -->
-    <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.16.0" />
+    <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.17.0" />
+    <!-- Version hold: no stable release of OpenTelemetry.Exporter.Prometheus.AspNetCore
+         exists yet; 1.15.3-beta.1 is the latest available. -->
     <PackageVersion Include="OpenTelemetry.Exporter.Prometheus.AspNetCore" Version="1.15.3-beta.1" />
-    <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.16.0" />
-    <PackageVersion Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.16.0" />
-    <PackageVersion Include="OpenTelemetry.Instrumentation.Http" Version="1.16.0" />
-    <PackageVersion Include="OpenTelemetry.Instrumentation.Runtime" Version="1.16.0" />
+    <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.17.0" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.17.0" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.Http" Version="1.17.0" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.Runtime" Version="1.17.0" />
     <PackageVersion Include="Serilog.AspNetCore" Version="10.0.0" />
     <PackageVersion Include="Serilog.Sinks.OpenTelemetry" Version="4.2.0" />
     <PackageVersion Include="Serilog.Sinks.Seq" Version="9.1.0" />
@@ -94,8 +97,9 @@
     <PackageVersion Include="Panlingo.LanguageIdentification.FastText" Version="0.8.0" />
     <PackageVersion Include="QRCoder" Version="1.8.0" />
     <PackageVersion Include="SendGrid" Version="9.29.3" />
-    <!-- Pinned to last free (Apache-era) release: 4.0.0+ requires a paid Six Labors license.
-         Tracked for replacement in #523. -->
+    <!-- Version hold: 4.0.0 enforces a build-time license key
+         (SixLaborsLicenseKey / sixlabors.lic) with no OSS opt-out.
+         Tracked by open issue #523. -->
     <PackageVersion Include="SixLabors.ImageSharp" Version="3.1.12" />
     <PackageVersion Include="System.IO.Hashing" Version="10.0.10" />
     <PackageVersion Include="Testably.Abstractions" Version="10.3.0" />
@@ -113,6 +117,6 @@
     <PackageVersion Include="Testably.Abstractions.Testing" Version="7.0.1" />
     <PackageVersion Include="Testcontainers" Version="4.13.0" />
     <PackageVersion Include="Testcontainers.PostgreSql" Version="4.13.0" />
-    <PackageVersion Include="WireMock.Net" Version="2.12.0" />
+    <PackageVersion Include="WireMock.Net" Version="2.13.0" />
   </ItemGroup>
 </Project>

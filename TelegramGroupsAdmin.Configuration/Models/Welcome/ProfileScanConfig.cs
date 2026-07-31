@@ -35,6 +35,13 @@ public class ProfileScanConfig
     public bool ScanOnProfileChange { get; set; } = true;
 
     /// <summary>
+    /// Whether to scan a user's profile on their first message when they have
+    /// never been scanned. Covers users who arrive without a join event, such as
+    /// accounts commenting on channel posts in a linked discussion group.
+    /// </summary>
+    public bool ScanOnFirstMessage { get; set; } = false;
+
+    /// <summary>
     /// When true, replace the banned user's display name in public chat posts
     /// (e.g., ban-celebration captions) with <see cref="ExplicitUsernameRedactionText"/>
     /// if the most recent profile scan flagged the display text as explicit.

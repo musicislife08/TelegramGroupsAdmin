@@ -184,6 +184,12 @@
                                                    Disabled="!_config.JoinSecurity.ProfileScan.Enabled" />
                                     </MudItem>
                                     <MudItem xs="6">
+                                        <MudSwitch @bind-Value="_config.JoinSecurity.ProfileScan.ScanOnFirstMessage"
+                                                   Color="Color.Primary"
+                                                   Label="Scan on first message"
+                                                   Disabled="!_config.JoinSecurity.ProfileScan.Enabled" />
+                                    </MudItem>
+                                    <MudItem xs="6">
                                         <MudSwitch @bind-Value="_config.JoinSecurity.ProfileScan.MaskExplicitUsername"
                                                    Color="Color.Primary"
                                                    Label="Mask explicit usernames in public ban posts"

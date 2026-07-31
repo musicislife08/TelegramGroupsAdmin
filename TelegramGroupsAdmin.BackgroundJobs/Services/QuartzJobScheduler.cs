@@ -106,7 +106,6 @@ public class QuartzJobScheduler : IJobScheduler
             BackgroundJobNames.TempbanExpiry => typeof(Jobs.TempbanExpiryJob),
             BackgroundJobNames.RotateBackupPassphrase => typeof(Jobs.RotateBackupPassphraseJob),
             BackgroundJobNames.DataCleanup => typeof(Jobs.DataCleanupJob),
-            BackgroundJobNames.ProfileScan => typeof(Jobs.ProfileScanJob),
             _ => throw new ArgumentException($"Unknown job name: {jobName}", nameof(jobName))
         };
     }

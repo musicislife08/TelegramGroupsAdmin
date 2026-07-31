@@ -601,6 +601,87 @@ public class WelcomeSystemConfigTests : WelcomeSystemConfigTestContext
 
     #endregion
 
+    #region Profile Scan First Message Tests
+
+    [Test]
+    public void WelcomeSystemConfig_RendersScanOnFirstMessageSwitchWhenProfileScanEnabled()
+    {
+        // Arrange - profile scan ON so the first-message switch should render enabled
+        ConfigService.GetWelcomeAsync(Arg.Any<long>())
+            .Returns(new WelcomeConfig
+            {
+                Enabled = true,
+                MainWelcomeMessage = "Welcome {username}!",
+                JoinSecurity = new JoinSecurityConfig
+                {
+                    ProfileScan = new ProfileScanConfig
+                    {
+                        Enabled = true,
+                        ScanOnFirstMessage = false
+                    }
+                }
+            });
+
+        // Act
+        var cut = Render<WelcomeSystemConfig>();
+
+        // Assert - locate the switch via its label text and confirm not disabled
+        cut.WaitForAssertion(() =>
+        {
+            Assert.That(cut.Markup, Does.Contain("Scan on first message"));
+
+            var switchLabel = cut.FindAll("label")
+                .FirstOrDefault(l => l.TextContent.Contains("Scan on first message"));
+            Assert.That(switchLabel, Is.Not.Null,
+                "Scan on first message switch label should be present in the rendered DOM");
+
+            // MudSwitch renders <label><span class="mud-switch"><input /></span>...<span>Label</span></label>
+            var switchInput = switchLabel!.QuerySelector("input");
+            Assert.That(switchInput, Is.Not.Null, "Scan on first message switch should expose an input element");
+            Assert.That(switchInput!.HasAttribute("disabled"), Is.False,
+                "Scan on first message switch should be enabled when ProfileScan.Enabled is true");
+        }, TimeSpan.FromSeconds(2));
+    }
+
+    [Test]
+    public void WelcomeSystemConfig_DisablesScanOnFirstMessageSwitchWhenProfileScanDisabled()
+    {
+        // Arrange - profile scan OFF cascades disabled to the first-message switch
+        ConfigService.GetWelcomeAsync(Arg.Any<long>())
+            .Returns(new WelcomeConfig
+            {
+                Enabled = true,
+                MainWelcomeMessage = "Welcome {username}!",
+                JoinSecurity = new JoinSecurityConfig
+                {
+                    ProfileScan = new ProfileScanConfig
+                    {
+                        Enabled = false,
+                        ScanOnFirstMessage = false
+                    }
+                }
+            });
+
+        // Act
+        var cut = Render<WelcomeSystemConfig>();
+
+        // Assert - the switch input carries the disabled attribute
+        cut.WaitForAssertion(() =>
+        {
+            var switchLabel = cut.FindAll("label")
+                .FirstOrDefault(l => l.TextContent.Contains("Scan on first message"));
+            Assert.That(switchLabel, Is.Not.Null,
+                "Scan on first message switch label should be present in the rendered DOM");
+
+            var switchInput = switchLabel!.QuerySelector("input");
+            Assert.That(switchInput, Is.Not.Null, "Scan on first message switch should expose an input element");
+            Assert.That(switchInput!.HasAttribute("disabled"), Is.True,
+                "Scan on first message switch should be disabled when ProfileScan.Enabled is false");
+        }, TimeSpan.FromSeconds(2));
+    }
+
+    #endregion
+
     #region Explicit Username Masking Tests
 
     [Test]

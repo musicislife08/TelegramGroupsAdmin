@@ -70,6 +70,7 @@ public static class ServiceCollectionExtensions
             services.AddSingleton<IAuthFlowStore, AuthFlowStore>();
             services.AddScoped<ITelegramAuthService, TelegramAuthService>();
             services.AddSingleton<IProfileScanService, ProfileScanService>();
+            services.AddScoped<IProfileScanGate, ProfileScanGate>();
             services.AddScoped<IProfileScoringEngine, ProfileScoringEngine>();
 
             // Telegram infrastructure

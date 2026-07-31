@@ -96,7 +96,6 @@ public class QuartzScheduleSynchronizerOrphanCleanupTests
         Assert.That(jobNames, Does.Contain(BackgroundJobNames.DeleteMessage));
         Assert.That(jobNames, Does.Contain(BackgroundJobNames.FileScan));
         Assert.That(jobNames, Does.Contain(BackgroundJobNames.WelcomeTimeout));
-        Assert.That(jobNames, Does.Contain(BackgroundJobNames.ProfileScan));
         Assert.That(jobNames, Does.Contain(BackgroundJobNames.TempbanExpiry));
         Assert.That(jobNames, Does.Contain(BackgroundJobNames.FetchUserPhoto));
         Assert.That(jobNames, Does.Contain(BackgroundJobNames.DeleteUserMessages));
