@@ -117,6 +117,10 @@
     <PackageVersion Include="Testably.Abstractions.Testing" Version="7.0.1" />
     <PackageVersion Include="Testcontainers" Version="4.13.0" />
     <PackageVersion Include="Testcontainers.PostgreSql" Version="4.13.0" />
+    <!-- Transitive pin: Testcontainers pulls SSH.NET 2025.1.0, which carries
+         CVE-2026-48798 (ScpClient recursive download arbitrary file write,
+         GHSA-q939-rpr3-3284). Pinned to the first patched release. -->
+    <PackageVersion Include="SSH.NET" Version="2026.0.0" />
     <PackageVersion Include="WireMock.Net" Version="2.13.0" />
   </ItemGroup>
 </Project>
