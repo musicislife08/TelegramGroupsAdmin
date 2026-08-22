@@ -23,4 +23,11 @@ public abstract record ModerationIntent
     /// Human-readable reason for the action (stored in audit log).
     /// </summary>
     public required string Reason { get; init; }
+
+    /// <summary>
+    /// Report id that triggered this action, when one did. The orchestrator's report-cleanup
+    /// rule skips it, so the report handler that initiated the action keeps ownership of its
+    /// own status update instead of losing the race to the auto-close sweep.
+    /// </summary>
+    public long? OriginReportId { get; init; }
 }
