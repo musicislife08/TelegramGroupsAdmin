@@ -1048,8 +1048,8 @@ public class WelcomeService(
             }
         }
 
-        // Step 3: Try to send rules via DM (or fallback to chat)
-        // Always attempt this - previous DM sent via /start may have been deleted by user
+        // Step 3: Try to send rules via DM.
+        // Always attempt this - previous DM sent via /start may have been deleted by user.
         var dmResult = await SendRulesAsync(chat, user, config, cancellationToken);
 
         logger.LogDebug(
@@ -1347,13 +1347,21 @@ public class WelcomeService(
         // Use extracted builder for rules confirmation message (includes footer)
         var dmMessage = WelcomeMessageBuilder.FormatRulesConfirmation(config, UserIdentity.From(user), chatName);
 
-        // Delegate to DmDeliveryService with chat fallback and 30-second auto-delete
+        // No chat fallback: a blocked DM must not spill the rules into the group as a
+        // message addressed to a user who may already be banned or held for review.
         var result = await dmDeliveryService.SendDmAsync(
             user: UserIdentity.From(user),
             message: dmMessage,
-            fallbackChatId: chat.Id,
-            autoDeleteSeconds: 30,
             cancellationToken: cancellationToken);
+
+        if (result.Failed)
+        {
+            logger.LogWarning(
+                "Could not deliver welcome rules to {User} for {Chat}: {Error}",
+                user.ToLogDebug(),
+                chat.ToLogDebug(),
+                result.ErrorMessage);
+        }
 
         logger.LogDebug(
             "Rules sent to {User}: DmSent={DmSent}, FallbackUsed={FallbackUsed}",
