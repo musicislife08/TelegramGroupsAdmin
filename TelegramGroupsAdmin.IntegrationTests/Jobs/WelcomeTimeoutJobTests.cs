@@ -270,11 +270,13 @@ public class WelcomeTimeoutJobTests
     /// When KickUserFromChatAsync throws (e.g., user already left), the job must still
     /// record the Timeout response. The kick failure is logged and swallowed by the job;
     /// it must not prevent the response update. Welcome message deletion is owned by the
-    /// moderation orchestrator as part of a successful kick, so a failed kick means no
-    /// deletion happens at all — there is no job-level fallback for it anymore.
+    /// moderation orchestrator as part of a successful kick, so on a throwing kick the job
+    /// falls back to deleting the message itself under a distinct "kick failed" source —
+    /// otherwise the message survives with live Accept/Deny buttons while the record says
+    /// Timeout, letting the user self-admit by clicking Accept.
     /// </summary>
     [Test]
-    public async Task Execute_KickThrows_UpdatesResponseDespiteKickFailure()
+    public async Task Execute_KickThrows_DeletesMessageAndUpdatesResponse()
     {
         // Arrange — canonical 999001 is Pending; force the kick to throw
         _mockModerationService!
@@ -288,13 +290,13 @@ public class WelcomeTimeoutJobTests
         // Act — must NOT propagate the kick exception
         Assert.DoesNotThrowAsync(async () => await job.Execute(context));
 
-        // Assert — no deletion happens: the orchestrator never ran because the kick failed
+        // Assert — the job falls back to deleting the message itself under a distinct source
         await _mockMessageService!
-            .DidNotReceive()
+            .Received(1)
             .DeleteAndMarkMessageAsync(
                 MainChatId,
                 PendingWelcomeMsgId,
-                "welcome_timeout",
+                "welcome_timeout_kick_failed",
                 Arg.Any<CancellationToken>());
 
         // Assert — response row transitioned to Timeout regardless of kick outcome
@@ -310,6 +312,52 @@ public class WelcomeTimeoutJobTests
             Assert.That(updated, Is.Not.Null, "WelcomeResponse row should still exist");
             Assert.That(updated!.Response, Is.EqualTo(WelcomeResponseType.Timeout),
                 "Response should still be updated to Timeout even when kick fails");
+        }
+    }
+
+    /// <summary>
+    /// When KickUserFromChatAsync returns a failure result WITHOUT throwing (e.g., Telegram
+    /// API rejected the kick but the call itself completed), the job must fall back to
+    /// deleting the welcome message itself — the moderation orchestrator's cleanup only runs
+    /// after a successful kick, so a non-throwing failure is otherwise silently unhandled.
+    /// </summary>
+    [Test]
+    public async Task Execute_KickReturnsFailureWithoutThrowing_DeletesMessageAndUpdatesResponse()
+    {
+        // Arrange — canonical 999001 is Pending; kick completes but reports failure
+        _mockModerationService!
+            .KickUserFromChatAsync(Arg.Any<KickIntent>(), Arg.Any<CancellationToken>())
+            .Returns(new ModerationResult { Success = false, ErrorMessage = "User not a chat member" });
+
+        var payload = BuildPayload();
+        var context = BuildJobContext(payload);
+        var job = BuildJob();
+
+        // Act
+        await job.Execute(context);
+
+        // Assert — the job falls back to deleting the message itself under a distinct source
+        await _mockMessageService!
+            .Received(1)
+            .DeleteAndMarkMessageAsync(
+                MainChatId,
+                PendingWelcomeMsgId,
+                "welcome_timeout_kick_failed",
+                Arg.Any<CancellationToken>());
+
+        // Assert — response row still transitions to Timeout
+        await using var verifyContext = ContextFactory.CreateDbContext();
+        var updated = await verifyContext.WelcomeResponses
+            .Where(r => r.ChatId == MainChatId
+                        && r.UserId == WelcomeUserId
+                        && r.WelcomeMessageId == PendingWelcomeMsgId)
+            .FirstOrDefaultAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(updated, Is.Not.Null, "WelcomeResponse row should still exist");
+            Assert.That(updated!.Response, Is.EqualTo(WelcomeResponseType.Timeout),
+                "Response should still be updated to Timeout even when kick reports failure");
         }
     }
 

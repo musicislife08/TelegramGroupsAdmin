@@ -971,7 +971,12 @@ public class WelcomeService(
         }
     }
 
-    private async Task KickUserAsync(
+    /// <summary>
+    /// Kicks a user via the moderation orchestrator. Returns whether the kick succeeded
+    /// so callers can decide whether they still own welcome-message cleanup: a successful
+    /// kick means the orchestrator already deleted the message; a failed one means it didn't.
+    /// </summary>
+    private async Task<bool> KickUserAsync(
         Chat chat,
         User user,
         string reason,
@@ -1004,6 +1009,8 @@ public class WelcomeService(
                     user.ToLogDebug(),
                     chat.ToLogDebug());
             }
+
+            return result.Success;
         }
         catch (Exception ex)
         {
@@ -1130,8 +1137,16 @@ public class WelcomeService(
             }
         }
 
-        // Step 2: Kick user (the moderation orchestrator deletes the welcome message)
-        await KickUserAsync(chat, user, ReasonDeniedRules, cancellationToken);
+        // Step 2: Kick user (the moderation orchestrator deletes the welcome message on a successful kick)
+        var kicked = await KickUserAsync(chat, user, ReasonDeniedRules, cancellationToken);
+
+        // Step 2b: On a failed (non-throwing) kick, the orchestrator's cleanup never ran —
+        // delete the message here so it doesn't survive with live Accept/Deny buttons while
+        // the response below is recorded as Denied.
+        if (!kicked)
+        {
+            await TryDeleteMessageAsync(chat.Id, welcomeMessageId, cancellationToken);
+        }
 
         // Step 3: Update or create response record
         if (existingResponse != null)

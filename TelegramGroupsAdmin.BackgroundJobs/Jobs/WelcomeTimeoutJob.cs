@@ -107,9 +107,10 @@ public class WelcomeTimeoutJob(
                 payload.Chat.ToLogInfo());
 
             // Kick user for timeout
+            var kicked = false;
             try
             {
-                await moderationService.KickUserFromChatAsync(
+                var kickResult = await moderationService.KickUserFromChatAsync(
                     new KickIntent
                     {
                         User = payload.User,
@@ -118,11 +119,23 @@ public class WelcomeTimeoutJob(
                         Reason = "Welcome timeout"
                     },
                     cancellationToken);
+                kicked = kickResult.Success;
 
-                logger.LogInformation(
-                    "Kicked {User} from {Chat} due to welcome timeout",
-                    payload.User.ToLogInfo(),
-                    payload.Chat.ToLogInfo());
+                if (kicked)
+                {
+                    logger.LogInformation(
+                        "Kicked {User} from {Chat} due to welcome timeout",
+                        payload.User.ToLogInfo(),
+                        payload.Chat.ToLogInfo());
+                }
+                else
+                {
+                    logger.LogWarning(
+                        "Failed to kick {User} from {Chat}: {Error}",
+                        payload.User.ToLogInfo(),
+                        payload.Chat.ToLogInfo(),
+                        kickResult.ErrorMessage);
+                }
             }
             catch (Exception ex)
             {
@@ -134,7 +147,29 @@ public class WelcomeTimeoutJob(
                 // Continue to update the response record even if kick fails
             }
 
-            // The moderation orchestrator deletes the welcome message as part of the kick.
+            // The orchestrator deletes the welcome message as part of a SUCCESSFUL kick. On a
+            // failed kick it never runs, so delete here — otherwise the message survives with
+            // live Accept/Deny buttons while the record says Timeout, and the user could click
+            // Accept to self-admit.
+            if (!kicked)
+            {
+                try
+                {
+                    await messageService.DeleteAndMarkMessageAsync(
+                        chatId: payload.Chat.Id,
+                        messageId: payload.WelcomeMessageId,
+                        deletionSource: "welcome_timeout_kick_failed",
+                        cancellationToken: cancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(
+                        ex,
+                        "Failed to delete welcome message {MessageId} in chat {ChatId}",
+                        payload.WelcomeMessageId,
+                        payload.Chat.Id);
+                }
+            }
 
             // Update response record
             response.Response = Data.Models.WelcomeResponseType.Timeout;
