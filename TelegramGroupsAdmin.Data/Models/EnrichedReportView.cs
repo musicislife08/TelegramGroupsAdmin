@@ -70,6 +70,9 @@ public class EnrichedReportView
             profile_user.last_name AS profile_last_name,
             profile_user.user_photo_path AS profile_photo_path,
 
+            -- ContentReport: message author (type = 0)
+            content_msg.user_id AS content_user_id,
+
             -- Reviewer (all types with web_user_id)
             reviewer.email AS reviewer_email
 
@@ -97,6 +100,14 @@ public class EnrichedReportView
         LEFT JOIN telegram_users profile_user
             ON r.type = 3
             AND profile_user.telegram_user_id = (r.context->>'userId')::bigint
+
+        -- ContentReport author (only for type = 0). Joins messages on its
+        -- (message_id, chat_id) primary key. No telegram_users join — only the
+        -- id is needed, for subject-user filtering.
+        LEFT JOIN messages content_msg
+            ON r.type = 0
+            AND content_msg.chat_id = r.chat_id
+            AND content_msg.message_id = r.message_id
 
         -- Reviewer (all types)
         LEFT JOIN users reviewer ON r.web_user_id = reviewer.id;
@@ -238,6 +249,17 @@ public class EnrichedReportView
 
     [Column("profile_photo_path")]
     public string? ProfilePhotoPath { get; set; }
+
+    #endregion
+
+    #region ContentReport: Message Author (type = 0)
+
+    /// <summary>
+    /// ContentReport (type = 0): the reported message's author, joined from messages.
+    /// Null for every other report type.
+    /// </summary>
+    [Column("content_user_id")]
+    public long? ContentUserId { get; set; }
 
     #endregion
 

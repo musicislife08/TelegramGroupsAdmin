@@ -122,10 +122,11 @@ public class ProfileScanAlertMappingTests
         var id = await _repository!.InsertProfileScanAlertAsync(alert, CancellationToken.None);
         var results = await _repository.GetProfileScanAlertsAsync(pendingOnly: true, CancellationToken.None);
 
-        // Assert
-        Assert.That(results, Has.Count.EqualTo(1));
+        // Assert — canonical carries one pre-existing pending profile-scan alert
+        // (join-gate cleanup fixture, report id 188), so look up this test's own row by id.
+        Assert.That(results, Has.Count.EqualTo(2));
 
-        var retrieved = results[0];
+        var retrieved = results.Single(r => r.Id == id);
         Assert.That(retrieved, Is.Not.Null);
 
         using (Assert.EnterMultipleScope())
@@ -194,13 +195,14 @@ public class ProfileScanAlertMappingTests
         };
 
         // Act
-        await _repository!.InsertProfileScanAlertAsync(alert, CancellationToken.None);
+        var id = await _repository!.InsertProfileScanAlertAsync(alert, CancellationToken.None);
         var results = await _repository.GetProfileScanAlertsAsync(pendingOnly: true, CancellationToken.None);
 
-        // Assert
-        Assert.That(results, Has.Count.EqualTo(1));
+        // Assert — canonical carries one pre-existing pending profile-scan alert
+        // (join-gate cleanup fixture, report id 188), so look up this test's own row by id.
+        Assert.That(results, Has.Count.EqualTo(2));
 
-        var retrieved = results[0];
+        var retrieved = results.Single(r => r.Id == id);
         Assert.That(retrieved, Is.Not.Null);
 
         using (Assert.EnterMultipleScope())
