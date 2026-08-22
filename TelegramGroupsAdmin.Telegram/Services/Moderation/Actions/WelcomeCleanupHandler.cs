@@ -42,12 +42,24 @@ public sealed class WelcomeCleanupHandler(
             try
             {
                 // Idempotent: deleting an already-deleted message is a no-op at the API level.
-                await messageHandler.DeleteAsync(
+                // DeleteAsync does not throw on failure — it reports it via DeleteResult.Success —
+                // so this is the primary signal; the catch below is defense-in-depth only.
+                var result = await messageHandler.DeleteAsync(
                     targetChat, response.WelcomeMessageId, executor, cancellationToken);
 
-                deleted++;
-                logger.LogDebug("Deleted stranded welcome message {MessageId} for {User} in {Chat}",
-                    response.WelcomeMessageId, user.ToLogDebug(), targetChat.ToLogDebug());
+                if (result.Success)
+                {
+                    deleted++;
+                    logger.LogDebug("Deleted stranded welcome message {MessageId} for {User} in {Chat}",
+                        response.WelcomeMessageId, user.ToLogDebug(), targetChat.ToLogDebug());
+                }
+                else
+                {
+                    // Cleanup must never fail a ban that already landed on Telegram.
+                    logger.LogDebug(
+                        "Failed to delete stranded welcome message {MessageId} for {User} in {Chat}: {Error} (non-fatal)",
+                        response.WelcomeMessageId, user.ToLogDebug(), targetChat.ToLogDebug(), result.ErrorMessage);
+                }
             }
             catch (Exception ex)
             {

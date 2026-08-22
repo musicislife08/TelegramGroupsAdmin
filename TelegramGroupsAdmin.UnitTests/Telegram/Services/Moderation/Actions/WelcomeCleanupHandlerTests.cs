@@ -109,16 +109,55 @@ public class WelcomeCleanupHandlerTests
     }
 
     [Test]
-    public async Task DeleteStrandedWelcomeMessagesAsync_DeleteFailureDoesNotThrow()
+    public async Task DeleteStrandedWelcomeMessagesAsync_DeleteFailureResult_NotCountedAsDeleted()
     {
+        // Realistic failure mode: BotModerationMessageHandler.DeleteAsync never throws — it
+        // reports failure via DeleteResult.Success. This is the signal the handler must honor.
         _welcomeRepository.GetByUserAsync(TestUser.Id, Arg.Any<CancellationToken>())
             .Returns([Response(ChatAId, 100)]);
         _messageHandler
             .DeleteAsync(Arg.Any<ChatIdentity>(), Arg.Any<int>(), Arg.Any<Actor>(), Arg.Any<CancellationToken>())
-            .Returns<DeleteResult>(_ => throw new InvalidOperationException("message already gone"));
+            .Returns(DeleteResult.Failed("message already gone"));
+
+        var deleted = await _sut.DeleteStrandedWelcomeMessagesAsync(TestUser, chat: null, TestExecutor);
+
+        Assert.That(deleted, Is.Zero, "a failed DeleteResult must not be counted as a deleted message");
+    }
+
+    [Test]
+    public async Task DeleteStrandedWelcomeMessagesAsync_DeleteThrows_DoesNotThrow()
+    {
+        // Defense-in-depth: DeleteAsync is not documented to throw, but cleanup must still
+        // never fail the ban that already landed if some future implementation does.
+        _welcomeRepository.GetByUserAsync(TestUser.Id, Arg.Any<CancellationToken>())
+            .Returns([Response(ChatAId, 100)]);
+        _messageHandler
+            .DeleteAsync(Arg.Any<ChatIdentity>(), Arg.Any<int>(), Arg.Any<Actor>(), Arg.Any<CancellationToken>())
+            .Returns<DeleteResult>(_ => throw new InvalidOperationException("unexpected throw"));
 
         var deleted = await _sut.DeleteStrandedWelcomeMessagesAsync(TestUser, chat: null, TestExecutor);
 
         Assert.That(deleted, Is.Zero, "cleanup must never fail the ban that already landed");
+    }
+
+    [Test]
+    public async Task DeleteStrandedWelcomeMessagesAsync_OneChatFails_RemainingChatsStillProcessed()
+    {
+        _welcomeRepository.GetByUserAsync(TestUser.Id, Arg.Any<CancellationToken>())
+            .Returns([Response(ChatAId, 100), Response(ChatBId, 200)]);
+        _messageHandler
+            .DeleteAsync(Arg.Is<ChatIdentity>(c => c!.Id == ChatAId), 100, TestExecutor, Arg.Any<CancellationToken>())
+            .Returns(DeleteResult.Failed("permission error"));
+        _messageHandler
+            .DeleteAsync(Arg.Is<ChatIdentity>(c => c!.Id == ChatBId), 200, TestExecutor, Arg.Any<CancellationToken>())
+            .Returns(DeleteResult.Succeeded());
+
+        var deleted = await _sut.DeleteStrandedWelcomeMessagesAsync(TestUser, chat: null, TestExecutor);
+
+        Assert.That(deleted, Is.EqualTo(1), "chat B's success must still be counted despite chat A's failure");
+        await _messageHandler.Received(1).DeleteAsync(
+            Arg.Is<ChatIdentity>(c => c!.Id == ChatAId), 100, TestExecutor, Arg.Any<CancellationToken>());
+        await _messageHandler.Received(1).DeleteAsync(
+            Arg.Is<ChatIdentity>(c => c!.Id == ChatBId), 200, TestExecutor, Arg.Any<CancellationToken>());
     }
 }
