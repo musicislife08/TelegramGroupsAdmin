@@ -1130,13 +1130,10 @@ public class WelcomeService(
             }
         }
 
-        // Step 2: Kick user
+        // Step 2: Kick user (the moderation orchestrator deletes the welcome message)
         await KickUserAsync(chat, user, ReasonDeniedRules, cancellationToken);
 
-        // Step 3: Delete welcome message
-        await TryDeleteMessageAsync(chat.Id, welcomeMessageId, cancellationToken);
-
-        // Step 4: Update or create response record
+        // Step 3: Update or create response record
         if (existingResponse != null)
         {
             await welcomeResponsesRepository.UpdateResponseAsync(existingResponse.Id, WelcomeResponseType.Denied, dmSent: false, dmFallback: false, cancellationToken);

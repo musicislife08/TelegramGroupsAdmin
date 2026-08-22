@@ -131,26 +131,10 @@ public class WelcomeTimeoutJob(
                     "Failed to kick {User} from {Chat}",
                     payload.User.ToLogInfo(),
                     payload.Chat.ToLogInfo());
-                // Continue to delete message and update response even if kick fails
+                // Continue to update the response record even if kick fails
             }
 
-            // Delete welcome message
-            try
-            {
-                await messageService.DeleteAndMarkMessageAsync(
-                    chatId: payload.Chat.Id,
-                    messageId: payload.WelcomeMessageId,
-                    deletionSource: "welcome_timeout",
-                    cancellationToken: cancellationToken);
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(
-                    ex,
-                    "Failed to delete welcome message {MessageId} in chat {ChatId}",
-                    payload.WelcomeMessageId,
-                    payload.Chat.Id);
-            }
+            // The moderation orchestrator deletes the welcome message as part of the kick.
 
             // Update response record
             response.Response = Data.Models.WelcomeResponseType.Timeout;

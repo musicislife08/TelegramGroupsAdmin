@@ -59,7 +59,7 @@ internal sealed class ExamHandler(
         var exam = fetch.Value!;
 
         var result = await examFlowService.DenyExamFailureAsync(
-            exam.User, exam.Chat, executor, cancellationToken);
+            exam.User, exam.Chat, executor, examId, cancellationToken);
 
         if (!result.Success)
             return new ReviewActionResult(false, result.ErrorMessage ?? "Denial failed");
@@ -94,7 +94,7 @@ internal sealed class ExamHandler(
         var exam = fetch.Value!;
 
         var result = await examFlowService.DenyAndBanExamFailureAsync(
-            exam.User, exam.Chat, executor, cancellationToken);
+            exam.User, exam.Chat, executor, examId, cancellationToken);
 
         if (!result.Success)
             return new ReviewActionResult(false, result.ErrorMessage ?? "Ban failed");

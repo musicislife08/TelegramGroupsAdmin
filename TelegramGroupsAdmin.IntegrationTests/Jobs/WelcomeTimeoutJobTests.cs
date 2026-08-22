@@ -212,8 +212,10 @@ public class WelcomeTimeoutJobTests
     }
 
     /// <summary>
-    /// When a Pending response exists, the job must kick the user, delete the welcome
-    /// message, and persist a Timeout response with an updated RespondedAt timestamp.
+    /// When a Pending response exists, the job must kick the user and persist a Timeout
+    /// response with an updated RespondedAt timestamp. Welcome message deletion is no
+    /// longer the job's job — the moderation orchestrator deletes it as part of the kick
+    /// (verified in BotModerationServiceTests, not here, since the orchestrator is mocked).
     /// </summary>
     [Test]
     public async Task Execute_ResponsePending_KicksUserAndUpdatesResponse()
@@ -237,9 +239,9 @@ public class WelcomeTimeoutJobTests
                     && intent.Chat.Id == MainChatId),
                 Arg.Any<CancellationToken>());
 
-        // Assert — welcome message deletion was called with correct chatId and messageId
+        // Assert — the job no longer deletes the welcome message itself after a kick
         await _mockMessageService!
-            .Received(1)
+            .DidNotReceive()
             .DeleteAndMarkMessageAsync(
                 MainChatId,
                 PendingWelcomeMsgId,
@@ -266,11 +268,13 @@ public class WelcomeTimeoutJobTests
 
     /// <summary>
     /// When KickUserFromChatAsync throws (e.g., user already left), the job must still
-    /// delete the welcome message and record the Timeout response.  The kick failure is
-    /// logged and swallowed by the job; it must not prevent cleanup.
+    /// record the Timeout response. The kick failure is logged and swallowed by the job;
+    /// it must not prevent the response update. Welcome message deletion is owned by the
+    /// moderation orchestrator as part of a successful kick, so a failed kick means no
+    /// deletion happens at all — there is no job-level fallback for it anymore.
     /// </summary>
     [Test]
-    public async Task Execute_KickThrows_StillDeletesMessageAndUpdatesResponse()
+    public async Task Execute_KickThrows_UpdatesResponseDespiteKickFailure()
     {
         // Arrange — canonical 999001 is Pending; force the kick to throw
         _mockModerationService!
@@ -284,9 +288,9 @@ public class WelcomeTimeoutJobTests
         // Act — must NOT propagate the kick exception
         Assert.DoesNotThrowAsync(async () => await job.Execute(context));
 
-        // Assert — message deletion still called despite the kick failure
+        // Assert — no deletion happens: the orchestrator never ran because the kick failed
         await _mockMessageService!
-            .Received(1)
+            .DidNotReceive()
             .DeleteAndMarkMessageAsync(
                 MainChatId,
                 PendingWelcomeMsgId,
