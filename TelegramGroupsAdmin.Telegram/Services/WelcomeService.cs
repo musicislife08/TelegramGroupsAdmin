@@ -1137,12 +1137,25 @@ public class WelcomeService(
             }
         }
 
-        // Step 2: Kick user (the moderation orchestrator deletes the welcome message on a successful kick)
-        var kicked = await KickUserAsync(chat, user, ReasonDeniedRules, cancellationToken);
+        // Step 2: Kick user (the moderation orchestrator deletes the welcome message on a
+        // successful kick). KickUserAsync logs and rethrows on failure — catch it here so a
+        // throwing kick still falls through to the failure-path delete and the Step 3 response
+        // update below, the same as a non-throwing failure result.
+        bool kicked;
+        try
+        {
+            kicked = await KickUserAsync(chat, user, ReasonDeniedRules, cancellationToken);
+        }
+        catch (Exception)
+        {
+            // KickUserAsync already logged the failure before rethrowing.
+            kicked = false;
+        }
 
-        // Step 2b: On a failed (non-throwing) kick, the orchestrator's cleanup never ran —
-        // delete the message here so it doesn't survive with live Accept/Deny buttons while
-        // the response below is recorded as Denied.
+        // Step 2b: On a failed kick — thrown or a non-throwing Failed result — the
+        // orchestrator's cleanup never ran, so delete the message here. Otherwise it survives
+        // with live Accept/Deny buttons while the response below is recorded as Denied,
+        // letting the user self-admit by clicking Accept.
         if (!kicked)
         {
             await TryDeleteMessageAsync(chat.Id, welcomeMessageId, cancellationToken);
