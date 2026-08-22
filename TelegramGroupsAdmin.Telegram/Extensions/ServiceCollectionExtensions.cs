@@ -121,6 +121,7 @@ public static class ServiceCollectionExtensions
             services.AddScoped<ITrustHandler, TrustHandler>();
             services.AddScoped<IWarnHandler, WarnHandler>();
             services.AddScoped<IReportCleanupHandler, ReportCleanupHandler>();
+            services.AddScoped<IWelcomeCleanupHandler, WelcomeCleanupHandler>();
 
             // Support handlers
             services.AddScoped<IAuditHandler, AuditHandler>();
