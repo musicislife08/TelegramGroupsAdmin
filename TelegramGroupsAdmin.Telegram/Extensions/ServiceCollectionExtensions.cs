@@ -120,6 +120,7 @@ public static class ServiceCollectionExtensions
             // Moderation domain handlers (non-bot operations)
             services.AddScoped<ITrustHandler, TrustHandler>();
             services.AddScoped<IWarnHandler, WarnHandler>();
+            services.AddScoped<IReportCleanupHandler, ReportCleanupHandler>();
 
             // Support handlers
             services.AddScoped<IAuditHandler, AuditHandler>();

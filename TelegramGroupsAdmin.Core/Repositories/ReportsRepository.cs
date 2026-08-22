@@ -70,6 +70,31 @@ public class ReportsRepository : IReportsRepository
         return results.Select(r => r.ToBaseModel()).ToList();
     }
 
+    public async Task<List<ReportBase>> GetPendingForUserAsync(
+        long userId,
+        long? chatId = null,
+        CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        var query = context.EnrichedReports
+            .AsNoTracking()
+            .Where(r => r.Status == (int)ReportStatus.Pending)
+            .Where(r => r.ContentUserId == userId
+                        || r.SuspectedUserId == userId
+                        || r.ExamUserId == userId
+                        || r.ProfileUserId == userId);
+
+        if (chatId.HasValue)
+            query = query.Where(r => r.ChatId == chatId.Value);
+
+        var views = await query
+            .OrderBy(r => r.Id)
+            .ToListAsync(cancellationToken);
+
+        return views.Select(v => v.ToBaseModel()).ToList();
+    }
+
     public async Task<List<ReportBase>> GetAsync(
         long? chatId = null,
         ReportType? type = null,
