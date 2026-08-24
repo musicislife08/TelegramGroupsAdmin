@@ -338,6 +338,27 @@ public class ContentReportHandlerTests
     }
 
     [Test]
+    public async Task WarnAsync_Success_ThreadsOriginReportId()
+    {
+        // Regression coverage: without OriginReportId, an auto-ban triggered by this warning
+        // closes this very report before the handler's own status update runs, and the handler
+        // spuriously reports failure for an action that fully succeeded.
+        var report = CreateTestReport();
+        var message = CreateTestMessage();
+        SetupReportAndMessage(report, message);
+
+        _mockModerationService.WarnUserAsync(
+                Arg.Any<WarnIntent>(), Arg.Any<CancellationToken>())
+            .Returns(new ModerationResult { Success = true, WarningCount = 2 });
+
+        await _handler.WarnAsync(TestReportId, TestExecutor, CancellationToken.None);
+
+        await _mockModerationService.Received(1).WarnUserAsync(
+            Arg.Is<WarnIntent>(i => i!.OriginReportId == TestReportId),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
     public async Task WarnAsync_ModerationFails_ReturnsFailure()
     {
         var report = CreateTestReport();

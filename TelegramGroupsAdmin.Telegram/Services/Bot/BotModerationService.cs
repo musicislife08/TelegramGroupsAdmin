@@ -317,6 +317,20 @@ public class BotModerationService : IBotModerationService
                     () => _messageHandler.ScheduleUserMessagesCleanupAsync(intent.User, cancellationToken),
                     $"Schedule messages cleanup for user {intent.User.Id}");
 
+                // This path deliberately reimplements the ban instead of delegating to BanUserAsync
+                // (see the comment above _banHandler.BanAsync), so BanUserAsync's cleanup rules are
+                // never inherited here — they must be replayed explicitly. chat: null is deliberate:
+                // this is a global ban, same as BanUserAsync's global cleanup.
+                await SafeExecuteAsync(
+                    () => _reportCleanupHandler.CloseOpenReportsAsync(
+                        intent.User, chat: null, Actor.AutoBan, "Ban", intent.OriginReportId, cancellationToken),
+                    $"Close open reports for user {intent.User.Id}");
+
+                await SafeExecuteAsync(
+                    () => _welcomeCleanupHandler.DeleteStrandedWelcomeMessagesAsync(
+                        intent.User, chat: null, Actor.AutoBan, cancellationToken),
+                    $"Delete stranded welcome messages for user {intent.User.Id}");
+
                 result = result with
                 {
                     AutoBanTriggered = true,

@@ -156,7 +156,8 @@ internal sealed class ContentReportHandler(
                 Chat = message.Chat,
                 Executor = executor,
                 Reason = $"Report #{reportId} - inappropriate behavior",
-                MessageId = report.MessageId
+                MessageId = report.MessageId,
+                OriginReportId = reportId
             },
             cancellationToken);
 
