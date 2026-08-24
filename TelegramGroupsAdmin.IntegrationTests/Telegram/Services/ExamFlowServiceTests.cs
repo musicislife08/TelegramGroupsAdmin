@@ -42,6 +42,12 @@ public class ExamFlowServiceTests
     private const long TestUserId = 123456789L;
     private const long TestDmChatId = 123456789L; // DM chat ID equals user ID
 
+    // Canonical "Top MainChat author" recipe (@unhelpfulgrab, telegram_user_id 9921676191756):
+    // a real telegram_users row with 19 messages in MainChat and zero welcome_responses rows
+    // anywhere in canonical, so it's a safe FK anchor for a runtime-inserted WelcomeResponse
+    // without colliding with the pinned MainChat rows (73/75/94/128/999001..999005).
+    private const long CanonicalMainChatUserId = 9921676191756L;
+
     private MigrationTestHelper? _testHelper;
     private IServiceProvider? _serviceProvider;
     private IBotMessageService? _mockMessageService;
@@ -452,15 +458,10 @@ public class ExamFlowServiceTests
         using var scope = _serviceProvider!.CreateScope();
         var examFlowService = scope.ServiceProvider.GetRequiredService<IExamFlowService>();
         var welcomeResponsesRepo = scope.ServiceProvider.GetRequiredService<IWelcomeResponsesRepository>();
-        var telegramUserRepo = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
-
-        // welcome_responses.user_id has an FK to telegram_users — the test's synthetic
-        // TestUserId isn't in the canonical dataset, so create it first.
-        await telegramUserRepo.GetOrCreateAsync(UserIdentity.FromId(TestUserId), isBot: false);
 
         const int teaserMessageId = 42424;
         await welcomeResponsesRepo.InsertAsync(new WelcomeResponse(
-            Id: 0, ChatId: TestChatId, UserId: TestUserId, Username: "testuser",
+            Id: 0, ChatId: TestChatId, UserId: CanonicalMainChatUserId, Username: "testuser",
             WelcomeMessageId: teaserMessageId, Response: WelcomeResponseType.Pending,
             RespondedAt: DateTimeOffset.UtcNow, DmSent: false, DmFallback: false,
             CreatedAt: DateTimeOffset.UtcNow, TimeoutJobId: null));
@@ -468,7 +469,7 @@ public class ExamFlowServiceTests
         _mockModerationService!.KickUserFromChatAsync(Arg.Any<KickIntent>(), Arg.Any<CancellationToken>())
             .Returns(ModerationResult.Failed("kick failed"));
 
-        var user = TelegramTestFactory.CreateUser(id: TestUserId, firstName: "Test");
+        var user = TelegramTestFactory.CreateUser(id: CanonicalMainChatUserId, firstName: "Test");
         var chat = new ChatIdentity(TestChatId, "Test Chat");
         var executor = Actor.WelcomeFlow;
 
@@ -479,7 +480,7 @@ public class ExamFlowServiceTests
         // Assert
         Assert.That(result.Success, Is.False);
 
-        var response = await welcomeResponsesRepo.GetByUserAndChatAsync(TestUserId, TestChatId);
+        var response = await welcomeResponsesRepo.GetByUserAndChatAsync(CanonicalMainChatUserId, TestChatId);
         Assert.That(response!.Response, Is.EqualTo(WelcomeResponseType.Denied),
             "step 1 writes Denied unconditionally, before the kick is attempted");
 
@@ -495,13 +496,10 @@ public class ExamFlowServiceTests
         using var scope = _serviceProvider!.CreateScope();
         var examFlowService = scope.ServiceProvider.GetRequiredService<IExamFlowService>();
         var welcomeResponsesRepo = scope.ServiceProvider.GetRequiredService<IWelcomeResponsesRepository>();
-        var telegramUserRepo = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
-
-        await telegramUserRepo.GetOrCreateAsync(UserIdentity.FromId(TestUserId), isBot: false);
 
         const int teaserMessageId = 42425;
         await welcomeResponsesRepo.InsertAsync(new WelcomeResponse(
-            Id: 0, ChatId: TestChatId, UserId: TestUserId, Username: "testuser",
+            Id: 0, ChatId: TestChatId, UserId: CanonicalMainChatUserId, Username: "testuser",
             WelcomeMessageId: teaserMessageId, Response: WelcomeResponseType.Pending,
             RespondedAt: DateTimeOffset.UtcNow, DmSent: false, DmFallback: false,
             CreatedAt: DateTimeOffset.UtcNow, TimeoutJobId: null));
@@ -509,7 +507,7 @@ public class ExamFlowServiceTests
         _mockModerationService!.BanUserAsync(Arg.Any<BanIntent>(), Arg.Any<CancellationToken>())
             .Returns(ModerationResult.Failed("ban failed"));
 
-        var user = TelegramTestFactory.CreateUser(id: TestUserId, firstName: "Test");
+        var user = TelegramTestFactory.CreateUser(id: CanonicalMainChatUserId, firstName: "Test");
         var chat = new ChatIdentity(TestChatId, "Test Chat");
         var executor = Actor.WelcomeFlow;
 
