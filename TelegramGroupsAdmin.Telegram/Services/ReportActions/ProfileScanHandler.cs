@@ -150,6 +150,23 @@ internal sealed class ProfileScanHandler(
             logger.LogInformation("Profile scan alert {AlertId}: User {User} allowed by {Executor} (admission: {Result})",
                 alertId, alert.User.ToLogInfo(), executor.DisplayName, admissionResult);
 
+            // TryAdmitUserAsync restores permissions but does not delete the welcome message.
+            // Only delete once the user is actually admitted \u2014 on StillWaiting the response is
+            // still Pending and the user needs the buttons.
+            if (admissionResult == AdmissionResult.Admitted && welcomeResponse != null)
+            {
+                await moderationService.DeleteMessageAsync(
+                    new DeleteMessageIntent
+                    {
+                        MessageId = welcomeResponse.WelcomeMessageId,
+                        Chat = alert.Chat,
+                        User = alert.User,
+                        Executor = executor,
+                        Reason = "Welcome message cleanup after profile scan allow"
+                    },
+                    cancellationToken);
+            }
+
             message = admissionResult == AdmissionResult.Admitted
                 ? "User allowed \u2014 permissions restored"
                 : "User allowed \u2014 awaiting welcome gate completion";

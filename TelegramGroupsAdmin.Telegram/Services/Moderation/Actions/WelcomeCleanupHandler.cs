@@ -10,6 +10,7 @@ namespace TelegramGroupsAdmin.Telegram.Services.Moderation.Actions;
 /// <inheritdoc />
 public sealed class WelcomeCleanupHandler(
     IWelcomeResponsesRepository welcomeResponsesRepository,
+    IMessageHistoryRepository messageHistoryRepository,
     IBotModerationMessageHandler messageHandler,
     ILogger<WelcomeCleanupHandler> logger) : IWelcomeCleanupHandler
 {
@@ -38,6 +39,20 @@ public sealed class WelcomeCleanupHandler(
                 continue;
 
             var targetChat = chat ?? ChatIdentity.FromId(response.ChatId);
+
+            // Most bans/kicks target a user who was already admitted normally — HandleAcceptAsync
+            // already deleted this message and nothing ever clears WelcomeMessageId. Check the row
+            // first (one indexed PK lookup) instead of round-tripping to Telegram just to learn the
+            // same thing from an API error.
+            var existingMessage = await messageHistoryRepository.GetMessageAsync(
+                response.WelcomeMessageId, targetChat.Id, cancellationToken);
+            if (existingMessage is { DeletedAt: not null })
+            {
+                logger.LogDebug(
+                    "Skipping already-deleted welcome message {MessageId} for {User} in {Chat}",
+                    response.WelcomeMessageId, user.ToLogDebug(), targetChat.ToLogDebug());
+                continue;
+            }
 
             try
             {

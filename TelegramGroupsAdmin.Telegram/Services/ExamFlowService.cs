@@ -907,6 +907,23 @@ public class ExamFlowService : IExamFlowService
 
             if (!banResult.Success)
             {
+                // The ban failed, so BotModerationService's cleanup never ran and the welcome
+                // response is already Denied — delete the teaser here so it doesn't strand with
+                // live buttons while StartExamInDmAsync has no guard against the Denied state.
+                if (welcomeResponse != null)
+                {
+                    await orchestrator.DeleteMessageAsync(
+                        new DeleteMessageIntent
+                        {
+                            MessageId = welcomeResponse.WelcomeMessageId,
+                            Chat = chat,
+                            User = user,
+                            Executor = executor,
+                            Reason = "Exam teaser cleanup after failed ban"
+                        },
+                        cancellationToken);
+                }
+
                 return banResult;
             }
         }
@@ -926,6 +943,22 @@ public class ExamFlowService : IExamFlowService
 
             if (!kickResult.Success)
             {
+                // Same as the ban branch above: the kick failed, so the boss's cleanup never
+                // ran, and the welcome response is already Denied.
+                if (welcomeResponse != null)
+                {
+                    await orchestrator.DeleteMessageAsync(
+                        new DeleteMessageIntent
+                        {
+                            MessageId = welcomeResponse.WelcomeMessageId,
+                            Chat = chat,
+                            User = user,
+                            Executor = executor,
+                            Reason = "Exam teaser cleanup after failed kick"
+                        },
+                        cancellationToken);
+                }
+
                 return kickResult;
             }
         }

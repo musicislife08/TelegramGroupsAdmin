@@ -23,6 +23,7 @@ public class WelcomeCleanupHandlerTests
     private static readonly Actor TestExecutor = Actor.AutoDetection;
 
     private IWelcomeResponsesRepository _welcomeRepository = null!;
+    private IMessageHistoryRepository _messageHistoryRepository = null!;
     private IBotModerationMessageHandler _messageHandler = null!;
     private WelcomeCleanupHandler _sut = null!;
 
@@ -30,6 +31,13 @@ public class WelcomeCleanupHandlerTests
     public void SetUp()
     {
         _welcomeRepository = Substitute.For<IWelcomeResponsesRepository>();
+        _messageHistoryRepository = Substitute.For<IMessageHistoryRepository>();
+        // Default: no row found (e.g. the message was never persisted to history), so the
+        // pre-flight check falls through and the handler still attempts the delete — matching
+        // behavior before the row was checked at all.
+        _messageHistoryRepository
+            .GetMessageAsync(Arg.Any<int>(), Arg.Any<long>(), Arg.Any<CancellationToken>())
+            .Returns((MessageRecord?)null);
         _messageHandler = Substitute.For<IBotModerationMessageHandler>();
         _messageHandler
             .DeleteAsync(Arg.Any<ChatIdentity>(), Arg.Any<int>(), Arg.Any<Actor>(), Arg.Any<CancellationToken>())
@@ -37,9 +45,40 @@ public class WelcomeCleanupHandlerTests
 
         _sut = new WelcomeCleanupHandler(
             _welcomeRepository,
+            _messageHistoryRepository,
             _messageHandler,
             Substitute.For<ILogger<WelcomeCleanupHandler>>());
     }
+
+    private static MessageRecord MessageRow(int messageId, long chatId, DateTimeOffset? deletedAt) => new(
+        MessageId: messageId,
+        User: TestUser,
+        Chat: new ChatIdentity(chatId, "Test Chat"),
+        Timestamp: DateTimeOffset.UtcNow,
+        MessageText: "Welcome!",
+        PhotoFileId: null,
+        PhotoFileSize: null,
+        Urls: null,
+        EditDate: null,
+        ContentHash: null,
+        PhotoLocalPath: null,
+        PhotoThumbnailPath: null,
+        ChatIconPath: null,
+        UserPhotoPath: null,
+        DeletedAt: deletedAt,
+        DeletionSource: deletedAt != null ? "welcome_accepted" : null,
+        ReplyToMessageId: null,
+        ReplyToUser: null,
+        ReplyToText: null,
+        MediaType: null,
+        MediaFileId: null,
+        MediaFileSize: null,
+        MediaFileName: null,
+        MediaMimeType: null,
+        MediaLocalPath: null,
+        MediaDuration: null,
+        Translation: null,
+        ContentCheckSkipReason: ContentCheckSkipReason.NotSkipped);
 
     private static WelcomeResponse Response(long chatId, int welcomeMessageId) => new(
         Id: 1,
@@ -138,6 +177,39 @@ public class WelcomeCleanupHandlerTests
         var deleted = await _sut.DeleteStrandedWelcomeMessagesAsync(TestUser, chat: null, TestExecutor);
 
         Assert.That(deleted, Is.Zero, "cleanup must never fail the ban that already landed");
+    }
+
+    [Test]
+    public async Task DeleteStrandedWelcomeMessagesAsync_AlreadyDeletedMessage_SkipsTelegramCall()
+    {
+        // The common case: HandleAcceptAsync already deleted this message on normal admission,
+        // and a later ban/kick must not re-attempt it against Telegram.
+        _welcomeRepository.GetByUserAsync(TestUser.Id, Arg.Any<CancellationToken>())
+            .Returns([Response(ChatAId, 100)]);
+        _messageHistoryRepository.GetMessageAsync(100, ChatAId, Arg.Any<CancellationToken>())
+            .Returns(MessageRow(100, ChatAId, DateTimeOffset.UtcNow));
+
+        var deleted = await _sut.DeleteStrandedWelcomeMessagesAsync(TestUser, chat: null, TestExecutor);
+
+        Assert.That(deleted, Is.Zero, "an already-deleted message must not be counted as newly deleted");
+        await _messageHandler.DidNotReceive().DeleteAsync(
+            Arg.Any<ChatIdentity>(), Arg.Any<int>(), Arg.Any<Actor>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task DeleteStrandedWelcomeMessagesAsync_NotYetDeletedMessage_StillDeletes()
+    {
+        // A genuine ban-before-admission case must still delete the message.
+        _welcomeRepository.GetByUserAsync(TestUser.Id, Arg.Any<CancellationToken>())
+            .Returns([Response(ChatAId, 100)]);
+        _messageHistoryRepository.GetMessageAsync(100, ChatAId, Arg.Any<CancellationToken>())
+            .Returns(MessageRow(100, ChatAId, deletedAt: null));
+
+        var deleted = await _sut.DeleteStrandedWelcomeMessagesAsync(TestUser, chat: null, TestExecutor);
+
+        Assert.That(deleted, Is.EqualTo(1));
+        await _messageHandler.Received(1).DeleteAsync(
+            Arg.Is<ChatIdentity>(c => c!.Id == ChatAId), 100, TestExecutor, Arg.Any<CancellationToken>());
     }
 
     [Test]

@@ -220,6 +220,66 @@ public class ProfileScanHandlerTests
     }
 
     [Test]
+    public async Task AllowAsync_Admitted_DeletesStrandedWelcomeMessage()
+    {
+        // Regression coverage for I3: TryAdmitUserAsync restores permissions but never deletes
+        // the "under admin review" teaser — that was the whole point of this branch, and Allow
+        // is the most common outcome of a profile scan review.
+        var alert = CreateTestAlert();
+        _mockReportsRepo.GetProfileScanAlertAsync(TestAlertId, Arg.Any<CancellationToken>())
+            .Returns(alert);
+        var welcomeResponse = new WelcomeResponse(
+            Id: 1, ChatId: TestChatId, UserId: TestUserId,
+            Username: "testuser", WelcomeMessageId: 777,
+            Response: WelcomeResponseType.Pending,
+            RespondedAt: DateTimeOffset.UtcNow,
+            DmSent: false, DmFallback: false,
+            CreatedAt: DateTimeOffset.UtcNow,
+            TimeoutJobId: null);
+        _mockWelcomeRepo.GetByUserAndChatAsync(TestUserId, TestChatId, Arg.Any<CancellationToken>())
+            .Returns(welcomeResponse);
+        _mockAdmissionHandler.TryAdmitUserAsync(
+                Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<Actor>(),
+                Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(AdmissionResult.Admitted);
+
+        await _handler.AllowAsync(TestAlertId, TestExecutor, CancellationToken.None);
+
+        await _mockModerationService.Received(1).DeleteMessageAsync(
+            Arg.Is<DeleteMessageIntent>(i => i!.MessageId == 777 && i.Chat.Id == TestChatId),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task AllowAsync_StillWaiting_DoesNotDeleteWelcomeMessage()
+    {
+        // Must be gated on Admitted — on StillWaiting the response is still Pending and the
+        // user still needs the buttons on the teaser message.
+        var alert = CreateTestAlert();
+        _mockReportsRepo.GetProfileScanAlertAsync(TestAlertId, Arg.Any<CancellationToken>())
+            .Returns(alert);
+        var welcomeResponse = new WelcomeResponse(
+            Id: 1, ChatId: TestChatId, UserId: TestUserId,
+            Username: "testuser", WelcomeMessageId: 777,
+            Response: WelcomeResponseType.Pending,
+            RespondedAt: DateTimeOffset.UtcNow,
+            DmSent: false, DmFallback: false,
+            CreatedAt: DateTimeOffset.UtcNow,
+            TimeoutJobId: null);
+        _mockWelcomeRepo.GetByUserAndChatAsync(TestUserId, TestChatId, Arg.Any<CancellationToken>())
+            .Returns(welcomeResponse);
+        _mockAdmissionHandler.TryAdmitUserAsync(
+                Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<Actor>(),
+                Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(AdmissionResult.StillWaiting);
+
+        await _handler.AllowAsync(TestAlertId, TestExecutor, CancellationToken.None);
+
+        await _mockModerationService.DidNotReceive().DeleteMessageAsync(
+            Arg.Any<DeleteMessageIntent>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
     public async Task AllowAsync_TimedOutUser_SkipsAdmissionAndDismisses()
     {
         var alert = CreateTestAlert();

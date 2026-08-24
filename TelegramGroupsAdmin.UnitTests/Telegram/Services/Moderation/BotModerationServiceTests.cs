@@ -2608,5 +2608,30 @@ public class BotModerationServiceTests
             user, chat, Arg.Any<Actor>(), Arg.Any<CancellationToken>());
     }
 
+    [Test]
+    public async Task KickUserFromChatAsync_FailedKick_SkipsCleanup()
+    {
+        _mockBanHandler.KickFromChatAsync(Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(),
+                Arg.Any<Actor>(), Arg.Any<string>(), Arg.Any<KickOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(BanResult.Failed("API error"));
+
+        var user = new UserIdentity(555L, "Test", null, "testuser");
+        var chat = new ChatIdentity(TestChatId, "TestChat");
+
+        await _orchestrator.KickUserFromChatAsync(new KickIntent
+        {
+            User = user,
+            Chat = chat,
+            Executor = Actor.WelcomeFlow,
+            Reason = "test"
+        });
+
+        await _mockReportCleanupHandler.DidNotReceive().CloseOpenReportsAsync(
+            Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<Actor>(),
+            Arg.Any<string>(), Arg.Any<long?>(), Arg.Any<CancellationToken>());
+        await _mockWelcomeCleanupHandler.DidNotReceive().DeleteStrandedWelcomeMessagesAsync(
+            Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<Actor>(), Arg.Any<CancellationToken>());
+    }
+
     #endregion
 }

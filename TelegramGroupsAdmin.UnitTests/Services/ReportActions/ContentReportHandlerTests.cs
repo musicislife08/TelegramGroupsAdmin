@@ -255,6 +255,27 @@ public class ContentReportHandlerTests
     }
 
     [Test]
+    public async Task BanAsync_Success_ThreadsOriginReportId()
+    {
+        // Regression coverage for I1: without OriginReportId, BotModerationService's sweep closes
+        // this very report before the handler's own status update runs, and the handler
+        // spuriously reports failure for an action that fully succeeded.
+        var report = CreateTestReport();
+        var message = CreateTestMessage();
+        SetupReportAndMessage(report, message);
+
+        _mockModerationService.BanUserAsync(
+                Arg.Any<BanIntent>(), Arg.Any<CancellationToken>())
+            .Returns(new ModerationResult { Success = true, ChatsAffected = 3 });
+
+        await _handler.BanAsync(TestReportId, TestExecutor, CancellationToken.None);
+
+        await _mockModerationService.Received(1).BanUserAsync(
+            Arg.Is<BanIntent>(i => i!.OriginReportId == TestReportId),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
     public async Task BanAsync_ModerationFails_ReturnsFailure()
     {
         var report = CreateTestReport();
