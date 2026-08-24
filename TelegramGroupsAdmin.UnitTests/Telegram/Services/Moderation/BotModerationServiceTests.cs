@@ -418,6 +418,45 @@ public class BotModerationServiceTests
             Arg.Any<CancellationToken>());
     }
 
+    [Test]
+    public async Task WarnUserAsync_ReachesThreshold_SendsBanCelebration()
+    {
+        // Arrange — threshold auto-ban now delegates to BanUserAsync with the originating chat,
+        // so it should celebrate the same way CAS/impersonation and kick-escalation bans do.
+        const long userId = 12345L;
+        var executor = Actor.FromSystem("SpamDetection");
+        var chat = ChatIdentity.FromId(TestChatId);
+
+        _mockWarnHandler.WarnAsync(Arg.Any<UserIdentity>(), executor, Arg.Any<string>(), Arg.Any<long>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
+            .Returns(WarnResult.Succeeded(warningCount: 3));
+
+        _mockConfigService.GetEffectiveWarningSystemAsync(Arg.Any<long>())
+            .Returns(new WarningSystemConfig { AutoBanEnabled = true, AutoBanThreshold = 3 });
+
+        _mockBanHandler.BanAsync(Arg.Any<UserIdentity>(), Arg.Any<Actor>(), Arg.Any<string>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
+            .Returns(BanResult.Succeeded(chatsAffected: 5, chatsFailed: 0));
+
+        _mockTrustHandler.UntrustAsync(Arg.Any<UserIdentity>(), Arg.Any<Actor>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(UntrustResult.Succeeded());
+
+        // Act
+        await _orchestrator.WarnUserAsync(
+            new WarnIntent
+            {
+                User = UserIdentity.FromId(userId),
+                Executor = executor,
+                Reason = "Final warning",
+                Chat = chat
+            });
+
+        // Assert — ban celebration should fire because the auto-ban forwards the originating chat
+        await _mockBanCelebrationService.Received(1).SendBanCelebrationAsync(
+            Arg.Is<ChatIdentity>(c => c!.Id == TestChatId),
+            Arg.Is<UserIdentity>(u => u!.Id == userId),
+            Arg.Any<bool>(),
+            Arg.Any<CancellationToken>());
+    }
+
     #endregion
 
     #region MarkAsSpamAndBanAsync Tests
@@ -2636,9 +2675,8 @@ public class BotModerationServiceTests
     [Test]
     public async Task WarnUserAsync_ThresholdReachedAndBanSucceeds_RunsCleanupGloballyWithOriginReportId()
     {
-        // Auto-ban replays BanUserAsync's cleanup rules by hand (it can't delegate to BanUserAsync -
-        // see the comment on that call site), so this pins that replay to the same global scope and
-        // OriginReportId forwarding BanUserAsync itself provides.
+        // Auto-ban now delegates to BanUserAsync, so this pins the inherited cleanup to the same
+        // global scope and OriginReportId forwarding BanUserAsync itself provides.
         const long userId = 12345L;
         var executor = Actor.FromSystem("SpamDetection");
         var chat = ChatIdentity.FromId(TestChatId);

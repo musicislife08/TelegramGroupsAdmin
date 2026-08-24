@@ -294,48 +294,27 @@ public class BotModerationService : IBotModerationService
                 ? warningConfig.AutoBanReason.Replace("{count}", warnResult.WarningCount.ToString())
                 : $"Exceeded warning threshold ({warnResult.WarningCount}/{warningConfig.AutoBanThreshold} warnings)";
 
-            // Auto-ban: Call handlers directly (don't call BanUserAsync to avoid nested orchestrator calls)
-            var banResult = await _banHandler.BanAsync(intent.User, Actor.AutoBan, autoBanReason, intent.MessageId, cancellationToken);
+            // Auto-ban: delegate to BanUserAsync so every ban side effect (audit, trust
+            // revocation, admin notification, message cleanup, report/welcome sweep, and
+            // celebration) lives in exactly one place instead of being replayed by hand here.
+            // Chat is forwarded so the celebration fires here too, same as CAS/impersonation bans.
+            var banResult = await BanUserAsync(new BanIntent
+            {
+                User = intent.User,
+                Executor = Actor.AutoBan,
+                Reason = autoBanReason,
+                MessageId = intent.MessageId,
+                Chat = intent.Chat,
+                OriginReportId = intent.OriginReportId
+            }, cancellationToken);
 
             if (banResult.Success)
             {
-                // Audit successful auto-ban
-                await SafeAuditAsync(
-                    () => _auditHandler.LogBanAsync(intent.User, Actor.AutoBan, autoBanReason, cancellationToken),
-                    "auto-ban (from warnings)", intent.User, intent.Chat);
-
-                // Business rule: Bans always revoke trust
-                var trustRevoked = await RevokeTrustOnBanAsync(intent.User, Actor.AutoBan, autoBanReason, cancellationToken);
-
-                // Notify admins (simple notification - no detection context for warning-based bans)
-                await SafeExecuteAsync(
-                    () => _notificationHandler.NotifyAdminsBanAsync(intent.User, Actor.AutoBan, autoBanReason, intent.Chat, cancellationToken),
-                    $"Auto-ban notification for user {intent.User.Id}");
-
-                // Schedule cleanup of user's messages
-                await SafeExecuteAsync(
-                    () => _messageHandler.ScheduleUserMessagesCleanupAsync(intent.User, cancellationToken),
-                    $"Schedule messages cleanup for user {intent.User.Id}");
-
-                // This path deliberately reimplements the ban instead of delegating to BanUserAsync
-                // (see the comment above _banHandler.BanAsync), so BanUserAsync's cleanup rules are
-                // never inherited here — they must be replayed explicitly. chat: null is deliberate:
-                // this is a global ban, same as BanUserAsync's global cleanup.
-                await SafeExecuteAsync(
-                    () => _reportCleanupHandler.CloseOpenReportsAsync(
-                        intent.User, chat: null, Actor.AutoBan, "Ban", intent.OriginReportId, cancellationToken),
-                    $"Close open reports for user {intent.User.Id}");
-
-                await SafeExecuteAsync(
-                    () => _welcomeCleanupHandler.DeleteStrandedWelcomeMessagesAsync(
-                        intent.User, chat: null, Actor.AutoBan, cancellationToken),
-                    $"Delete stranded welcome messages for user {intent.User.Id}");
-
                 result = result with
                 {
                     AutoBanTriggered = true,
                     ChatsAffected = banResult.ChatsAffected,
-                    TrustRemoved = trustRevoked
+                    TrustRemoved = banResult.TrustRemoved
                 };
             }
             else
