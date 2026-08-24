@@ -766,3 +766,74 @@ public class ReportsRepositoryTests
 
     #endregion
 }
+
+/// <summary>
+/// Canonical-dataset tests for cross-type pending lookups.
+/// Uses the golden template because the assertion is about the view's four
+/// subject-user joins resolving against real report/message/user rows.
+/// </summary>
+[TestFixture]
+public class ReportsRepositoryPendingForUserTests
+{
+    private const long SubjectUserId = 9465377455871;
+    private const long ChatWithTwoReports = -100054416618415;
+
+    private MigrationTestHelper? _testHelper;
+    private IServiceProvider? _serviceProvider;
+    private IServiceScope? _scope;
+    private IReportsRepository? _repository;
+
+    [SetUp]
+    public async Task SetUp()
+    {
+        _testHelper = new MigrationTestHelper();
+        await _testHelper.CreateDatabaseFromGoldenTemplateAsync();
+
+        var services = new ServiceCollection();
+        services.AddDbContextFactory<AppDbContext>(options => options.UseNpgsql(_testHelper.ConnectionString));
+        services.AddLogging(builder => builder.AddConsole().SetMinimumLevel(LogLevel.Warning));
+        services.AddScoped<IReportsRepository, ReportsRepository>();
+
+        _serviceProvider = services.BuildServiceProvider();
+        _scope = _serviceProvider.CreateScope();
+        _repository = _scope.ServiceProvider.GetRequiredService<IReportsRepository>();
+    }
+
+    [TearDown]
+    public void TearDown()
+    {
+        _scope?.Dispose();
+        (_serviceProvider as IDisposable)?.Dispose();
+        _testHelper?.Dispose();
+    }
+
+    [Test]
+    public async Task GetPendingForUserAsync_NoChatFilter_ReturnsEveryTypeAcrossChats()
+    {
+        var pending = await _repository!.GetPendingForUserAsync(SubjectUserId);
+
+        Assert.That(pending.Select(r => r.Type), Is.EquivalentTo(new[]
+        {
+            ReportType.ContentReport,
+            ReportType.ExamFailure,
+            ReportType.ProfileScanAlert
+        }));
+    }
+
+    [Test]
+    public async Task GetPendingForUserAsync_WithChatFilter_ReturnsOnlyThatChat()
+    {
+        var pending = await _repository!.GetPendingForUserAsync(SubjectUserId, ChatWithTwoReports);
+
+        Assert.That(pending.Select(r => r.Chat.Id), Is.All.EqualTo(ChatWithTwoReports));
+        Assert.That(pending, Has.Count.EqualTo(2));
+    }
+
+    [Test]
+    public async Task GetPendingForUserAsync_ExcludesAlreadyReviewedReports()
+    {
+        var pending = await _repository!.GetPendingForUserAsync(SubjectUserId);
+
+        Assert.That(pending.Select(r => r.Status), Is.All.EqualTo(ReportStatus.Pending));
+    }
+}

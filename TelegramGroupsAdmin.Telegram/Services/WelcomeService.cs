@@ -971,7 +971,12 @@ public class WelcomeService(
         }
     }
 
-    private async Task KickUserAsync(
+    /// <summary>
+    /// Kicks a user via the moderation orchestrator. Returns whether the kick succeeded
+    /// so callers can decide whether they still own welcome-message cleanup: a successful
+    /// kick means the orchestrator already deleted the message; a failed one means it didn't.
+    /// </summary>
+    private async Task<bool> KickUserAsync(
         Chat chat,
         User user,
         string reason,
@@ -1004,6 +1009,8 @@ public class WelcomeService(
                     user.ToLogDebug(),
                     chat.ToLogDebug());
             }
+
+            return result.Success;
         }
         catch (Exception ex)
         {
@@ -1041,8 +1048,8 @@ public class WelcomeService(
             }
         }
 
-        // Step 3: Try to send rules via DM (or fallback to chat)
-        // Always attempt this - previous DM sent via /start may have been deleted by user
+        // Step 3: Try to send rules via DM.
+        // Always attempt this - previous DM sent via /start may have been deleted by user.
         var dmResult = await SendRulesAsync(chat, user, config, cancellationToken);
 
         logger.LogDebug(
@@ -1130,13 +1137,31 @@ public class WelcomeService(
             }
         }
 
-        // Step 2: Kick user
-        await KickUserAsync(chat, user, ReasonDeniedRules, cancellationToken);
+        // Step 2: Kick user (the moderation orchestrator deletes the welcome message on a
+        // successful kick). KickUserAsync logs and rethrows on failure — catch it here so a
+        // throwing kick still falls through to the failure-path delete and the Step 3 response
+        // update below, the same as a non-throwing failure result.
+        bool kicked;
+        try
+        {
+            kicked = await KickUserAsync(chat, user, ReasonDeniedRules, cancellationToken);
+        }
+        catch (Exception)
+        {
+            // KickUserAsync already logged the failure before rethrowing.
+            kicked = false;
+        }
 
-        // Step 3: Delete welcome message
-        await TryDeleteMessageAsync(chat.Id, welcomeMessageId, cancellationToken);
+        // Step 2b: On a failed kick — thrown or a non-throwing Failed result — the
+        // orchestrator's cleanup never ran, so delete the message here. Otherwise it survives
+        // with live Accept/Deny buttons while the response below is recorded as Denied,
+        // letting the user self-admit by clicking Accept.
+        if (!kicked)
+        {
+            await TryDeleteMessageAsync(chat.Id, welcomeMessageId, cancellationToken);
+        }
 
-        // Step 4: Update or create response record
+        // Step 3: Update or create response record
         if (existingResponse != null)
         {
             await welcomeResponsesRepository.UpdateResponseAsync(existingResponse.Id, WelcomeResponseType.Denied, dmSent: false, dmFallback: false, cancellationToken);
@@ -1322,13 +1347,21 @@ public class WelcomeService(
         // Use extracted builder for rules confirmation message (includes footer)
         var dmMessage = WelcomeMessageBuilder.FormatRulesConfirmation(config, UserIdentity.From(user), chatName);
 
-        // Delegate to DmDeliveryService with chat fallback and 30-second auto-delete
+        // No chat fallback: a blocked DM must not spill the rules into the group as a
+        // message addressed to a user who may already be banned or held for review.
         var result = await dmDeliveryService.SendDmAsync(
             user: UserIdentity.From(user),
             message: dmMessage,
-            fallbackChatId: chat.Id,
-            autoDeleteSeconds: 30,
             cancellationToken: cancellationToken);
+
+        if (result.Failed)
+        {
+            logger.LogWarning(
+                "Could not deliver welcome rules to {User} for {Chat}: {Error}",
+                user.ToLogDebug(),
+                chat.ToLogDebug(),
+                result.ErrorMessage);
+        }
 
         logger.LogDebug(
             "Rules sent to {User}: DmSent={DmSent}, FallbackUsed={FallbackUsed}",

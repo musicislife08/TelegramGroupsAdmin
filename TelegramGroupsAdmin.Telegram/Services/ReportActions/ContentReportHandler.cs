@@ -93,7 +93,8 @@ internal sealed class ContentReportHandler(
                 Executor = executor,
                 Reason = $"Report #{reportId} - spam/abuse",
                 MessageId = report.MessageId,
-                Chat = message.Chat
+                Chat = message.Chat,
+                OriginReportId = reportId
             },
             cancellationToken);
 
@@ -155,7 +156,8 @@ internal sealed class ContentReportHandler(
                 Chat = message.Chat,
                 Executor = executor,
                 Reason = $"Report #{reportId} - inappropriate behavior",
-                MessageId = report.MessageId
+                MessageId = report.MessageId,
+                OriginReportId = reportId
             },
             cancellationToken);
 

@@ -120,35 +120,6 @@ public class ProfileScanHandlerTests
         Assert.That(result.Message, Does.Contain("Cannot ban admin"));
     }
 
-    [Test]
-    public async Task BanAsync_Success_AutoClosesSiblingAlerts()
-    {
-        var alert = CreateTestAlert();
-        _mockReportsRepo.GetProfileScanAlertAsync(TestAlertId, Arg.Any<CancellationToken>())
-            .Returns(alert);
-        _mockModerationService.BanUserAsync(
-                Arg.Any<BanIntent>(), Arg.Any<CancellationToken>())
-            .Returns(new ModerationResult { Success = true, ChatsAffected = 1 });
-
-        var siblingAlert = new ProfileScanAlertRecord
-        {
-            Id = 301L,
-            User = new UserIdentity(TestUserId, "Test", null, "testuser"),
-            Chat = new ChatIdentity(-100999L, "Other Chat"),
-            Score = 3.5m
-        };
-        _mockReportsRepo.GetPendingProfileScanAlertsForUserAsync(
-                TestUserId, Arg.Any<CancellationToken>())
-            .Returns(new List<ProfileScanAlertRecord> { siblingAlert });
-
-        await _handler.BanAsync(TestAlertId, TestExecutor, CancellationToken.None);
-
-        // Sibling alert auto-closed
-        await _mockReportsRepo.Received(1).TryUpdateStatusAsync(
-            301L, ReportStatus.Reviewed, Arg.Any<string>(),
-            "Auto-Ban", Arg.Any<string>(), Arg.Any<CancellationToken>());
-    }
-
     #endregion
 
     #region KickAsync Tests
@@ -190,35 +161,6 @@ public class ProfileScanHandlerTests
 
         await _mockModerationService.DidNotReceive()
             .KickUserFromChatAsync(Arg.Any<KickIntent>(), Arg.Any<CancellationToken>());
-    }
-
-    [Test]
-    public async Task KickAsync_Success_AutoClosesSiblingAlerts()
-    {
-        var alert = CreateTestAlert();
-        _mockReportsRepo.GetProfileScanAlertAsync(TestAlertId, Arg.Any<CancellationToken>())
-            .Returns(alert);
-        _mockModerationService.KickUserFromChatAsync(
-                Arg.Any<KickIntent>(), Arg.Any<CancellationToken>())
-            .Returns(new ModerationResult { Success = true });
-
-        var siblingAlert = new ProfileScanAlertRecord
-        {
-            Id = 301L,
-            User = new UserIdentity(TestUserId, "Test", null, "testuser"),
-            Chat = new ChatIdentity(-100999L, "Other Chat"),
-            Score = 3.5m
-        };
-        _mockReportsRepo.GetPendingProfileScanAlertsForUserAsync(
-                TestUserId, Arg.Any<CancellationToken>())
-            .Returns(new List<ProfileScanAlertRecord> { siblingAlert });
-
-        await _handler.KickAsync(TestAlertId, TestExecutor, CancellationToken.None);
-
-        // Sibling alert auto-closed
-        await _mockReportsRepo.Received(1).TryUpdateStatusAsync(
-            301L, ReportStatus.Reviewed, Arg.Any<string>(),
-            "Auto-Kick", Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -275,6 +217,66 @@ public class ProfileScanHandlerTests
 
         Assert.That(result.Success, Is.True);
         Assert.That(result.Message, Does.Contain("awaiting welcome gate"));
+    }
+
+    [Test]
+    public async Task AllowAsync_Admitted_DeletesStrandedWelcomeMessage()
+    {
+        // Regression coverage for I3: TryAdmitUserAsync restores permissions but never deletes
+        // the "under admin review" teaser — that was the whole point of this branch, and Allow
+        // is the most common outcome of a profile scan review.
+        var alert = CreateTestAlert();
+        _mockReportsRepo.GetProfileScanAlertAsync(TestAlertId, Arg.Any<CancellationToken>())
+            .Returns(alert);
+        var welcomeResponse = new WelcomeResponse(
+            Id: 1, ChatId: TestChatId, UserId: TestUserId,
+            Username: "testuser", WelcomeMessageId: 777,
+            Response: WelcomeResponseType.Pending,
+            RespondedAt: DateTimeOffset.UtcNow,
+            DmSent: false, DmFallback: false,
+            CreatedAt: DateTimeOffset.UtcNow,
+            TimeoutJobId: null);
+        _mockWelcomeRepo.GetByUserAndChatAsync(TestUserId, TestChatId, Arg.Any<CancellationToken>())
+            .Returns(welcomeResponse);
+        _mockAdmissionHandler.TryAdmitUserAsync(
+                Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<Actor>(),
+                Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(AdmissionResult.Admitted);
+
+        await _handler.AllowAsync(TestAlertId, TestExecutor, CancellationToken.None);
+
+        await _mockModerationService.Received(1).DeleteMessageAsync(
+            Arg.Is<DeleteMessageIntent>(i => i!.MessageId == 777 && i.Chat.Id == TestChatId),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task AllowAsync_StillWaiting_DoesNotDeleteWelcomeMessage()
+    {
+        // Must be gated on Admitted — on StillWaiting the response is still Pending and the
+        // user still needs the buttons on the teaser message.
+        var alert = CreateTestAlert();
+        _mockReportsRepo.GetProfileScanAlertAsync(TestAlertId, Arg.Any<CancellationToken>())
+            .Returns(alert);
+        var welcomeResponse = new WelcomeResponse(
+            Id: 1, ChatId: TestChatId, UserId: TestUserId,
+            Username: "testuser", WelcomeMessageId: 777,
+            Response: WelcomeResponseType.Pending,
+            RespondedAt: DateTimeOffset.UtcNow,
+            DmSent: false, DmFallback: false,
+            CreatedAt: DateTimeOffset.UtcNow,
+            TimeoutJobId: null);
+        _mockWelcomeRepo.GetByUserAndChatAsync(TestUserId, TestChatId, Arg.Any<CancellationToken>())
+            .Returns(welcomeResponse);
+        _mockAdmissionHandler.TryAdmitUserAsync(
+                Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<Actor>(),
+                Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(AdmissionResult.StillWaiting);
+
+        await _handler.AllowAsync(TestAlertId, TestExecutor, CancellationToken.None);
+
+        await _mockModerationService.DidNotReceive().DeleteMessageAsync(
+            Arg.Any<DeleteMessageIntent>(), Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -502,6 +504,72 @@ public class ProfileScanHandlerTests
         Assert.That(result.Success, Is.True);
         await _mockCallbackContextRepo.DidNotReceive()
             .DeleteByReportIdAsync(Arg.Any<long>(), Arg.Any<CancellationToken>());
+    }
+
+    #endregion
+
+    #region Orchestrator Ownership Tests
+
+    [Test]
+    public async Task BanAsync_PassesOriginReportIdToOrchestrator()
+    {
+        _mockReportsRepo.GetProfileScanAlertAsync(TestAlertId, Arg.Any<CancellationToken>())
+            .Returns(CreateTestAlert());
+        _mockModerationService.BanUserAsync(Arg.Any<BanIntent>(), Arg.Any<CancellationToken>())
+            .Returns(new ModerationResult { Success = true, ChatsAffected = 1 });
+
+        await _handler.BanAsync(TestAlertId, TestExecutor, CancellationToken.None);
+
+        await _mockModerationService.Received(1).BanUserAsync(
+            Arg.Is<BanIntent>(i => i!.OriginReportId == TestAlertId),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task KickAsync_PassesOriginReportIdToOrchestrator()
+    {
+        _mockReportsRepo.GetProfileScanAlertAsync(TestAlertId, Arg.Any<CancellationToken>())
+            .Returns(CreateTestAlert());
+        _mockModerationService.KickUserFromChatAsync(Arg.Any<KickIntent>(), Arg.Any<CancellationToken>())
+            .Returns(new ModerationResult { Success = true, ChatsAffected = 1 });
+
+        await _handler.KickAsync(TestAlertId, TestExecutor, CancellationToken.None);
+
+        await _mockModerationService.Received(1).KickUserFromChatAsync(
+            Arg.Is<KickIntent>(i => i!.OriginReportId == TestAlertId),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task BanAsync_DoesNotCloseSiblingAlertsItself()
+    {
+        _mockReportsRepo.GetProfileScanAlertAsync(TestAlertId, Arg.Any<CancellationToken>())
+            .Returns(CreateTestAlert());
+        _mockModerationService.BanUserAsync(Arg.Any<BanIntent>(), Arg.Any<CancellationToken>())
+            .Returns(new ModerationResult { Success = true, ChatsAffected = 1 });
+
+        await _handler.BanAsync(TestAlertId, TestExecutor, CancellationToken.None);
+
+        await _mockReportsRepo.DidNotReceive().GetPendingProfileScanAlertsForUserAsync(
+            Arg.Any<long>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task AllowAsync_StillClosesSiblingProfileScanAlerts()
+    {
+        _mockReportsRepo.GetProfileScanAlertAsync(TestAlertId, Arg.Any<CancellationToken>())
+            .Returns(CreateTestAlert());
+        _mockWelcomeRepo.GetByUserAndChatAsync(TestUserId, TestChatId, Arg.Any<CancellationToken>())
+            .Returns((WelcomeResponse?)null);
+        _mockAdmissionHandler.TryAdmitUserAsync(
+                Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<Actor>(),
+                Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(AdmissionResult.Admitted);
+
+        await _handler.AllowAsync(TestAlertId, TestExecutor, CancellationToken.None);
+
+        await _mockReportsRepo.Received(1).GetPendingProfileScanAlertsForUserAsync(
+            TestUserId, Arg.Any<CancellationToken>());
     }
 
     #endregion

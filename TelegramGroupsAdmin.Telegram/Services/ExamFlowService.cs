@@ -831,6 +831,7 @@ public class ExamFlowService : IExamFlowService
         UserIdentity user,
         ChatIdentity chat,
         Actor executor,
+        long? originReportId = null,
         CancellationToken cancellationToken = default)
     {
         return await ExecuteExamDenialAsync(
@@ -838,6 +839,7 @@ public class ExamFlowService : IExamFlowService
             chat,
             executor,
             banGlobally: false,
+            originReportId,
             cancellationToken);
     }
 
@@ -846,6 +848,7 @@ public class ExamFlowService : IExamFlowService
         UserIdentity user,
         ChatIdentity chat,
         Actor executor,
+        long? originReportId = null,
         CancellationToken cancellationToken = default)
     {
         return await ExecuteExamDenialAsync(
@@ -853,18 +856,21 @@ public class ExamFlowService : IExamFlowService
             chat,
             executor,
             banGlobally: true,
+            originReportId,
             cancellationToken);
     }
 
     /// <summary>
     /// Shared method for completing exam denial (both kick and ban flows).
-    /// Handles: delete teaser, update welcome response, kick/ban user, send DM notification.
+    /// Handles: update welcome response, kick/ban user (the moderation orchestrator deletes
+    /// the teaser message as part of that action), send DM notification.
     /// </summary>
     private async Task<ModerationResult> ExecuteExamDenialAsync(
         UserIdentity user,
         ChatIdentity chat,
         Actor executor,
         bool banGlobally,
+        long? originReportId,
         CancellationToken cancellationToken)
     {
         await using var scope = _serviceProvider.CreateAsyncScope();
@@ -873,23 +879,10 @@ public class ExamFlowService : IExamFlowService
 
         var chatName = chat.ChatName ?? "the chat";
 
-        // 1. Delete teaser and update welcome response
+        // 1. Update welcome response to denied
         var welcomeResponse = await welcomeResponsesRepo.GetByUserAndChatAsync(user.Id, chat.Id, cancellationToken);
         if (welcomeResponse != null)
         {
-            // Delete teaser message via orchestrator (audit trail)
-            await orchestrator.DeleteMessageAsync(
-                new DeleteMessageIntent
-                {
-                    MessageId = welcomeResponse.WelcomeMessageId,
-                    Chat = chat,
-                    User = user,
-                    Executor = executor,
-                    Reason = "Exam teaser cleanup after denial"
-                },
-                cancellationToken);
-
-            // Update welcome response to denied
             await welcomeResponsesRepo.UpdateResponseAsync(
                 welcomeResponse.Id,
                 WelcomeResponseType.Denied,
@@ -907,12 +900,30 @@ public class ExamFlowService : IExamFlowService
                 {
                     User = user,
                     Executor = executor,
-                    Reason = "Exam failed - banned to prevent repeat join spam"
+                    Reason = "Exam failed - banned to prevent repeat join spam",
+                    OriginReportId = originReportId
                 },
                 cancellationToken);
 
             if (!banResult.Success)
             {
+                // The ban failed, so BotModerationService's cleanup never ran and the welcome
+                // response is already Denied — delete the teaser here so it doesn't strand with
+                // live buttons while StartExamInDmAsync has no guard against the Denied state.
+                if (welcomeResponse != null)
+                {
+                    await orchestrator.DeleteMessageAsync(
+                        new DeleteMessageIntent
+                        {
+                            MessageId = welcomeResponse.WelcomeMessageId,
+                            Chat = chat,
+                            User = user,
+                            Executor = executor,
+                            Reason = "Exam teaser cleanup after failed ban"
+                        },
+                        cancellationToken);
+                }
+
                 return banResult;
             }
         }
@@ -925,12 +936,29 @@ public class ExamFlowService : IExamFlowService
                     User = user,
                     Chat = chat,
                     Executor = executor,
-                    Reason = "Exam denied - kicked from chat"
+                    Reason = "Exam denied - kicked from chat",
+                    OriginReportId = originReportId
                 },
                 cancellationToken);
 
             if (!kickResult.Success)
             {
+                // Same as the ban branch above: the kick failed, so the boss's cleanup never
+                // ran, and the welcome response is already Denied.
+                if (welcomeResponse != null)
+                {
+                    await orchestrator.DeleteMessageAsync(
+                        new DeleteMessageIntent
+                        {
+                            MessageId = welcomeResponse.WelcomeMessageId,
+                            Chat = chat,
+                            User = user,
+                            Executor = executor,
+                            Reason = "Exam teaser cleanup after failed kick"
+                        },
+                        cancellationToken);
+                }
+
                 return kickResult;
             }
         }

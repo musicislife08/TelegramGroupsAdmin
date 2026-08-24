@@ -34,7 +34,8 @@ internal sealed class ImpersonationHandler(
                 User = alert.SuspectedUser,
                 Executor = executor,
                 Reason = $"Impersonation alert #{alertId} confirmed - impersonating {alert.TargetUser.DisplayName}",
-                Chat = alert.Chat
+                Chat = alert.Chat,
+                OriginReportId = alertId
             },
             cancellationToken);
 

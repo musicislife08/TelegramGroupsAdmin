@@ -26,6 +26,19 @@ public interface IReportsRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Get every pending report whose subject is the given user, regardless of report type.
+    /// Subject resolution per type: ContentReport → reported message author,
+    /// ImpersonationAlert → suspected user, ExamFailure / ProfileScanAlert → the user.
+    /// </summary>
+    /// <param name="userId">Telegram user id of the report subject.</param>
+    /// <param name="chatId">When supplied, narrows to reports in that chat.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    Task<List<ReportBase>> GetPendingForUserAsync(
+        long userId,
+        long? chatId = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Get reports with optional filters.
     /// </summary>
     Task<List<ReportBase>> GetAsync(

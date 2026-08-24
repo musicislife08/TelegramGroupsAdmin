@@ -123,7 +123,7 @@ public class ExamHandlerTests
             .Returns(exam);
         _mockExamFlowService.DenyExamFailureAsync(
                 Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(),
-                Arg.Any<Actor>(), Arg.Any<CancellationToken>())
+                Arg.Any<Actor>(), Arg.Any<long?>(), Arg.Any<CancellationToken>())
             .Returns(new ModerationResult { Success = true });
 
         var result = await _handler.DenyAsync(TestExamId, TestExecutor, CancellationToken.None);
@@ -157,7 +157,7 @@ public class ExamHandlerTests
             .Returns(exam);
         _mockExamFlowService.DenyExamFailureAsync(
                 Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(),
-                Arg.Any<Actor>(), Arg.Any<CancellationToken>())
+                Arg.Any<Actor>(), Arg.Any<long?>(), Arg.Any<CancellationToken>())
             .Returns(ModerationResult.Failed("Chat not found"));
 
         var result = await _handler.DenyAsync(TestExamId, TestExecutor, CancellationToken.None);
@@ -178,7 +178,7 @@ public class ExamHandlerTests
             .Returns(exam);
         _mockExamFlowService.DenyAndBanExamFailureAsync(
                 Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(),
-                Arg.Any<Actor>(), Arg.Any<CancellationToken>())
+                Arg.Any<Actor>(), Arg.Any<long?>(), Arg.Any<CancellationToken>())
             .Returns(new ModerationResult { Success = true });
 
         var result = await _handler.DenyAndBanAsync(TestExamId, TestExecutor, CancellationToken.None);
@@ -212,7 +212,7 @@ public class ExamHandlerTests
             .Returns(exam);
         _mockExamFlowService.DenyAndBanExamFailureAsync(
                 Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(),
-                Arg.Any<Actor>(), Arg.Any<CancellationToken>())
+                Arg.Any<Actor>(), Arg.Any<long?>(), Arg.Any<CancellationToken>())
             .Returns(ModerationResult.Failed("Ban API error"));
 
         var result = await _handler.DenyAndBanAsync(TestExamId, TestExecutor, CancellationToken.None);
@@ -261,7 +261,7 @@ public class ExamHandlerTests
             .Returns(exam);
         _mockExamFlowService.DenyExamFailureAsync(
                 Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(),
-                Arg.Any<Actor>(), Arg.Any<CancellationToken>())
+                Arg.Any<Actor>(), Arg.Any<long?>(), Arg.Any<CancellationToken>())
             .Returns(new ModerationResult { Success = true });
 
         _mockReportsRepo.TryUpdateStatusAsync(
@@ -288,7 +288,7 @@ public class ExamHandlerTests
             .Returns(exam);
         _mockExamFlowService.DenyAndBanExamFailureAsync(
                 Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(),
-                Arg.Any<Actor>(), Arg.Any<CancellationToken>())
+                Arg.Any<Actor>(), Arg.Any<long?>(), Arg.Any<CancellationToken>())
             .Returns(new ModerationResult { Success = true });
 
         _mockReportsRepo.TryUpdateStatusAsync(

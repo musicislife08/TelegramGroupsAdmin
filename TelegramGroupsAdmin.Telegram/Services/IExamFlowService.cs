@@ -122,31 +122,41 @@ public interface IExamFlowService
 
     /// <summary>
     /// Deny an exam failure after admin review (kick user, allow rejoin).
-    /// Kicks user from chat, deletes teaser message, updates welcome response, sends notification.
+    /// Kicks user from chat, updates welcome response, sends notification.
     /// </summary>
     /// <param name="user">Identity of the user being denied</param>
     /// <param name="chat">Identity of the chat where the exam was taken</param>
     /// <param name="executor">Actor performing the denial</param>
+    /// <param name="originReportId">
+    /// Exam failure report id that triggered this denial. Passed to the moderation
+    /// orchestrator so its report-cleanup sweep skips this report.
+    /// </param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Result indicating success or failure</returns>
     Task<ModerationResult> DenyExamFailureAsync(
         UserIdentity user,
         ChatIdentity chat,
         Actor executor,
+        long? originReportId = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Deny an exam failure after admin review and ban the user globally.
-    /// Bans user from all managed chats, deletes teaser message, updates welcome response, sends notification.
+    /// Bans user from all managed chats, updates welcome response, sends notification.
     /// </summary>
     /// <param name="user">Identity of the user being denied and banned</param>
     /// <param name="chat">Identity of the chat where the exam was taken</param>
     /// <param name="executor">Actor performing the denial</param>
+    /// <param name="originReportId">
+    /// Exam failure report id that triggered this denial. Passed to the moderation
+    /// orchestrator so its report-cleanup sweep skips this report.
+    /// </param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Result indicating success or failure</returns>
     Task<ModerationResult> DenyAndBanExamFailureAsync(
         UserIdentity user,
         ChatIdentity chat,
         Actor executor,
+        long? originReportId = null,
         CancellationToken cancellationToken = default);
 }

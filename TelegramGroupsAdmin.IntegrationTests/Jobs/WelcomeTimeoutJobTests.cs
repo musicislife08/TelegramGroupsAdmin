@@ -212,8 +212,10 @@ public class WelcomeTimeoutJobTests
     }
 
     /// <summary>
-    /// When a Pending response exists, the job must kick the user, delete the welcome
-    /// message, and persist a Timeout response with an updated RespondedAt timestamp.
+    /// When a Pending response exists, the job must kick the user and persist a Timeout
+    /// response with an updated RespondedAt timestamp. Welcome message deletion is no
+    /// longer the job's job — the moderation orchestrator deletes it as part of the kick
+    /// (verified in BotModerationServiceTests, not here, since the orchestrator is mocked).
     /// </summary>
     [Test]
     public async Task Execute_ResponsePending_KicksUserAndUpdatesResponse()
@@ -237,9 +239,9 @@ public class WelcomeTimeoutJobTests
                     && intent.Chat.Id == MainChatId),
                 Arg.Any<CancellationToken>());
 
-        // Assert — welcome message deletion was called with correct chatId and messageId
+        // Assert — the job no longer deletes the welcome message itself after a kick
         await _mockMessageService!
-            .Received(1)
+            .DidNotReceive()
             .DeleteAndMarkMessageAsync(
                 MainChatId,
                 PendingWelcomeMsgId,
@@ -266,11 +268,15 @@ public class WelcomeTimeoutJobTests
 
     /// <summary>
     /// When KickUserFromChatAsync throws (e.g., user already left), the job must still
-    /// delete the welcome message and record the Timeout response.  The kick failure is
-    /// logged and swallowed by the job; it must not prevent cleanup.
+    /// record the Timeout response. The kick failure is logged and swallowed by the job;
+    /// it must not prevent the response update. Welcome message deletion is owned by the
+    /// moderation orchestrator as part of a successful kick, so on a throwing kick the job
+    /// falls back to deleting the message itself under a distinct "kick failed" source —
+    /// otherwise the message survives with live Accept/Deny buttons while the record says
+    /// Timeout, letting the user self-admit by clicking Accept.
     /// </summary>
     [Test]
-    public async Task Execute_KickThrows_StillDeletesMessageAndUpdatesResponse()
+    public async Task Execute_KickThrows_DeletesMessageAndUpdatesResponse()
     {
         // Arrange — canonical 999001 is Pending; force the kick to throw
         _mockModerationService!
@@ -284,13 +290,13 @@ public class WelcomeTimeoutJobTests
         // Act — must NOT propagate the kick exception
         Assert.DoesNotThrowAsync(async () => await job.Execute(context));
 
-        // Assert — message deletion still called despite the kick failure
+        // Assert — the job falls back to deleting the message itself under a distinct source
         await _mockMessageService!
             .Received(1)
             .DeleteAndMarkMessageAsync(
                 MainChatId,
                 PendingWelcomeMsgId,
-                "welcome_timeout",
+                "welcome_timeout_kick_failed",
                 Arg.Any<CancellationToken>());
 
         // Assert — response row transitioned to Timeout regardless of kick outcome
@@ -306,6 +312,52 @@ public class WelcomeTimeoutJobTests
             Assert.That(updated, Is.Not.Null, "WelcomeResponse row should still exist");
             Assert.That(updated!.Response, Is.EqualTo(WelcomeResponseType.Timeout),
                 "Response should still be updated to Timeout even when kick fails");
+        }
+    }
+
+    /// <summary>
+    /// When KickUserFromChatAsync returns a failure result WITHOUT throwing (e.g., Telegram
+    /// API rejected the kick but the call itself completed), the job must fall back to
+    /// deleting the welcome message itself — the moderation orchestrator's cleanup only runs
+    /// after a successful kick, so a non-throwing failure is otherwise silently unhandled.
+    /// </summary>
+    [Test]
+    public async Task Execute_KickReturnsFailureWithoutThrowing_DeletesMessageAndUpdatesResponse()
+    {
+        // Arrange — canonical 999001 is Pending; kick completes but reports failure
+        _mockModerationService!
+            .KickUserFromChatAsync(Arg.Any<KickIntent>(), Arg.Any<CancellationToken>())
+            .Returns(new ModerationResult { Success = false, ErrorMessage = "User not a chat member" });
+
+        var payload = BuildPayload();
+        var context = BuildJobContext(payload);
+        var job = BuildJob();
+
+        // Act
+        await job.Execute(context);
+
+        // Assert — the job falls back to deleting the message itself under a distinct source
+        await _mockMessageService!
+            .Received(1)
+            .DeleteAndMarkMessageAsync(
+                MainChatId,
+                PendingWelcomeMsgId,
+                "welcome_timeout_kick_failed",
+                Arg.Any<CancellationToken>());
+
+        // Assert — response row still transitions to Timeout
+        await using var verifyContext = ContextFactory.CreateDbContext();
+        var updated = await verifyContext.WelcomeResponses
+            .Where(r => r.ChatId == MainChatId
+                        && r.UserId == WelcomeUserId
+                        && r.WelcomeMessageId == PendingWelcomeMsgId)
+            .FirstOrDefaultAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(updated, Is.Not.Null, "WelcomeResponse row should still exist");
+            Assert.That(updated!.Response, Is.EqualTo(WelcomeResponseType.Timeout),
+                "Response should still be updated to Timeout even when kick reports failure");
         }
     }
 
