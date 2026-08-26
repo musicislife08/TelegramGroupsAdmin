@@ -380,13 +380,21 @@ dotnet build TelegramGroupsAdmin.sln
 
 Expected: `Build succeeded`, zero warnings. If `MessageDeliveryMethod` is now an unused using or the identifier no longer resolves anywhere in this file, that is expected only if no other reference remains — check with `grep -n "MessageDeliveryMethod" TelegramGroupsAdmin.Telegram/Services/BotCommands/Commands/BanCommand.cs` and remove nothing unless the grep comes back empty (the type lives in the `TelegramGroupsAdmin.Telegram.Services` namespace, which is not separately imported here, so there is no using directive to remove).
 
-- [ ] **Step 4: Run the ban command tests**
+- [ ] **Step 4: Run the unit suite**
+
+There is **no** `BanCommandTests.cs` in this repo — the only fixtures under
+`TelegramGroupsAdmin.UnitTests/Telegram/Services/BotCommands/Commands/` are `HelpCommandTests.cs`
+and `ReportCommandTests.cs`. Do not run `--filter "FullyQualifiedName~BanCommand"`: it matches
+zero tests and exits non-zero with `No test matches the given testcase filter`, which is not a
+failure signal. Run the suite instead:
 
 ```bash
-dotnet test TelegramGroupsAdmin.UnitTests --filter "FullyQualifiedName~BanCommand"
+dotnet test TelegramGroupsAdmin.UnitTests
 ```
 
-Expected: PASS. If a test asserts on the old `"User notified via {DeliveryMethod}"` log message or stubs `SendToUserAsync`, update it to match the new call — the behaviour change is intended and the test is encoding the old contract.
+Expected: PASS. `BanCommand` has no dedicated fixture, so the regression guard for this task is
+the build plus the full suite. Do not write one — adding coverage for `BanCommand` is worthwhile
+but is its own piece of work, outside this issue's scope.
 
 - [ ] **Step 5: Commit**
 
@@ -459,13 +467,18 @@ dotnet build TelegramGroupsAdmin.sln
 
 Expected: `Build succeeded`, zero warnings.
 
-- [ ] **Step 3: Run the ban callback tests**
+- [ ] **Step 3: Run the unit suite**
+
+As in Task 2, there is **no** `BanCallbackServiceTests.cs` in this repo. Do not run
+`--filter "FullyQualifiedName~BanCallback"`: it matches zero tests and exits non-zero with
+`No test matches the given testcase filter`, which is not a failure signal.
 
 ```bash
-dotnet test TelegramGroupsAdmin.UnitTests --filter "FullyQualifiedName~BanCallback"
+dotnet test TelegramGroupsAdmin.UnitTests
 ```
 
-Expected: PASS. As in Task 2, a test stubbing `SendToUserAsync` for this path is encoding the old contract and should be updated to `SendDmOnlyAsync`.
+Expected: PASS. Build plus full suite is the regression guard for this task. Do not write a new
+fixture — out of scope for this issue.
 
 - [ ] **Step 4: Commit**
 
