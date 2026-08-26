@@ -19,7 +19,7 @@ public interface IUserMessagingService
     /// <param name="message">Pre-rendered message (text + entities) to send</param>
     /// <param name="replyToMessageId">Optional message ID to reply to in chat fallback</param>
     /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>True if message was sent successfully (either DM or fallback), false if both failed</returns>
+    /// <returns>A result carrying <see cref="MessageDeliveryMethod.PrivateDm"/> or <see cref="MessageDeliveryMethod.ChatMention"/> on success, or <see cref="MessageDeliveryMethod.Failed"/> if both the DM and the mention failed</returns>
     Task<MessageSendResult> SendToUserAsync(
         long userId,
         Chat chat,

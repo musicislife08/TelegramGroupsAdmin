@@ -145,10 +145,17 @@ public class BanCallbackService : IBanCallbackService
                 var banNotification = BanNotificationMessage.Build(
                     chatName, ModerationConstants.DefaultBanReason, result.ChatsAffected);
 
-                await messagingService.SendDmOnlyAsync(
+                var messageResult = await messagingService.SendDmOnlyAsync(
                     userId: targetUserId,
                     message: banNotification,
                     cancellationToken: cancellationToken);
+
+                if (!messageResult.Success)
+                {
+                    _logger.LogInformation(
+                        "Ban DM not delivered to {TargetUser}",
+                        targetUser.ToLogInfo(targetUser.TelegramUserId));
+                }
             }
             else
             {
