@@ -279,4 +279,105 @@ public class UserMessagingServiceTests
 
         Assert.That(result.DeliveryMethod, Is.EqualTo(MessageDeliveryMethod.ChatMention));
     }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // SendDmOnlyAsync — no chat-mention fallback (issue #526)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    [Test]
+    public async Task SendDmOnlyAsync_DmDisabled_SendsNothingToChat()
+    {
+        // Arrange: banned user never opened a DM with the bot
+        var user = MakeUser(TestUserId1, firstName: "Grace", botDmEnabled: false);
+        _mockUserRepo
+            .GetByTelegramIdAsync(TestUserId1, Arg.Any<CancellationToken>())
+            .Returns(user);
+
+        // Act
+        var result = await _sut.SendDmOnlyAsync(TestUserId1, TelegramMessage.Plain("You were banned."));
+
+        // Assert: DM never attempted, and nothing posted in any chat
+        await _mockDmService
+            .DidNotReceive()
+            .SendDmAsync(
+                user: Arg.Any<UserIdentity>(),
+                message: Arg.Any<TelegramMessage>(),
+                fallbackChatId: Arg.Any<long?>(),
+                autoDeleteSeconds: Arg.Any<int?>(),
+                cancellationToken: Arg.Any<CancellationToken>());
+
+        await _mockMessageService
+            .DidNotReceive()
+            .SendAndSaveMessageAsync(
+                chatId: Arg.Any<long>(),
+                message: Arg.Any<TelegramMessage>(),
+                replyParameters: Arg.Any<ReplyParameters?>(),
+                cancellationToken: Arg.Any<CancellationToken>());
+
+        using var _ = Assert.EnterMultipleScope();
+        Assert.That(result.Success, Is.False);
+        Assert.That(result.DeliveryMethod, Is.EqualTo(MessageDeliveryMethod.Failed));
+    }
+
+    [Test]
+    public async Task SendDmOnlyAsync_DmFails_DoesNotFallBackToChatMention()
+    {
+        // Arrange: DM enabled but the send fails (user blocked the bot since /start)
+        var user = MakeUser(TestUserId1, firstName: "Heidi", botDmEnabled: true);
+        _mockUserRepo
+            .GetByTelegramIdAsync(TestUserId1, Arg.Any<CancellationToken>())
+            .Returns(user);
+
+        _mockDmService
+            .SendDmAsync(
+                user: Arg.Any<UserIdentity>(),
+                message: Arg.Any<TelegramMessage>(),
+                fallbackChatId: Arg.Any<long?>(),
+                autoDeleteSeconds: Arg.Any<int?>(),
+                cancellationToken: Arg.Any<CancellationToken>())
+            .Returns(new DmDeliveryResult { DmSent = false, Failed = true });
+
+        // Act
+        var result = await _sut.SendDmOnlyAsync(TestUserId1, TelegramMessage.Plain("You were banned."));
+
+        // Assert: nothing posted in any chat
+        await _mockMessageService
+            .DidNotReceive()
+            .SendAndSaveMessageAsync(
+                chatId: Arg.Any<long>(),
+                message: Arg.Any<TelegramMessage>(),
+                replyParameters: Arg.Any<ReplyParameters?>(),
+                cancellationToken: Arg.Any<CancellationToken>());
+
+        using var _ = Assert.EnterMultipleScope();
+        Assert.That(result.Success, Is.False);
+        Assert.That(result.DeliveryMethod, Is.EqualTo(MessageDeliveryMethod.Failed));
+    }
+
+    [Test]
+    public async Task SendDmOnlyAsync_DmSucceeds_ReportsPrivateDm()
+    {
+        // Arrange
+        var user = MakeUser(TestUserId1, firstName: "Ivan", botDmEnabled: true);
+        _mockUserRepo
+            .GetByTelegramIdAsync(TestUserId1, Arg.Any<CancellationToken>())
+            .Returns(user);
+
+        _mockDmService
+            .SendDmAsync(
+                user: Arg.Any<UserIdentity>(),
+                message: Arg.Any<TelegramMessage>(),
+                fallbackChatId: Arg.Any<long?>(),
+                autoDeleteSeconds: Arg.Any<int?>(),
+                cancellationToken: Arg.Any<CancellationToken>())
+            .Returns(new DmDeliveryResult { DmSent = true });
+
+        // Act
+        var result = await _sut.SendDmOnlyAsync(TestUserId1, TelegramMessage.Plain("You were banned."));
+
+        // Assert
+        using var _ = Assert.EnterMultipleScope();
+        Assert.That(result.Success, Is.True);
+        Assert.That(result.DeliveryMethod, Is.EqualTo(MessageDeliveryMethod.PrivateDm));
+    }
 }

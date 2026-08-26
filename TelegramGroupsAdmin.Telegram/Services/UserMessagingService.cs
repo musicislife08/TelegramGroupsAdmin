@@ -10,7 +10,7 @@ using TelegramGroupsAdmin.Telegram.Services.Bot;
 namespace TelegramGroupsAdmin.Telegram.Services;
 
 /// <summary>
-/// Service for sending messages to specific users with DM-first, mention-fallback strategy.
+/// Service for sending messages to specific users.
 /// Uses IBotDmService for DM attempts and IBotMessageService for chat mention fallback.
 /// </summary>
 public class UserMessagingService : IUserMessagingService
@@ -39,38 +39,69 @@ public class UserMessagingService : IUserMessagingService
         int? replyToMessageId = null,
         CancellationToken cancellationToken = default)
     {
-        // Get user's DM preference (optimization: skip DM attempt if user blocked bot)
-        var user = await _telegramUserRepository.GetByTelegramIdAsync(userId, cancellationToken);
-        var botDmEnabled = user?.BotDmEnabled ?? false;
-
-        // Attempt DM if user has enabled it
-        if (botDmEnabled)
+        if (await TrySendDmAsync(userId, message, cancellationToken))
         {
-            // Try DM via IBotDmService (no fallback - we'll handle mention fallback ourselves)
-            var dmResult = await _dmService.SendDmAsync(
-                user: user != null ? UserIdentity.From(user) : UserIdentity.FromId(userId),
-                message: message,
-                fallbackChatId: null,
-                cancellationToken: cancellationToken);
-
-            if (dmResult.DmSent)
-            {
-                _logger.LogInformation(
-                    "Sent DM to user {User}: {MessagePreview}",
-                    user.ToLogInfo(userId),
-                    message.Text.Length > 50 ? message.Text[..50] + "..." : message.Text);
-
-                return new MessageSendResult(userId, Success: true, MessageDeliveryMethod.PrivateDm);
-            }
-
-            // DM failed (user blocked bot or error) - fall through to mention fallback
-            _logger.LogDebug(
-                "DM to {User} failed, falling back to chat mention",
-                user.ToLogDebug(userId));
+            return new MessageSendResult(userId, Success: true, MessageDeliveryMethod.PrivateDm);
         }
 
         // Fallback: Send as chat mention
         return await SendChatMentionAsync(userId, chat, message, replyToMessageId, cancellationToken);
+    }
+
+    public async Task<MessageSendResult> SendDmOnlyAsync(
+        long userId,
+        TelegramMessage message,
+        CancellationToken cancellationToken = default)
+    {
+        if (await TrySendDmAsync(userId, message, cancellationToken))
+        {
+            return new MessageSendResult(userId, Success: true, MessageDeliveryMethod.PrivateDm);
+        }
+
+        // No fallback: the recipient can't read a chat mention, so nothing is sent
+        return new MessageSendResult(
+            userId,
+            Success: false,
+            MessageDeliveryMethod.Failed,
+            ErrorMessage: "DM unavailable and no chat-mention fallback for this message");
+    }
+
+    /// <summary>
+    /// Attempt a DM to the user, honouring their stored DM preference.
+    /// Returns true only when the DM was actually delivered.
+    /// </summary>
+    private async Task<bool> TrySendDmAsync(
+        long userId,
+        TelegramMessage message,
+        CancellationToken cancellationToken)
+    {
+        // Get user's DM preference (optimization: skip DM attempt if user blocked bot)
+        var user = await _telegramUserRepository.GetByTelegramIdAsync(userId, cancellationToken);
+        if (user?.BotDmEnabled is not true)
+        {
+            return false;
+        }
+
+        // Try DM via IBotDmService (no fallback - callers decide what happens next)
+        var dmResult = await _dmService.SendDmAsync(
+            user: UserIdentity.From(user),
+            message: message,
+            fallbackChatId: null,
+            cancellationToken: cancellationToken);
+
+        if (dmResult.DmSent)
+        {
+            _logger.LogInformation(
+                "Sent DM to user {User}: {MessagePreview}",
+                user.ToLogInfo(userId),
+                message.Text.Length > 50 ? message.Text[..50] + "..." : message.Text);
+
+            return true;
+        }
+
+        // DM failed (user blocked bot or error)
+        _logger.LogDebug("DM to {User} failed", user.ToLogDebug(userId));
+        return false;
     }
 
     public async Task<List<MessageSendResult>> SendToMultipleUsersAsync(
