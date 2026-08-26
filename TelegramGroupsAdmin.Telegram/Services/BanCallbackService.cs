@@ -138,17 +138,16 @@ public class BanCallbackService : IBanCallbackService
                     targetUser.ToLogInfo(targetUser.TelegramUserId),
                     executorUser.ToLogInfo());
 
-                // Send ban notification to user (resolve from scope since IUserMessagingService is Scoped)
+                // Send ban notification by DM only - the user is out of the chat, so a mention is just noise
+                // (resolve from scope since IUserMessagingService is Scoped)
                 var messagingService = scope.ServiceProvider.GetRequiredService<IUserMessagingService>();
                 var chatName = callbackQuery.Message?.Chat.Title ?? "this chat";
                 var banNotification = BanNotificationMessage.Build(
                     chatName, ModerationConstants.DefaultBanReason, result.ChatsAffected);
 
-                await messagingService.SendToUserAsync(
+                await messagingService.SendDmOnlyAsync(
                     userId: targetUserId,
-                    chat: callbackQuery.Message!.Chat,
                     message: banNotification,
-                    replyToMessageId: null,
                     cancellationToken: cancellationToken);
             }
             else
