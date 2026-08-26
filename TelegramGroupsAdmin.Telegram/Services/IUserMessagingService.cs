@@ -40,15 +40,4 @@ public interface IUserMessagingService
         long userId,
         TelegramMessage message,
         CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Send a notification to multiple users (e.g., all admins in a chat).
-    /// Each user gets DM if available, otherwise fallback to single chat mention.
-    /// </summary>
-    Task<List<MessageSendResult>> SendToMultipleUsersAsync(
-        List<long> userIds,
-        Chat chat,
-        TelegramMessage message,
-        int? replyToMessageId = null,
-        CancellationToken cancellationToken = default);
 }
