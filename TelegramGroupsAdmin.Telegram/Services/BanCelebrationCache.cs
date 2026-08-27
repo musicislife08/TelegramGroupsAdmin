@@ -63,6 +63,20 @@ public class BanCelebrationCache : IBanCelebrationCache
         }
     }
 
+    public void AddGifId(int id)
+    {
+        lock (_gifLock)
+        {
+            // Empty bag means the next pull reloads all IDs from the database,
+            // which will include this one. Inserting here would instead make the
+            // new item jump the queue and force an immediate reshuffle after it.
+            if (_gifBag.Count == 0)
+                return;
+
+            SpliceInto(_gifBag, id);
+        }
+    }
+
     public int? GetNextCaptionId()
     {
         lock (_captionLock)
@@ -88,6 +102,37 @@ public class BanCelebrationCache : IBanCelebrationCache
             {
                 _captionBag.Enqueue(id);
             }
+        }
+    }
+
+    public void AddCaptionId(int id)
+    {
+        lock (_captionLock)
+        {
+            if (_captionBag.Count == 0)
+                return;
+
+            SpliceInto(_captionBag, id);
+        }
+    }
+
+    /// <summary>
+    /// Inserts an ID at a uniformly random position among the queue's pending items.
+    /// Queue&lt;int&gt; has no random insert, so the pending items are drained to a list,
+    /// the ID is inserted, and the list is re-enqueued in order. Bags hold at most the
+    /// library size (tens of items), so the copy is negligible.
+    /// Callers must already hold the matching lock.
+    /// </summary>
+    private static void SpliceInto(Queue<int> bag, int id)
+    {
+        var pending = new List<int>(bag);
+        bag.Clear();
+
+        pending.Insert(Random.Shared.Next(pending.Count + 1), id);
+
+        foreach (var pendingId in pending)
+        {
+            bag.Enqueue(pendingId);
         }
     }
 }

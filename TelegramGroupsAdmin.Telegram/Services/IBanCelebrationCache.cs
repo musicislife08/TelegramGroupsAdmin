@@ -19,6 +19,14 @@ public interface IBanCelebrationCache
     void RepopulateGifBag(List<int> ids);
 
     /// <summary>
+    /// Splices a newly added GIF ID into the pending items of the current bag at a
+    /// random position, so new library content joins the rotation immediately.
+    /// No-op when the bag is empty: the next pull reloads every ID from the database,
+    /// which already includes the new one.
+    /// </summary>
+    void AddGifId(int id);
+
+    /// <summary>
     /// Returns true if the GIF bag is empty and needs repopulating.
     /// </summary>
     bool IsGifBagEmpty { get; }
@@ -33,6 +41,12 @@ public interface IBanCelebrationCache
     /// Repopulates the caption shuffle bag with the provided IDs (shuffled).
     /// </summary>
     void RepopulateCaptionBag(List<int> ids);
+
+    /// <summary>
+    /// Splices a newly added caption ID into the pending items of the current bag at a
+    /// random position. Same semantics as <see cref="AddGifId"/>.
+    /// </summary>
+    void AddCaptionId(int id);
 
     /// <summary>
     /// Returns true if the caption bag is empty and needs repopulating.
