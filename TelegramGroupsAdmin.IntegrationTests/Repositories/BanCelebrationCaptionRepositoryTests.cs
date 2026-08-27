@@ -1,10 +1,12 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using NSubstitute;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
 using TelegramGroupsAdmin.Telegram.Constants;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Telegram.Services;
 
 namespace TelegramGroupsAdmin.IntegrationTests.Repositories;
 
@@ -27,6 +29,7 @@ public class BanCelebrationCaptionRepositoryTests
     private MigrationTestHelper? _testHelper;
     private IServiceProvider? _serviceProvider;
     private IBanCelebrationCaptionRepository? _repository;
+    private IBanCelebrationCache _mockCelebrationCache = null!;
 
     [SetUp]
     public async Task SetUp()
@@ -45,6 +48,10 @@ public class BanCelebrationCaptionRepositoryTests
             builder.AddConsole().SetMinimumLevel(LogLevel.Warning));
 
         services.AddScoped<IBanCelebrationCaptionRepository, BanCelebrationCaptionRepository>();
+
+        // Cache is notified when a caption is added so it joins the live shuffle bag
+        _mockCelebrationCache = Substitute.For<IBanCelebrationCache>();
+        services.AddSingleton(_mockCelebrationCache);
 
         _serviceProvider = services.BuildServiceProvider();
         _repository = _serviceProvider.CreateScope()
@@ -257,6 +264,16 @@ public class BanCelebrationCaptionRepositoryTests
         // Act & Assert
         Assert.ThrowsAsync<ArgumentException>(async () =>
             await _repository!.AddAsync("Chat text", "   ", "Name"));
+    }
+
+    [Test]
+    public async Task AddAsync_ValidCaption_NotifiesShuffleBagWithNewId()
+    {
+        // Act
+        var result = await _repository!.AddAsync("{username} was banned!", "You were banned!", "Test");
+
+        // Assert
+        _mockCelebrationCache.Received(1).AddCaptionId(result.Id);
     }
 
     #endregion

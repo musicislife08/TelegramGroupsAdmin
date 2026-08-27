@@ -5,6 +5,7 @@ using TelegramGroupsAdmin.Data.Models;
 using TelegramGroupsAdmin.Telegram.Constants;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories.Mappings;
+using TelegramGroupsAdmin.Telegram.Services;
 
 namespace TelegramGroupsAdmin.Telegram.Repositories;
 
@@ -15,13 +16,16 @@ public class BanCelebrationCaptionRepository : IBanCelebrationCaptionRepository
 {
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
     private readonly ILogger<BanCelebrationCaptionRepository> _logger;
+    private readonly IBanCelebrationCache _celebrationCache;
 
     public BanCelebrationCaptionRepository(
         IDbContextFactory<AppDbContext> contextFactory,
-        ILogger<BanCelebrationCaptionRepository> logger)
+        ILogger<BanCelebrationCaptionRepository> logger,
+        IBanCelebrationCache celebrationCache)
     {
         _contextFactory = contextFactory;
         _logger = logger;
+        _celebrationCache = celebrationCache;
     }
 
     public async Task<List<BanCelebrationCaption>> GetAllAsync(CancellationToken ct = default)
@@ -80,6 +84,9 @@ public class BanCelebrationCaptionRepository : IBanCelebrationCaptionRepository
         await context.SaveChangesAsync(ct);
 
         _logger.LogInformation("Added ban celebration caption: {Id} ({Name})", dto.Id, name ?? "unnamed");
+
+        // Join the live shuffle bag so the new caption can be picked before the bag drains.
+        _celebrationCache.AddCaptionId(dto.Id);
 
         return dto.ToModel();
     }
