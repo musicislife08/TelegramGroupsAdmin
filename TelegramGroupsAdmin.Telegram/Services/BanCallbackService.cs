@@ -133,11 +133,6 @@ public class BanCallbackService : IBanCallbackService
 
             if (result.Success)
             {
-                _logger.LogInformation(
-                    "{TargetUser} banned by {Executor} via selection button",
-                    targetUser.ToLogInfo(targetUser.TelegramUserId),
-                    executorUser.ToLogInfo());
-
                 // Send ban notification by DM only - the user is out of the chat, so a mention is just noise
                 // (resolve from scope since IUserMessagingService is Scoped)
                 var messagingService = scope.ServiceProvider.GetRequiredService<IUserMessagingService>();
@@ -150,12 +145,11 @@ public class BanCallbackService : IBanCallbackService
                     message: banNotification,
                     cancellationToken: cancellationToken);
 
-                if (!messageResult.Success)
-                {
-                    _logger.LogInformation(
-                        "Ban DM not delivered to {TargetUser}",
-                        targetUser.ToLogInfo(targetUser.TelegramUserId));
-                }
+                _logger.LogInformation(
+                    "{TargetUser} banned by {Executor} via selection button. Ban DM delivered: {DmDelivered}",
+                    targetUser.ToLogInfo(targetUser.TelegramUserId),
+                    executorUser.ToLogInfo(),
+                    messageResult.Success);
             }
             else
             {
