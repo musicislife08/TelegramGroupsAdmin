@@ -16,7 +16,7 @@ namespace TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
 /// <summary>
 /// /ban - Ban user from all managed chats
 /// Supports: reply to message, @username, user ID, or fuzzy name search
-/// Notifies user via DM if available, falls back to chat mention
+/// Notifies user via DM only - a banned user cannot read a chat mention
 /// </summary>
 public class BanCommand : IBotCommand
 {
@@ -207,28 +207,22 @@ public class BanCommand : IBotCommand
                 return new CommandResult(TelegramMessage.Plain($"❌ Failed to ban user: {result.ErrorMessage}"), DeleteCommandMessage, DeleteResponseAfterSeconds);
             }
 
-            // Notify user of ban via DM (preferred) or chat mention (fallback)
+            // Notify user of ban via DM only - they are out of the chat, so a mention is just noise
             var chatName = message.Chat.Title ?? message.Chat.Username ?? "this chat";
             var banNotification = BanNotificationMessage.Build(
                 chatName, ModerationConstants.DefaultBanReason, result.ChatsAffected);
 
-            var messageResult = await _messagingService.SendToUserAsync(
+            var messageResult = await _messagingService.SendDmOnlyAsync(
                 userId: targetIdentity.Id,
-                chat: message.Chat,
                 message: banNotification,
-                replyToMessageId: null, // Don't reply to trigger message for bans
                 cancellationToken: cancellationToken);
-
-            var deliveryMethod = messageResult.DeliveryMethod == MessageDeliveryMethod.PrivateDm
-                ? "DM"
-                : "chat mention";
 
             _logger.LogInformation(
                 "{TargetUser} banned by {Executor} from {ChatsAffected} chats. " +
-                "Reason: {Reason}. User notified via {DeliveryMethod}. Trust removed: {TrustRemoved}",
+                "Reason: {Reason}. Ban DM delivered: {DmDelivered}. Trust removed: {TrustRemoved}",
                 targetIdentity.ToLogInfo(),
                 message.From.ToLogInfo(),
-                result.ChatsAffected, ModerationConstants.DefaultBanReason, deliveryMethod, result.TrustRemoved);
+                result.ChatsAffected, ModerationConstants.DefaultBanReason, messageResult.Success, result.TrustRemoved);
 
             // Silent mode: No chat feedback, command message simply disappears
             return new CommandResult(TelegramMessage.Empty, DeleteCommandMessage, DeleteResponseAfterSeconds);

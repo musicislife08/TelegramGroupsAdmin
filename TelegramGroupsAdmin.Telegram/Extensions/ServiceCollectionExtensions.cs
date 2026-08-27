@@ -139,7 +139,7 @@ public static class ServiceCollectionExtensions
             services.AddScoped<UserAutoTrustService>();
             services.AddScoped<AdminMentionHandler>();
             services.AddScoped<ITelegramUserManagementService, TelegramUserManagementService>(); // Orchestrates Telegram user operations
-            services.AddScoped<IUserMessagingService, UserMessagingService>(); // DM with fallback to chat mentions
+            services.AddScoped<IUserMessagingService, UserMessagingService>(); // DM-first with chat-mention fallback, plus DM-only for users who left the chat
             services.AddScoped<IWelcomeService, WelcomeService>();
             services.AddSingleton<IWelcomeAdmissionHandler, WelcomeAdmissionHandler>(); // Dual-gate admission (profile scan + welcome)
             services.AddSingleton<IWelcomeBypassResolver, WelcomeBypassResolver>();

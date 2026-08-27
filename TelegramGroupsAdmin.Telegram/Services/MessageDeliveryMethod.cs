@@ -11,6 +11,6 @@ public enum MessageDeliveryMethod
     /// <summary>Message sent as chat mention (fallback)</summary>
     ChatMention,
 
-    /// <summary>Both DM and fallback failed</summary>
+    /// <summary>DM failed, or failed with no fallback available</summary>
     Failed
 }
