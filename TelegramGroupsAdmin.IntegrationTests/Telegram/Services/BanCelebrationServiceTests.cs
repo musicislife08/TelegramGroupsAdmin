@@ -54,6 +54,7 @@ public class BanCelebrationServiceTests
     private IConfigService? _configService;
     private IBotMessageService? _mockMessageService;
     private IBotDmService? _mockDmService;
+    private RepopulationCountingCache _celebrationCache = null!;
     private string _tempMediaPath = null!;
 
     [SetUp]
@@ -136,8 +137,12 @@ public class BanCelebrationServiceTests
         services.AddSingleton(_mockMessageService);
         services.AddSingleton(_mockDmService);
 
-        // Register BanCelebrationCache (real singleton for shuffle-bag state)
-        services.AddSingleton<IBanCelebrationCache, BanCelebrationCache>();
+        // Register BanCelebrationCache (real singleton for shuffle-bag state), wrapped in a
+        // counting decorator so tests can assert how many times the bag was refilled from the
+        // database — the observable that separates "the new GIF was spliced into the live bag"
+        // from "the bag drained and reloaded and happened to hand out the new GIF first".
+        _celebrationCache = new RepopulationCountingCache(new BanCelebrationCache());
+        services.AddSingleton<IBanCelebrationCache>(_celebrationCache);
 
         // Register BanCelebrationService
         services.AddScoped<IBanCelebrationService, BanCelebrationService>();
@@ -329,6 +334,8 @@ public class BanCelebrationServiceTests
             new ChatIdentity(TestChatId, TestChatName), new UserIdentity(TestUserId, TestUserName, null, null), isAutoBan: true);
         Assert.That(firstResult, Is.True);
         Assert.That(dispensedGifIds, Has.Count.EqualTo(1));
+        Assert.That(_celebrationCache.GifBagRepopulations, Is.EqualTo(1),
+            "The first celebration fills the empty bag once from the database");
 
         // Add a 4th GIF mid-cycle through the repository — this splices its id into the 2
         // still-pending items of the live bag (now 3 pending), rather than waiting for reshuffle.
@@ -345,12 +352,20 @@ public class BanCelebrationServiceTests
         }
 
         // Assert — all 4 GIFs (including the one added mid-cycle) were dispensed exactly once
-        // across the 4 celebrations, proving the mid-cycle addition was sent within the current
-        // cycle rather than only becoming available after the next reshuffle.
+        // across the 4 celebrations, and the bag was never refilled after its initial fill.
+        //
+        // The repopulation count is what makes this deterministic. Asserting only on the
+        // dispensed ids cannot separate the two implementations: without the splice the bag
+        // drains after the 3rd celebration, reloads all 4 ids, and one shuffle in four hands
+        // out the 4th GIF first — producing exactly the sequence above. A refill, by contrast,
+        // is unavoidable without the splice and impossible with it, on every seed.
         Assert.That(dispensedGifIds, Has.Count.EqualTo(4));
         Assert.That(dispensedGifIds, Is.EquivalentTo(new[] { gif1.Id, gif2.Id, gif3.Id, gif4.Id }));
         Assert.That(dispensedGifIds.Distinct().Count(), Is.EqualTo(4),
             "No GIF should repeat before all 4 (including the mid-cycle addition) have been dispensed");
+        Assert.That(_celebrationCache.GifBagRepopulations, Is.EqualTo(1),
+            "The mid-cycle GIF must join the live bag; a second refill means it only became "
+            + "available after the bag drained");
     }
 
     #endregion
@@ -841,6 +856,39 @@ public class BanCelebrationServiceTests
         };
 
         return new MemoryStream(gifBytes);
+    }
+
+    /// <summary>
+    /// Forwards every call to a real <see cref="BanCelebrationCache"/> while counting how often
+    /// each shuffle bag is refilled from the database. A refill happens only when the bag runs
+    /// dry, so the count is the deterministic signal that a mid-cycle addition did — or did not —
+    /// join the live bag.
+    /// </summary>
+    private sealed class RepopulationCountingCache(IBanCelebrationCache inner) : IBanCelebrationCache
+    {
+        public int GifBagRepopulations { get; private set; }
+        public int CaptionBagRepopulations { get; private set; }
+
+        public bool IsGifBagEmpty => inner.IsGifBagEmpty;
+        public bool IsCaptionBagEmpty => inner.IsCaptionBagEmpty;
+
+        public int? GetNextGifId() => inner.GetNextGifId();
+        public int? GetNextCaptionId() => inner.GetNextCaptionId();
+
+        public void AddGifId(int id) => inner.AddGifId(id);
+        public void AddCaptionId(int id) => inner.AddCaptionId(id);
+
+        public void RepopulateGifBag(List<int> ids)
+        {
+            GifBagRepopulations++;
+            inner.RepopulateGifBag(ids);
+        }
+
+        public void RepopulateCaptionBag(List<int> ids)
+        {
+            CaptionBagRepopulations++;
+            inner.RepopulateCaptionBag(ids);
+        }
     }
 
     #endregion
