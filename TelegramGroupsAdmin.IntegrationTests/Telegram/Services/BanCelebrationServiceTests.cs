@@ -291,6 +291,68 @@ public class BanCelebrationServiceTests
         Assert.That(result, Is.False);
     }
 
+    [Test]
+    public async Task SendBanCelebrationAsync_GifAddedMidCycle_DispensedWithinSameCycleBeforeAnyRepeat()
+    {
+        // Arrange — override the animation-send mock so it never returns an Animation.FileId.
+        // That keeps every send on the local-upload path (InputFileStream), whose FileName is
+        // "{gif.Id}.gif" (see BanCelebrationGifRepository.AddFromFileAsync), so we can identify
+        // exactly which GIF was dispensed on each celebration without file_id caching collapsing
+        // every send onto the same mocked Animation.FileId.
+        var dispensedGifIds = new List<int>();
+        _mockMessageService!.SendAndSaveAnimationAsync(
+            Arg.Any<long>(), Arg.Any<InputFile>(), Arg.Any<TelegramMessage>(), Arg.Any<CancellationToken>()
+        ).Returns(callInfo =>
+        {
+            var inputFile = callInfo.ArgAt<InputFile>(1);
+            if (inputFile is InputFileStream fileStream)
+            {
+                dispensedGifIds.Add(int.Parse(Path.GetFileNameWithoutExtension(fileStream.FileName!)));
+            }
+
+            return TelegramTestFactory.CreateMessage(messageId: 999, chatId: callInfo.ArgAt<long>(0));
+        });
+
+        // Seed 3 GIFs and a caption (mirrors SeedTestGifAndCaption's caption seeding).
+        using var gifStream1 = CreateTestGifStream();
+        var gif1 = await _gifRepository!.AddFromFileAsync(gifStream1, "one.gif", "One");
+        using var gifStream2 = CreateTestGifStream();
+        var gif2 = await _gifRepository!.AddFromFileAsync(gifStream2, "two.gif", "Two");
+        using var gifStream3 = CreateTestGifStream();
+        var gif3 = await _gifRepository!.AddFromFileAsync(gifStream3, "three.gif", "Three");
+        await _captionRepository!.AddAsync("🔨 {username} banned!", "You got banned!", "Test Caption");
+        await EnableBanCelebration(TestChatId);
+
+        // Act — trigger one celebration: the empty bag fills with the 3 seeded GIFs and one
+        // is immediately dispensed, leaving 2 pending in the live bag.
+        var firstResult = await _service!.SendBanCelebrationAsync(
+            new ChatIdentity(TestChatId, TestChatName), new UserIdentity(TestUserId, TestUserName, null, null), isAutoBan: true);
+        Assert.That(firstResult, Is.True);
+        Assert.That(dispensedGifIds, Has.Count.EqualTo(1));
+
+        // Add a 4th GIF mid-cycle through the repository — this splices its id into the 2
+        // still-pending items of the live bag (now 3 pending), rather than waiting for reshuffle.
+        using var gifStream4 = CreateTestGifStream();
+        var gif4 = await _gifRepository!.AddFromFileAsync(gifStream4, "four.gif", "Four");
+
+        // Trigger exactly 3 more celebrations — enough to drain the 3 now-pending items
+        // (the 2 original leftovers plus the spliced-in 4th) and complete the cycle.
+        for (var i = 0; i < 3; i++)
+        {
+            var result = await _service!.SendBanCelebrationAsync(
+                new ChatIdentity(TestChatId, TestChatName), new UserIdentity(TestUserId, TestUserName, null, null), isAutoBan: true);
+            Assert.That(result, Is.True);
+        }
+
+        // Assert — all 4 GIFs (including the one added mid-cycle) were dispensed exactly once
+        // across the 4 celebrations, proving the mid-cycle addition was sent within the current
+        // cycle rather than only becoming available after the next reshuffle.
+        Assert.That(dispensedGifIds, Has.Count.EqualTo(4));
+        Assert.That(dispensedGifIds, Is.EquivalentTo(new[] { gif1.Id, gif2.Id, gif3.Id, gif4.Id }));
+        Assert.That(dispensedGifIds.Distinct().Count(), Is.EqualTo(4),
+            "No GIF should repeat before all 4 (including the mid-cycle addition) have been dispensed");
+    }
+
     #endregion
 
     #region Placeholder Replacement Tests

@@ -930,6 +930,10 @@ public class BanCelebrationGifRepositoryTests
         // Verify DB record was cleaned up (no orphaned records)
         var allGifs = await _repository!.GetAllAsync();
         Assert.That(allGifs, Is.Empty, "DB record should be removed after conversion failure");
+
+        // AddGifId must never be called for a row that was deleted after conversion failure —
+        // pins the ordering requirement that AddGifId(dto.Id) stays after the cleanup path.
+        _mockCelebrationCache.DidNotReceive().AddGifId(Arg.Any<int>());
     }
 
     #endregion

@@ -109,6 +109,7 @@ public class BanCelebrationCache : IBanCelebrationCache
     {
         lock (_captionLock)
         {
+            // Same rationale as AddGifId.
             if (_captionBag.Count == 0)
                 return;
 
