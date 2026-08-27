@@ -8,6 +8,7 @@ using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Data.Models;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories.Mappings;
+using TelegramGroupsAdmin.Telegram.Services;
 
 namespace TelegramGroupsAdmin.Telegram.Repositories;
 
@@ -22,6 +23,7 @@ public class BanCelebrationGifRepository : IBanCelebrationGifRepository
     private readonly ILogger<BanCelebrationGifRepository> _logger;
     private readonly string _mediaBasePath;
     private readonly HttpClient _httpClient;
+    private readonly IBanCelebrationCache _celebrationCache;
 
     private const string GifSubdirectory = "ban-gifs";
     private const long MaxDownloadSize = 50 * 1024 * 1024; // 50 MB — matches file upload limit and Telegram API ceiling
@@ -31,11 +33,13 @@ public class BanCelebrationGifRepository : IBanCelebrationGifRepository
         IVideoFrameExtractionService videoService,
         IOptions<AppOptions> appOptions,
         IHttpClientFactory httpClientFactory,
-        ILogger<BanCelebrationGifRepository> logger)
+        ILogger<BanCelebrationGifRepository> logger,
+        IBanCelebrationCache celebrationCache)
     {
         _contextFactory = contextFactory;
         _videoService = videoService;
         _logger = logger;
+        _celebrationCache = celebrationCache;
         _mediaBasePath = Path.Combine(appOptions.Value.DataPath, "media");
         _httpClient = httpClientFactory.CreateClient();
 
@@ -197,6 +201,11 @@ public class BanCelebrationGifRepository : IBanCelebrationGifRepository
         _logger.LogInformation("Added ban celebration GIF: {Id} ({Name}) at {Path}{ConvertedFrom}",
             dto.Id, name ?? "unnamed", relativePath,
             isVideo ? $" (converted from {sourceExtension})" : "");
+
+        // Join the live shuffle bag so the new GIF can be picked before the bag drains.
+        // Must be last: the row is created up front to obtain an ID, and the video
+        // conversion failure paths above delete it again.
+        _celebrationCache.AddGifId(dto.Id);
 
         return dto.ToModel();
     }

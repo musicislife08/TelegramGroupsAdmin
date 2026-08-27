@@ -7,6 +7,7 @@ using TelegramGroupsAdmin.ContentDetection.Services;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Telegram.Services;
 using WireMock.RequestBuilders;
 using WireMock.ResponseBuilders;
 using WireMock.Server;
@@ -34,6 +35,7 @@ public class BanCelebrationGifRepositoryTests
     private IServiceProvider? _serviceProvider;
     private IBanCelebrationGifRepository? _repository;
     private IVideoFrameExtractionService? _mockVideoService;
+    private IBanCelebrationCache _mockCelebrationCache = null!;
     private WireMockServer _mockServer = null!;
     private string _tempMediaPath = null!;
 
@@ -87,6 +89,10 @@ public class BanCelebrationGifRepositoryTests
         services.AddSingleton(_mockVideoService);
 
         services.AddScoped<IBanCelebrationGifRepository, BanCelebrationGifRepository>();
+
+        // Cache is notified when a GIF is added so it joins the live shuffle bag
+        _mockCelebrationCache = Substitute.For<IBanCelebrationCache>();
+        services.AddSingleton(_mockCelebrationCache);
 
         _serviceProvider = services.BuildServiceProvider();
         _repository = _serviceProvider.CreateScope()
@@ -331,6 +337,19 @@ public class BanCelebrationGifRepositoryTests
 
         // Assert
         Assert.That(result.FilePath, Does.EndWith(".gif"));
+    }
+
+    [Test]
+    public async Task AddFromFileAsync_ValidGif_NotifiesShuffleBagWithNewId()
+    {
+        // Arrange
+        using var stream = CreateTestGifStream();
+
+        // Act
+        var result = await _repository!.AddFromFileAsync(stream, "new.gif", "New GIF");
+
+        // Assert
+        _mockCelebrationCache.Received(1).AddGifId(result.Id);
     }
 
     #endregion
