@@ -333,6 +333,40 @@ public class BanCelebrationGifRepositoryTests
         Assert.That(result.FilePath, Does.EndWith(".gif"));
     }
 
+    [Test]
+    public async Task AddFromFileAsync_WhileStillWritingTheFile_TheGifIsNotYetClaimable()
+    {
+        // Hold the conversion open so the upload is observably mid-flight. A GIF that has no file
+        // on disk yet must not be in the rotation: a claim would stamp it, the send would fail on
+        // the missing file, and the GIF would be burned for the rest of the cycle without ever
+        // having been shown.
+        var conversionStarted = new TaskCompletionSource();
+        var releaseConversion = new TaskCompletionSource();
+        _mockVideoService!.ConvertVideoToGifAsync(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                conversionStarted.TrySetResult();
+                return releaseConversion.Task.ContinueWith(_ => true, TaskScheduler.Default);
+            });
+
+        using var stream = CreateTestGifStream();
+        var addTask = _repository!.AddFromFileAsync(stream, "slow.mp4", "Still converting");
+
+        await conversionStarted.Task;
+
+        var duringUpload = await _repository.ClaimNextForCycleAsync();
+        Assert.That(duringUpload, Is.Null,
+            "a GIF whose file is not on disk yet must not be claimable");
+
+        releaseConversion.SetResult();
+        var added = await addTask;
+
+        var afterUpload = await _repository.ClaimNextForCycleAsync();
+        Assert.That(afterUpload?.Id, Is.EqualTo(added.Id),
+            "once the file is on disk the GIF joins the rotation immediately");
+    }
+
     #endregion
 
     #region DeleteAsync Tests
