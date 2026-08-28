@@ -950,6 +950,146 @@ public class BanCelebrationGifRepositoryTests
 
     #endregion
 
+    #region ClaimNextForCycleAsync Tests
+
+    /// <summary>Adds <paramref name="count"/> GIFs and returns their ids in insertion order.</summary>
+    private async Task<List<int>> SeedGifsAsync(int count)
+    {
+        var ids = new List<int>();
+        for (var i = 0; i < count; i++)
+        {
+            using var stream = CreateTestGifStream();
+            var gif = await _repository!.AddFromFileAsync(stream, $"seed{i}.gif", $"Seed {i}");
+            ids.Add(gif.Id);
+        }
+
+        return ids;
+    }
+
+    /// <summary>Claims <paramref name="count"/> times in sequence and returns the ids dispensed.</summary>
+    private async Task<List<int>> ClaimSequenceAsync(int count)
+    {
+        var claimed = new List<int>();
+        for (var i = 0; i < count; i++)
+        {
+            var gif = await _repository!.ClaimNextForCycleAsync();
+            Assert.That(gif, Is.Not.Null, $"claim {i} returned null");
+            claimed.Add(gif!.Id);
+        }
+
+        return claimed;
+    }
+
+    [Test]
+    public async Task ClaimNextForCycleAsync_FullCycle_DispensesEveryItemExactlyOnce()
+    {
+        var seeded = await SeedGifsAsync(5);
+
+        var claimed = await ClaimSequenceAsync(5);
+
+        Assert.That(claimed, Is.EquivalentTo(seeded));
+        Assert.That(claimed, Is.Unique);
+    }
+
+    [Test]
+    public async Task ClaimNextForCycleAsync_PastEndOfCycle_StartsAFreshCycle()
+    {
+        await SeedGifsAsync(3);
+
+        var claimed = await ClaimSequenceAsync(4);
+
+        Assert.That(claimed.Take(3), Is.Unique, "the first cycle dispenses each item once");
+        Assert.That(claimed[3], Is.AnyOf(claimed[0], claimed[1]),
+            "the 4th claim comes from a fresh cycle, and cannot be the held-back 3rd item");
+    }
+
+    [Test]
+    public async Task ClaimNextForCycleAsync_AcrossCycleBoundary_NeverRepeatsConsecutively()
+    {
+        await SeedGifsAsync(3);
+
+        // Two full cycles plus one: every boundary in this sequence is exercised.
+        var claimed = await ClaimSequenceAsync(7);
+
+        for (var i = 1; i < claimed.Count; i++)
+        {
+            Assert.That(claimed[i], Is.Not.EqualTo(claimed[i - 1]),
+                $"claim {i} repeated claim {i - 1} — the hold-back did not hold");
+        }
+    }
+
+    [Test]
+    public async Task ClaimNextForCycleAsync_HeldBackItem_StillDispensedInTheNewCycle()
+    {
+        var seeded = await SeedGifsAsync(3);
+
+        var claimed = await ClaimSequenceAsync(6);
+
+        Assert.That(claimed.Skip(3).Take(3), Is.EquivalentTo(seeded),
+            "the second cycle dispenses all three, including the one held back at the boundary");
+    }
+
+    [Test]
+    public async Task ClaimNextForCycleAsync_ItemAddedMidCycle_IsClaimableImmediately()
+    {
+        await SeedGifsAsync(3);
+        await ClaimSequenceAsync(1);
+
+        using var stream = CreateTestGifStream();
+        var added = await _repository!.AddFromFileAsync(stream, "mid.gif", "Mid-cycle");
+
+        // Two pending originals plus the new one: it must appear without any reset.
+        var claimed = await ClaimSequenceAsync(3);
+
+        Assert.That(claimed, Does.Contain(added.Id));
+        Assert.That(claimed, Is.Unique);
+    }
+
+    [Test]
+    public async Task ClaimNextForCycleAsync_DeletedItem_IsNeverClaimed()
+    {
+        var seeded = await SeedGifsAsync(3);
+        await _repository!.DeleteAsync(seeded[1]);
+
+        var claimed = await ClaimSequenceAsync(4);
+
+        Assert.That(claimed, Does.Not.Contain(seeded[1]));
+    }
+
+    [Test]
+    public async Task ClaimNextForCycleAsync_EmptyLibrary_ReturnsNull()
+    {
+        var result = await _repository!.ClaimNextForCycleAsync();
+
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public async Task ClaimNextForCycleAsync_SingleItemLibrary_KeepsDispensingThatItem()
+    {
+        var seeded = await SeedGifsAsync(1);
+
+        var claimed = await ClaimSequenceAsync(3);
+
+        Assert.That(claimed, Is.EqualTo(new[] { seeded[0], seeded[0], seeded[0] }),
+            "a one-item library repeats by definition; the hold-back must not starve it");
+    }
+
+    [Test]
+    public async Task ClaimNextForCycleAsync_ConcurrentClaims_NeverDispenseTheSameItemTwice()
+    {
+        var seeded = await SeedGifsAsync(5);
+
+        var claims = await Task.WhenAll(Enumerable.Range(0, 5)
+            .Select(_ => _repository!.ClaimNextForCycleAsync()));
+
+        var ids = claims.Select(c => c!.Id).ToList();
+        Assert.That(ids, Is.Unique, "FOR UPDATE SKIP LOCKED must stop two claims taking one row");
+        Assert.That(ids, Is.EquivalentTo(seeded));
+    }
+
+    #endregion
+
     #region Helper Methods
 
     /// <summary>
