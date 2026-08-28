@@ -482,4 +482,95 @@ public class BanCelebrationCaptionRepositoryTests
     }
 
     #endregion
+
+    #region ClaimNextForCycleAsync Tests
+
+    /// <summary>Adds <paramref name="count"/> captions and returns their ids in insertion order.</summary>
+    private async Task<List<int>> SeedCaptionsAsync(int count)
+    {
+        var ids = new List<int>();
+        for (var i = 0; i < count; i++)
+        {
+            var caption = await _repository!.AddAsync(
+                $"{{username}} banned #{i}", $"You were banned #{i}", $"Seed {i}");
+            ids.Add(caption.Id);
+        }
+
+        return ids;
+    }
+
+    private async Task<List<int>> ClaimSequenceAsync(int count)
+    {
+        var claimed = new List<int>();
+        for (var i = 0; i < count; i++)
+        {
+            var caption = await _repository!.ClaimNextForCycleAsync();
+            Assert.That(caption, Is.Not.Null, $"claim {i} returned null");
+            claimed.Add(caption!.Id);
+        }
+
+        return claimed;
+    }
+
+    [Test]
+    public async Task ClaimNextForCycleAsync_FullCycle_DispensesEveryItemExactlyOnce()
+    {
+        var seeded = await SeedCaptionsAsync(5);
+
+        var claimed = await ClaimSequenceAsync(5);
+
+        Assert.That(claimed, Is.EquivalentTo(seeded));
+        Assert.That(claimed, Is.Unique);
+    }
+
+    [Test]
+    public async Task ClaimNextForCycleAsync_AcrossCycleBoundary_NeverRepeatsConsecutively()
+    {
+        await SeedCaptionsAsync(3);
+
+        var claimed = await ClaimSequenceAsync(7);
+
+        for (var i = 1; i < claimed.Count; i++)
+        {
+            Assert.That(claimed[i], Is.Not.EqualTo(claimed[i - 1]),
+                $"claim {i} repeated claim {i - 1} — the hold-back did not hold");
+        }
+    }
+
+    [Test]
+    public async Task ClaimNextForCycleAsync_ItemAddedMidCycle_IsClaimableImmediately()
+    {
+        await SeedCaptionsAsync(3);
+        await ClaimSequenceAsync(1);
+
+        var added = await _repository!.AddAsync("{username} mid-cycle", "You mid-cycle", "Mid");
+
+        var claimed = await ClaimSequenceAsync(3);
+
+        Assert.That(claimed, Does.Contain(added.Id));
+        Assert.That(claimed, Is.Unique);
+    }
+
+    [Test]
+    public async Task ClaimNextForCycleAsync_EmptyLibrary_ReturnsNull()
+    {
+        var result = await _repository!.ClaimNextForCycleAsync();
+
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public async Task ClaimNextForCycleAsync_ConcurrentClaims_NeverDispenseTheSameItemTwice()
+    {
+        var seeded = await SeedCaptionsAsync(5);
+
+        var claims = await Task.WhenAll(Enumerable.Range(0, 5)
+            .Select(_ => _repository!.ClaimNextForCycleAsync()));
+
+        var ids = claims.Select(c => c!.Id).ToList();
+        Assert.That(ids, Is.Unique, "FOR UPDATE SKIP LOCKED must stop two claims taking one row");
+        Assert.That(ids, Is.EquivalentTo(seeded));
+    }
+
+    #endregion
 }

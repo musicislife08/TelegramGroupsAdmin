@@ -54,6 +54,20 @@ public class BanCelebrationCaptionRepository : IBanCelebrationCaptionRepository
         return dto?.ToModel();
     }
 
+    public async Task<BanCelebrationCaption?> ClaimNextForCycleAsync(CancellationToken ct = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(ct);
+
+        var claimedId = await RotationCycleClaim.ClaimNextIdAsync(
+            context, RotationBag.BanCelebrationCaptions, ct);
+
+        if (claimedId is null)
+            return null;
+
+        var dto = await context.BanCelebrationCaptions.FindAsync([claimedId.Value], ct);
+        return dto?.ToModel();
+    }
+
     public async Task<BanCelebrationCaption?> GetByIdAsync(int id, CancellationToken ct = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(ct);

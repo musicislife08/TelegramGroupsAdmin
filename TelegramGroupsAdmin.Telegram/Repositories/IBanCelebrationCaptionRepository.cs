@@ -23,6 +23,14 @@ public interface IBanCelebrationCaptionRepository
     Task<BanCelebrationCaption?> GetRandomAsync(CancellationToken ct = default);
 
     /// <summary>
+    /// Claims the next caption in the current rotation cycle: picks a random caption not yet
+    /// dispensed, marks it dispensed, and returns it. When the cycle is exhausted, starts a fresh
+    /// cycle — holding back the caption dispensed last so it cannot repeat immediately — and
+    /// claims from it. Returns null only when the library is empty.
+    /// </summary>
+    Task<BanCelebrationCaption?> ClaimNextForCycleAsync(CancellationToken ct = default);
+
+    /// <summary>
     /// Gets a specific caption by ID
     /// </summary>
     Task<BanCelebrationCaption?> GetByIdAsync(int id, CancellationToken ct = default);
