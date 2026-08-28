@@ -91,6 +91,24 @@ Rejected here: `SERIALIZABLE` isolation, which turns the race into a serializati
 pushes retry loops into the application; and a sentinel row locked with `SELECT ... FOR UPDATE`,
 which is the same semantics as the advisory lock but needs a table to hold the sentinel.
 
+**The lock mostly closes the hazard above, not entirely — the residual safety is MVCC's, not the
+lock's.** The reset itself is two statements: a `SELECT ... ORDER BY dispensed_at DESC LIMIT 1`
+that computes `heldBackId`, then an `UPDATE ... WHERE dispensed_at IS NOT NULL AND id <>
+heldBackId`. If claim A commits *between* those two statements of claim B's reset, A's row is
+visible and unlocked under B's `UPDATE`, is not the `heldBackId` B already computed from the
+snapshot before A committed, and gets cleared along with the rest — A's item is back in the bag
+immediately after being dispensed. The window is one round trip inside the lock, it needs two
+claims overlapping exactly at exhaustion to open at all, and the outcome is one consecutive
+repeat — the same severity as the single-row library's repeat-by-definition trade-off already
+accepted below, just reached by a different mechanism.
+
+The inverse ordering is safe. If A is still stamping a previously-pending row and has not yet
+committed when B's reset runs, A's new stamp is invisible to B — the row still reads as `NULL`
+under B's snapshot — so B's `UPDATE` neither locks it nor clears it. Once A commits, that stamp
+persists: the row carries it straight into the new cycle, already looking dispensed from the
+cycle's first moment, and sits out one full cycle before it is eligible again. A fairness
+deviation, but in the harmless direction.
+
 ### Reset: hold back the last-dispensed row
 
 Even single-threaded, a plain reset lets the last item of cycle N be the first of cycle N+1 — the

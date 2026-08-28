@@ -21,7 +21,8 @@ public interface IBanCelebrationGifRepository
     /// Claims the next GIF in the current rotation cycle: picks a random GIF not yet dispensed,
     /// marks it dispensed, and returns it. When the cycle is exhausted, starts a fresh cycle —
     /// holding back the GIF dispensed last so it cannot repeat immediately — and claims from it.
-    /// Returns null only when the library is empty.
+    /// Returns null only when nothing is claimable — an empty library, or (vanishingly rarely)
+    /// every pending row locked by concurrent claims.
     /// </summary>
     Task<BanCelebrationGif?> ClaimNextForCycleAsync(CancellationToken ct = default);
 

@@ -1111,6 +1111,16 @@ public class BanCelebrationGifRepositoryTests
         var ids = claims.Select(c => c!.Id).ToList();
         Assert.That(ids, Is.Unique,
             "the advisory lock must serialize the reset so no two concurrent claims at the boundary take the same row");
+
+        // Deterministic, unlike the held-back-row identity above: 5 seeded rows, 5 sequential
+        // claims stamp all of them, then exactly one reset clears 4 (holding back 1) before the 3
+        // concurrent claims re-stamp 3 of those cleared rows. A second, spurious reset would clear
+        // the held-back row too and leave fewer than 3 stamped — so this count catches a
+        // double-reset that "all non-null and unique" alone would miss.
+        var contextFactory = _serviceProvider!.GetRequiredService<IDbContextFactory<AppDbContext>>();
+        await using var ctx = await contextFactory.CreateDbContextAsync();
+        var stampedCount = await ctx.BanCelebrationGifs.CountAsync(g => g.DispensedAt != null);
+        Assert.That(stampedCount, Is.EqualTo(3), "exactly one reset must have occurred");
     }
 
     #endregion

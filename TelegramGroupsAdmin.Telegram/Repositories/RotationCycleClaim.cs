@@ -133,7 +133,7 @@ internal static class RotationCycleClaim
     private static Task<int?> ClaimOneAsync(AppDbContext context, string table, CancellationToken ct) =>
         ScalarAsync(context,
             $"""
-             UPDATE {table} SET dispensed_at = now()
+             UPDATE {table} SET dispensed_at = clock_timestamp()
              WHERE id = (
                  SELECT id FROM {table}
                  WHERE dispensed_at IS NULL
@@ -151,6 +151,12 @@ internal static class RotationCycleClaim
     /// here at all: applying any LINQ operator instead (FirstOrDefaultAsync, Where, Take) wraps the
     /// SQL in a subquery, and PostgreSQL rejects a data-modifying statement there. Do not "tidy"
     /// this into FirstOrDefaultAsync.
+    ///
+    /// SAFETY: sql arrives here as a plain string, so EF1002 cannot see through this parameter to
+    /// flag an interpolated value at any call site. Every current caller builds sql from
+    /// Resolve(bag)'s table constant plus {0}-bound parameters, never from caller-supplied runtime
+    /// values — but a future call that interpolates a runtime value into this parameter gets no
+    /// analyzer warning at all. Keep it that way, or add the same scrutiny by hand.
     /// </summary>
     private static async Task<int?> ScalarAsync(AppDbContext context, string sql, CancellationToken ct)
     {
