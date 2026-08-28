@@ -136,9 +136,6 @@ public class BanCelebrationServiceTests
         services.AddSingleton(_mockMessageService);
         services.AddSingleton(_mockDmService);
 
-        // Register BanCelebrationCache (real singleton for shuffle-bag state)
-        services.AddSingleton<IBanCelebrationCache, BanCelebrationCache>();
-
         // Register BanCelebrationService
         services.AddScoped<IBanCelebrationService, BanCelebrationService>();
 

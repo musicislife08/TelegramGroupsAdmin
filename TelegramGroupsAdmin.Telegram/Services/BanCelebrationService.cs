@@ -18,13 +18,13 @@ namespace TelegramGroupsAdmin.Telegram.Services;
 /// <summary>
 /// Service for posting celebratory GIFs when users are banned.
 /// Sends GIF + caption to chat, optionally DMs the banned user.
-/// Uses IBanCelebrationCache (singleton) for shuffle-bag state to ensure all GIFs/captions
-/// are shown before any repeats.
+/// Rotation is database-backed: each repository claims and stamps the next unclaimed row in a
+/// single statement, so every GIF/caption is shown before any repeats, newly added items are
+/// claimable immediately, and the rotation survives restarts.
 /// Scoped service with direct dependency injection.
 /// </summary>
 public class BanCelebrationService(
     IConfigService configService,
-    IBanCelebrationCache celebrationCache,
     IBanCelebrationGifRepository gifRepository,
     IBanCelebrationCaptionRepository captionRepository,
     IProfileScanResultsRepository scanRepository,
@@ -161,79 +161,18 @@ public class BanCelebrationService(
     }
 
     /// <summary>
-    /// Gets the next GIF from the shuffle bag. When the bag is empty, reloads all GIF IDs
-    /// from the database and shuffles them. This guarantees every GIF is shown once before
-    /// any can repeat (minimum gap = total GIF count).
+    /// Claims the next GIF in the rotation. The repository owns cycle state, so every GIF is sent
+    /// once before any repeats, newly added GIFs are claimable immediately, and the rotation
+    /// survives restarts.
     /// </summary>
-    private async Task<BanCelebrationGif?> GetNextGifAsync(CancellationToken cancellationToken)
-    {
-        while (true)
-        {
-            // Check if bag needs repopulating
-            if (celebrationCache.IsGifBagEmpty)
-            {
-                var ids = await gifRepository.GetAllIdsAsync(cancellationToken);
-
-                if (ids.Count == 0)
-                    return null;
-
-                celebrationCache.RepopulateGifBag(ids);
-                logger.LogDebug("Reshuffled GIF bag with {Count} items", ids.Count);
-            }
-
-            var nextId = celebrationCache.GetNextGifId();
-            if (nextId == null)
-            {
-                // Bag became empty between check and dequeue (race condition) - retry
-                continue;
-            }
-
-            // Fetch the full GIF — may return null if deleted since last shuffle
-            var gif = await gifRepository.GetByIdAsync(nextId.Value, cancellationToken);
-
-            if (gif != null)
-                return gif;
-
-            logger.LogDebug("GIF {GifId} no longer exists, skipping to next in bag", nextId);
-            // Continue loop — try next item in bag (or reshuffle if empty)
-        }
-    }
+    private Task<BanCelebrationGif?> GetNextGifAsync(CancellationToken cancellationToken) =>
+        gifRepository.ClaimNextForCycleAsync(cancellationToken);
 
     /// <summary>
-    /// Gets the next caption from the shuffle bag. Same algorithm as GIF bag.
+    /// Claims the next caption in the rotation. Same cycle semantics as <see cref="GetNextGifAsync"/>.
     /// </summary>
-    private async Task<BanCelebrationCaption?> GetNextCaptionAsync(CancellationToken cancellationToken)
-    {
-        while (true)
-        {
-            // Check if bag needs repopulating
-            if (celebrationCache.IsCaptionBagEmpty)
-            {
-                var ids = await captionRepository.GetAllIdsAsync(cancellationToken);
-
-                if (ids.Count == 0)
-                    return null;
-
-                celebrationCache.RepopulateCaptionBag(ids);
-                logger.LogDebug("Reshuffled caption bag with {Count} items", ids.Count);
-            }
-
-            var nextId = celebrationCache.GetNextCaptionId();
-            if (nextId == null)
-            {
-                // Bag became empty between check and dequeue (race condition) - retry
-                continue;
-            }
-
-            // Fetch the full caption — may return null if deleted since last shuffle
-            var caption = await captionRepository.GetByIdAsync(nextId.Value, cancellationToken);
-
-            if (caption != null)
-                return caption;
-
-            logger.LogDebug("Caption {CaptionId} no longer exists, skipping to next in bag", nextId);
-        }
-    }
+    private Task<BanCelebrationCaption?> GetNextCaptionAsync(CancellationToken cancellationToken) =>
+        captionRepository.ClaimNextForCycleAsync(cancellationToken);
 
     private async Task<Message?> SendGifToChatAsync(
         ChatIdentity chat,
