@@ -49,17 +49,14 @@ Fisher-Yates produced up front.
 ### The claim
 
 ```sql
-WITH claimed AS (
-    UPDATE ban_celebration_gifs SET dispensed_at = now()
-    WHERE id = (
-        SELECT id FROM ban_celebration_gifs
-        WHERE dispensed_at IS NULL
-        ORDER BY random() LIMIT 1
-        FOR UPDATE SKIP LOCKED
-    )
-    RETURNING id
+UPDATE ban_celebration_gifs SET dispensed_at = now()
+WHERE id = (
+    SELECT id FROM ban_celebration_gifs
+    WHERE dispensed_at IS NULL
+    ORDER BY random() LIMIT 1
+    FOR UPDATE SKIP LOCKED
 )
-SELECT id FROM claimed;
+RETURNING id;
 ```
 
 `FOR UPDATE SKIP LOCKED` is load-bearing: two bans processed concurrently would otherwise both
@@ -224,17 +221,27 @@ with the hold-back and claim again; finally load the claimed row through EF by I
 result after the reset means the library itself is empty — return null, and the service skips the
 celebration exactly as it does today.
 
-**Implementation risk to settle empirically, not by assumption:** EF composes `FromSql` /
-`Database.SqlQuery<T>` into a subquery, which is why the claim is written as a data-modifying CTE
-wrapped in a `SELECT` — valid to nest, unlike a bare `UPDATE`. The plan must verify this executes
-under EF Core 10 + Npgsql with an integration test before the rest is built. If composition breaks
-it, fall back to a raw `DbCommand` from `context.Database.GetDbConnection()` with
-`ExecuteScalarAsync`, which has no composition behavior at all.
+**Settled by spike, not assumed** (throwaway integration tests against Postgres 18, EF Core 10 +
+Npgsql, run before this section was written):
 
-The advisory lock and the reset statements must run on the **same connection and transaction** as
-the claim — `pg_advisory_xact_lock` is scoped to its transaction, so a call that lands on a
-different pooled connection locks nothing. Open the transaction explicitly with
-`context.Database.BeginTransactionAsync` and issue every statement through that same context.
+- A data-modifying CTE **cannot** be nested. Postgres rejects it outright: `0A000: WITH clause
+  containing a data-modifying statement must be at the top level`. Wrapping the `UPDATE` in a CTE
+  therefore does not make it survive EF's composition — it only survives while nothing composes.
+  `SqlQueryRaw(...).ToListAsync()` sends the SQL verbatim and works; adding any operator, such as
+  `FirstOrDefaultAsync`, wraps it in a subquery and fails at runtime. That is a landmine for the
+  next person who adds a `Where` or a `Take`, so the EF query pipeline is not used here at all.
+- Statements run instead through a raw `DbCommand` from `context.Database.GetDbConnection()`,
+  enlisted with `command.Transaction = context.Database.CurrentTransaction?.GetDbTransaction()`.
+  No composition surface exists, so the claim is a plain `UPDATE ... RETURNING id` with no CTE,
+  and `ExecuteScalarAsync` returns the id — or null, when no row matched.
+- `BeginTransactionAsync` opens the connection, so no explicit `OpenConnectionAsync` is needed.
+- Named parameters (`@p0`) bind correctly through the generic `DbCommand` API, so no value is ever
+  interpolated into SQL. Only table names are, and only from internal constants.
+- `pg_advisory_xact_lock` verified held on its transaction and released on commit, with no cleanup
+  path. It is scoped to that transaction, so every statement in a claim must run through the same
+  context — a call landing on a different pooled connection would lock nothing.
+- `FOR UPDATE SKIP LOCKED` verified: three concurrent claims over three rows returned three
+  distinct rows.
 
 `GetAllIdsAsync` loses its only callers and is deleted from both interfaces and implementations
 along with its tests. `GetRandomAsync` stays — `BanCelebrationSettings.razor:473-474` uses it for
