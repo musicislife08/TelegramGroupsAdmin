@@ -74,14 +74,11 @@ public class BanCelebrationGifRepository : IBanCelebrationGifRepository
     {
         await using var context = await _contextFactory.CreateDbContextAsync(ct);
 
-        var claimedId = await RotationCycleClaim.ClaimNextIdAsync(
-            context, RotationBag.BanCelebrationGifs, ct);
-
-        if (claimedId is null)
-            return null;
-
-        var dto = await context.BanCelebrationGifs.FindAsync([claimedId.Value], ct);
-        return dto?.ToModel();
+        return await RotationCycleClaim.ClaimNextAsync(
+            context,
+            RotationBag.BanCelebrationGifs,
+            async (id, token) => (await context.BanCelebrationGifs.FindAsync([id], token))?.ToModel(),
+            ct);
     }
 
     public async Task<BanCelebrationGif> AddFromFileAsync(Stream fileStream, string fileName, string? name, CancellationToken ct = default)

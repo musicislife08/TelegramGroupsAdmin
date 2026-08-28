@@ -50,14 +50,11 @@ public class BanCelebrationCaptionRepository : IBanCelebrationCaptionRepository
     {
         await using var context = await _contextFactory.CreateDbContextAsync(ct);
 
-        var claimedId = await RotationCycleClaim.ClaimNextIdAsync(
-            context, RotationBag.BanCelebrationCaptions, ct);
-
-        if (claimedId is null)
-            return null;
-
-        var dto = await context.BanCelebrationCaptions.FindAsync([claimedId.Value], ct);
-        return dto?.ToModel();
+        return await RotationCycleClaim.ClaimNextAsync(
+            context,
+            RotationBag.BanCelebrationCaptions,
+            async (id, token) => (await context.BanCelebrationCaptions.FindAsync([id], token))?.ToModel(),
+            ct);
     }
 
     public async Task<BanCelebrationCaption> AddAsync(string text, string dmText, string? name, CancellationToken ct = default)

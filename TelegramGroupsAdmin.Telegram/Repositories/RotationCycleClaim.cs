@@ -34,16 +34,24 @@ internal static class RotationCycleClaim
     };
 
     /// <summary>
-    /// Claims the next id in the current cycle, starting a fresh cycle when the current one is
-    /// exhausted. Returns null only when nothing is claimable — an empty table, or (vanishingly
-    /// rarely) every pending row locked by concurrent claims.
+    /// Claims the next row in the current cycle, starting a fresh cycle when the current one is
+    /// exhausted, and returns whatever <paramref name="materialize"/> makes of it. Returns null
+    /// only when nothing is claimable — an empty table, or (vanishingly rarely) every pending row
+    /// locked by concurrent claims.
     /// </summary>
     /// <param name="context">Context carrying the whole operation. All statements run in one
     /// transaction because <c>pg_advisory_xact_lock</c> is transaction-scoped.</param>
     /// <param name="bag">Which rotation to claim from.</param>
-    public static async Task<int?> ClaimNextIdAsync(
+    /// <param name="materialize">Turns the claimed id into the caller's model. Runs INSIDE the
+    /// claim's transaction, and deliberately so: the claiming UPDATE holds a row-level exclusive
+    /// lock until commit, so a concurrent delete of that row blocks rather than racing. Fetching
+    /// after the commit instead would leave a window where the row vanishes between being stamped
+    /// and being read — the caller would get a null indistinguishable from "nothing claimable"
+    /// while the row stayed stamped, burned for the rest of the cycle without ever being used.</param>
+    public static async Task<T?> ClaimNextAsync<T>(
         AppDbContext context,
         RotationBag bag,
+        Func<int, CancellationToken, Task<T?>> materialize,
         CancellationToken ct)
     {
         var (table, advisoryLockKey) = Resolve(bag);
@@ -60,8 +68,16 @@ internal static class RotationCycleClaim
             var claimed = await ClaimOneAsync(context, table, ct)
                           ?? await StartFreshCycleAndClaimAsync(context, table, advisoryLockKey, ct);
 
+            if (claimed is null)
+            {
+                await transaction.CommitAsync(ct);
+                return default;
+            }
+
+            var materialized = await materialize(claimed.Value, ct);
+
             await transaction.CommitAsync(ct);
-            return claimed;
+            return materialized;
         });
     }
 
