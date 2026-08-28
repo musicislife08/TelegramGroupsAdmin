@@ -34,14 +34,6 @@ public class BanCelebrationCaptionRepository : IBanCelebrationCaptionRepository
         return dtos.Select(d => d.ToModel()).ToList();
     }
 
-    public async Task<List<int>> GetAllIdsAsync(CancellationToken ct = default)
-    {
-        await using var context = await _contextFactory.CreateDbContextAsync(ct);
-        return await context.BanCelebrationCaptions
-            .Select(c => c.Id)
-            .ToListAsync(ct);
-    }
-
     public async Task<BanCelebrationCaption?> GetRandomAsync(CancellationToken ct = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(ct);
