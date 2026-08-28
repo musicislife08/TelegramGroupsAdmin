@@ -5,6 +5,7 @@ using NSubstitute;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.ContentDetection.Services;
 using TelegramGroupsAdmin.Data;
+using TelegramGroupsAdmin.Data.Models;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using WireMock.RequestBuilders;
@@ -203,40 +204,6 @@ public class BanCelebrationGifRepositoryTests
 
     #endregion
 
-    #region GetByIdAsync Tests
-
-    [Test]
-    public async Task GetByIdAsync_ExistingGif_ReturnsGif()
-    {
-        // Arrange
-        using var stream = CreateTestGifStream();
-        var added = await _repository!.AddFromFileAsync(stream, "test.gif", "Test GIF");
-
-        // Act
-        var result = await _repository.GetByIdAsync(added.Id);
-
-        // Assert
-        Assert.That(result, Is.Not.Null);
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(result!.Id, Is.EqualTo(added.Id));
-            Assert.That(result.Name, Is.EqualTo("Test GIF"));
-            Assert.That(result.FilePath, Does.Contain("ban-gifs"));
-        }
-    }
-
-    [Test]
-    public async Task GetByIdAsync_NonExistentId_ReturnsNull()
-    {
-        // Act
-        var result = await _repository!.GetByIdAsync(99999);
-
-        // Assert
-        Assert.That(result, Is.Null);
-    }
-
-    #endregion
-
     #region AddFromFileAsync Tests
 
     [Test]
@@ -386,7 +353,7 @@ public class BanCelebrationGifRepositoryTests
         await _repository.DeleteAsync(gif.Id);
 
         // Assert
-        var result = await _repository.GetByIdAsync(gif.Id);
+        var result = await ReadRowAsync(gif.Id);
         using (Assert.EnterMultipleScope())
         {
             Assert.That(result, Is.Null, "Database record should be deleted");
@@ -445,7 +412,7 @@ public class BanCelebrationGifRepositoryTests
             await _repository.DeleteAsync(gif.Id));
 
         // Verify database record is still deleted
-        var result = await _repository.GetByIdAsync(gif.Id);
+        var result = await ReadRowAsync(gif.Id);
         Assert.That(result, Is.Null);
     }
 
@@ -464,7 +431,7 @@ public class BanCelebrationGifRepositoryTests
         await _repository.UpdateFileIdAsync(gif.Id, "AgACAgIAAxkBAAI_cached_file_id_123");
 
         // Assert
-        var updated = await _repository.GetByIdAsync(gif.Id);
+        var updated = await ReadRowAsync(gif.Id);
         Assert.That(updated!.FileId, Is.EqualTo("AgACAgIAAxkBAAI_cached_file_id_123"));
     }
 
@@ -499,14 +466,14 @@ public class BanCelebrationGifRepositoryTests
         await _repository.UpdateFileIdAsync(gif.Id, "AgACAgIAAxkBAAI_cached_file_id_456");
 
         // Verify it's set
-        var withFileId = await _repository.GetByIdAsync(gif.Id);
+        var withFileId = await ReadRowAsync(gif.Id);
         Assert.That(withFileId!.FileId, Is.EqualTo("AgACAgIAAxkBAAI_cached_file_id_456"));
 
         // Act
         await _repository.ClearFileIdAsync(gif.Id);
 
         // Assert
-        var cleared = await _repository.GetByIdAsync(gif.Id);
+        var cleared = await ReadRowAsync(gif.Id);
         Assert.That(cleared!.FileId, Is.Null, "FileId should be cleared to null");
     }
 
@@ -526,7 +493,7 @@ public class BanCelebrationGifRepositoryTests
         var gif = await _repository!.AddFromFileAsync(stream, "alreadynull.gif", "Already Null");
 
         // Verify FileId is already null (never set)
-        var existing = await _repository.GetByIdAsync(gif.Id);
+        var existing = await ReadRowAsync(gif.Id);
         Assert.That(existing!.FileId, Is.Null);
 
         // Act & Assert - Should not throw
@@ -534,7 +501,7 @@ public class BanCelebrationGifRepositoryTests
             await _repository.ClearFileIdAsync(gif.Id));
 
         // Verify still null
-        var after = await _repository.GetByIdAsync(gif.Id);
+        var after = await ReadRowAsync(gif.Id);
         Assert.That(after!.FileId, Is.Null);
     }
 
@@ -553,7 +520,7 @@ public class BanCelebrationGifRepositoryTests
         await _repository.UpdateThumbnailPathAsync(gif.Id, "ban-gifs/thumbnails/1.png");
 
         // Assert
-        var updated = await _repository.GetByIdAsync(gif.Id);
+        var updated = await ReadRowAsync(gif.Id);
         Assert.That(updated!.ThumbnailPath, Is.EqualTo("ban-gifs/thumbnails/1.png"));
     }
 
@@ -629,7 +596,7 @@ public class BanCelebrationGifRepositoryTests
         await _repository.UpdatePhotoHashAsync(gif.Id, testHash);
 
         // Assert
-        var updated = await _repository.GetByIdAsync(gif.Id);
+        var updated = await ReadRowAsync(gif.Id);
         Assert.That(updated!.PhotoHash, Is.EqualTo(testHash));
     }
 
@@ -1160,6 +1127,19 @@ public class BanCelebrationGifRepositoryTests
     #endregion
 
     #region Helper Methods
+
+    /// <summary>
+    /// Reads a GIF row straight from the database. These tests assert what a mutation persisted, so
+    /// they read it back through the database rather than through another method of the very class
+    /// under test — a read-back through the repository would pass just as happily if both the write
+    /// and the read were broken in the same direction.
+    /// </summary>
+    private async Task<BanCelebrationGifDto?> ReadRowAsync(int id)
+    {
+        var contextFactory = _serviceProvider!.GetRequiredService<IDbContextFactory<AppDbContext>>();
+        await using var context = await contextFactory.CreateDbContextAsync();
+        return await context.BanCelebrationGifs.FindAsync([id]);
+    }
 
     /// <summary>
     /// Creates a minimal valid GIF byte array for testing.

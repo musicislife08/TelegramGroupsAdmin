@@ -60,13 +60,6 @@ public class BanCelebrationCaptionRepository : IBanCelebrationCaptionRepository
         return dto?.ToModel();
     }
 
-    public async Task<BanCelebrationCaption?> GetByIdAsync(int id, CancellationToken ct = default)
-    {
-        await using var context = await _contextFactory.CreateDbContextAsync(ct);
-        var dto = await context.BanCelebrationCaptions.FindAsync([id], ct);
-        return dto?.ToModel();
-    }
-
     public async Task<BanCelebrationCaption> AddAsync(string text, string dmText, string? name, CancellationToken ct = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(text);

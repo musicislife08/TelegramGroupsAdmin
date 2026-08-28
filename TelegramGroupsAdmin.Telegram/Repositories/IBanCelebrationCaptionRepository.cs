@@ -27,11 +27,6 @@ public interface IBanCelebrationCaptionRepository
     Task<BanCelebrationCaption?> ClaimNextForCycleAsync(CancellationToken ct = default);
 
     /// <summary>
-    /// Gets a specific caption by ID
-    /// </summary>
-    Task<BanCelebrationCaption?> GetByIdAsync(int id, CancellationToken ct = default);
-
-    /// <summary>
     /// Adds a new caption to the library
     /// </summary>
     Task<BanCelebrationCaption> AddAsync(string text, string dmText, string? name, CancellationToken ct = default);

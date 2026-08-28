@@ -27,11 +27,6 @@ public interface IBanCelebrationGifRepository
     Task<BanCelebrationGif?> ClaimNextForCycleAsync(CancellationToken ct = default);
 
     /// <summary>
-    /// Gets a specific GIF by ID
-    /// </summary>
-    Task<BanCelebrationGif?> GetByIdAsync(int id, CancellationToken ct = default);
-
-    /// <summary>
     /// Adds a new GIF from a file stream (uploaded via UI)
     /// Saves file to /data/media/ban-gifs/{id}.{ext}
     /// </summary>

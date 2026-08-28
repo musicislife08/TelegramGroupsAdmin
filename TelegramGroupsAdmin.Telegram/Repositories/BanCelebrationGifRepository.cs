@@ -84,13 +84,6 @@ public class BanCelebrationGifRepository : IBanCelebrationGifRepository
         return dto?.ToModel();
     }
 
-    public async Task<BanCelebrationGif?> GetByIdAsync(int id, CancellationToken ct = default)
-    {
-        await using var context = await _contextFactory.CreateDbContextAsync(ct);
-        var dto = await context.BanCelebrationGifs.FindAsync([id], ct);
-        return dto?.ToModel();
-    }
-
     public async Task<BanCelebrationGif> AddFromFileAsync(Stream fileStream, string fileName, string? name, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(fileStream);
