@@ -154,6 +154,27 @@ public class BanCelebrationServiceTests
     #region GIF/Caption Availability Tests
 
     [Test]
+    public async Task SendBanCelebration_OneCelebration_ClaimsExactlyOneGifAndOneCaption()
+    {
+        // Arrange - a single celebration must consume exactly one item from each rotation.
+        // A claim stamps and permanently burns the row for every user, so a stray extra call
+        // here would silently waste a GIF/caption on every ban, not just in this test.
+        _mockGifRepository.ClaimNextForCycleAsync(Arg.Any<CancellationToken>())
+            .Returns(new BanCelebrationGif { Id = 1, FilePath = "ban-gifs/1.gif", FileId = "file1" });
+        _mockCaptionRepository.ClaimNextForCycleAsync(Arg.Any<CancellationToken>())
+            .Returns(new BanCelebrationCaption { Id = 1, Text = "Banned!", DmText = "Banned" });
+        SetupSuccessfulSendAnimation();
+
+        // Act
+        var result = await _sut.SendBanCelebrationAsync(new ChatIdentity(123, "Chat"), new UserIdentity(456, "User", null, null), true);
+
+        // Assert
+        Assert.That(result, Is.True);
+        await _mockGifRepository.Received(1).ClaimNextForCycleAsync(Arg.Any<CancellationToken>());
+        await _mockCaptionRepository.Received(1).ClaimNextForCycleAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Test]
     public async Task SendBanCelebration_WhenNoGifsExist_ReturnsFalse()
     {
         // Arrange - Repository has no GIF left to claim (library empty)

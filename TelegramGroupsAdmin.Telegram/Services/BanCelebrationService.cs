@@ -18,9 +18,9 @@ namespace TelegramGroupsAdmin.Telegram.Services;
 /// <summary>
 /// Service for posting celebratory GIFs when users are banned.
 /// Sends GIF + caption to chat, optionally DMs the banned user.
-/// Rotation is database-backed: each repository claims and stamps the next unclaimed row in a
-/// single statement, so every GIF/caption is shown before any repeats, newly added items are
-/// claimable immediately, and the rotation survives restarts.
+/// Rotation is database-backed: each repository claims and stamps the next unclaimed row
+/// atomically, then fetches it, so every GIF/caption is shown before any repeats, newly added
+/// items are claimable immediately, and the rotation survives restarts.
 /// Scoped service with direct dependency injection.
 /// </summary>
 public class BanCelebrationService(
