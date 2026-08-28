@@ -174,10 +174,33 @@ reaches a scale where `EXPLAIN` says otherwise.
 Existing rows — including the canonical test dataset's 92 GIFs and 74 captions — take `NULL` and
 are therefore all pending, which is the correct starting state for a fresh cycle.
 
-### Advisory lock keys
+### Naming a rotation
 
-Advisory lock keys share one namespace across the whole database, so they belong in one visible
-registry rather than being computed at call sites. New file
+Two tables share one algorithm, so the algorithm needs to know which table it is rotating. It is
+told by an enum, not a string — callers name a rotation and never a table:
+
+```csharp
+internal enum RotationBag
+{
+    BanCelebrationGifs,
+    BanCelebrationCaptions
+}
+```
+
+A single switch inside the helper maps each bag to its table name and its advisory lock key, so a
+table can never be paired with the wrong key, and the only strings interpolated into SQL are two
+constants that no caller can reach. The switch needs an explicit `_ => throw` arm: the project sets
+`TreatWarningsAsErrors`, and a defaultless switch expression over an enum fails the build with
+CS8524 (verified). The consequence is worth knowing — a future third rotation added without a
+switch arm throws at runtime rather than breaking the build, and its own tests are what catch it.
+
+Rejected: deriving the table name from EF model metadata (`FindEntityType(...).GetTableName()`).
+It removes the hand-typed constant, but the drift it guards against — someone renaming a `[Table]`
+attribute — already fails loudly, since every claim would error against a table that no longer
+exists and every rotation test would fail on the next run. Reflection is not worth buying that.
+
+Advisory lock keys keep their own registry, because the key space is global to the database and a
+collision between unrelated features is only visible if every key is written in one place. New file
 `TelegramGroupsAdmin.Data/Constants/AdvisoryLockKeys.cs`, beside the existing
 `MigrationCompactionConstants`:
 

@@ -21,7 +21,8 @@
 - No `AS "Value"` alias is needed on these scalar queries — verified positively, not merely by absence of an error.
 - `pg_advisory_xact_lock` is scoped to its transaction. Every statement in a claim — lock, claim, reset, release — must run through the SAME `AppDbContext` inside one `BeginTransactionAsync`, or the lock protects nothing.
 - Wrap the whole claim in `context.Database.CreateExecutionStrategy().ExecuteAsync(...)`. Production configures `EnableRetryOnFailure`; an explicit transaction does not throw under it (verified against a retry-configured context, which the test fixtures are not), but the wrapper is what makes a transient failure retry the claim instead of surfacing as a skipped celebration.
-- Table names are interpolated into SQL from internal constants only. No user input is ever interpolated; every value binds as a `{0}` parameter.
+- The only values interpolated into SQL are the two table-name constants inside `RotationCycleClaim`'s own switch. Nothing reaches it from a caller, and every runtime value binds as a `{0}` parameter.
+- `TreatWarningsAsErrors` is on in `TelegramGroupsAdmin.Telegram`, and a switch expression over an enum with no default arm fails the build with CS8524 (verified). The switch therefore needs its `_ => throw` arm, which means a future third rotation added without a switch arm throws at runtime rather than breaking the build — its own tests are what catch it.
 - No UI changes. `BanCelebrationSettings.razor` and the add dialogs are untouched.
 - `GetRandomAsync` stays on both repositories — the settings-page preview uses it and deliberately does not participate in the rotation.
 - Solution file: `TelegramGroupsAdmin.sln`. Integration tests need Docker running.
@@ -33,7 +34,7 @@
 | `TelegramGroupsAdmin.Data/Models/BanCelebrationGifDto.cs` | + `DispensedAt` column |
 | `TelegramGroupsAdmin.Data/Models/BanCelebrationCaptionDto.cs` | + `DispensedAt` column |
 | `TelegramGroupsAdmin.Data/Constants/AdvisoryLockKeys.cs` | **new** — registry of advisory lock keys |
-| `TelegramGroupsAdmin.Telegram/Repositories/RotationCycleClaim.cs` | **new** — the claim/reset algorithm, shared by both repositories |
+| `TelegramGroupsAdmin.Telegram/Repositories/RotationCycleClaim.cs` | **new** — the `RotationBag` enum and the claim/reset algorithm, shared by both repositories |
 | `TelegramGroupsAdmin.Telegram/Repositories/BanCelebrationGifRepository.cs` | + `ClaimNextForCycleAsync`, − `GetAllIdsAsync` |
 | `TelegramGroupsAdmin.Telegram/Repositories/BanCelebrationCaptionRepository.cs` | + `ClaimNextForCycleAsync`, − `GetAllIdsAsync` |
 | `TelegramGroupsAdmin.Telegram/Services/BanCelebrationService.cs` | selection collapses to one repository call per content type |
@@ -124,7 +125,7 @@ git commit -m "feat(celebration): add dispensed_at rotation column"
 - Consumes: `DispensedAt` / `dispensed_at` from Task 1.
 - Produces:
   - `AdvisoryLockKeys.BanCelebrationGifCycle` (`long`, value `7_201_001`) and `AdvisoryLockKeys.BanCelebrationCaptionCycle` (`long`, value `7_201_002`), namespace `TelegramGroupsAdmin.Data.Constants`.
-  - `internal static Task<int?> RotationCycleClaim.ClaimNextIdAsync(AppDbContext context, string tableName, long advisoryLockKey, CancellationToken ct)` in namespace `TelegramGroupsAdmin.Telegram.Repositories` — Task 3 calls this with the caption table.
+  - `internal enum RotationBag { BanCelebrationGifs, BanCelebrationCaptions }` and `internal static Task<int?> RotationCycleClaim.ClaimNextIdAsync(AppDbContext context, RotationBag bag, CancellationToken ct)`, both in namespace `TelegramGroupsAdmin.Telegram.Repositories` — Task 3 calls this with `RotationBag.BanCelebrationCaptions`.
   - `Task<BanCelebrationGif?> IBanCelebrationGifRepository.ClaimNextForCycleAsync(CancellationToken ct = default)` — Task 4 calls this.
 
 - [ ] **Step 1: Read the settled SQL facts before writing any of it**
@@ -313,8 +314,16 @@ Create `TelegramGroupsAdmin.Telegram/Repositories/RotationCycleClaim.cs`:
 ```csharp
 using Microsoft.EntityFrameworkCore;
 using TelegramGroupsAdmin.Data;
+using TelegramGroupsAdmin.Data.Constants;
 
 namespace TelegramGroupsAdmin.Telegram.Repositories;
+
+/// <summary>A table that rotates its rows shuffle-bag style.</summary>
+internal enum RotationBag
+{
+    BanCelebrationGifs,
+    BanCelebrationCaptions
+}
 
 /// <summary>
 /// Shuffle-bag rotation over a table with a nullable <c>dispensed_at</c> column: a null stamp
@@ -324,21 +333,35 @@ namespace TelegramGroupsAdmin.Telegram.Repositories;
 internal static class RotationCycleClaim
 {
     /// <summary>
+    /// The table each bag rotates and the advisory lock serializing its cycle exhaustion. Callers
+    /// name a bag, never a table, so a table can never be paired with the wrong lock key.
+    /// </summary>
+    private static (string Table, long AdvisoryLockKey) Resolve(RotationBag bag) => bag switch
+    {
+        RotationBag.BanCelebrationGifs =>
+            ("ban_celebration_gifs", AdvisoryLockKeys.BanCelebrationGifCycle),
+        RotationBag.BanCelebrationCaptions =>
+            ("ban_celebration_captions", AdvisoryLockKeys.BanCelebrationCaptionCycle),
+        // Required: TreatWarningsAsErrors turns a defaultless enum switch into a CS8524 build
+        // failure. A new bag added without an arm here therefore fails at runtime, not at build.
+        _ => throw new ArgumentOutOfRangeException(nameof(bag), bag, "Unknown rotation bag")
+    };
+
+    /// <summary>
     /// Claims the next id in the current cycle, starting a fresh cycle when the current one is
     /// exhausted. Returns null only when nothing is claimable — an empty table, or (vanishingly
     /// rarely) every pending row locked by concurrent claims.
     /// </summary>
     /// <param name="context">Context carrying the whole operation. All statements run in one
     /// transaction because <c>pg_advisory_xact_lock</c> is transaction-scoped.</param>
-    /// <param name="tableName">Table to rotate over. Interpolated into SQL, so it must be an
-    /// internal constant and never user input.</param>
-    /// <param name="advisoryLockKey">Key from <c>AdvisoryLockKeys</c> serializing exhaustion.</param>
+    /// <param name="bag">Which rotation to claim from.</param>
     public static async Task<int?> ClaimNextIdAsync(
         AppDbContext context,
-        string tableName,
-        long advisoryLockKey,
+        RotationBag bag,
         CancellationToken ct)
     {
+        var (table, advisoryLockKey) = Resolve(bag);
+
         // Production enables retry-on-failure; the strategy re-runs this whole unit on a transient
         // failure rather than letting one surface as a skipped celebration.
         var strategy = context.Database.CreateExecutionStrategy();
@@ -348,8 +371,8 @@ internal static class RotationCycleClaim
             await using var transaction = await context.Database.BeginTransactionAsync(ct);
 
             // Fast path: something is still pending in the current cycle.
-            var claimed = await ClaimOneAsync(context, tableName, ct)
-                          ?? await StartFreshCycleAndClaimAsync(context, tableName, advisoryLockKey, ct);
+            var claimed = await ClaimOneAsync(context, table, ct)
+                          ?? await StartFreshCycleAndClaimAsync(context, table, advisoryLockKey, ct);
 
             await transaction.CommitAsync(ct);
             return claimed;
@@ -358,7 +381,7 @@ internal static class RotationCycleClaim
 
     private static async Task<int?> StartFreshCycleAndClaimAsync(
         AppDbContext context,
-        string tableName,
+        string table,
         long advisoryLockKey,
         CancellationToken ct)
     {
@@ -368,7 +391,7 @@ internal static class RotationCycleClaim
 
         // Double-check: whoever held the lock before us has already reset and committed, so the
         // common outcome here is a hit — and we never reset at all.
-        var claimed = await ClaimOneAsync(context, tableName, ct);
+        var claimed = await ClaimOneAsync(context, table, ct);
         if (claimed is not null)
             return claimed;
 
@@ -377,7 +400,7 @@ internal static class RotationCycleClaim
         // claimed. Null means no row carries a stamp, so there is nothing to rotate.
         var heldBackId = await ScalarAsync(context,
             $"""
-             SELECT id FROM {tableName}
+             SELECT id FROM {table}
              WHERE dispensed_at IS NOT NULL
              ORDER BY dispensed_at DESC LIMIT 1
              """, ct);
@@ -385,40 +408,40 @@ internal static class RotationCycleClaim
         if (heldBackId is null)
             return null;
 
-        var rowCount = await ScalarAsync(context, $"SELECT count(*)::int FROM {tableName}", ct) ?? 0;
+        var rowCount = await ScalarAsync(context, $"SELECT count(*)::int FROM {table}", ct) ?? 0;
 
         if (rowCount <= 1)
         {
             // A one-row library repeats by definition; holding its only row back would starve it.
             await context.Database.ExecuteSqlRawAsync(
-                $"UPDATE {tableName} SET dispensed_at = NULL WHERE dispensed_at IS NOT NULL", ct);
-            return await ClaimOneAsync(context, tableName, ct);
+                $"UPDATE {table} SET dispensed_at = NULL WHERE dispensed_at IS NOT NULL", ct);
+            return await ClaimOneAsync(context, table, ct);
         }
 
         await context.Database.ExecuteSqlRawAsync(
-            $"UPDATE {tableName} SET dispensed_at = NULL WHERE dispensed_at IS NOT NULL AND id <> {{0}}",
+            $"UPDATE {table} SET dispensed_at = NULL WHERE dispensed_at IS NOT NULL AND id <> {{0}}",
             [heldBackId.Value], ct);
 
-        claimed = await ClaimOneAsync(context, tableName, ct);
+        claimed = await ClaimOneAsync(context, table, ct);
 
         // Release the held-back row into the remainder of the new cycle.
         await context.Database.ExecuteSqlRawAsync(
-            $"UPDATE {tableName} SET dispensed_at = NULL WHERE id = {{0}}", [heldBackId.Value], ct);
+            $"UPDATE {table} SET dispensed_at = NULL WHERE id = {{0}}", [heldBackId.Value], ct);
 
         // Only reachable if concurrent claims took every freshly-cleared row first.
-        return claimed ?? await ClaimOneAsync(context, tableName, ct);
+        return claimed ?? await ClaimOneAsync(context, table, ct);
     }
 
     /// <summary>
     /// Picks a random pending row and stamps it in one statement. FOR UPDATE SKIP LOCKED stops two
     /// concurrent claims taking the same row.
     /// </summary>
-    private static Task<int?> ClaimOneAsync(AppDbContext context, string tableName, CancellationToken ct) =>
+    private static Task<int?> ClaimOneAsync(AppDbContext context, string table, CancellationToken ct) =>
         ScalarAsync(context,
             $"""
-             UPDATE {tableName} SET dispensed_at = now()
+             UPDATE {table} SET dispensed_at = now()
              WHERE id = (
-                 SELECT id FROM {tableName}
+                 SELECT id FROM {table}
                  WHERE dispensed_at IS NULL
                  ORDER BY random() LIMIT 1
                  FOR UPDATE SKIP LOCKED
@@ -457,7 +480,7 @@ In `IBanCelebrationGifRepository.cs`, add after `GetRandomAsync`:
     Task<BanCelebrationGif?> ClaimNextForCycleAsync(CancellationToken ct = default);
 ```
 
-In `BanCelebrationGifRepository.cs`, add `using TelegramGroupsAdmin.Data.Constants;` and this method after `GetRandomAsync`:
+In `BanCelebrationGifRepository.cs`, add this method after `GetRandomAsync` (no new `using` is needed — `RotationBag` lives in this namespace):
 
 ```csharp
     public async Task<BanCelebrationGif?> ClaimNextForCycleAsync(CancellationToken ct = default)
@@ -465,7 +488,7 @@ In `BanCelebrationGifRepository.cs`, add `using TelegramGroupsAdmin.Data.Constan
         await using var context = await _contextFactory.CreateDbContextAsync(ct);
 
         var claimedId = await RotationCycleClaim.ClaimNextIdAsync(
-            context, "ban_celebration_gifs", AdvisoryLockKeys.BanCelebrationGifCycle, ct);
+            context, RotationBag.BanCelebrationGifs, ct);
 
         if (claimedId is null)
             return null;
@@ -503,7 +526,7 @@ git commit -m "feat(celebration): claim GIFs from a database-backed rotation cyc
 - Test: `TelegramGroupsAdmin.IntegrationTests/Repositories/BanCelebrationCaptionRepositoryTests.cs`
 
 **Interfaces:**
-- Consumes: `RotationCycleClaim.ClaimNextIdAsync(AppDbContext, string, long, CancellationToken)` and `AdvisoryLockKeys.BanCelebrationCaptionCycle` from Task 2.
+- Consumes: `RotationCycleClaim.ClaimNextIdAsync(AppDbContext, RotationBag, CancellationToken)` and `RotationBag.BanCelebrationCaptions` from Task 2.
 - Produces: `Task<BanCelebrationCaption?> IBanCelebrationCaptionRepository.ClaimNextForCycleAsync(CancellationToken ct = default)` — Task 4 calls this.
 
 - [ ] **Step 1: Write the failing tests**
@@ -618,7 +641,7 @@ In `IBanCelebrationCaptionRepository.cs`, add after `GetRandomAsync`:
     Task<BanCelebrationCaption?> ClaimNextForCycleAsync(CancellationToken ct = default);
 ```
 
-In `BanCelebrationCaptionRepository.cs`, add `using TelegramGroupsAdmin.Data.Constants;` and this method after `GetRandomAsync`:
+In `BanCelebrationCaptionRepository.cs`, add this method after `GetRandomAsync` (no new `using` is needed — `RotationBag` lives in this namespace):
 
 ```csharp
     public async Task<BanCelebrationCaption?> ClaimNextForCycleAsync(CancellationToken ct = default)
@@ -626,7 +649,7 @@ In `BanCelebrationCaptionRepository.cs`, add `using TelegramGroupsAdmin.Data.Con
         await using var context = await _contextFactory.CreateDbContextAsync(ct);
 
         var claimedId = await RotationCycleClaim.ClaimNextIdAsync(
-            context, "ban_celebration_captions", AdvisoryLockKeys.BanCelebrationCaptionCycle, ct);
+            context, RotationBag.BanCelebrationCaptions, ct);
 
         if (claimedId is null)
             return null;
