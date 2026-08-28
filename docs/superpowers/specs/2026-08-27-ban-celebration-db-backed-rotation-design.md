@@ -222,26 +222,34 @@ result after the reset means the library itself is empty — return null, and th
 celebration exactly as it does today.
 
 **Settled by spike, not assumed** (throwaway integration tests against Postgres 18, EF Core 10 +
-Npgsql, run before this section was written):
+Npgsql, including a context configured with `EnableRetryOnFailure` exactly as production is):
 
-- A data-modifying CTE **cannot** be nested. Postgres rejects it outright: `0A000: WITH clause
-  containing a data-modifying statement must be at the top level`. Wrapping the `UPDATE` in a CTE
-  therefore does not make it survive EF's composition — it only survives while nothing composes.
-  `SqlQueryRaw(...).ToListAsync()` sends the SQL verbatim and works; adding any operator, such as
-  `FirstOrDefaultAsync`, wraps it in a subquery and fails at runtime. That is a landmine for the
-  next person who adds a `Where` or a `Take`, so the EF query pipeline is not used here at all.
-- Statements run instead through a raw `DbCommand` from `context.Database.GetDbConnection()`,
-  enlisted with `command.Transaction = context.Database.CurrentTransaction?.GetDbTransaction()`.
-  No composition surface exists, so the claim is a plain `UPDATE ... RETURNING id` with no CTE,
-  and `ExecuteScalarAsync` returns the id — or null, when no row matched.
-- `BeginTransactionAsync` opens the connection, so no explicit `OpenConnectionAsync` is needed.
-- Named parameters (`@p0`) bind correctly through the generic `DbCommand` API, so no value is ever
-  interpolated into SQL. Only table names are, and only from internal constants.
+- Statements stay inside EF's raw SQL APIs. Dropping to a raw `DbCommand` off
+  `context.Database.GetDbConnection()` was tried and rejected: it works, but it bypasses EF's
+  command interception and logging — which is what feeds Seq and OpenTelemetry here — and takes the
+  operation outside the execution strategy. That is a real cost paid to guard against a
+  hypothetical future edit.
+- A data-modifying CTE **cannot** be nested: `0A000: WITH clause containing a data-modifying
+  statement must be at the top level`. So a CTE does not make an `UPDATE` composition-safe, and
+  none is used — the claim is a plain `UPDATE ... RETURNING id`.
+- `context.Database.SqlQueryRaw<int>(sql).ToListAsync(ct)` sends that SQL verbatim and returns the
+  `RETURNING` id. **Never apply a LINQ operator to it** — `FirstOrDefaultAsync` wraps it in a
+  subquery and Postgres rejects the `UPDATE`. Materializing with `ToListAsync` is not composition;
+  operators are.
+- The `AS "Value"` alias that `SqlQuery` scalars are usually written with is **not** required here:
+  verified positively by asserting the returned id equals the row the statement stamped.
+- `ExecuteSqlRawAsync` runs the advisory lock and the reset statements, binding values as `{0}`
+  parameters. Only table names are interpolated, and only from internal constants.
+- An explicit `BeginTransactionAsync` does **not** throw under the production retrying execution
+  strategy — verified directly, since that is a live-only failure the test fixtures would hide
+  (they configure no retry). The claim is still wrapped in
+  `context.Database.CreateExecutionStrategy().ExecuteAsync(...)`, not to avoid an exception but so
+  a transient failure retries the whole claim instead of surfacing as a skipped celebration.
 - `pg_advisory_xact_lock` verified held on its transaction and released on commit, with no cleanup
   path. It is scoped to that transaction, so every statement in a claim must run through the same
   context — a call landing on a different pooled connection would lock nothing.
-- `FOR UPDATE SKIP LOCKED` verified: three concurrent claims over three rows returned three
-  distinct rows.
+- `FOR UPDATE SKIP LOCKED` verified under this shape: three concurrent claims over three rows
+  returned three distinct rows.
 
 `GetAllIdsAsync` loses its only callers and is deleted from both interfaces and implementations
 along with its tests. `GetRandomAsync` stays — `BanCelebrationSettings.razor:473-474` uses it for

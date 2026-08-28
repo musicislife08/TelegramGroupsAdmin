@@ -4,7 +4,7 @@
 
 **Goal:** Move ban celebration rotation state out of the in-memory shuffle bag and into a `dispensed_at` column on the two content tables, so a newly added GIF or caption is in the rotation at the instant its row commits.
 
-**Architecture:** `NULL` in `dispensed_at` means "not yet dispensed this cycle" — i.e. in the bag. Claiming is one statement: an `UPDATE ... RETURNING id` that picks a random undispensed row with `FOR UPDATE SKIP LOCKED` and stamps it, run through a raw `DbCommand` so EF's query pipeline never composes it. On exhaustion, a transaction-scoped advisory lock serializes the reset, a double-checked re-claim means the loser of a race never resets at all, and the reset holds back the last-dispensed row so it cannot open the next cycle. `BanCelebrationCache` and its interface are deleted entirely.
+**Architecture:** `NULL` in `dispensed_at` means "not yet dispensed this cycle" — i.e. in the bag. Claiming is one statement: an `UPDATE ... RETURNING id` that picks a random undispensed row with `FOR UPDATE SKIP LOCKED` and stamps it, run through EF's raw SQL APIs and materialized without composition. On exhaustion, a transaction-scoped advisory lock serializes the reset, a double-checked re-claim means the loser of a race never resets at all, and the reset holds back the last-dispensed row so it cannot open the next cycle. `BanCelebrationCache` and its interface are deleted entirely.
 
 **Tech Stack:** .NET 10, EF Core 10 + Npgsql, PostgreSQL 18, NUnit, NSubstitute 6, Testcontainers-backed Postgres for integration tests.
 
@@ -16,9 +16,12 @@
 - Conventional commit prefixes (`feat:`, `fix:`, `refactor:`, `test:`, `docs:`, `chore:`).
 - EF Core workflow: modify models and `AppDbContext` FIRST, then `dotnet ef migrations add`. Never hand-write a migration file.
 - Apply migrations with `dotnet run --migrate-only` from the app project. Never apply by hand-running SQL.
-- **Do not use EF's query pipeline for these statements.** `SqlQueryRaw(...).ToListAsync()` sends SQL verbatim, but any composed operator (`FirstOrDefaultAsync`, `Where`, `Take`) wraps it in a subquery, and Postgres rejects an `UPDATE` there. Every statement goes through a raw `DbCommand` from `context.Database.GetDbConnection()`, enlisted with `command.Transaction = context.Database.CurrentTransaction?.GetDbTransaction()`. All of this is verified — see the spike findings in the spec.
-- `pg_advisory_xact_lock` is scoped to its transaction. Every statement in a claim — lock, claim, reset, release — must run through the SAME `AppDbContext` inside one explicit `BeginTransactionAsync`, or the lock protects nothing. `BeginTransactionAsync` opens the connection; no explicit `OpenConnectionAsync` is needed.
-- Table names are interpolated into SQL from internal constants only. No user input is ever interpolated; every value binds as an `@p0`-style parameter, which is verified to work through the generic `DbCommand` API.
+- **Stay inside EF's raw SQL APIs.** `SqlQueryRaw<int>(sql).ToListAsync(ct)` sends SQL verbatim and returns the `RETURNING` id; `ExecuteSqlRawAsync` runs the lock and reset statements. Do NOT drop to a raw `DbCommand` off `GetDbConnection()` — it works, but it bypasses EF's command interception and logging (which feed Seq and OpenTelemetry here) and leaves the execution strategy. That was tried and rejected.
+- **Never apply a LINQ operator to a `SqlQueryRaw` that contains an `UPDATE`.** Materializing with `ToListAsync` is not composition; `FirstOrDefaultAsync`, `Where` or `Take` are — they wrap the SQL in a subquery, and Postgres rejects an `UPDATE` there, CTE-wrapped or not. Verified; see the spec's spike findings.
+- No `AS "Value"` alias is needed on these scalar queries — verified positively, not merely by absence of an error.
+- `pg_advisory_xact_lock` is scoped to its transaction. Every statement in a claim — lock, claim, reset, release — must run through the SAME `AppDbContext` inside one `BeginTransactionAsync`, or the lock protects nothing.
+- Wrap the whole claim in `context.Database.CreateExecutionStrategy().ExecuteAsync(...)`. Production configures `EnableRetryOnFailure`; an explicit transaction does not throw under it (verified against a retry-configured context, which the test fixtures are not), but the wrapper is what makes a transient failure retry the claim instead of surfacing as a skipped celebration.
+- Table names are interpolated into SQL from internal constants only. No user input is ever interpolated; every value binds as a `{0}` parameter.
 - No UI changes. `BanCelebrationSettings.razor` and the add dialogs are untouched.
 - `GetRandomAsync` stays on both repositories — the settings-page preview uses it and deliberately does not participate in the rotation.
 - Solution file: `TelegramGroupsAdmin.sln`. Integration tests need Docker running.
@@ -126,11 +129,13 @@ git commit -m "feat(celebration): add dispensed_at rotation column"
 
 - [ ] **Step 1: Read the settled SQL facts before writing any of it**
 
-The spec's "Settled by spike" list is the result of throwaway integration tests already run
-against Postgres 18 and EF Core 10 — a data-modifying CTE cannot be nested, EF composition breaks
-raw `UPDATE`s, the raw `DbCommand` shape works, `BeginTransactionAsync` opens the connection, and
-`@p0` parameters bind through the generic API. Read that list. Do not reintroduce a CTE or route
-these statements through `SqlQueryRaw`; both were tried and rejected with evidence.
+The spec's "Settled by spike" list is the result of throwaway integration tests already run against
+Postgres 18 and EF Core 10, including a context configured with `EnableRetryOnFailure` as
+production is. It settles: no CTE (a data-modifying CTE cannot be nested at all), `SqlQueryRaw` +
+`ToListAsync` returns the `RETURNING` id, no LINQ operator may ever be applied to it, no `"Value"`
+alias is needed, an explicit transaction does not throw under the retry strategy, and
+`FOR UPDATE SKIP LOCKED` genuinely separates concurrent claims. Read that list. Do not reintroduce
+a CTE, and do not drop to a raw `DbCommand` — both were tried and rejected with evidence.
 
 - [ ] **Step 2: Write the advisory lock key registry**
 
@@ -306,9 +311,7 @@ Expected: build failure — `'IBanCelebrationGifRepository' does not contain a d
 Create `TelegramGroupsAdmin.Telegram/Repositories/RotationCycleClaim.cs`:
 
 ```csharp
-using System.Data.Common;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Storage;
 using TelegramGroupsAdmin.Data;
 
 namespace TelegramGroupsAdmin.Telegram.Repositories;
@@ -317,11 +320,6 @@ namespace TelegramGroupsAdmin.Telegram.Repositories;
 /// Shuffle-bag rotation over a table with a nullable <c>dispensed_at</c> column: a null stamp
 /// means the row is still pending in the current cycle. Shared by the ban celebration GIF and
 /// caption repositories.
-///
-/// Statements run through raw <see cref="DbCommand"/>s rather than EF's query pipeline. EF
-/// composes query SQL into a subquery as soon as any operator is applied, and PostgreSQL rejects
-/// an UPDATE there — including one wrapped in a CTE ("WITH clause containing a data-modifying
-/// statement must be at the top level"). A raw command has no composition surface at all.
 /// </summary>
 internal static class RotationCycleClaim
 {
@@ -330,8 +328,8 @@ internal static class RotationCycleClaim
     /// exhausted. Returns null only when nothing is claimable — an empty table, or (vanishingly
     /// rarely) every pending row locked by concurrent claims.
     /// </summary>
-    /// <param name="context">Context whose connection carries the whole operation. All statements
-    /// run in one transaction because <c>pg_advisory_xact_lock</c> is transaction-scoped.</param>
+    /// <param name="context">Context carrying the whole operation. All statements run in one
+    /// transaction because <c>pg_advisory_xact_lock</c> is transaction-scoped.</param>
     /// <param name="tableName">Table to rotate over. Interpolated into SQL, so it must be an
     /// internal constant and never user input.</param>
     /// <param name="advisoryLockKey">Key from <c>AdvisoryLockKeys</c> serializing exhaustion.</param>
@@ -341,15 +339,21 @@ internal static class RotationCycleClaim
         long advisoryLockKey,
         CancellationToken ct)
     {
-        // BeginTransactionAsync opens the connection, which the raw commands below rely on.
-        await using var transaction = await context.Database.BeginTransactionAsync(ct);
+        // Production enables retry-on-failure; the strategy re-runs this whole unit on a transient
+        // failure rather than letting one surface as a skipped celebration.
+        var strategy = context.Database.CreateExecutionStrategy();
 
-        // Fast path: something is still pending in the current cycle.
-        var claimed = await ClaimOneAsync(context, tableName, ct)
-                      ?? await StartFreshCycleAndClaimAsync(context, tableName, advisoryLockKey, ct);
+        return await strategy.ExecuteAsync(async () =>
+        {
+            await using var transaction = await context.Database.BeginTransactionAsync(ct);
 
-        await transaction.CommitAsync(ct);
-        return claimed;
+            // Fast path: something is still pending in the current cycle.
+            var claimed = await ClaimOneAsync(context, tableName, ct)
+                          ?? await StartFreshCycleAndClaimAsync(context, tableName, advisoryLockKey, ct);
+
+            await transaction.CommitAsync(ct);
+            return claimed;
+        });
     }
 
     private static async Task<int?> StartFreshCycleAndClaimAsync(
@@ -359,7 +363,8 @@ internal static class RotationCycleClaim
         CancellationToken ct)
     {
         // Serialize exhaustion. Released automatically when the transaction ends.
-        await ScalarAsync(context, "SELECT pg_advisory_xact_lock(@p0)", ct, advisoryLockKey);
+        await context.Database.ExecuteSqlRawAsync(
+            "SELECT pg_advisory_xact_lock({0})", [advisoryLockKey], ct);
 
         // Double-check: whoever held the lock before us has already reset and committed, so the
         // common outcome here is a hit — and we never reset at all.
@@ -385,20 +390,20 @@ internal static class RotationCycleClaim
         if (rowCount <= 1)
         {
             // A one-row library repeats by definition; holding its only row back would starve it.
-            await ScalarAsync(context,
+            await context.Database.ExecuteSqlRawAsync(
                 $"UPDATE {tableName} SET dispensed_at = NULL WHERE dispensed_at IS NOT NULL", ct);
             return await ClaimOneAsync(context, tableName, ct);
         }
 
-        await ScalarAsync(context,
-            $"UPDATE {tableName} SET dispensed_at = NULL WHERE dispensed_at IS NOT NULL AND id <> @p0",
-            ct, heldBackId.Value);
+        await context.Database.ExecuteSqlRawAsync(
+            $"UPDATE {tableName} SET dispensed_at = NULL WHERE dispensed_at IS NOT NULL AND id <> {{0}}",
+            [heldBackId.Value], ct);
 
         claimed = await ClaimOneAsync(context, tableName, ct);
 
         // Release the held-back row into the remainder of the new cycle.
-        await ScalarAsync(context,
-            $"UPDATE {tableName} SET dispensed_at = NULL WHERE id = @p0", ct, heldBackId.Value);
+        await context.Database.ExecuteSqlRawAsync(
+            $"UPDATE {tableName} SET dispensed_at = NULL WHERE id = {{0}}", [heldBackId.Value], ct);
 
         // Only reachable if concurrent claims took every freshly-cleared row first.
         return claimed ?? await ClaimOneAsync(context, tableName, ct);
@@ -422,26 +427,18 @@ internal static class RotationCycleClaim
              """, ct);
 
     /// <summary>
-    /// Runs one statement on the context's connection, enlisted in its current transaction, and
-    /// returns the first column of the first row — or null when the statement matched nothing.
+    /// Runs a statement that yields at most one integer, and returns it — or null when the
+    /// statement matched nothing.
+    ///
+    /// ToListAsync materializes without composing, which is what lets an UPDATE ... RETURNING run
+    /// here at all: applying any LINQ operator instead (FirstOrDefaultAsync, Where, Take) wraps the
+    /// SQL in a subquery, and PostgreSQL rejects a data-modifying statement there. Do not "tidy"
+    /// this into FirstOrDefaultAsync.
     /// </summary>
-    private static async Task<int?> ScalarAsync(
-        AppDbContext context, string sql, CancellationToken ct, params object[] values)
+    private static async Task<int?> ScalarAsync(AppDbContext context, string sql, CancellationToken ct)
     {
-        await using DbCommand command = context.Database.GetDbConnection().CreateCommand();
-        command.CommandText = sql;
-        command.Transaction = context.Database.CurrentTransaction?.GetDbTransaction();
-
-        for (var i = 0; i < values.Length; i++)
-        {
-            var parameter = command.CreateParameter();
-            parameter.ParameterName = $"p{i}";
-            parameter.Value = values[i];
-            command.Parameters.Add(parameter);
-        }
-
-        var result = await command.ExecuteScalarAsync(ct);
-        return result is null or DBNull ? null : Convert.ToInt32(result);
+        var results = await context.Database.SqlQueryRaw<int>(sql).ToListAsync(ct);
+        return results.Count > 0 ? results[0] : null;
     }
 }
 ```
