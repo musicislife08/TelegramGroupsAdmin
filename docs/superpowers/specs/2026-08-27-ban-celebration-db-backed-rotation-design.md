@@ -98,9 +98,9 @@ heldBackId`. If claim A commits *between* those two statements of claim B's rese
 visible and unlocked under B's `UPDATE`, is not the `heldBackId` B already computed from the
 snapshot before A committed, and gets cleared along with the rest — A's item is back in the bag
 immediately after being dispensed. The window is one round trip inside the lock, it needs two
-claims overlapping exactly at exhaustion to open at all, and the outcome is one consecutive
-repeat — the same severity as the single-row library's repeat-by-definition trade-off already
-accepted below, just reached by a different mechanism.
+claims overlapping exactly at exhaustion to open at all, and the outcome is bounded: one item
+dispensed twice across the boundary. That is the same cost the hold-back exists to avoid, so the
+hold-back is best read as closing the sequential case rather than every case.
 
 The inverse ordering is safe. If A is still stamping a previously-pending row and has not yet
 committed when B's reset runs, A's new stamp is invisible to B — the row still reads as `NULL`
