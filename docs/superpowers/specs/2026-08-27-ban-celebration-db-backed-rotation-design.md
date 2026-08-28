@@ -66,24 +66,74 @@ SELECT id FROM claimed;
 select the same row and both dispense it. With it, the second claim skips the locked row and takes
 another.
 
-Zero rows back means the cycle is exhausted. The repository then clears the cycle and claims
-again, in the same transaction:
+Zero rows back means the cycle is exhausted, and the exhaustion path is where the two remaining
+correctness problems live. Both are closed below; neither costs anything on the hot path, which
+stays exactly the one statement above.
+
+### Exhaustion: serialize it with an advisory lock
+
+Two celebrations reaching exhaustion together would both reset. That is worse than it first
+appears: if A has claimed a row but not yet committed, B's `SKIP LOCKED` skips A's row, B
+concludes the cycle is exhausted, and B's reset blocks on A's row lock and then clears A's stamp
+the instant A commits — A's GIF was dispensed and is immediately back in the bag.
+
+A transaction-scoped advisory lock, taken only after a claim comes back empty, serializes the
+whole exhaustion path:
 
 ```sql
+SELECT pg_advisory_xact_lock(<key>);
+```
+
+Then **re-run the claim before resetting**. The loser of the race blocks on the lock, and by the
+time it acquires it the winner has already reset and committed, so the re-claim succeeds and the
+loser never resets at all. Only when the re-claim is also empty does a reset happen. The lock
+releases automatically at commit or rollback — no cleanup path and nothing to leak if the
+transaction dies.
+
+Rejected here: `SERIALIZABLE` isolation, which turns the race into a serialization failure and
+pushes retry loops into the application; and a sentinel row locked with `SELECT ... FOR UPDATE`,
+which is the same semantics as the advisory lock but needs a table to hold the sentinel.
+
+### Reset: hold back the last-dispensed row
+
+Even single-threaded, a plain reset lets the last item of cycle N be the first of cycle N+1 — the
+one repeat a viewer actually notices. The current in-memory implementation has this property too
+(a fresh shuffle is independent of the previous cycle's tail), and it is cheap to do better than
+parity here. Reset everything *except* the most recently dispensed row, claim from the fresh
+cycle — which therefore cannot pick it — then release it for the remainder of the cycle:
+
+```sql
+UPDATE ban_celebration_gifs SET dispensed_at = NULL
+WHERE dispensed_at IS NOT NULL
+  AND id <> (SELECT id FROM ban_celebration_gifs
+             WHERE dispensed_at IS NOT NULL
+             ORDER BY dispensed_at DESC LIMIT 1);
+-- claim (cannot pick the held-back row)
 UPDATE ban_celebration_gifs SET dispensed_at = NULL WHERE dispensed_at IS NOT NULL;
 ```
 
-A second empty result after the reset means the library itself is empty; the method returns null
-and the service skips the celebration, as it does today.
+Guard: a single-row library has nothing else to pick, so skip the hold-back when the library holds
+one row — that library repeats by definition. A two-row library degrades to strict alternation,
+which is the best available.
 
-### What this deliberately does not solve
+Both statements run inside the same transaction as the claim, under the advisory lock, on a path
+that executes once per full cycle — roughly once per hundred celebrations at the current library
+size.
 
-Two celebrations that exhaust the cycle at the same instant can both reset, so an item dispensed
-by one may become claimable by the other and appear twice in quick succession. This is the same
-property the current implementation has at every cycle boundary — a fresh shuffle is independent
-of the previous cycle's tail, so the last GIF of cycle N can be the first of cycle N+1 — and it
-is not made worse here. Adding cycle-generation bookkeeping to close it would reintroduce the
-complexity this design exists to remove.
+### The resulting guarantee
+
+Every item is dispensed exactly once per cycle; no item is dispensed twice in succession across a
+cycle boundary; concurrent bans never dispense the same item; and rotation position survives
+restarts and travels with a backup. That is strictly stronger than what the in-memory bag provides
+today on all four counts.
+
+### Scale escape hatch, not needed now
+
+The reset is an N-row `UPDATE`. If a library ever reached tens of thousands of rows, the cheaper
+shape is a generation counter — `last_cycle int` per row plus a single-row `current_cycle` table,
+where advancing the cycle is one atomic `UPDATE ... RETURNING` and no mass write happens at all.
+At ~100 rows that is a table and a subquery bought for nothing, so it stays unbuilt and recorded
+here as the known next move.
 
 ### Rejected: keeping the in-memory bag and fixing the race
 
@@ -127,6 +177,34 @@ reaches a scale where `EXPLAIN` says otherwise.
 Existing rows — including the canonical test dataset's 92 GIFs and 74 captions — take `NULL` and
 are therefore all pending, which is the correct starting state for a fresh cycle.
 
+### Advisory lock keys
+
+Advisory lock keys share one namespace across the whole database, so they belong in one visible
+registry rather than being computed at call sites. New file
+`TelegramGroupsAdmin.Data/Constants/AdvisoryLockKeys.cs`, beside the existing
+`MigrationCompactionConstants`:
+
+```csharp
+namespace TelegramGroupsAdmin.Data.Constants;
+
+/// <summary>
+/// Keys for PostgreSQL advisory locks. The key space is global to the database, so every
+/// advisory lock in the application must take its key from this file — that is what makes a
+/// collision between two unrelated features visible in one place.
+/// </summary>
+public static class AdvisoryLockKeys
+{
+    /// <summary>Serializes ban celebration GIF rotation-cycle exhaustion.</summary>
+    public const long BanCelebrationGifCycle = 7_201_001;
+
+    /// <summary>Serializes ban celebration caption rotation-cycle exhaustion.</summary>
+    public const long BanCelebrationCaptionCycle = 7_201_002;
+}
+```
+
+Literal constants rather than `hashtext('...')` at runtime: the values are greppable, stable
+across Postgres versions, and collisions are checked by reading one file.
+
 ### Repositories
 
 Both interfaces gain one method:
@@ -134,14 +212,17 @@ Both interfaces gain one method:
 ```csharp
     /// <summary>
     /// Claims the next item in the current rotation cycle: picks a random item not yet dispensed,
-    /// marks it dispensed, and returns it. When the cycle is exhausted, clears it and claims from
-    /// the fresh cycle. Returns null only when the library is empty.
+    /// marks it dispensed, and returns it. When the cycle is exhausted, starts a fresh cycle —
+    /// holding back the item dispensed last so it cannot repeat immediately — and claims from it.
+    /// Returns null only when the library is empty.
     /// </summary>
     Task<BanCelebrationGif?> ClaimNextForCycleAsync(CancellationToken ct = default);
 ```
 
-Implementation runs the claim, the conditional reset, and the retry inside one transaction, then
-loads the claimed row through EF by ID.
+One transaction per call: claim; on empty, take the advisory lock, re-claim, and only then reset
+with the hold-back and claim again; finally load the claimed row through EF by ID. A second empty
+result after the reset means the library itself is empty — return null, and the service skips the
+celebration exactly as it does today.
 
 **Implementation risk to settle empirically, not by assumption:** EF composes `FromSql` /
 `Database.SqlQuery<T>` into a subquery, which is why the claim is written as a data-modifying CTE
@@ -149,6 +230,11 @@ wrapped in a `SELECT` — valid to nest, unlike a bare `UPDATE`. The plan must v
 under EF Core 10 + Npgsql with an integration test before the rest is built. If composition breaks
 it, fall back to a raw `DbCommand` from `context.Database.GetDbConnection()` with
 `ExecuteScalarAsync`, which has no composition behavior at all.
+
+The advisory lock and the reset statements must run on the **same connection and transaction** as
+the claim — `pg_advisory_xact_lock` is scoped to its transaction, so a call that lands on a
+different pooled connection locks nothing. Open the transaction explicitly with
+`context.Database.BeginTransactionAsync` and issue every statement through that same context.
 
 `GetAllIdsAsync` loses its only callers and is deleted from both interfaces and implementations
 along with its tests. `GetRandomAsync` stays — `BanCelebrationSettings.razor:473-474` uses it for
@@ -175,6 +261,15 @@ returns a row that existed and was stamped in the same statement, so it cannot b
 - Claiming across a full cycle returns every row exactly once before any repeats.
 - The cycle resets automatically: with N rows, N+1 claims succeed and the (N+1)th comes from a
   fresh cycle.
+- The hold-back holds: across a cycle boundary the first item of the new cycle is never the last
+  item of the old one. With 3 rows, drain twice over and assert no two consecutive claims match —
+  deterministic, since the hold-back makes the adjacent repeat impossible rather than unlikely.
+- The held-back item is not lost: it is still dispensed within the new cycle.
+- A single-row library claims that row repeatedly rather than returning null — the hold-back guard
+  must not starve it.
+- Concurrent exhaustion: run two claims in parallel against a cycle with one row left and assert
+  both succeed, return different rows, and that exactly one reset occurred (assert on the count of
+  rows whose stamp survived, not on timing).
 - A row inserted mid-cycle is claimable immediately — the property the whole change exists for.
   Assert it is claimed within the current cycle, without any reset having occurred.
 - A deleted row is never claimed.
