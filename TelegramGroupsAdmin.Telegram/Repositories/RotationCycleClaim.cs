@@ -71,9 +71,6 @@ internal static class RotationCycleClaim
         long advisoryLockKey,
         CancellationToken ct)
     {
-        // SAFETY: the only interpolated value below is `table`, which comes from Resolve(bag)'s own
-        // switch — never from a caller. Every runtime value still binds as a {0} parameter.
-#pragma warning disable EF1002
         // Serialize exhaustion. Released automatically when the transaction ends.
         await context.Database.ExecuteSqlRawAsync(
             "SELECT pg_advisory_xact_lock({0})", [advisoryLockKey], ct);
@@ -101,25 +98,32 @@ internal static class RotationCycleClaim
 
         if (rowCount <= 1)
         {
+            // SAFETY: the only interpolated value below is `table`, which comes from Resolve(bag)'s
+            // own switch — never from a caller. Every runtime value still binds as a {0} parameter.
+#pragma warning disable EF1002
             // A one-row library repeats by definition; holding its only row back would starve it.
             await context.Database.ExecuteSqlRawAsync(
                 $"UPDATE {table} SET dispensed_at = NULL WHERE dispensed_at IS NOT NULL", ct);
+#pragma warning restore EF1002
             return await ClaimOneAsync(context, table, ct);
         }
 
+#pragma warning disable EF1002
         await context.Database.ExecuteSqlRawAsync(
             $"UPDATE {table} SET dispensed_at = NULL WHERE dispensed_at IS NOT NULL AND id <> {{0}}",
             [heldBackId.Value], ct);
+#pragma warning restore EF1002
 
         claimed = await ClaimOneAsync(context, table, ct);
 
         // Release the held-back row into the remainder of the new cycle.
+#pragma warning disable EF1002
         await context.Database.ExecuteSqlRawAsync(
             $"UPDATE {table} SET dispensed_at = NULL WHERE id = {{0}}", [heldBackId.Value], ct);
+#pragma warning restore EF1002
 
         // Only reachable if concurrent claims took every freshly-cleared row first.
         return claimed ?? await ClaimOneAsync(context, table, ct);
-#pragma warning restore EF1002
     }
 
     /// <summary>

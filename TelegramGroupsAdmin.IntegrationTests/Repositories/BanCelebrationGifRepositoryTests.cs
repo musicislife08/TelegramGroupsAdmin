@@ -1088,6 +1088,31 @@ public class BanCelebrationGifRepositoryTests
         Assert.That(ids, Is.EquivalentTo(seeded));
     }
 
+    [Test]
+    public async Task ClaimNextForCycleAsync_ConcurrentClaimsAtCycleBoundary_EachClaimSucceedsWithUniqueId()
+    {
+        // Exhaust the cycle sequentially first, so all 3 concurrent claims below hit the
+        // advisory-lock/reset branch at once — the fast path (already-pending row) never applies.
+        await SeedGifsAsync(5);
+        await ClaimSequenceAsync(5);
+
+        var claims = await Task.WhenAll(Enumerable.Range(0, 3)
+            .Select(_ => _repository!.ClaimNextForCycleAsync()));
+
+        // Only one of the 3 concurrent calls actually wins the advisory lock and performs the
+        // reset; that winner's own claim is guaranteed to exclude the held-back row (the one
+        // dispensed last in the exhausted cycle). But it releases the held-back row as part of
+        // the same transaction, before the other two waiters run their own claim — so either of
+        // them can legitimately draw it. Concurrency does not let us observe which of the 3
+        // results came from the winner, so "none of them is the held-back row" is not a safe
+        // assertion here: it would fail roughly half the time. What the algorithm does guarantee
+        // under this contention is that the reset itself is race-free and every claim succeeds.
+        Assert.That(claims, Has.All.Not.Null, "every claim must succeed once the new cycle is seeded");
+        var ids = claims.Select(c => c!.Id).ToList();
+        Assert.That(ids, Is.Unique,
+            "the advisory lock must serialize the reset so no two concurrent claims at the boundary take the same row");
+    }
+
     #endregion
 
     #region Helper Methods
