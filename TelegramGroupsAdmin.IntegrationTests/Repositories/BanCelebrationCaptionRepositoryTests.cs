@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Data;
+using TelegramGroupsAdmin.Data.Models;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
 using TelegramGroupsAdmin.Telegram.Constants;
 using TelegramGroupsAdmin.Telegram.Repositories;
@@ -56,6 +57,19 @@ public class BanCelebrationCaptionRepositoryTests
     {
         (_serviceProvider as IDisposable)?.Dispose();
         _testHelper?.Dispose();
+    }
+
+    /// <summary>
+    /// Reads a caption row straight from the database. These tests assert what a mutation persisted,
+    /// so they read it back through the database rather than through another method of the very
+    /// class under test — a read-back through the repository would pass just as happily if both the
+    /// write and the read were broken in the same direction.
+    /// </summary>
+    private async Task<BanCelebrationCaptionDto?> ReadRowAsync(int id)
+    {
+        var contextFactory = _serviceProvider!.GetRequiredService<IDbContextFactory<AppDbContext>>();
+        await using var context = await contextFactory.CreateDbContextAsync();
+        return await context.BanCelebrationCaptions.FindAsync([id]);
     }
 
     #region GetAllAsync Tests
@@ -134,43 +148,6 @@ public class BanCelebrationCaptionRepositoryTests
         // Assert
         Assert.That(result, Is.Not.Null);
         Assert.That(result!.Id, Is.EqualTo(caption.Id));
-    }
-
-    #endregion
-
-    #region GetByIdAsync Tests
-
-    [Test]
-    public async Task GetByIdAsync_ExistingCaption_ReturnsCaption()
-    {
-        // Arrange
-        var added = await _repository!.AddAsync(
-            "🔨 **BAN HAMMER!** {username} has been banned!",
-            "You have been banned!",
-            "Ban Hammer");
-
-        // Act
-        var result = await _repository.GetByIdAsync(added.Id);
-
-        // Assert
-        Assert.That(result, Is.Not.Null);
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(result!.Id, Is.EqualTo(added.Id));
-            Assert.That(result.Text, Is.EqualTo("🔨 **BAN HAMMER!** {username} has been banned!"));
-            Assert.That(result.DmText, Is.EqualTo("You have been banned!"));
-            Assert.That(result.Name, Is.EqualTo("Ban Hammer"));
-        }
-    }
-
-    [Test]
-    public async Task GetByIdAsync_NonExistentId_ReturnsNull()
-    {
-        // Act
-        var result = await _repository!.GetByIdAsync(99999);
-
-        // Assert
-        Assert.That(result, Is.Null);
     }
 
     #endregion
@@ -286,7 +263,7 @@ public class BanCelebrationCaptionRepositoryTests
         }
 
         // Verify persistence
-        var fetched = await _repository.GetByIdAsync(original.Id);
+        var fetched = await ReadRowAsync(original.Id);
         Assert.That(fetched!.Text, Is.EqualTo("Updated chat text"));
     }
 
@@ -347,7 +324,7 @@ public class BanCelebrationCaptionRepositoryTests
         await _repository.DeleteAsync(caption.Id);
 
         // Assert
-        var result = await _repository.GetByIdAsync(caption.Id);
+        var result = await ReadRowAsync(caption.Id);
         Assert.That(result, Is.Null);
     }
 
@@ -479,6 +456,97 @@ public class BanCelebrationCaptionRepositoryTests
         var count = await _repository.GetCountAsync();
         Assert.That(count, Is.EqualTo(BanCelebrationDefaults.Captions.Count),
             "Calling seed twice should not duplicate captions");
+    }
+
+    #endregion
+
+    #region ClaimNextForCycleAsync Tests
+
+    /// <summary>Adds <paramref name="count"/> captions and returns their ids in insertion order.</summary>
+    private async Task<List<int>> SeedCaptionsAsync(int count)
+    {
+        var ids = new List<int>();
+        for (var i = 0; i < count; i++)
+        {
+            var caption = await _repository!.AddAsync(
+                $"{{username}} banned #{i}", $"You were banned #{i}", $"Seed {i}");
+            ids.Add(caption.Id);
+        }
+
+        return ids;
+    }
+
+    private async Task<List<int>> ClaimSequenceAsync(int count)
+    {
+        var claimed = new List<int>();
+        for (var i = 0; i < count; i++)
+        {
+            var caption = await _repository!.ClaimNextForCycleAsync();
+            Assert.That(caption, Is.Not.Null, $"claim {i} returned null");
+            claimed.Add(caption!.Id);
+        }
+
+        return claimed;
+    }
+
+    [Test]
+    public async Task ClaimNextForCycleAsync_FullCycle_DispensesEveryItemExactlyOnce()
+    {
+        var seeded = await SeedCaptionsAsync(5);
+
+        var claimed = await ClaimSequenceAsync(5);
+
+        Assert.That(claimed, Is.EquivalentTo(seeded));
+        Assert.That(claimed, Is.Unique);
+    }
+
+    [Test]
+    public async Task ClaimNextForCycleAsync_AcrossCycleBoundary_NeverRepeatsConsecutively()
+    {
+        await SeedCaptionsAsync(3);
+
+        var claimed = await ClaimSequenceAsync(7);
+
+        for (var i = 1; i < claimed.Count; i++)
+        {
+            Assert.That(claimed[i], Is.Not.EqualTo(claimed[i - 1]),
+                $"claim {i} repeated claim {i - 1} — the hold-back did not hold");
+        }
+    }
+
+    [Test]
+    public async Task ClaimNextForCycleAsync_ItemAddedMidCycle_IsClaimableImmediately()
+    {
+        await SeedCaptionsAsync(3);
+        await ClaimSequenceAsync(1);
+
+        var added = await _repository!.AddAsync("{username} mid-cycle", "You mid-cycle", "Mid");
+
+        var claimed = await ClaimSequenceAsync(3);
+
+        Assert.That(claimed, Does.Contain(added.Id));
+        Assert.That(claimed, Is.Unique);
+    }
+
+    [Test]
+    public async Task ClaimNextForCycleAsync_EmptyLibrary_ReturnsNull()
+    {
+        var result = await _repository!.ClaimNextForCycleAsync();
+
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public async Task ClaimNextForCycleAsync_ConcurrentClaims_NeverDispenseTheSameItemTwice()
+    {
+        var seeded = await SeedCaptionsAsync(5);
+
+        var claims = await Task.WhenAll(Enumerable.Range(0, 5)
+            .Select(_ => _repository!.ClaimNextForCycleAsync()));
+
+        var ids = claims.Select(c => c!.Id).ToList();
+        Assert.That(ids, Is.Unique, "FOR UPDATE SKIP LOCKED must stop two claims taking one row");
+        Assert.That(ids, Is.EquivalentTo(seeded));
     }
 
     #endregion

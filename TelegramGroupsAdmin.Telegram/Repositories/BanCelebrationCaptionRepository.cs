@@ -34,14 +34,6 @@ public class BanCelebrationCaptionRepository : IBanCelebrationCaptionRepository
         return dtos.Select(d => d.ToModel()).ToList();
     }
 
-    public async Task<List<int>> GetAllIdsAsync(CancellationToken ct = default)
-    {
-        await using var context = await _contextFactory.CreateDbContextAsync(ct);
-        return await context.BanCelebrationCaptions
-            .Select(c => c.Id)
-            .ToListAsync(ct);
-    }
-
     public async Task<BanCelebrationCaption?> GetRandomAsync(CancellationToken ct = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(ct);
@@ -54,11 +46,15 @@ public class BanCelebrationCaptionRepository : IBanCelebrationCaptionRepository
         return dto?.ToModel();
     }
 
-    public async Task<BanCelebrationCaption?> GetByIdAsync(int id, CancellationToken ct = default)
+    public async Task<BanCelebrationCaption?> ClaimNextForCycleAsync(CancellationToken ct = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(ct);
-        var dto = await context.BanCelebrationCaptions.FindAsync([id], ct);
-        return dto?.ToModel();
+
+        return await RotationCycleClaim.ClaimNextAsync(
+            context,
+            RotationBag.BanCelebrationCaptions,
+            async (id, token) => (await context.BanCelebrationCaptions.FindAsync([id], token))?.ToModel(),
+            ct);
     }
 
     public async Task<BanCelebrationCaption> AddAsync(string text, string dmText, string? name, CancellationToken ct = default)

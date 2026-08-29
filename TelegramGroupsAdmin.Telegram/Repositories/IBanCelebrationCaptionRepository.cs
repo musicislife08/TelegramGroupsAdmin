@@ -13,19 +13,18 @@ public interface IBanCelebrationCaptionRepository
     Task<List<BanCelebrationCaption>> GetAllAsync(CancellationToken ct = default);
 
     /// <summary>
-    /// Gets all caption IDs (lightweight query for shuffle-bag algorithm)
-    /// </summary>
-    Task<List<int>> GetAllIdsAsync(CancellationToken ct = default);
-
-    /// <summary>
     /// Gets a random caption from the library
     /// </summary>
     Task<BanCelebrationCaption?> GetRandomAsync(CancellationToken ct = default);
 
     /// <summary>
-    /// Gets a specific caption by ID
+    /// Claims the next caption in the current rotation cycle: picks a random caption not yet
+    /// dispensed, marks it dispensed, and returns it. When the cycle is exhausted, starts a fresh
+    /// cycle — holding back the caption dispensed last so it cannot repeat immediately — and
+    /// claims from it. Returns null only when nothing is claimable — an empty library, or
+    /// (vanishingly rarely) every pending row locked by concurrent claims.
     /// </summary>
-    Task<BanCelebrationCaption?> GetByIdAsync(int id, CancellationToken ct = default);
+    Task<BanCelebrationCaption?> ClaimNextForCycleAsync(CancellationToken ct = default);
 
     /// <summary>
     /// Adds a new caption to the library

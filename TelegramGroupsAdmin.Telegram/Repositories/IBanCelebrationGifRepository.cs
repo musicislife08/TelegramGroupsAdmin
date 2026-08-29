@@ -13,19 +13,18 @@ public interface IBanCelebrationGifRepository
     Task<List<BanCelebrationGif>> GetAllAsync(CancellationToken ct = default);
 
     /// <summary>
-    /// Gets all GIF IDs (lightweight query for shuffle-bag algorithm)
-    /// </summary>
-    Task<List<int>> GetAllIdsAsync(CancellationToken ct = default);
-
-    /// <summary>
     /// Gets a random GIF from the library
     /// </summary>
     Task<BanCelebrationGif?> GetRandomAsync(CancellationToken ct = default);
 
     /// <summary>
-    /// Gets a specific GIF by ID
+    /// Claims the next GIF in the current rotation cycle: picks a random GIF not yet dispensed,
+    /// marks it dispensed, and returns it. When the cycle is exhausted, starts a fresh cycle —
+    /// holding back the GIF dispensed last so it cannot repeat immediately — and claims from it.
+    /// Returns null only when nothing is claimable — an empty library, or (vanishingly rarely)
+    /// every pending row locked by concurrent claims.
     /// </summary>
-    Task<BanCelebrationGif?> GetByIdAsync(int id, CancellationToken ct = default);
+    Task<BanCelebrationGif?> ClaimNextForCycleAsync(CancellationToken ct = default);
 
     /// <summary>
     /// Adds a new GIF from a file stream (uploaded via UI)

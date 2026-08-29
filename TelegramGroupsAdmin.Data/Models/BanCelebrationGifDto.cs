@@ -52,4 +52,12 @@ public class BanCelebrationGifDto
 
     [Column("created_at")]
     public DateTimeOffset CreatedAt { get; set; }
+
+    /// <summary>
+    /// When this item was dispensed in the CURRENT rotation cycle, or null if it is still pending.
+    /// Cleared for every row when the cycle is exhausted — this is cycle state, not a durable
+    /// "last shown" record.
+    /// </summary>
+    [Column("dispensed_at")]
+    public DateTimeOffset? DispensedAt { get; set; }
 }

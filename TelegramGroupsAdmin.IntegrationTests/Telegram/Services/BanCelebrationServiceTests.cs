@@ -136,9 +136,6 @@ public class BanCelebrationServiceTests
         services.AddSingleton(_mockMessageService);
         services.AddSingleton(_mockDmService);
 
-        // Register BanCelebrationCache (real singleton for shuffle-bag state)
-        services.AddSingleton<IBanCelebrationCache, BanCelebrationCache>();
-
         // Register BanCelebrationService
         services.AddScoped<IBanCelebrationService, BanCelebrationService>();
 
@@ -391,8 +388,11 @@ public class BanCelebrationServiceTests
         await _service!.SendBanCelebrationAsync(
             new ChatIdentity(TestChatId, TestChatName), new UserIdentity(TestUserId, TestUserName, null, null), isAutoBan: true);
 
-        // Assert - Check that file_id was cached
-        var updatedGif = await _gifRepository.GetByIdAsync(gif.Id);
+        // Assert - Check that file_id was cached, read back from the database rather than through
+        // the repository whose write we are verifying
+        var contextFactory = _serviceProvider!.GetRequiredService<IDbContextFactory<AppDbContext>>();
+        await using var context = await contextFactory.CreateDbContextAsync();
+        var updatedGif = await context.BanCelebrationGifs.FindAsync([gif.Id]);
         Assert.That(updatedGif!.FileId, Is.EqualTo("AgACAgIAAxkBAAI_test_file_id_123"));
     }
 

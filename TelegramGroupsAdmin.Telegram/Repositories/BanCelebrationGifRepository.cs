@@ -58,14 +58,6 @@ public class BanCelebrationGifRepository : IBanCelebrationGifRepository
         return dtos.Select(d => d.ToModel()).ToList();
     }
 
-    public async Task<List<int>> GetAllIdsAsync(CancellationToken ct = default)
-    {
-        await using var context = await _contextFactory.CreateDbContextAsync(ct);
-        return await context.BanCelebrationGifs
-            .Select(g => g.Id)
-            .ToListAsync(ct);
-    }
-
     public async Task<BanCelebrationGif?> GetRandomAsync(CancellationToken ct = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(ct);
@@ -78,11 +70,15 @@ public class BanCelebrationGifRepository : IBanCelebrationGifRepository
         return dto?.ToModel();
     }
 
-    public async Task<BanCelebrationGif?> GetByIdAsync(int id, CancellationToken ct = default)
+    public async Task<BanCelebrationGif?> ClaimNextForCycleAsync(CancellationToken ct = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(ct);
-        var dto = await context.BanCelebrationGifs.FindAsync([id], ct);
-        return dto?.ToModel();
+
+        return await RotationCycleClaim.ClaimNextAsync(
+            context,
+            RotationBag.BanCelebrationGifs,
+            async (id, token) => (await context.BanCelebrationGifs.FindAsync([id], token))?.ToModel(),
+            ct);
     }
 
     public async Task<BanCelebrationGif> AddFromFileAsync(Stream fileStream, string fileName, string? name, CancellationToken ct = default)
@@ -93,112 +89,118 @@ public class BanCelebrationGifRepository : IBanCelebrationGifRepository
         if (fileStream.Length == 0)
             throw new ArgumentException("File stream is empty", nameof(fileStream));
 
-        await using var context = await _contextFactory.CreateDbContextAsync(ct);
-
-        // Create the database record first to get the ID
-        var dto = new BanCelebrationGifDto
-        {
-            FilePath = string.Empty, // Will be set after we have the ID
-            Name = name,
-            CreatedAt = DateTimeOffset.UtcNow
-        };
-
-        context.BanCelebrationGifs.Add(dto);
-        await context.SaveChangesAsync(ct);
-
         var sourceExtension = Path.GetExtension(fileName).ToLowerInvariant();
         var isVideo = MediaUtilities.VideoExtensions.Contains(sourceExtension);
 
-        // Final file is always .gif
-        var relativePath = $"{GifSubdirectory}/{dto.Id}.gif";
+        // The file is written before the row is inserted, so the name cannot be derived from the
+        // row id. Rotation claims any row whose dispensed_at is null the instant it commits, and a
+        // row committed ahead of its file would be claimed, stamped, and then fail to send —
+        // burning that GIF for the rest of the cycle without ever showing it. Final file is always
+        // .gif; existing rows keep their older {id}.gif paths, which nothing derives or parses.
+        var relativePath = $"{GifSubdirectory}/{Guid.NewGuid():N}.gif";
         var fullPath = Path.Combine(_mediaBasePath, relativePath);
 
-        if (isVideo)
+        try
         {
-            // Video file: save temporarily, convert to GIF, delete temp
-            var tempPath = Path.Combine(_mediaBasePath, GifSubdirectory, $"{dto.Id}_temp{sourceExtension}");
-
-            try
+            if (isVideo)
             {
-                // Save the uploaded video temporarily
-                await using (var tempStream = new FileStream(tempPath, FileMode.Create))
-                {
-                    await fileStream.CopyToAsync(tempStream, ct);
-                }
-
-                // Convert video to GIF using FFmpeg
-                var success = await _videoService.ConvertVideoToGifAsync(tempPath, fullPath, maxSize: 480, ct);
-
-                if (!success)
-                {
-                    // Conversion failed - clean up and throw
-                    context.BanCelebrationGifs.Remove(dto);
-                    await context.SaveChangesAsync(ct);
-                    throw new InvalidOperationException($"Failed to convert video to GIF. FFmpeg conversion failed for: {fileName}");
-                }
-            }
-            finally
-            {
-                // Clean up temp file
-                if (File.Exists(tempPath))
-                {
-                    try { File.Delete(tempPath); }
-                    catch (IOException ex) { _logger.LogDebug(ex, "Failed to clean up temp file: {Path}", tempPath); }
-                }
-            }
-        }
-        else
-        {
-            // Regular GIF or image: save directly
-            await using (var fileStreamWrite = new FileStream(fullPath, FileMode.Create))
-            {
-                await fileStream.CopyToAsync(fileStreamWrite, ct);
-            }
-
-            // Check if the saved file is actually video content despite non-video extension.
-            // Giphy and similar services often serve MP4 from .gif URLs with misleading content types.
-            if (MediaUtilities.IsVideoContent(fullPath))
-            {
-                _logger.LogInformation(
-                    "File {FileName} has non-video extension but contains video content, converting to GIF",
-                    fileName);
-
-                var tempPath = fullPath + ".tmp";
-                File.Move(fullPath, tempPath);
+                // Video file: save temporarily, convert to GIF, delete temp
+                var tempPath = Path.Combine(
+                    _mediaBasePath, GifSubdirectory, $"{Path.GetFileNameWithoutExtension(relativePath)}_temp{sourceExtension}");
 
                 try
                 {
-                    var success = await _videoService.ConvertVideoToGifAsync(tempPath, fullPath, maxSize: 480, ct);
-                    if (!success)
+                    // Save the uploaded video temporarily
+                    await using (var tempStream = new FileStream(tempPath, FileMode.Create))
                     {
-                        // Conversion failed — clean up DB record and throw, same as the explicit-video path
-                        context.BanCelebrationGifs.Remove(dto);
-                        await context.SaveChangesAsync(ct);
-                        throw new InvalidOperationException(
-                            $"Failed to convert video to GIF. FFmpeg conversion failed for: {fileName}");
+                        await fileStream.CopyToAsync(tempStream, ct);
                     }
+
+                    // Convert video to GIF using FFmpeg
+                    var success = await _videoService.ConvertVideoToGifAsync(tempPath, fullPath, maxSize: 480, ct);
+
+                    if (!success)
+                        throw new InvalidOperationException($"Failed to convert video to GIF. FFmpeg conversion failed for: {fileName}");
                 }
                 finally
                 {
+                    // Clean up temp file
                     if (File.Exists(tempPath))
                     {
                         try { File.Delete(tempPath); }
                         catch (IOException ex) { _logger.LogDebug(ex, "Failed to clean up temp file: {Path}", tempPath); }
                     }
                 }
-
             }
+            else
+            {
+                // Regular GIF or image: save directly
+                await using (var fileStreamWrite = new FileStream(fullPath, FileMode.Create))
+                {
+                    await fileStream.CopyToAsync(fileStreamWrite, ct);
+                }
+
+                // Check if the saved file is actually video content despite non-video extension.
+                // Giphy and similar services often serve MP4 from .gif URLs with misleading content types.
+                if (MediaUtilities.IsVideoContent(fullPath))
+                {
+                    _logger.LogInformation(
+                        "File {FileName} has non-video extension but contains video content, converting to GIF",
+                        fileName);
+
+                    var tempPath = fullPath + ".tmp";
+                    File.Move(fullPath, tempPath);
+
+                    try
+                    {
+                        var success = await _videoService.ConvertVideoToGifAsync(tempPath, fullPath, maxSize: 480, ct);
+                        if (!success)
+                            throw new InvalidOperationException(
+                                $"Failed to convert video to GIF. FFmpeg conversion failed for: {fileName}");
+                    }
+                    finally
+                    {
+                        if (File.Exists(tempPath))
+                        {
+                            try { File.Delete(tempPath); }
+                            catch (IOException ex) { _logger.LogDebug(ex, "Failed to clean up temp file: {Path}", tempPath); }
+                        }
+                    }
+
+                }
+            }
+
+            // The file is on disk: the row can now be created, and is claimable the moment it commits.
+            await using var context = await _contextFactory.CreateDbContextAsync(ct);
+
+            var dto = new BanCelebrationGifDto
+            {
+                FilePath = relativePath,
+                Name = name,
+                CreatedAt = DateTimeOffset.UtcNow
+            };
+
+            context.BanCelebrationGifs.Add(dto);
+            await context.SaveChangesAsync(ct);
+
+            _logger.LogInformation("Added ban celebration GIF: {Id} ({Name}) at {Path}{ConvertedFrom}",
+                dto.Id, name ?? "unnamed", relativePath,
+                isVideo ? $" (converted from {sourceExtension})" : "");
+
+            return dto.ToModel();
         }
+        catch
+        {
+            // No row was ever written, so the file is what needs cleaning up — otherwise a failed
+            // upload leaves a GIF on disk that nothing references and nothing will ever delete.
+            if (File.Exists(fullPath))
+            {
+                try { File.Delete(fullPath); }
+                catch (IOException ex) { _logger.LogDebug(ex, "Failed to clean up failed upload: {Path}", fullPath); }
+            }
 
-        // Update the file path
-        dto.FilePath = relativePath;
-        await context.SaveChangesAsync(ct);
-
-        _logger.LogInformation("Added ban celebration GIF: {Id} ({Name}) at {Path}{ConvertedFrom}",
-            dto.Id, name ?? "unnamed", relativePath,
-            isVideo ? $" (converted from {sourceExtension})" : "");
-
-        return dto.ToModel();
+            throw;
+        }
     }
 
     public async Task<BanCelebrationGif> AddFromUrlAsync(string url, string? name, CancellationToken ct = default)
