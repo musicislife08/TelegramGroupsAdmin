@@ -4,13 +4,6 @@ using TelegramGroupsAdmin.Data.Constants;
 
 namespace TelegramGroupsAdmin.Telegram.Repositories;
 
-/// <summary>A table that rotates its rows shuffle-bag style.</summary>
-internal enum RotationBag
-{
-    BanCelebrationGifs,
-    BanCelebrationCaptions
-}
-
 /// <summary>
 /// Shuffle-bag rotation over a table with a nullable <c>dispensed_at</c> column: a null stamp
 /// means the row is still pending in the current cycle. Shared by the ban celebration GIF and
@@ -19,15 +12,15 @@ internal enum RotationBag
 internal static class RotationCycleClaim
 {
     /// <summary>
-    /// The table each bag rotates and the advisory lock serializing its cycle exhaustion. Callers
-    /// name a bag, never a table, so a table can never be paired with the wrong lock key.
+    /// Resolves a bag to its table and lock key. Callers name a bag, never a table, so a table can
+    /// never be paired with the wrong lock key.
     /// </summary>
-    private static (string Table, long AdvisoryLockKey) Resolve(RotationBag bag) => bag switch
+    private static RotationTarget Resolve(RotationBag bag) => bag switch
     {
         RotationBag.BanCelebrationGifs =>
-            ("ban_celebration_gifs", AdvisoryLockKeys.BanCelebrationGifCycle),
+            new RotationTarget("ban_celebration_gifs", AdvisoryLockKeys.BanCelebrationGifCycle),
         RotationBag.BanCelebrationCaptions =>
-            ("ban_celebration_captions", AdvisoryLockKeys.BanCelebrationCaptionCycle),
+            new RotationTarget("ban_celebration_captions", AdvisoryLockKeys.BanCelebrationCaptionCycle),
         // Required: TreatWarningsAsErrors turns a defaultless enum switch into a CS8524 build
         // failure. A new bag added without an arm here therefore fails at runtime, not at build.
         _ => throw new ArgumentOutOfRangeException(nameof(bag), bag, "Unknown rotation bag")
@@ -54,7 +47,7 @@ internal static class RotationCycleClaim
         Func<int, CancellationToken, Task<T?>> materialize,
         CancellationToken ct)
     {
-        var (table, advisoryLockKey) = Resolve(bag);
+        var target = Resolve(bag);
 
         // Production enables retry-on-failure; the strategy re-runs this whole unit on a transient
         // failure rather than letting one surface as a skipped celebration.
@@ -65,8 +58,8 @@ internal static class RotationCycleClaim
             await using var transaction = await context.Database.BeginTransactionAsync(ct);
 
             // Fast path: something is still pending in the current cycle.
-            var claimed = await ClaimOneAsync(context, table, ct)
-                          ?? await StartFreshCycleAndClaimAsync(context, table, advisoryLockKey, ct);
+            var claimed = await ClaimOneAsync(context, target.Table, ct)
+                          ?? await StartFreshCycleAndClaimAsync(context, target, ct);
 
             if (claimed is null)
             {
@@ -83,13 +76,14 @@ internal static class RotationCycleClaim
 
     private static async Task<int?> StartFreshCycleAndClaimAsync(
         AppDbContext context,
-        string table,
-        long advisoryLockKey,
+        RotationTarget target,
         CancellationToken ct)
     {
+        var table = target.Table;
+
         // Serialize exhaustion. Released automatically when the transaction ends.
         await context.Database.ExecuteSqlRawAsync(
-            "SELECT pg_advisory_xact_lock({0})", [advisoryLockKey], ct);
+            "SELECT pg_advisory_xact_lock({0})", [target.AdvisoryLockKey], ct);
 
         // Double-check: whoever held the lock before us has already reset and committed, so the
         // common outcome here is a hit — and we never reset at all.
