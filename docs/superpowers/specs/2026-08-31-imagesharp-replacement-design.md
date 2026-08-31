@@ -120,8 +120,9 @@ SkiaSharp decodes to a pixel buffer. Everything after that is managed code:
 4. Pack to 8 bytes
 
 A box average over the whole image washes out per-decoder rounding noise, so the hash becomes
-near-immune to future library or codec changes. We pay the one-time rehash now; this is the last
-time we pay it.
+near-immune to future library or codec changes. Measured on the probe, PNG, JPEG(85) and WebP(90)
+re-encodes of the same source produce **byte-identical** hashes. We pay the one-time rehash now;
+this is the last time we pay it.
 
 The existing bit packing is preserved exactly — `hash[i / 8] |= (byte)(1 << (i % 8))` is correct
 standard packing. It is written confusingly, reusing `HashingConstants.PhotoHashByteCount` for both
@@ -188,25 +189,56 @@ leave `TelegramGroupsAdmin.UnitTests.csproj` at all.
 New coverage:
 
 - **Golden hash** — checked-in fixture → exact expected bytes.
-- **Hash stability** — the same image re-encoded as PNG and JPEG hashes within a small Hamming
-  distance, proving the box average absorbs decoder differences.
+- **Hash stability** — the same image re-encoded as PNG, JPEG and WebP produces byte-identical
+  hashes (measured 0-bit drift on the probe), proving the box average absorbs decoder differences.
 - **Rehash job, three branches** — file present yields a new hash; file missing yields `NULL`;
   banned user yields `NULL` without reading the blurred file.
 - **Format coverage** — PNG, JPEG, animated GIF, and WebP each decode and thumbnail correctly.
 
-## Deployment risk: the chiseled runtime
+## Deployment on the chiseled runtime — verified, not assumed
 
 The runtime image is `mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled-extra`
 (`TelegramGroupsAdmin/Dockerfile:173`). ImageSharp is pure managed, so SkiaSharp would be the first
-native library a managed code path depends on — normally a real risk on a chiseled base.
+native library a managed code path depends on — normally the largest risk in this change.
 
-It is already mitigated. The Dockerfile flattens `/usr/lib/*/lib*.so.*` from the Ubuntu-noble
-`tesseract-env` stage into the final image (`Dockerfile:200`, ~171MB), which brings `libstdc++`,
-`libgcc_s`, `libfreetype`, `libpng`, `libjpeg`, and `libwebp` with it.
-`NativeAssets.Linux.NoDependencies` needs less than that, so **no Dockerfile change is expected**.
+**It was tested rather than reasoned about.** A throwaway probe (a console app referencing
+SkiaSharp 4.151.1 + `NativeAssets.Linux.NoDependencies`, published into a container replicating the
+production `tesseract-env` and `final` stages) exercised every operation the design needs. All
+checks passed on `linux/amd64`:
 
-Because the whole change is worthless if this assumption is wrong, verifying `libSkiaSharp.so`
-loads inside the built container is the **first** implementation step, not the last.
+```
+PASS  native libSkiaSharp loads              SkiaSharp 4.151.0.0
+PASS  encode Png / Jpeg / Webp               7,304 / 5,311 / 3,800 bytes
+PASS  decode Png / Jpeg / Webp               240x160 Bgra8888
+PASS  ResizeToFit                            240x160 -> 100x67
+PASS  ResizeToFill                           240x160 -> 64x64
+PASS  Gaussian blur                          sigma 26.7, contrast 7.4 -> 2.2
+PASS  animated GIF decodes to first frame    2 frames, first frame pixel #ffff0000
+PASS  managed box-average aHash              FF49499292242400 (Png +0, Jpeg +0, Webp +0)
+```
+
+Three results worth carrying into implementation:
+
+**No Dockerfile change is needed, and there is no hidden coupling.** The probe passes on *bare*
+`chiseled-extra` with the Tesseract `COPY --from=tesseract-env` lines removed entirely. The
+flattened `/usr/lib` payload (`Dockerfile:200`) is not load-bearing for SkiaSharp, so this design
+does not quietly depend on the OCR stage continuing to exist.
+
+**arm64 is covered.** The package ships `runtimes/linux-arm64/native/libSkiaSharp.so` (11.6MB), and
+`readelf -d` shows it declares an identical dependency set to the verified x64 build —
+`libstdc++.so.6`, `libpthread.so.0`, `libdl.so.2`, `libm.so.6`, `libc.so.6`, `librt.so.1`, all
+glibc core plus libstdc++. Nothing exotic, and the arm64 chiseled image is built from the same
+Ubuntu noble package set. No arm64 emulator is registered on this machine, so this is a static
+verification rather than an execution one — worth one confirming run on real arm64 hardware
+post-merge, but not a design risk.
+
+**The box-average hash is more decoder-stable than predicted.** The design argued the box average
+would absorb per-decoder rounding to within a couple of bits. Measured drift across PNG, JPEG(85),
+and WebP(90) re-encodes of the same source is **0 bits** — byte-identical hashes. The stability
+claim in §2 is stronger than stated.
+
+The probe's assertions are not thrown away: the format-coverage, animated-GIF-first-frame, and
+hash-stability checks become real NUnit tests in the Testing section below.
 
 ## Bundled dependency bumps
 
@@ -242,7 +274,8 @@ with SkiaSharp (MIT) and Skia itself (BSD-3-Clause).
 ## Acceptance criteria
 
 - [ ] No `SixLabors.*` package reference or `using` remains anywhere in the solution, tests included.
-- [ ] `libSkiaSharp.so` loads in the built `linux/amd64` and `linux/arm64` container images.
+- [x] `libSkiaSharp.so` loads and operates in the `linux/amd64` chiseled image (probe, verified).
+- [ ] Confirming run on real `linux/arm64` hardware post-merge (statically verified only).
 - [ ] Thumbnail, profile-photo, and media handling preserve current behavior across PNG, JPEG,
       animated GIF, and WebP.
 - [ ] `PhotoHashService` computes its 8×8 downsample in managed code; a golden test pins the output.
