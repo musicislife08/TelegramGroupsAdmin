@@ -1,9 +1,7 @@
 @using TelegramGroupsAdmin.Helpers
-@using Microsoft.AspNetCore.Components.Authorization
 @inject ITagDefinitionsRepository TagDefinitionsRepository
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
-@inject AuthenticationStateProvider AuthenticationStateProvider
 
 <MudStack Spacing="4">
     <MudPaper Class="pa-4">
@@ -94,15 +92,15 @@
 @code {
     private List<TagDefinition> _tags = [];
     private bool _loading = true;
-    private bool _canEdit;
+    [CascadingParameter] private WebUserIdentity? WebUser { get; set; }
+
+    // Tag definitions are a global content setting (color preferences, not chat-scoped),
+    // so editing follows the content tier: GlobalAdmin or Owner. Chat-scoped Admins have
+    // read-only access to global settings. Matches Settings._canEditContent / CriticalChecks.
+    private bool _canEdit => WebUser?.IsGlobalAdminOrHigher ?? false;
 
     protected override async Task OnInitializedAsync()
     {
-        // Check if user has Admin or Owner role
-        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-        var user = authState.User;
-        _canEdit = user.IsInRole("Admin") || user.IsInRole("Owner");
-
         await LoadTags();
     }
 

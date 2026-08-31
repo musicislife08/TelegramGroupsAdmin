@@ -16,7 +16,10 @@ ARG BUILDPLATFORM
 WORKDIR /deps
 
 # Install system dependencies for downloading and extracting
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Use HTTPS for apt sources — plain HTTP over the public internet should
+# not be the default in 2026; TLS-everywhere is the baseline.
+RUN sed -i 's|http://|https://|g' /etc/apt/sources.list.d/ubuntu.sources && \
+    apt-get update && apt-get install -y --no-install-recommends \
     wget \
     xz-utils \
     && rm -rf /var/lib/apt/lists/*
@@ -76,7 +79,9 @@ ARG BUILDPLATFORM
 
 # Install Tesseract OCR and dependencies
 # These will be copied to final runtime image
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Use HTTPS for apt sources (see note in dependencies stage above).
+RUN sed -i 's|http://|https://|g' /etc/apt/sources.list.d/ubuntu.sources && \
+    apt-get update && apt-get install -y --no-install-recommends \
     tesseract-ocr \
     libleptonica-dev \
     wget \

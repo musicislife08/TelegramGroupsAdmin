@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Configuration.Models;
 using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.Data;
+using TelegramGroupsAdmin.IntegrationTests.Fixtures;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
 
 namespace TelegramGroupsAdmin.IntegrationTests.Configuration;
@@ -28,18 +29,15 @@ public class AIProviderConfigIntegrationTests
     [SetUp]
     public async Task SetUp()
     {
-        // Create unique test database with migrations applied
+        // Clone the empty migrated template for this test
         _testHelper = new MigrationTestHelper();
-        await _testHelper.CreateDatabaseAndApplyMigrationsAsync();
+        await _testHelper.CreateDatabaseFromEmptyTemplateAsync();
 
         // Set up dependency injection
         var services = new ServiceCollection();
 
-        // Configure Data Protection with ephemeral keys
-        var keyDirectory = new DirectoryInfo(Path.Combine(Path.GetTempPath(), $"test_keys_{Guid.NewGuid():N}"));
-        services.AddDataProtection()
-            .SetApplicationName("TelegramGroupsAdmin.Tests")
-            .PersistKeysToFileSystem(keyDirectory);
+        // Use shared DataProtection provider (same keys used to encrypt canonical data)
+        services.AddSingleton<IDataProtectionProvider>(PostgresFixture.SharedDataProtectionProvider);
 
         // Add NpgsqlDataSource
         var dataSourceBuilder = new Npgsql.NpgsqlDataSourceBuilder(_testHelper.ConnectionString);
@@ -55,7 +53,6 @@ public class AIProviderConfigIntegrationTests
         services.AddLogging(builder =>
         {
             builder.AddConsole().SetMinimumLevel(LogLevel.Warning);
-            builder.AddFilter("Microsoft.AspNetCore.DataProtection", LogLevel.Error);
         });
 
         // Register repository
@@ -109,7 +106,7 @@ public class AIProviderConfigIntegrationTests
                     ConnectionId = "openai-main",
                     Model = "gpt-4o-mini",
                     MaxTokens = 500,
-                    Temperature = 0.2
+                    Temperature = 0.2f
                 }
             }
         };
@@ -144,7 +141,7 @@ public class AIProviderConfigIntegrationTests
                 new AIConnection
                 {
                     Id = "local-ollama",
-                    Provider = AIProviderType.LocalOpenAI,
+                    Provider = AIProviderType.OpenAICompatible,
                     Enabled = true,
                     LocalEndpoint = "http://localhost:11434/v1",
                     LocalRequiresApiKey = false
@@ -189,8 +186,7 @@ public class AIProviderConfigIntegrationTests
                     Id = "updated",
                     Provider = AIProviderType.AzureOpenAI,
                     Enabled = false,
-                    AzureEndpoint = "https://test.openai.azure.com",
-                    AzureApiVersion = "2024-10-21"
+                    AzureEndpoint = "https://test.openai.azure.com"
                 }
             ]
         };
@@ -226,13 +222,12 @@ public class AIProviderConfigIntegrationTests
                     Id = "azure",
                     Provider = AIProviderType.AzureOpenAI,
                     Enabled = false,
-                    AzureEndpoint = "https://test.openai.azure.com",
-                    AzureApiVersion = "2024-10-21"
+                    AzureEndpoint = "https://test.openai.azure.com"
                 },
                 new AIConnection
                 {
                     Id = "local",
-                    Provider = AIProviderType.LocalOpenAI,
+                    Provider = AIProviderType.OpenAICompatible,
                     Enabled = true,
                     LocalEndpoint = "http://localhost:11434/v1"
                 }
@@ -275,35 +270,35 @@ public class AIProviderConfigIntegrationTests
                     ConnectionId = "main",
                     Model = "gpt-4o-mini",
                     MaxTokens = 500,
-                    Temperature = 0.2
+                    Temperature = 0.2f
                 },
                 [AIFeatureType.Translation] = new AIFeatureConfig
                 {
                     ConnectionId = "main",
                     Model = "gpt-4o",
                     MaxTokens = 1000,
-                    Temperature = 0.3
+                    Temperature = 0.3f
                 },
                 [AIFeatureType.ImageAnalysis] = new AIFeatureConfig
                 {
                     ConnectionId = "main",
                     Model = "gpt-4o",
                     MaxTokens = 500,
-                    Temperature = 0.1
+                    Temperature = 0.1f
                 },
                 [AIFeatureType.VideoAnalysis] = new AIFeatureConfig
                 {
                     ConnectionId = "main",
                     Model = "gpt-4o",
                     MaxTokens = 500,
-                    Temperature = 0.1
+                    Temperature = 0.1f
                 },
                 [AIFeatureType.PromptBuilder] = new AIFeatureConfig
                 {
                     ConnectionId = "main",
                     Model = "gpt-4o",
                     MaxTokens = 2000,
-                    Temperature = 0.5
+                    Temperature = 0.5f
                 }
             }
         };
@@ -320,7 +315,7 @@ public class AIProviderConfigIntegrationTests
             Assert.That(retrieved.Features[AIFeatureType.SpamDetection].MaxTokens, Is.EqualTo(500));
             Assert.That(retrieved.Features[AIFeatureType.Translation].MaxTokens, Is.EqualTo(1000));
             Assert.That(retrieved.Features[AIFeatureType.PromptBuilder].MaxTokens, Is.EqualTo(2000));
-            Assert.That(retrieved.Features[AIFeatureType.SpamDetection].Temperature, Is.EqualTo(0.2));
+            Assert.That(retrieved.Features[AIFeatureType.SpamDetection].Temperature, Is.EqualTo(0.2f));
         }
     }
 
@@ -337,8 +332,7 @@ public class AIProviderConfigIntegrationTests
                     Id = "azure",
                     Provider = AIProviderType.AzureOpenAI,
                     Enabled = true,
-                    AzureEndpoint = "https://myresource.openai.azure.com",
-                    AzureApiVersion = "2024-10-21"
+                    AzureEndpoint = "https://myresource.openai.azure.com"
                 }
             ],
             Features = new Dictionary<AIFeatureType, AIFeatureConfig>
@@ -377,7 +371,7 @@ public class AIProviderConfigIntegrationTests
                 new AIConnection
                 {
                     Id = "local",
-                    Provider = AIProviderType.LocalOpenAI,
+                    Provider = AIProviderType.OpenAICompatible,
                     Enabled = true,
                     LocalEndpoint = "http://localhost:11434/v1",
                     AvailableModels =
@@ -553,7 +547,7 @@ public class AIProviderConfigIntegrationTests
                 new AIConnection
                 {
                     Id = "local",
-                    Provider = AIProviderType.LocalOpenAI,
+                    Provider = AIProviderType.OpenAICompatible,
                     Enabled = true,
                     LocalEndpoint = "http://localhost:11434"
                 }
@@ -613,7 +607,7 @@ public class AIProviderConfigIntegrationTests
                 new AIConnection
                 {
                     Id = "custom",
-                    Provider = AIProviderType.LocalOpenAI,
+                    Provider = AIProviderType.OpenAICompatible,
                     Enabled = true,
                     LocalEndpoint = "http://localhost:8080/v1?api_version=2024-01-01&timeout=30"
                 }

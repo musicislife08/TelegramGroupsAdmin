@@ -8,7 +8,7 @@ using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Services;
 using TelegramGroupsAdmin.Core.Extensions;
-using TelegramGroupsAdmin.Core.Services.AI;
+using TelegramGroupsAdmin.AI.Services;
 
 namespace TelegramGroupsAdmin.ContentDetection.Checks;
 

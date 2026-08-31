@@ -4,9 +4,11 @@ using MudBlazor.Services;
 using NSubstitute;
 using TelegramGroupsAdmin.Components.Shared;
 using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Configuration.Models.Welcome;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Models;
 
@@ -26,13 +28,13 @@ public class WelcomeSystemConfigTestContext : BunitContext
         ConfigService = Substitute.For<IConfigService>();
 
         // Default config returns
-        ConfigService.GetAsync<WelcomeConfig>(Arg.Any<ConfigType>(), Arg.Any<long>())
+        ConfigService.GetWelcomeAsync(Arg.Any<long>())
             .Returns(WelcomeConfig.Default);
 
         // Register mocks
         Services.AddSingleton(ConfigService);
         Services.AddSingleton(Substitute.For<IUsernameBlacklistRepository>());
-        Services.AddSingleton(Substitute.For<IAuditService>());
+        Services.AddSingleton(Substitute.For<IUsernameBlacklistService>());
 
         // Add MudBlazor services
         Services.AddMudServices(options =>
@@ -70,7 +72,7 @@ public class WelcomeSystemConfigTests : WelcomeSystemConfigTestContext
     public void Setup()
     {
         ConfigService.ClearReceivedCalls();
-        ConfigService.GetAsync<WelcomeConfig>(Arg.Any<ConfigType>(), Arg.Any<long>())
+        ConfigService.GetWelcomeAsync(Arg.Any<long>())
             .Returns(WelcomeConfig.Default);
     }
 
@@ -459,7 +461,7 @@ public class WelcomeSystemConfigTests : WelcomeSystemConfigTestContext
     public void ShowsErrorAlert_WhenConfigLoadFails()
     {
         // Arrange
-        ConfigService.GetAsync<WelcomeConfig>(Arg.Any<ConfigType>(), Arg.Any<long>())
+        ConfigService.GetWelcomeAsync(Arg.Any<long>())
             .Returns((WelcomeConfig?)null);
 
         // Note: Component sets _config to null on error, showing error alert
@@ -474,6 +476,377 @@ public class WelcomeSystemConfigTests : WelcomeSystemConfigTestContext
         {
             Assert.That(cut.Markup, Does.Not.Contain("Failed to load configuration"));
         });
+    }
+
+    #endregion
+
+    #region Trusted User Bypass Tests
+
+    [Test]
+    public void TrustedBypassPanel_Renders_WhenConfigLoaded()
+    {
+        // Arrange - use WelcomeConfig.Default so MainWelcomeMessage is non-empty and
+        // the panel is rendered via the "load as-is" path.
+        ConfigService.GetWelcomeAsync(Arg.Any<long>())
+            .Returns(WelcomeConfig.Default);
+
+        // Act
+        var cut = Render<WelcomeSystemConfig>();
+
+        // Assert - new verb-led panel title
+        cut.WaitForAssertion(() =>
+        {
+            Assert.That(cut.Markup, Does.Contain("Auto-admit Trusted Users"));
+        });
+    }
+
+    [Test]
+    public void TrustedBypassPanel_RendersBothTemplateFieldsAndPreviews_WhenEnabled()
+    {
+        // Arrange - enable bypass so both Admin + Trusted template fields + previews
+        // are present (fields are enabled; previews always render).
+        ConfigService.GetWelcomeAsync(Arg.Any<long>())
+            .Returns(new WelcomeConfig
+            {
+                MainWelcomeMessage = "Welcome {username}!",
+                TrustedBypass = new TrustedBypassConfig
+                {
+                    Enabled = true,
+                    AnnouncementMessageAdmin = "admin template {username}",
+                    AnnouncementMessageTrusted = "trusted template {username}",
+                }
+            });
+
+        // Act
+        var cut = Render<WelcomeSystemConfig>();
+
+        // Assert - both section headers + labels are rendered, and each preview renders {username}
+        // through the real WelcomeMessageBuilder path: a clickable text_mention (rendered as a
+        // tg-mention span carrying the distinct example display name, NOT a literal "@name" string).
+        cut.WaitForAssertion(() =>
+        {
+            Assert.That(cut.Markup, Does.Contain("Admin Bypass Announcement"));
+            Assert.That(cut.Markup, Does.Contain("Trusted User Announcement"));
+            Assert.That(cut.Markup, Does.Contain("Template (admin)"));
+            Assert.That(cut.Markup, Does.Contain("Template (trusted)"));
+            Assert.That(cut.Markup, Does.Contain("tg-mention"));
+            Assert.That(cut.Markup, Does.Contain("example_admin"));
+            Assert.That(cut.Markup, Does.Contain("example_trusted"));
+            // The mention renders the display name only — no literal "@" prefix.
+            Assert.That(cut.Markup, Does.Not.Contain("@example_admin"));
+            Assert.That(cut.Markup, Does.Not.Contain("@example_trusted"));
+        });
+    }
+
+    [Test]
+    public void TrustedBypassPanel_FieldsDisabled_WhenToggleOff()
+    {
+        // Arrange - TrustedBypass.Enabled defaults to false
+        ConfigService.GetWelcomeAsync(Arg.Any<long>())
+            .Returns(new WelcomeConfig
+            {
+                TrustedBypass = new TrustedBypassConfig { Enabled = false }
+            });
+
+        // Act
+        var cut = Render<WelcomeSystemConfig>();
+
+        // Assert - MudBlazor renders disabled fields with the disabled attribute
+        cut.WaitForAssertion(() =>
+        {
+            var disabledInputs = cut.FindAll("input[disabled], textarea[disabled]");
+            Assert.That(disabledInputs.Count, Is.GreaterThan(0));
+        });
+    }
+
+    [Test]
+    public void LoadConfig_TrustedBypassPopulated_RendersCustomTemplates()
+    {
+        // Arrange: load-as-is branch (non-empty MainWelcomeMessage) with custom TrustedBypass
+        ConfigService.GetWelcomeAsync(Arg.Any<long>())
+            .Returns(new WelcomeConfig
+            {
+                Enabled = true,
+                MainWelcomeMessage = "Welcome {username}!",
+                TrustedBypass = new TrustedBypassConfig
+                {
+                    Enabled = true,
+                    AnnouncementMessageAdmin = "admin custom",
+                    AnnouncementMessageTrusted = "trusted custom",
+                    AnnouncementTtlSeconds = 45
+                }
+            });
+
+        // Act
+        var cut = Render<WelcomeSystemConfig>();
+
+        // Assert: the loaded values flow into the rendered DOM
+        cut.WaitForAssertion(() =>
+        {
+            Assert.That(cut.Markup, Does.Contain("admin custom"));
+            Assert.That(cut.Markup, Does.Contain("trusted custom"));
+        }, TimeSpan.FromSeconds(2));
+
+        // TTL: MudNumericField at WelcomeSystemConfig.razor:257-258 renders the bound
+        // value into both `value` and `aria-valuenow` attributes. The label text
+        // "Auto-delete after (seconds)" lives in a sibling <label for="..."> element,
+        // so traverse from label to input via the for-id.
+        cut.WaitForAssertion(() =>
+        {
+            var ttlLabel = cut.FindAll("label").First(l => l.TextContent.Contains("Auto-delete after"));
+            var ttlInput = cut.Find($"#{ttlLabel.GetAttribute("for")}");
+            Assert.That(ttlInput.GetAttribute("value"), Is.EqualTo("45"));
+        }, TimeSpan.FromSeconds(2));
+    }
+
+    #endregion
+
+    #region Profile Scan First Message Tests
+
+    [Test]
+    public void WelcomeSystemConfig_RendersScanOnFirstMessageSwitchWhenProfileScanEnabled()
+    {
+        // Arrange - profile scan ON so the first-message switch should render enabled
+        ConfigService.GetWelcomeAsync(Arg.Any<long>())
+            .Returns(new WelcomeConfig
+            {
+                Enabled = true,
+                MainWelcomeMessage = "Welcome {username}!",
+                JoinSecurity = new JoinSecurityConfig
+                {
+                    ProfileScan = new ProfileScanConfig
+                    {
+                        Enabled = true,
+                        ScanOnFirstMessage = false
+                    }
+                }
+            });
+
+        // Act
+        var cut = Render<WelcomeSystemConfig>();
+
+        // Assert - locate the switch via its label text and confirm not disabled
+        cut.WaitForAssertion(() =>
+        {
+            Assert.That(cut.Markup, Does.Contain("Scan on first message"));
+
+            var switchLabel = cut.FindAll("label")
+                .FirstOrDefault(l => l.TextContent.Contains("Scan on first message"));
+            Assert.That(switchLabel, Is.Not.Null,
+                "Scan on first message switch label should be present in the rendered DOM");
+
+            // MudSwitch renders <label><span class="mud-switch"><input /></span>...<span>Label</span></label>
+            var switchInput = switchLabel!.QuerySelector("input");
+            Assert.That(switchInput, Is.Not.Null, "Scan on first message switch should expose an input element");
+            Assert.That(switchInput!.HasAttribute("disabled"), Is.False,
+                "Scan on first message switch should be enabled when ProfileScan.Enabled is true");
+        }, TimeSpan.FromSeconds(2));
+    }
+
+    [Test]
+    public void WelcomeSystemConfig_DisablesScanOnFirstMessageSwitchWhenProfileScanDisabled()
+    {
+        // Arrange - profile scan OFF cascades disabled to the first-message switch
+        ConfigService.GetWelcomeAsync(Arg.Any<long>())
+            .Returns(new WelcomeConfig
+            {
+                Enabled = true,
+                MainWelcomeMessage = "Welcome {username}!",
+                JoinSecurity = new JoinSecurityConfig
+                {
+                    ProfileScan = new ProfileScanConfig
+                    {
+                        Enabled = false,
+                        ScanOnFirstMessage = false
+                    }
+                }
+            });
+
+        // Act
+        var cut = Render<WelcomeSystemConfig>();
+
+        // Assert - the switch input carries the disabled attribute
+        cut.WaitForAssertion(() =>
+        {
+            var switchLabel = cut.FindAll("label")
+                .FirstOrDefault(l => l.TextContent.Contains("Scan on first message"));
+            Assert.That(switchLabel, Is.Not.Null,
+                "Scan on first message switch label should be present in the rendered DOM");
+
+            var switchInput = switchLabel!.QuerySelector("input");
+            Assert.That(switchInput, Is.Not.Null, "Scan on first message switch should expose an input element");
+            Assert.That(switchInput!.HasAttribute("disabled"), Is.True,
+                "Scan on first message switch should be disabled when ProfileScan.Enabled is false");
+        }, TimeSpan.FromSeconds(2));
+    }
+
+    #endregion
+
+    #region Explicit Username Masking Tests
+
+    [Test]
+    public void WelcomeSystemConfig_RendersMaskExplicitUsernameSwitchWhenProfileScanEnabled()
+    {
+        // Arrange - profile scan ON so the masking switch should render enabled
+        ConfigService.GetWelcomeAsync(Arg.Any<long>())
+            .Returns(new WelcomeConfig
+            {
+                Enabled = true,
+                MainWelcomeMessage = "Welcome {username}!",
+                JoinSecurity = new JoinSecurityConfig
+                {
+                    ProfileScan = new ProfileScanConfig
+                    {
+                        Enabled = true,
+                        MaskExplicitUsername = true,
+                        ExplicitUsernameRedactionText = "[explicit username redacted]"
+                    }
+                }
+            });
+
+        // Act
+        var cut = Render<WelcomeSystemConfig>();
+
+        // Assert - locate the masking switch input via its label text and confirm not disabled
+        cut.WaitForAssertion(() =>
+        {
+            var maskLabel = cut.FindAll("label")
+                .FirstOrDefault(l => l.TextContent.Contains("Mask explicit usernames"));
+            Assert.That(maskLabel, Is.Not.Null,
+                "Mask explicit usernames switch label should be present in the rendered DOM");
+
+            // MudSwitch renders <label><span class="mud-switch"><input /></span>...<span>Label</span></label>
+            var maskInput = maskLabel!.QuerySelector("input");
+            Assert.That(maskInput, Is.Not.Null, "Mask switch should expose an input element");
+            Assert.That(maskInput!.HasAttribute("disabled"), Is.False,
+                "Mask switch should be enabled when ProfileScan.Enabled is true");
+        }, TimeSpan.FromSeconds(2));
+    }
+
+    [Test]
+    public void WelcomeSystemConfig_DisablesMaskingSwitchWhenProfileScanDisabled()
+    {
+        // Arrange - profile scan OFF cascades disabled to the masking switch
+        ConfigService.GetWelcomeAsync(Arg.Any<long>())
+            .Returns(new WelcomeConfig
+            {
+                Enabled = true,
+                MainWelcomeMessage = "Welcome {username}!",
+                JoinSecurity = new JoinSecurityConfig
+                {
+                    ProfileScan = new ProfileScanConfig
+                    {
+                        Enabled = false,
+                        MaskExplicitUsername = true,
+                        ExplicitUsernameRedactionText = "[explicit username redacted]"
+                    }
+                }
+            });
+
+        // Act
+        var cut = Render<WelcomeSystemConfig>();
+
+        // Assert - the mask switch input carries the disabled attribute
+        cut.WaitForAssertion(() =>
+        {
+            var maskLabel = cut.FindAll("label")
+                .FirstOrDefault(l => l.TextContent.Contains("Mask explicit usernames"));
+            Assert.That(maskLabel, Is.Not.Null,
+                "Mask explicit usernames switch label should be present in the rendered DOM");
+
+            var maskInput = maskLabel!.QuerySelector("input");
+            Assert.That(maskInput, Is.Not.Null, "Mask switch should expose an input element");
+            Assert.That(maskInput!.HasAttribute("disabled"), Is.True,
+                "Mask switch should be disabled when ProfileScan.Enabled is false");
+        }, TimeSpan.FromSeconds(2));
+    }
+
+    [Test]
+    public void WelcomeSystemConfig_DisablesRedactionTextFieldWhenMaskingOff()
+    {
+        // Arrange - profile scan ON but masking OFF: the redaction text should be disabled
+        ConfigService.GetWelcomeAsync(Arg.Any<long>())
+            .Returns(new WelcomeConfig
+            {
+                Enabled = true,
+                MainWelcomeMessage = "Welcome {username}!",
+                JoinSecurity = new JoinSecurityConfig
+                {
+                    ProfileScan = new ProfileScanConfig
+                    {
+                        Enabled = true,
+                        MaskExplicitUsername = false,
+                        ExplicitUsernameRedactionText = "[explicit username redacted]"
+                    }
+                }
+            });
+
+        // Act
+        var cut = Render<WelcomeSystemConfig>();
+
+        // Assert - MudTextField label sits in a sibling element addressed via for/id linkage
+        cut.WaitForAssertion(() =>
+        {
+            var redactionLabel = cut.FindAll("label")
+                .FirstOrDefault(l => l.TextContent.Contains("Redaction text"));
+            Assert.That(redactionLabel, Is.Not.Null,
+                "Redaction text field label should be present in the rendered DOM");
+
+            var forId = redactionLabel!.GetAttribute("for");
+            Assert.That(forId, Is.Not.Null.And.Not.Empty,
+                "Redaction text label should be linked to its input via for=");
+
+            var redactionInput = cut.Find($"#{forId}");
+            Assert.That(redactionInput.HasAttribute("disabled"), Is.True,
+                "Redaction text field should be disabled when MaskExplicitUsername is false");
+        }, TimeSpan.FromSeconds(2));
+    }
+
+    [Test]
+    public async Task WelcomeSystemConfig_Save_PassesMaskingFieldsThrough()
+    {
+        // Arrange - load with custom masking values; the component performs a wholesale
+        // assign and SaveWelcomeAsync should receive them verbatim
+        ConfigService.GetWelcomeAsync(Arg.Any<long>())
+            .Returns(new WelcomeConfig
+            {
+                Enabled = true,
+                MainWelcomeMessage = "Welcome {username}!",
+                JoinSecurity = new JoinSecurityConfig
+                {
+                    ProfileScan = new ProfileScanConfig
+                    {
+                        Enabled = true,
+                        MaskExplicitUsername = false,
+                        ExplicitUsernameRedactionText = "custom redaction"
+                    }
+                }
+            });
+
+        // WebUser cascading parameter is required by SaveConfig (uses WebUser!.ToActor())
+        this.AddTestWebUser();
+
+        var cut = Render<WelcomeSystemConfig>();
+
+        // Wait until the Save Configuration button is present, then click it
+        cut.WaitForAssertion(() =>
+        {
+            Assert.That(cut.Markup, Does.Contain("Save Configuration"));
+        }, TimeSpan.FromSeconds(2));
+
+        var saveButton = cut.FindAll("button")
+            .First(b => b.TextContent.Contains("Save Configuration"));
+        saveButton.Click();
+
+        // Assert - SaveWelcomeAsync received the wholesale config with the masking fields
+        // intact. Service internals (audit, repo dispatch) are not retested here.
+        await ConfigService.Received(1).SaveWelcomeAsync(
+            Arg.Any<ChatIdentity>(),
+            Arg.Is<WelcomeConfig>(c =>
+                c!.JoinSecurity.ProfileScan.MaskExplicitUsername == false
+             && c.JoinSecurity.ProfileScan.ExplicitUsernameRedactionText == "custom redaction"),
+            Arg.Any<Actor>(),
+            Arg.Any<CancellationToken>());
     }
 
     #endregion

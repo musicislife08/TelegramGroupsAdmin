@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Repositories;
+using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Extensions;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
@@ -18,7 +19,7 @@ public class ReportCommand(
     public string Name => "report";
     public string Description => "Report message for admin review";
     public string Usage => "/report (reply to message)";
-    public int MinPermissionLevel => 0; // Anyone can report
+    public PermissionLevel MinPermissionLevel => PermissionLevel.Member; // everyone
     public bool RequiresReply => true;
     public bool DeleteCommandMessage => false; // Keep visible for confirmation
     public int? DeleteResponseAfterSeconds => null;
@@ -26,12 +27,12 @@ public class ReportCommand(
     public async Task<CommandResult> ExecuteAsync(
         Message message,
         string[] args,
-        int userPermissionLevel,
+        PermissionLevel userPermission,
         CancellationToken cancellationToken = default)
     {
         if (message.ReplyToMessage == null)
         {
-            return new CommandResult("❌ Please reply to the message you want to report.", DeleteCommandMessage, DeleteResponseAfterSeconds);
+            return new CommandResult(TelegramMessage.Plain("❌ Please reply to the message you want to report."), DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
 
         var reportedMessage = message.ReplyToMessage;
@@ -40,7 +41,7 @@ public class ReportCommand(
 
         if (reportedUser == null || reporter == null)
         {
-            return new CommandResult("❌ Could not identify users.", DeleteCommandMessage, DeleteResponseAfterSeconds);
+            return new CommandResult(TelegramMessage.Plain("❌ Could not identify users."), DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
 
         using var scope = serviceProvider.CreateScope();
@@ -57,12 +58,20 @@ public class ReportCommand(
         {
             var existingReporterName = existingReport.ReportedByUserName ?? "System";
             return new CommandResult(
-                $"ℹ️ This message has already been reported.\n\n" +
-                $"📋 Report #{existingReport.Id}\n" +
-                $"👤 Reported by: {existingReporterName}\n" +
-                $"📅 Reported: {existingReport.ReportedAt:g}\n" +
-                $"📊 Status: {existingReport.Status}\n\n" +
-                $"_Admins will review the report shortly._",
+                new TelegramMessageBuilder()
+                    .Text("ℹ️ This message has already been reported.")
+                    .LineBreak().LineBreak()
+                    .Text($"📋 Report #{existingReport.Id}")
+                    .LineBreak()
+                    .Text("👤 Reported by: ")
+                    .Text(existingReporterName)
+                    .LineBreak()
+                    .Text($"📅 Reported: {existingReport.ReportedAt:g}")
+                    .LineBreak()
+                    .Text($"📊 Status: {existingReport.Status}")
+                    .LineBreak().LineBreak()
+                    .Italic("Admins will review the report shortly.")
+                    .Build(),
                 DeleteCommandMessage,
                 DeleteResponseAfterSeconds);
         }
@@ -82,10 +91,13 @@ public class ReportCommand(
             AdminNotes: null
         );
 
+        var reporterActor = Actor.FromTelegramUser(
+            reporter.Id, reporter.Username, reporter.FirstName, reporter.LastName);
+
         var result = await reportService.CreateReportAsync(
             report,
             reportedMessage,
-            isAutomated: false,
+            reporterActor,
             cancellationToken);
 
         logger.LogInformation(
@@ -98,9 +110,14 @@ public class ReportCommand(
             reportedUser.Username);
 
         return new CommandResult(
-            $"✅ Message reported for admin review (Report #{result.ReportId})\n" +
-            $"Reported user: @{reportedUser.Username ?? reportedUser.Id.ToString()}\n\n" +
-            $"_Admins will be notified shortly._",
+            new TelegramMessageBuilder()
+                .Text($"✅ Message reported for admin review (Report #{result.ReportId})")
+                .LineBreak()
+                .Text("Reported user: ")
+                .Mention(new UserIdentity(reportedUser.Id, reportedUser.FirstName, reportedUser.LastName, reportedUser.Username))
+                .LineBreak().LineBreak()
+                .Italic("Admins will be notified shortly.")
+                .Build(),
             DeleteCommandMessage,
             DeleteResponseAfterSeconds);
     }

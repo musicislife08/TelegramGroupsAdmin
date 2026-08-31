@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
-using Telegram.Bot.Types.Enums;
+using TelegramGroupsAdmin.Core.Utilities;
+using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 
@@ -8,7 +9,7 @@ namespace TelegramGroupsAdmin.Telegram.Services;
 
 /// <summary>
 /// Handles @admin mentions in group chats by notifying all active administrators
-/// Uses HTML text mentions (tg://user?id=X) to support users without usernames
+/// Uses entity-based text_mention entities to support users without usernames, avoiding HTML injection risks.
 /// </summary>
 public class AdminMentionHandler
 {
@@ -41,7 +42,7 @@ public class AdminMentionHandler
     }
 
     /// <summary>
-    /// Send notification to all admins in the chat by replying to the message with HTML text mentions
+    /// Send notification to all admins in the chat by replying to the message with entity text_mentions
     /// </summary>
     public async Task NotifyAdminsAsync(
         Message message,
@@ -63,8 +64,9 @@ public class AdminMentionHandler
                 return;
             }
 
-            // Build HTML notification with text mentions for each admin
-            var mentionsList = new List<string>();
+            // Build entity-based notification with text_mention entities for each admin
+            var builder = new TelegramMessageBuilder().Bold("🔔 Admin Alert").LineBreak();
+            var notified = 0;
 
             foreach (var admin in admins)
             {
@@ -76,15 +78,12 @@ public class AdminMentionHandler
                 if (admin.User.Id == botId)
                     continue;
 
-                // Create HTML text mention with username or fallback to generic name
-                // Format: <a href="tg://user?id=123">@username</a> or <a href="tg://user?id=123">Admin</a>
-                var displayName = !string.IsNullOrWhiteSpace(admin.User.Username)
-                    ? $"@{admin.User.Username}"
-                    : "Admin";
-                mentionsList.Add($"<a href=\"tg://user?id={admin.User.Id}\">{displayName}</a>");
+                if (notified > 0) builder.Text(" ");
+                builder.Mention(admin.User);
+                notified++;
             }
 
-            if (mentionsList.Count == 0)
+            if (notified == 0)
             {
                 _logger.LogInformation(
                     "No other admins to notify in chat {ChatId} (only sender is admin)",
@@ -92,24 +91,20 @@ public class AdminMentionHandler
                 return;
             }
 
-            // Build final notification message
-            var notificationText = "🔔 <b>Admin Alert</b>\n" +
-                                   string.Join(" ", mentionsList) + " " +
-                                   "you've been mentioned in this conversation.";
+            builder.Text(" you've been mentioned in this conversation.");
 
             // Reply to the original message with admin mentions
             await _messageService.SendAndSaveMessageAsync(
                 chatId: message.Chat.Id,
-                text: notificationText,
-                parseMode: ParseMode.Html,
+                message: builder.Build(),
                 replyParameters: new ReplyParameters { MessageId = message.MessageId },
                 cancellationToken: cancellationToken);
 
             _logger.LogInformation(
-                "Notified {AdminCount} admins in chat {ChatId} for @admin mention by user {UserId}",
-                mentionsList.Count,
-                message.Chat.Id,
-                message.From?.Id);
+                "Notified {AdminCount} admins in {Chat} for @admin mention by {User}",
+                notified,
+                message.Chat.ToLogInfo(),
+                message.From.ToLogInfo());
         }
         catch (Exception ex)
         {

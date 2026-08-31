@@ -133,26 +133,23 @@ public class BanCallbackService : IBanCallbackService
 
             if (result.Success)
             {
-                _logger.LogInformation(
-                    "{TargetUser} banned by {Executor} via selection button",
-                    targetUser.ToLogInfo(targetUser.TelegramUserId),
-                    executorUser.ToLogInfo());
-
-                // Send ban notification to user (resolve from scope since IUserMessagingService is Scoped)
+                // Send ban notification by DM only - the user is out of the chat, so a mention is just noise
+                // (resolve from scope since IUserMessagingService is Scoped)
                 var messagingService = scope.ServiceProvider.GetRequiredService<IUserMessagingService>();
                 var chatName = callbackQuery.Message?.Chat.Title ?? "this chat";
-                var banNotification = $"🚫 **You have been banned**\n\n" +
-                                     $"**Chat:** {chatName}\n" +
-                                     $"**Reason:** {ModerationConstants.DefaultBanReason}\n" +
-                                     $"**Chats affected:** {result.ChatsAffected}\n\n" +
-                                     $"If you believe this was a mistake, you may appeal by contacting the chat administrators.";
+                var banNotification = BanNotificationMessage.Build(
+                    chatName, ModerationConstants.DefaultBanReason, result.ChatsAffected);
 
-                await messagingService.SendToUserAsync(
+                var messageResult = await messagingService.SendDmOnlyAsync(
                     userId: targetUserId,
-                    chat: callbackQuery.Message!.Chat,
-                    messageText: banNotification,
-                    replyToMessageId: null,
+                    message: banNotification,
                     cancellationToken: cancellationToken);
+
+                _logger.LogInformation(
+                    "{TargetUser} banned by {Executor} via selection button. Ban DM delivered: {DmDelivered}",
+                    targetUser.ToLogInfo(targetUser.TelegramUserId),
+                    executorUser.ToLogInfo(),
+                    messageResult.Success);
             }
             else
             {

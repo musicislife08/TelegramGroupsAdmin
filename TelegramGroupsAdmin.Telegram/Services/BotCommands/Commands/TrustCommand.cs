@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
@@ -22,7 +23,7 @@ public class TrustCommand : IBotCommand
     public string Name => "trust";
     public string Description => "Toggle trust status (bypass spam detection)";
     public string Usage => "/trust (reply to message) OR /trust <username>";
-    public int MinPermissionLevel => 1; // Admin required
+    public PermissionLevel MinPermissionLevel => PermissionLevel.Admin; // chat admin or higher
     public bool RequiresReply => false;
     public bool DeleteCommandMessage => false; // Keep visible for confirmation
     public int? DeleteResponseAfterSeconds => null;
@@ -40,7 +41,7 @@ public class TrustCommand : IBotCommand
     public async Task<CommandResult> ExecuteAsync(
         Message message,
         string[] args,
-        int userPermissionLevel,
+        PermissionLevel userPermission,
         CancellationToken cancellationToken = default)
     {
         User? targetUser = null;
@@ -59,16 +60,16 @@ public class TrustCommand : IBotCommand
 
             // Try to find user in chat members (limited by Telegram API - only works for recent messages)
             // For now, return error - need to implement GetChatMember API call
-            return new CommandResult("❌ Username lookup not yet implemented. Please reply to a message from the user.", DeleteCommandMessage, DeleteResponseAfterSeconds);
+            return new CommandResult(TelegramMessage.Plain("❌ Username lookup not yet implemented. Please reply to a message from the user."), DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
         else
         {
-            return new CommandResult("❌ Please reply to a message from the user OR provide username: /trust <username>", DeleteCommandMessage, DeleteResponseAfterSeconds);
+            return new CommandResult(TelegramMessage.Plain("❌ Please reply to a message from the user OR provide username: /trust <username>"), DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
 
         if (targetUser == null)
         {
-            return new CommandResult("❌ Could not identify target user.", DeleteCommandMessage, DeleteResponseAfterSeconds);
+            return new CommandResult(TelegramMessage.Plain("❌ Could not identify target user."), DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
 
         using var scope = _serviceProvider.CreateScope();
@@ -109,7 +110,7 @@ public class TrustCommand : IBotCommand
                 _logger.LogError("Failed to untrust {User}: {Error}",
                     targetUser.ToLogDebug(),
                     result.ErrorMessage);
-                return new CommandResult($"❌ Failed to untrust user: {result.ErrorMessage}", DeleteCommandMessage, DeleteResponseAfterSeconds);
+                return new CommandResult(TelegramMessage.Plain($"❌ Failed to untrust user: {result.ErrorMessage}"), DeleteCommandMessage, DeleteResponseAfterSeconds);
             }
 
             _logger.LogInformation(
@@ -118,8 +119,8 @@ public class TrustCommand : IBotCommand
                 message.From.ToLogInfo(),
                 message.Chat.ToLogInfo());
 
-            return new CommandResult($"✅ User @{userDisplay} is no longer trusted\n\n" +
-                   $"This user's messages will now be subject to spam detection.", DeleteCommandMessage, DeleteResponseAfterSeconds);
+            return new CommandResult(TelegramMessage.Plain($"✅ User @{userDisplay} is no longer trusted\n\n" +
+                   $"This user's messages will now be subject to spam detection."), DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
         else
         {
@@ -140,7 +141,7 @@ public class TrustCommand : IBotCommand
                 _logger.LogError("Failed to trust {User}: {Error}",
                     targetUser.ToLogDebug(),
                     result.ErrorMessage);
-                return new CommandResult($"❌ Failed to trust user: {result.ErrorMessage}", DeleteCommandMessage, DeleteResponseAfterSeconds);
+                return new CommandResult(TelegramMessage.Plain($"❌ Failed to trust user: {result.ErrorMessage}"), DeleteCommandMessage, DeleteResponseAfterSeconds);
             }
 
             _logger.LogInformation(
@@ -149,8 +150,8 @@ public class TrustCommand : IBotCommand
                 message.From.ToLogInfo(),
                 message.Chat.ToLogInfo());
 
-            return new CommandResult($"✅ User @{userDisplay} marked as trusted\n\n" +
-                   $"This user's messages will bypass spam detection globally.", DeleteCommandMessage, DeleteResponseAfterSeconds);
+            return new CommandResult(TelegramMessage.Plain($"✅ User @{userDisplay} marked as trusted\n\n" +
+                   $"This user's messages will bypass spam detection globally."), DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
     }
 }

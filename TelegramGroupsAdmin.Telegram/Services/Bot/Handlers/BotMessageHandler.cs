@@ -17,6 +17,7 @@ public class BotMessageHandler(ITelegramBotClientFactory botClientFactory) : IBo
         ParseMode? parseMode = null,
         ReplyParameters? replyParameters = null,
         InlineKeyboardMarkup? replyMarkup = null,
+        IReadOnlyList<MessageEntity>? entities = null,
         CancellationToken ct = default)
     {
         var apiClient = await botClientFactory.GetApiClientAsync();
@@ -26,6 +27,7 @@ public class BotMessageHandler(ITelegramBotClientFactory botClientFactory) : IBo
             parseMode: parseMode,
             replyParameters: replyParameters,
             replyMarkup: replyMarkup,
+            entities: entities,
             ct: ct);
     }
 
@@ -36,6 +38,7 @@ public class BotMessageHandler(ITelegramBotClientFactory botClientFactory) : IBo
         ParseMode? parseMode = null,
         ReplyParameters? replyParameters = null,
         InlineKeyboardMarkup? replyMarkup = null,
+        IReadOnlyList<MessageEntity>? captionEntities = null,
         CancellationToken ct = default)
     {
         var apiClient = await botClientFactory.GetApiClientAsync();
@@ -46,6 +49,7 @@ public class BotMessageHandler(ITelegramBotClientFactory botClientFactory) : IBo
             parseMode: parseMode,
             replyParameters: replyParameters,
             replyMarkup: replyMarkup,
+            captionEntities: captionEntities,
             ct: ct);
     }
 
@@ -56,6 +60,7 @@ public class BotMessageHandler(ITelegramBotClientFactory botClientFactory) : IBo
         ParseMode? parseMode = null,
         ReplyParameters? replyParameters = null,
         InlineKeyboardMarkup? replyMarkup = null,
+        IReadOnlyList<MessageEntity>? captionEntities = null,
         CancellationToken ct = default)
     {
         var apiClient = await botClientFactory.GetApiClientAsync();
@@ -66,6 +71,7 @@ public class BotMessageHandler(ITelegramBotClientFactory botClientFactory) : IBo
             parseMode: parseMode,
             replyParameters: replyParameters,
             replyMarkup: replyMarkup,
+            captionEntities: captionEntities,
             ct: ct);
     }
 
@@ -76,6 +82,7 @@ public class BotMessageHandler(ITelegramBotClientFactory botClientFactory) : IBo
         ParseMode? parseMode = null,
         ReplyParameters? replyParameters = null,
         InlineKeyboardMarkup? replyMarkup = null,
+        IReadOnlyList<MessageEntity>? captionEntities = null,
         CancellationToken ct = default)
     {
         var apiClient = await botClientFactory.GetApiClientAsync();
@@ -86,6 +93,7 @@ public class BotMessageHandler(ITelegramBotClientFactory botClientFactory) : IBo
             parseMode: parseMode,
             replyParameters: replyParameters,
             replyMarkup: replyMarkup,
+            captionEntities: captionEntities,
             ct: ct);
     }
 
@@ -95,6 +103,7 @@ public class BotMessageHandler(ITelegramBotClientFactory botClientFactory) : IBo
         string text,
         ParseMode? parseMode = null,
         InlineKeyboardMarkup? replyMarkup = null,
+        IReadOnlyList<MessageEntity>? entities = null,
         CancellationToken ct = default)
     {
         var apiClient = await botClientFactory.GetApiClientAsync();
@@ -104,6 +113,7 @@ public class BotMessageHandler(ITelegramBotClientFactory botClientFactory) : IBo
             text,
             parseMode: parseMode,
             replyMarkup: replyMarkup,
+            entities: entities,
             ct: ct);
     }
 

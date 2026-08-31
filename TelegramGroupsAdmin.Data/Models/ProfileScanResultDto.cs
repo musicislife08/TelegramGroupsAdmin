@@ -44,6 +44,10 @@ public class ProfileScanResultDto
     [Column("ai_signals")]
     public string? AiSignals { get; set; }
 
+    /// <summary>AI flagged the visible display name or @username as explicit text</summary>
+    [Column("ai_explicit_display_text")]
+    public bool AiExplicitDisplayText { get; set; }
+
     // Navigation
     [ForeignKey(nameof(UserId))]
     public virtual TelegramUserDto? User { get; set; }

@@ -1,5 +1,7 @@
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
+using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
@@ -33,7 +35,7 @@ public class MyStatusCommand : IBotCommand
     public string Name => "mystatus";
     public string Description => "Check your warning count, trust status, and other info (DM only)";
     public string Usage => "/mystatus";
-    public int MinPermissionLevel => 0; // Everyone can use
+    public PermissionLevel MinPermissionLevel => PermissionLevel.Member; // everyone
     public bool RequiresReply => false;
     public bool DeleteCommandMessage => true; // Delete command for privacy
     public int? DeleteResponseAfterSeconds => null;
@@ -41,12 +43,12 @@ public class MyStatusCommand : IBotCommand
     public async Task<CommandResult> ExecuteAsync(
         Message message,
         string[] args,
-        int userPermissionLevel,
+        PermissionLevel userPermission,
         CancellationToken cancellationToken = default)
     {
         if (message.From == null)
         {
-            return new CommandResult(string.Empty, DeleteCommandMessage, DeleteResponseAfterSeconds);
+            return new CommandResult(TelegramMessage.Empty, DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
 
         var telegramUserId = message.From.Id;
@@ -54,7 +56,8 @@ public class MyStatusCommand : IBotCommand
         // If command was sent in a group chat, send DM instead (privacy-first)
         if (message.Chat.Type != ChatType.Private)
         {
-            // Send status via DM notification system
+            // Send status via DM notification system with the full entity payload
+            // so bold formatting renders in the DM.
             var statusMessage = await BuildStatusMessageAsync(telegramUserId, cancellationToken);
             var notification = new Notification("mystatus", statusMessage);
 
@@ -66,7 +69,7 @@ public class MyStatusCommand : IBotCommand
             if (result.Success)
             {
                 // Silently delete command message, DM sent successfully
-                return new CommandResult(string.Empty, DeleteCommandMessage, DeleteResponseAfterSeconds);
+                return new CommandResult(TelegramMessage.Empty, DeleteCommandMessage, DeleteResponseAfterSeconds);
             }
             else
             {
@@ -75,7 +78,8 @@ public class MyStatusCommand : IBotCommand
                 var deepLink = $"https://t.me/{botInfo.Username}?start=mystatus";
 
                 return new CommandResult(
-                    $"📬 I've queued your status information for you. Please start a conversation with me to receive it privately: {deepLink}",
+                    TelegramMessage.Plain(
+                        $"📬 I've queued your status information for you. Please start a conversation with me to receive it privately: {deepLink}"),
                     DeleteCommandMessage,
                     30);
             }
@@ -83,10 +87,10 @@ public class MyStatusCommand : IBotCommand
 
         // Command was sent in private DM - respond directly
         var statusText = await BuildStatusMessageAsync(telegramUserId, cancellationToken);
-        return new CommandResult(statusText, DeleteCommandMessage, DeleteResponseAfterSeconds, ParseMode.Html);
+        return new CommandResult(statusText, DeleteCommandMessage, DeleteResponseAfterSeconds);
     }
 
-    private async Task<string> BuildStatusMessageAsync(
+    private async Task<TelegramMessage> BuildStatusMessageAsync(
         long telegramUserId,
         CancellationToken cancellationToken)
     {
@@ -95,7 +99,7 @@ public class MyStatusCommand : IBotCommand
 
         if (telegramUser == null)
         {
-            return "❌ User record not found. You may need to interact with the bot in a managed chat first.";
+            return TelegramMessage.Plain("❌ User record not found. You may need to interact with the bot in a managed chat first.");
         }
 
         // Get active warnings (not expired)
@@ -106,59 +110,57 @@ public class MyStatusCommand : IBotCommand
 
         var warningCount = activeWarnings.Count;
 
-        // Build status message (HTML format for Telegram Html parse mode)
-        var statusLines = new List<string>
-        {
-            "📊 <b>Your Status</b>",
-            ""
-        };
+        // Build status message with explicit entities (bold via builder, no parse mode)
+        var builder = new TelegramMessageBuilder()
+            .Text("📊 ").Bold("Your Status").LineBreak()
+            .LineBreak();
 
         // Trust status
         if (telegramUser.IsTrusted)
         {
-            statusLines.Add("✅ <b>Trusted User</b> - Your messages skip spam detection");
+            builder.Text("✅ ").Bold("Trusted User").Text(" - Your messages skip spam detection").LineBreak();
         }
         else
         {
-            statusLines.Add("👤 <b>Regular User</b> - Your messages are checked for spam");
+            builder.Text("👤 ").Bold("Regular User").Text(" - Your messages are checked for spam").LineBreak();
         }
 
-        statusLines.Add("");
+        builder.LineBreak();
 
         // Warning status
         if (warningCount == 0)
         {
-            statusLines.Add("🎉 <b>No Active Warnings</b> - You're in good standing!");
+            builder.Text("🎉 ").Bold("No Active Warnings").Text(" - You're in good standing!").LineBreak();
         }
         else
         {
-            statusLines.Add($"⚠️ <b>Active Warnings:</b> {warningCount}");
-            statusLines.Add("");
-            statusLines.Add("<b>Recent Warnings:</b>");
+            builder.Text("⚠️ ").Bold("Active Warnings:").Text($" {warningCount}").LineBreak()
+                .LineBreak()
+                .Bold("Recent Warnings:").LineBreak();
 
             foreach (var warning in activeWarnings.Take(5).OrderByDescending(w => w.IssuedAt))
             {
                 var daysAgo = (DateTimeOffset.UtcNow - warning.IssuedAt).Days;
                 var timeAgo = daysAgo == 0 ? "today" : $"{daysAgo} day{(daysAgo > 1 ? "s" : "")} ago";
-                statusLines.Add($"  • {System.Net.WebUtility.HtmlEncode(warning.Reason)} ({timeAgo})");
+                builder.Text($"  • {warning.Reason} ({timeAgo})").LineBreak();
             }
 
             if (activeWarnings.Count > 5)
             {
-                statusLines.Add($"  ... and {activeWarnings.Count - 5} more");
+                builder.Text($"  ... and {activeWarnings.Count - 5} more").LineBreak();
             }
         }
 
-        statusLines.Add("");
-        statusLines.Add($"<b>Account Created:</b> {telegramUser.FirstSeenAt:MMM d, yyyy}");
-        statusLines.Add($"<b>Last Active:</b> {telegramUser.LastSeenAt:MMM d, yyyy}");
+        builder.LineBreak()
+            .Bold("Account Created:").Text($" {telegramUser.FirstSeenAt:MMM d, yyyy}").LineBreak()
+            .Bold("Last Active:").Text($" {telegramUser.LastSeenAt:MMM d, yyyy}").LineBreak();
 
         if (telegramUser.BotDmEnabled)
         {
-            statusLines.Add("");
-            statusLines.Add("✉️ DM notifications are <b>enabled</b>");
+            builder.LineBreak()
+                .Text("✉️ DM notifications are ").Bold("enabled").LineBreak();
         }
 
-        return string.Join("\n", statusLines);
+        return builder.Build();
     }
 }

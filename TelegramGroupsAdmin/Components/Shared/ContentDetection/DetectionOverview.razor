@@ -565,6 +565,8 @@
 </MudStack>
 
 @code {
+    [CascadingParameter] private WebUserIdentity? WebUser { get; set; }
+
     [Parameter]
     public ChatIdentity? Chat { get; set; }
 
@@ -581,8 +583,7 @@
         try
         {
             var chatId = Chat?.Id ?? 0;
-            _config = await ConfigService.GetEffectiveAsync<ContentDetectionConfig>(ConfigType.ContentDetection, chatId)
-                      ?? new ContentDetectionConfig();
+            _config = await ConfigService.GetEffectiveContentDetectionAsync(chatId);
         }
         catch (Exception ex)
         {
@@ -599,8 +600,9 @@
         {
             _isSaving = true;
 
+            var actor = WebUser!.ToActor();
             var chat = Chat ?? ChatIdentity.FromId(0);
-            await ConfigService.SaveAsync(ConfigType.ContentDetection, chat, _config);
+            await ConfigService.SaveContentDetectionAsync(chat, _config, actor);
             Snackbar.Add(chat.Id == 0 ? "Global configuration saved successfully" : "Chat configuration saved successfully", Severity.Success);
         }
         catch (Exception ex)

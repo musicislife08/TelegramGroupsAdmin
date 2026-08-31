@@ -62,7 +62,7 @@ public sealed class ApiMetrics
             description: "Telegram Bot API error breakdown");
     }
 
-    public void RecordOpenAiCall(string feature, string model, int promptTokens, int completionTokens, double durationMs, bool success)
+    public void RecordOpenAiCall(string feature, string model, long promptTokens, long completionTokens, double durationMs, bool success)
     {
         _openAiCallsTotal.Add(1, new TagList
         {

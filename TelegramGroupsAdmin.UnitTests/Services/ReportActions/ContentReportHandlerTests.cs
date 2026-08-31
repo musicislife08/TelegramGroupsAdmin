@@ -61,7 +61,6 @@ public class ContentReportHandlerTests
             _mockModerationService,
             _mockAuditService,
             _mockBotMessageService,
-            _mockCallbackContextRepo,
             NullLogger<ContentReportHandler>.Instance);
     }
 
@@ -97,7 +96,7 @@ public class ContentReportHandlerTests
 
         await _mockModerationService.Received(1).MarkAsSpamAndBanAsync(
             Arg.Is<SpamBanIntent>(i =>
-                i.User.Id == TestUserId &&
+                i!.User.Id == TestUserId &&
                 i.MessageId == TestMessageId &&
                 i.Chat.Id == TestChatId &&
                 i.Reason.Contains($"Report #{TestReportId}")),
@@ -160,14 +159,14 @@ public class ContentReportHandlerTests
 
         await _mockAuditService.Received(1).LogEventAsync(
             AuditEventType.ReportReviewed,
-            Arg.Is<Actor>(a => a.WebUserId == TestReviewerId),
-            Arg.Is<Actor>(a => a.TelegramUserId == TestUserId),
-            Arg.Is<string>(s => s.Contains("Marked as spam") && s.Contains($"report #{TestReportId}")),
+            Arg.Is<Actor>(a => a!.WebUserId == TestReviewerId),
+            Arg.Is<Actor>(a => a!.TelegramUserId == TestUserId),
+            Arg.Is<string>(s => s!.Contains("Marked as spam") && s.Contains($"report #{TestReportId}")),
             Arg.Any<CancellationToken>());
     }
 
     [Test]
-    public async Task SpamAsync_Success_CleansUpCallbackContext()
+    public async Task SpamAsync_Success_DoesNotDeleteCallbackContextsByReportId()
     {
         var report = CreateTestReport();
         var message = CreateTestMessage();
@@ -176,8 +175,56 @@ public class ContentReportHandlerTests
 
         await _handler.SpamAsync(TestReportId, TestExecutor, CancellationToken.None);
 
-        await _mockCallbackContextRepo.Received(1)
-            .DeleteByReportIdAsync(TestReportId, Arg.Any<CancellationToken>());
+        await _mockCallbackContextRepo.DidNotReceive()
+            .DeleteByReportIdAsync(Arg.Any<long>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task BanAsync_Success_DoesNotDeleteCallbackContextsByReportId()
+    {
+        var report = CreateTestReport();
+        var message = CreateTestMessage();
+        SetupReportAndMessage(report, message);
+
+        _mockModerationService.BanUserAsync(
+                Arg.Any<BanIntent>(), Arg.Any<CancellationToken>())
+            .Returns(new ModerationResult { Success = true, ChatsAffected = 3 });
+
+        await _handler.BanAsync(TestReportId, TestExecutor, CancellationToken.None);
+
+        await _mockCallbackContextRepo.DidNotReceive()
+            .DeleteByReportIdAsync(Arg.Any<long>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task WarnAsync_Success_DoesNotDeleteCallbackContextsByReportId()
+    {
+        var report = CreateTestReport();
+        var message = CreateTestMessage();
+        SetupReportAndMessage(report, message);
+
+        _mockModerationService.WarnUserAsync(
+                Arg.Any<WarnIntent>(), Arg.Any<CancellationToken>())
+            .Returns(new ModerationResult { Success = true, WarningCount = 1 });
+
+        await _handler.WarnAsync(TestReportId, TestExecutor, CancellationToken.None);
+
+        await _mockCallbackContextRepo.DidNotReceive()
+            .DeleteByReportIdAsync(Arg.Any<long>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task DismissAsync_Success_DoesNotDeleteCallbackContextsByReportId()
+    {
+        var report = CreateTestReport();
+        _mockReportsRepo.GetContentReportAsync(TestReportId, Arg.Any<CancellationToken>())
+            .Returns(report);
+
+        var result = await _handler.DismissAsync(TestReportId, TestExecutor, null, CancellationToken.None);
+
+        Assert.That(result.Success, Is.True);
+        await _mockCallbackContextRepo.DidNotReceive()
+            .DeleteByReportIdAsync(Arg.Any<long>(), Arg.Any<CancellationToken>());
     }
 
     #endregion
@@ -205,6 +252,27 @@ public class ContentReportHandlerTests
             TestChatId, TestMessageId,
             deletionSource: "ban_action",
             cancellationToken: Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task BanAsync_Success_ThreadsOriginReportId()
+    {
+        // Regression coverage for I1: without OriginReportId, BotModerationService's sweep closes
+        // this very report before the handler's own status update runs, and the handler
+        // spuriously reports failure for an action that fully succeeded.
+        var report = CreateTestReport();
+        var message = CreateTestMessage();
+        SetupReportAndMessage(report, message);
+
+        _mockModerationService.BanUserAsync(
+                Arg.Any<BanIntent>(), Arg.Any<CancellationToken>())
+            .Returns(new ModerationResult { Success = true, ChatsAffected = 3 });
+
+        await _handler.BanAsync(TestReportId, TestExecutor, CancellationToken.None);
+
+        await _mockModerationService.Received(1).BanUserAsync(
+            Arg.Is<BanIntent>(i => i!.OriginReportId == TestReportId),
+            Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -270,6 +338,27 @@ public class ContentReportHandlerTests
     }
 
     [Test]
+    public async Task WarnAsync_Success_ThreadsOriginReportId()
+    {
+        // Regression coverage: without OriginReportId, an auto-ban triggered by this warning
+        // closes this very report before the handler's own status update runs, and the handler
+        // spuriously reports failure for an action that fully succeeded.
+        var report = CreateTestReport();
+        var message = CreateTestMessage();
+        SetupReportAndMessage(report, message);
+
+        _mockModerationService.WarnUserAsync(
+                Arg.Any<WarnIntent>(), Arg.Any<CancellationToken>())
+            .Returns(new ModerationResult { Success = true, WarningCount = 2 });
+
+        await _handler.WarnAsync(TestReportId, TestExecutor, CancellationToken.None);
+
+        await _mockModerationService.Received(1).WarnUserAsync(
+            Arg.Is<WarnIntent>(i => i!.OriginReportId == TestReportId),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
     public async Task WarnAsync_ModerationFails_ReturnsFailure()
     {
         var report = CreateTestReport();
@@ -301,7 +390,7 @@ public class ContentReportHandlerTests
 
         await _mockAuditService.Received(1).LogEventAsync(
             AuditEventType.ReportReviewed, Arg.Any<Actor>(), Arg.Any<Actor>(),
-            Arg.Is<string>(s => s.Contains("Warned user") && s.Contains("3 warnings total")),
+            Arg.Is<string>(s => s!.Contains("Warned user") && s.Contains("3 warnings total")),
             Arg.Any<CancellationToken>());
     }
 
@@ -354,9 +443,9 @@ public class ContentReportHandlerTests
 
         await _mockBotMessageService.Received(1).SendAndSaveMessageAsync(
             TestChatId,
-            Arg.Is<string>(s => s.Contains("reviewed") && s.Contains("no action")),
+            Arg.Is<string>(s => s!.Contains("reviewed") && s.Contains("no action")),
             parseMode: ParseMode.None,
-            replyParameters: Arg.Is<ReplyParameters>(r => r.MessageId == TestMessageId),
+            replyParameters: Arg.Is<ReplyParameters>(r => r!.MessageId == TestMessageId),
             cancellationToken: Arg.Any<CancellationToken>());
     }
 

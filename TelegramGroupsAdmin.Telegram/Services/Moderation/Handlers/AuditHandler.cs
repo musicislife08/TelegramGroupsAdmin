@@ -3,6 +3,7 @@ using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Telegram.Services.Welcome;
 
 namespace TelegramGroupsAdmin.Telegram.Services.Moderation.Handlers;
 
@@ -90,15 +91,18 @@ public class AuditHandler : IAuditHandler
     /// <inheritdoc />
     public async Task LogRestrictAsync(UserIdentity user, ChatIdentity? chat, Actor executor, string? reason, CancellationToken cancellationToken = default)
     {
-        var record = CreateRecord(user.Id, UserActionType.Mute, executor, reason);
+        var record = CreateRecord(user.Id, UserActionType.Mute, executor, reason, chatId: chat?.Id);
         await _userActionsRepository.InsertAsync(record, cancellationToken);
-        LogRecorded(UserActionType.Mute, user, executor);
+
+        _logger.LogDebug(
+            "Recorded {ActionType} action for {User} in {Chat} by {Executor}",
+            UserActionType.Mute, user.ToLogDebug(), chat.ToLogDebug(), executor.GetDisplayText());
     }
 
     /// <inheritdoc />
     public async Task LogRestorePermissionsAsync(UserIdentity user, ChatIdentity chat, Actor executor, string? reason, CancellationToken cancellationToken = default)
     {
-        var record = CreateRecord(user.Id, UserActionType.RestorePermissions, executor, reason);
+        var record = CreateRecord(user.Id, UserActionType.RestorePermissions, executor, reason, chatId: chat.Id);
         await _userActionsRepository.InsertAsync(record, cancellationToken);
 
         _logger.LogDebug(
@@ -109,12 +113,28 @@ public class AuditHandler : IAuditHandler
     /// <inheritdoc />
     public async Task LogKickAsync(UserIdentity user, ChatIdentity chat, Actor executor, string? reason, CancellationToken cancellationToken = default)
     {
-        var record = CreateRecord(user.Id, UserActionType.Kick, executor, reason);
+        var record = CreateRecord(user.Id, UserActionType.Kick, executor, reason, chatId: chat.Id);
         await _userActionsRepository.InsertAsync(record, cancellationToken);
 
         _logger.LogDebug(
             "Recorded {ActionType} action for {User} in {Chat} by {Executor}",
             UserActionType.Kick, user.ToLogDebug(), chat.ToLogDebug(), executor.GetDisplayText());
+    }
+
+    /// <inheritdoc />
+    public async Task LogWelcomeBypassAsync(
+        UserIdentity user,
+        ChatIdentity chat,
+        BypassDecision decision,
+        string reasonDetail,
+        CancellationToken cancellationToken = default)
+    {
+        var record = CreateRecord(user.Id, UserActionType.WelcomeBypass, Actor.WelcomeBypass, reasonDetail, chatId: chat.Id);
+        await _userActionsRepository.InsertAsync(record, cancellationToken);
+
+        _logger.LogDebug(
+            "Recorded {ActionType} action for {User} in {Chat} (decision: {Decision}, reason: {Reason})",
+            UserActionType.WelcomeBypass, user.ToLogDebug(), chat.ToLogDebug(), decision, reasonDetail);
     }
 
     private static UserActionRecord CreateRecord(

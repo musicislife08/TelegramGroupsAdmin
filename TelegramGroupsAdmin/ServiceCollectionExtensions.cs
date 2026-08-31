@@ -1,12 +1,15 @@
 using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Server;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.IO;
 using MudBlazor.Services;
 using Polly;
 using Polly.RateLimiting;
+using TelegramGroupsAdmin.Auth;
 using TelegramGroupsAdmin.Constants;
 using TelegramGroupsAdmin.Data.Services;
 using TelegramGroupsAdmin.Services;
@@ -81,20 +84,38 @@ public static class ServiceCollectionExtensions
                     options.LoginPath = "/login";
                     options.LogoutPath = "/logout";
                     options.AccessDeniedPath = "/access-denied";
+                    options.Events = new CookieAuthenticationEvents
+                    {
+                        OnValidatePrincipal = async context =>
+                        {
+                            if (context.Principal is null)
+                                return;
+
+                            var validator = context.HttpContext.RequestServices
+                                .GetRequiredService<TelegramGroupsAdmin.Services.Auth.IUserSessionValidator>();
+
+                            if (!await validator.IsStillValidAsync(context.Principal, context.HttpContext.RequestAborted))
+                            {
+                                context.RejectPrincipal();
+                                await context.HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+                            }
+                        }
+                    };
                 });
 
             // Add authorization policies
             services.AddAuthorizationBuilder()
                 .AddPolicy(AuthenticationConstants.PolicyGlobalAdminOrOwner, policy =>
                     policy.RequireRole("GlobalAdmin", "Owner"))
-                .AddPolicy("OwnerOnly", policy =>
+                .AddPolicy(AuthenticationConstants.PolicyOwnerOnly, policy =>
                     policy.RequireRole("Owner"));
 
             services.AddCascadingAuthenticationState();
-            services.AddScoped<AuthenticationStateProvider, ServerAuthenticationStateProvider>();
+            services.AddScoped<AuthenticationStateProvider, RevalidatingUserAuthenticationStateProvider>();
 
             // Auth cookie service for programmatic cookie generation (used by app and tests)
             services.AddScoped<TelegramGroupsAdmin.Services.Auth.IAuthCookieService, TelegramGroupsAdmin.Services.Auth.AuthCookieService>();
+            services.AddScoped<TelegramGroupsAdmin.Services.Auth.IUserSessionValidator, TelegramGroupsAdmin.Services.Auth.UserSessionValidator>();
 
             return services;
         }
@@ -235,7 +256,7 @@ public static class ServiceCollectionExtensions
                     resiliencePipelineBuilder.AddRateLimiter(limiterOptions);
                 });
 
-            // Note: OpenAI HttpClient removed - now using Semantic Kernel via IChatService
+            // Note: OpenAI HttpClient removed - now using IChatService (Microsoft.Extensions.AI)
             // which handles multiple providers (OpenAI, Azure OpenAI, local endpoints)
 
             services.AddHttpClient();

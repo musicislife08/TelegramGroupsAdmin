@@ -10,4 +10,5 @@ public record ScoringResult(
     decimal AiScore,
     string? AiReason,
     string[]? AiSignals,
-    bool ContainsNudity = false);
+    bool ContainsNudity = false,
+    bool ExplicitDisplayText = false);

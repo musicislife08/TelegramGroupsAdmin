@@ -1,4 +1,5 @@
 using Telegram.Bot.Types;
+using TelegramGroupsAdmin.Core.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BotCommands;
 
@@ -23,9 +24,9 @@ public interface IBotCommand
     string Usage { get; }
 
     /// <summary>
-    /// Minimum permission level required (0=Admin, 1=GlobalAdmin, 2=Owner)
+    /// Minimum permission tier required to run this command.
     /// </summary>
-    int MinPermissionLevel { get; }
+    PermissionLevel MinPermissionLevel { get; }
 
     /// <summary>
     /// Whether this command requires replying to a message
@@ -48,12 +49,12 @@ public interface IBotCommand
     /// </summary>
     /// <param name="message">Telegram message containing the command</param>
     /// <param name="args">Command arguments (parsed after command name)</param>
-    /// <param name="userPermissionLevel">Permission level of user who issued command</param>
+    /// <param name="userPermission">Effective permission tier of the user who issued the command</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>CommandResult with response message and optional dynamic deletion time</returns>
     Task<CommandResult> ExecuteAsync(
         Message message,
         string[] args,
-        int userPermissionLevel,
+        PermissionLevel userPermission,
         CancellationToken cancellationToken = default);
 }

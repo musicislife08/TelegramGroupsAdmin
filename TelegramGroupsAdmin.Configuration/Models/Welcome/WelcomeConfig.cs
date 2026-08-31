@@ -55,6 +55,13 @@ public class WelcomeConfig
     public ExamConfig? ExamConfig { get; set; }
 
     /// <summary>
+    /// Trusted user / privileged bypass configuration.
+    /// When enabled, trusted users skip the welcome flow. Chat admins and linked web
+    /// admins always bypass regardless of this toggle.
+    /// </summary>
+    public TrustedBypassConfig TrustedBypass { get; set; } = new();
+
+    /// <summary>
     /// Default configuration
     /// </summary>
     public static WelcomeConfig Default => new()

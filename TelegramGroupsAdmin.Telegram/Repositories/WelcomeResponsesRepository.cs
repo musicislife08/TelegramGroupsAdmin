@@ -54,6 +54,21 @@ public class WelcomeResponsesRepository : IWelcomeResponsesRepository
         return entity?.ToModel();
     }
 
+    public async Task<List<WelcomeResponse>> GetByUserAsync(long userId, CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        // One row per chat — the newest, matching GetByUserAndChatAsync's ordering.
+        var entities = await context.WelcomeResponses
+            .AsNoTracking()
+            .Where(wr => wr.UserId == userId)
+            .GroupBy(wr => wr.ChatId)
+            .Select(g => g.OrderByDescending(wr => wr.CreatedAt).First())
+            .ToListAsync(cancellationToken);
+
+        return entities.Select(e => e.ToModel()).ToList();
+    }
+
     public async Task UpdateResponseAsync(long id, WelcomeResponseType responseType, bool dmSent = false, bool dmFallback = false, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);

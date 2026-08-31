@@ -1,6 +1,7 @@
 using DataModels = TelegramGroupsAdmin.Data.Models;
 using UiModels = TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Core.Repositories.Mappings;
+using TelegramGroupsAdmin.Core.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Repositories.Mappings;
 
@@ -32,7 +33,7 @@ public static class UserActionMappings
             string? targetLastName = null) => new(
             Id: data.Id,
             UserId: data.UserId,
-            ActionType: (UiModels.UserActionType)data.ActionType,
+            ActionType: (UserActionType)data.ActionType,
             MessageId: data.MessageId,
             ChatId: data.ChatId,
             IssuedBy: ActorMappings.ToActor(data.WebUserId, data.TelegramUserId, data.SystemIdentifier, webUserEmail, telegramUsername, telegramFirstName, telegramLastName),
@@ -55,7 +56,7 @@ public static class UserActionMappings
             {
                 Id = ui.Id,
                 UserId = ui.UserId,
-                ActionType = (DataModels.UserActionType)(int)ui.ActionType,
+                ActionType = (int)ui.ActionType,
                 MessageId = ui.MessageId,
                 ChatId = ui.ChatId,
                 WebUserId = webUserId,

@@ -26,6 +26,19 @@ public interface IReportsRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Get every pending report whose subject is the given user, regardless of report type.
+    /// Subject resolution per type: ContentReport → reported message author,
+    /// ImpersonationAlert → suspected user, ExamFailure / ProfileScanAlert → the user.
+    /// </summary>
+    /// <param name="userId">Telegram user id of the report subject.</param>
+    /// <param name="chatId">When supplied, narrows to reports in that chat.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    Task<List<ReportBase>> GetPendingForUserAsync(
+        long userId,
+        long? chatId = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Get reports with optional filters.
     /// </summary>
     Task<List<ReportBase>> GetAsync(
@@ -37,10 +50,13 @@ public interface IReportsRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Get count of pending reports, optionally filtered by chat and/or type.
+    /// Get count of pending reports scoped by the given chat-id collection.
+    /// A collection containing <c>0</c> (GlobalChatId) counts all pending reports (global / no filter).
+    /// An empty collection returns 0 rows.
+    /// A non-empty collection without <c>0</c> counts only reports in those specific chats.
     /// </summary>
     Task<int> GetPendingCountAsync(
-        long? chatId = null,
+        IReadOnlyCollection<long> chatIds,
         ReportType? type = null,
         CancellationToken cancellationToken = default);
 

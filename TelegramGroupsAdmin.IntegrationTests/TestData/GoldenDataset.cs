@@ -1,597 +1,122 @@
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Data.Constants;
 
 namespace TelegramGroupsAdmin.IntegrationTests.TestData;
 
-/// <summary>
-/// Golden dataset extracted from production database with PII redacted.
-/// Contains real message content and spam patterns to ensure realistic testing.
-/// </summary>
 public static class GoldenDataset
 {
-    // Tables with DTOs that BackupService can export (excludes: __EFMigrationsHistory, file_scan_quota, ticker.*)
-    public const int TotalTableCount = 42; // Updated 2026-04-09: +file_scan_results (FileScanResultDto rename)
-
     /// <summary>
-    /// Web application users (ASP.NET Identity)
+    /// Loads the 35 canonical/*.sql fixtures FK-ordered into the target context, then
+    /// runs the encrypted-column UPDATE post-step using the supplied DataProtection
+    /// provider. Used by PostgresFixture.[OneTimeSetUp] to build golden_template, and
+    /// by GoldenReducePlanTests to exercise Reduce against canonical without depending
+    /// on Phase 2's template infrastructure.
+    ///
+    /// HASHES are pre-baked into the SQL files (see Pre-1b) — this method does NOT
+    /// recompute content_hash / similarity_hash at load time. The only post-load step
+    /// is the encrypted-column UPDATE below.
     /// </summary>
-    public static class Users
+    public static async Task LoadCanonicalAsync(
+        AppDbContext context,
+        IDataProtectionProvider dataProtection,
+        CancellationToken ct = default)
     {
-        public const string User1_Id = "b388ee38-0ed3-4c09-9def-5715f9f07f56";
-        public const string User1_Email = "owner@example.com";
-        public const int User1_PermissionLevel = 2; // Owner
-        public const int User1_Status = 1; // Active
-        public const bool User1_EmailVerified = true;
-        public const bool User1_TotpEnabled = true;
-
-        public const string User2_Id = "921637d5-0f65-4c66-b143-6f057dd06a1c";
-        public const string User2_Email = "admin@example.com";
-        public const int User2_PermissionLevel = 0; // Admin
-        public const int User2_Status = 1; // Active
-        public const string User2_InvitedBy = User1_Id; // FK to User1
-        public const bool User2_EmailVerified = true;
-        public const bool User2_TotpEnabled = true;
-
-        public const string User3_Id = "a8dc8371-afc5-4b61-9d71-d177f2dd9ddd";
-        public const string User3_Email = "deleted@example.com";
-        public const int User3_PermissionLevel = 0; // Admin
-        public const int User3_Status = 3; // Deleted
-        public const string User3_InvitedBy = User1_Id;
-        public const bool User3_EmailVerified = false;
-        public const bool User3_TotpEnabled = false;
-
-        public const string User4_Id = "ba9ba542-3df6-4473-a820-578562780c57";
-        public const string User4_Email = "globaladmin@example.com";
-        public const int User4_PermissionLevel = 1; // GlobalAdmin
-        public const int User4_Status = 3; // Deleted
-        public const string User4_InvitedBy = User2_Id; // FK to User2
-        public const bool User4_EmailVerified = false;
-        public const bool User4_TotpEnabled = false;
-    }
-
-    /// <summary>
-    /// Telegram users (from groups)
-    /// </summary>
-    public static class TelegramUsers
-    {
-        // System user (special ID 0)
-        public const long System_TelegramUserId = 0;
-        public const string System_Username = "system";
-        public const bool System_IsTrusted = false;
-        public const bool System_BotDmEnabled = false;
-
-        // Real users (IDs randomized)
-        public const long User1_TelegramUserId = 100001;
-        public const string User1_Username = "alice_user";
-        public const string User1_FirstName = "Alice";
-        public const string User1_LastName = "Anderson";
-        public const bool User1_IsTrusted = false;
-        public const bool User1_BotDmEnabled = true;
-
-        public const long User2_TelegramUserId = 100002;
-        public const string User2_Username = "bob_chat";
-        public const string User2_FirstName = "Bob";
-        public const string User2_LastName = "Brown";
-        public const bool User2_IsTrusted = false;
-        public const bool User2_BotDmEnabled = false;
-
-        public const long User3_TelegramUserId = 100003;
-        public const string User3_Username = "charlie_msg";
-        public const string User3_FirstName = "Charlie";
-        public const string User3_LastName = "Clark";
-        public const bool User3_IsTrusted = true;
-        public const bool User3_BotDmEnabled = false;
-
-        public const long User4_TelegramUserId = 100004;
-        public const string User4_Username = "diana_test";
-        public const string User4_FirstName = "Diana";
-        public const string User4_LastName = "Davis";
-        public const bool User4_IsTrusted = false;
-        public const bool User4_BotDmEnabled = true;
-
-        public const long User5_TelegramUserId = 100005;
-        public const string User5_Username = "eve_trusted";
-        public const string? User5_FirstName = null;
-        public const bool User5_IsTrusted = true;
-        public const bool User5_BotDmEnabled = false;
-
-        public const long User6_TelegramUserId = 100006;
-        public const string? User6_Username = null;
-        public const string User6_FirstName = "Frank";
-        public const bool User6_IsTrusted = true;
-        public const bool User6_BotDmEnabled = false;
-
-        public const long User7_TelegramUserId = 100007;
-        public const string User7_Username = "grace_j";
-        public const string? User7_FirstName = null;
-        public const bool User7_IsTrusted = true;
-        public const bool User7_BotDmEnabled = false;
-    }
-
-    /// <summary>
-    /// Managed chats (groups monitored by bot)
-    /// </summary>
-    public static class ManagedChats
-    {
-        public const long Chat1_Id = -1001766988150;
-        public const string Chat1_Name = "Test Group Alpha";
-        public const int Chat1_Type = 2; // Group
-        public const int Chat1_BotStatus = 1;
-        public const bool Chat1_IsAdmin = true;
-        public const bool Chat1_IsActive = true;
-
-        public const long Chat2_Id = -1003193605358;
-        public const string Chat2_Name = "Bot Testing Beta";
-        public const int Chat2_Type = 2; // Group
-        public const int Chat2_BotStatus = 1;
-        public const bool Chat2_IsAdmin = true;
-        public const bool Chat2_IsActive = true;
-
-        public const long Chat3_Id = -1001241664237;
-        public const string Chat3_Name = "Community Gamma";
-        public const int Chat3_Type = 2; // Group
-        public const int Chat3_BotStatus = 1;
-        public const bool Chat3_IsAdmin = true;
-        public const bool Chat3_IsActive = true;
-
-        // Chat for most test messages
-        public const long MainChat_Id = -1001322973935;
-        public const string MainChat_Name = "Main Test Group";
-        public const int MainChat_Type = 2;
-        public const int MainChat_BotStatus = 1;
-        public const bool MainChat_IsAdmin = true;
-        public const bool MainChat_IsActive = true;
-    }
-
-    /// <summary>
-    /// Real message content from production (PII redacted)
-    /// </summary>
-    public static class Messages
-    {
-        // Message IDs and relationships preserved
-        public const int Msg1_Id = 82619;
-        public const long Msg1_UserId = TelegramUsers.User2_TelegramUserId;
-        public const long Msg1_ChatId = ManagedChats.MainChat_Id;
-        public const string Msg1_Text = "Fair enough";
-        public const int Msg1_ContentCheckSkipReason = 2;
-
-        public const int Msg2_Id = 82618;
-        public const long Msg2_UserId = 1232994248; // Additional user
-        public const long Msg2_ChatId = ManagedChats.MainChat_Id;
-        public const string Msg2_Text = "He was old and crusty 20yrs ago 😂.  I'm guessing he's had enough.";
-        public const int Msg2_ContentCheckSkipReason = 2;
-
-        public const int Msg3_Id = 82617;
-        public const long Msg3_UserId = TelegramUsers.User2_TelegramUserId;
-        public const long Msg3_ChatId = ManagedChats.MainChat_Id;
-        public const string Msg3_Text = "Get while the getting's good?";
-        public const int Msg3_ContentCheckSkipReason = 2;
-
-        public const int Msg4_Id = 82616;
-        public const long Msg4_UserId = TelegramUsers.User2_TelegramUserId;
-        public const long Msg4_ChatId = ManagedChats.MainChat_Id;
-        public const string Msg4_Text = "Sounds like he may wanna do it again at some point. I know looking at the state of things I might want to be in it while watching whatever is gonna go down in the economy";
-        public const int Msg4_ContentCheckSkipReason = 2;
-
-        public const int Msg5_Id = 82615;
-        public const long Msg5_UserId = 1232994248;
-        public const long Msg5_ChatId = ManagedChats.MainChat_Id;
-        public const string Msg5_Text = "Sad to see him ride out, he definitely knows how to run an org.";
-        public const int Msg5_ContentCheckSkipReason = 2;
-
-        // Message with media
-        public const int Msg6_Id = 82612;
-        public const long Msg6_UserId = 1232994248;
-        public const long Msg6_ChatId = ManagedChats.MainChat_Id;
-        public const string? Msg6_Text = null; // Media only
-        public const int Msg6_MediaType = 1; // Photo
-        public const int Msg6_ContentCheckSkipReason = 2;
-
-        // Longer message
-        public const int Msg7_Id = 82603;
-        public const long Msg7_UserId = TelegramUsers.User2_TelegramUserId;
-        public const long Msg7_ChatId = ManagedChats.MainChat_Id;
-        public const string Msg7_Text = "OK, I feel as though I can now say this from a position of competency, trial and error success.\n\nJust pay the feckin $20.\n\nEven with a used car value worth of GPUs, there is not a single sumbitchin local LLM to approach the effectiveness of even the $20 Claude models with Code CLI.\n\nI feel like I have a very expensive chat bot that feeds me a chain of errors to correct in my shed.";
-        public const int Msg7_ContentCheckSkipReason = 2;
-
-        // Professional conversation
-        public const int Msg8_Id = 82606;
-        public const long Msg8_UserId = 934156131;
-        public const long Msg8_ChatId = ManagedChats.MainChat_Id;
-        public const string Msg8_Text = "I've been active with the American Institute of Architects large firm Roundtable for years. We have an email list. I emailed every single General Counsel at the top 20 architectural firms, and that's how I got this job and why I'm talking to the other firm too.";
-        public const int Msg8_ContentCheckSkipReason = 1;
-
-        // Healthcare tech discussion
-        public const int Msg9_Id = 82596;
-        public const long Msg9_UserId = 468009795;
-        public const long Msg9_ChatId = ManagedChats.MainChat_Id;
-        public const string Msg9_Text = "I have close to 8 years of experience in Healthcare tech. So I have that momentum.";
-        public const int Msg9_ContentCheckSkipReason = 2;
-
-        // Software engineering context
-        public const int Msg10_Id = 82594;
-        public const long Msg10_UserId = 468009795;
-        public const long Msg10_ChatId = ManagedChats.MainChat_Id;
-        public const string Msg10_Text = "I'm a software engineering manager.  Like I'm the boss of people who write the code.";
-        public const int Msg10_ContentCheckSkipReason = 2;
-
-        // Message for Result2
-        public const int Msg11_Id = 82581;
-        public const long Msg11_UserId = TelegramUsers.User1_TelegramUserId;
-        public const long Msg11_ChatId = ManagedChats.MainChat_Id;
-        public const string Msg11_Text = "I hit 30 last summer.";
-        public const int Msg11_ContentCheckSkipReason = 0; // Actually checked
-    }
-
-    /// <summary>
-    /// Detection results (spam/ham classifications)
-    /// </summary>
-    public static class DetectionResults
-    {
-        public const int Result1_MessageId = Messages.Msg1_Id;
-        public const string Result1_DetectionMethod = "InvisibleChars, StopWords, CAS, Similarity, Bayes, Spacing";
-        public const double Result1_Score = 0.0;
-        public const bool Result1_IsSpam = false;
-        public const string Result1_Reason = "No spam detected";
-        public const double Result1_NetScore = 0.0;
-
-        public const int Result2_MessageId = 82581; // "I hit 30 last summer"
-        public const string Result2_DetectionMethod = "InvisibleChars, StopWords, CAS, Similarity, Bayes, Spacing";
-        public const double Result2_Score = 1.85;
-        public const bool Result2_IsSpam = false;
-        public const string Result2_Reason = "Spam probability: 0.752 (key words: hit) (certainty: 0.504)";
-        public const double Result2_NetScore = 1.85;
-    }
-
-    /// <summary>
-    /// Training labels (explicit ML training data for spam classifier)
-    /// </summary>
-    public static class TrainingLabels
-    {
-        // Spam label 1: Msg1 marked as spam by admin
-        public const int Label1_MessageId = Messages.Msg1_Id;
-        public const short Label1_Label = 0; // Spam
-        public const long Label1_LabeledByUserId = TelegramUsers.User1_TelegramUserId;
-        public const string Label1_Reason = "Manual spam marking via /report command";
-
-        // Spam label 2: Msg2 marked as spam (no user attribution)
-        public const int Label2_MessageId = Messages.Msg2_Id;
-        public const short Label2_Label = 0; // Spam
-        public static readonly long? Label2_LabeledByUserId = null;
-        public const string Label2_Reason = "Confirmed spam pattern";
-
-        // Ham label 1: Msg3 corrected to ham
-        public const int Label3_MessageId = Messages.Msg3_Id;
-        public const short Label3_Label = 1; // Ham
-        public const long Label3_LabeledByUserId = TelegramUsers.User2_TelegramUserId;
-        public const string Label3_Reason = "Admin correction - false positive";
-
-        // Ham label 2: Msg4 marked as ham (no reason)
-        public const int Label4_MessageId = Messages.Msg4_Id;
-        public const short Label4_Label = 1; // Ham
-        public static readonly long? Label4_LabeledByUserId = null;
-        public static readonly string? Label4_Reason = null;
-
-        // Spam label 3: Msg5 marked as spam (no reason)
-        public const int Label5_MessageId = Messages.Msg5_Id;
-        public const short Label5_Label = 0; // Spam
-        public static readonly long? Label5_LabeledByUserId = null;
-        public static readonly string? Label5_Reason = null;
-    }
-
-    /// <summary>
-    /// Linked channels (channels linked to managed chat groups for impersonation detection)
-    /// </summary>
-    public static class LinkedChannels
-    {
-        // Channel linked to MainChat (1:1 relationship per Telegram API)
-        public const long Channel1_ManagedChatId = ManagedChats.MainChat_Id;
-        public const long Channel1_ChannelId = -1001555777999;
-        public const string Channel1_Name = "Main Test Channel";
-        public const string? Channel1_IconPath = null; // No icon downloaded
-        // Photo hash: 8 bytes representing a pHash for impersonation detection
-        public static readonly byte[] Channel1_PhotoHash = [0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF0];
-
-        // Channel linked to Chat1 (no photo hash - tests null handling)
-        public const long Channel2_ManagedChatId = ManagedChats.Chat1_Id;
-        public const long Channel2_ChannelId = -1001444666888;
-        public const string Channel2_Name = "Alpha Channel";
-        public const string? Channel2_IconPath = "channels/alpha_icon.jpg";
-        public static readonly byte[]? Channel2_PhotoHash = null;
-    }
-
-    /// <summary>
-    /// Test API keys (plaintext, will be encrypted during seed)
-    /// </summary>
-    public static class ApiKeys
-    {
-        public const string VirusTotal_Test = "vt_test_key_1a2b3c4d5e6f";
-    }
-
-    /// <summary>
-    /// Config data (JSONB and encrypted fields)
-    /// </summary>
-    public static class Configs
-    {
-        public const long Config1_Id = 1;
-        public const long Config1_ChatId = 0; // Global config (SCHEMA-3: chat_id = 0 for global)
-
-        // Backup encryption config (real structure)
-        public const string BackupEncryptionConfigJson = """
+        // FK-safe load order matching TestData/SQL/canonical/ exactly (35 files;
+        // numeric on-disk order IS the FK-safe order — Pre-1b enforced this).
+        // Resource names use '.' separators per .NET embedded-resource conventions:
+        // path "TestData/SQL/canonical/01_users.sql" -> "SQL.canonical.01_users.sql".
+        string[] fixtures =
         {
-          "Enabled": true,
-          "Algorithm": "AES-256-GCM",
-          "CreatedAt": "2025-10-28T03:44:47.159372+00:00",
-          "Iterations": 100000,
-          "LastRotatedAt": null
-        }
-        """;
-    }
+            // Layer 0 roots — users, telegram_users, managed_chats first
+            "SQL.canonical.01_users.sql",
+            "SQL.canonical.02_telegram_users.sql",
+            "SQL.canonical.03_managed_chats.sql",
+            // Independent reference / config tables
+            "SQL.canonical.04_configs.sql",
+            "SQL.canonical.05_content_detection_configs.sql",
+            "SQL.canonical.06_ban_celebration_captions.sql",
+            "SQL.canonical.07_ban_celebration_gifs.sql",
+            "SQL.canonical.08_blocklist_subscriptions.sql",
+            "SQL.canonical.09_prompt_versions.sql",
+            "SQL.canonical.10_recovery_codes.sql",       // EMPTY (0 rows)
+            "SQL.canonical.11_stop_words.sql",
+            "SQL.canonical.12_tag_definitions.sql",
+            "SQL.canonical.13_username_blacklist.sql",   // 2 rows (Exact only)
+            "SQL.canonical.14_domain_filters.sql",       // EMPTY
+            "SQL.canonical.15_image_training_samples.sql", // EMPTY
+            "SQL.canonical.16_video_training_samples.sql", // EMPTY
+            "SQL.canonical.17_web_notifications.sql",    // EMPTY
+            "SQL.canonical.18_notification_preferences.sql",
+            // Layer 1 — children of roots
+            "SQL.canonical.19_messages.sql",             // 400 rows
+            "SQL.canonical.20_chat_admins.sql",
+            "SQL.canonical.21_linked_channels.sql",
+            "SQL.canonical.22_telegram_user_mappings.sql",
+            "SQL.canonical.23_profile_scan_results.sql",
+            "SQL.canonical.24_username_history.sql",
+            "SQL.canonical.25_admin_notes.sql",
+            "SQL.canonical.26_audit_log.sql",
+            "SQL.canonical.27_user_tags.sql",
+            "SQL.canonical.28_welcome_responses.sql",    // includes synthetic 999001..999005
+            "SQL.canonical.29_invites.sql",
+            "SQL.canonical.30_reports.sql",
+            // Layer 2 — children of messages
+            "SQL.canonical.31_message_edits.sql",
+            "SQL.canonical.32_detection_results.sql",
+            "SQL.canonical.33_training_labels.sql",      // 200 rows
+            "SQL.canonical.34_user_actions.sql",         // 993 rows
+            // Layer 3 — child of messages AND message_edits
+            "SQL.canonical.35_message_translations.sql",
+        };
 
-    /// <summary>
-    /// Analytics test data expected values (from 50_analytics_test_data.sql).
-    /// Used for assertions in AnalyticsRepositoryTests.
-    /// </summary>
-    public static class AnalyticsData
-    {
-        // Spam detection counts (net_confidence > 0)
-        public const int TodaySpamCount = 3;           // 3 spam detections today (82617, 82618, 82616)
-        public const int YesterdaySpamCount = 2;       // 2 spam detections yesterday (82615, 82612)
-        public const int LastWeekSpamCount = 2;        // 2 spam detections 8-9 days ago (82606, 82603)
-
-        // Base data has 2 ham detections (from 05_base_detection_results.sql)
-        public const int BaseHamCount = 2;
-
-        // FP/FN test data (references existing message IDs)
-        public const int FalsePositiveMessageId = 82617;  // Spam corrected to ham
-        public const int FalseNegativeMessageId = 82594;  // Ham (from base) corrected to spam
-
-        // Welcome response expected counts (from 50_analytics_test_data.sql)
-        public const int TodayAcceptedCount = 2;       // Users 100001, 100002
-        public const int TodayDeniedCount = 1;         // User 100003
-        public const int YesterdayTimeoutCount = 1;    // User 100004
-        public const int YesterdayLeftCount = 1;       // User 100005
-        public const int LastWeekAcceptedCount = 1;    // User 100006
-
-        // Total welcome responses
-        public const int TotalWelcomeResponses = 6;
-
-        // Algorithm performance data - CheckName enum values in check_results_json
-        public const int CheckNameStopWords = 0;       // StopWords algorithm
-        public const int CheckNameBayes = 3;           // Bayes classifier
-        public const int CheckNameOpenAI = 6;          // OpenAI/LLM check
-
-        // Precalculated expected percentages for welcome response distribution
-        // Based on: 6 total (3 accepted, 1 denied, 1 timeout, 1 left)
-        public const double ExpectedAcceptedPercentage = 50.0;           // 3/6 * 100
-        public const double ExpectedDeniedPercentage = 100.0 / 6.0;      // 1/6 * 100 ≈ 16.67%
-        public const double ExpectedTimeoutPercentage = 100.0 / 6.0;     // 1/6 * 100 ≈ 16.67%
-        public const double ExpectedLeftPercentage = 100.0 / 6.0;        // 1/6 * 100 ≈ 16.67%
-    }
-
-    /// <summary>
-    /// Test data for old messages with various ages.
-    /// Message IDs: 96001-96006 (to avoid conflicts with ML training data 90001-90040 and dedup 95001-95022)
-    /// Useful for testing cleanup/retention logic.
-    /// Training data = detection_results WHERE used_for_training = true
-    /// </summary>
-    public static class OldMessages
-    {
-        // Messages without training data (eligible for cleanup)
-        public const int Msg45DaysOld_Id = 96001;     // 45 days old, no detection results, HAS edit + translation
-        public const int Msg60DaysOld_Id = 96002;     // 60 days old, no detection results, HAS translation
-        public const int Msg35DaysOld_Id = 96004;     // 35 days old (just past 30-day threshold)
-        public const int MsgNonTraining_Id = 96006;   // 50 days old, has detection but used_for_training=false
-
-        // Message WITH training data (should be preserved regardless of age)
-        public const int MsgWithTraining_Id = 96003;  // 90 days old but has training data
-
-        // Boundary case - 29 days old (just inside retention window)
-        public const int Msg29DaysOld_Id = 96005;
-
-        // Related data for cascade delete testing
-        public const long Edit_ForMsg45Days_Id = 960001;  // Edit of Msg45DaysOld - cascades when message deleted
-
-        // Helper: Expected deletion count when using 30-day retention
-        public const int ExpectedDeletionsWith30DayRetention = 4;  // 96001, 96002, 96004, 96006
-    }
-
-    /// <summary>
-    /// Seeds full dataset: base data + GoldenDataset training labels (3 spam + 2 ham) + MLTrainingData.sql (20 spam + 20 ham).
-    /// Total: 23 spam + 22 ham training samples.
-    /// Use for most tests that need complete training data.
-    /// </summary>
-    public static async Task SeedAsync(AppDbContext context, IDataProtectionProvider? dataProtectionProvider = null)
-    {
-        await SeedBaseDataAsync(context, dataProtectionProvider);
-        await SeedGoldenDatasetTrainingLabelsAsync(context);
-        await SeedMLTrainingDataScriptAsync(context);
-        await context.SaveChangesAsync();
-    }
-
-    /// <summary>
-    /// Seeds only base data (messages, users, chats, configs) - NO training labels or ML data.
-    /// Total: 0 spam + 0 ham training samples.
-    /// Use for threshold tests that need to create minimal custom datasets.
-    /// </summary>
-    public static async Task SeedWithoutTrainingDataAsync(AppDbContext context, IDataProtectionProvider? dataProtectionProvider = null)
-    {
-        await SeedBaseDataAsync(context, dataProtectionProvider);
-        await context.SaveChangesAsync();
-    }
-
-    /// <summary>
-    /// Seeds base data + GoldenDataset training labels only (3 spam + 2 ham) - skips MLTrainingData.sql.
-    /// Total: 3 spam + 2 ham training samples (below 20 minimum threshold).
-    /// Use for tests validating behavior with insufficient training data.
-    /// </summary>
-    public static async Task SeedWithMinimalTrainingDataAsync(AppDbContext context, IDataProtectionProvider? dataProtectionProvider = null)
-    {
-        await SeedBaseDataAsync(context, dataProtectionProvider);
-        await SeedGoldenDatasetTrainingLabelsAsync(context);
-        await context.SaveChangesAsync();
-    }
-
-    /// <summary>
-    /// Seeds base database structure (users, chats, messages, detection_results, configs).
-    /// Loads SQL scripts 00-05 in FK dependency order, then configs inline (encryption).
-    /// Does NOT seed training_labels or ML training data.
-    /// </summary>
-    private static async Task SeedBaseDataAsync(AppDbContext context, IDataProtectionProvider? dataProtectionProvider)
-    {
-        // Load base data scripts in FK dependency order
-        await LoadSqlScriptAsync(context, "SQL.00_base_telegram_users.sql");
-        await LoadSqlScriptAsync(context, "SQL.01_base_web_users.sql");
-        await LoadSqlScriptAsync(context, "SQL.02_base_managed_chats.sql");
-        await LoadSqlScriptAsync(context, "SQL.03_base_linked_channels.sql");
-        await LoadSqlScriptAsync(context, "SQL.04_base_messages.sql");
-        await LoadSqlScriptAsync(context, "SQL.05_base_detection_results.sql");
-        await LoadSqlScriptAsync(context, "SQL.06_base_content_detection_configs.sql");
-
-        // Seed configs inline (requires runtime encryption of API keys)
-        await SeedConfigsAsync(context, dataProtectionProvider);
-    }
-
-    /// <summary>
-    /// Seeds configs with encrypted API keys.
-    /// Kept inline because encryption output changes every run (includes nonce/timestamp).
-    /// </summary>
-    private static async Task SeedConfigsAsync(AppDbContext context, IDataProtectionProvider? dataProtectionProvider)
-    {
-        var apiKeyProtector = dataProtectionProvider?.CreateProtector(DataProtectionPurposes.ApiKeys);
-        string? encryptedApiKeys = null;
-        if (apiKeyProtector != null)
+        foreach (var fixture in fixtures)
         {
-            var apiKeysJson = $$"""
-            {
-              "VirusTotal": "{{ApiKeys.VirusTotal_Test}}"
-            }
-            """;
-            encryptedApiKeys = apiKeyProtector.Protect(apiKeysJson);
+            ct.ThrowIfCancellationRequested();
+            await LoadCanonicalSqlScriptAsync(context, fixture);
         }
+
+        // Encrypted-column post-step: 04_configs.sql seeds the configs rows with all
+        // DataProtection-encrypted columns NULL. Encrypt canonical plaintext under the
+        // shared provider and UPDATE. Each column has its OWN purpose string — production
+        // code in TelegramGroupsAdmin.Configuration uses DataProtectionPurposes.ApiKeys
+        // ("ApiKeys") for the api_keys column, so canonical MUST use the same constant —
+        // mismatched purposes would write ciphertext production code can't decrypt.
+        var apiKeysProtector = dataProtection.CreateProtector(DataProtectionPurposes.ApiKeys);
+        var apiKeysCanonical = apiKeysProtector.Protect("""{"openai":"sk-canonical-test-key"}""");
 
         await context.Database.ExecuteSqlRawAsync(
-            """
-            INSERT INTO configs (id, chat_id, api_keys, backup_encryption_config, created_at)
-            VALUES
-            ({0}, {1}, {2}, {3}::jsonb, NOW() - INTERVAL '10 days')
-            """,
-            Configs.Config1_Id,
-            Configs.Config1_ChatId,
-            encryptedApiKeys!,
-            Configs.BackupEncryptionConfigJson!
-        );
+            "UPDATE configs SET api_keys = {0} WHERE chat_id = 0",
+            apiKeysCanonical);
     }
 
     /// <summary>
-    /// Seeds GoldenDataset training labels (3 spam + 2 ham from original test data).
+    /// Entry point for the subtractive Reduce builder. Returns a stage-1 plan bound
+    /// to the supplied context; no DB work runs until ApplyAsync is called. Each
+    /// invocation returns a fresh plan — plans are single-shot.
     /// </summary>
-    private static async Task SeedGoldenDatasetTrainingLabelsAsync(AppDbContext context)
-    {
-        await LoadSqlScriptAsync(context, "SQL.10_training_minimal.sql");
-    }
+    public static GoldenReducePlanBuilder Reduce(AppDbContext context)
+        => new GoldenReducePlanBuilder(new GoldenReducePlanState(context));
 
     /// <summary>
-    /// Seeds ML training data from embedded SQL script (20 spam + 20 ham).
+    /// Entry point for the in-place Mutator. Returns a builder bound to the supplied
+    /// context; no DB work runs until ApplyAsync is called. Reserve for cases where
+    /// canonical structurally cannot provide the shape (the canonical example is
+    /// analytics aggregations that need NOW()-relative timestamps).
     /// </summary>
-    private static async Task SeedMLTrainingDataScriptAsync(AppDbContext context)
-    {
-        await LoadSqlScriptAsync(context, "MLTrainingData.sql");
-    }
+    public static GoldenMutatePlanBuilder Mutate(AppDbContext context)
+        => new GoldenMutatePlanBuilder(context);
 
     /// <summary>
-    /// Seeds balanced ML training data (20 spam + 20 ham).
-    /// Use for tests requiring balanced training datasets.
+    /// Loads and executes an embedded canonical SQL script via a raw <see cref="NpgsqlCommand"/>
+    /// that bypasses EF Core's <c>{n}</c> parameter parser. Required because canonical fixtures
+    /// (pg_dump --column-inserts output) carry single-brace JSONB literals like
+    /// <c>'{{"ChatId": -123, ...}}'</c> that ExecuteSqlRawAsync mis-parses as parameter
+    /// placeholders.
     /// </summary>
-    public static async Task SeedBalancedTrainingDataAsync(AppDbContext context)
-    {
-        await LoadSqlScriptAsync(context, "SQL.11_training_full.sql");
-    }
-
-    /// <summary>
-    /// Seeds global content detection configuration (chat_id = 0).
-    /// Use for tests that need content detection settings without full base data.
-    /// </summary>
-    public static async Task SeedContentDetectionConfigAsync(AppDbContext context)
-    {
-        await LoadSqlScriptAsync(context, "SQL.06_base_content_detection_configs.sql");
-    }
-
-    /// <summary>
-    /// Seeds high-spam imbalanced ML training data (100 spam + 20 ham, 83.3% spam, 5:1 ratio).
-    /// Use for testing ML classifier behavior with high spam ratio.
-    /// </summary>
-    public static async Task SeedHighSpamTrainingDataAsync(AppDbContext context)
-    {
-        await LoadSqlScriptAsync(context, "SQL.20_unbalanced_100_20.sql");
-    }
-
-    /// <summary>
-    /// Seeds high-ham imbalanced ML training data (20 spam + 100 ham, 16.7% spam, 1:5 ratio).
-    /// Use for testing ML classifier behavior with high ham ratio.
-    /// </summary>
-    public static async Task SeedHighHamTrainingDataAsync(AppDbContext context)
-    {
-        await LoadSqlScriptAsync(context, "SQL.21_unbalanced_20_100.sql");
-    }
-
-    /// <summary>
-    /// Seeds deduplication test data with intentional near-duplicates (22 messages with 7 distinct groups).
-    /// Use for testing SimHash near-duplicate detection accuracy.
-    /// Message IDs: 95001-95022
-    /// Groups:
-    /// - Group 1 (95001-95004): Crypto signal spam variants
-    /// - Group 2 (95005-95007): Investment scam variants
-    /// - Group 3 (95008-95010): Giveaway scam variants
-    /// - Group 4 (95011-95013): Different spam topics (not near-duplicates)
-    /// - Group 5 (95014-95016): Legitimate ham messages
-    /// - Group 6 (95017-95019): Ham near-duplicates
-    /// - Group 7 (95020-95022): More spam variants
-    /// </summary>
-    public static async Task SeedDeduplicationTestDataAsync(AppDbContext context)
-    {
-        await LoadSqlScriptAsync(context, "SQL.30_dedup_test_data.sql");
-    }
-
-    /// <summary>
-    /// Seeds analytics-specific test data with temporal spans for trend testing.
-    /// Includes spam detection results, manual corrections (FP/FN), and welcome responses.
-    /// Use for testing IAnalyticsRepository methods (DailySpamSummary, SpamTrendComparison, etc.).
-    /// </summary>
-    public static async Task SeedAnalyticsDataAsync(AppDbContext context)
-    {
-        await LoadSqlScriptAsync(context, "SQL.50_analytics_test_data.sql");
-    }
-
-    /// <summary>
-    /// Seeds old messages with various ages for testing retention/cleanup logic.
-    /// Includes messages with and without training data at various ages.
-    /// Use for testing CleanupExpiredAsync and message retention behavior.
-    /// </summary>
-    public static async Task SeedOldMessagesAsync(AppDbContext context)
-    {
-        await LoadSqlScriptAsync(context, "SQL.60_old_messages.sql");
-    }
-
-    /// <summary>
-    /// Loads and executes an embedded SQL script from TestData directory.
-    /// </summary>
-    /// <param name="context">Database context</param>
-    /// <param name="scriptPath">Relative path within TestData (e.g., "SQL.11_training_full.sql")</param>
-    private static async Task LoadSqlScriptAsync(AppDbContext context, string scriptPath)
-    {
-        await LoadSqlScriptAsync(scriptPath, sql => context.Database.ExecuteSqlRawAsync(sql));
-    }
-
-    /// <summary>
-    /// Loads and executes an embedded SQL script using a custom executor.
-    /// Use this for migration tests where DbContext isn't available (schema mismatch at migration points).
-    /// </summary>
-    /// <param name="scriptPath">Relative path within TestData (e.g., "SQL.40_pre_migration_impersonation_alerts.sql")</param>
-    /// <param name="sqlExecutor">Delegate to execute the SQL (e.g., helper.ExecuteSqlAsync)</param>
-    public static async Task LoadSqlScriptAsync(string scriptPath, Func<string, Task> sqlExecutor)
+    private static async Task LoadCanonicalSqlScriptAsync(AppDbContext context, string scriptPath)
     {
         var assembly = typeof(GoldenDataset).Assembly;
         var resourceName = $"TelegramGroupsAdmin.IntegrationTests.TestData.{scriptPath}";
@@ -603,6 +128,10 @@ public static class GoldenDataset
 
         using var reader = new StreamReader(stream);
         var sqlScript = await reader.ReadToEndAsync();
-        await sqlExecutor(sqlScript);
+
+        await using var connection = new NpgsqlConnection(context.Database.GetConnectionString());
+        await connection.OpenAsync();
+        await using var cmd = new NpgsqlCommand(sqlScript, connection);
+        await cmd.ExecuteNonQueryAsync();
     }
 }

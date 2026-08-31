@@ -41,8 +41,14 @@ public interface IUserRepository
     Task UpdateLastLoginAsync(string userId, CancellationToken cancellationToken = default);
     Task UpdateSecurityStampAsync(string userId, CancellationToken cancellationToken = default);
     Task UpdateTotpSecretAsync(string userId, string totpSecret, CancellationToken cancellationToken = default);
+
+    /// <summary>Enables TOTP. Rotates the user's security stamp in the same UPDATE, invalidating existing sessions (forced re-login).</summary>
     Task EnableTotpAsync(string userId, CancellationToken cancellationToken = default);
+
+    /// <summary>Disables TOTP (secret preserved). Rotates the user's security stamp in the same UPDATE, invalidating existing sessions (forced re-login).</summary>
     Task DisableTotpAsync(string userId, CancellationToken cancellationToken = default);
+
+    /// <summary>Resets TOTP (clears secret, timestamp, disables). Rotates the user's security stamp in the same UPDATE, invalidating existing sessions (forced re-login).</summary>
     Task ResetTotpAsync(string userId, CancellationToken cancellationToken = default);
     Task DeleteRecoveryCodesAsync(string userId, CancellationToken cancellationToken = default);
     Task<List<RecoveryCodeRecord>> GetRecoveryCodesAsync(string userId, CancellationToken cancellationToken = default);
@@ -50,9 +56,9 @@ public interface IUserRepository
     Task CreateRecoveryCodeAsync(string userId, string codeHash, CancellationToken cancellationToken = default);
     Task<bool> UseRecoveryCodeAsync(string userId, string codeHash, CancellationToken cancellationToken = default);
     Task<InviteRecord?> GetInviteByTokenAsync(string token, CancellationToken cancellationToken = default);
-    Task UseInviteAsync(string token, string userId, CancellationToken cancellationToken = default);
     Task<List<UserRecord>> GetAllAsync(CancellationToken cancellationToken = default);
     Task<List<UserRecord>> GetAllIncludingDeletedAsync(CancellationToken cancellationToken = default);
+    /// <summary>Updates the user's permission level. Rotates the user's security stamp in the same UPDATE, invalidating existing sessions (forced re-login).</summary>
     Task UpdatePermissionLevelAsync(string userId, int permissionLevel, string modifiedBy, CancellationToken cancellationToken = default);
     Task UpdateStatusAsync(string userId, UserStatus newStatus, string modifiedBy, CancellationToken cancellationToken = default);
     Task UpdateAsync(UserRecord user, CancellationToken cancellationToken = default);

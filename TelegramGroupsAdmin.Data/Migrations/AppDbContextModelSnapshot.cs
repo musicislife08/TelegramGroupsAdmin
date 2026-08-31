@@ -17,7 +17,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.0")
+                .HasAnnotation("ProductVersion", "10.0.11")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -423,6 +423,10 @@ namespace TelegramGroupsAdmin.Data.Migrations
                         .HasColumnType("smallint")
                         .HasColumnName("misfire_instr");
 
+                    b.Property<long?>("MisfireOriginalFireTime")
+                        .HasColumnType("bigint")
+                        .HasColumnName("misfire_orig_fire_time");
+
                     b.Property<long?>("NextFireTime")
                         .HasColumnType("bigint")
                         .HasColumnName("next_fire_time");
@@ -610,6 +614,10 @@ namespace TelegramGroupsAdmin.Data.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
+                    b.Property<DateTimeOffset?>("DispensedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("dispensed_at");
+
                     b.Property<string>("DmText")
                         .IsRequired()
                         .HasColumnType("text")
@@ -645,6 +653,10 @@ namespace TelegramGroupsAdmin.Data.Migrations
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
+
+                    b.Property<DateTimeOffset?>("DispensedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("dispensed_at");
 
                     b.Property<string>("FileId")
                         .HasMaxLength(255)
@@ -1514,6 +1526,10 @@ namespace TelegramGroupsAdmin.Data.Migrations
                     b.Property<string>("ChatName")
                         .HasColumnType("text")
                         .HasColumnName("chat_name");
+
+                    b.Property<long?>("ContentUserId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("content_user_id");
 
                     b.Property<string>("Context")
                         .HasColumnType("text")
@@ -2395,6 +2411,12 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
 
+                    b.Property<bool>("AiExplicitDisplayText")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("ai_explicit_display_text");
+
                     b.Property<string>("AiReason")
                         .HasColumnType("text")
                         .HasColumnName("ai_reason");
@@ -3229,7 +3251,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
                         {
                             t.HasCheckConstraint("CK_user_actions_exclusive_actor", "(web_user_id IS NOT NULL)::int + (telegram_user_id IS NOT NULL)::int + (system_identifier IS NOT NULL)::int = 1");
 
-                            t.HasCheckConstraint("CK_user_actions_message_chat_null_consistency", "(message_id IS NULL) = (chat_id IS NULL)");
+                            t.HasCheckConstraint("CK_user_actions_message_chat_null_consistency", "(message_id IS NULL) OR (chat_id IS NOT NULL)");
                         });
                 });
 
@@ -3460,20 +3482,6 @@ namespace TelegramGroupsAdmin.Data.Migrations
                         .HasColumnType("character varying(200)")
                         .HasColumnName("pattern");
 
-                    b.Property<string>("SystemIdentifier")
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)")
-                        .HasColumnName("system_identifier");
-
-                    b.Property<long?>("TelegramUserId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("telegram_user_id");
-
-                    b.Property<string>("WebUserId")
-                        .HasMaxLength(450)
-                        .HasColumnType("character varying(450)")
-                        .HasColumnName("web_user_id");
-
                     b.HasKey("Id");
 
                     b.HasIndex("Pattern")
@@ -3481,14 +3489,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
                         .HasDatabaseName("IX_username_blacklist_unique_enabled_pattern")
                         .HasFilter("enabled = true");
 
-                    b.HasIndex("TelegramUserId");
-
-                    b.HasIndex("WebUserId");
-
-                    b.ToTable("username_blacklist", t =>
-                        {
-                            t.HasCheckConstraint("CK_username_blacklist_exclusive_actor", "(web_user_id IS NOT NULL)::int + (telegram_user_id IS NOT NULL)::int + (system_identifier IS NOT NULL)::int = 1");
-                        });
+                    b.ToTable("username_blacklist");
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.UsernameHistoryDto", b =>
@@ -3957,7 +3958,9 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                             b1.ToTable("content_detection_configs");
 
-                            b1.ToJson("config_json");
+                            b1
+                                .ToJson("config_json")
+                                .HasColumnType("jsonb");
 
                             b1.WithOwner()
                                 .HasForeignKey("ContentDetectionConfigRecordDtoId");
@@ -4522,7 +4525,9 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                             b1.ToTable("telegram_users");
 
-                            b1.ToJson("warnings");
+                            b1
+                                .ToJson("warnings")
+                                .HasColumnType("jsonb");
 
                             b1.WithOwner()
                                 .HasForeignKey("TelegramUserDtoTelegramUserId");
@@ -4627,19 +4632,6 @@ namespace TelegramGroupsAdmin.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("TelegramUser");
-                });
-
-            modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.UsernameBlacklistEntryDto", b =>
-                {
-                    b.HasOne("TelegramGroupsAdmin.Data.Models.TelegramUserDto", null)
-                        .WithMany()
-                        .HasForeignKey("TelegramUserId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("TelegramGroupsAdmin.Data.Models.UserRecordDto", null)
-                        .WithMany()
-                        .HasForeignKey("WebUserId")
-                        .OnDelete(DeleteBehavior.SetNull);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.UsernameHistoryDto", b =>

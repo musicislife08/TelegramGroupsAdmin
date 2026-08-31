@@ -39,9 +39,12 @@ public class TotpSetupPage
     /// </summary>
     public async Task WaitForPageAsync(int timeoutMs = 10000)
     {
+        // Commit, not the full Load event — the setup-steps/error wait below is the real
+        // readiness signal and auto-retries; "Load" waits flake under CI contention.
         await _page.WaitForURLAsync("**/login/setup-2fa**", new PageWaitForURLOptions
         {
-            Timeout = timeoutMs
+            Timeout = timeoutMs,
+            WaitUntil = WaitUntilState.Commit
         });
 
         // Wait for either the setup steps to load or an error message
@@ -165,7 +168,8 @@ public class TotpSetupPage
     {
         await _page.WaitForURLAsync(url => !url.Contains("/login/setup-2fa"), new PageWaitForURLOptions
         {
-            Timeout = timeoutMs
+            Timeout = timeoutMs,
+            WaitUntil = WaitUntilState.Commit
         });
     }
 

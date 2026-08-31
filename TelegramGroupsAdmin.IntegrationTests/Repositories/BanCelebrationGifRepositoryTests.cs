@@ -5,6 +5,7 @@ using NSubstitute;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.ContentDetection.Services;
 using TelegramGroupsAdmin.Data;
+using TelegramGroupsAdmin.Data.Models;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using WireMock.RequestBuilders;
@@ -40,9 +41,9 @@ public class BanCelebrationGifRepositoryTests
     [SetUp]
     public async Task SetUp()
     {
-        // Create unique test database with migrations applied
+        // Clone the empty migrated template for this test
         _testHelper = new MigrationTestHelper();
-        await _testHelper.CreateDatabaseAndApplyMigrationsAsync();
+        await _testHelper.CreateDatabaseFromEmptyTemplateAsync();
 
         // Start WireMock server for URL download tests
         _mockServer = WireMockServer.Start();
@@ -203,40 +204,6 @@ public class BanCelebrationGifRepositoryTests
 
     #endregion
 
-    #region GetByIdAsync Tests
-
-    [Test]
-    public async Task GetByIdAsync_ExistingGif_ReturnsGif()
-    {
-        // Arrange
-        using var stream = CreateTestGifStream();
-        var added = await _repository!.AddFromFileAsync(stream, "test.gif", "Test GIF");
-
-        // Act
-        var result = await _repository.GetByIdAsync(added.Id);
-
-        // Assert
-        Assert.That(result, Is.Not.Null);
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(result!.Id, Is.EqualTo(added.Id));
-            Assert.That(result.Name, Is.EqualTo("Test GIF"));
-            Assert.That(result.FilePath, Does.Contain("ban-gifs"));
-        }
-    }
-
-    [Test]
-    public async Task GetByIdAsync_NonExistentId_ReturnsNull()
-    {
-        // Act
-        var result = await _repository!.GetByIdAsync(99999);
-
-        // Assert
-        Assert.That(result, Is.Null);
-    }
-
-    #endregion
-
     #region AddFromFileAsync Tests
 
     [Test]
@@ -333,6 +300,40 @@ public class BanCelebrationGifRepositoryTests
         Assert.That(result.FilePath, Does.EndWith(".gif"));
     }
 
+    [Test]
+    public async Task AddFromFileAsync_WhileStillWritingTheFile_TheGifIsNotYetClaimable()
+    {
+        // Hold the conversion open so the upload is observably mid-flight. A GIF that has no file
+        // on disk yet must not be in the rotation: a claim would stamp it, the send would fail on
+        // the missing file, and the GIF would be burned for the rest of the cycle without ever
+        // having been shown.
+        var conversionStarted = new TaskCompletionSource();
+        var releaseConversion = new TaskCompletionSource();
+        _mockVideoService!.ConvertVideoToGifAsync(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                conversionStarted.TrySetResult();
+                return releaseConversion.Task.ContinueWith(_ => true, TaskScheduler.Default);
+            });
+
+        using var stream = CreateTestGifStream();
+        var addTask = _repository!.AddFromFileAsync(stream, "slow.mp4", "Still converting");
+
+        await conversionStarted.Task;
+
+        var duringUpload = await _repository.ClaimNextForCycleAsync();
+        Assert.That(duringUpload, Is.Null,
+            "a GIF whose file is not on disk yet must not be claimable");
+
+        releaseConversion.SetResult();
+        var added = await addTask;
+
+        var afterUpload = await _repository.ClaimNextForCycleAsync();
+        Assert.That(afterUpload?.Id, Is.EqualTo(added.Id),
+            "once the file is on disk the GIF joins the rotation immediately");
+    }
+
     #endregion
 
     #region DeleteAsync Tests
@@ -352,7 +353,7 @@ public class BanCelebrationGifRepositoryTests
         await _repository.DeleteAsync(gif.Id);
 
         // Assert
-        var result = await _repository.GetByIdAsync(gif.Id);
+        var result = await ReadRowAsync(gif.Id);
         using (Assert.EnterMultipleScope())
         {
             Assert.That(result, Is.Null, "Database record should be deleted");
@@ -411,7 +412,7 @@ public class BanCelebrationGifRepositoryTests
             await _repository.DeleteAsync(gif.Id));
 
         // Verify database record is still deleted
-        var result = await _repository.GetByIdAsync(gif.Id);
+        var result = await ReadRowAsync(gif.Id);
         Assert.That(result, Is.Null);
     }
 
@@ -430,7 +431,7 @@ public class BanCelebrationGifRepositoryTests
         await _repository.UpdateFileIdAsync(gif.Id, "AgACAgIAAxkBAAI_cached_file_id_123");
 
         // Assert
-        var updated = await _repository.GetByIdAsync(gif.Id);
+        var updated = await ReadRowAsync(gif.Id);
         Assert.That(updated!.FileId, Is.EqualTo("AgACAgIAAxkBAAI_cached_file_id_123"));
     }
 
@@ -465,14 +466,14 @@ public class BanCelebrationGifRepositoryTests
         await _repository.UpdateFileIdAsync(gif.Id, "AgACAgIAAxkBAAI_cached_file_id_456");
 
         // Verify it's set
-        var withFileId = await _repository.GetByIdAsync(gif.Id);
+        var withFileId = await ReadRowAsync(gif.Id);
         Assert.That(withFileId!.FileId, Is.EqualTo("AgACAgIAAxkBAAI_cached_file_id_456"));
 
         // Act
         await _repository.ClearFileIdAsync(gif.Id);
 
         // Assert
-        var cleared = await _repository.GetByIdAsync(gif.Id);
+        var cleared = await ReadRowAsync(gif.Id);
         Assert.That(cleared!.FileId, Is.Null, "FileId should be cleared to null");
     }
 
@@ -492,7 +493,7 @@ public class BanCelebrationGifRepositoryTests
         var gif = await _repository!.AddFromFileAsync(stream, "alreadynull.gif", "Already Null");
 
         // Verify FileId is already null (never set)
-        var existing = await _repository.GetByIdAsync(gif.Id);
+        var existing = await ReadRowAsync(gif.Id);
         Assert.That(existing!.FileId, Is.Null);
 
         // Act & Assert - Should not throw
@@ -500,7 +501,7 @@ public class BanCelebrationGifRepositoryTests
             await _repository.ClearFileIdAsync(gif.Id));
 
         // Verify still null
-        var after = await _repository.GetByIdAsync(gif.Id);
+        var after = await ReadRowAsync(gif.Id);
         Assert.That(after!.FileId, Is.Null);
     }
 
@@ -519,7 +520,7 @@ public class BanCelebrationGifRepositoryTests
         await _repository.UpdateThumbnailPathAsync(gif.Id, "ban-gifs/thumbnails/1.png");
 
         // Assert
-        var updated = await _repository.GetByIdAsync(gif.Id);
+        var updated = await ReadRowAsync(gif.Id);
         Assert.That(updated!.ThumbnailPath, Is.EqualTo("ban-gifs/thumbnails/1.png"));
     }
 
@@ -595,7 +596,7 @@ public class BanCelebrationGifRepositoryTests
         await _repository.UpdatePhotoHashAsync(gif.Id, testHash);
 
         // Assert
-        var updated = await _repository.GetByIdAsync(gif.Id);
+        var updated = await ReadRowAsync(gif.Id);
         Assert.That(updated!.PhotoHash, Is.EqualTo(testHash));
     }
 
@@ -950,7 +951,195 @@ public class BanCelebrationGifRepositoryTests
 
     #endregion
 
+    #region ClaimNextForCycleAsync Tests
+
+    /// <summary>Adds <paramref name="count"/> GIFs and returns their ids in insertion order.</summary>
+    private async Task<List<int>> SeedGifsAsync(int count)
+    {
+        var ids = new List<int>();
+        for (var i = 0; i < count; i++)
+        {
+            using var stream = CreateTestGifStream();
+            var gif = await _repository!.AddFromFileAsync(stream, $"seed{i}.gif", $"Seed {i}");
+            ids.Add(gif.Id);
+        }
+
+        return ids;
+    }
+
+    /// <summary>Claims <paramref name="count"/> times in sequence and returns the ids dispensed.</summary>
+    private async Task<List<int>> ClaimSequenceAsync(int count)
+    {
+        var claimed = new List<int>();
+        for (var i = 0; i < count; i++)
+        {
+            var gif = await _repository!.ClaimNextForCycleAsync();
+            Assert.That(gif, Is.Not.Null, $"claim {i} returned null");
+            claimed.Add(gif!.Id);
+        }
+
+        return claimed;
+    }
+
+    [Test]
+    public async Task ClaimNextForCycleAsync_FullCycle_DispensesEveryItemExactlyOnce()
+    {
+        var seeded = await SeedGifsAsync(5);
+
+        var claimed = await ClaimSequenceAsync(5);
+
+        Assert.That(claimed, Is.EquivalentTo(seeded));
+        Assert.That(claimed, Is.Unique);
+    }
+
+    [Test]
+    public async Task ClaimNextForCycleAsync_PastEndOfCycle_StartsAFreshCycle()
+    {
+        await SeedGifsAsync(3);
+
+        var claimed = await ClaimSequenceAsync(4);
+
+        Assert.That(claimed.Take(3), Is.Unique, "the first cycle dispenses each item once");
+        Assert.That(claimed[3], Is.AnyOf(claimed[0], claimed[1]),
+            "the 4th claim comes from a fresh cycle, and cannot be the held-back 3rd item");
+    }
+
+    [Test]
+    public async Task ClaimNextForCycleAsync_AcrossCycleBoundary_NeverRepeatsConsecutively()
+    {
+        await SeedGifsAsync(3);
+
+        // Two full cycles plus one: every boundary in this sequence is exercised.
+        var claimed = await ClaimSequenceAsync(7);
+
+        for (var i = 1; i < claimed.Count; i++)
+        {
+            Assert.That(claimed[i], Is.Not.EqualTo(claimed[i - 1]),
+                $"claim {i} repeated claim {i - 1} — the hold-back did not hold");
+        }
+    }
+
+    [Test]
+    public async Task ClaimNextForCycleAsync_HeldBackItem_StillDispensedInTheNewCycle()
+    {
+        var seeded = await SeedGifsAsync(3);
+
+        var claimed = await ClaimSequenceAsync(6);
+
+        Assert.That(claimed.Skip(3).Take(3), Is.EquivalentTo(seeded),
+            "the second cycle dispenses all three, including the one held back at the boundary");
+    }
+
+    [Test]
+    public async Task ClaimNextForCycleAsync_ItemAddedMidCycle_IsClaimableImmediately()
+    {
+        await SeedGifsAsync(3);
+        await ClaimSequenceAsync(1);
+
+        using var stream = CreateTestGifStream();
+        var added = await _repository!.AddFromFileAsync(stream, "mid.gif", "Mid-cycle");
+
+        // Two pending originals plus the new one: it must appear without any reset.
+        var claimed = await ClaimSequenceAsync(3);
+
+        Assert.That(claimed, Does.Contain(added.Id));
+        Assert.That(claimed, Is.Unique);
+    }
+
+    [Test]
+    public async Task ClaimNextForCycleAsync_DeletedItem_IsNeverClaimed()
+    {
+        var seeded = await SeedGifsAsync(3);
+        await _repository!.DeleteAsync(seeded[1]);
+
+        var claimed = await ClaimSequenceAsync(4);
+
+        Assert.That(claimed, Does.Not.Contain(seeded[1]));
+    }
+
+    [Test]
+    public async Task ClaimNextForCycleAsync_EmptyLibrary_ReturnsNull()
+    {
+        var result = await _repository!.ClaimNextForCycleAsync();
+
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public async Task ClaimNextForCycleAsync_SingleItemLibrary_KeepsDispensingThatItem()
+    {
+        var seeded = await SeedGifsAsync(1);
+
+        var claimed = await ClaimSequenceAsync(3);
+
+        Assert.That(claimed, Is.EqualTo(new[] { seeded[0], seeded[0], seeded[0] }),
+            "a one-item library repeats by definition; the hold-back must not starve it");
+    }
+
+    [Test]
+    public async Task ClaimNextForCycleAsync_ConcurrentClaims_NeverDispenseTheSameItemTwice()
+    {
+        var seeded = await SeedGifsAsync(5);
+
+        var claims = await Task.WhenAll(Enumerable.Range(0, 5)
+            .Select(_ => _repository!.ClaimNextForCycleAsync()));
+
+        var ids = claims.Select(c => c!.Id).ToList();
+        Assert.That(ids, Is.Unique, "FOR UPDATE SKIP LOCKED must stop two claims taking one row");
+        Assert.That(ids, Is.EquivalentTo(seeded));
+    }
+
+    [Test]
+    public async Task ClaimNextForCycleAsync_ConcurrentClaimsAtCycleBoundary_EachClaimSucceedsWithUniqueId()
+    {
+        // Exhaust the cycle sequentially first, so all 3 concurrent claims below hit the
+        // advisory-lock/reset branch at once — the fast path (already-pending row) never applies.
+        await SeedGifsAsync(5);
+        await ClaimSequenceAsync(5);
+
+        var claims = await Task.WhenAll(Enumerable.Range(0, 3)
+            .Select(_ => _repository!.ClaimNextForCycleAsync()));
+
+        // Only one of the 3 concurrent calls actually wins the advisory lock and performs the
+        // reset; that winner's own claim is guaranteed to exclude the held-back row (the one
+        // dispensed last in the exhausted cycle). But it releases the held-back row as part of
+        // the same transaction, before the other two waiters run their own claim — so either of
+        // them can legitimately draw it. Concurrency does not let us observe which of the 3
+        // results came from the winner, so "none of them is the held-back row" is not a safe
+        // assertion here: it would fail roughly half the time. What the algorithm does guarantee
+        // under this contention is that the reset itself is race-free and every claim succeeds.
+        Assert.That(claims, Has.All.Not.Null, "every claim must succeed once the new cycle is seeded");
+        var ids = claims.Select(c => c!.Id).ToList();
+        Assert.That(ids, Is.Unique,
+            "the advisory lock must serialize the reset so no two concurrent claims at the boundary take the same row");
+
+        // Deterministic, unlike the held-back-row identity above: 5 seeded rows, 5 sequential
+        // claims stamp all of them, then exactly one reset clears 4 (holding back 1) before the 3
+        // concurrent claims re-stamp 3 of those cleared rows. A second, spurious reset would clear
+        // the held-back row too and leave fewer than 3 stamped — so this count catches a
+        // double-reset that "all non-null and unique" alone would miss.
+        var contextFactory = _serviceProvider!.GetRequiredService<IDbContextFactory<AppDbContext>>();
+        await using var ctx = await contextFactory.CreateDbContextAsync();
+        var stampedCount = await ctx.BanCelebrationGifs.CountAsync(g => g.DispensedAt != null);
+        Assert.That(stampedCount, Is.EqualTo(3), "exactly one reset must have occurred");
+    }
+
+    #endregion
+
     #region Helper Methods
+
+    /// <summary>
+    /// Reads a GIF row straight from the database. These tests assert what a mutation persisted, so
+    /// they read it back through the database rather than through another method of the very class
+    /// under test — a read-back through the repository would pass just as happily if both the write
+    /// and the read were broken in the same direction.
+    /// </summary>
+    private async Task<BanCelebrationGifDto?> ReadRowAsync(int id)
+    {
+        var contextFactory = _serviceProvider!.GetRequiredService<IDbContextFactory<AppDbContext>>();
+        await using var context = await contextFactory.CreateDbContextAsync();
+        return await context.BanCelebrationGifs.FindAsync([id]);
+    }
 
     /// <summary>
     /// Creates a minimal valid GIF byte array for testing.

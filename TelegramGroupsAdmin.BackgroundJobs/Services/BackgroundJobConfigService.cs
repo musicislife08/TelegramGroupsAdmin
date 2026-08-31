@@ -19,7 +19,7 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
     private readonly ILogger<BackgroundJobConfigService> _logger;
     private readonly IQuartzScheduleConverter _scheduleConverter;
-    private volatile QuartzSchedulingSyncService? _syncService; // Injected lazily to avoid circular dependency
+    private readonly IScheduleResyncSignal _resyncSignal;
 
     /// <summary>
     /// Event fired when a job's NextRunAt is updated (for UI refresh via SignalR)
@@ -36,20 +36,13 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
     public BackgroundJobConfigService(
         IDbContextFactory<AppDbContext> contextFactory,
         ILogger<BackgroundJobConfigService> logger,
-        IQuartzScheduleConverter scheduleConverter)
+        IQuartzScheduleConverter scheduleConverter,
+        IScheduleResyncSignal resyncSignal)
     {
         _contextFactory = contextFactory;
         _logger = logger;
         _scheduleConverter = scheduleConverter;
-    }
-
-    /// <summary>
-    /// Set the sync service reference (called by QuartzSchedulingSyncService after it starts)
-    /// Lazy injection to avoid circular dependency during DI registration
-    /// </summary>
-    public void SetSyncService(QuartzSchedulingSyncService syncService)
-    {
-        _syncService = syncService;
+        _resyncSignal = resyncSignal;
     }
 
     public async Task<BackgroundJobConfig?> GetJobConfigAsync(string jobName, CancellationToken cancellationToken = default)
@@ -158,7 +151,7 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
         if (requiresResync)
         {
             _logger.LogDebug("Triggering Quartz re-sync for {JobName} due to config change", jobName);
-            _syncService?.TriggerResync();
+            _resyncSignal.RequestResync();
         }
 
         // Fire event for UI refresh if NextRunAt changed (Blazor Server SignalR push)

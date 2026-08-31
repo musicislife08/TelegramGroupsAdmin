@@ -13,14 +13,17 @@ namespace TelegramGroupsAdmin.Telegram.Services.ReportActions;
 
 /// <summary>
 /// Handles profile scan alert actions (ban, kick, allow).
-/// Fetches alert, executes moderation, atomically updates status, and auto-closes sibling alerts.
+/// Fetches alert, executes moderation, and atomically updates status.
+/// Ban and kick cleanup (closing the user's other open reports, deleting the stranded
+/// welcome message) is owned by BotModerationService — this handler only supplies
+/// OriginReportId so its own alert is excluded from that sweep. Allow performs no
+/// moderation action, so it still closes its own sibling profile scan alerts.
 /// </summary>
 internal sealed class ProfileScanHandler(
     IReportsRepository reportsRepository,
     IBotModerationService moderationService,
     IWelcomeResponsesRepository welcomeResponsesRepository,
     IWelcomeAdmissionHandler welcomeAdmissionHandler,
-    IReportCallbackContextRepository callbackContextRepo,
     ILogger<ProfileScanHandler> logger) : IProfileScanHandler
 {
     public async Task<ReviewActionResult> BanAsync(long alertId, Actor executor, CancellationToken cancellationToken)
@@ -37,7 +40,8 @@ internal sealed class ProfileScanHandler(
                 User = alert.User,
                 Executor = executor,
                 Reason = $"Profile scan alert #{alertId} confirmed \u2014 score {alert.Score:F1}",
-                Chat = alert.Chat
+                Chat = alert.Chat,
+                OriginReportId = alertId
             },
             cancellationToken);
 
@@ -59,9 +63,6 @@ internal sealed class ProfileScanHandler(
 
         logger.LogInformation("Profile scan alert {AlertId}: User {User} banned by {Executor}",
             alertId, alert.User.ToLogInfo(), executor.DisplayName);
-
-        await CleanupSiblingAlertsAsync(alert, "Ban", cancellationToken);
-        await callbackContextRepo.DeleteByReportIdAsync(alertId, cancellationToken);
 
         return new ReviewActionResult(true,
             $"User banned from {result.ChatsAffected} chat(s)",
@@ -85,7 +86,8 @@ internal sealed class ProfileScanHandler(
                     Chat = alert.Chat,
                     Executor = executor,
                     Reason = $"Profile scan alert #{alertId} \u2014 kicked after review",
-                    RevokeMessages = false
+                    RevokeMessages = false,
+                    OriginReportId = alertId
                 },
                 cancellationToken);
 
@@ -111,9 +113,6 @@ internal sealed class ProfileScanHandler(
 
         logger.LogInformation("Profile scan alert {AlertId}: User {User} kicked by {Executor}",
             alertId, alert.User.ToLogInfo(), executor.DisplayName);
-
-        await CleanupSiblingAlertsAsync(alert, "Kick", cancellationToken);
-        await callbackContextRepo.DeleteByReportIdAsync(alertId, cancellationToken);
 
         var message = alert.Chat.Id == 0
             ? "Alert resolved (no chat to kick from)"
@@ -151,6 +150,23 @@ internal sealed class ProfileScanHandler(
             logger.LogInformation("Profile scan alert {AlertId}: User {User} allowed by {Executor} (admission: {Result})",
                 alertId, alert.User.ToLogInfo(), executor.DisplayName, admissionResult);
 
+            // TryAdmitUserAsync restores permissions but does not delete the welcome message.
+            // Only delete once the user is actually admitted \u2014 on StillWaiting the response is
+            // still Pending and the user needs the buttons.
+            if (admissionResult == AdmissionResult.Admitted && welcomeResponse != null)
+            {
+                await moderationService.DeleteMessageAsync(
+                    new DeleteMessageIntent
+                    {
+                        MessageId = welcomeResponse.WelcomeMessageId,
+                        Chat = alert.Chat,
+                        User = alert.User,
+                        Executor = executor,
+                        Reason = "Welcome message cleanup after profile scan allow"
+                    },
+                    cancellationToken);
+            }
+
             message = admissionResult == AdmissionResult.Admitted
                 ? "User allowed \u2014 permissions restored"
                 : "User allowed \u2014 awaiting welcome gate completion";
@@ -170,7 +186,6 @@ internal sealed class ProfileScanHandler(
         if (statusResult != null) return statusResult;
 
         await CleanupSiblingAlertsAsync(alert, "Allow", cancellationToken);
-        await callbackContextRepo.DeleteByReportIdAsync(alertId, cancellationToken);
 
         return new ReviewActionResult(true, message, ActionName: "Allow");
     }
@@ -189,6 +204,12 @@ internal sealed class ProfileScanHandler(
         return FetchResult<ProfileScanAlertRecord>.Ok(alert);
     }
 
+    /// <summary>
+    /// Close the user's other pending profile scan alerts after an Allow.
+    /// Deliberately scoped to profile scan alerts only: an admin allowing a profile scan is a
+    /// weaker signal than a ban and must not auto-dismiss a pending exam failure or content report.
+    /// Ban and kick do not call this — BotModerationService closes all report types for them.
+    /// </summary>
     private async Task CleanupSiblingAlertsAsync(ProfileScanAlertRecord alert, string actionName, CancellationToken cancellationToken)
     {
         var siblingAlerts = await reportsRepository.GetPendingProfileScanAlertsForUserAsync(alert.User.Id, cancellationToken);

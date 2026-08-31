@@ -126,8 +126,8 @@ public class DataCleanupJobTests
             Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>());
         await _reportsRepo.Received(1).DeleteOldReportsAsync(
             Arg.Any<DateTimeOffset>(), type: null, Arg.Any<CancellationToken>());
-        await _callbackContextRepo.Received(1).DeleteExpiredAsync(
-            Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>());
+        await _callbackContextRepo.Received(1).DeleteOrphanedAsync(
+            Arg.Any<CancellationToken>());
         await _notificationRepo.Received(1).DeleteOldReadNotificationsAsync(
             Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>());
         await _fileScanResultRepo.Received(1).CleanupExpiredResultsAsync(

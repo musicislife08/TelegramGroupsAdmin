@@ -7,6 +7,7 @@ using TelegramGroupsAdmin.Components.Shared;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
+using TelegramGroupsAdmin.Configuration.Services;
 
 namespace TelegramGroupsAdmin.ComponentTests.Components;
 
@@ -26,7 +27,7 @@ public class ServiceMessageDeletionSettingsTestContext : BunitContext
         Snackbar = Substitute.For<ISnackbar>();
 
         // Default config returns
-        ConfigService.GetAsync<ServiceMessageDeletionConfig>(Arg.Any<ConfigType>(), Arg.Any<long>())
+        ConfigService.GetServiceMessageDeletionAsync(Arg.Any<long>())
             .Returns(ServiceMessageDeletionConfig.Default);
 
         // Register mocks
@@ -61,7 +62,7 @@ public class ServiceMessageDeletionSettingsTests : ServiceMessageDeletionSetting
     {
         ConfigService.ClearReceivedCalls();
         Snackbar.ClearReceivedCalls();
-        ConfigService.GetAsync<ServiceMessageDeletionConfig>(Arg.Any<ConfigType>(), Arg.Any<long>())
+        ConfigService.GetServiceMessageDeletionAsync(Arg.Any<long>())
             .Returns(ServiceMessageDeletionConfig.Default);
     }
 
@@ -329,7 +330,7 @@ public class ServiceMessageDeletionSettingsTests : ServiceMessageDeletionSetting
 
         // Assert - snackbar should be called
         Snackbar.Received().Add(
-            Arg.Is<string>(s => s.Contains("Defaults loaded")),
+            Arg.Is<string>(s => s!.Contains("Defaults loaded")),
             Arg.Any<Severity>(),
             Arg.Any<Action<SnackbarOptions>>(),
             Arg.Any<string>());
@@ -343,7 +344,7 @@ public class ServiceMessageDeletionSettingsTests : ServiceMessageDeletionSetting
     public void ShowsErrorAlert_WhenConfigLoadFails()
     {
         // Arrange - return null to simulate failed config load (component handles this)
-        ConfigService.GetAsync<ServiceMessageDeletionConfig>(Arg.Any<ConfigType>(), Arg.Any<long>())
+        ConfigService.GetServiceMessageDeletionAsync(Arg.Any<long>())
             .Returns((ServiceMessageDeletionConfig?)null);
 
         // Act
@@ -375,9 +376,7 @@ public class ServiceMessageDeletionSettingsTests : ServiceMessageDeletionSetting
         });
 
         // Assert - ConfigService.GetAsync should have been called
-        await ConfigService.Received().GetAsync<ServiceMessageDeletionConfig>(
-            ConfigType.ServiceMessageDeletion,
-            Arg.Any<long>());
+        await ConfigService.Received().GetServiceMessageDeletionAsync(Arg.Any<long>());
     }
 
     [Test]
@@ -397,9 +396,7 @@ public class ServiceMessageDeletionSettingsTests : ServiceMessageDeletionSetting
         });
 
         // Assert - ConfigService.GetAsync should have been called with the chat ID
-        await ConfigService.Received().GetAsync<ServiceMessageDeletionConfig>(
-            ConfigType.ServiceMessageDeletion,
-            chatId);
+        await ConfigService.Received().GetServiceMessageDeletionAsync(chatId);
     }
 
     #endregion

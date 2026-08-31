@@ -159,19 +159,19 @@ public class AuthService(
             {
                 // Admin enabled TOTP but user needs to set it up (forced setup)
                 // TotpEnabled=true, RequiresTotp=false → Login.razor redirects to setup
-                return new AuthResult(true, user.WebUser.Id, user.WebUser.Email, user.WebUser.PermissionLevel, true, false, null);
+                return new AuthResult(true, user.WebUser.Id, user.WebUser.Email, user.WebUser.PermissionLevel, true, false, null, user.SecurityStamp);
             }
             else
             {
                 // Normal 2FA verification required
                 // TotpEnabled=true, RequiresTotp=true → Login.razor redirects to verify
-                return new AuthResult(true, user.WebUser.Id, user.WebUser.Email, user.WebUser.PermissionLevel, true, true, null);
+                return new AuthResult(true, user.WebUser.Id, user.WebUser.Email, user.WebUser.PermissionLevel, true, true, null, user.SecurityStamp);
             }
         }
 
         // TOTP disabled (either never set up or admin disabled for bypass)
         // TotpEnabled=false, RequiresTotp=false → Normal login
-        return new AuthResult(true, user.WebUser.Id, user.WebUser.Email, user.WebUser.PermissionLevel, false, false, null);
+        return new AuthResult(true, user.WebUser.Id, user.WebUser.Email, user.WebUser.PermissionLevel, false, false, null, user.SecurityStamp);
     }
 
     public async Task<AuthResult> VerifyTotpAsync(WebUserIdentity user, string code, CancellationToken cancellationToken = default)
@@ -189,7 +189,7 @@ public class AuthService(
         }
 
         await userRepository.UpdateLastLoginAsync(user.Id, cancellationToken);
-        return new AuthResult(true, dbUser.WebUser.Id, dbUser.WebUser.Email, dbUser.WebUser.PermissionLevel, true, false, null);
+        return new AuthResult(true, dbUser.WebUser.Id, dbUser.WebUser.Email, dbUser.WebUser.PermissionLevel, true, false, null, dbUser.SecurityStamp);
     }
 
     public async Task<bool> IsFirstRunAsync(CancellationToken cancellationToken = default)
@@ -392,7 +392,7 @@ public class AuthService(
 
         await userRepository.UpdateLastLoginAsync(user.Id, cancellationToken);
 
-        return new AuthResult(true, dbUser.WebUser.Id, dbUser.WebUser.Email, dbUser.WebUser.PermissionLevel, true, false, null);
+        return new AuthResult(true, dbUser.WebUser.Id, dbUser.WebUser.Email, dbUser.WebUser.PermissionLevel, true, false, null, dbUser.SecurityStamp);
     }
 
     public async Task AuditLogoutAsync(WebUserIdentity user, CancellationToken cancellationToken = default)

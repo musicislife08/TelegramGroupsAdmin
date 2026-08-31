@@ -1,35 +1,39 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Telegram.Bot.Types;
-using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Configuration.Models.Welcome;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
+using TelegramGroupsAdmin.Telegram.Metrics;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.Configuration.Services;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 
 /// <summary>
 /// Service for posting celebratory GIFs when users are banned.
 /// Sends GIF + caption to chat, optionally DMs the banned user.
-/// Uses IBanCelebrationCache (singleton) for shuffle-bag state to ensure all GIFs/captions
-/// are shown before any repeats.
+/// Rotation is database-backed: each repository claims and stamps the next unclaimed row
+/// atomically, then fetches it, so every GIF/caption is shown before any repeats, newly added
+/// items are claimable immediately, and the rotation survives restarts.
 /// Scoped service with direct dependency injection.
 /// </summary>
 public class BanCelebrationService(
     IConfigService configService,
-    IBanCelebrationCache celebrationCache,
     IBanCelebrationGifRepository gifRepository,
     IBanCelebrationCaptionRepository captionRepository,
+    IProfileScanResultsRepository scanRepository,
     IBotMessageService messageService,
     IBotDmService dmDeliveryService,
     IUserActionsRepository userActionsRepository,
     IOptions<AppOptions> appOptions,
-    ILogger<BanCelebrationService> logger) : IBanCelebrationService
+    ILogger<BanCelebrationService> logger,
+    PipelineMetrics pipelineMetrics) : IBanCelebrationService
 {
     private readonly string _mediaBasePath = Path.Combine(appOptions.Value.DataPath, "media");
 
@@ -42,8 +46,7 @@ public class BanCelebrationService(
         try
         {
             // Get the effective config for this chat (merges global + chat-specific)
-            var config = await configService.GetEffectiveAsync<BanCelebrationConfig>(
-                ConfigType.BanCelebration, chat.Id);
+            var config = await configService.GetEffectiveBanCelebrationAsync(chat.Id, cancellationToken);
 
             // Use default config if none exists
             config ??= BanCelebrationConfig.Default;
@@ -87,15 +90,43 @@ public class BanCelebrationService(
             // Get today's ban count for this chat
             var banCount = await GetTodaysBanCountAsync(cancellationToken);
 
+            // Determine whether the AI flagged the user's display text as explicit,
+            // and whether per-chat config says to mask it in the public caption.
+            var welcomeConfig = await configService.GetEffectiveWelcomeAsync(chat.Id, cancellationToken);
+            var profileScanConfig = welcomeConfig?.JoinSecurity?.ProfileScan ?? new ProfileScanConfig();
+
+            // Honor the parent ProfileScan.Enabled kill-switch. If scans are off, don't
+            // consult stale scan rows even if MaskExplicitUsername was left on (UI disables
+            // the child switch under the parent but doesn't reset its stored value).
+            var maskingActive = profileScanConfig.Enabled && profileScanConfig.MaskExplicitUsername;
+            var latestScan = maskingActive
+                ? await scanRepository.GetLatestByUserIdAsync(bannedUser.Id, cancellationToken)
+                : null;
+            var aiFlagged = latestScan?.ExplicitDisplayText ?? false;
+            var maskUsername = maskingActive && aiFlagged;
+            // Admins can clear the redaction text field (MudTextField MaxLength is client-only).
+            // A blank value would publish a caption like " got banned!" — fall back to the default.
+            var redactionText = string.IsNullOrWhiteSpace(profileScanConfig.ExplicitUsernameRedactionText)
+                ? ProfileScanConfig.DefaultExplicitUsernameRedactionText
+                : profileScanConfig.ExplicitUsernameRedactionText;
+            var displayedName = maskUsername ? redactionText : bannedUser.DisplayName;
+
+            if (maskUsername)
+            {
+                logger.LogDebug("Masking explicit display name for {User} in {Chat}",
+                    bannedUser.ToLogDebug(), chat.ToLogDebug());
+                pipelineMetrics.RecordMaskedUsername(isAutoBan ? "auto_ban" : "manual_ban");
+            }
+
             // Build the chat caption with placeholders replaced
             var chatCaption = ReplacePlaceholders(
                 caption.Text,
-                bannedUser.DisplayName,
+                displayedName,
                 chat.ChatName ?? chat.Id.ToString(),
                 banCount);
 
             // Send the GIF to the chat
-            var sentMessage = await SendGifToChatAsync(chat, gif, chatCaption, cancellationToken);
+            var sentMessage = await SendGifToChatAsync(chat, gif, TelegramMessage.Plain(chatCaption), cancellationToken);
             if (sentMessage == null)
             {
                 return false;
@@ -130,84 +161,23 @@ public class BanCelebrationService(
     }
 
     /// <summary>
-    /// Gets the next GIF from the shuffle bag. When the bag is empty, reloads all GIF IDs
-    /// from the database and shuffles them. This guarantees every GIF is shown once before
-    /// any can repeat (minimum gap = total GIF count).
+    /// Claims the next GIF in the rotation. The repository owns cycle state, so every GIF is sent
+    /// once before any repeats, newly added GIFs are claimable immediately, and the rotation
+    /// survives restarts.
     /// </summary>
-    private async Task<BanCelebrationGif?> GetNextGifAsync(CancellationToken cancellationToken)
-    {
-        while (true)
-        {
-            // Check if bag needs repopulating
-            if (celebrationCache.IsGifBagEmpty)
-            {
-                var ids = await gifRepository.GetAllIdsAsync(cancellationToken);
-
-                if (ids.Count == 0)
-                    return null;
-
-                celebrationCache.RepopulateGifBag(ids);
-                logger.LogDebug("Reshuffled GIF bag with {Count} items", ids.Count);
-            }
-
-            var nextId = celebrationCache.GetNextGifId();
-            if (nextId == null)
-            {
-                // Bag became empty between check and dequeue (race condition) - retry
-                continue;
-            }
-
-            // Fetch the full GIF — may return null if deleted since last shuffle
-            var gif = await gifRepository.GetByIdAsync(nextId.Value, cancellationToken);
-
-            if (gif != null)
-                return gif;
-
-            logger.LogDebug("GIF {GifId} no longer exists, skipping to next in bag", nextId);
-            // Continue loop — try next item in bag (or reshuffle if empty)
-        }
-    }
+    private Task<BanCelebrationGif?> GetNextGifAsync(CancellationToken cancellationToken) =>
+        gifRepository.ClaimNextForCycleAsync(cancellationToken);
 
     /// <summary>
-    /// Gets the next caption from the shuffle bag. Same algorithm as GIF bag.
+    /// Claims the next caption in the rotation. Same cycle semantics as <see cref="GetNextGifAsync"/>.
     /// </summary>
-    private async Task<BanCelebrationCaption?> GetNextCaptionAsync(CancellationToken cancellationToken)
-    {
-        while (true)
-        {
-            // Check if bag needs repopulating
-            if (celebrationCache.IsCaptionBagEmpty)
-            {
-                var ids = await captionRepository.GetAllIdsAsync(cancellationToken);
-
-                if (ids.Count == 0)
-                    return null;
-
-                celebrationCache.RepopulateCaptionBag(ids);
-                logger.LogDebug("Reshuffled caption bag with {Count} items", ids.Count);
-            }
-
-            var nextId = celebrationCache.GetNextCaptionId();
-            if (nextId == null)
-            {
-                // Bag became empty between check and dequeue (race condition) - retry
-                continue;
-            }
-
-            // Fetch the full caption — may return null if deleted since last shuffle
-            var caption = await captionRepository.GetByIdAsync(nextId.Value, cancellationToken);
-
-            if (caption != null)
-                return caption;
-
-            logger.LogDebug("Caption {CaptionId} no longer exists, skipping to next in bag", nextId);
-        }
-    }
+    private Task<BanCelebrationCaption?> GetNextCaptionAsync(CancellationToken cancellationToken) =>
+        captionRepository.ClaimNextForCycleAsync(cancellationToken);
 
     private async Task<Message?> SendGifToChatAsync(
         ChatIdentity chat,
         BanCelebrationGif gif,
-        string caption,
+        TelegramMessage caption,
         CancellationToken cancellationToken)
     {
         try
@@ -224,7 +194,6 @@ public class BanCelebrationService(
                         chat.Id,
                         inputFile,
                         caption,
-                        ParseMode.Markdown,
                         cancellationToken);
                 }
                 catch (Exception ex) when (IsInvalidFileIdError(ex))
@@ -254,7 +223,6 @@ public class BanCelebrationService(
                 chat.Id,
                 localInputFile,
                 caption,
-                ParseMode.Markdown,
                 cancellationToken);
         }
         catch (Exception ex)
@@ -275,7 +243,7 @@ public class BanCelebrationService(
         try
         {
             // Check if the chat has DM-based welcome mode (required for DM delivery)
-            var welcomeConfig = await configService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, chat.Id);
+            var welcomeConfig = await configService.GetEffectiveWelcomeAsync(chat.Id, cancellationToken);
             if (welcomeConfig == null || !welcomeConfig.Enabled)
             {
                 logger.LogDebug("Skipping DM to banned user: welcome system not enabled for chat {ChatId}", chat.Id);
@@ -289,9 +257,9 @@ public class BanCelebrationService(
                 return;
             }
 
-            // Build the DM caption (uses "You" grammar)
-            // Escape for MarkdownV2 since DmDeliveryService uses that parse mode
-            var dmCaption = TelegramTextUtilities.EscapeMarkdownV2(
+            // Build the DM caption (uses "You" grammar). Entity-based, no parse mode — the banned
+            // user's grammar token is plain text, matching the chat caption.
+            var dmCaption = TelegramMessage.Plain(
                 ReplacePlaceholders(caption.DmText, "You", chat.ChatName ?? chat.Id.ToString(), banCount));
 
             // Get the full path to the GIF
@@ -303,7 +271,7 @@ public class BanCelebrationService(
             }
 
             // Determine if it's a video or image for the DM service
-            // The DM service uses SendDmWithMediaAsync which accepts photo/video paths
+            // The DM service uses SendDmWithMediaEntitiesAsync which accepts photo/video paths
             // For GIFs/animations, we'll use the video path parameter
             var extension = Path.GetExtension(fullPath).ToLowerInvariant();
             string? photoPath = null;
@@ -318,8 +286,8 @@ public class BanCelebrationService(
                 photoPath = fullPath;
             }
 
-            var result = await dmDeliveryService.SendDmWithMediaAsync(
-                bannedUser.Id,
+            var result = await dmDeliveryService.SendDmWithMediaEntitiesAsync(
+                bannedUser,
                 "ban_celebration",
                 dmCaption,
                 photoPath,

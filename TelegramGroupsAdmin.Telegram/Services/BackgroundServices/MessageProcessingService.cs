@@ -19,6 +19,8 @@ using TelegramGroupsAdmin.Telegram.Metrics;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.BotCommands;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
+using TelegramGroupsAdmin.Telegram.Services.UserApi;
+using TelegramGroupsAdmin.Configuration.Services;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 
@@ -77,15 +79,14 @@ public partial class MessageProcessingService(
                 try
                 {
                     var commandResult = await commandRouter.RouteCommandAsync(message, cancellationToken);
-                    if (commandResult?.Response != null && !string.IsNullOrWhiteSpace(commandResult.Response))
+                    if (commandResult != null && !string.IsNullOrWhiteSpace(commandResult.Message.Text))
                     {
                         // Use BotMessageService to save bot response to database
                         using var scope = scopeFactory.CreateScope();
                         var botMessageService = scope.ServiceProvider.GetRequiredService<IBotMessageService>();
                         await botMessageService.SendAndSaveMessageAsync(
                             message.Chat.Id,
-                            commandResult.Response,
-                            parseMode: commandResult.ParseMode ?? ParseMode.Markdown,
+                            commandResult.Message,
                             cancellationToken: cancellationToken);
                     }
                 }
@@ -196,8 +197,8 @@ public partial class MessageProcessingService(
         // Handle service messages (join/leave, photo changes, title changes, etc.)
         // Check per-chat config to determine if each type should be deleted
         var configService = messageScope.ServiceProvider.GetRequiredService<IConfigService>();
-        var deletionConfig = await configService.GetEffectiveAsync<ServiceMessageDeletionConfig>(
-            ConfigType.ServiceMessageDeletion, message.Chat.Id) ?? ServiceMessageDeletionConfig.Default;
+        var deletionConfig = await configService.GetEffectiveServiceMessageDeletionAsync(message.Chat.Id, cancellationToken)
+                             ?? ServiceMessageDeletionConfig.Default;
 
         if (ServiceMessageHelper.IsServiceMessage(message, deletionConfig, out var shouldDelete))
         {
@@ -359,14 +360,13 @@ public partial class MessageProcessingService(
                     if (commandResult != null)
                     {
                         // Send response if there is one (and it's not empty)
-                        if (commandResult.Response != null && !string.IsNullOrWhiteSpace(commandResult.Response))
+                        if (!string.IsNullOrWhiteSpace(commandResult.Message.Text))
                         {
                             // Use BotMessageService to save bot response to database
                             var botMessageService = messageScope.ServiceProvider.GetRequiredService<IBotMessageService>();
                             var responseMessage = await botMessageService.SendAndSaveMessageAsync(
                                 message.Chat.Id,
-                                commandResult.Response,
-                                parseMode: commandResult.ParseMode ?? ParseMode.Markdown,
+                                commandResult.Message,
                                 replyParameters: new ReplyParameters { MessageId = message.MessageId },
                                 cancellationToken: cancellationToken);
 
@@ -667,7 +667,8 @@ public partial class MessageProcessingService(
                 UpdatedAt: now
             );
             // Profile change detection: compare Bot API User fields against stored values
-            // New users (existingUser == null) get scanned on join, not here.
+            // New users (existingUser == null) are covered by the first-message scan below,
+            // not here.
             // Trusted/admin users are already skipped by contentCheckSkipReason.
             if (existingUser is not null
                 && contentCheckSkipReason == ContentCheckSkipReason.NotSkipped
@@ -700,16 +701,50 @@ public partial class MessageProcessingService(
 
                 try
                 {
-                    var jobScheduler = messageScope.ServiceProvider.GetRequiredService<Handlers.BackgroundJobScheduler>();
-                    await jobScheduler.ScheduleProfileScanAsync(message.From.Id, message.Chat.Id, cancellationToken);
+                    var profileScanGate = messageScope.ServiceProvider.GetRequiredService<IProfileScanGate>();
+                    await profileScanGate.ScanIfEligibleAsync(
+                        UserIdentity.From(message.From),
+                        ChatIdentity.From(message.Chat),
+                        ProfileScanTrigger.ProfileChange,
+                        ct: cancellationToken);
                 }
                 catch (Exception ex)
                 {
-                    logger.LogWarning(ex, "Failed to schedule profile scan for user {UserId}", message.From.Id);
+                    LogProfileScanFailed(logger, ex, message.From.ToLogDebug());
                 }
             }
 
             await telegramUserRepo.UpsertAsync(telegramUser, cancellationToken);
+
+            // Profile scan for users we have never scanned. Users who arrive
+            // without a join event (for example, accounts commenting on channel
+            // posts in a linked discussion group) are not covered by the join
+            // trigger, and have no prior record for the profile-diff trigger to
+            // compare against. Runs after the upsert so the user row exists for
+            // the scan-result and report foreign keys. The gate owns the whole
+            // eligibility decision, including whether this user was scanned before.
+            var profileScanBanned = false;
+
+            try
+            {
+                var profileScanGate = messageScope.ServiceProvider.GetRequiredService<IProfileScanGate>();
+                var firstMessageScan = await profileScanGate.ScanIfEligibleAsync(
+                    UserIdentity.From(message.From),
+                    ChatIdentity.From(message.Chat),
+                    ProfileScanTrigger.FirstMessage,
+                    ct: cancellationToken);
+
+                if (firstMessageScan?.Outcome == ProfileScanOutcome.Banned)
+                {
+                    profileScanBanned = true;
+                    LogFirstMessageScanBanned(logger, message.From.ToLogDebug());
+                }
+            }
+            catch (Exception ex)
+            {
+                // A failed scan must never cost us the message.
+                LogProfileScanFailed(logger, ex, message.From.ToLogDebug());
+            }
 
             // Raise event for real-time UI updates
             OnNewMessage?.Invoke(messageRecord);
@@ -748,7 +783,9 @@ public partial class MessageProcessingService(
             // Skip content detection for command messages (already processed by CommandRouter)
             // Skip content detection for inactive chats (bot not admin - can't take moderation actions)
             // Run content detection if message has text OR images (image-only spam detection)
-            if (commandResult == null && (!string.IsNullOrWhiteSpace(text) || photoLocalPath != null))
+            if (!profileScanBanned
+                && commandResult == null
+                && (!string.IsNullOrWhiteSpace(text) || photoLocalPath != null))
             {
                 // Check if chat is active (bot has admin permissions) before running detection
                 using var chatCheckScope = serviceProvider.CreateScope();

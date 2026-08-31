@@ -18,14 +18,14 @@ public interface IBotChatService
     /// For public groups, returns t.me/username.
     /// For private groups, returns cached link or exports primary link on first call.
     /// </summary>
-    Task<string?> GetInviteLinkAsync(long chatId, CancellationToken ct = default);
+    Task<string?> GetInviteLinkAsync(ChatIdentity chat, CancellationToken ct = default);
 
     /// <summary>
     /// Refresh invite link from Telegram API and update cache.
     /// For public groups, checks if username changed.
     /// For private groups, returns cached link (doesn't revoke).
     /// </summary>
-    Task<string?> RefreshInviteLinkAsync(long chatId, CancellationToken ct = default);
+    Task<string?> RefreshInviteLinkAsync(ChatIdentity chat, CancellationToken ct = default);
 
     /// <summary>
     /// Leave a chat (group, supergroup, or channel).

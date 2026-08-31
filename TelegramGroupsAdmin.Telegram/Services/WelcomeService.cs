@@ -4,6 +4,7 @@ using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
 using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Configuration.Models.Welcome;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.JobPayloads;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
@@ -16,8 +17,10 @@ using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
+using TelegramGroupsAdmin.Telegram.Services.Moderation.Handlers;
 using TelegramGroupsAdmin.Telegram.Services.UserApi;
 using TelegramGroupsAdmin.Telegram.Services.Welcome;
+using TelegramGroupsAdmin.Configuration.Services;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 
@@ -41,9 +44,10 @@ public class WelcomeService(
     ICasCheckService casCheckService,
     IUsernameBlacklistService usernameBlacklistService,
     TelegramPhotoService photoService,
-    IProfileScanService profileScanService,
-    ITelegramSessionManager sessionManager,
+    IProfileScanGate profileScanGate,
     IWelcomeAdmissionHandler admissionHandler,
+    IWelcomeBypassResolver bypassResolver,
+    IAuditHandler auditHandler,
     WelcomeMetrics welcomeMetrics,
     ChatMetrics chatMetrics,
     ILogger<WelcomeService> logger) : IWelcomeService
@@ -125,7 +129,7 @@ public class WelcomeService(
             chatMemberUpdate.Chat.ToLogInfo());
 
         // Load welcome config from database (chat-specific or global fallback)
-        var config = await configService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, chatMemberUpdate.Chat.Id)
+        var config = await configService.GetEffectiveWelcomeAsync(chatMemberUpdate.Chat.Id, cancellationToken)
                      ?? WelcomeConfig.Default;
 
         // Track message ID for cleanup on ban/security failure
@@ -133,23 +137,12 @@ public class WelcomeService(
 
         try
         {
-            // Step 1: Check if user is an admin/owner - skip all checks for admins
-            var chatMember = await userService.GetChatMemberAsync(chatMemberUpdate.Chat.Id, user.Id, cancellationToken);
-            if (chatMember.Status is ChatMemberStatus.Administrator or ChatMemberStatus.Creator)
-            {
-                logger.LogInformation(
-                    "Skipping welcome for admin/owner: {User} in {Chat}",
-                    user.ToLogInfo(),
-                    chatMemberUpdate.Chat.ToLogInfo());
-                welcomeMetrics.RecordWelcomeOutcome("skipped_admin", Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
-                return;
-            }
-
             // Step 2: Ensure user record exists (FK constraint for audit logging)
             var existingUser = await telegramUserRepository.GetOrCreateAsync(
-                user.Id, user.Username, user.FirstName, user.LastName, user.IsBot, cancellationToken);
+                UserIdentity.From(user), user.IsBot, cancellationToken);
 
-            // Early-out: If user is already globally banned, apply single-chat ban and skip welcome
+            // Early-out: If user is already globally banned, apply single-chat ban and skip welcome.
+            // Pre-banned status wins over any bypass — this MUST run before Step 2.5.
             if (existingUser.IsBanned)
             {
                 logger.LogInformation(
@@ -169,15 +162,41 @@ public class WelcomeService(
                 return;
             }
 
+            // Step 2.5: Unified privileged/trusted bypass (chat admin, web admin, or trusted user).
+            // Short-circuits BEFORE mute (Step 3) — bypassed users are never muted.
+            var bypassResolution = await bypassResolver.ResolveAsync(
+                UserIdentity.From(user),
+                ChatIdentity.From(chatMemberUpdate.Chat),
+                cancellationToken);
+            var bypassDecision = bypassResolution.Decision;
+            if (bypassDecision != BypassDecision.None)
+            {
+                await telegramUserRepository.ActivateAsync(user.Id, cancellationToken);
+                await auditHandler.LogWelcomeBypassAsync(
+                    UserIdentity.From(user),
+                    ChatIdentity.From(chatMemberUpdate.Chat),
+                    bypassResolution.Decision,
+                    bypassResolution.ReasonDetail ?? string.Empty,
+                    cancellationToken);
+                await PostBypassAnnouncementIfConfiguredAsync(
+                    chatMemberUpdate.Chat, user, config, bypassDecision, cancellationToken);
+
+                welcomeMetrics.RecordBypassOutcome(
+                    bypassDecision,
+                    Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
+                return;
+            }
+
             // Step 3: Restrict user permissions (mute immediately - no spam window)
             await RestrictUserPermissionsAsync(chatMemberUpdate.Chat, user, cancellationToken);
 
             // Step 4: Send verifying message
-            var username = TelegramDisplayName.FormatMention(user);
-            var verifyingText = WelcomeMessageBuilder.FormatVerifyingMessage(username);
             var verifyingMessage = await messageService.SendAndSaveMessageAsync(
                 chatId: chatMemberUpdate.Chat.Id,
-                text: verifyingText,
+                message: new TelegramMessageBuilder()
+                    .Mention(UserIdentity.From(user))
+                    .Text(" ⏳ Verifying...")
+                    .Build(),
                 cancellationToken: cancellationToken);
             verifyingMessageId = verifyingMessage.MessageId;
 
@@ -187,11 +206,12 @@ public class WelcomeService(
             // Trusted users skip CAS + profile scan (trust is global)
             // ═══════════════════════════════════════════════════════════════════
 
+            var userIdentity = UserIdentity.From(user);
+
             // Step 5: Username blacklist check - auto-ban blacklisted display names FIRST (instant, local DB)
             // Skip trusted users — trust is global, applied across all groups
             if (config.JoinSecurity.UsernameBlacklist.Enabled && existingUser?.IsTrusted != true)
             {
-                var userIdentity = UserIdentity.From(user);
                 var blacklistMatch = await usernameBlacklistService.CheckDisplayNameAsync(
                     userIdentity.DisplayName, cancellationToken);
 
@@ -236,7 +256,7 @@ public class WelcomeService(
             // Skip trusted users — trust is global, applied across all groups
             if (config.JoinSecurity.Cas.Enabled && existingUser?.IsTrusted != true)
             {
-                var casResult = await casCheckService.CheckUserAsync(user.Id, config.JoinSecurity.Cas, cancellationToken);
+                var casResult = await casCheckService.CheckUserAsync(userIdentity, config.JoinSecurity.Cas, cancellationToken);
                 if (casResult.IsBanned)
                 {
                     logger.LogWarning(
@@ -372,52 +392,44 @@ public class WelcomeService(
                 welcomeMetrics.RecordSecurityCheck("photo_match", "skipped");
             }
 
-            // Step 9: Profile scan via User API (skip trusted users)
-            if (config.JoinSecurity.ProfileScan.Enabled
-                && config.JoinSecurity.ProfileScan.ScanOnJoin
-                && existingUser?.IsTrusted != true)
+            // Step 9: Profile scan via User API (eligibility owned by ProfileScanGate)
+            var scanResult = await profileScanGate.ScanIfEligibleAsync(
+                UserIdentity.From(user),
+                ChatIdentity.From(chatMemberUpdate.Chat),
+                ProfileScanTrigger.Join,
+                ct: cancellationToken);
+
+            if (scanResult is not null)
             {
-                if (await sessionManager.HasAnyActiveSessionAsync(cancellationToken))
+                if (scanResult.Outcome == ProfileScanOutcome.Banned)
                 {
-                    var scanResult = await profileScanService.ScanUserProfileAsync(
-                        UserIdentity.From(user),
-                        ChatIdentity.From(chatMemberUpdate.Chat),
-                        cancellationToken);
+                    await TryDeleteMessageAsync(chatMemberUpdate.Chat.Id, verifyingMessageId.Value, cancellationToken);
 
-                    if (scanResult.Outcome == ProfileScanOutcome.Banned)
-                    {
-                        await TryDeleteMessageAsync(chatMemberUpdate.Chat.Id, verifyingMessageId.Value, cancellationToken);
-
-                        logger.LogInformation(
-                            "{User} auto-banned by profile scan (score {Score}), skipping welcome flow",
-                            user.ToLogInfo(), scanResult.Score);
-                        welcomeMetrics.RecordSecurityCheck("profile_scan", "fail");
-                        welcomeMetrics.RecordWelcomeOutcome("banned", Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
-                        return; // User already banned by ProfileScanService
-                    }
-
-                    if (scanResult.Outcome == ProfileScanOutcome.HeldForReview)
-                    {
-                        // Update verifying message — user waits for admin + welcome gate
-                        var holdText = WelcomeMessageBuilder.FormatProfileHoldMessage(
-                            TelegramDisplayName.FormatMention(user));
-                        await TryEditMessageAsync(
-                            chatMemberUpdate.Chat.Id, verifyingMessageId.Value, holdText, cancellationToken);
-
-                        logger.LogInformation(
-                            "{User} held for profile scan review (score {Score}), continuing welcome flow",
-                            user.ToLogInfo(), scanResult.Score);
-                        // Fall through — exam will run below if configured (dual-gate: both must pass)
-                    }
-
-                    welcomeMetrics.RecordSecurityCheck("profile_scan", "pass");
+                    logger.LogInformation(
+                        "{User} auto-banned by profile scan (score {Score}), skipping welcome flow",
+                        user.ToLogInfo(), scanResult.Score);
+                    welcomeMetrics.RecordSecurityCheck("profile_scan", "fail");
+                    welcomeMetrics.RecordWelcomeOutcome("banned", Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
+                    return; // User already banned by ProfileScanService
                 }
-                else
+
+                if (scanResult.Outcome == ProfileScanOutcome.HeldForReview)
                 {
-                    logger.LogDebug("No User API session available, skipping profile scan for {User}",
-                        user.ToLogDebug());
-                    welcomeMetrics.RecordSecurityCheck("profile_scan", "skipped");
+                    // Update verifying message — user waits for admin + welcome gate
+                    var holdMessage = new TelegramMessageBuilder()
+                        .Mention(UserIdentity.From(user))
+                        .Text(" ⏳ Your profile is under admin review. Please wait...")
+                        .Build();
+                    await TryEditMessageAsync(
+                        chatMemberUpdate.Chat.Id, verifyingMessageId.Value, holdMessage, cancellationToken);
+
+                    logger.LogInformation(
+                        "{User} held for profile scan review (score {Score}), continuing welcome flow",
+                        user.ToLogInfo(), scanResult.Score);
+                    // Fall through — exam will run below if configured (dual-gate: both must pass)
                 }
+
+                welcomeMetrics.RecordSecurityCheck("profile_scan", "pass");
             }
             else
             {
@@ -472,7 +484,7 @@ public class WelcomeService(
             // Welcome ENABLED: Update verifying message to full welcome content
             var chatInfo = await chatService.GetChatAsync(chatMemberUpdate.Chat.Id, cancellationToken);
             var chatName = chatInfo.Title ?? "this chat";
-            var messageText = WelcomeMessageBuilder.FormatWelcomeMessage(config, username, chatName);
+            var welcomeMessage = WelcomeMessageBuilder.FormatWelcomeMessage(config, UserIdentity.From(user), chatName);
 
             // Build keyboard based on welcome mode
             InlineKeyboardMarkup keyboard;
@@ -495,7 +507,7 @@ public class WelcomeService(
             await messageService.EditAndUpdateMessageAsync(
                 chatId: chatMemberUpdate.Chat.Id,
                 messageId: verifyingMessageId.Value,
-                text: messageText,
+                message: welcomeMessage,
                 replyMarkup: keyboard,
                 cancellationToken: cancellationToken);
 
@@ -532,7 +544,7 @@ public class WelcomeService(
             );
 
             var jobId = await jobScheduler.ScheduleJobAsync(
-                "WelcomeTimeout",
+                BackgroundJobNames.WelcomeTimeout,
                 payload,
                 delaySeconds: config.TimeoutSeconds,
                 deduplicationKey: None,
@@ -589,17 +601,112 @@ public class WelcomeService(
         }
     }
 
-    private async Task TryEditMessageAsync(long chatId, int messageId, string text, CancellationToken cancellationToken)
+    private async Task TryEditMessageAsync(long chatId, int messageId, TelegramMessage message, CancellationToken cancellationToken)
     {
         try
         {
-            await messageService.EditAndUpdateMessageAsync(chatId, messageId, text, cancellationToken: cancellationToken);
+            await messageService.EditAndUpdateMessageAsync(chatId, messageId, message, cancellationToken: cancellationToken);
         }
         catch (Exception ex)
         {
             logger.LogDebug(ex, "Failed to edit message {MessageId} (non-fatal)", messageId);
         }
     }
+
+    /// <summary>
+    /// Post the per-decision trusted-bypass announcement message in chat and schedule its
+    /// auto-deletion. No-op when the TrustedBypass toggle is disabled or the per-decision
+    /// template is blank — those are the configured "disable announcement" signals.
+    ///
+    /// Security: <c>{username}</c> and <c>{chat_name}</c> substitutions are rendered as
+    /// Telegram <c>text_mention</c> entities / plain text segments via
+    /// <see cref="TelegramMessageBuilder"/>. No HTML parser is involved, eliminating the
+    /// CWE-79 (stored HTML injection) surface that the former ParseMode.Html path carried.
+    /// </summary>
+    private async Task PostBypassAnnouncementIfConfiguredAsync(
+        Chat chat,
+        User user,
+        WelcomeConfig config,
+        BypassDecision decision,
+        CancellationToken cancellationToken)
+    {
+        // Toggle gates the entire feature — admin can kill all announcements without
+        // blanking templates. Re-checked here (resolver already read it once) as a
+        // best-effort guard: if an admin flipped the toggle between resolve and announce,
+        // the bypass decision is already committed (audit row written, user admitted) —
+        // skipping the announcement is graceful degradation, not a correctness bug.
+        if (!config.TrustedBypass.Enabled)
+        {
+            return;
+        }
+
+        // Per-decision template lookup. Empty template → this decision opts out
+        // (admin-only silent, or trusted-only silent, or both).
+        var template = decision switch
+        {
+            BypassDecision.Admin => config.TrustedBypass.AnnouncementMessageAdmin,
+            BypassDecision.Trusted => config.TrustedBypass.AnnouncementMessageTrusted,
+            _ => null,
+        };
+        if (string.IsNullOrWhiteSpace(template))
+        {
+            return;
+        }
+
+        // Consumer-side clamp: config write-path validators should already reject
+        // over-limit templates, but we also truncate here to keep us under Telegram's
+        // wire limit in the face of bad config writes or migration gaps.
+        if (template.Length > TrustedBypassConfig.MaxAnnouncementTemplateLength)
+        {
+            logger.LogWarning(
+                "TrustedBypass {Decision} template exceeds {Max} chars (was {Actual}); truncating. Chat: {Chat}",
+                decision,
+                TrustedBypassConfig.MaxAnnouncementTemplateLength,
+                template.Length,
+                chat.ToLogInfo());
+            template = template[..TrustedBypassConfig.MaxAnnouncementTemplateLength];
+        }
+
+        // Floor TTL at the configured minimum (0). TTL=0 means "schedule delete
+        // immediately"; we still post + schedule, we do not short-circuit.
+        var ttl = Math.Max(
+            TrustedBypassConfig.MinAnnouncementTtlSeconds,
+            config.TrustedBypass.AnnouncementTtlSeconds);
+
+        var announcementMessage = BuildBypassAnnouncementMessage(template, user, chat);
+
+        var announcement = await messageService.SendAndSaveMessageAsync(
+            chatId: chat.Id,
+            message: announcementMessage,
+            cancellationToken: cancellationToken);
+
+        var deletePayload = new DeleteMessagePayload(
+            chat.Id,
+            announcement.MessageId,
+            "welcome_bypass_announcement");
+
+        await jobScheduler.ScheduleJobAsync(
+            BackgroundJobNames.DeleteMessage,
+            deletePayload,
+            delaySeconds: ttl,
+            deduplicationKey: None,
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// Builds the trusted-bypass announcement (<c>{username}</c> → clickable
+    /// <c>text_mention</c>, <c>{chat_name}</c> → text) via the shared
+    /// <see cref="WelcomeMessageBuilder"/> so the production send and the admin live-preview
+    /// render identically. No HTML parser is involved — no CWE-79 surface.
+    /// </summary>
+    private static TelegramMessage BuildBypassAnnouncementMessage(
+        string template,
+        User user,
+        Chat chat)
+        => WelcomeMessageBuilder.BuildBypassTemplate(
+            template,
+            UserIdentity.From(user),
+            chat.Title ?? string.Empty);
 
     public async Task HandleCallbackQueryAsync(
         CallbackQuery callbackQuery,
@@ -680,7 +787,7 @@ public class WelcomeService(
                 case WelcomeCallbackType.Accept:
                 case WelcomeCallbackType.Deny:
                     // Load welcome config for chat-based callbacks
-                    var config = await configService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, chatId)
+                    var config = await configService.GetEffectiveWelcomeAsync(chatId, cancellationToken)
                                  ?? WelcomeConfig.Default;
 
                     if (parsedCallback.Type == WelcomeCallbackType.Accept)
@@ -713,11 +820,12 @@ public class WelcomeService(
     {
         try
         {
-            var username = TelegramDisplayName.FormatMention(user);
-            var warningText = WelcomeMessageBuilder.FormatWrongUserWarning(username);
             var warningMsg = await messageService.SendAndSaveMessageAsync(
                 chatId: chatId,
-                text: warningText,
+                message: new TelegramMessageBuilder()
+                    .Mention(UserIdentity.From(user))
+                    .Text(", ⚠️ this button is not for you. Only the mentioned user can respond.")
+                    .Build(),
                 replyParameters: new ReplyParameters { MessageId = replyToMessageId },
                 cancellationToken: cancellationToken);
 
@@ -729,7 +837,7 @@ public class WelcomeService(
             );
 
             await jobScheduler.ScheduleJobAsync(
-                "DeleteMessage",
+                BackgroundJobNames.DeleteMessage,
                 deletePayload,
                 delaySeconds: 10,
                 deduplicationKey: None,
@@ -863,7 +971,12 @@ public class WelcomeService(
         }
     }
 
-    private async Task KickUserAsync(
+    /// <summary>
+    /// Kicks a user via the moderation orchestrator. Returns whether the kick succeeded
+    /// so callers can decide whether they still own welcome-message cleanup: a successful
+    /// kick means the orchestrator already deleted the message; a failed one means it didn't.
+    /// </summary>
+    private async Task<bool> KickUserAsync(
         Chat chat,
         User user,
         string reason,
@@ -896,6 +1009,8 @@ public class WelcomeService(
                     user.ToLogDebug(),
                     chat.ToLogDebug());
             }
+
+            return result.Success;
         }
         catch (Exception ex)
         {
@@ -933,8 +1048,8 @@ public class WelcomeService(
             }
         }
 
-        // Step 3: Try to send rules via DM (or fallback to chat)
-        // Always attempt this - previous DM sent via /start may have been deleted by user
+        // Step 3: Try to send rules via DM.
+        // Always attempt this - previous DM sent via /start may have been deleted by user.
         var dmResult = await SendRulesAsync(chat, user, config, cancellationToken);
 
         logger.LogDebug(
@@ -989,9 +1104,11 @@ public class WelcomeService(
         else
         {
             // Profile gate still pending — update welcome message to show hold status
-            var holdText = WelcomeMessageBuilder.FormatProfileHoldMessage(
-                TelegramDisplayName.FormatMention(user));
-            await TryEditMessageAsync(chat.Id, welcomeMessageId, holdText, cancellationToken);
+            var holdMessage = new TelegramMessageBuilder()
+                .Mention(UserIdentity.From(user))
+                .Text(" ⏳ Your profile is under admin review. Please wait...")
+                .Build();
+            await TryEditMessageAsync(chat.Id, welcomeMessageId, holdMessage, cancellationToken);
 
             logger.LogInformation(
                 "{User} completed welcome in {Chat} but held for profile review",
@@ -1020,13 +1137,31 @@ public class WelcomeService(
             }
         }
 
-        // Step 2: Kick user
-        await KickUserAsync(chat, user, ReasonDeniedRules, cancellationToken);
+        // Step 2: Kick user (the moderation orchestrator deletes the welcome message on a
+        // successful kick). KickUserAsync logs and rethrows on failure — catch it here so a
+        // throwing kick still falls through to the failure-path delete and the Step 3 response
+        // update below, the same as a non-throwing failure result.
+        bool kicked;
+        try
+        {
+            kicked = await KickUserAsync(chat, user, ReasonDeniedRules, cancellationToken);
+        }
+        catch (Exception)
+        {
+            // KickUserAsync already logged the failure before rethrowing.
+            kicked = false;
+        }
 
-        // Step 3: Delete welcome message
-        await TryDeleteMessageAsync(chat.Id, welcomeMessageId, cancellationToken);
+        // Step 2b: On a failed kick — thrown or a non-throwing Failed result — the
+        // orchestrator's cleanup never ran, so delete the message here. Otherwise it survives
+        // with live Accept/Deny buttons while the response below is recorded as Denied,
+        // letting the user self-admit by clicking Accept.
+        if (!kicked)
+        {
+            await TryDeleteMessageAsync(chat.Id, welcomeMessageId, cancellationToken);
+        }
 
-        // Step 4: Update or create response record
+        // Step 3: Update or create response record
         if (existingResponse != null)
         {
             await welcomeResponsesRepository.UpdateResponseAsync(existingResponse.Id, WelcomeResponseType.Denied, dmSent: false, dmFallback: false, cancellationToken);
@@ -1100,7 +1235,7 @@ public class WelcomeService(
                 groupChat.ToLogDebug());
 
             // Send error to user in DM
-            await dmDeliveryService.SendDmAsync(user.Id, ErrorNoWelcomeRecord, cancellationToken: cancellationToken);
+            await dmDeliveryService.SendDmAsync(UserIdentity.From(user), ErrorNoWelcomeRecord, cancellationToken: cancellationToken);
             return;
         }
 
@@ -1135,10 +1270,12 @@ public class WelcomeService(
         else
         {
             // Profile gate still pending — update group message and notify user in DM
-            var holdText = WelcomeMessageBuilder.FormatProfileHoldMessage(
-                TelegramDisplayName.FormatMention(user));
-            await TryEditMessageAsync(groupChatId, welcomeResponse.WelcomeMessageId, holdText, cancellationToken);
-            await dmDeliveryService.SendDmAsync(user.Id,
+            var holdMessage = new TelegramMessageBuilder()
+                .Mention(UserIdentity.From(user))
+                .Text(" ⏳ Your profile is under admin review. Please wait...")
+                .Build();
+            await TryEditMessageAsync(groupChatId, welcomeResponse.WelcomeMessageId, holdMessage, cancellationToken);
+            await dmDeliveryService.SendDmAsync(UserIdentity.From(user),
                 "⏳ Your profile is under admin review. You'll be able to participate once approved.",
                 cancellationToken: cancellationToken);
 
@@ -1159,7 +1296,7 @@ public class WelcomeService(
             // For private chats (no username), try to get invite link
             if (chatDeepLink == null)
             {
-                chatDeepLink = await chatService.GetInviteLinkAsync(groupChat.Id, cancellationToken);
+                chatDeepLink = await chatService.GetInviteLinkAsync(ChatIdentity.From(groupChat), cancellationToken);
 
                 if (chatDeepLink != null)
                 {
@@ -1188,7 +1325,7 @@ public class WelcomeService(
             }
 
             var confirmationText = WelcomeMessageBuilder.FormatDmAcceptanceConfirmation(chatName);
-            await dmDeliveryService.SendDmAsync(user.Id, confirmationText, cancellationToken: cancellationToken);
+            await dmDeliveryService.SendDmAsync(UserIdentity.From(user), confirmationText, cancellationToken: cancellationToken);
         }
         catch (Exception ex)
         {
@@ -1206,18 +1343,25 @@ public class WelcomeService(
         CancellationToken cancellationToken = default)
     {
         var chatName = chat.Title ?? "this chat";
-        var username = TelegramDisplayName.FormatMention(user);
 
         // Use extracted builder for rules confirmation message (includes footer)
-        var dmText = WelcomeMessageBuilder.FormatRulesConfirmation(config, username, chatName);
+        var dmMessage = WelcomeMessageBuilder.FormatRulesConfirmation(config, UserIdentity.From(user), chatName);
 
-        // Delegate to DmDeliveryService with chat fallback and 30-second auto-delete
+        // No chat fallback: a blocked DM must not spill the rules into the group as a
+        // message addressed to a user who may already be banned or held for review.
         var result = await dmDeliveryService.SendDmAsync(
-            telegramUserId: user.Id,
-            messageText: dmText,
-            fallbackChatId: chat.Id,
-            autoDeleteSeconds: 30,
+            user: UserIdentity.From(user),
+            message: dmMessage,
             cancellationToken: cancellationToken);
+
+        if (result.Failed)
+        {
+            logger.LogWarning(
+                "Could not deliver welcome rules to {User} for {Chat}: {Error}",
+                user.ToLogDebug(),
+                chat.ToLogDebug(),
+                result.ErrorMessage);
+        }
 
         logger.LogDebug(
             "Rules sent to {User}: DmSent={DmSent}, FallbackUsed={FallbackUsed}",

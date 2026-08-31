@@ -22,7 +22,7 @@ public class SpamCommand : IBotCommand
     public string Name => "spam";
     public string Description => "Mark message as spam and delete it";
     public string Usage => "/spam (reply to message)";
-    public int MinPermissionLevel => 1; // Admin required
+    public PermissionLevel MinPermissionLevel => PermissionLevel.Admin; // chat admin or higher
     public bool RequiresReply => true;
     public bool DeleteCommandMessage => true; // Clean up moderation command
     public int? DeleteResponseAfterSeconds => null;
@@ -40,12 +40,12 @@ public class SpamCommand : IBotCommand
     public async Task<CommandResult> ExecuteAsync(
         Message message,
         string[] args,
-        int userPermissionLevel,
+        PermissionLevel userPermission,
         CancellationToken cancellationToken = default)
     {
         if (message.ReplyToMessage == null)
         {
-            return new CommandResult("❌ Please reply to the spam message.", DeleteCommandMessage, DeleteResponseAfterSeconds);
+            return new CommandResult(TelegramMessage.Plain("❌ Please reply to the spam message."), DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
 
         var spamMessage = message.ReplyToMessage;
@@ -58,7 +58,7 @@ public class SpamCommand : IBotCommand
 
         if (spamUserId == null)
         {
-            return new CommandResult("❌ Could not identify user.", DeleteCommandMessage, DeleteResponseAfterSeconds);
+            return new CommandResult(TelegramMessage.Plain("❌ Could not identify user."), DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
 
         using var scope = _serviceProvider.CreateScope();
@@ -68,7 +68,7 @@ public class SpamCommand : IBotCommand
         var isAdmin = await chatAdminsRepository.IsAdminAsync(message.Chat.Id, spamUserId.Value, cancellationToken);
         if (isAdmin)
         {
-            return new CommandResult("❌ Cannot mark admin messages as spam.", DeleteCommandMessage, DeleteResponseAfterSeconds);
+            return new CommandResult(TelegramMessage.Plain("❌ Cannot mark admin messages as spam."), DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
 
         // NOTE: Trust status is intentionally NOT checked here.
@@ -98,7 +98,7 @@ public class SpamCommand : IBotCommand
 
         if (!result.Success)
         {
-            return new CommandResult($"❌ Failed to process spam action: {result.ErrorMessage}", DeleteCommandMessage, DeleteResponseAfterSeconds);
+            return new CommandResult(TelegramMessage.Plain($"❌ Failed to process spam action: {result.ErrorMessage}"), DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
 
         _logger.LogInformation(
@@ -108,6 +108,6 @@ public class SpamCommand : IBotCommand
 
         // Silent mode: No chat feedback, message and command simply disappear
         // Admins see action through DM notifications if enabled
-        return new CommandResult(null, DeleteCommandMessage, DeleteResponseAfterSeconds);
+        return new CommandResult(TelegramMessage.Empty, DeleteCommandMessage, DeleteResponseAfterSeconds);
     }
 }

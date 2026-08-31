@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Repositories.Mappings;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Telegram.Models;
@@ -80,11 +81,11 @@ public class TelegramUserMappingRepository : ITelegramUserMappingRepository
             .AnyAsync(tum => tum.TelegramId == telegramId && tum.IsActive, cancellationToken);
     }
 
-    public async Task<int?> GetPermissionLevelByTelegramIdAsync(long telegramId, CancellationToken cancellationToken = default)
+    public async Task<PermissionLevel?> GetPermissionLevelByTelegramIdAsync(long telegramId, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         // Single query with JOIN - returns null if no mapping or user found
-        var permissionLevel = await context.TelegramUserMappings
+        var levelInt = await context.TelegramUserMappings
             .AsNoTracking()
             .Where(tum => tum.TelegramId == telegramId && tum.IsActive)
             .Join(
@@ -94,7 +95,7 @@ public class TelegramUserMappingRepository : ITelegramUserMappingRepository
                 (tum, user) => (int?)user.PermissionLevel)
             .FirstOrDefaultAsync(cancellationToken);
 
-        return permissionLevel;
+        return levelInt is null ? null : (PermissionLevel)levelInt.Value;
     }
 
     public async Task<HashSet<long>> GetTelegramIdsByUserIdsAsync(IEnumerable<string> userIds, CancellationToken cancellationToken = default)

@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
+using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
@@ -53,9 +54,8 @@ public class UserAutoTrustService
 
         try
         {
-            // Get effective config via ConfigService (single entry point for all config)
-            var config = await _configService.GetEffectiveAsync<ContentDetectionConfig>(ConfigType.ContentDetection, chatId)
-                        ?? new ContentDetectionConfig();
+            // Get effective config via IConfigService
+            var config = await _configService.GetEffectiveContentDetectionAsync(chatId, cancellationToken);
 
             // Feature disabled - skip
             if (!config.FirstMessageOnly)

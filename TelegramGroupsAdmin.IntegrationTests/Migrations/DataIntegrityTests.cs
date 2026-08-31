@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using TelegramGroupsAdmin.Data.Models;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
+using CoreModels = TelegramGroupsAdmin.Core.Models;
 
 namespace TelegramGroupsAdmin.IntegrationTests.Migrations;
 
@@ -34,7 +35,7 @@ public class DataIntegrityTests
     {
         // Arrange - Create database and apply migrations
         using var helper = new MigrationTestHelper();
-        await helper.CreateDatabaseAndApplyMigrationsAsync();
+        await helper.CreateDatabaseFromEmptyTemplateAsync();
 
         // Test 1: message_translations UNIQUE on message_id (already covered in Test 2, but include for completeness)
         await using (var context = helper.GetDbContext())
@@ -89,7 +90,7 @@ public class DataIntegrityTests
                 NormalizedEmail = "USER@TEST.COM",
                 PasswordHash = "hash",
                 SecurityStamp = Guid.NewGuid().ToString(),
-                PermissionLevel = PermissionLevel.Admin,
+                PermissionLevel = (int)CoreModels.PermissionLevel.Admin,
                 Status = UserStatus.Active,
                 CreatedAt = DateTimeOffset.UtcNow
             });
@@ -107,7 +108,7 @@ public class DataIntegrityTests
                 NormalizedEmail = "USER@TEST.COM",  // Duplicate normalized!
                 PasswordHash = "hash",
                 SecurityStamp = Guid.NewGuid().ToString(),
-                PermissionLevel = PermissionLevel.Admin,
+                PermissionLevel = (int)CoreModels.PermissionLevel.Admin,
                 Status = UserStatus.Active,
                 CreatedAt = DateTimeOffset.UtcNow
             });
@@ -169,7 +170,7 @@ public class DataIntegrityTests
     {
         // Arrange - Create database and apply migrations
         using var helper = new MigrationTestHelper();
-        await helper.CreateDatabaseAndApplyMigrationsAsync();
+        await helper.CreateDatabaseFromEmptyTemplateAsync();
 
         // Test 1: message_translations exclusive arc (both NULL - invalid)
         var bothNullException = Assert.ThrowsAsync<Npgsql.PostgresException>(async () =>
@@ -272,7 +273,7 @@ public class DataIntegrityTests
     {
         // Arrange - Create database and apply migrations
         using var helper = new MigrationTestHelper();
-        await helper.CreateDatabaseAndApplyMigrationsAsync();
+        await helper.CreateDatabaseFromEmptyTemplateAsync();
 
         // Test 1: users.email NOT NULL
         var emailNullException = Assert.ThrowsAsync<Npgsql.PostgresException>(async () =>
@@ -362,7 +363,7 @@ public class DataIntegrityTests
     {
         // Arrange - Create database and apply migrations
         using var helper = new MigrationTestHelper();
-        await helper.CreateDatabaseAndApplyMigrationsAsync();
+        await helper.CreateDatabaseFromEmptyTemplateAsync();
 
         // Test 1: message_translations FK to messages (orphaned message_id)
         var orphanedMessageException = Assert.ThrowsAsync<Npgsql.PostgresException>(async () =>
@@ -460,7 +461,7 @@ public class DataIntegrityTests
     {
         // Arrange - Create database and apply migrations
         using var helper = new MigrationTestHelper();
-        await helper.CreateDatabaseAndApplyMigrationsAsync();
+        await helper.CreateDatabaseFromEmptyTemplateAsync();
 
         // Test 1: FK constraint - push_subscriptions.user_id must reference valid user
         var orphanedUserException = Assert.ThrowsAsync<Npgsql.PostgresException>(async () =>
@@ -491,7 +492,7 @@ public class DataIntegrityTests
                 NormalizedEmail = "PUSH@TEST.COM",
                 PasswordHash = "hash",
                 SecurityStamp = Guid.NewGuid().ToString(),
-                PermissionLevel = PermissionLevel.Admin,
+                PermissionLevel = (int)CoreModels.PermissionLevel.Admin,
                 Status = UserStatus.Active,
                 CreatedAt = DateTimeOffset.UtcNow
             });
@@ -538,7 +539,7 @@ public class DataIntegrityTests
     {
         // Arrange - Create database and apply migrations
         using var helper = new MigrationTestHelper();
-        await helper.CreateDatabaseAndApplyMigrationsAsync();
+        await helper.CreateDatabaseFromEmptyTemplateAsync();
 
         // Test: FK constraint - web_notifications.user_id must reference valid user
         var orphanedUserException = Assert.ThrowsAsync<Npgsql.PostgresException>(async () =>
@@ -568,7 +569,7 @@ public class DataIntegrityTests
                 NormalizedEmail = "NOTIFY@TEST.COM",
                 PasswordHash = "hash",
                 SecurityStamp = Guid.NewGuid().ToString(),
-                PermissionLevel = PermissionLevel.Admin,
+                PermissionLevel = (int)CoreModels.PermissionLevel.Admin,
                 Status = UserStatus.Active,
                 CreatedAt = DateTimeOffset.UtcNow
             });

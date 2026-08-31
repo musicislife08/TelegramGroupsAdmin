@@ -1,7 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Configuration;
-using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.JobPayloads;
@@ -9,6 +8,7 @@ using TelegramGroupsAdmin.Core.Models;
 using static TelegramGroupsAdmin.Core.BackgroundJobs.DeduplicationKeys;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Configuration.Services;
 
 namespace TelegramGroupsAdmin.Telegram.Handlers;
 
@@ -63,10 +63,9 @@ public class FileScanningHandler
         }
 
         // Get effective content detection config for this chat
-        var config = await _configService.GetEffectiveAsync<ContentDetectionConfig>(ConfigType.ContentDetection, chatId);
+        var config = await _configService.GetEffectiveContentDetectionAsync(chatId, cancellationToken);
 
-        // If no config exists, use defaults (file scanning enabled with AlwaysRun=true)
-        var fileScanningConfig = config?.FileScanning ?? new FileScanningDetectionConfig();
+        var fileScanningConfig = config.FileScanning;
 
         // Check if file scanning is enabled
         if (!fileScanningConfig.Enabled)

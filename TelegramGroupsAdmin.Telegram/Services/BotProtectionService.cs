@@ -1,6 +1,8 @@
 using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Configuration.Models;
+using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Extensions;
@@ -31,8 +33,7 @@ public class BotProtectionService(
         }
 
         // Get effective config for this chat (chat-specific overrides global)
-        // Note: IConfigService doesn't support CancellationToken (configuration library)
-        var config = await configService.GetEffectiveAsync<BotProtectionConfig>(ConfigType.UrlFilter, chat.Id)
+        var config = await configService.GetEffectiveBotProtectionAsync(chat.Id, cancellationToken)
                     ?? BotProtectionConfig.Default;
 
         // Bot protection disabled - allow all bots

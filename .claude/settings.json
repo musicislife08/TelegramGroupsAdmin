@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "dotnet slopwatch analyze -d . --hook",
+            "command": "dotnet slopwatch analyze -d \"$CLAUDE_PROJECT_DIR\" --hook",
             "timeout": 60000
           }
         ]

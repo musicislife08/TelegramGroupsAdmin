@@ -1,4 +1,7 @@
-using Telegram.Bot.Types.Enums;
+using Telegram.Bot.Types;
+using Telegram.Bot.Types.ReplyMarkups;
+using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Utilities;
 
 namespace TelegramGroupsAdmin.Telegram.Services.Bot;
 
@@ -6,6 +9,10 @@ namespace TelegramGroupsAdmin.Telegram.Services.Bot;
 /// Centralized DM delivery service with consistent bot_dm_enabled tracking and fallback handling.
 /// Used by: NotificationSystem, WelcomeService, and any other feature that needs DM delivery.
 /// This service is in the Bot layer and can use IBotMessageHandler directly.
+///
+/// Callers pass a <see cref="UserIdentity"/> so the service never needs to fetch the user for
+/// logging — identity flows through from the call site (build via <c>UserIdentity.FromAsync</c>
+/// when only an ID is available).
 /// </summary>
 public interface IBotDmService
 {
@@ -13,102 +20,51 @@ public interface IBotDmService
     /// Attempt to send a DM to a user. Updates bot_dm_enabled flag automatically.
     /// If DM fails and fallbackChatId is provided, posts message in chat with optional auto-delete.
     /// </summary>
-    /// <param name="telegramUserId">Telegram user ID to send DM to</param>
+    /// <param name="user">Target user identity (used for logging; Id is the DM chat)</param>
     /// <param name="messageText">Message text to send</param>
     /// <param name="fallbackChatId">Optional chat ID to post fallback message if DM fails (403)</param>
     /// <param name="autoDeleteSeconds">Optional seconds to auto-delete fallback message (uses Quartz.NET)</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Result indicating success, fallback usage, or failure</returns>
     Task<DmDeliveryResult> SendDmAsync(
-        long telegramUserId,
+        UserIdentity user,
         string messageText,
         long? fallbackChatId = null,
         int? autoDeleteSeconds = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Attempt to send a DM to a user. If DM fails (403), queues notification for later delivery.
-    /// Updates bot_dm_enabled flag automatically.
+    /// Entity-based <see cref="SendDmAsync(UserIdentity, string, long?, int?, CancellationToken)"/>:
+    /// sends pre-rendered text + entities (no parse_mode), preserving the 403 fallback-to-chat and
+    /// auto-delete semantics. Canonical overload; the string overload forwards here.
     /// </summary>
-    /// <param name="telegramUserId">Telegram user ID to send DM to</param>
-    /// <param name="notificationType">Type of notification (e.g., "warning", "mystatus")</param>
-    /// <param name="messageText">Message text to send</param>
-    /// <param name="parseMode">Telegram parse mode (default: MarkdownV2). Use Html for HTML-formatted messages.</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Result indicating success or failure (queued notifications are considered failures)</returns>
-    Task<DmDeliveryResult> SendDmWithQueueAsync(
-        long telegramUserId,
-        string notificationType,
-        string messageText,
-        ParseMode parseMode = ParseMode.MarkdownV2,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Attempt to send a DM with optional media (photo or video) to a user.
-    /// If DM fails (403), queues notification for later delivery.
-    /// Updates bot_dm_enabled flag automatically.
-    /// Phase 5.2: Enhanced spam notifications with media support
-    /// </summary>
-    /// <param name="telegramUserId">Telegram user ID to send DM to</param>
-    /// <param name="notificationType">Type of notification (e.g., "spam_banned")</param>
-    /// <param name="messageText">Message text to send (or caption if media present)</param>
-    /// <param name="photoPath">Optional local path to photo file</param>
-    /// <param name="videoPath">Optional local path to video file</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Result indicating success or failure (queued notifications are considered failures)</returns>
-    Task<DmDeliveryResult> SendDmWithMediaAsync(
-        long telegramUserId,
-        string notificationType,
-        string messageText,
-        string? photoPath = null,
-        string? videoPath = null,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Attempt to send a DM with optional media and inline keyboard buttons.
-    /// If DM fails (403), queues notification for later delivery (without buttons).
-    /// Updates bot_dm_enabled flag automatically.
-    /// Phase X: Report moderation DM support with action buttons
-    /// </summary>
-    /// <param name="telegramUserId">Telegram user ID to send DM to</param>
-    /// <param name="notificationType">Type of notification (e.g., "report")</param>
-    /// <param name="messageText">Message text to send (or caption if media present)</param>
-    /// <param name="photoPath">Optional local path to photo file</param>
-    /// <param name="videoPath">Optional local path to video file</param>
-    /// <param name="keyboard">Optional inline keyboard markup with action buttons</param>
-    /// <param name="parseMode">Telegram parse mode (default: MarkdownV2). Use Html for HTML-formatted messages.</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Result indicating success or failure</returns>
-    Task<DmDeliveryResult> SendDmWithMediaAndKeyboardAsync(
-        long telegramUserId,
-        string notificationType,
-        string messageText,
-        string? photoPath = null,
-        string? videoPath = null,
-        global::Telegram.Bot.Types.ReplyMarkups.InlineKeyboardMarkup? keyboard = null,
-        ParseMode parseMode = ParseMode.MarkdownV2,
+    Task<DmDeliveryResult> SendDmAsync(
+        UserIdentity user,
+        TelegramMessage message,
+        long? fallbackChatId = null,
+        int? autoDeleteSeconds = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Edit a DM text message with optional inline keyboard change.
     /// Used for updating review notification DMs after admin action (removes buttons, shows result).
     /// </summary>
-    Task<global::Telegram.Bot.Types.Message> EditDmTextAsync(
+    Task<Message> EditDmTextAsync(
         long dmChatId,
         int messageId,
         string text,
-        global::Telegram.Bot.Types.ReplyMarkups.InlineKeyboardMarkup? replyMarkup = null,
+        InlineKeyboardMarkup? replyMarkup = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Edit a DM media message caption with optional inline keyboard change.
     /// Used for updating review notification DMs with photos/videos after admin action.
     /// </summary>
-    Task<global::Telegram.Bot.Types.Message> EditDmCaptionAsync(
+    Task<Message> EditDmCaptionAsync(
         long dmChatId,
         int messageId,
         string? caption,
-        global::Telegram.Bot.Types.ReplyMarkups.InlineKeyboardMarkup? replyMarkup = null,
+        InlineKeyboardMarkup? replyMarkup = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -125,14 +81,58 @@ public interface IBotDmService
     /// Does NOT queue on failure (keyboards can't be queued).
     /// Used for exam questions with answer buttons.
     /// </summary>
-    /// <param name="telegramUserId">Telegram user ID to send DM to</param>
-    /// <param name="messageText">Message text to send</param>
-    /// <param name="keyboard">Inline keyboard markup with buttons</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Result indicating success or failure, with MessageId if successful</returns>
     Task<DmDeliveryResult> SendDmWithKeyboardAsync(
-        long telegramUserId,
+        UserIdentity user,
         string messageText,
-        global::Telegram.Bot.Types.ReplyMarkups.InlineKeyboardMarkup keyboard,
+        InlineKeyboardMarkup keyboard,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Entity-based DM with an inline keyboard (no parse_mode). Does NOT queue on failure.
+    /// Canonical overload; the string overload forwards here.
+    /// </summary>
+    Task<DmDeliveryResult> SendDmWithKeyboardAsync(
+        UserIdentity user,
+        TelegramMessage message,
+        InlineKeyboardMarkup keyboard,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Attempt to send a DM using pre-rendered text + entities (no parse_mode).
+    /// For admin notifications that need text_mention entities so user mentions are
+    /// clickable even when the recipient has never interacted with the mentioned user.
+    /// If DM fails (403), queues the message for later delivery (text only; entities dropped).
+    /// </summary>
+    Task<DmDeliveryResult> SendDmWithEntitiesAsync(
+        UserIdentity user,
+        string notificationType,
+        string text,
+        IReadOnlyList<MessageEntity> entities,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Attempt to send a DM with media and an entity-based caption (no parse_mode, no keyboard).
+    /// If DM fails (403), queues the text for later delivery (without media/entities).
+    /// </summary>
+    Task<DmDeliveryResult> SendDmWithMediaEntitiesAsync(
+        UserIdentity user,
+        string notificationType,
+        TelegramMessage message,
+        string? photoPath = null,
+        string? videoPath = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Attempt to send a DM with media, entities, and optional inline keyboard (no parse_mode).
+    /// If DM fails (403), queues the text for later delivery (without media/buttons/entities).
+    /// </summary>
+    Task<DmDeliveryResult> SendDmWithMediaAndKeyboardEntitiesAsync(
+        UserIdentity user,
+        string notificationType,
+        string text,
+        IReadOnlyList<MessageEntity> entities,
+        string? photoPath = null,
+        string? videoPath = null,
+        InlineKeyboardMarkup? keyboard = null,
         CancellationToken cancellationToken = default);
 }

@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Mappings;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Data;
 using DataModels = TelegramGroupsAdmin.Data.Models;
@@ -131,7 +132,7 @@ public class UserRepository : IUserRepository
             existingEntity.NormalizedEmail = normalizedEmail;
             existingEntity.PasswordHash = passwordHash;
             existingEntity.SecurityStamp = Guid.NewGuid().ToString();
-            existingEntity.PermissionLevel = (DataModels.PermissionLevel)(int)permissionLevel;
+            existingEntity.PermissionLevel = (int)permissionLevel;
             existingEntity.InvitedBy = invitedBy;
             existingEntity.Status = DataModels.UserStatus.Active;
             existingEntity.IsActive = true;
@@ -160,7 +161,7 @@ public class UserRepository : IUserRepository
                 NormalizedEmail = normalizedEmail,
                 PasswordHash = passwordHash,
                 SecurityStamp = Guid.NewGuid().ToString(),
-                PermissionLevel = (DataModels.PermissionLevel)(int)permissionLevel,
+                PermissionLevel = (int)permissionLevel,
                 InvitedBy = invitedBy,
                 Status = DataModels.UserStatus.Active,
                 IsActive = true,
@@ -237,6 +238,7 @@ public class UserRepository : IUserRepository
 
         entity.TotpEnabled = true;
         entity.TotpSetupStartedAt = null;
+        entity.SecurityStamp = Guid.NewGuid().ToString(); // Rotate stamp in the same UPDATE to invalidate existing sessions (forced re-login)
         await context.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation("Enabled TOTP for {User}", LogDisplayName.WebUserInfo(entity.Email, userId));
@@ -251,6 +253,7 @@ public class UserRepository : IUserRepository
         // IMPORTANT: Only set TotpEnabled=false, KEEP the secret and timestamp
         // This allows user to re-enable TOTP later without re-scanning QR code
         entity.TotpEnabled = false;
+        entity.SecurityStamp = Guid.NewGuid().ToString(); // Rotate stamp in the same UPDATE to invalidate existing sessions (forced re-login)
         await context.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation("Disabled TOTP for {User} (secret preserved)", LogDisplayName.WebUserInfo(entity.Email, userId));
@@ -265,6 +268,7 @@ public class UserRepository : IUserRepository
         entity.TotpSecret = null;
         entity.TotpEnabled = false;
         entity.TotpSetupStartedAt = null;
+        entity.SecurityStamp = Guid.NewGuid().ToString(); // Rotate stamp in the same UPDATE to invalidate existing sessions (forced re-login)
         await context.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation("Reset TOTP for {User}", LogDisplayName.WebUserInfo(entity.Email, userId));
@@ -349,21 +353,6 @@ public class UserRepository : IUserRepository
         return entity?.ToModel();
     }
 
-    public async Task UseInviteAsync(string token, string userId, CancellationToken cancellationToken = default)
-    {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var entity = await context.Invites.FirstOrDefaultAsync(i => i.Token == token, cancellationToken);
-        if (entity == null) return;
-
-        entity.UsedBy = userId;
-        entity.Status = DataModels.InviteStatus.Used;
-        entity.ModifiedAt = DateTimeOffset.UtcNow;
-
-        await context.SaveChangesAsync(cancellationToken);
-
-        _logger.LogInformation("Invite {Token} used by user {UserId}", token, userId);
-    }
-
     public async Task<List<UserRecord>> GetAllAsync(CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
@@ -380,7 +369,7 @@ public class UserRepository : IUserRepository
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var entities = await context.Users
             .AsNoTracking()
-            .Where(u => u.PermissionLevel == Data.Models.PermissionLevel.Owner
+            .Where(u => u.PermissionLevel == (int)PermissionLevel.Owner
                         && u.Status == Data.Models.UserStatus.Active)
             .OrderByDescending(u => u.CreatedAt)
             .ToListAsync(cancellationToken);
@@ -405,9 +394,10 @@ public class UserRepository : IUserRepository
         var entity = await context.Users.FirstOrDefaultAsync(u => u.Id == userId, cancellationToken);
         if (entity == null) return;
 
-        entity.PermissionLevel = (DataModels.PermissionLevel)permissionLevel;
+        entity.PermissionLevel = permissionLevel;
         entity.ModifiedBy = modifiedBy;
         entity.ModifiedAt = DateTimeOffset.UtcNow;
+        entity.SecurityStamp = Guid.NewGuid().ToString(); // Rotate stamp in the same UPDATE to invalidate existing sessions (forced re-login)
 
         await context.SaveChangesAsync(cancellationToken);
 
@@ -443,7 +433,7 @@ public class UserRepository : IUserRepository
         entity.NormalizedEmail = user.NormalizedEmail;
         entity.PasswordHash = user.PasswordHash;
         entity.SecurityStamp = user.SecurityStamp;
-        entity.PermissionLevel = (DataModels.PermissionLevel)(int)user.WebUser.PermissionLevel;
+        entity.PermissionLevel = (int)user.WebUser.PermissionLevel;
         entity.InvitedBy = user.InvitedBy;
         entity.IsActive = user.IsActive;
         entity.TotpSecret = user.TotpSecret;
@@ -530,7 +520,7 @@ public class UserRepository : IUserRepository
         {
             // Chat-contextual: global admins + owners (always) + chat-scoped admins (via telegram_user_mappings → chat_admins)
             query = query.Where(u =>
-                u.PermissionLevel >= DataModels.PermissionLevel.GlobalAdmin
+                u.PermissionLevel >= (int)PermissionLevel.GlobalAdmin
                 || u.TelegramMappings.Any(tum =>
                     tum.IsActive
                     && context.ChatAdmins.Any(ca =>
@@ -541,7 +531,7 @@ public class UserRepository : IUserRepository
         else
         {
             // No chat context: global admins + owners only
-            query = query.Where(u => u.PermissionLevel >= DataModels.PermissionLevel.GlobalAdmin);
+            query = query.Where(u => u.PermissionLevel >= (int)PermissionLevel.GlobalAdmin);
         }
 
         var entities = await query.ToListAsync(cancellationToken);
@@ -555,7 +545,7 @@ public class UserRepository : IUserRepository
         // Get the first Owner (permission_level=2) by created_at - this is the primary/original owner
         var email = await context.Users
             .AsNoTracking()
-            .Where(u => u.PermissionLevel == DataModels.PermissionLevel.Owner
+            .Where(u => u.PermissionLevel == (int)PermissionLevel.Owner
                      && u.Status == DataModels.UserStatus.Active)
             .OrderBy(u => u.CreatedAt)
             .Select(u => u.Email)

@@ -1,4 +1,5 @@
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Telegram.Services.Welcome;
 
 namespace TelegramGroupsAdmin.Telegram.Services.Moderation.Handlers;
 
@@ -42,4 +43,15 @@ public interface IAuditHandler
     /// Called when user is kicked from a specific chat (temporary ban with auto-expiry).
     /// </summary>
     Task LogKickAsync(UserIdentity user, ChatIdentity chat, Actor executor, string? reason, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Log a welcome-flow bypass to the audit trail.
+    /// Called whenever the bypass resolver returns a non-None decision.
+    /// </summary>
+    Task LogWelcomeBypassAsync(
+        UserIdentity user,
+        ChatIdentity chat,
+        BypassDecision decision,
+        string reasonDetail,
+        CancellationToken cancellationToken = default);
 }

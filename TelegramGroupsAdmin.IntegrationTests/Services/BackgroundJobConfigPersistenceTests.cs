@@ -26,9 +26,9 @@ public class BackgroundJobConfigPersistenceTests
     [SetUp]
     public async Task SetUp()
     {
-        // Create unique test database with migrations applied
+        // Clone the empty migrated template for this test
         _testHelper = new MigrationTestHelper();
-        await _testHelper.CreateDatabaseAndApplyMigrationsAsync();
+        await _testHelper.CreateDatabaseFromEmptyTemplateAsync();
 
         // Set up dependency injection
         var services = new ServiceCollection();
@@ -48,6 +48,9 @@ public class BackgroundJobConfigPersistenceTests
         // Mock schedule converter (not needed for migration tests)
         var mockScheduleConverter = Substitute.For<IQuartzScheduleConverter>();
         services.AddSingleton(mockScheduleConverter);
+
+        // IScheduleResyncSignal is required by BackgroundJobConfigService; signal behavior isn't under test here.
+        services.AddSingleton(Substitute.For<IScheduleResyncSignal>());
 
         // Add BackgroundJobConfigService
         services.AddScoped<IBackgroundJobConfigService, BackgroundJobConfigService>();
@@ -116,7 +119,6 @@ public class BackgroundJobConfigPersistenceTests
         {
             MessageRetention = "60d",
             ReportRetention = "120d",
-            CallbackContextRetention = "14d",
             WebNotificationRetention = "30d"
         };
 
@@ -129,7 +131,6 @@ public class BackgroundJobConfigPersistenceTests
         {
             Assert.That(reloaded!.DataCleanup!.MessageRetention, Is.EqualTo("60d"));
             Assert.That(reloaded.DataCleanup.ReportRetention, Is.EqualTo("120d"));
-            Assert.That(reloaded.DataCleanup.CallbackContextRetention, Is.EqualTo("14d"));
             Assert.That(reloaded.DataCleanup.WebNotificationRetention, Is.EqualTo("30d"));
         }
     }

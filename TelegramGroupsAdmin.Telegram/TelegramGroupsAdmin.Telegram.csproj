@@ -10,6 +10,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="TelegramGroupsAdmin.UnitTests" />
+    <InternalsVisibleTo Include="TelegramGroupsAdmin.IntegrationTests" />
     <InternalsVisibleTo Include="DynamicProxyGenAssembly2" />
   </ItemGroup>
 
@@ -28,6 +29,7 @@
   <ItemGroup>
     <ProjectReference Include="..\TelegramGroupsAdmin.Configuration\TelegramGroupsAdmin.Configuration.csproj" />
     <ProjectReference Include="..\TelegramGroupsAdmin.Data\TelegramGroupsAdmin.Data.csproj" />
+    <ProjectReference Include="..\TelegramGroupsAdmin.AI\TelegramGroupsAdmin.AI.csproj" />
     <ProjectReference Include="..\TelegramGroupsAdmin.ContentDetection\TelegramGroupsAdmin.ContentDetection.csproj" />
     <ProjectReference Include="..\TelegramGroupsAdmin.Core\TelegramGroupsAdmin.Core.csproj" />
   </ItemGroup>

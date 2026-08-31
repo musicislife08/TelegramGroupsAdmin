@@ -70,6 +70,7 @@ public static class ServiceCollectionExtensions
             services.AddSingleton<IAuthFlowStore, AuthFlowStore>();
             services.AddScoped<ITelegramAuthService, TelegramAuthService>();
             services.AddSingleton<IProfileScanService, ProfileScanService>();
+            services.AddScoped<IProfileScanGate, ProfileScanGate>();
             services.AddScoped<IProfileScoringEngine, ProfileScoringEngine>();
 
             // Telegram infrastructure
@@ -119,6 +120,8 @@ public static class ServiceCollectionExtensions
             // Moderation domain handlers (non-bot operations)
             services.AddScoped<ITrustHandler, TrustHandler>();
             services.AddScoped<IWarnHandler, WarnHandler>();
+            services.AddScoped<IReportCleanupHandler, ReportCleanupHandler>();
+            services.AddScoped<IWelcomeCleanupHandler, WelcomeCleanupHandler>();
 
             // Support handlers
             services.AddScoped<IAuditHandler, AuditHandler>();
@@ -136,9 +139,10 @@ public static class ServiceCollectionExtensions
             services.AddScoped<UserAutoTrustService>();
             services.AddScoped<AdminMentionHandler>();
             services.AddScoped<ITelegramUserManagementService, TelegramUserManagementService>(); // Orchestrates Telegram user operations
-            services.AddScoped<IUserMessagingService, UserMessagingService>(); // DM with fallback to chat mentions
+            services.AddScoped<IUserMessagingService, UserMessagingService>(); // DM-first with chat-mention fallback, plus DM-only for users who left the chat
             services.AddScoped<IWelcomeService, WelcomeService>();
             services.AddSingleton<IWelcomeAdmissionHandler, WelcomeAdmissionHandler>(); // Dual-gate admission (profile scan + welcome)
+            services.AddSingleton<IWelcomeBypassResolver, WelcomeBypassResolver>();
             services.AddSingleton<IBanCallbackService, BanCallbackService>(); // Ban user selection callbacks
             services.AddSingleton<IReportCallbackService, ReportCallbackService>(); // Report moderation action callbacks
 
@@ -152,8 +156,7 @@ public static class ServiceCollectionExtensions
             services.AddScoped<IBotMessageService, BotMessageService>(); // Phase 1: Bot message storage and deletion tracking
             services.AddScoped<IWebBotMessagingService, WebBotMessagingService>(); // Phase 1: Web UI bot messaging with signature
             services.AddScoped<IWebUserMessagingService, WebUserMessagingService>(); // Send/edit as admin's personal Telegram account
-            services.AddSingleton<IBanCelebrationCache, BanCelebrationCache>(); // Singleton: shuffle-bag state for ban celebrations
-            services.AddScoped<IBanCelebrationService, BanCelebrationService>(); // Scoped: uses IBanCelebrationCache for state
+            services.AddScoped<IBanCelebrationService, BanCelebrationService>(); // Scoped: rotation state is database-backed
             services.AddScoped<IThumbnailService, ThumbnailService>(); // Thumbnail generation for images/GIFs
 
             // Training data quality services

@@ -1,284 +1,94 @@
 using Bunit;
+using NUnit.Framework;
 using TelegramGroupsAdmin.Components.Shared;
+using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Utilities;
 
 namespace TelegramGroupsAdmin.ComponentTests.Components;
 
 /// <summary>
-/// Component tests for TelegramMessagePreview.razor
-/// Tests the compact Telegram-style message preview component.
+/// Component tests for TelegramMessagePreview.razor — verifies it renders a TelegramMessage
+/// (text + entities) into the bot bubble via TelegramEntityRenderer, so the preview reflects
+/// exactly what Telegram is sent.
 /// </summary>
-[TestFixture]
 public class TelegramMessagePreviewTests : MudBlazorTestContext
 {
-    #region Structure Tests
-
     [Test]
-    public void HasPreviewContainer()
+    public void Renders_plain_message_text_inside_bot_bubble()
     {
-        // Arrange & Act
         var cut = Render<TelegramMessagePreview>(p => p
-            .Add(x => x.PreviewText, "Hello world"));
+            .Add(c => c.Message, TelegramMessage.Plain("Hello world")));
 
-        // Assert
-        var container = cut.Find(".telegram-compact-preview");
-        Assert.That(container, Is.Not.Null);
+        var bubble = cut.Find(".telegram-bubble-bot .telegram-message-text");
+        Assert.That(bubble.TextContent, Does.Contain("Hello world"));
     }
 
     [Test]
-    public void HasBotMessageWrapper()
+    public void Renders_bold_entity_as_bold_tag()
     {
-        // Arrange & Act
-        var cut = Render<TelegramMessagePreview>(p => p
-            .Add(x => x.PreviewText, "Hello world"));
+        var message = new TelegramMessageBuilder().Text("a ").Bold("banned").Build();
 
-        // Assert
-        var wrapper = cut.Find(".telegram-bot-message");
-        Assert.That(wrapper, Is.Not.Null);
+        var cut = Render<TelegramMessagePreview>(p => p.Add(c => c.Message, message));
+
+        var bubble = cut.Find(".telegram-bubble-bot .telegram-message-text");
+        Assert.That(bubble.InnerHtml, Does.Contain("<b>banned</b>"));
     }
 
     [Test]
-    public void HasMessageBubble()
+    public void Renders_text_mention_as_styled_span()
     {
-        // Arrange & Act
-        var cut = Render<TelegramMessagePreview>(p => p
-            .Add(x => x.PreviewText, "Hello world"));
+        var message = new TelegramMessageBuilder()
+            .Text("Hi ")
+            .Mention(new UserIdentity(1, "Sofi", null, null))
+            .Build();
 
-        // Assert
-        var bubble = cut.Find(".telegram-bubble-bot");
-        Assert.That(bubble, Is.Not.Null);
+        var cut = Render<TelegramMessagePreview>(p => p.Add(c => c.Message, message));
+
+        var bubble = cut.Find(".telegram-bubble-bot .telegram-message-text");
+        Assert.That(bubble.InnerHtml, Does.Contain("<span class=\"tg-mention\">Sofi</span>"));
     }
 
     [Test]
-    public void HasMessageText()
+    public void Html_encodes_message_text_so_markup_cannot_be_injected()
     {
-        // Arrange & Act
         var cut = Render<TelegramMessagePreview>(p => p
-            .Add(x => x.PreviewText, "Hello world"));
+            .Add(c => c.Message, TelegramMessage.Plain("a < b & c")));
 
-        // Assert
-        var text = cut.Find(".telegram-message-text");
-        Assert.That(text, Is.Not.Null);
+        var bubble = cut.Find(".telegram-bubble-bot .telegram-message-text");
+        Assert.That(bubble.InnerHtml, Does.Contain("a &lt; b &amp; c"));
     }
 
     [Test]
-    public void HasMessageTime()
+    public void Shows_user_command_bubble_when_enabled()
     {
-        // Arrange & Act
         var cut = Render<TelegramMessagePreview>(p => p
-            .Add(x => x.PreviewText, "Hello world"));
+            .Add(c => c.Message, TelegramMessage.Plain("Bot response"))
+            .Add(c => c.ShowUserCommand, true));
 
-        // Assert
-        var time = cut.Find(".telegram-message-time");
-        Assert.That(time, Is.Not.Null);
-    }
-
-    #endregion
-
-    #region PreviewText Parameter Tests
-
-    [Test]
-    public void DisplaysPreviewText()
-    {
-        // Arrange & Act
-        var cut = Render<TelegramMessagePreview>(p => p
-            .Add(x => x.PreviewText, "Hello from the bot!"));
-
-        // Assert
-        Assert.That(cut.Markup, Does.Contain("Hello from the bot!"));
+        var userBubble = cut.Find(".telegram-bubble-user");
+        Assert.That(userBubble.TextContent, Does.Contain("/start"));
     }
 
     [Test]
-    public void DisplaysEmptyTextGracefully()
+    public void Hides_user_command_bubble_when_disabled()
     {
-        // Arrange & Act
         var cut = Render<TelegramMessagePreview>(p => p
-            .Add(x => x.PreviewText, ""));
+            .Add(c => c.Message, TelegramMessage.Plain("Bot response"))
+            .Add(c => c.ShowUserCommand, false));
 
-        // Assert - Should still render the container
-        var container = cut.Find(".telegram-compact-preview");
-        Assert.That(container, Is.Not.Null);
-    }
-
-    #endregion
-
-    #region ShowUserCommand Parameter Tests
-
-    [Test]
-    public void ShowsUserCommand_ByDefault()
-    {
-        // Arrange & Act
-        var cut = Render<TelegramMessagePreview>(p => p
-            .Add(x => x.PreviewText, "Hello"));
-
-        // Assert
-        Assert.That(cut.Markup, Does.Contain("/start"));
-        Assert.That(cut.Markup, Does.Contain("telegram-user-message"));
+        Assert.That(cut.FindAll(".telegram-bubble-user"), Is.Empty);
     }
 
     [Test]
-    public void ShowsUserCommand_WhenTrue()
+    public void Renders_inline_keyboard_buttons()
     {
-        // Arrange & Act
         var cut = Render<TelegramMessagePreview>(p => p
-            .Add(x => x.PreviewText, "Hello")
-            .Add(x => x.ShowUserCommand, true));
+            .Add(c => c.Message, TelegramMessage.Plain("Pick one"))
+            .Add(c => c.Buttons, new[] { new[] { "Accept", "Decline" } }));
 
-        // Assert
-        Assert.That(cut.Markup, Does.Contain("/start"));
-        Assert.That(cut.Markup, Does.Contain("telegram-bubble-user"));
+        var buttons = cut.FindAll(".telegram-inline-button");
+        Assert.That(buttons, Has.Count.EqualTo(2));
+        Assert.That(buttons[0].TextContent, Does.Contain("Accept"));
+        Assert.That(buttons[1].TextContent, Does.Contain("Decline"));
     }
-
-    [Test]
-    public void HidesUserCommand_WhenFalse()
-    {
-        // Arrange & Act
-        var cut = Render<TelegramMessagePreview>(p => p
-            .Add(x => x.PreviewText, "Hello")
-            .Add(x => x.ShowUserCommand, false));
-
-        // Assert - Use FindAll to check element doesn't exist (CSS contains the class name)
-        Assert.That(cut.Markup, Does.Not.Contain("/start"));
-        var userMessages = cut.FindAll(".telegram-user-message");
-        Assert.That(userMessages.Count, Is.EqualTo(0));
-    }
-
-    #endregion
-
-    #region Buttons Parameter Tests
-
-    [Test]
-    public void DisplaysInlineButtons()
-    {
-        // Arrange & Act
-        var cut = Render<TelegramMessagePreview>(p => p
-            .Add(x => x.PreviewText, "Hello")
-            .Add(x => x.Buttons, [["Accept", "Decline"]]));
-
-        // Assert
-        Assert.That(cut.Markup, Does.Contain("telegram-inline-keyboard"));
-        Assert.That(cut.Markup, Does.Contain("Accept"));
-        Assert.That(cut.Markup, Does.Contain("Decline"));
-    }
-
-    [Test]
-    public void DisplaysButtonRow()
-    {
-        // Arrange & Act
-        var cut = Render<TelegramMessagePreview>(p => p
-            .Add(x => x.PreviewText, "Hello")
-            .Add(x => x.Buttons, [["Button1"]]));
-
-        // Assert
-        var row = cut.Find(".telegram-button-row");
-        Assert.That(row, Is.Not.Null);
-    }
-
-    [Test]
-    public void DisplaysMultipleButtonRows()
-    {
-        // Arrange & Act
-        var cut = Render<TelegramMessagePreview>(p => p
-            .Add(x => x.PreviewText, "Hello")
-            .Add(x => x.Buttons, [
-                ["Row1-Btn1", "Row1-Btn2"],
-                ["Row2-Btn1"]
-            ]));
-
-        // Assert
-        var rows = cut.FindAll(".telegram-button-row");
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(rows.Count, Is.EqualTo(2));
-            Assert.That(cut.Markup, Does.Contain("Row1-Btn1"));
-        }
-        Assert.That(cut.Markup, Does.Contain("Row2-Btn1"));
-    }
-
-    [Test]
-    public void HidesButtons_WhenNull()
-    {
-        // Arrange & Act
-        var cut = Render<TelegramMessagePreview>(p => p
-            .Add(x => x.PreviewText, "Hello")
-            .Add(x => x.Buttons, null));
-
-        // Assert - Use FindAll to check element doesn't exist (CSS contains the class name)
-        var keyboards = cut.FindAll(".telegram-inline-keyboard");
-        Assert.That(keyboards.Count, Is.EqualTo(0));
-    }
-
-    [Test]
-    public void HidesButtons_WhenEmpty()
-    {
-        // Arrange & Act
-        var cut = Render<TelegramMessagePreview>(p => p
-            .Add(x => x.PreviewText, "Hello")
-            .Add(x => x.Buttons, []));
-
-        // Assert - Use FindAll to check element doesn't exist (CSS contains the class name)
-        var keyboards = cut.FindAll(".telegram-inline-keyboard");
-        Assert.That(keyboards.Count, Is.EqualTo(0));
-    }
-
-    #endregion
-
-    #region ShowWarning and ValidVariables Tests
-
-    [Test]
-    public void ShowsWarning_WhenInvalidVariables()
-    {
-        // Arrange & Act
-        var cut = Render<TelegramMessagePreview>(p => p
-            .Add(x => x.PreviewText, "Hello {name}, welcome to {invalid}")
-            .Add(x => x.ShowWarning, true)
-            .Add(x => x.ValidVariables, ["name"]));
-
-        // Assert
-        Assert.That(cut.Markup, Does.Contain("telegram-preview-warning"));
-        Assert.That(cut.Markup, Does.Contain("Invalid or incomplete variables detected"));
-    }
-
-    [Test]
-    public void HidesWarning_WhenAllVariablesValid()
-    {
-        // Arrange & Act
-        var cut = Render<TelegramMessagePreview>(p => p
-            .Add(x => x.PreviewText, "Hello {name}, welcome to {group}")
-            .Add(x => x.ShowWarning, true)
-            .Add(x => x.ValidVariables, ["name", "group"]));
-
-        // Assert - Use FindAll to check element doesn't exist (CSS contains the class name)
-        var warnings = cut.FindAll(".telegram-preview-warning");
-        Assert.That(warnings.Count, Is.EqualTo(0));
-    }
-
-    [Test]
-    public void HidesWarning_WhenShowWarningFalse()
-    {
-        // Arrange & Act
-        var cut = Render<TelegramMessagePreview>(p => p
-            .Add(x => x.PreviewText, "Hello {invalid}")
-            .Add(x => x.ShowWarning, false)
-            .Add(x => x.ValidVariables, ["name"]));
-
-        // Assert - Use FindAll to check element doesn't exist (CSS contains the class name)
-        var warnings = cut.FindAll(".telegram-preview-warning");
-        Assert.That(warnings.Count, Is.EqualTo(0));
-    }
-
-    [Test]
-    public void HidesWarning_WhenNoVariablesInText()
-    {
-        // Arrange & Act
-        var cut = Render<TelegramMessagePreview>(p => p
-            .Add(x => x.PreviewText, "Hello world, no variables here")
-            .Add(x => x.ShowWarning, true)
-            .Add(x => x.ValidVariables, ["name"]));
-
-        // Assert - Use FindAll to check element doesn't exist (CSS contains the class name)
-        var warnings = cut.FindAll(".telegram-preview-warning");
-        Assert.That(warnings.Count, Is.EqualTo(0));
-    }
-
-    #endregion
 }

@@ -3,20 +3,23 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Telegram.Bot.Types;
-using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Configuration.Models.Welcome;
 using TelegramGroupsAdmin.Configuration.Repositories;
+using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Repositories;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Services;
-using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.IntegrationTests.TestData;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
+using TelegramGroupsAdmin.Telegram.Metrics;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.Configuration.Services;
 
 namespace TelegramGroupsAdmin.IntegrationTests.Telegram.Services;
 
@@ -56,14 +59,16 @@ public class BanCelebrationServiceTests
     [SetUp]
     public async Task SetUp()
     {
-        // Create unique test database with migrations applied
+        // This test family is the documented exception to the canonical+reducer+mutator
+        // pattern. Every test starts from an empty schema and adds its own scenario via
+        // production repositories (captions, GIFs, configs). Canonical's reference data
+        // (74 captions + 92 GIFs + per-chat configs with ban_celebration enabled) would
+        // contaminate the SUT's RNG-driven caption/GIF selection and break the
+        // "no captions" / "no GIFs" / "disabled by default" tests. SeedBanActions below
+        // is a direct EF insert as a deliberate exception — the user_actions table has
+        // no public production "insert ban action" API for tests to route through.
         _testHelper = new MigrationTestHelper();
-        await _testHelper.CreateDatabaseAndApplyMigrationsAsync();
-
-        // Seed only telegram users (needed for user_actions FK constraint in SeedBanActions)
-        await GoldenDataset.LoadSqlScriptAsync(
-            "SQL.00_base_telegram_users.sql",
-            sql => _testHelper.ExecuteSqlAsync(sql));
+        await _testHelper.CreateDatabaseFromEmptyTemplateAsync();
 
         // Create temp directory for media files
         _tempMediaPath = Path.Combine(Path.GetTempPath(), $"BanCelebrationServiceTests_{Guid.NewGuid():N}");
@@ -73,12 +78,11 @@ public class BanCelebrationServiceTests
         _mockMessageService = Substitute.For<IBotMessageService>();
         _mockDmService = Substitute.For<IBotDmService>();
 
-        // Configure mock to return a message with animation
+        // Configure mock to return a message with animation (entity-based caption overload)
         _mockMessageService.SendAndSaveAnimationAsync(
             Arg.Any<long>(),
             Arg.Any<InputFile>(),
-            Arg.Any<string?>(),
-            Arg.Any<ParseMode?>(),
+            Arg.Any<TelegramMessage>(),
             Arg.Any<CancellationToken>()
         ).Returns(callInfo =>
         {
@@ -114,20 +118,23 @@ public class BanCelebrationServiceTests
         services.AddScoped<IBanCelebrationGifRepository, BanCelebrationGifRepository>();
         services.AddScoped<IBanCelebrationCaptionRepository, BanCelebrationCaptionRepository>();
         services.AddScoped<IUserActionsRepository, UserActionsRepository>();
+        services.AddScoped<IProfileScanResultsRepository, ProfileScanResultsRepository>();
+
+        // Register PipelineMetrics (real singleton - records masked-username metric)
+        services.AddSingleton<PipelineMetrics>();
 
         // Register ConfigService and its dependencies (real implementations)
         services.AddScoped<IConfigRepository, ConfigRepository>();
         services.AddScoped<IContentDetectionConfigRepository, ContentDetectionConfigRepository>();
         services.AddHybridCache();
         services.AddDataProtection();
+        services.AddScoped<IAuditLogRepository, AuditLogRepository>();
+        services.AddScoped<IAuditService, AuditService>();
         services.AddScoped<IConfigService, ConfigService>();
 
         // Register mocked external services
         services.AddSingleton(_mockMessageService);
         services.AddSingleton(_mockDmService);
-
-        // Register BanCelebrationCache (real singleton for shuffle-bag state)
-        services.AddSingleton<IBanCelebrationCache, BanCelebrationCache>();
 
         // Register BanCelebrationService
         services.AddScoped<IBanCelebrationService, BanCelebrationService>();
@@ -176,8 +183,8 @@ public class BanCelebrationServiceTests
         // Assert
         Assert.That(result, Is.False);
         await _mockMessageService!.DidNotReceive().SendAndSaveAnimationAsync(
-            Arg.Any<long>(), Arg.Any<InputFile>(), Arg.Any<string?>(),
-            Arg.Any<ParseMode?>(), Arg.Any<CancellationToken>());
+            Arg.Any<long>(), Arg.Any<InputFile>(), Arg.Any<TelegramMessage>(),
+            Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -194,8 +201,8 @@ public class BanCelebrationServiceTests
         // Assert
         Assert.That(result, Is.True);
         await _mockMessageService!.Received(1).SendAndSaveAnimationAsync(
-            TestChatId, Arg.Any<InputFile>(), Arg.Any<string?>(),
-            ParseMode.Markdown, Arg.Any<CancellationToken>());
+            TestChatId, Arg.Any<InputFile>(), Arg.Any<TelegramMessage>(),
+            Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -212,8 +219,8 @@ public class BanCelebrationServiceTests
         // Assert
         Assert.That(result, Is.False);
         await _mockMessageService!.DidNotReceive().SendAndSaveAnimationAsync(
-            Arg.Any<long>(), Arg.Any<InputFile>(), Arg.Any<string?>(),
-            Arg.Any<ParseMode?>(), Arg.Any<CancellationToken>());
+            Arg.Any<long>(), Arg.Any<InputFile>(), Arg.Any<TelegramMessage>(),
+            Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -296,8 +303,8 @@ public class BanCelebrationServiceTests
 
         string? capturedCaption = null;
         _mockMessageService!.SendAndSaveAnimationAsync(
-            Arg.Any<long>(), Arg.Any<InputFile>(), Arg.Do<string?>(c => capturedCaption = c),
-            Arg.Any<ParseMode?>(), Arg.Any<CancellationToken>()
+            Arg.Any<long>(), Arg.Any<InputFile>(), Arg.Do<TelegramMessage>(m => capturedCaption = m.Text),
+            Arg.Any<CancellationToken>()
         ).Returns(TelegramTestFactory.CreateMessage(messageId: 1, chatId: TestChatId));
 
         // Act
@@ -320,8 +327,8 @@ public class BanCelebrationServiceTests
 
         string? capturedCaption = null;
         _mockMessageService!.SendAndSaveAnimationAsync(
-            Arg.Any<long>(), Arg.Any<InputFile>(), Arg.Do<string?>(c => capturedCaption = c),
-            Arg.Any<ParseMode?>(), Arg.Any<CancellationToken>()
+            Arg.Any<long>(), Arg.Any<InputFile>(), Arg.Do<TelegramMessage>(m => capturedCaption = m.Text),
+            Arg.Any<CancellationToken>()
         ).Returns(TelegramTestFactory.CreateMessage(messageId: 1, chatId: TestChatId));
 
         // Act
@@ -342,13 +349,14 @@ public class BanCelebrationServiceTests
         await _captionRepository!.AddAsync("Ban #{bancount} today!", "DM", "Test");
         await EnableBanCelebration(TestChatId);
 
-        // Seed some ban actions for today
+        // Seed 3 ban actions for today (direct EF insert is this test family's
+        // documented exception — see the SetUp docstring for rationale).
         await SeedBanActions(3);
 
         string? capturedCaption = null;
         _mockMessageService!.SendAndSaveAnimationAsync(
-            Arg.Any<long>(), Arg.Any<InputFile>(), Arg.Do<string?>(c => capturedCaption = c),
-            Arg.Any<ParseMode?>(), Arg.Any<CancellationToken>()
+            Arg.Any<long>(), Arg.Any<InputFile>(), Arg.Do<TelegramMessage>(m => capturedCaption = m.Text),
+            Arg.Any<CancellationToken>()
         ).Returns(TelegramTestFactory.CreateMessage(messageId: 1, chatId: TestChatId));
 
         // Act
@@ -380,8 +388,11 @@ public class BanCelebrationServiceTests
         await _service!.SendBanCelebrationAsync(
             new ChatIdentity(TestChatId, TestChatName), new UserIdentity(TestUserId, TestUserName, null, null), isAutoBan: true);
 
-        // Assert - Check that file_id was cached
-        var updatedGif = await _gifRepository.GetByIdAsync(gif.Id);
+        // Assert - Check that file_id was cached, read back from the database rather than through
+        // the repository whose write we are verifying
+        var contextFactory = _serviceProvider!.GetRequiredService<IDbContextFactory<AppDbContext>>();
+        await using var context = await contextFactory.CreateDbContextAsync();
+        var updatedGif = await context.BanCelebrationGifs.FindAsync([gif.Id]);
         Assert.That(updatedGif!.FileId, Is.EqualTo("AgACAgIAAxkBAAI_test_file_id_123"));
     }
 
@@ -397,8 +408,8 @@ public class BanCelebrationServiceTests
         await EnableBanCelebration(TestChatId);
 
         _mockMessageService!.SendAndSaveAnimationAsync(
-            Arg.Any<long>(), Arg.Any<InputFile>(), Arg.Any<string?>(),
-            Arg.Any<ParseMode?>(), Arg.Any<CancellationToken>()
+            Arg.Any<long>(), Arg.Any<InputFile>(), Arg.Any<TelegramMessage>(),
+            Arg.Any<CancellationToken>()
         ).Returns<Message>(x => throw new Exception("Telegram API error"));
 
         // Act
@@ -423,8 +434,8 @@ public class BanCelebrationServiceTests
         // Enable DM welcome mode (required for DM delivery)
         await EnableDmWelcomeMode(TestChatId);
 
-        _mockDmService!.SendDmWithMediaAsync(
-            Arg.Any<long>(), Arg.Any<string>(), Arg.Any<string>(),
+        _mockDmService!.SendDmWithMediaEntitiesAsync(
+            Arg.Any<UserIdentity>(), Arg.Any<string>(), Arg.Any<TelegramMessage>(),
             Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>()
         ).Returns(new DmDeliveryResult { DmSent = true });
 
@@ -433,8 +444,8 @@ public class BanCelebrationServiceTests
             new ChatIdentity(TestChatId, TestChatName), new UserIdentity(TestUserId, TestUserName, null, null), isAutoBan: true);
 
         // Assert - DM delivery was attempted
-        await _mockDmService!.Received(1).SendDmWithMediaAsync(
-            TestUserId, "ban_celebration", Arg.Any<string>(),
+        await _mockDmService!.Received(1).SendDmWithMediaEntitiesAsync(
+            Arg.Is<UserIdentity>(u => u!.Id == TestUserId), "ban_celebration", Arg.Any<TelegramMessage>(),
             Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }
 
@@ -450,8 +461,8 @@ public class BanCelebrationServiceTests
             new ChatIdentity(TestChatId, TestChatName), new UserIdentity(TestUserId, TestUserName, null, null), isAutoBan: true);
 
         // Assert - DM delivery was NOT attempted
-        await _mockDmService!.DidNotReceive().SendDmWithMediaAsync(
-            Arg.Any<long>(), Arg.Any<string>(), Arg.Any<string>(),
+        await _mockDmService!.DidNotReceive().SendDmWithMediaEntitiesAsync(
+            Arg.Any<UserIdentity>(), Arg.Any<string>(), Arg.Any<TelegramMessage>(),
             Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }
 
@@ -468,8 +479,8 @@ public class BanCelebrationServiceTests
             new ChatIdentity(TestChatId, TestChatName), new UserIdentity(TestUserId, TestUserName, null, null), isAutoBan: true);
 
         // Assert - DM delivery was NOT attempted (no DM mode enabled)
-        await _mockDmService!.DidNotReceive().SendDmWithMediaAsync(
-            Arg.Any<long>(), Arg.Any<string>(), Arg.Any<string>(),
+        await _mockDmService!.DidNotReceive().SendDmWithMediaEntitiesAsync(
+            Arg.Any<UserIdentity>(), Arg.Any<string>(), Arg.Any<TelegramMessage>(),
             Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }
 
@@ -481,8 +492,8 @@ public class BanCelebrationServiceTests
         await EnableBanCelebration(TestChatId, sendToBannedUser: true);
         await EnableDmWelcomeMode(TestChatId);
 
-        _mockDmService!.SendDmWithMediaAsync(
-            Arg.Any<long>(), Arg.Any<string>(), Arg.Any<string>(),
+        _mockDmService!.SendDmWithMediaEntitiesAsync(
+            Arg.Any<UserIdentity>(), Arg.Any<string>(), Arg.Any<TelegramMessage>(),
             Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>()
         ).Returns(new DmDeliveryResult { DmSent = false, Failed = true, ErrorMessage = "User blocked bot" });
 
@@ -492,6 +503,131 @@ public class BanCelebrationServiceTests
 
         // Assert - Chat message succeeded, DM failure doesn't affect result
         Assert.That(result, Is.True);
+    }
+
+    #endregion
+
+    #region Explicit Username Masking Tests
+
+    [Test]
+    public async Task SendBanCelebrationAsync_AiFlaggedAndMaskingOn_MasksUsernameInChatCaption()
+    {
+        // Arrange: scan row with ExplicitDisplayText=true + per-chat config with masking on.
+        await SeedExplicitFlaggedScanAsync(TestUserId, explicitFlag: true);
+        await EnableBanCelebration(TestChatId);
+        await SetWelcomeProfileScanMaskingAsync(maskingEnabled: true,
+            redactionText: "[explicit username redacted]");
+        using var gifStream = CreateTestGifStream();
+        await _gifRepository!.AddFromFileAsync(gifStream, "test.gif", "Test GIF");
+        await _captionRepository!.AddAsync("{username} got banned!", "DM", "Test");
+
+        // Act
+        var sent = await _service!.SendBanCelebrationAsync(
+            chat: ChatIdentity.FromId(TestChatId),
+            bannedUser: new UserIdentity(TestUserId, TestUserName, null, null),
+            isAutoBan: true,
+            cancellationToken: CancellationToken.None);
+
+        // Assert
+        Assert.That(sent, Is.True);
+        await _mockMessageService!.Received(1).SendAndSaveAnimationAsync(
+            TestChatId,
+            Arg.Any<InputFile>(),
+            Arg.Is<TelegramMessage>(m => m!.Text.Contains("[explicit username redacted]")
+                                      && !m.Text.Contains(TestUserName)),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task SendBanCelebrationAsync_AiFlaggedButMaskingOff_LeavesDisplayNameInCaption()
+    {
+        // Arrange: scan row flagged, but masking disabled via config.
+        await SeedExplicitFlaggedScanAsync(TestUserId, explicitFlag: true);
+        await EnableBanCelebration(TestChatId);
+        await SetWelcomeProfileScanMaskingAsync(maskingEnabled: false,
+            redactionText: "[explicit username redacted]");
+        using var gifStream = CreateTestGifStream();
+        await _gifRepository!.AddFromFileAsync(gifStream, "test.gif", "Test GIF");
+        await _captionRepository!.AddAsync("{username} got banned!", "DM", "Test");
+
+        // Act
+        await _service!.SendBanCelebrationAsync(
+            chat: ChatIdentity.FromId(TestChatId),
+            bannedUser: new UserIdentity(TestUserId, TestUserName, null, null),
+            isAutoBan: true,
+            cancellationToken: CancellationToken.None);
+
+        // Assert
+        await _mockMessageService!.Received(1).SendAndSaveAnimationAsync(
+            TestChatId,
+            Arg.Any<InputFile>(),
+            Arg.Is<TelegramMessage>(m => m!.Text.Contains(TestUserName)
+                                      && !m.Text.Contains("[explicit username redacted]")),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task SendBanCelebrationAsync_NoScanRow_LeavesDisplayNameInCaption()
+    {
+        // Arrange: no scan row seeded - user has never been scanned. Masking is on,
+        // so the service consults the scan repo and finds nothing; falls through to
+        // the display name.
+        await EnableBanCelebration(TestChatId);
+        await SetWelcomeProfileScanMaskingAsync(maskingEnabled: true,
+            redactionText: "[explicit username redacted]");
+        using var gifStream = CreateTestGifStream();
+        await _gifRepository!.AddFromFileAsync(gifStream, "test.gif", "Test GIF");
+        await _captionRepository!.AddAsync("{username} got banned!", "DM", "Test");
+
+        // Act
+        await _service!.SendBanCelebrationAsync(
+            chat: ChatIdentity.FromId(TestChatId),
+            bannedUser: new UserIdentity(TestUserId, TestUserName, null, null),
+            isAutoBan: true,
+            cancellationToken: CancellationToken.None);
+
+        // Assert
+        await _mockMessageService!.Received(1).SendAndSaveAnimationAsync(
+            TestChatId,
+            Arg.Any<InputFile>(),
+            Arg.Is<TelegramMessage>(m => m!.Text.Contains(TestUserName)
+                                      && !m.Text.Contains("[explicit username redacted]")),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task SendBanCelebrationAsync_ProfileScanDisabledButStaleFlaggedScanExists_DoesNotMaskCaption()
+    {
+        // Arrange: an old flagged scan row exists (from when scanning was on).
+        await SeedExplicitFlaggedScanAsync(TestUserId, explicitFlag: true);
+
+        // Admin has since disabled profile scanning entirely. The child masking
+        // toggle is still at its default (true) because the UI only disables the
+        // child switch under the parent - it doesn't reset its stored value.
+        await EnableBanCelebration(TestChatId);
+        await SetWelcomeProfileScanMaskingAsync(
+            maskingEnabled: true,
+            redactionText: "[explicit username redacted]",
+            profileScanEnabled: false);
+        using var gifStream = CreateTestGifStream();
+        await _gifRepository!.AddFromFileAsync(gifStream, "test.gif", "Test GIF");
+        await _captionRepository!.AddAsync("{username} got banned!", "DM", "Test");
+
+        // Act
+        await _service!.SendBanCelebrationAsync(
+            chat: ChatIdentity.FromId(TestChatId),
+            bannedUser: new UserIdentity(TestUserId, TestUserName, null, null),
+            isAutoBan: true,
+            cancellationToken: CancellationToken.None);
+
+        // Assert: caption uses DisplayName, NOT the redaction text - profile scan
+        // is the parent kill-switch and overrides the stale child masking value.
+        await _mockMessageService!.Received(1).SendAndSaveAnimationAsync(
+            TestChatId,
+            Arg.Any<InputFile>(),
+            Arg.Is<TelegramMessage>(m => m!.Text.Contains(TestUserName)
+                                      && !m.Text.Contains("[explicit username redacted]")),
+            Arg.Any<CancellationToken>());
     }
 
     #endregion
@@ -519,7 +655,7 @@ public class BanCelebrationServiceTests
             SendToBannedUser = sendToBannedUser
         };
 
-        await _configService!.SaveAsync(ConfigType.BanCelebration, ChatIdentity.FromId(chatId), config);
+        await _configService!.SaveBanCelebrationAsync(ChatIdentity.FromId(chatId), config, Actor.SystemSeed);
     }
 
     private async Task EnableDmWelcomeMode(long chatId)
@@ -536,31 +672,90 @@ public class BanCelebrationServiceTests
             DmButtonText = "Open DM"
         };
 
-        await _configService!.SaveAsync(ConfigType.Welcome, ChatIdentity.FromId(chatId), welcomeConfig);
+        await _configService!.SaveWelcomeAsync(ChatIdentity.FromId(chatId), welcomeConfig, Actor.SystemSeed);
+    }
+
+    /// <summary>
+    /// Raw INSERT (rare exception): this test class is the documented
+    /// canonical-clone exception (see SetUp comment). The masking
+    /// scenario requires a profile_scan_results row, but the class
+    /// uses empty-template so canonical extension doesn't help.
+    /// IProfileScanResultsRepository.InsertAsync is NOT used because
+    /// the scan row is prerequisite setup, not the assertion subject.
+    /// The telegram_users FK parent is also raw-INSERTed for the same
+    /// reason (mirrors SeedBanActions which uses direct EF inserts).
+    /// </summary>
+    private async Task SeedExplicitFlaggedScanAsync(long userId, bool explicitFlag)
+    {
+        await using var context = _testHelper!.GetDbContext();
+
+        // Satisfy FK_profile_scan_results_telegram_users_user_id: the
+        // scan row references telegram_users.telegram_user_id.
+        await context.Database.ExecuteSqlInterpolatedAsync(
+            $@"INSERT INTO telegram_users (telegram_user_id, is_bot, is_trusted, is_active, is_banned, bot_dm_enabled, first_seen_at, last_seen_at, created_at, updated_at, has_pinned_stories, is_fake, is_scam, is_verified, profile_scan_excluded, kick_count)
+               VALUES ({userId}, false, false, true, false, false, NOW(), NOW(), NOW(), NOW(), false, false, false, false, false, 0)
+               ON CONFLICT (telegram_user_id) DO NOTHING");
+
+        await context.Database.ExecuteSqlInterpolatedAsync(
+            $@"INSERT INTO profile_scan_results
+                   (user_id, scanned_at, score, outcome, rule_score, ai_score, ai_reason, ai_signals, ai_explicit_display_text)
+               VALUES
+                   ({userId}, NOW(), 4.5, 2, 0.0, 4.5, 'test', 'test_signal', {explicitFlag})");
+    }
+
+    private async Task SetWelcomeProfileScanMaskingAsync(
+        bool maskingEnabled,
+        string redactionText,
+        bool profileScanEnabled = true)
+    {
+        var welcomeConfig = new WelcomeConfig
+        {
+            Enabled = true,
+            Mode = WelcomeMode.ChatAcceptDeny,
+            TimeoutSeconds = 60,
+            MainWelcomeMessage = "Welcome!",
+            DmChatTeaserMessage = "Check DM",
+            AcceptButtonText = "Accept",
+            DenyButtonText = "Deny",
+            DmButtonText = "Open DM",
+            JoinSecurity = new JoinSecurityConfig
+            {
+                ProfileScan = new ProfileScanConfig
+                {
+                    Enabled = profileScanEnabled,
+                    MaskExplicitUsername = maskingEnabled,
+                    ExplicitUsernameRedactionText = redactionText
+                }
+            }
+        };
+
+        await _configService!.SaveWelcomeAsync(ChatIdentity.FromId(TestChatId), welcomeConfig, Actor.SystemSeed);
     }
 
     private async Task SeedBanActions(int count)
     {
         await using var context = _testHelper!.GetDbContext();
 
-        // Use existing telegram users from GoldenDataset (100001-100007)
-        var existingUserIds = new[]
+        // Insert telegram_users + user_actions in one transaction-free batch.
+        // Self-contained: no dependency on the legacy 00_base_telegram_users.sql
+        // (which is on the cleanup-deletion trajectory). Synthetic IDs live in
+        // the canonical 9_xxx_xxx_xxx_xxx identity space so they can't collide
+        // with any future canonical sample.
+        const long SyntheticUserIdBase = 9100000000000L;
+        for (int i = 0; i < count; i++)
         {
-            GoldenDataset.TelegramUsers.User1_TelegramUserId,
-            GoldenDataset.TelegramUsers.User2_TelegramUserId,
-            GoldenDataset.TelegramUsers.User3_TelegramUserId,
-            GoldenDataset.TelegramUsers.User4_TelegramUserId,
-            GoldenDataset.TelegramUsers.User5_TelegramUserId,
-            GoldenDataset.TelegramUsers.User6_TelegramUserId,
-            GoldenDataset.TelegramUsers.User7_TelegramUserId
-        };
-
-        for (int i = 0; i < count && i < existingUserIds.Length; i++)
-        {
+            var bannedUserId = SyntheticUserIdBase + i;
+            context.TelegramUsers.Add(new Data.Models.TelegramUserDto
+            {
+                TelegramUserId = bannedUserId,
+                Username = $"test_bancelebration_user_{i}",
+                FirstName = "Test",
+            });
             context.UserActions.Add(new Data.Models.UserActionRecordDto
             {
-                TelegramUserId = existingUserIds[i],
-                ActionType = Data.Models.UserActionType.Ban,
+                UserId = bannedUserId,
+                SystemIdentifier = "test-bancelebration",
+                ActionType = (int)UserActionType.Ban,
                 IssuedAt = DateTimeOffset.UtcNow,
                 Reason = "Test ban"
             });

@@ -37,7 +37,7 @@ internal static class ProfileScanPrompts
         to each other.
 
         Respond with valid JSON in this exact format:
-        {"score": 0.0-5.0, "reason": "clear explanation", "signals_detected": ["signal1", "signal2"], "contains_nudity": true/false}
+        {"score": 0.0-5.0, "reason": "clear explanation", "signals_detected": ["signal1", "signal2"], "contains_nudity": true/false, "explicit_display_text": true/false}
 
         The score is a continuous risk assessment on a 0.0 to 5.0 scale:
           4.0-5.0: Clearly not a genuine community member — obvious on inspection
@@ -178,6 +178,34 @@ internal static class ProfileScanPrompts
         not the nudity flag.
 
         This flag triggers image censoring in admin review.
+
+        ══════════════════════════════════════
+         EXPLICIT DISPLAY-TEXT FLAG
+        ══════════════════════════════════════
+
+        Set "explicit_display_text" to true ONLY when the user's
+        <display_name>, first/last name, or <username> contains
+        text that itself reads as explicit content. Examples:
+        - Sexual solicitation phrases ("looking for F buddy",
+          "DM me horny", "fuck friends wanted")
+        - Explicit slurs or graphic sexual terminology embedded
+          in the visible name string
+        - Sexual roleplay handles ("sub4daddy", "kinky_milf")
+        - @-handles that are themselves explicit slurs
+
+        Do NOT set this flag for:
+        - Suggestive but non-explicit names ("BeachBabe92",
+          "lonely_girl")
+        - Names that are merely lowercase or aesthetic
+        - Bios containing explicit content - only the visible
+          name string matters (display name + username)
+        - Photos containing explicit content - that's the
+          "contains_nudity" flag, separate concern
+
+        This flag triggers username masking in public chat posts
+        (e.g., ban-celebration captions). The display name and
+        username should be safe to render in front of group
+        members when this flag is false.
         """;
 
     internal static string BuildUserPrompt(
@@ -239,7 +267,7 @@ internal static class ProfileScanPrompts
               <image_labels>{{imageLabels ?? "none"}}</image_labels>
             </images>
             {{urlMetadataBlock}}
-            Respond with JSON: {"score": 0.0-5.0, "reason": "...", "signals_detected": [...], "contains_nudity": true/false}
+            Respond with JSON: {"score": 0.0-5.0, "reason": "...", "signals_detected": [...], "contains_nudity": true/false, "explicit_display_text": true/false}
             """;
     }
 }
@@ -251,4 +279,5 @@ internal record ProfileScanAIResponse(
     [property: JsonPropertyName("score")] decimal Score,
     [property: JsonPropertyName("reason")] string? Reason,
     [property: JsonPropertyName("signals_detected")] string[]? SignalsDetected,
-    [property: JsonPropertyName("contains_nudity")] bool ContainsNudity);
+    [property: JsonPropertyName("contains_nudity")] bool ContainsNudity,
+    [property: JsonPropertyName("explicit_display_text")] bool ExplicitDisplayText = false);

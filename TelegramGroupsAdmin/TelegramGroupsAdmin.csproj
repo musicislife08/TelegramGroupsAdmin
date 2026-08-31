@@ -69,6 +69,7 @@
       <ProjectReference Include="..\TelegramGroupsAdmin.Data\TelegramGroupsAdmin.Data.csproj" />
       <ProjectReference Include="..\TelegramGroupsAdmin.ContentDetection\TelegramGroupsAdmin.ContentDetection.csproj" />
       <ProjectReference Include="..\TelegramGroupsAdmin.Configuration\TelegramGroupsAdmin.Configuration.csproj" />
+      <ProjectReference Include="..\TelegramGroupsAdmin.AI\TelegramGroupsAdmin.AI.csproj" />
       <ProjectReference Include="..\TelegramGroupsAdmin.Telegram\TelegramGroupsAdmin.Telegram.csproj" />
       <ProjectReference Include="..\TelegramGroupsAdmin.BackgroundJobs\TelegramGroupsAdmin.BackgroundJobs.csproj" />
     </ItemGroup>

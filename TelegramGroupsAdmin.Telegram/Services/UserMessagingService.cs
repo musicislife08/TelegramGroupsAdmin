@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
-using Telegram.Bot.Types.Enums;
+using Telegram.Bot.Types.ReplyMarkups;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
@@ -9,7 +10,7 @@ using TelegramGroupsAdmin.Telegram.Services.Bot;
 namespace TelegramGroupsAdmin.Telegram.Services;
 
 /// <summary>
-/// Service for sending messages to specific users with DM-first, mention-fallback strategy.
+/// Service for sending messages to specific users.
 /// Uses IBotDmService for DM attempts and IBotMessageService for chat mention fallback.
 /// </summary>
 public class UserMessagingService : IUserMessagingService
@@ -34,141 +35,73 @@ public class UserMessagingService : IUserMessagingService
     public async Task<MessageSendResult> SendToUserAsync(
         long userId,
         Chat chat,
-        string messageText,
+        TelegramMessage message,
         int? replyToMessageId = null,
         CancellationToken cancellationToken = default)
     {
-        // Get user's DM preference (optimization: skip DM attempt if user blocked bot)
-        var user = await _telegramUserRepository.GetByTelegramIdAsync(userId, cancellationToken);
-        var botDmEnabled = user?.BotDmEnabled ?? false;
-
-        // Attempt DM if user has enabled it
-        if (botDmEnabled)
+        if (await TrySendDmAsync(userId, message, cancellationToken))
         {
-            // Try DM via IBotDmService (no fallback - we'll handle mention fallback ourselves)
-            var dmResult = await _dmService.SendDmAsync(
-                telegramUserId: userId,
-                messageText: messageText,
-                fallbackChatId: null,
-                cancellationToken: cancellationToken);
-
-            if (dmResult.DmSent)
-            {
-                _logger.LogInformation(
-                    "Sent DM to user {User}: {MessagePreview}",
-                    user.ToLogInfo(userId),
-                    messageText.Length > 50 ? messageText[..50] + "..." : messageText);
-
-                return new MessageSendResult(userId, Success: true, MessageDeliveryMethod.PrivateDm);
-            }
-
-            // DM failed (user blocked bot or error) - fall through to mention fallback
-            _logger.LogDebug(
-                "DM to {User} failed, falling back to chat mention",
-                user.ToLogDebug(userId));
+            return new MessageSendResult(userId, Success: true, MessageDeliveryMethod.PrivateDm);
         }
 
         // Fallback: Send as chat mention
-        return await SendChatMentionAsync(userId, chat, messageText, replyToMessageId, cancellationToken);
+        return await SendChatMentionAsync(userId, chat, message, replyToMessageId, cancellationToken);
     }
 
-    public async Task<List<MessageSendResult>> SendToMultipleUsersAsync(
-        List<long> userIds,
-        Chat chat,
-        string messageText,
-        int? replyToMessageId = null,
+    public async Task<MessageSendResult> SendDmOnlyAsync(
+        long userId,
+        TelegramMessage message,
         CancellationToken cancellationToken = default)
     {
-        var results = new List<MessageSendResult>();
-        var failedDmUsers = new List<(long UserId, string Mention)>();
-
-        // Try to send DMs to all users who have it enabled
-        foreach (var userId in userIds)
+        if (await TrySendDmAsync(userId, message, cancellationToken))
         {
-            var user = await _telegramUserRepository.GetByTelegramIdAsync(userId, cancellationToken);
-            var botDmEnabled = user?.BotDmEnabled ?? false;
-
-            if (botDmEnabled)
-            {
-                // Try DM via IBotDmService
-                var dmResult = await _dmService.SendDmAsync(
-                    telegramUserId: userId,
-                    messageText: messageText,
-                    fallbackChatId: null,
-                    cancellationToken: cancellationToken);
-
-                if (dmResult.DmSent)
-                {
-                    _logger.LogInformation(
-                        "Sent DM to user {User}: {MessagePreview}",
-                        user.ToLogInfo(userId),
-                        messageText.Length > 50 ? messageText[..50] + "..." : messageText);
-
-                    results.Add(new MessageSendResult(userId, Success: true, MessageDeliveryMethod.PrivateDm));
-                }
-                else
-                {
-                    // DM failed - add to batch mention list
-                    var userMention = TelegramDisplayName.FormatMention(new Core.Models.UserIdentity(userId, user?.FirstName, user?.LastName, user?.Username));
-                    failedDmUsers.Add((userId, userMention));
-                }
-            }
-            else
-            {
-                // User doesn't have DM enabled, add to batch mention list
-                var userMention = TelegramDisplayName.FormatMention(new Core.Models.UserIdentity(userId, user?.FirstName, user?.LastName, user?.Username));
-                failedDmUsers.Add((userId, userMention));
-            }
+            return new MessageSendResult(userId, Success: true, MessageDeliveryMethod.PrivateDm);
         }
 
-        // If any users need chat mentions, send ONE message with all mentions
-        if (failedDmUsers.Count > 0)
+        // No fallback: the recipient can't read a chat mention, so nothing is sent
+        return new MessageSendResult(
+            userId,
+            Success: false,
+            MessageDeliveryMethod.Failed,
+            ErrorMessage: "DM unavailable and no chat-mention fallback for this message");
+    }
+
+    /// <summary>
+    /// Attempt a DM to the user, honouring their stored DM preference.
+    /// Returns true only when the DM was actually delivered.
+    /// </summary>
+    private async Task<bool> TrySendDmAsync(
+        long userId,
+        TelegramMessage message,
+        CancellationToken cancellationToken)
+    {
+        // Get user's DM preference (optimization: skip DM attempt if user blocked bot)
+        var user = await _telegramUserRepository.GetByTelegramIdAsync(userId, cancellationToken);
+        if (user?.BotDmEnabled is not true)
         {
-            try
-            {
-                var mentions = string.Join(", ", failedDmUsers.Select(u => u.Mention));
-                var chatMessage = $"{mentions}:\n\n{messageText}";
-
-                await _messageService.SendAndSaveMessageAsync(
-                    chatId: chat.Id,
-                    text: chatMessage,
-                    parseMode: ParseMode.Markdown,
-                    replyParameters: replyToMessageId.HasValue
-                        ? new ReplyParameters { MessageId = replyToMessageId.Value }
-                        : null,
-                    cancellationToken: cancellationToken);
-
-                _logger.LogInformation(
-                    "Sent batched chat mention to {UserCount} users in {Chat}",
-                    failedDmUsers.Count,
-                    chat.ToLogInfo());
-
-                // Add success result for all users in the batch
-                foreach (var (userId, _) in failedDmUsers)
-                {
-                    results.Add(new MessageSendResult(userId, Success: true, MessageDeliveryMethod.ChatMention));
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex,
-                    "Failed to send batched chat mention to {UserCount} users in {Chat}",
-                    failedDmUsers.Count,
-                    chat.ToLogDebug());
-
-                // Add failure results
-                foreach (var (userId, _) in failedDmUsers)
-                {
-                    results.Add(new MessageSendResult(
-                        userId,
-                        Success: false,
-                        MessageDeliveryMethod.Failed,
-                        ErrorMessage: ex.Message));
-                }
-            }
+            return false;
         }
 
-        return results;
+        // Try DM via IBotDmService (no fallback - callers decide what happens next)
+        var dmResult = await _dmService.SendDmAsync(
+            user: UserIdentity.From(user),
+            message: message,
+            fallbackChatId: null,
+            cancellationToken: cancellationToken);
+
+        if (dmResult.DmSent)
+        {
+            _logger.LogInformation(
+                "Sent DM to user {User}: {MessagePreview}",
+                user.ToLogInfo(userId),
+                message.Text.Length > 50 ? message.Text[..50] + "..." : message.Text);
+
+            return true;
+        }
+
+        // DM failed (user blocked bot or error)
+        _logger.LogDebug("DM to {User} failed", user.ToLogDebug(userId));
+        return false;
     }
 
     /// <summary>
@@ -177,7 +110,7 @@ public class UserMessagingService : IUserMessagingService
     private async Task<MessageSendResult> SendChatMentionAsync(
         long userId,
         Chat chat,
-        string messageText,
+        TelegramMessage message,
         int? replyToMessageId,
         CancellationToken cancellationToken)
     {
@@ -186,13 +119,15 @@ public class UserMessagingService : IUserMessagingService
 
         try
         {
-            var userMention = TelegramDisplayName.FormatMention(new Core.Models.UserIdentity(userId, user?.FirstName, user?.LastName, user?.Username));
-            var chatMessage = $"{userMention}: {messageText}";
+            var mentionMessage = new TelegramMessageBuilder()
+                .Mention(new UserIdentity(userId, user?.FirstName, user?.LastName, user?.Username))
+                .Text(": ")
+                .Append(message)
+                .Build();
 
             await _messageService.SendAndSaveMessageAsync(
                 chatId: chat.Id,
-                text: chatMessage,
-                parseMode: ParseMode.Markdown,
+                message: mentionMessage,
                 replyParameters: replyToMessageId.HasValue
                     ? new ReplyParameters { MessageId = replyToMessageId.Value }
                     : null,

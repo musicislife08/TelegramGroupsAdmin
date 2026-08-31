@@ -6,10 +6,12 @@ using Telegram.Bot.Types.ReplyMarkups;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.Welcome;
+using TelegramGroupsAdmin.Configuration.Services;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
 
@@ -50,7 +52,7 @@ public class StartCommand : IBotCommand
     public string Name => "start";
     public string Description => "Start conversation with bot";
     public string Usage => "/start [deeplink_payload]";
-    public int MinPermissionLevel => 0; // Everyone can use
+    public PermissionLevel MinPermissionLevel => PermissionLevel.Member; // everyone
     public bool RequiresReply => false;
     public bool DeleteCommandMessage => false;
     public int? DeleteResponseAfterSeconds => null;
@@ -58,13 +60,13 @@ public class StartCommand : IBotCommand
     public async Task<CommandResult> ExecuteAsync(
         Message message,
         string[] args,
-        int userPermissionLevel,
+        PermissionLevel userPermission,
         CancellationToken cancellationToken = default)
     {
         // Only respond to /start in private DMs, ignore in group chats
         if (message.Chat.Type != ChatType.Private)
         {
-            return new CommandResult(string.Empty, DeleteCommandMessage, DeleteResponseAfterSeconds); // Silently ignore /start in group chats
+            return new CommandResult(TelegramMessage.Empty, DeleteCommandMessage, DeleteResponseAfterSeconds); // Silently ignore /start in group chats
         }
 
         // User started a private conversation with the bot - enable DM notifications
@@ -91,9 +93,10 @@ public class StartCommand : IBotCommand
 
         // Default /start response
         return new CommandResult(
-            "👋 Welcome to TelegramGroupsAdmin Bot!\n\n" +
-            "This bot helps manage your Telegram groups with spam detection and moderation tools.\n\n" +
-            "Use /help to see available commands.",
+            TelegramMessage.Plain(
+                "👋 Welcome to TelegramGroupsAdmin Bot!\n\n" +
+                "This bot helps manage your Telegram groups with spam detection and moderation tools.\n\n" +
+                "Use /help to see available commands."),
             DeleteCommandMessage,
             DeleteResponseAfterSeconds);
     }
@@ -108,7 +111,7 @@ public class StartCommand : IBotCommand
         if (parts.Length != 3 || !long.TryParse(parts[1], out var chatId) || !long.TryParse(parts[2], out var targetUserId))
         {
             return new CommandResult(
-                "❌ Invalid deep link. Please use the button from the welcome message.",
+                TelegramMessage.Plain("❌ Invalid deep link. Please use the button from the welcome message."),
                 DeleteCommandMessage,
                 DeleteResponseAfterSeconds);
         }
@@ -117,7 +120,7 @@ public class StartCommand : IBotCommand
         if (message.From?.Id != targetUserId)
         {
             return new CommandResult(
-                "❌ This link is not for you. Please use the welcome link sent to you.",
+                TelegramMessage.Plain("❌ This link is not for you. Please use the welcome link sent to you."),
                 DeleteCommandMessage,
                 DeleteResponseAfterSeconds);
         }
@@ -131,7 +134,7 @@ public class StartCommand : IBotCommand
         catch (Exception)
         {
             return new CommandResult(
-                "❌ Unable to retrieve chat information. The bot may have been removed from the chat.",
+                TelegramMessage.Plain("❌ Unable to retrieve chat information. The bot may have been removed from the chat."),
                 DeleteCommandMessage,
                 DeleteResponseAfterSeconds);
         }
@@ -140,25 +143,22 @@ public class StartCommand : IBotCommand
         // Must create scope because StartCommand is scoped but IConfigService is also scoped
         using var scope = _serviceProvider.CreateScope();
         var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
-        var config = await configService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, chatId)
+        var config = await configService.GetEffectiveWelcomeAsync(chatId, cancellationToken)
                      ?? WelcomeConfig.Default;
 
-        // Send main welcome message in DM
+        // Send main welcome message in DM — built through the shared WelcomeMessageBuilder so the
+        // {username}/{chat_name}/{timeout} substitution (clickable mention, humanized timeout)
+        // matches every other welcome render path.
         var chatName = chat.Title ?? "the chat";
-        // Use HTML mention format to create clickable user tag
-        var username = message.From.Username != null
-            ? $"<a href=\"tg://user?id={message.From.Id}\">@{message.From.Username}</a>"
-            : $"<a href=\"tg://user?id={message.From.Id}\">{message.From.FirstName}</a>";
-
-        var messageText = config.MainWelcomeMessage
-            .Replace("{username}", username)
-            .Replace("{chat_name}", chatName)
-            .Replace("{timeout}", config.TimeoutSeconds.ToString());
+        var welcomeMessage = WelcomeMessageBuilder.BuildFromTemplate(
+            config.MainWelcomeMessage,
+            new UserIdentity(message.From.Id, message.From.FirstName, message.From.LastName, message.From.Username),
+            chatName,
+            config.TimeoutSeconds);
 
         await _messageService.SendAndSaveMessageAsync(
             chatId: message.Chat.Id,
-            text: messageText,
-            parseMode: ParseMode.Html,
+            message: welcomeMessage,
             cancellationToken: cancellationToken);
 
         // Send Accept button in separate message (will be deleted after click)
@@ -191,7 +191,7 @@ public class StartCommand : IBotCommand
         }
 
         // Don't return a message - the Accept button will trigger the final confirmation
-        return new CommandResult(string.Empty, DeleteCommandMessage, DeleteResponseAfterSeconds);
+        return new CommandResult(TelegramMessage.Empty, DeleteCommandMessage, DeleteResponseAfterSeconds);
     }
 
     /// <summary>
@@ -207,7 +207,7 @@ public class StartCommand : IBotCommand
         if (examPayload == null)
         {
             return new CommandResult(
-                "❌ Invalid exam link. Please use the button from the welcome message.",
+                TelegramMessage.Plain("❌ Invalid exam link. Please use the button from the welcome message."),
                 DeleteCommandMessage,
                 DeleteResponseAfterSeconds);
         }
@@ -216,7 +216,7 @@ public class StartCommand : IBotCommand
         if (message.From?.Id != examPayload.UserId)
         {
             return new CommandResult(
-                "❌ This exam link is not for you. Please use the button sent to you when you joined.",
+                TelegramMessage.Plain("❌ This exam link is not for you. Please use the button sent to you when you joined."),
                 DeleteCommandMessage,
                 DeleteResponseAfterSeconds);
         }
@@ -230,7 +230,7 @@ public class StartCommand : IBotCommand
         catch (Exception)
         {
             return new CommandResult(
-                "❌ Unable to retrieve chat information. The bot may have been removed from the chat.",
+                TelegramMessage.Plain("❌ Unable to retrieve chat information. The bot may have been removed from the chat."),
                 DeleteCommandMessage,
                 DeleteResponseAfterSeconds);
         }
@@ -238,13 +238,13 @@ public class StartCommand : IBotCommand
         // Load welcome config from database (chat-specific or global fallback)
         using var scope = _serviceProvider.CreateScope();
         var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
-        var config = await configService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, examPayload.ChatId)
+        var config = await configService.GetEffectiveWelcomeAsync(examPayload.ChatId, cancellationToken)
                      ?? WelcomeConfig.Default;
 
         if (config.Mode != WelcomeMode.EntranceExam || config.ExamConfig == null)
         {
             return new CommandResult(
-                "❌ Entrance exam is no longer configured for this chat.",
+                TelegramMessage.Plain("❌ Entrance exam is no longer configured for this chat."),
                 DeleteCommandMessage,
                 DeleteResponseAfterSeconds);
         }
@@ -261,18 +261,18 @@ public class StartCommand : IBotCommand
         if (!result.Success)
         {
             return new CommandResult(
-                "❌ Failed to start exam. Please try again or contact an admin.",
+                TelegramMessage.Plain("❌ Failed to start exam. Please try again or contact an admin."),
                 DeleteCommandMessage,
                 DeleteResponseAfterSeconds);
         }
 
         _logger.LogInformation(
-            "Started entrance exam in DM for user {UserId} from group {GroupId}",
-            examPayload.UserId,
-            examPayload.ChatId);
+            "Started entrance exam in DM for {User} from {Chat}",
+            message.From.ToLogInfo(),
+            chat.ToLogInfo());
 
         // Empty result - the exam service sends the first question
-        return new CommandResult(string.Empty, DeleteCommandMessage, DeleteResponseAfterSeconds);
+        return new CommandResult(TelegramMessage.Empty, DeleteCommandMessage, DeleteResponseAfterSeconds);
     }
 
     /// <summary>
@@ -304,7 +304,7 @@ public class StartCommand : IBotCommand
                 try
                 {
                     var result = await _dmService.SendDmAsync(
-                        telegramUserId: telegramUserId,
+                        user: Core.Models.UserIdentity.FromId(telegramUserId),
                         messageText: notification.MessageText,
                         cancellationToken: cancellationToken);
 

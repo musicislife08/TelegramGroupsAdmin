@@ -91,5 +91,27 @@ public enum AuditEventType
 
     // Report Events
     /// <summary>Report created (user-submitted or auto-detected)</summary>
-    ReportCreated = 34
+    ReportCreated = 34,
+
+    // Telegram User API Events
+    /// <summary>Admin connected their Telegram account via User API</summary>
+    TelegramAccountConnected = 35,
+    /// <summary>Admin disconnected their Telegram account (user-initiated or session revoked)</summary>
+    TelegramAccountDisconnected = 36,
+    /// <summary>Owner configured or cleared Telegram User API credentials</summary>
+    TelegramApiConfigured = 37,
+    /// <summary>Admin's web account auto-linked to their Telegram account after User API auth</summary>
+    TelegramAccountLinked = 38,
+
+    // Username Blacklist (39-43)
+    /// <summary>Username blacklist entry added</summary>
+    BlacklistEntryAdded = 39,
+    /// <summary>Username blacklist entry removed</summary>
+    BlacklistEntryRemoved = 40,
+    /// <summary>Username blacklist entry enabled</summary>
+    BlacklistEntryEnabled = 41,
+    /// <summary>Username blacklist entry disabled</summary>
+    BlacklistEntryDisabled = 42,
+    /// <summary>Username blacklist entry notes changed</summary>
+    BlacklistEntryNotesChanged = 43,
 }

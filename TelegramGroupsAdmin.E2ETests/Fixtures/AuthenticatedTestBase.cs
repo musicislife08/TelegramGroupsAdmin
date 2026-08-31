@@ -101,7 +101,7 @@ public abstract class AuthenticatedTestBase : E2ETestBase
 
         // Generate the encrypted cookie value
         var cookieValue = authCookieService.GenerateCookieValue(
-            new WebUserIdentity(user.Id, user.Email, user.PermissionLevel));
+            new WebUserIdentity(user.Id, user.Email, user.PermissionLevel), user.Record.SecurityStamp);
 
         // Extract host and port from the server address
         var baseUri = new Uri(Factory.ServerAddress);

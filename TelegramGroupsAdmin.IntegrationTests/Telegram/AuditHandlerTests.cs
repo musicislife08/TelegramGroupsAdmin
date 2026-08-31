@@ -26,45 +26,38 @@ public class AuditHandlerTests
     private MigrationTestHelper? _testHelper;
     private IServiceProvider? _serviceProvider;
 
-    // Test constants
-    private const long ValidUserId = 123456789L;
+    // Canonical anchors — telegram_user_id=9921676191756 (@unhelpfulgrab) exists in golden_template.
+    // chat_id=-100026957614982 is MainChat in canonical. NonExistentUserId is outside the
+    // canonical ID range [9_000_000_000_000, 10_000_000_000_000) so it will never collide.
+    private const long CanonicalUserId = 9921676191756L;
     private const long NonExistentUserId = 999999999L;
-    private const long ChatId = -1001234567890L;
+    private const long MainChatId = -100026957614982L;
     private const int TestMessageId = 99999;  // Used in tests expecting FK failures
 
     [SetUp]
     public async Task SetUp()
     {
-        // Create unique test database with migrations applied
         _testHelper = new MigrationTestHelper();
-        await _testHelper.CreateDatabaseAndApplyMigrationsAsync();
+        await _testHelper.CreateDatabaseFromGoldenTemplateAsync();
 
-        // Set up dependency injection
         var services = new ServiceCollection();
 
-        // Configure Data Protection with ephemeral keys
-        services.AddDataProtection()
-            .SetApplicationName("TelegramGroupsAdmin.Tests")
-            .PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(Path.GetTempPath(), $"test_keys_{Guid.NewGuid():N}")));
+        services.AddSingleton<IDataProtectionProvider>(PostgresFixture.SharedDataProtectionProvider);
 
-        // Add NpgsqlDataSource
         var dataSourceBuilder = new Npgsql.NpgsqlDataSourceBuilder(_testHelper.ConnectionString);
         services.AddSingleton(dataSourceBuilder.Build());
 
-        // Add DbContextFactory
         services.AddDbContextFactory<AppDbContext>((_, options) =>
         {
             options.UseNpgsql(_testHelper.ConnectionString);
         });
 
-        // Add logging
         services.AddLogging(builder =>
         {
             builder.AddConsole().SetMinimumLevel(LogLevel.Warning);
             builder.AddFilter("Microsoft.AspNetCore.DataProtection", LogLevel.Error);
         });
 
-        // Register repositories and handlers
         services.AddScoped<IUserActionsRepository, UserActionsRepository>();
         services.AddScoped<ITelegramUserRepository, TelegramUserRepository>();
         services.AddScoped<IManagedChatsRepository, ManagedChatsRepository>();
@@ -74,7 +67,31 @@ public class AuditHandlerTests
     }
 
     /// <summary>
-    /// Helper method to create a test user directly in the database (satisfies FK constraint).
+    /// Inserts a message seeded inline (satisfies user_actions.message_id FK constraint).
+    /// The user and chat must already exist (canonical or previously seeded inline).
+    /// </summary>
+    private async Task<int> CreateTestMessageAsync(long chatId, long userId)
+    {
+        var contextFactory = _serviceProvider!.GetRequiredService<IDbContextFactory<AppDbContext>>();
+        await using var context = await contextFactory.CreateDbContextAsync();
+
+        var message = new Data.Models.MessageRecordDto
+        {
+            ChatId = chatId,
+            UserId = userId,
+            MessageText = "Test message",
+            Timestamp = DateTimeOffset.UtcNow
+        };
+
+        context.Messages.Add(message);
+        await context.SaveChangesAsync();
+
+        return message.MessageId;
+    }
+
+    /// <summary>
+    /// Inserts a telegram_user inline. Use only for IDs that are not in canonical
+    /// (e.g., the zero service-account edge case).
     /// </summary>
     private async Task CreateTestUserAsync(long userId)
     {
@@ -100,28 +117,6 @@ public class AuditHandlerTests
         await context.SaveChangesAsync();
     }
 
-    /// <summary>
-    /// Helper method to create a test message directly in the database (satisfies FK constraint for user_actions.message_id).
-    /// </summary>
-    private async Task<int> CreateTestMessageAsync(long chatId, long userId)
-    {
-        var contextFactory = _serviceProvider!.GetRequiredService<IDbContextFactory<AppDbContext>>();
-        await using var context = await contextFactory.CreateDbContextAsync();
-
-        var message = new Data.Models.MessageRecordDto
-        {
-            ChatId = chatId,
-            UserId = userId,
-            MessageText = "Test message",
-            Timestamp = DateTimeOffset.UtcNow
-        };
-
-        context.Messages.Add(message);
-        await context.SaveChangesAsync();
-
-        return message.MessageId;
-    }
-
     [TearDown]
     public void TearDown()
     {
@@ -134,9 +129,9 @@ public class AuditHandlerTests
     [Test]
     public async Task LogDeleteAsync_WithValidUserId_InsertsSuccessfully()
     {
-        // Arrange - Create a telegram_user and message first (satisfies FK constraints)
-        await CreateTestUserAsync(ValidUserId);
-        var messageId = await CreateTestMessageAsync(ChatId, ValidUserId);
+        // Arrange - CanonicalUserId (@unhelpfulgrab) already exists in golden_template;
+        // seed a new message inline so we have a valid message_id FK target.
+        var messageId = await CreateTestMessageAsync(MainChatId, CanonicalUserId);
 
         var executor = Actor.FromSystem("IntegrationTest");
 
@@ -144,7 +139,7 @@ public class AuditHandlerTests
         using (var scope = _serviceProvider!.CreateScope())
         {
             var auditHandler = scope.ServiceProvider.GetRequiredService<IAuditHandler>();
-            await auditHandler.LogDeleteAsync(messageId, ChatIdentity.FromId(ChatId), UserIdentity.FromId(ValidUserId), executor);
+            await auditHandler.LogDeleteAsync(messageId, ChatIdentity.FromId(MainChatId), UserIdentity.FromId(CanonicalUserId), executor);
         }
 
         // Assert - Verify record was inserted with FK intact
@@ -152,15 +147,15 @@ public class AuditHandlerTests
         await using var context = await contextFactory.CreateDbContextAsync();
 
         var record = await context.UserActions
-            .Where(ua => ua.MessageId == messageId && ua.UserId == ValidUserId)
+            .Where(ua => ua.MessageId == messageId && ua.UserId == CanonicalUserId)
             .FirstOrDefaultAsync();
 
         Assert.That(record, Is.Not.Null, "Audit record should be inserted");
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(record!.UserId, Is.EqualTo(ValidUserId));
+            Assert.That(record!.UserId, Is.EqualTo(CanonicalUserId));
             Assert.That(record.MessageId, Is.EqualTo(messageId));
-            Assert.That(record.ActionType, Is.EqualTo(Data.Models.UserActionType.Delete));
+            Assert.That(record.ActionType, Is.EqualTo((int)UserActionType.Delete));
             Assert.That(record.SystemIdentifier, Is.EqualTo("IntegrationTest"));
         }
     }
@@ -168,7 +163,8 @@ public class AuditHandlerTests
     [Test]
     public void LogDeleteAsync_WithNonExistentUserId_ThrowsDbUpdateException()
     {
-        // Arrange - Don't create a telegram_user (FK constraint will fail)
+        // Arrange - NonExistentUserId is outside the canonical ID range so it is absent
+        // from golden_template; no inline seed needed — FK constraint will fire.
         var executor = Actor.FromSystem("IntegrationTest");
 
         // Act & Assert - Should throw DbUpdateException due to FK constraint violation
@@ -176,7 +172,7 @@ public class AuditHandlerTests
         {
             using var scope = _serviceProvider!.CreateScope();
             var auditHandler = scope.ServiceProvider.GetRequiredService<IAuditHandler>();
-            await auditHandler.LogDeleteAsync(TestMessageId, ChatIdentity.FromId(ChatId), UserIdentity.FromId(NonExistentUserId), executor);
+            await auditHandler.LogDeleteAsync(TestMessageId, ChatIdentity.FromId(MainChatId), UserIdentity.FromId(NonExistentUserId), executor);
         });
 
         // Verify it's specifically an FK constraint violation
@@ -187,10 +183,11 @@ public class AuditHandlerTests
     [Test]
     public async Task LogDeleteAsync_WithServiceAccountUserId_WorksIfUserExists()
     {
-        // Arrange - Create the service account user (ID 0 is special, but still needs to exist)
-        // NOTE: Service account protection happens at orchestrator level, not in AuditHandler
+        // Arrange - telegram_user_id=0 is not in canonical (it is the chat_id=0 sentinel,
+        // not a telegram_user row). Seed the zero service-account user inline.
+        // NOTE: Service account protection happens at orchestrator level, not in AuditHandler.
         await CreateTestUserAsync(0L);
-        var messageId = await CreateTestMessageAsync(ChatId, 0L);
+        var messageId = await CreateTestMessageAsync(MainChatId, 0L);
 
         var executor = Actor.FromSystem("IntegrationTest");
 
@@ -198,7 +195,7 @@ public class AuditHandlerTests
         using (var scope = _serviceProvider!.CreateScope())
         {
             var auditHandler = scope.ServiceProvider.GetRequiredService<IAuditHandler>();
-            await auditHandler.LogDeleteAsync(messageId, ChatIdentity.FromId(ChatId), UserIdentity.FromId(0L), executor);
+            await auditHandler.LogDeleteAsync(messageId, ChatIdentity.FromId(MainChatId), UserIdentity.FromId(0L), executor);
         }
 
         // Assert - Verify record was inserted
@@ -220,16 +217,14 @@ public class AuditHandlerTests
     [Test]
     public async Task LogBanAsync_WithValidUserId_InsertsSuccessfully()
     {
-        // Arrange - Create a telegram_user
-        await CreateTestUserAsync(ValidUserId);
-
+        // Arrange - CanonicalUserId (@unhelpfulgrab) already exists in golden_template.
         var executor = Actor.FromSystem("IntegrationTest");
 
         // Act
         using (var scope = _serviceProvider!.CreateScope())
         {
             var auditHandler = scope.ServiceProvider.GetRequiredService<IAuditHandler>();
-            await auditHandler.LogBanAsync(UserIdentity.FromId(ValidUserId), executor, "Test ban reason");
+            await auditHandler.LogBanAsync(UserIdentity.FromId(CanonicalUserId), executor, "Test ban reason");
         }
 
         // Assert
@@ -237,7 +232,8 @@ public class AuditHandlerTests
         await using var context = await contextFactory.CreateDbContextAsync();
 
         var record = await context.UserActions
-            .Where(ua => ua.UserId == ValidUserId && ua.ActionType == Data.Models.UserActionType.Ban)
+            .Where(ua => ua.UserId == CanonicalUserId && ua.ActionType == (int)UserActionType.Ban)
+            .OrderByDescending(ua => ua.Id)
             .FirstOrDefaultAsync();
 
         Assert.That(record, Is.Not.Null);
@@ -268,16 +264,14 @@ public class AuditHandlerTests
     [Test]
     public async Task LogWarnAsync_WithValidUserId_InsertsSuccessfully()
     {
-        // Arrange
-        await CreateTestUserAsync(ValidUserId);
-
+        // Arrange - CanonicalUserId (@unhelpfulgrab) already exists in golden_template.
         var executor = Actor.FromSystem("IntegrationTest");
 
         // Act
         using (var scope = _serviceProvider!.CreateScope())
         {
             var auditHandler = scope.ServiceProvider.GetRequiredService<IAuditHandler>();
-            await auditHandler.LogWarnAsync(UserIdentity.FromId(ValidUserId), executor, "Test warning");
+            await auditHandler.LogWarnAsync(UserIdentity.FromId(CanonicalUserId), executor, "Test warning");
         }
 
         // Assert
@@ -285,7 +279,8 @@ public class AuditHandlerTests
         await using var context = await contextFactory.CreateDbContextAsync();
 
         var record = await context.UserActions
-            .Where(ua => ua.UserId == ValidUserId && ua.ActionType == Data.Models.UserActionType.Warn)
+            .Where(ua => ua.UserId == CanonicalUserId && ua.ActionType == (int)UserActionType.Warn)
+            .OrderByDescending(ua => ua.Id)
             .FirstOrDefaultAsync();
 
         Assert.That(record, Is.Not.Null);
@@ -314,9 +309,8 @@ public class AuditHandlerTests
     [Test]
     public async Task LogDeleteAsync_WithSystemActor_StoresSystemIdentifier()
     {
-        // Arrange
-        await CreateTestUserAsync(ValidUserId);
-        var messageId = await CreateTestMessageAsync(ChatId, ValidUserId);
+        // Arrange - CanonicalUserId (@unhelpfulgrab) exists in golden_template.
+        var messageId = await CreateTestMessageAsync(MainChatId, CanonicalUserId);
 
         var executor = Actor.FromSystem("AutoModerator");
 
@@ -324,7 +318,7 @@ public class AuditHandlerTests
         using (var scope = _serviceProvider!.CreateScope())
         {
             var auditHandler = scope.ServiceProvider.GetRequiredService<IAuditHandler>();
-            await auditHandler.LogDeleteAsync(messageId, ChatIdentity.FromId(ChatId), UserIdentity.FromId(ValidUserId), executor);
+            await auditHandler.LogDeleteAsync(messageId, ChatIdentity.FromId(MainChatId), UserIdentity.FromId(CanonicalUserId), executor);
         }
 
         // Assert - Verify exclusive arc: only system_identifier is set

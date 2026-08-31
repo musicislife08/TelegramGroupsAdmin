@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using TelegramGroupsAdmin.Configuration.Models.Welcome;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Services;
 using WireMock.RequestBuilders;
 using WireMock.ResponseBuilders;
@@ -84,7 +85,7 @@ public class CasCheckServiceTests
                 .WithBody("""{"ok": false, "description": "Record not found."}"""));
 
         // Act
-        var result = await _service.CheckUserAsync(userId, casConfig);
+        var result = await _service.CheckUserAsync(UserIdentity.FromId(userId), casConfig);
 
         // Assert
         using (Assert.EnterMultipleScope())
@@ -122,7 +123,7 @@ public class CasCheckServiceTests
                 """));
 
         // Act
-        var result = await _service.CheckUserAsync(userId, casConfig);
+        var result = await _service.CheckUserAsync(UserIdentity.FromId(userId), casConfig);
 
         // Assert
         using (Assert.EnterMultipleScope())
@@ -154,8 +155,8 @@ public class CasCheckServiceTests
                 .WithBody("""{"ok": true, "result": {"reasons": [1], "offenses": 1, "messages": ["Spam"], "time_added": "2021-01-01T00:00:00.000Z"}}"""));
 
         // Act
-        var result1 = await _service.CheckUserAsync(userId, casConfig);
-        var result2 = await _service.CheckUserAsync(userId, casConfig);
+        var result1 = await _service.CheckUserAsync(UserIdentity.FromId(userId), casConfig);
+        var result2 = await _service.CheckUserAsync(UserIdentity.FromId(userId), casConfig);
 
         // Assert
         using (Assert.EnterMultipleScope())
@@ -188,7 +189,7 @@ public class CasCheckServiceTests
                 .WithBody("Internal Server Error"));
 
         // Act
-        var result = await _service.CheckUserAsync(userId, casConfig);
+        var result = await _service.CheckUserAsync(UserIdentity.FromId(userId), casConfig);
 
         // Assert - Fail open means return not banned
         using (Assert.EnterMultipleScope())
@@ -214,7 +215,7 @@ public class CasCheckServiceTests
                 .WithBody("Not Found"));
 
         // Act
-        var result = await _service.CheckUserAsync(userId, casConfig);
+        var result = await _service.CheckUserAsync(UserIdentity.FromId(userId), casConfig);
 
         // Assert - Fail open
         Assert.That(result.IsBanned, Is.False);
@@ -237,7 +238,7 @@ public class CasCheckServiceTests
                 .WithBody("not valid json at all"));
 
         // Act
-        var result = await _service.CheckUserAsync(userId, casConfig);
+        var result = await _service.CheckUserAsync(UserIdentity.FromId(userId), casConfig);
 
         // Assert - Fail open on parse error
         Assert.That(result.IsBanned, Is.False);
@@ -260,7 +261,7 @@ public class CasCheckServiceTests
                 .WithBody("""{"ok": true, "result": {"reasons": [1], "offenses": 1, "messages": ["Spam"], "time_added": "2021-01-01T00:00:00.000Z"}}"""));
 
         // Act
-        var result = await _service.CheckUserAsync(userId, casConfig);
+        var result = await _service.CheckUserAsync(UserIdentity.FromId(userId), casConfig);
 
         // Assert - Fail open on timeout
         Assert.That(result.IsBanned, Is.False);
@@ -281,7 +282,7 @@ public class CasCheckServiceTests
         };
 
         // Act
-        var result = await _service.CheckUserAsync(userId, badConfig);
+        var result = await _service.CheckUserAsync(UserIdentity.FromId(userId), badConfig);
 
         // Assert - Fail open on network error
         Assert.That(result.IsBanned, Is.False);
@@ -309,7 +310,7 @@ public class CasCheckServiceTests
                 .WithBody("""{"ok": false, "description": "Record not found."}"""));
 
         // Act
-        var result = await _service.CheckUserAsync(userId, casConfig);
+        var result = await _service.CheckUserAsync(UserIdentity.FromId(userId), casConfig);
 
         // Assert - ok=false means user is NOT banned
         Assert.That(result.IsBanned, Is.False);
@@ -332,7 +333,7 @@ public class CasCheckServiceTests
                 .WithBody("""{"ok": true, "result": {"reasons": [1], "offenses": 0, "messages": ["Spam"], "time_added": "2021-01-01T00:00:00.000Z"}}"""));
 
         // Act
-        var result = await _service.CheckUserAsync(userId, casConfig);
+        var result = await _service.CheckUserAsync(UserIdentity.FromId(userId), casConfig);
 
         // Assert - ok=true means banned, even with 0 offenses
         using (Assert.EnterMultipleScope())
@@ -368,7 +369,7 @@ public class CasCheckServiceTests
                 .WithBody("""{"ok": false, "description": "Record not found."}"""));
 
         // Act
-        var result = await _service.CheckUserAsync(userId, casConfig);
+        var result = await _service.CheckUserAsync(UserIdentity.FromId(userId), casConfig);
 
         using (Assert.EnterMultipleScope())
         {

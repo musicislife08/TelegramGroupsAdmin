@@ -62,4 +62,9 @@ public class WelcomeConfigData
     /// Entrance exam configuration (EntranceExam mode only).
     /// </summary>
     public ExamConfigData? ExamConfig { get; set; }
+
+    /// <summary>
+    /// Optional. Nullable so chats that haven't configured trusted bypass deserialize cleanly without forcing a default subtree.
+    /// </summary>
+    public TrustedBypassConfigData? TrustedBypass { get; set; }
 }

@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
@@ -13,42 +14,39 @@ namespace TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
 public class UnbanCommand : IBotCommand
 {
     private readonly ILogger<UnbanCommand> _logger;
-    private readonly IServiceProvider _serviceProvider;
     private readonly IBotModerationService _moderationService;
 
     public string Name => "unban";
     public string Description => "Remove ban from user";
     public string Usage => "/unban (reply to message)";
-    public int MinPermissionLevel => 1; // Admin required
+    public PermissionLevel MinPermissionLevel => PermissionLevel.Admin; // chat admin or higher
     public bool RequiresReply => true;
     public bool DeleteCommandMessage => false; // Keep visible for confirmation
     public int? DeleteResponseAfterSeconds => null;
 
     public UnbanCommand(
         ILogger<UnbanCommand> logger,
-        IServiceProvider serviceProvider,
         IBotModerationService moderationService)
     {
         _logger = logger;
-        _serviceProvider = serviceProvider;
         _moderationService = moderationService;
     }
 
     public async Task<CommandResult> ExecuteAsync(
         Message message,
         string[] args,
-        int userPermissionLevel,
+        PermissionLevel userPermission,
         CancellationToken cancellationToken = default)
     {
         if (message.ReplyToMessage == null)
         {
-            return new CommandResult("❌ Please reply to a message from the user to unban.", DeleteCommandMessage, DeleteResponseAfterSeconds);
+            return new CommandResult(TelegramMessage.Plain("❌ Please reply to a message from the user to unban."), DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
 
         var targetUser = message.ReplyToMessage.From;
         if (targetUser == null)
         {
-            return new CommandResult("❌ Could not identify target user.", DeleteCommandMessage, DeleteResponseAfterSeconds);
+            return new CommandResult(TelegramMessage.Plain("❌ Could not identify target user."), DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
 
         try
@@ -74,18 +72,18 @@ public class UnbanCommand : IBotCommand
             // Build response based on result
             if (!result.Success)
             {
-                return new CommandResult($"❌ {result.ErrorMessage}", DeleteCommandMessage, DeleteResponseAfterSeconds);
+                return new CommandResult(TelegramMessage.Plain($"❌ {result.ErrorMessage}"), DeleteCommandMessage, DeleteResponseAfterSeconds);
             }
 
             var response = $"✅ User @{targetUser.Username ?? targetUser.Id.ToString()} unbanned from {result.ChatsAffected} chat(s)";
 
-            return new CommandResult(response, DeleteCommandMessage, DeleteResponseAfterSeconds);
+            return new CommandResult(TelegramMessage.Plain(response), DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to unban {User}",
                 targetUser.ToLogDebug());
-            return new CommandResult($"❌ Failed to unban user: {ex.Message}", DeleteCommandMessage, DeleteResponseAfterSeconds);
+            return new CommandResult(TelegramMessage.Plain($"❌ Failed to unban user: {ex.Message}"), DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
     }
 }

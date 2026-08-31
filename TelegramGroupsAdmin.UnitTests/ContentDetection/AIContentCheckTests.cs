@@ -9,13 +9,13 @@ using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Services;
 using TelegramGroupsAdmin.Core.Models;
-using TelegramGroupsAdmin.Core.Services.AI;
+using TelegramGroupsAdmin.AI.Services;
 
 namespace TelegramGroupsAdmin.UnitTests.ContentDetection;
 
 /// <summary>
 /// Tests for AIContentCheckV2 with V2 scoring model (0.0-5.0 points)
-/// Renamed from OpenAIContentCheckTests after Semantic Kernel refactoring.
+/// Renamed from OpenAIContentCheckTests in an earlier refactor.
 /// </summary>
 [TestFixture]
 public class AIContentCheckTests

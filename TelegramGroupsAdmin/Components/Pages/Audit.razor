@@ -8,7 +8,7 @@
 @inject ITelegramUserRepository TelegramUserRepository
 @inject ISnackbar Snackbar
 @inject NavigationManager Navigation
-@attribute [Authorize(Roles = "GlobalAdmin,Owner")]
+@attribute [Authorize(Policy = AuthenticationConstants.PolicyGlobalAdminOrOwner)]
 @implements IDisposable
 
 <PageTitle>Audit Log - TelegramGroupsAdmin</PageTitle>

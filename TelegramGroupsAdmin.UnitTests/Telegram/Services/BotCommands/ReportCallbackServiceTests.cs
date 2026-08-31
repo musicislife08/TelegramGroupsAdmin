@@ -168,7 +168,7 @@ public class ReportCallbackServiceTests
 
         await _mockDmService.Received(1).EditDmTextAsync(
             TestDmChatId, TestDmMessageId,
-            Arg.Is<string>(s => s.Contains("expired")),
+            Arg.Is<string>(s => s!.Contains("expired")),
             replyMarkup: null,
             cancellationToken: Arg.Any<CancellationToken>());
 
@@ -245,7 +245,7 @@ public class ReportCallbackServiceTests
         // DM should be updated with "Invalid action" message
         await _mockDmService.Received(1).EditDmTextAsync(
             TestDmChatId, TestDmMessageId,
-            Arg.Is<string>(s => s.Contains("Invalid action")),
+            Arg.Is<string>(s => s!.Contains("Invalid action")),
             replyMarkup: null,
             cancellationToken: Arg.Any<CancellationToken>());
     }
@@ -304,7 +304,7 @@ public class ReportCallbackServiceTests
 
         await _mockDmService.Received(1).EditDmTextAsync(
             TestDmChatId, TestDmMessageId,
-            Arg.Is<string>(s => s.Contains("Invalid action")),
+            Arg.Is<string>(s => s!.Contains("Invalid action")),
             replyMarkup: null,
             cancellationToken: Arg.Any<CancellationToken>());
     }
@@ -363,7 +363,7 @@ public class ReportCallbackServiceTests
 
         await _mockDmService.Received(1).EditDmTextAsync(
             TestDmChatId, TestDmMessageId,
-            Arg.Is<string>(s => s.Contains("Invalid action")),
+            Arg.Is<string>(s => s!.Contains("Invalid action")),
             replyMarkup: null,
             cancellationToken: Arg.Any<CancellationToken>());
     }
@@ -422,7 +422,7 @@ public class ReportCallbackServiceTests
 
         await _mockDmService.Received(1).EditDmTextAsync(
             TestDmChatId, TestDmMessageId,
-            Arg.Is<string>(s => s.Contains("Invalid action")),
+            Arg.Is<string>(s => s!.Contains("Invalid action")),
             replyMarkup: null,
             cancellationToken: Arg.Any<CancellationToken>());
     }
@@ -446,7 +446,7 @@ public class ReportCallbackServiceTests
 
         await _mockDmService.Received(1).EditDmTextAsync(
             TestDmChatId, TestDmMessageId,
-            Arg.Is<string>(s => s.Contains("Original report text") && s.Contains("Spam confirmed")),
+            Arg.Is<string>(s => s!.Contains("Original report text") && s.Contains("Spam confirmed")),
             replyMarkup: null,
             cancellationToken: Arg.Any<CancellationToken>());
     }
@@ -467,7 +467,7 @@ public class ReportCallbackServiceTests
 
         await _mockDmService.Received(1).EditDmCaptionAsync(
             TestDmChatId, TestDmMessageId,
-            Arg.Is<string>(s => s.Contains("Photo caption") && s.Contains("User banned")),
+            Arg.Is<string>(s => s!.Contains("Photo caption") && s.Contains("User banned")),
             replyMarkup: null,
             cancellationToken: Arg.Any<CancellationToken>());
     }
@@ -488,7 +488,7 @@ public class ReportCallbackServiceTests
 
         await _mockDmService.Received(1).EditDmCaptionAsync(
             TestDmChatId, TestDmMessageId,
-            Arg.Is<string>(s => s.Contains("Video caption") && s.Contains("User banned")),
+            Arg.Is<string>(s => s!.Contains("Video caption") && s.Contains("User banned")),
             replyMarkup: null,
             cancellationToken: Arg.Any<CancellationToken>());
     }
@@ -531,11 +531,12 @@ public class ReportCallbackServiceTests
                 Arg.Any<CancellationToken>())
             .ThrowsAsync(new Exception("DM edit failed"));
 
+        // Should complete without throwing
         await _service.HandleCallbackAsync(CreateCallbackQuery(data: $"rev:{TestContextId}:0"));
 
-        // Should complete without throwing
-        await _mockCallbackContextRepo.Received(1)
-            .DeleteAsync(TestContextId, Arg.Any<CancellationToken>());
+        // Action should still have been routed despite the DM failure
+        await _mockReportActionsService.Received(1)
+            .HandleContentSpamAsync(TestReportId, Arg.Any<Actor>(), Arg.Any<CancellationToken>());
     }
 
     #endregion
@@ -543,16 +544,19 @@ public class ReportCallbackServiceTests
     #region Context Cleanup Tests
 
     [Test]
-    public async Task HandleCallbackAsync_Success_DeletesCallbackContext()
+    public async Task HandleCallbackAsync_DoesNotDeleteContextById_AfterSuccessfulAction()
     {
+        // Orphan-based cleanup handles callback context lifecycle - do not eagerly
+        // delete after a successful action (avoids a race where another admin is
+        // mid-click on the same context ID).
         SetupContext(ReportType.ContentReport);
         _mockReportActionsService.HandleContentSpamAsync(TestReportId, Arg.Any<Actor>(), Arg.Any<CancellationToken>())
             .Returns(new ReviewActionResult(true, "Done"));
 
         await _service.HandleCallbackAsync(CreateCallbackQuery(data: $"rev:{TestContextId}:0"));
 
-        await _mockCallbackContextRepo.Received(1)
-            .DeleteAsync(TestContextId, Arg.Any<CancellationToken>());
+        await _mockCallbackContextRepo.DidNotReceive()
+            .DeleteAsync(Arg.Any<long>(), Arg.Any<CancellationToken>());
     }
 
     #endregion
@@ -572,7 +576,7 @@ public class ReportCallbackServiceTests
 
         await _mockReportActionsService.Received(1).HandleContentSpamAsync(
             TestReportId,
-            Arg.Is<Actor>(a => a.TelegramUserId == 99999),
+            Arg.Is<Actor>(a => a!.TelegramUserId == 99999),
             Arg.Any<CancellationToken>());
     }
 

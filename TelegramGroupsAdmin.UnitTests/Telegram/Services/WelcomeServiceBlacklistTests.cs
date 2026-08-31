@@ -3,6 +3,7 @@ using NSubstitute;
 using global::Telegram.Bot.Types;
 using global::Telegram.Bot.Types.Enums;
 using global::Telegram.Bot.Types.ReplyMarkups;
+using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Models.Welcome;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
@@ -13,9 +14,11 @@ using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
+using TelegramGroupsAdmin.Telegram.Services.Moderation.Handlers;
 using TelegramGroupsAdmin.Telegram.Services.UserApi;
 using TelegramGroupsAdmin.Telegram.Metrics;
 using TelegramGroupsAdmin.Telegram.Services.Welcome;
+using TelegramGroupsAdmin.Configuration.Services;
 
 namespace TelegramGroupsAdmin.UnitTests.Telegram.Services;
 
@@ -48,10 +51,12 @@ public class WelcomeServiceBlacklistTests
     private IBotModerationService _moderationService = null!;
     private IJobScheduler _jobScheduler = null!;
     private ICasCheckService _casCheckService = null!;
-    private IProfileScanService _profileScanService = null!;
     private ITelegramSessionManager _sessionManager = null!;
+    private IProfileScanGate _profileScanGate = null!;
     private IWelcomeAdmissionHandler _admissionHandler = null!;
     private IUsernameBlacklistService _usernameBlacklistService = null!;
+    private IWelcomeBypassResolver _bypassResolver = null!;
+    private IAuditHandler _auditHandler = null!;
 
     // TelegramPhotoService is concrete — built with mocked sub-dependencies.
     private TelegramPhotoService _photoService = null!;
@@ -105,10 +110,12 @@ public class WelcomeServiceBlacklistTests
         _moderationService = Substitute.For<IBotModerationService>();
         _jobScheduler = Substitute.For<IJobScheduler>();
         _casCheckService = Substitute.For<ICasCheckService>();
-        _profileScanService = Substitute.For<IProfileScanService>();
         _sessionManager = Substitute.For<ITelegramSessionManager>();
+        _profileScanGate = Substitute.For<IProfileScanGate>();
         _admissionHandler = Substitute.For<IWelcomeAdmissionHandler>();
         _usernameBlacklistService = Substitute.For<IUsernameBlacklistService>();
+        _bypassResolver = Substitute.For<IWelcomeBypassResolver>();
+        _auditHandler = Substitute.For<IAuditHandler>();
 
         // Build TelegramPhotoService with mocked sub-dependencies so it never touches the real
         // file system. GetUserPhotoWithMetadataAsync calls IBotMediaService, which is mocked to
@@ -127,7 +134,7 @@ public class WelcomeServiceBlacklistTests
 
         // Config always returns WelcomeConfig.Default (enabled, ChatAcceptDeny mode)
         _configService
-            .GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, Arg.Any<long>())
+            .GetEffectiveWelcomeAsync(Arg.Any<long>())
             .Returns(WelcomeConfig.Default);
 
         // User is a regular member (not admin) by default
@@ -138,8 +145,7 @@ public class WelcomeServiceBlacklistTests
         // User exists and is not banned
         _telegramUserRepository
             .GetOrCreateAsync(
-                Arg.Any<long>(), Arg.Any<string?>(), Arg.Any<string?>(),
-                Arg.Any<string?>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
+                Arg.Any<UserIdentity>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
             .Returns(NonBannedTelegramUser);
 
         // Bot protection allows bots by default
@@ -162,11 +168,20 @@ public class WelcomeServiceBlacklistTests
             .BanUserAsync(Arg.Any<BanIntent>(), Arg.Any<CancellationToken>())
             .Returns(new ModerationResult { Success = true });
 
-        // SendAndSaveMessageAsync returns a minimal Message so verifyingMessageId is set
+        // SendAndSaveMessageAsync returns a minimal Message so verifyingMessageId is set (string overload)
         _messageService
             .SendAndSaveMessageAsync(
                 Arg.Any<long>(), Arg.Any<string>(),
                 Arg.Any<ParseMode?>(),
+                Arg.Any<ReplyParameters?>(),
+                Arg.Any<InlineKeyboardMarkup?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new Message { Id = 42, Chat = new Chat { Id = TestChatId } });
+
+        // SendAndSaveMessageAsync returns a minimal Message so verifyingMessageId is set (entity overload)
+        _messageService
+            .SendAndSaveMessageAsync(
+                Arg.Any<long>(), Arg.Any<TelegramMessage>(),
                 Arg.Any<ReplyParameters?>(),
                 Arg.Any<InlineKeyboardMarkup?>(),
                 Arg.Any<CancellationToken>())
@@ -184,7 +199,7 @@ public class WelcomeServiceBlacklistTests
 
         // CAS returns not banned by default
         _casCheckService
-            .CheckUserAsync(Arg.Any<long>(), Arg.Any<CasConfig>(), Arg.Any<CancellationToken>())
+            .CheckUserAsync(Arg.Any<UserIdentity>(), Arg.Any<CasConfig>(), Arg.Any<CancellationToken>())
             .Returns(new CasCheckResult(IsBanned: false, Reason: null));
 
         _sut = new WelcomeService(
@@ -203,9 +218,10 @@ public class WelcomeServiceBlacklistTests
             _casCheckService,
             _usernameBlacklistService,
             _photoService,
-            _profileScanService,
-            _sessionManager,
+            _profileScanGate,
             _admissionHandler,
+            _bypassResolver,
+            _auditHandler,
             new WelcomeMetrics(),
             new ChatMetrics(Substitute.For<IChatCache>()),
             NullLogger<WelcomeService>.Instance);
@@ -283,7 +299,6 @@ public class WelcomeServiceBlacklistTests
             MatchType: BlacklistMatchType.Exact,
             Enabled: true,
             CreatedAt: DateTimeOffset.UtcNow,
-            CreatedBy: Actor.FromSystem("test"),
             Notes: null);
 
         _usernameBlacklistService
@@ -298,14 +313,14 @@ public class WelcomeServiceBlacklistTests
         // Assert — BanUserAsync must be called with reason containing the pattern and correct executor
         await _moderationService.Received(1).BanUserAsync(
             Arg.Is<BanIntent>(b =>
-                b.User.Id == TestUserId &&
+                b!.User.Id == TestUserId &&
                 b.Reason.Contains("Scarlett Lux") &&
                 b.Executor == Actor.UsernameBlacklist),
             Arg.Any<CancellationToken>());
 
         // Early-exit: CAS check must NOT be called (short-circuited by blacklist)
         await _casCheckService.DidNotReceive().CheckUserAsync(
-            Arg.Any<long>(),
+            Arg.Any<UserIdentity>(),
             Arg.Any<CasConfig>(),
             Arg.Any<CancellationToken>());
     }
@@ -323,7 +338,7 @@ public class WelcomeServiceBlacklistTests
             .Returns((UsernameBlacklistEntry?)null);
 
         _casCheckService
-            .CheckUserAsync(Arg.Any<long>(), Arg.Any<CasConfig>(), Arg.Any<CancellationToken>())
+            .CheckUserAsync(Arg.Any<UserIdentity>(), Arg.Any<CasConfig>(), Arg.Any<CancellationToken>())
             .Returns(new CasCheckResult(IsBanned: false, Reason: null));
 
         var update = CreateJoinUpdate();
@@ -337,7 +352,7 @@ public class WelcomeServiceBlacklistTests
 
         // CAS was called (blacklist didn't short-circuit)
         await _casCheckService.Received(1).CheckUserAsync(
-            Arg.Any<long>(),
+            Arg.Any<UserIdentity>(),
             Arg.Any<CasConfig>(),
             Arg.Any<CancellationToken>());
 
@@ -356,8 +371,7 @@ public class WelcomeServiceBlacklistTests
         // Arrange — repository returns a trusted user
         _telegramUserRepository
             .GetOrCreateAsync(
-                Arg.Any<long>(), Arg.Any<string?>(), Arg.Any<string?>(),
-                Arg.Any<string?>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
+                Arg.Any<UserIdentity>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
             .Returns(TrustedTelegramUser);
 
         var update = CreateJoinUpdate();
@@ -391,7 +405,7 @@ public class WelcomeServiceBlacklistTests
         };
 
         _configService
-            .GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, Arg.Any<long>())
+            .GetEffectiveWelcomeAsync(Arg.Any<long>())
             .Returns(configWithBlacklistDisabled);
 
         var update = CreateJoinUpdate();

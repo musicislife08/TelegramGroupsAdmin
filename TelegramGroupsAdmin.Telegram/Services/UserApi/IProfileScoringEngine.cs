@@ -1,4 +1,4 @@
-using TelegramGroupsAdmin.Core.Services.AI;
+using TelegramGroupsAdmin.AI.Services;
 
 namespace TelegramGroupsAdmin.Telegram.Services.UserApi;
 

@@ -4,7 +4,7 @@ using TelegramGroupsAdmin.Configuration.Models;
 using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.Core.Extensions;
-using TelegramGroupsAdmin.Core.Services.AI;
+using TelegramGroupsAdmin.AI.Services;
 
 namespace TelegramGroupsAdmin.Services.PromptBuilder;
 

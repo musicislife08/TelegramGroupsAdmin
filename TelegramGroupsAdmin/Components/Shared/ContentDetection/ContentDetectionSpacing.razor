@@ -67,7 +67,7 @@
         try
         {
             // Always load global config for comparison/fallback
-            _globalConfig = await ConfigService.GetAsync<ContentDetectionConfig>(ConfigType.ContentDetection, 0)
+            _globalConfig = await ConfigService.GetContentDetectionAsync(0)
                             ?? new ContentDetectionConfig();
 
             if (IsGlobalView)
@@ -78,7 +78,7 @@
             else
             {
                 // Load chat-specific config (which may have UseGlobal flags set)
-                var chatConfig = await ConfigService.GetAsync<ContentDetectionConfig>(ConfigType.ContentDetection, Chat!.Id);
+                var chatConfig = await ConfigService.GetContentDetectionAsync(Chat!.Id);
                 _config = chatConfig ?? new ContentDetectionConfig();
             }
         }

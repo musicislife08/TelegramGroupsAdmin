@@ -1,32 +1,33 @@
+using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Utilities;
+
 namespace TelegramGroupsAdmin.Telegram.Services.Welcome;
 
 /// <summary>
-/// Pure static functions for building exam message text.
-/// Ensures preview text matches actual messages sent to users.
+/// Pure static functions for building exam messages as entity-based <see cref="TelegramMessage"/>s.
+/// The user reference is a clickable <c>text_mention</c> (works without a username), and the same
+/// builder output drives both the live DM and the config-editor preview, so the preview matches
+/// exactly what is sent.
 /// </summary>
 public static class ExamMessageBuilder
 {
     /// <summary>
-    /// Formats the open-ended question message sent to users in DM.
+    /// Builds the open-ended question message sent to users in DM.
     /// </summary>
-    /// <param name="username">User's formatted mention</param>
-    /// <param name="question">The open-ended question text</param>
-    /// <returns>Formatted message text</returns>
-    public static string FormatOpenEndedQuestion(string username, string question)
-    {
-        return $"📝 {username}, please answer this question:\n\n{question}\n\nSend your answer below.";
-    }
+    public static TelegramMessage FormatOpenEndedQuestion(UserIdentity user, string question)
+        => new TelegramMessageBuilder()
+            .Text("📝 ")
+            .Mention(user)
+            .Text($", please answer this question:\n\n{question}\n\nSend your answer below.")
+            .Build();
 
     /// <summary>
-    /// Formats the MC question message sent to users in DM.
+    /// Builds the MC question message sent to users in DM.
     /// </summary>
-    /// <param name="username">User's formatted mention</param>
-    /// <param name="questionNumber">Current question number (1-based)</param>
-    /// <param name="totalQuestions">Total number of questions</param>
-    /// <param name="questionText">The question text</param>
-    /// <returns>Formatted message text</returns>
-    public static string FormatMcQuestion(string username, int questionNumber, int totalQuestions, string questionText)
-    {
-        return $"📝 {username}, Question {questionNumber}/{totalQuestions}:\n\n{questionText}";
-    }
+    public static TelegramMessage FormatMcQuestion(UserIdentity user, int questionNumber, int totalQuestions, string questionText)
+        => new TelegramMessageBuilder()
+            .Text("📝 ")
+            .Mention(user)
+            .Text($", Question {questionNumber}/{totalQuestions}:\n\n{questionText}")
+            .Build();
 }

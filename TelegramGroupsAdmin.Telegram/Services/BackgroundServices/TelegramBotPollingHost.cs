@@ -10,6 +10,7 @@ using TelegramGroupsAdmin.Configuration.Models;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Telegram.Services.BotCommands;
 using TelegramGroupsAdmin.Telegram.Constants;
+using TelegramGroupsAdmin.Configuration.Services;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 
@@ -89,8 +90,7 @@ public class TelegramBotPollingHost(
         using (var scope = scopeFactory.CreateScope())
         {
             var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
-            // Load global bot config (chat_id = 0 for global config)
-            botConfig = await configService.GetAsync<TelegramBotConfig>(ConfigType.TelegramBot, 0)
+            botConfig = await configService.GetTelegramBotAsync(stoppingToken)
                        ?? TelegramBotConfig.Default;
         }
 
@@ -249,7 +249,7 @@ public class TelegramBotPollingHost(
         {
             // Register commands with different scopes based on permission levels
 
-            // Default scope - commands for all users (Admin level 0)
+            // Default scope - public commands for all users (Member tier)
             var defaultCommands = commandRouter.GetAvailableCommands(permissionLevel: CommandConstants.DefaultCommandPermissionLevel)
                 .Select(cmd => new BotCommand
                 {
@@ -263,7 +263,7 @@ public class TelegramBotPollingHost(
                 scope: new BotCommandScopeDefault(),
                 cancellationToken: cancellationToken);
 
-            // Admin scope - commands for group admins (Admin level 1+)
+            // Admin scope - adds moderation commands for group admins (Admin tier)
             var adminCommands = commandRouter.GetAvailableCommands(permissionLevel: CommandConstants.AdminCommandPermissionLevel)
                 .Select(cmd => new BotCommand
                 {

@@ -39,23 +39,25 @@ public record Actor
     // ============================================================================
 
     // Common system actors (eliminates magic strings)
-    public static readonly Actor AutoDetection = FromSystem("auto_detection");
-    public static readonly Actor BotProtection = FromSystem("bot_protection");
-    public static readonly Actor FileScanner = FromSystem("file_scanner");
-    public static readonly Actor AutoTrust = FromSystem("auto_trust");
-    public static readonly Actor Impersonation = FromSystem("impersonation");
-    public static readonly Actor AutoBan = FromSystem("auto_ban");
-    public static readonly Actor Cas = FromSystem("cas"); // CAS (Combot Anti-Spam) user join check
-    public static readonly Actor LanguageWarning = FromSystem("language_warning"); // Phase 4.21
-    public static readonly Actor SystemSeed = FromSystem("system_seed"); // Initial data seeding
-    public static readonly Actor ExamFlow = FromSystem("exam_flow"); // Entrance exam auto-pass
-    public static readonly Actor WelcomeFlow = FromSystem("welcome_flow"); // Welcome/rules flow completion
-    public static readonly Actor TempbanExpiry = FromSystem("tempban_expiry"); // Scheduled tempban expiry
-    public static readonly Actor Unknown = FromSystem("unknown");
-    public static readonly Actor ProfileScan = FromSystem("profile_scan");
-    public static readonly Actor UsernameBlacklist = FromSystem("username_blacklist");
-    public static readonly Actor Bootstrap = FromSystem("bootstrap");
-    public static readonly Actor ProfileDiffDetection = FromSystem("profile_diff_detection");
+    public static readonly Actor AutoDetection = FromSystem(SystemActorIds.AutoDetection);
+    public static readonly Actor BotProtection = FromSystem(SystemActorIds.BotProtection);
+    public static readonly Actor FileScanner = FromSystem(SystemActorIds.FileScanner);
+    public static readonly Actor AutoTrust = FromSystem(SystemActorIds.AutoTrust);
+    public static readonly Actor Impersonation = FromSystem(SystemActorIds.Impersonation);
+    public static readonly Actor AutoBan = FromSystem(SystemActorIds.AutoBan);
+    public static readonly Actor Cas = FromSystem(SystemActorIds.Cas);
+    public static readonly Actor LanguageWarning = FromSystem(SystemActorIds.LanguageWarning);
+    public static readonly Actor SystemSeed = FromSystem(SystemActorIds.SystemSeed);
+    public static readonly Actor ExamFlow = FromSystem(SystemActorIds.ExamFlow);
+    public static readonly Actor WelcomeFlow = FromSystem(SystemActorIds.WelcomeFlow);
+    public static readonly Actor TempbanExpiry = FromSystem(SystemActorIds.TempbanExpiry);
+    public static readonly Actor Unknown = FromSystem(SystemActorIds.Unknown);
+    public static readonly Actor ProfileScan = FromSystem(SystemActorIds.ProfileScan);
+    public static readonly Actor UsernameBlacklist = FromSystem(SystemActorIds.UsernameBlacklist);
+    public static readonly Actor Bootstrap = FromSystem(SystemActorIds.Bootstrap);
+    public static readonly Actor ProfileDiffDetection = FromSystem(SystemActorIds.ProfileDiffDetection);
+    public static readonly Actor WelcomeBypass = FromSystem(SystemActorIds.WelcomeBypass);
+    public static readonly Actor BotChatService = FromSystem(SystemActorIds.BotChatService);
 
     /// <summary>
     /// Create actor from web user
@@ -96,25 +98,27 @@ public record Actor
     {
         var displayName = systemIdentifier switch
         {
-            "auto_detection" => "Auto-Detection",
-            "bot_protection" => "Bot Protection",
-            "file_scanner" => "File Scanner",
-            "auto_trust" => "Auto-Trust",
-            "impersonation" => "Impersonation Detection",
-            "auto_ban" => "Auto-Ban",
-            "cas" => "CAS Anti-Spam",
-            "language_warning" => "Language Warning",
-            "system_seed" => "System Seed",
-            "initial_seed" => "Initial Seed",
-            "web_admin" => "Web Admin (Legacy)",
-            "exam_flow" => "Exam Flow",
-            "welcome_flow" => "Welcome Flow",
-            "tempban_expiry" => "Tempban Expiry",
-            "unknown" => "Unknown",
-            "profile_scan" => "Profile Scan",
-            "username_blacklist" => "Username Blacklist",
-            "bootstrap" => "CLI Bootstrap",
-            "profile_diff_detection" => "Profile Change Detection",
+            SystemActorIds.AutoDetection => "Auto-Detection",
+            SystemActorIds.BotProtection => "Bot Protection",
+            SystemActorIds.FileScanner => "File Scanner",
+            SystemActorIds.AutoTrust => "Auto-Trust",
+            SystemActorIds.Impersonation => "Impersonation Detection",
+            SystemActorIds.AutoBan => "Auto-Ban",
+            SystemActorIds.Cas => "CAS Anti-Spam",
+            SystemActorIds.LanguageWarning => "Language Warning",
+            SystemActorIds.SystemSeed => "System Seed",
+            SystemActorIds.InitialSeed => "Initial Seed",
+            SystemActorIds.WebAdmin => "Web Admin (Legacy)",
+            SystemActorIds.ExamFlow => "Exam Flow",
+            SystemActorIds.WelcomeFlow => "Welcome Flow",
+            SystemActorIds.TempbanExpiry => "Tempban Expiry",
+            SystemActorIds.Unknown => "Unknown",
+            SystemActorIds.ProfileScan => "Profile Scan",
+            SystemActorIds.UsernameBlacklist => "Username Blacklist",
+            SystemActorIds.Bootstrap => "CLI Bootstrap",
+            SystemActorIds.ProfileDiffDetection => "Profile Change Detection",
+            SystemActorIds.WelcomeBypass => "Welcome Bypass",
+            SystemActorIds.BotChatService => "Bot Chat Service",
             _ => systemIdentifier
         };
 

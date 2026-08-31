@@ -1,8 +1,10 @@
+using TelegramGroupsAdmin.Core.Models;
+
 namespace TelegramGroupsAdmin.Services.Notifications;
 
 /// <summary>
 /// Fluent builder for constructing immutable NotificationPayload records.
-/// Call sites use WithText/WithField/WithSection/WithFieldIf for clean, readable payload construction.
+/// Each With* method adds content; conditional logic lives at the call site.
 /// </summary>
 internal sealed class NotificationPayloadBuilder
 {
@@ -20,15 +22,15 @@ internal sealed class NotificationPayloadBuilder
         return this;
     }
 
-    public NotificationPayloadBuilder WithField(string label, string value, long? telegramUserId = null)
+    public NotificationPayloadBuilder WithField(string label, string value)
     {
-        _blocks.Add(new FieldList([new(label, value, telegramUserId)]));
+        _blocks.Add(new FieldList([new(label, value)]));
         return this;
     }
 
-    public NotificationPayloadBuilder WithFieldIf(bool condition, string label, string? value, long? telegramUserId = null)
+    public NotificationPayloadBuilder WithField(string label, UserIdentity user)
     {
-        if (condition && value != null) WithField(label, value, telegramUserId);
+        _blocks.Add(new FieldList([new(label, user.DisplayName, user)]));
         return this;
     }
 
@@ -40,13 +42,13 @@ internal sealed class NotificationPayloadBuilder
         return this;
     }
 
-    public NotificationPayloadBuilder WithPhoto(string? path)
+    public NotificationPayloadBuilder WithPhoto(string path)
     {
         _photoPath = path;
         return this;
     }
 
-    public NotificationPayloadBuilder WithVideo(string? path)
+    public NotificationPayloadBuilder WithVideo(string path)
     {
         _videoPath = path;
         return this;

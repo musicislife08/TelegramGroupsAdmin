@@ -12,6 +12,7 @@ using TelegramGroupsAdmin.Data.Models;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using UiModels = TelegramGroupsAdmin.Telegram.Models;
+using TelegramGroupsAdmin.Configuration.Services;
 
 namespace TelegramGroupsAdmin.UnitTests.Telegram.Services;
 
@@ -52,7 +53,7 @@ public class ImpersonationDetectionServiceTests
         _mockConfigService = Substitute.For<IConfigService>();
 
         // Default config: check first 5 messages
-        _mockConfigService.GetEffectiveAsync<ContentDetectionConfig>(ConfigType.ContentDetection, Arg.Any<long>())
+        _mockConfigService.GetEffectiveContentDetectionAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(new ContentDetectionConfig { FirstMessagesCount = 5 });
 
         // Note: Full service instantiation requires concrete dependencies that can't be mocked.

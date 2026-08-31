@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using TelegramGroupsAdmin.Configuration.Models;
-using TelegramGroupsAdmin.Core.Services.AI;
+using TelegramGroupsAdmin.AI.Services;
 
 namespace TelegramGroupsAdmin.ComponentTests.Services.AI;
 

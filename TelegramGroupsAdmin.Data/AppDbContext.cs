@@ -376,11 +376,13 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 "CK_user_actions_exclusive_actor",
                 "(web_user_id IS NOT NULL)::int + (telegram_user_id IS NOT NULL)::int + (system_identifier IS NOT NULL)::int = 1"));
 
-        // UserActions: message_id and chat_id must be both null or both non-null
+        // UserActions: reject orphaned message references (a message_id requires a chat_id).
+        // A chat_id without a message_id is allowed for chat-scoped, message-less audit events
+        // (e.g. welcome bypass, kick, restore permissions).
         modelBuilder.Entity<UserActionRecordDto>()
             .ToTable(t => t.HasCheckConstraint(
                 "CK_user_actions_message_chat_null_consistency",
-                "(message_id IS NULL) = (chat_id IS NULL)"));
+                "(message_id IS NULL) OR (chat_id IS NOT NULL)"));
 
         // DetectionResults: Exactly one actor must be non-null
         modelBuilder.Entity<DetectionResultRecordDto>()
@@ -532,20 +534,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.Entity<UsernameBlacklistEntryDto>(entity =>
         {
             entity.Property(e => e.MatchType).HasDefaultValue(0);
-
-            entity.HasOne<UserRecordDto>()
-                .WithMany()
-                .HasForeignKey(e => e.WebUserId)
-                .OnDelete(DeleteBehavior.SetNull);
-
-            entity.HasOne<TelegramUserDto>()
-                .WithMany()
-                .HasForeignKey(e => e.TelegramUserId)
-                .OnDelete(DeleteBehavior.SetNull);
-
-            entity.ToTable(t => t.HasCheckConstraint(
-                "CK_username_blacklist_exclusive_actor",
-                "(web_user_id IS NOT NULL)::int + (telegram_user_id IS NOT NULL)::int + (system_identifier IS NOT NULL)::int = 1"));
 
             // Prevent duplicate patterns (case-insensitive, only enabled entries)
             entity.HasIndex(e => e.Pattern)
@@ -838,24 +826,12 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .Property(i => i.Status)
             .HasConversion<int>();
 
-        modelBuilder.Entity<InviteRecordDto>()
-            .Property(i => i.PermissionLevel)
-            .HasConversion<int>();
-
-        modelBuilder.Entity<UserRecordDto>()
-            .Property(u => u.PermissionLevel)
-            .HasConversion<int>();
-
         modelBuilder.Entity<ManagedChatRecordDto>()
             .Property(mc => mc.BotStatus)
             .HasConversion<int>();
 
         modelBuilder.Entity<ManagedChatRecordDto>()
             .Property(mc => mc.ChatType)
-            .HasConversion<int>();
-
-        modelBuilder.Entity<UserActionRecordDto>()
-            .Property(ua => ua.ActionType)
             .HasConversion<int>();
 
         modelBuilder.Entity<ReportDto>()
@@ -968,6 +944,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.Entity<ProfileScanResultDto>()
             .Property(p => p.AiScore)
             .HasPrecision(3, 1);
+        modelBuilder.Entity<ProfileScanResultDto>()
+            .Property(p => p.AiExplicitDisplayText)
+            .HasDefaultValue(false);
 
         // Users (web users): Set database defaults for columns added in later migrations
         modelBuilder.Entity<UserRecordDto>()

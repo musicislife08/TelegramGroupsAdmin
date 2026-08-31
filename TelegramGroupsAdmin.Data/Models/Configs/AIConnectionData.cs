@@ -2,7 +2,7 @@ namespace TelegramGroupsAdmin.Data.Models.Configs;
 
 /// <summary>
 /// Data layer representation of AIConnection for EF Core JSON column mapping.
-/// Note: AIProviderType enum stored as int (0=OpenAI, 1=AzureOpenAI, 2=LocalOpenAI)
+/// Note: AIProviderType enum stored as int (0=OpenAI, 1=AzureOpenAI, 2=OpenAICompatible, 3=OpenRouter, 4=Anthropic)
 /// </summary>
 public class AIConnectionData
 {
@@ -25,11 +25,6 @@ public class AIConnectionData
     /// Azure OpenAI endpoint URL
     /// </summary>
     public string? AzureEndpoint { get; set; }
-
-    /// <summary>
-    /// Azure OpenAI API version
-    /// </summary>
-    public string? AzureApiVersion { get; set; } = "2024-10-21";
 
     /// <summary>
     /// Local endpoint URL for OpenAI-compatible providers

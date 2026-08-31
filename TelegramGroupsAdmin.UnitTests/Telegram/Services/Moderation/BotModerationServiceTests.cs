@@ -15,6 +15,7 @@ using TelegramGroupsAdmin.Telegram.Services.Moderation;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions.Results;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Handlers;
+using TelegramGroupsAdmin.Configuration.Services;
 
 namespace TelegramGroupsAdmin.UnitTests.Telegram.Services.Moderation;
 
@@ -32,6 +33,8 @@ public class BotModerationServiceTests
     private IWarnHandler _mockWarnHandler = null!;
     private IBotModerationMessageHandler _mockMessageHandler = null!;
     private IBotRestrictHandler _mockRestrictHandler = null!;
+    private IReportCleanupHandler _mockReportCleanupHandler = null!;
+    private IWelcomeCleanupHandler _mockWelcomeCleanupHandler = null!;
     private IAuditHandler _mockAuditHandler = null!;
     private INotificationHandler _mockNotificationHandler = null!;
     private ITrainingHandler _mockTrainingHandler = null!;
@@ -51,6 +54,8 @@ public class BotModerationServiceTests
         _mockWarnHandler = Substitute.For<IWarnHandler>();
         _mockMessageHandler = Substitute.For<IBotModerationMessageHandler>();
         _mockRestrictHandler = Substitute.For<IBotRestrictHandler>();
+        _mockReportCleanupHandler = Substitute.For<IReportCleanupHandler>();
+        _mockWelcomeCleanupHandler = Substitute.For<IWelcomeCleanupHandler>();
         _mockAuditHandler = Substitute.For<IAuditHandler>();
         _mockNotificationHandler = Substitute.For<INotificationHandler>();
         _mockTrainingHandler = Substitute.For<ITrainingHandler>();
@@ -67,6 +72,8 @@ public class BotModerationServiceTests
             _mockWarnHandler,
             _mockMessageHandler,
             _mockRestrictHandler,
+            _mockReportCleanupHandler,
+            _mockWelcomeCleanupHandler,
             _mockAuditHandler,
             _mockNotificationHandler,
             _mockTrainingHandler,
@@ -207,18 +214,18 @@ public class BotModerationServiceTests
 
         // Verify business rule: bans always revoke trust
         await _mockTrustHandler.Received(1).UntrustAsync(
-            Arg.Is<UserIdentity>(u => u.Id == userId),
+            Arg.Is<UserIdentity>(u => u!.Id == userId),
             executor,
             Arg.Is<string>(s => s!.Contains("ban")),
             Arg.Any<CancellationToken>());
 
         // Verify audit was logged
         await _mockAuditHandler.Received(1).LogBanAsync(
-            Arg.Is<UserIdentity>(u => u.Id == userId), executor, Arg.Any<string>(), Arg.Any<CancellationToken>());
+            Arg.Is<UserIdentity>(u => u!.Id == userId), executor, Arg.Any<string>(), Arg.Any<CancellationToken>());
 
         // Verify admins were notified
         await _mockNotificationHandler.Received(1).NotifyAdminsBanAsync(
-            Arg.Is<UserIdentity>(u => u.Id == userId), executor, Arg.Any<string>(), Arg.Any<ChatIdentity?>(), Arg.Any<CancellationToken>());
+            Arg.Is<UserIdentity>(u => u!.Id == userId), executor, Arg.Any<string>(), Arg.Any<ChatIdentity?>(), Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -265,8 +272,7 @@ public class BotModerationServiceTests
         _mockWarnHandler.WarnAsync(Arg.Any<UserIdentity>(), executor, Arg.Any<string>(), Arg.Any<long>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns(WarnResult.Succeeded(warningCount: 2)); // Below threshold
 
-        _mockConfigService.GetEffectiveAsync<WarningSystemConfig>(
-                ConfigType.Moderation, Arg.Any<long>())
+        _mockConfigService.GetEffectiveWarningSystemAsync(Arg.Any<long>())
             .Returns(new WarningSystemConfig { AutoBanEnabled = true, AutoBanThreshold = 3 });
 
         // Act
@@ -306,8 +312,7 @@ public class BotModerationServiceTests
         _mockWarnHandler.WarnAsync(Arg.Any<UserIdentity>(), executor, Arg.Any<string>(), Arg.Any<long>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns(WarnResult.Succeeded(warningCount: 3)); // Reaches threshold
 
-        _mockConfigService.GetEffectiveAsync<WarningSystemConfig>(
-                ConfigType.Moderation, Arg.Any<long>())
+        _mockConfigService.GetEffectiveWarningSystemAsync(Arg.Any<long>())
             .Returns(new WarningSystemConfig { AutoBanEnabled = true, AutoBanThreshold = 3 });
 
         _mockBanHandler.BanAsync(Arg.Any<UserIdentity>(), Arg.Any<Actor>(), Arg.Any<string>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
@@ -337,7 +342,7 @@ public class BotModerationServiceTests
 
         // Verify auto-ban was triggered with Actor.AutoBan
         await _mockBanHandler.Received(1).BanAsync(
-            Arg.Is<UserIdentity>(u => u.Id == userId),
+            Arg.Is<UserIdentity>(u => u!.Id == userId),
             Actor.AutoBan,
             Arg.Is<string>(s => s!.Contains("threshold")),
             Arg.Any<int?>(),
@@ -354,8 +359,7 @@ public class BotModerationServiceTests
         _mockWarnHandler.WarnAsync(Arg.Any<UserIdentity>(), executor, Arg.Any<string>(), Arg.Any<long>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns(WarnResult.Succeeded(warningCount: 5)); // Well above threshold
 
-        _mockConfigService.GetEffectiveAsync<WarningSystemConfig>(
-                ConfigType.Moderation, Arg.Any<long>())
+        _mockConfigService.GetEffectiveWarningSystemAsync(Arg.Any<long>())
             .Returns(new WarningSystemConfig { AutoBanEnabled = false, AutoBanThreshold = 3 });
 
         // Act
@@ -390,8 +394,7 @@ public class BotModerationServiceTests
         _mockWarnHandler.WarnAsync(Arg.Any<UserIdentity>(), executor, Arg.Any<string>(), Arg.Any<long>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns(WarnResult.Succeeded(warningCount: 1));
 
-        _mockConfigService.GetEffectiveAsync<WarningSystemConfig>(
-                ConfigType.Moderation, Arg.Any<long>())
+        _mockConfigService.GetEffectiveWarningSystemAsync(Arg.Any<long>())
             .Returns(WarningSystemConfig.Default);
 
         // Act
@@ -409,9 +412,48 @@ public class BotModerationServiceTests
 
         // Verify user was notified about their warning
         await _mockNotificationHandler.Received(1).NotifyUserWarningAsync(
-            Arg.Is<UserIdentity>(u => u.Id == userId),
+            Arg.Is<UserIdentity>(u => u!.Id == userId),
             1, // warning count
             "Spam detected",
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task WarnUserAsync_ReachesThreshold_SendsBanCelebration()
+    {
+        // Arrange — threshold auto-ban now delegates to BanUserAsync with the originating chat,
+        // so it should celebrate the same way CAS/impersonation and kick-escalation bans do.
+        const long userId = 12345L;
+        var executor = Actor.FromSystem("SpamDetection");
+        var chat = ChatIdentity.FromId(TestChatId);
+
+        _mockWarnHandler.WarnAsync(Arg.Any<UserIdentity>(), executor, Arg.Any<string>(), Arg.Any<long>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
+            .Returns(WarnResult.Succeeded(warningCount: 3));
+
+        _mockConfigService.GetEffectiveWarningSystemAsync(Arg.Any<long>())
+            .Returns(new WarningSystemConfig { AutoBanEnabled = true, AutoBanThreshold = 3 });
+
+        _mockBanHandler.BanAsync(Arg.Any<UserIdentity>(), Arg.Any<Actor>(), Arg.Any<string>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
+            .Returns(BanResult.Succeeded(chatsAffected: 5, chatsFailed: 0));
+
+        _mockTrustHandler.UntrustAsync(Arg.Any<UserIdentity>(), Arg.Any<Actor>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(UntrustResult.Succeeded());
+
+        // Act
+        await _orchestrator.WarnUserAsync(
+            new WarnIntent
+            {
+                User = UserIdentity.FromId(userId),
+                Executor = executor,
+                Reason = "Final warning",
+                Chat = chat
+            });
+
+        // Assert — ban celebration should fire because the auto-ban forwards the originating chat
+        await _mockBanCelebrationService.Received(1).SendBanCelebrationAsync(
+            Arg.Is<ChatIdentity>(c => c!.Id == TestChatId),
+            Arg.Is<UserIdentity>(u => u!.Id == userId),
+            Arg.Any<bool>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -468,7 +510,7 @@ public class BotModerationServiceTests
             Arg.Any<ChatIdentity>(), messageId, executor, Arg.Any<CancellationToken>());
 
         await _mockBanHandler.Received(1).BanAsync(
-            Arg.Is<UserIdentity>(u => u.Id == userId), executor, Arg.Any<string>(), Arg.Any<int?>(), Arg.Any<CancellationToken>());
+            Arg.Is<UserIdentity>(u => u!.Id == userId), executor, Arg.Any<string>(), Arg.Any<int?>(), Arg.Any<CancellationToken>());
 
         await _mockTrainingHandler.Received(1).CreateSpamSampleAsync(
             messageId, Arg.Any<ChatIdentity>(), executor, Arg.Any<CancellationToken>());
@@ -587,7 +629,7 @@ public class BotModerationServiceTests
 
         // Verify audit was logged
         await _mockAuditHandler.Received(1).LogTrustAsync(
-            Arg.Is<UserIdentity>(u => u.Id == userId), executor, "Verified user", Arg.Any<CancellationToken>());
+            Arg.Is<UserIdentity>(u => u!.Id == userId), executor, "Verified user", Arg.Any<CancellationToken>());
     }
 
     #endregion
@@ -627,7 +669,7 @@ public class BotModerationServiceTests
 
         // Verify trust was restored
         await _mockTrustHandler.Received(1).TrustAsync(
-            Arg.Is<UserIdentity>(u => u.Id == userId), executor, Arg.Any<string>(), Arg.Any<CancellationToken>());
+            Arg.Is<UserIdentity>(u => u!.Id == userId), executor, Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -696,7 +738,7 @@ public class BotModerationServiceTests
 
         // Verify user was notified about temp ban
         await _mockNotificationHandler.Received(1).NotifyUserTempBanAsync(
-            Arg.Is<UserIdentity>(u => u.Id == userId),
+            Arg.Is<UserIdentity>(u => u!.Id == userId),
             duration,
             Arg.Any<DateTimeOffset>(),
             "Temporary mute for spam",
@@ -771,7 +813,7 @@ public class BotModerationServiceTests
 
         // Verify user was notified even with partial success
         await _mockNotificationHandler.Received(1).NotifyUserTempBanAsync(
-            Arg.Is<UserIdentity>(u => u.Id == userId),
+            Arg.Is<UserIdentity>(u => u!.Id == userId),
             duration,
             Arg.Any<DateTimeOffset>(),
             Arg.Any<string>(),
@@ -1058,8 +1100,7 @@ public class BotModerationServiceTests
         _mockWarnHandler.WarnAsync(Arg.Any<UserIdentity>(), executor, Arg.Any<string>(), Arg.Any<long>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns(WarnResult.Succeeded(warningCount: 1));
 
-        _mockConfigService.GetEffectiveAsync<WarningSystemConfig>(
-                ConfigType.Moderation, Arg.Any<long>())
+        _mockConfigService.GetEffectiveWarningSystemAsync(Arg.Any<long>())
             .Returns(WarningSystemConfig.Default);
 
         _mockNotificationHandler.NotifyUserWarningAsync(Arg.Any<UserIdentity>(), 1, Arg.Any<string>(), Arg.Any<CancellationToken>())
@@ -1097,8 +1138,7 @@ public class BotModerationServiceTests
         _mockWarnHandler.WarnAsync(Arg.Any<UserIdentity>(), executor, Arg.Any<string>(), Arg.Any<long>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns(WarnResult.Succeeded(warningCount: 3)); // Reaches threshold
 
-        _mockConfigService.GetEffectiveAsync<WarningSystemConfig>(
-                ConfigType.Moderation, Arg.Any<long>())
+        _mockConfigService.GetEffectiveWarningSystemAsync(Arg.Any<long>())
             .Returns(new WarningSystemConfig { AutoBanEnabled = true, AutoBanThreshold = 3 });
 
         _mockBanHandler.BanAsync(Arg.Any<UserIdentity>(), Arg.Any<Actor>(), Arg.Any<string>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
@@ -1124,7 +1164,7 @@ public class BotModerationServiceTests
 
         // Verify: Ban was attempted
         await _mockBanHandler.Received(1).BanAsync(
-            Arg.Is<UserIdentity>(u => u.Id == userId), Actor.AutoBan, Arg.Any<string>(), Arg.Any<int?>(), Arg.Any<CancellationToken>());
+            Arg.Is<UserIdentity>(u => u!.Id == userId), Actor.AutoBan, Arg.Any<string>(), Arg.Any<int?>(), Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -1238,7 +1278,7 @@ public class BotModerationServiceTests
 
         // Verify audit record was created
         await _mockAuditHandler.Received(1).LogBanAsync(
-            Arg.Is<UserIdentity>(u => u.Id == 12345), Actor.AutoDetection, "Lazy ban sync", Arg.Any<CancellationToken>());
+            Arg.Is<UserIdentity>(u => u!.Id == 12345), Actor.AutoDetection, "Lazy ban sync", Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -1410,8 +1450,7 @@ public class BotModerationServiceTests
         _mockWarnHandler.WarnAsync(Arg.Any<UserIdentity>(), executor, Arg.Any<string>(), Arg.Any<long>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns(WarnResult.Succeeded(warningCount: 1));
 
-        _mockConfigService.GetEffectiveAsync<WarningSystemConfig>(
-                ConfigType.Moderation, Arg.Any<long>())
+        _mockConfigService.GetEffectiveWarningSystemAsync(Arg.Any<long>())
             .Returns(WarningSystemConfig.Default);
 
         _mockAuditHandler.LogWarnAsync(Arg.Any<UserIdentity>(), executor, Arg.Any<string>(), Arg.Any<CancellationToken>())
@@ -1619,11 +1658,11 @@ public class BotModerationServiceTests
                 Reason = malwareDetails
             });
 
-        // Assert - Report was created with isAutomated=true
+        // Assert - Report was created with the FileScanner system actor
         await _mockReportService.Received(1).CreateReportAsync(
-            Arg.Is<Report>(r => r.MessageId == messageId && r.Chat.Id == chatId),
+            Arg.Is<Report>(r => r!.MessageId == messageId && r.Chat.Id == chatId),
             telegramMessage,
-            true,
+            Arg.Is<Actor>(a => a!.Type == ActorType.System && a.SystemIdentifier == SystemActorIds.FileScanner),
             Arg.Any<CancellationToken>());
     }
 
@@ -1662,7 +1701,7 @@ public class BotModerationServiceTests
         await _mockNotificationService.Received(1).SendMalwareDetectedAsync(
             Arg.Any<ChatIdentity>(),
             Arg.Any<UserIdentity>(),
-            Arg.Is<string>(details => details.Contains(malwareDetails)),
+            Arg.Is<string>(details => details!.Contains(malwareDetails)),
             Arg.Any<CancellationToken>());
     }
 
@@ -1809,8 +1848,8 @@ public class BotModerationServiceTests
 
         // Assert - User notification was sent with all violations
         await _mockNotificationHandler.Received(1).NotifyUserCriticalViolationAsync(
-            Arg.Is<UserIdentity>(u => u.Id == userId),
-            Arg.Is<List<string>>(v => v.Count == 2 && v.Contains("Blocked URL") && v.Contains("Suspicious file")),
+            Arg.Is<UserIdentity>(u => u!.Id == userId),
+            Arg.Is<List<string>>(v => v!.Count == 2 && v.Contains("Blocked URL") && v.Contains("Suspicious file")),
             Arg.Any<CancellationToken>());
     }
 
@@ -1956,7 +1995,7 @@ public class BotModerationServiceTests
         // Arrange
         const long userId = 12345L;
 
-        _mockConfigService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, Arg.Any<long>())
+        _mockConfigService.GetEffectiveWelcomeAsync(Arg.Any<long>())
             .Returns(new WelcomeConfig { MaxKicksBeforeBan = 0 });
 
         _mockBanHandler.KickFromChatAsync(
@@ -1994,7 +2033,7 @@ public class BotModerationServiceTests
         // Arrange — GetEffectiveAsync returns null (no config stored for this chat)
         const long userId = 12345L;
 
-        _mockConfigService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, Arg.Any<long>())
+        _mockConfigService.GetEffectiveWelcomeAsync(Arg.Any<long>())
             .Returns((WelcomeConfig?)null);
 
         _mockBanHandler.KickFromChatAsync(
@@ -2027,7 +2066,7 @@ public class BotModerationServiceTests
         // Arrange — 0 prior kicks → 2^0 = 1 minute (distinguishes from "disabled" which uses DefaultKickDuration)
         const long userId = 12345L;
 
-        _mockConfigService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, Arg.Any<long>())
+        _mockConfigService.GetEffectiveWelcomeAsync(Arg.Any<long>())
             .Returns(new WelcomeConfig { MaxKicksBeforeBan = 3 });
 
         _mockTelegramUserRepository.GetKickCountAsync(userId, Arg.Any<CancellationToken>())
@@ -2070,7 +2109,7 @@ public class BotModerationServiceTests
         // Arrange — 1 prior kick → 2^1 = 2-minute duration
         const long userId = 12345L;
 
-        _mockConfigService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, Arg.Any<long>())
+        _mockConfigService.GetEffectiveWelcomeAsync(Arg.Any<long>())
             .Returns(new WelcomeConfig { MaxKicksBeforeBan = 3 });
 
         _mockTelegramUserRepository.GetKickCountAsync(userId, Arg.Any<CancellationToken>())
@@ -2113,7 +2152,7 @@ public class BotModerationServiceTests
         // Arrange — prior kicks == threshold, so next action is a permanent ban
         const long userId = 12345L;
 
-        _mockConfigService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, Arg.Any<long>())
+        _mockConfigService.GetEffectiveWelcomeAsync(Arg.Any<long>())
             .Returns(new WelcomeConfig { MaxKicksBeforeBan = 3 });
 
         _mockTelegramUserRepository.GetKickCountAsync(userId, Arg.Any<CancellationToken>())
@@ -2142,7 +2181,7 @@ public class BotModerationServiceTests
         Assert.That(result.Success, Is.True);
 
         await _mockBanHandler.Received(1).BanAsync(
-            Arg.Is<UserIdentity>(u => u.Id == userId),
+            Arg.Is<UserIdentity>(u => u!.Id == userId),
             Arg.Any<Actor>(),
             Arg.Any<string?>(),
             Arg.Any<int?>(),
@@ -2159,7 +2198,7 @@ public class BotModerationServiceTests
         // Arrange — prior kicks exceed threshold (e.g. 5 when threshold is 3)
         const long userId = 12345L;
 
-        _mockConfigService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, Arg.Any<long>())
+        _mockConfigService.GetEffectiveWelcomeAsync(Arg.Any<long>())
             .Returns(new WelcomeConfig { MaxKicksBeforeBan = 3 });
 
         _mockTelegramUserRepository.GetKickCountAsync(userId, Arg.Any<CancellationToken>())
@@ -2188,7 +2227,7 @@ public class BotModerationServiceTests
         Assert.That(result.Success, Is.True);
 
         await _mockBanHandler.Received(1).BanAsync(
-            Arg.Is<UserIdentity>(u => u.Id == userId),
+            Arg.Is<UserIdentity>(u => u!.Id == userId),
             Arg.Any<Actor>(),
             Arg.Any<string?>(),
             Arg.Any<int?>(),
@@ -2205,7 +2244,7 @@ public class BotModerationServiceTests
         // Arrange — escalation forwards Chat to BanIntent, which triggers ban celebration
         const long userId = 12345L;
 
-        _mockConfigService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, Arg.Any<long>())
+        _mockConfigService.GetEffectiveWelcomeAsync(Arg.Any<long>())
             .Returns(new WelcomeConfig { MaxKicksBeforeBan = 3 });
 
         _mockTelegramUserRepository.GetKickCountAsync(userId, Arg.Any<CancellationToken>())
@@ -2232,8 +2271,8 @@ public class BotModerationServiceTests
 
         // Assert — ban celebration should fire because BanIntent.Chat carries the originating chat
         await _mockBanCelebrationService.Received(1).SendBanCelebrationAsync(
-            Arg.Is<ChatIdentity>(c => c.Id == TestChatId),
-            Arg.Is<UserIdentity>(u => u.Id == userId),
+            Arg.Is<ChatIdentity>(c => c!.Id == TestChatId),
+            Arg.Is<UserIdentity>(u => u!.Id == userId),
             Arg.Any<bool>(),
             Arg.Any<CancellationToken>());
     }
@@ -2244,7 +2283,7 @@ public class BotModerationServiceTests
         // Arrange — verify the escalation reason communicates kick count and threshold
         const long userId = 12345L;
 
-        _mockConfigService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, Arg.Any<long>())
+        _mockConfigService.GetEffectiveWelcomeAsync(Arg.Any<long>())
             .Returns(new WelcomeConfig { MaxKicksBeforeBan = 3 });
 
         _mockTelegramUserRepository.GetKickCountAsync(userId, Arg.Any<CancellationToken>())
@@ -2288,7 +2327,7 @@ public class BotModerationServiceTests
         // Arrange — admin kicks should NOT revoke messages (preserve legitimate content)
         const long userId = 12345L;
 
-        _mockConfigService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, Arg.Any<long>())
+        _mockConfigService.GetEffectiveWelcomeAsync(Arg.Any<long>())
             .Returns(new WelcomeConfig { MaxKicksBeforeBan = 0 });
 
         _mockBanHandler.KickFromChatAsync(
@@ -2327,7 +2366,7 @@ public class BotModerationServiceTests
         // Arrange
         const long userId = 12345L;
 
-        _mockConfigService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, Arg.Any<long>())
+        _mockConfigService.GetEffectiveWelcomeAsync(Arg.Any<long>())
             .Returns(new WelcomeConfig { MaxKicksBeforeBan = 0 });
 
         _mockBanHandler.KickFromChatAsync(
@@ -2363,7 +2402,7 @@ public class BotModerationServiceTests
         // Arrange — successful kick must persist the new count so future kicks escalate
         const long userId = 12345L;
 
-        _mockConfigService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, Arg.Any<long>())
+        _mockConfigService.GetEffectiveWelcomeAsync(Arg.Any<long>())
             .Returns(new WelcomeConfig { MaxKicksBeforeBan = 0 });
 
         _mockBanHandler.KickFromChatAsync(
@@ -2385,7 +2424,7 @@ public class BotModerationServiceTests
         Assert.That(result.Success, Is.True);
 
         await _mockTelegramUserRepository.Received(1).IncrementKickCountAsync(
-            userId, Arg.Any<CancellationToken>());
+            UserIdentity.FromId(userId), Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -2394,7 +2433,7 @@ public class BotModerationServiceTests
         // Arrange — when we ban instead of kick, we must not also increment kick count
         const long userId = 12345L;
 
-        _mockConfigService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, Arg.Any<long>())
+        _mockConfigService.GetEffectiveWelcomeAsync(Arg.Any<long>())
             .Returns(new WelcomeConfig { MaxKicksBeforeBan = 3 });
 
         _mockTelegramUserRepository.GetKickCountAsync(userId, Arg.Any<CancellationToken>())
@@ -2421,7 +2460,7 @@ public class BotModerationServiceTests
 
         // Assert — IncrementKickCountAsync must not be called on the ban escalation path
         await _mockTelegramUserRepository.DidNotReceive().IncrementKickCountAsync(
-            Arg.Any<long>(), Arg.Any<CancellationToken>());
+            Arg.Any<UserIdentity>(), Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -2430,7 +2469,7 @@ public class BotModerationServiceTests
         // Arrange — failed kick must not register against the user's escalation history
         const long userId = 12345L;
 
-        _mockConfigService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, Arg.Any<long>())
+        _mockConfigService.GetEffectiveWelcomeAsync(Arg.Any<long>())
             .Returns(new WelcomeConfig { MaxKicksBeforeBan = 0 });
 
         _mockBanHandler.KickFromChatAsync(
@@ -2450,7 +2489,7 @@ public class BotModerationServiceTests
 
         // Assert
         await _mockTelegramUserRepository.DidNotReceive().IncrementKickCountAsync(
-            Arg.Any<long>(), Arg.Any<CancellationToken>());
+            Arg.Any<UserIdentity>(), Arg.Any<CancellationToken>());
     }
 
     // ---------------------------------------------------------------------------
@@ -2488,6 +2527,240 @@ public class BotModerationServiceTests
         await _mockBanHandler.DidNotReceive().KickFromChatAsync(
             Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<Actor>(),
             Arg.Any<string?>(), Arg.Any<KickOptions?>(), Arg.Any<CancellationToken>());
+    }
+
+    #endregion
+
+    #region Report + Welcome Cleanup Rules
+
+    [Test]
+    public async Task BanUserAsync_ClosesOpenReportsGlobally()
+    {
+        _mockBanHandler.BanAsync(Arg.Any<UserIdentity>(), Arg.Any<Actor>(), Arg.Any<string>(),
+                Arg.Any<int?>(), Arg.Any<CancellationToken>())
+            .Returns(BanResult.Succeeded(chatsAffected: 3, chatsFailed: 0));
+        _mockTrustHandler.UntrustAsync(Arg.Any<UserIdentity>(), Arg.Any<Actor>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(UntrustResult.Succeeded());
+
+        var user = new UserIdentity(555L, "Test", null, "testuser");
+        await _orchestrator.BanUserAsync(new BanIntent
+        {
+            User = user,
+            Executor = Actor.AutoDetection,
+            Reason = "test",
+            OriginReportId = 42
+        });
+
+        await _mockReportCleanupHandler.Received(1).CloseOpenReportsAsync(
+            user, null, Arg.Any<Actor>(), "Ban", 42, Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task BanUserAsync_DeletesStrandedWelcomeMessagesGlobally()
+    {
+        _mockBanHandler.BanAsync(Arg.Any<UserIdentity>(), Arg.Any<Actor>(), Arg.Any<string>(),
+                Arg.Any<int?>(), Arg.Any<CancellationToken>())
+            .Returns(BanResult.Succeeded(chatsAffected: 1, chatsFailed: 0));
+        _mockTrustHandler.UntrustAsync(Arg.Any<UserIdentity>(), Arg.Any<Actor>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(UntrustResult.Succeeded());
+
+        var user = new UserIdentity(555L, "Test", null, "testuser");
+        await _orchestrator.BanUserAsync(new BanIntent
+        {
+            User = user,
+            Executor = Actor.AutoDetection,
+            Reason = "test"
+        });
+
+        await _mockWelcomeCleanupHandler.Received(1).DeleteStrandedWelcomeMessagesAsync(
+            user, null, Arg.Any<Actor>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task BanUserAsync_FailedBan_SkipsCleanup()
+    {
+        _mockBanHandler.BanAsync(Arg.Any<UserIdentity>(), Arg.Any<Actor>(), Arg.Any<string>(),
+                Arg.Any<int?>(), Arg.Any<CancellationToken>())
+            .Returns(BanResult.Failed("API error"));
+
+        await _orchestrator.BanUserAsync(new BanIntent
+        {
+            User = new UserIdentity(555L, "Test", null, "testuser"),
+            Executor = Actor.AutoDetection,
+            Reason = "test"
+        });
+
+        await _mockReportCleanupHandler.DidNotReceive().CloseOpenReportsAsync(
+            Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<Actor>(),
+            Arg.Any<string>(), Arg.Any<long?>(), Arg.Any<CancellationToken>());
+        await _mockWelcomeCleanupHandler.DidNotReceive().DeleteStrandedWelcomeMessagesAsync(
+            Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<Actor>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task BanUserAsync_CleanupThrows_BanStillSucceeds()
+    {
+        _mockBanHandler.BanAsync(Arg.Any<UserIdentity>(), Arg.Any<Actor>(), Arg.Any<string>(),
+                Arg.Any<int?>(), Arg.Any<CancellationToken>())
+            .Returns(BanResult.Succeeded(chatsAffected: 1, chatsFailed: 0));
+        _mockTrustHandler.UntrustAsync(Arg.Any<UserIdentity>(), Arg.Any<Actor>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(UntrustResult.Succeeded());
+        _mockReportCleanupHandler.CloseOpenReportsAsync(
+                Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<Actor>(),
+                Arg.Any<string>(), Arg.Any<long?>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException("db down"));
+
+        var result = await _orchestrator.BanUserAsync(new BanIntent
+        {
+            User = new UserIdentity(555L, "Test", null, "testuser"),
+            Executor = Actor.AutoDetection,
+            Reason = "test"
+        });
+
+        Assert.That(result.Success, Is.True);
+    }
+
+    [Test]
+    public async Task KickUserFromChatAsync_ScopesCleanupToThatChat()
+    {
+        _mockConfigService.GetEffectiveWelcomeAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
+            .Returns(new WelcomeConfig { MaxKicksBeforeBan = 0 });
+        _mockBanHandler.KickFromChatAsync(Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(),
+                Arg.Any<Actor>(), Arg.Any<string>(), Arg.Any<KickOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(BanResult.Succeeded(chatsAffected: 1, chatsFailed: 0));
+
+        var user = new UserIdentity(555L, "Test", null, "testuser");
+        var chat = new ChatIdentity(TestChatId, "TestChat");
+
+        await _orchestrator.KickUserFromChatAsync(new KickIntent
+        {
+            User = user,
+            Chat = chat,
+            Executor = Actor.WelcomeFlow,
+            Reason = "test",
+            OriginReportId = 7
+        });
+
+        await _mockReportCleanupHandler.Received(1).CloseOpenReportsAsync(
+            user, chat, Arg.Any<Actor>(), "Kick", 7, Arg.Any<CancellationToken>());
+        await _mockWelcomeCleanupHandler.Received(1).DeleteStrandedWelcomeMessagesAsync(
+            user, chat, Arg.Any<Actor>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task KickUserFromChatAsync_FailedKick_SkipsCleanup()
+    {
+        _mockBanHandler.KickFromChatAsync(Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(),
+                Arg.Any<Actor>(), Arg.Any<string>(), Arg.Any<KickOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(BanResult.Failed("API error"));
+
+        var user = new UserIdentity(555L, "Test", null, "testuser");
+        var chat = new ChatIdentity(TestChatId, "TestChat");
+
+        await _orchestrator.KickUserFromChatAsync(new KickIntent
+        {
+            User = user,
+            Chat = chat,
+            Executor = Actor.WelcomeFlow,
+            Reason = "test"
+        });
+
+        await _mockReportCleanupHandler.DidNotReceive().CloseOpenReportsAsync(
+            Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<Actor>(),
+            Arg.Any<string>(), Arg.Any<long?>(), Arg.Any<CancellationToken>());
+        await _mockWelcomeCleanupHandler.DidNotReceive().DeleteStrandedWelcomeMessagesAsync(
+            Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<Actor>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task WarnUserAsync_ThresholdReachedAndBanSucceeds_RunsCleanupGloballyWithOriginReportId()
+    {
+        // Auto-ban now delegates to BanUserAsync, so this pins the inherited cleanup to the same
+        // global scope and OriginReportId forwarding BanUserAsync itself provides.
+        const long userId = 12345L;
+        var executor = Actor.FromSystem("SpamDetection");
+        var chat = ChatIdentity.FromId(TestChatId);
+
+        _mockWarnHandler.WarnAsync(Arg.Any<UserIdentity>(), executor, Arg.Any<string>(), Arg.Any<long>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
+            .Returns(WarnResult.Succeeded(warningCount: 3));
+        _mockConfigService.GetEffectiveWarningSystemAsync(Arg.Any<long>())
+            .Returns(new WarningSystemConfig { AutoBanEnabled = true, AutoBanThreshold = 3 });
+        _mockBanHandler.BanAsync(Arg.Any<UserIdentity>(), Arg.Any<Actor>(), Arg.Any<string>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
+            .Returns(BanResult.Succeeded(chatsAffected: 5, chatsFailed: 0));
+        _mockTrustHandler.UntrustAsync(Arg.Any<UserIdentity>(), Arg.Any<Actor>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(UntrustResult.Succeeded());
+
+        var user = UserIdentity.FromId(userId);
+
+        await _orchestrator.WarnUserAsync(new WarnIntent
+        {
+            User = user,
+            Executor = executor,
+            Reason = "Final warning",
+            Chat = chat,
+            OriginReportId = 42
+        });
+
+        await _mockReportCleanupHandler.Received(1).CloseOpenReportsAsync(
+            user, null, Actor.AutoBan, "Ban", 42, Arg.Any<CancellationToken>());
+        await _mockWelcomeCleanupHandler.Received(1).DeleteStrandedWelcomeMessagesAsync(
+            user, null, Actor.AutoBan, Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task WarnUserAsync_ThresholdReachedButBanFails_SkipsCleanup()
+    {
+        const long userId = 12345L;
+        var executor = Actor.FromSystem("SpamDetection");
+
+        _mockWarnHandler.WarnAsync(Arg.Any<UserIdentity>(), executor, Arg.Any<string>(), Arg.Any<long>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
+            .Returns(WarnResult.Succeeded(warningCount: 3));
+        _mockConfigService.GetEffectiveWarningSystemAsync(Arg.Any<long>())
+            .Returns(new WarningSystemConfig { AutoBanEnabled = true, AutoBanThreshold = 3 });
+        _mockBanHandler.BanAsync(Arg.Any<UserIdentity>(), Arg.Any<Actor>(), Arg.Any<string>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
+            .Returns(BanResult.Failed("API error"));
+
+        await _orchestrator.WarnUserAsync(new WarnIntent
+        {
+            User = UserIdentity.FromId(userId),
+            Executor = executor,
+            Reason = "Final warning",
+            Chat = ChatIdentity.FromId(TestChatId),
+            OriginReportId = 42
+        });
+
+        await _mockReportCleanupHandler.DidNotReceive().CloseOpenReportsAsync(
+            Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<Actor>(),
+            Arg.Any<string>(), Arg.Any<long?>(), Arg.Any<CancellationToken>());
+        await _mockWelcomeCleanupHandler.DidNotReceive().DeleteStrandedWelcomeMessagesAsync(
+            Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<Actor>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task WarnUserAsync_BelowThreshold_SkipsAutoBanCleanup()
+    {
+        const long userId = 12345L;
+        var executor = Actor.FromSystem("SpamDetection");
+
+        _mockWarnHandler.WarnAsync(Arg.Any<UserIdentity>(), executor, Arg.Any<string>(), Arg.Any<long>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
+            .Returns(WarnResult.Succeeded(warningCount: 2));
+        _mockConfigService.GetEffectiveWarningSystemAsync(Arg.Any<long>())
+            .Returns(new WarningSystemConfig { AutoBanEnabled = true, AutoBanThreshold = 3 });
+
+        await _orchestrator.WarnUserAsync(new WarnIntent
+        {
+            User = UserIdentity.FromId(userId),
+            Executor = executor,
+            Reason = "First warning",
+            Chat = ChatIdentity.FromId(TestChatId),
+            OriginReportId = 42
+        });
+
+        await _mockReportCleanupHandler.DidNotReceive().CloseOpenReportsAsync(
+            Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<Actor>(),
+            Arg.Any<string>(), Arg.Any<long?>(), Arg.Any<CancellationToken>());
+        await _mockWelcomeCleanupHandler.DidNotReceive().DeleteStrandedWelcomeMessagesAsync(
+            Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<Actor>(), Arg.Any<CancellationToken>());
     }
 
     #endregion

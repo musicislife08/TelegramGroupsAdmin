@@ -1,5 +1,6 @@
 using TelegramGroupsAdmin.Data.Models;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
+using CoreModels = TelegramGroupsAdmin.Core.Models;
 
 namespace TelegramGroupsAdmin.IntegrationTests.Migrations;
 
@@ -32,7 +33,7 @@ public class CascadeBehaviorTests
     {
         // Arrange - Create database and apply migrations
         using var helper = new MigrationTestHelper();
-        await helper.CreateDatabaseAndApplyMigrationsAsync();
+        await helper.CreateDatabaseFromEmptyTemplateAsync();
 
         // Create two web users (actor and target)
         await using (var context = helper.GetDbContext())
@@ -45,7 +46,7 @@ public class CascadeBehaviorTests
                     NormalizedEmail = "ACTOR@TEST.COM",
                     PasswordHash = "hash",
                     SecurityStamp = Guid.NewGuid().ToString(),
-                    PermissionLevel = PermissionLevel.Admin,
+                    PermissionLevel = (int)CoreModels.PermissionLevel.Admin,
                     Status = UserStatus.Active,
                     CreatedAt = DateTimeOffset.UtcNow
                 },
@@ -56,7 +57,7 @@ public class CascadeBehaviorTests
                     NormalizedEmail = "TARGET@TEST.COM",
                     PasswordHash = "hash",
                     SecurityStamp = Guid.NewGuid().ToString(),
-                    PermissionLevel = PermissionLevel.Admin,
+                    PermissionLevel = (int)CoreModels.PermissionLevel.Admin,
                     Status = UserStatus.Active,
                     CreatedAt = DateTimeOffset.UtcNow
                 }
@@ -143,7 +144,7 @@ public class CascadeBehaviorTests
     {
         // Arrange - Create database and apply migrations
         using var helper = new MigrationTestHelper();
-        await helper.CreateDatabaseAndApplyMigrationsAsync();
+        await helper.CreateDatabaseFromEmptyTemplateAsync();
 
         // Create message using DbContext (handles all required fields)
         await using (var context = helper.GetDbContext())
@@ -240,7 +241,7 @@ public class CascadeBehaviorTests
     {
         // Arrange - Create database and apply migrations
         using var helper = new MigrationTestHelper();
-        await helper.CreateDatabaseAndApplyMigrationsAsync();
+        await helper.CreateDatabaseFromEmptyTemplateAsync();
 
         // Create managed chat
         await using (var context = helper.GetDbContext())

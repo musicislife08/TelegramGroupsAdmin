@@ -14,19 +14,19 @@ public sealed class ReportMetrics
 
     private long _pendingCount;
 
+    private readonly Meter _meter = new("TelegramGroupsAdmin.Reports");
+
     public ReportMetrics()
     {
-        var meter = new Meter("TelegramGroupsAdmin.Reports");
-
-        _createdTotal = meter.CreateCounter<long>(
+        _createdTotal = _meter.CreateCounter<long>(
             "tga.reports.created_total",
             description: "Reports created by type and source");
 
-        _resolvedTotal = meter.CreateCounter<long>(
+        _resolvedTotal = _meter.CreateCounter<long>(
             "tga.reports.resolved_total",
             description: "Reports resolved by type and action");
 
-        meter.CreateObservableGauge(
+        _meter.CreateObservableGauge(
             "tga.reports.pending_count",
             () => Interlocked.Read(ref _pendingCount),
             description: "Current total pending reports");

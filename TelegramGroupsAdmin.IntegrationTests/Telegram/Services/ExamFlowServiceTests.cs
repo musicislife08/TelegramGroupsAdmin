@@ -8,14 +8,19 @@ using Telegram.Bot.Types.ReplyMarkups;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Core.Repositories;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
+using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Configuration.Models.Welcome;
+using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.Telegram.Services.Moderation;
 using TelegramGroupsAdmin.Telegram.Services.Welcome;
+using TelegramGroupsAdmin.Configuration.Services;
 
 namespace TelegramGroupsAdmin.IntegrationTests.Telegram.Services;
 
@@ -32,34 +37,41 @@ namespace TelegramGroupsAdmin.IntegrationTests.Telegram.Services;
 [TestFixture]
 public class ExamFlowServiceTests
 {
-    private const long TestChatId = -1001234567890L;
+    // Canonical MainChat anchor: chat_id = -100026957614982 (Main Community in golden_template)
+    private const long TestChatId = -100026957614982L;
     private const long TestUserId = 123456789L;
     private const long TestDmChatId = 123456789L; // DM chat ID equals user ID
+
+    // Canonical "Top MainChat author" recipe (@unhelpfulgrab, telegram_user_id 9921676191756):
+    // a real telegram_users row with 19 messages in MainChat and zero welcome_responses rows
+    // anywhere in canonical, so it's a safe FK anchor for a runtime-inserted WelcomeResponse
+    // without colliding with the pinned MainChat rows (73/75/94/128/999001..999005).
+    private const long CanonicalMainChatUserId = 9921676191756L;
 
     private MigrationTestHelper? _testHelper;
     private IServiceProvider? _serviceProvider;
     private IBotMessageService? _mockMessageService;
     private IBotChatService? _mockChatService;
     private IBotDmService? _mockDmService;
+    private IBotModerationService? _mockModerationService;
 
     [SetUp]
     public async Task SetUp()
     {
         _testHelper = new MigrationTestHelper();
-        await _testHelper.CreateDatabaseAndApplyMigrationsAsync();
+        await _testHelper.CreateDatabaseFromGoldenTemplateAsync();
 
         // Set up mocks for the new Bot*Service interfaces
         _mockMessageService = Substitute.For<IBotMessageService>();
         _mockChatService = Substitute.For<IBotChatService>();
         _mockDmService = Substitute.For<IBotDmService>();
+        _mockModerationService = Substitute.For<IBotModerationService>();
         var mockExamEvaluationService = Substitute.For<IExamEvaluationService>();
         var mockConfigService = Substitute.For<IConfigService>();
 
         // Configure mock config service to return valid exam config
         var defaultConfig = CreateValidExamConfig();
-        mockConfigService.GetEffectiveAsync<WelcomeConfig>(
-                Arg.Any<ConfigType>(),
-                Arg.Any<long>())
+        mockConfigService.GetEffectiveWelcomeAsync(Arg.Any<long>())
             .Returns(new ValueTask<WelcomeConfig?>(defaultConfig));
 
         // Create a real Message for mock returns
@@ -92,14 +104,22 @@ public class ExamFlowServiceTests
         // Mock DM service methods - exam questions are sent via DM
         var dmSuccessResult = new DmDeliveryResult { DmSent = true, MessageId = 1 };
         _mockDmService.SendDmWithKeyboardAsync(
-                Arg.Any<long>(),
-                Arg.Any<string>(),
+                Arg.Any<UserIdentity>(),
+                Arg.Any<TelegramMessage>(),
                 Arg.Any<InlineKeyboardMarkup>(),
                 Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(dmSuccessResult));
 
         _mockDmService.SendDmAsync(
-                Arg.Any<long>(),
+                Arg.Any<UserIdentity>(),
+                Arg.Any<TelegramMessage>(),
+                Arg.Any<long?>(),
+                Arg.Any<int?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(dmSuccessResult));
+
+        _mockDmService.SendDmAsync(
+                Arg.Any<UserIdentity>(),
                 Arg.Any<string>(),
                 Arg.Any<long?>(),
                 Arg.Any<int?>(),
@@ -136,6 +156,7 @@ public class ExamFlowServiceTests
         services.AddSingleton(_mockMessageService);
         services.AddSingleton(_mockChatService);
         services.AddSingleton(_mockDmService);
+        services.AddSingleton(_mockModerationService);
         services.AddScoped(_ => mockExamEvaluationService);  // Scoped in main app
         services.AddScoped(_ => mockConfigService);  // Scoped in main app
         services.AddSingleton(Substitute.For<IWelcomeAdmissionHandler>());
@@ -144,25 +165,6 @@ public class ExamFlowServiceTests
         services.AddScoped<IExamFlowService, ExamFlowService>();
 
         _serviceProvider = services.BuildServiceProvider();
-
-        // Create test chat in database (required for exam flow)
-        await CreateTestChatAsync();
-    }
-
-    private async Task CreateTestChatAsync()
-    {
-        var contextFactory = _serviceProvider!.GetRequiredService<IDbContextFactory<AppDbContext>>();
-        await using var context = await contextFactory.CreateDbContextAsync();
-
-        context.ManagedChats.Add(new Data.Models.ManagedChatRecordDto
-        {
-            ChatId = TestChatId,
-            ChatName = "Test Chat",
-            ChatType = Data.Models.ManagedChatType.Supergroup,
-            AddedAt = DateTimeOffset.UtcNow,
-            IsActive = true
-        });
-        await context.SaveChangesAsync();
     }
 
     [TearDown]
@@ -272,7 +274,7 @@ public class ExamFlowServiceTests
         var sessionRepo = scope.ServiceProvider.GetRequiredService<IExamSessionRepository>();
 
         var expiredTime = DateTimeOffset.UtcNow.AddMinutes(-5);
-        var sessionId = await sessionRepo.CreateSessionAsync(TestChatId, TestUserId, expiredTime);
+        var sessionId = await sessionRepo.CreateSessionAsync(new ChatIdentity(TestChatId, "Test Chat"), UserIdentity.FromId(TestUserId), expiredTime);
 
         var user = TelegramTestFactory.CreateUser(id: TestUserId, firstName: "Test");
         var message = TelegramTestFactory.CreateMessage(
@@ -301,7 +303,7 @@ public class ExamFlowServiceTests
         var sessionRepo = scope.ServiceProvider.GetRequiredService<IExamSessionRepository>();
 
         var expiresAt = DateTimeOffset.UtcNow.AddMinutes(5);
-        var sessionId = await sessionRepo.CreateSessionAsync(TestChatId, TestUserId, expiresAt);
+        var sessionId = await sessionRepo.CreateSessionAsync(new ChatIdentity(TestChatId, "Test Chat"), UserIdentity.FromId(TestUserId), expiresAt);
 
         // Different user tries to answer
         var wrongUser = TelegramTestFactory.CreateUser(id: TestUserId + 1, firstName: "Wrong");
@@ -339,7 +341,7 @@ public class ExamFlowServiceTests
         var sessionRepo = scope.ServiceProvider.GetRequiredService<IExamSessionRepository>();
 
         var expiresAt = DateTimeOffset.UtcNow.AddMinutes(5);
-        await sessionRepo.CreateSessionAsync(TestChatId, TestUserId, expiresAt);
+        await sessionRepo.CreateSessionAsync(new ChatIdentity(TestChatId, "Test Chat"), UserIdentity.FromId(TestUserId), expiresAt);
 
         // Act
         var hasSession = await examFlowService.HasActiveSessionAsync(
@@ -379,7 +381,7 @@ public class ExamFlowServiceTests
         var sessionRepo = scope.ServiceProvider.GetRequiredService<IExamSessionRepository>();
 
         var expiresAt = DateTimeOffset.UtcNow.AddMinutes(5);
-        await sessionRepo.CreateSessionAsync(TestChatId, TestUserId, expiresAt);
+        await sessionRepo.CreateSessionAsync(new ChatIdentity(TestChatId, "Test Chat"), UserIdentity.FromId(TestUserId), expiresAt);
 
         // Act
         var context = await examFlowService.GetActiveExamContextAsync(UserIdentity.FromId(TestUserId));
@@ -416,7 +418,7 @@ public class ExamFlowServiceTests
         var sessionRepo = scope.ServiceProvider.GetRequiredService<IExamSessionRepository>();
 
         var expiresAt = DateTimeOffset.UtcNow.AddMinutes(5);
-        await sessionRepo.CreateSessionAsync(TestChatId, TestUserId, expiresAt);
+        await sessionRepo.CreateSessionAsync(new ChatIdentity(TestChatId, "Test Chat"), UserIdentity.FromId(TestUserId), expiresAt);
 
         // Act
         await examFlowService.CancelSessionAsync(
@@ -440,6 +442,85 @@ public class ExamFlowServiceTests
             await examFlowService.CancelSessionAsync(
                 new ChatIdentity(TestChatId, "Test Chat"),
                 UserIdentity.FromId(TestUserId)));
+    }
+
+    #endregion
+
+    #region Exam Denial Teaser Cleanup Tests
+
+    [Test]
+    public async Task DenyExamFailureAsync_FailedKick_DeletesTeaserMessage()
+    {
+        // Regression coverage for I2: step 1 writes welcome_responses.Response = Denied before
+        // the kick runs. If the kick fails, BotModerationService's own cleanup never runs (it's
+        // gated on success), so the teaser must be deleted here instead — otherwise it strands
+        // with live buttons while the response already reads Denied.
+        using var scope = _serviceProvider!.CreateScope();
+        var examFlowService = scope.ServiceProvider.GetRequiredService<IExamFlowService>();
+        var welcomeResponsesRepo = scope.ServiceProvider.GetRequiredService<IWelcomeResponsesRepository>();
+
+        const int teaserMessageId = 42424;
+        await welcomeResponsesRepo.InsertAsync(new WelcomeResponse(
+            Id: 0, ChatId: TestChatId, UserId: CanonicalMainChatUserId, Username: "testuser",
+            WelcomeMessageId: teaserMessageId, Response: WelcomeResponseType.Pending,
+            RespondedAt: DateTimeOffset.UtcNow, DmSent: false, DmFallback: false,
+            CreatedAt: DateTimeOffset.UtcNow, TimeoutJobId: null));
+
+        _mockModerationService!.KickUserFromChatAsync(Arg.Any<KickIntent>(), Arg.Any<CancellationToken>())
+            .Returns(ModerationResult.Failed("kick failed"));
+
+        var user = TelegramTestFactory.CreateUser(id: CanonicalMainChatUserId, firstName: "Test");
+        var chat = new ChatIdentity(TestChatId, "Test Chat");
+        var executor = Actor.WelcomeFlow;
+
+        // Act
+        var result = await examFlowService.DenyExamFailureAsync(
+            UserIdentity.From(user), chat, executor);
+
+        // Assert
+        Assert.That(result.Success, Is.False);
+
+        var response = await welcomeResponsesRepo.GetByUserAndChatAsync(CanonicalMainChatUserId, TestChatId);
+        Assert.That(response!.Response, Is.EqualTo(WelcomeResponseType.Denied),
+            "step 1 writes Denied unconditionally, before the kick is attempted");
+
+        await _mockModerationService.Received(1).DeleteMessageAsync(
+            Arg.Is<DeleteMessageIntent>(i => i!.MessageId == teaserMessageId && i.Chat.Id == TestChatId),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task DenyAndBanExamFailureAsync_FailedBan_DeletesTeaserMessage()
+    {
+        // Same defect class as the kick branch above, for the global-ban path.
+        using var scope = _serviceProvider!.CreateScope();
+        var examFlowService = scope.ServiceProvider.GetRequiredService<IExamFlowService>();
+        var welcomeResponsesRepo = scope.ServiceProvider.GetRequiredService<IWelcomeResponsesRepository>();
+
+        const int teaserMessageId = 42425;
+        await welcomeResponsesRepo.InsertAsync(new WelcomeResponse(
+            Id: 0, ChatId: TestChatId, UserId: CanonicalMainChatUserId, Username: "testuser",
+            WelcomeMessageId: teaserMessageId, Response: WelcomeResponseType.Pending,
+            RespondedAt: DateTimeOffset.UtcNow, DmSent: false, DmFallback: false,
+            CreatedAt: DateTimeOffset.UtcNow, TimeoutJobId: null));
+
+        _mockModerationService!.BanUserAsync(Arg.Any<BanIntent>(), Arg.Any<CancellationToken>())
+            .Returns(ModerationResult.Failed("ban failed"));
+
+        var user = TelegramTestFactory.CreateUser(id: CanonicalMainChatUserId, firstName: "Test");
+        var chat = new ChatIdentity(TestChatId, "Test Chat");
+        var executor = Actor.WelcomeFlow;
+
+        // Act
+        var result = await examFlowService.DenyAndBanExamFailureAsync(
+            UserIdentity.From(user), chat, executor);
+
+        // Assert
+        Assert.That(result.Success, Is.False);
+
+        await _mockModerationService.Received(1).DeleteMessageAsync(
+            Arg.Is<DeleteMessageIntent>(i => i!.MessageId == teaserMessageId && i.Chat.Id == TestChatId),
+            Arg.Any<CancellationToken>());
     }
 
     #endregion

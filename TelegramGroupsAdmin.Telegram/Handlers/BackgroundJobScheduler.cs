@@ -71,23 +71,4 @@ public class BackgroundJobScheduler
             cancellationToken);
     }
 
-    /// <summary>
-    /// Schedule a profile scan via Quartz.NET with 0s delay.
-    /// Triggered by: on-message profile diff detection, manual re-scan from UI.
-    /// Deduplicated by userId — multiple triggers for the same user collapse into one scan.
-    /// </summary>
-    public async Task ScheduleProfileScanAsync(
-        long userId,
-        long? chatId,
-        CancellationToken cancellationToken = default)
-    {
-        var payload = new ProfileScanPayload(userId, chatId);
-
-        await _jobScheduler.ScheduleJobAsync(
-            BackgroundJobNames.ProfileScan,
-            payload,
-            delaySeconds: 0,
-            deduplicationKey: ProfileScan(userId),
-            cancellationToken);
-    }
 }

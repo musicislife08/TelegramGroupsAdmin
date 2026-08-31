@@ -49,23 +49,17 @@ public class CheckResultsSerializerTests
     #region Deserialize — Malformed JSON
 
     [Test]
-    public void Deserialize_MalformedJson_ReturnsEmptyList()
+    public void Deserialize_MalformedJson_Throws()
     {
-        // Arrange / Act
-        var result = CheckResultsSerializer.Deserialize("{ this is not valid json !!!");
-
-        // Assert
-        Assert.That(result, Is.Empty);
+        // Malformed JSON must propagate, not be silently swallowed into an empty list.
+        Assert.Throws<JsonException>(() => CheckResultsSerializer.Deserialize("{ this is not valid json !!!"));
     }
 
     [Test]
-    public void Deserialize_ValidJsonButWrongShape_ReturnsEmptyList()
+    public void Deserialize_ValidJsonButWrongShape_Throws()
     {
-        // Arrange — valid JSON but not the expected CheckResults wrapper shape
-        var result = CheckResultsSerializer.Deserialize("[1, 2, 3]");
-
-        // Assert
-        Assert.That(result, Is.Empty);
+        // Valid JSON of the wrong shape (array instead of the CheckResults object) must propagate.
+        Assert.Throws<JsonException>(() => CheckResultsSerializer.Deserialize("[1, 2, 3]"));
     }
 
     [Test]

@@ -29,10 +29,12 @@ Use CSharperMcp tools (`find_symbol`, `find_references`, `get_diagnostics`) inst
 
 ## Critical Rules
 
-- NEVER run the app normally — validate with `dotnet run --migrate-only` (singleton constraint)
+- Apply DB migrations with `dotnet run --migrate` or `dotnet run --migrate-only` (either flag works; both run migrations and exit cleanly).
+- Running the app normally locally is fine. The Telegram bot is disabled by default (`TelegramBotConfig.BotEnabled = false`, stored in the `configs` table at `chat_id=0` as JSONB) and only flipped on in prod, so there's no singleton conflict with the production instance. The one-connection-per-token constraint only applies in shared/prod environments.
 - EF Core: Modify models + AppDbContext FIRST → then `dotnet ef migrations add`
 - Prefer Fluent API in AppDbContext over custom SQL for schema configuration
 - Central Package Management: NuGet versions in `Directory.Packages.props`
 - No time estimates in docs or issues
 - MudBlazor v9 has breaking API changes — check context-keep memory before writing MudBlazor code
 - GitHub labels are custom — check context-keep memory before labeling issues/PRs
+- NSubstitute 6 matcher lambdas are nullable-annotated: `Arg.Is<T>(x => x.Prop == y)` needs a null-forgiving `!` on the first dereference (`x!.Prop`). Never use `?.` instead — it makes a null argument silently compare `false` in `Returns()` configuration instead of throwing.

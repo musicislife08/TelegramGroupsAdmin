@@ -1,6 +1,6 @@
 @page "/settings"
 @page "/settings/{Section?}/{SubSection?}"
-@attribute [Authorize(Policy = "GlobalAdminOrOwner")]
+@attribute [Authorize(Policy = AuthenticationConstants.PolicyGlobalAdminOrOwner)]
 @using TelegramGroupsAdmin.Components.Shared.ContentDetection
 @using TelegramGroupsAdmin.Components.Shared.Settings
 @using TelegramGroupsAdmin.Constants

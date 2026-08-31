@@ -1,4 +1,5 @@
 @* Compact Telegram message preview - just the message bubble without full chat UI *@
+@using TelegramGroupsAdmin.Core.Utilities
 
 <div class="telegram-compact-preview">
     @if (ShowUserCommand)
@@ -13,7 +14,7 @@
 
     <div class="telegram-message-wrapper telegram-bot-message">
         <div class="telegram-message-bubble telegram-bubble-bot">
-            <div class="telegram-message-text">@PreviewText</div>
+            <div class="telegram-message-text">@((MarkupString)TelegramEntityRenderer.ToHtml(Message))</div>
             <div class="telegram-message-time">8:52 PM</div>
         </div>
     </div>
@@ -35,13 +36,6 @@
                     </div>
                 }
             </div>
-        </div>
-    }
-
-    @if (ShowWarning && HasInvalidVariables())
-    {
-        <div class="telegram-preview-warning">
-            ⚠️ Invalid or incomplete variables detected
         </div>
     }
 </div>
@@ -95,6 +89,11 @@
         margin-bottom: 2px;
     }
 
+    /* text_mention entities render as Telegram's blue clickable name */
+    .telegram-message-text .tg-mention {
+        color: #6ab7ff;
+    }
+
     .telegram-message-time {
         font-size: 11px;
         color: #708499;
@@ -104,16 +103,6 @@
 
     .telegram-bubble-user .telegram-message-time {
         color: rgba(255,255,255,0.65);
-    }
-
-    .telegram-preview-warning {
-        background: rgba(255, 152, 0, 0.15);
-        border-left: 3px solid #ff9800;
-        color: #ffb74d;
-        padding: 6px 10px;
-        font-size: 12px;
-        margin-top: 8px;
-        border-radius: 4px;
     }
 
     .telegram-inline-keyboard {
@@ -154,17 +143,12 @@
 </style>
 
 @code {
+    /// <summary>The entity-based message to render — the same TelegramMessage type that is sent to Telegram.</summary>
     [Parameter, EditorRequired]
-    public string PreviewText { get; set; } = string.Empty;
+    public required TelegramMessage Message { get; set; }
 
     [Parameter]
     public bool ShowUserCommand { get; set; } = true;
-
-    [Parameter]
-    public bool ShowWarning { get; set; }
-
-    [Parameter]
-    public string[]? ValidVariables { get; set; }
 
     /// <summary>
     /// Inline keyboard buttons to display below the message.
@@ -173,21 +157,4 @@
     /// </summary>
     [Parameter]
     public string[][]? Buttons { get; set; }
-
-    private bool HasInvalidVariables()
-    {
-        if (string.IsNullOrEmpty(PreviewText) || ValidVariables == null) return false;
-
-        var matches = System.Text.RegularExpressions.Regex.Matches(PreviewText, @"\{([^}]*)\}");
-        foreach (System.Text.RegularExpressions.Match match in matches)
-        {
-            var variableName = match.Groups[1].Value;
-            if (!ValidVariables.Contains(variableName))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
 }

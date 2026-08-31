@@ -1,9 +1,7 @@
 @using TelegramGroupsAdmin.Services
-@using Microsoft.AspNetCore.Components.Authorization
 @inject IInviteService InviteService
 @inject ISnackbar Snackbar
 @inject NavigationManager Navigation
-@inject AuthenticationStateProvider AuthStateProvider
 
 <MudDialog DefaultFocus="DefaultFocus.Element">
     <DialogContent>
@@ -46,8 +44,8 @@
                     </MudTd>
                     <MudTd DataLabel="Created">@FormatDate(context.CreatedAt)</MudTd>
                     <MudTd DataLabel="Permission">
-                        <MudChip T="string" Size="Size.Small" Color="@GetPermissionColor((int)context.PermissionLevel)">
-                            @GetPermissionName((int)context.PermissionLevel)
+                        <MudChip T="string" Size="Size.Small" Color="@GetPermissionColor(context.PermissionLevel)">
+                            @context.PermissionLevel.GetDisplayName()
                         </MudChip>
                     </MudTd>
                     <MudTd DataLabel="Expires">@FormatDate(context.ExpiresAt)</MudTd>
@@ -107,6 +105,7 @@
 @code {
     [CascadingParameter]
     IMudDialogInstance? MudDialog { get; set; }
+    [CascadingParameter] private WebUserIdentity? WebUser { get; set; }
 
     /// <summary>
     /// The permission level of the current user viewing the dialog.
@@ -120,18 +119,9 @@
     private Dictionary<string, string> _userEmails = new();
     private bool _loading = true;
     private string _filter = "pending";
-    private string? _currentUserId;
 
     protected override async Task OnInitializedAsync()
     {
-        // Get current user ID
-        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
-        var user = authState.User;
-        if (user.Identity?.IsAuthenticated == true)
-        {
-            _currentUserId = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-        }
-
         await LoadInvitesAsync();
     }
 
@@ -202,9 +192,15 @@
 
     private async Task RevokeInvite(string token)
     {
+        if (WebUser is null)
+        {
+            Snackbar.Add("Your session could not be verified. Please sign in again.", Severity.Error);
+            return;
+        }
+
         try
         {
-            var success = await InviteService.RevokeInviteAsync(token, _currentUserId!);
+            var success = await InviteService.RevokeInviteAsync(token, WebUser.Id);
             if (success)
             {
                 Snackbar.Add("Invite revoked successfully", Severity.Success);
@@ -226,19 +222,11 @@
         MudDialog?.Close(DialogResult.Ok(true));
     }
 
-    private static string GetPermissionName(int level) => level switch
+    private static Color GetPermissionColor(PermissionLevel level) => level switch
     {
-        0 => "Admin",
-        1 => "GlobalAdmin",
-        2 => "Owner",
-        _ => "Unknown"
-    };
-
-    private static Color GetPermissionColor(int level) => level switch
-    {
-        0 => Color.Primary,
-        1 => Color.Info,
-        2 => Color.Secondary,
+        PermissionLevel.Admin => Color.Primary,
+        PermissionLevel.GlobalAdmin => Color.Info,
+        PermissionLevel.Owner => Color.Secondary,
         _ => Color.Error
     };
 

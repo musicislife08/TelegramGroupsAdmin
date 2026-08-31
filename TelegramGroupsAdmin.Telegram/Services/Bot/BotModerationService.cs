@@ -12,6 +12,7 @@ using TelegramGroupsAdmin.Telegram.Services.Bot.Handlers;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Handlers;
+using TelegramGroupsAdmin.Configuration.Services;
 
 namespace TelegramGroupsAdmin.Telegram.Services.Bot;
 
@@ -36,6 +37,8 @@ public class BotModerationService : IBotModerationService
     private readonly IWarnHandler _warnHandler;
     private readonly IBotModerationMessageHandler _messageHandler;
     private readonly IBotRestrictHandler _restrictHandler;
+    private readonly IReportCleanupHandler _reportCleanupHandler;
+    private readonly IWelcomeCleanupHandler _welcomeCleanupHandler;
 
     // Support handlers
     private readonly IAuditHandler _auditHandler;
@@ -60,6 +63,8 @@ public class BotModerationService : IBotModerationService
         IWarnHandler warnHandler,
         IBotModerationMessageHandler messageHandler,
         IBotRestrictHandler restrictHandler,
+        IReportCleanupHandler reportCleanupHandler,
+        IWelcomeCleanupHandler welcomeCleanupHandler,
         IAuditHandler auditHandler,
         INotificationHandler notificationHandler,
         ITrainingHandler trainingHandler,
@@ -75,6 +80,8 @@ public class BotModerationService : IBotModerationService
         _warnHandler = warnHandler;
         _messageHandler = messageHandler;
         _restrictHandler = restrictHandler;
+        _reportCleanupHandler = reportCleanupHandler;
+        _welcomeCleanupHandler = welcomeCleanupHandler;
         _auditHandler = auditHandler;
         _notificationHandler = notificationHandler;
         _trainingHandler = trainingHandler;
@@ -206,6 +213,21 @@ public class BotModerationService : IBotModerationService
             () => _messageHandler.ScheduleUserMessagesCleanupAsync(intent.User, cancellationToken),
             $"Schedule messages cleanup for user {intent.User.Id}");
 
+        // Business rule: a ban resolves every open report about this user, everywhere.
+        // OriginReportId is skipped so the report handler that started this keeps
+        // ownership of its own status update.
+        await SafeExecuteAsync(
+            () => _reportCleanupHandler.CloseOpenReportsAsync(
+                intent.User, chat: null, intent.Executor, "Ban", intent.OriginReportId, cancellationToken),
+            $"Close open reports for user {intent.User.Id}");
+
+        // Business rule: a ban ends any pending welcome, so the welcome/teaser message
+        // must not be left sitting in chat with live buttons.
+        await SafeExecuteAsync(
+            () => _welcomeCleanupHandler.DeleteStrandedWelcomeMessagesAsync(
+                intent.User, chat: null, intent.Executor, cancellationToken),
+            $"Delete stranded welcome messages for user {intent.User.Id}");
+
         // Bug 3 fix: Ban celebration when chat context is provided
         // (enables celebrations for CAS/Impersonation bans that carry the originating chat)
         if (intent.Chat is { } celebrationChat)
@@ -256,8 +278,8 @@ public class BotModerationService : IBotModerationService
         };
 
         // Business rule: Check warning threshold for auto-ban
-        var warningConfig = await _configService.GetEffectiveAsync<WarningSystemConfig>(
-            ConfigType.Moderation, intent.Chat.Id) ?? WarningSystemConfig.Default;
+        var warningConfig = await _configService.GetEffectiveWarningSystemAsync(intent.Chat.Id, cancellationToken)
+                            ?? WarningSystemConfig.Default;
 
         if (warningConfig.AutoBanEnabled &&
             warningConfig.AutoBanThreshold > 0 &&
@@ -272,34 +294,27 @@ public class BotModerationService : IBotModerationService
                 ? warningConfig.AutoBanReason.Replace("{count}", warnResult.WarningCount.ToString())
                 : $"Exceeded warning threshold ({warnResult.WarningCount}/{warningConfig.AutoBanThreshold} warnings)";
 
-            // Auto-ban: Call handlers directly (don't call BanUserAsync to avoid nested orchestrator calls)
-            var banResult = await _banHandler.BanAsync(intent.User, Actor.AutoBan, autoBanReason, intent.MessageId, cancellationToken);
+            // Auto-ban: delegate to BanUserAsync so every ban side effect (audit, trust
+            // revocation, admin notification, message cleanup, report/welcome sweep, and
+            // celebration) lives in exactly one place instead of being replayed by hand here.
+            // Chat is forwarded so the celebration fires here too, same as CAS/impersonation bans.
+            var banResult = await BanUserAsync(new BanIntent
+            {
+                User = intent.User,
+                Executor = Actor.AutoBan,
+                Reason = autoBanReason,
+                MessageId = intent.MessageId,
+                Chat = intent.Chat,
+                OriginReportId = intent.OriginReportId
+            }, cancellationToken);
 
             if (banResult.Success)
             {
-                // Audit successful auto-ban
-                await SafeAuditAsync(
-                    () => _auditHandler.LogBanAsync(intent.User, Actor.AutoBan, autoBanReason, cancellationToken),
-                    "auto-ban (from warnings)", intent.User, intent.Chat);
-
-                // Business rule: Bans always revoke trust
-                var trustRevoked = await RevokeTrustOnBanAsync(intent.User, Actor.AutoBan, autoBanReason, cancellationToken);
-
-                // Notify admins (simple notification - no detection context for warning-based bans)
-                await SafeExecuteAsync(
-                    () => _notificationHandler.NotifyAdminsBanAsync(intent.User, Actor.AutoBan, autoBanReason, intent.Chat, cancellationToken),
-                    $"Auto-ban notification for user {intent.User.Id}");
-
-                // Schedule cleanup of user's messages
-                await SafeExecuteAsync(
-                    () => _messageHandler.ScheduleUserMessagesCleanupAsync(intent.User, cancellationToken),
-                    $"Schedule messages cleanup for user {intent.User.Id}");
-
                 result = result with
                 {
                     AutoBanTriggered = true,
                     ChatsAffected = banResult.ChatsAffected,
-                    TrustRemoved = trustRevoked
+                    TrustRemoved = banResult.TrustRemoved
                 };
             }
             else
@@ -523,8 +538,7 @@ public class BotModerationService : IBotModerationService
 
         // Check kick history for escalation
         var kickDuration = ModerationConstants.DefaultKickDuration;
-        var config = await _configService.GetEffectiveAsync<WelcomeConfig>(
-            ConfigType.Welcome, intent.Chat.Id);
+        var config = await _configService.GetEffectiveWelcomeAsync(intent.Chat.Id, cancellationToken);
         var maxKicks = config?.MaxKicksBeforeBan ?? ModerationConstants.DefaultMaxKicksBeforeBan;
 
         if (maxKicks > 0)
@@ -544,7 +558,8 @@ public class BotModerationService : IBotModerationService
                     User = intent.User,
                     Chat = intent.Chat,
                     Executor = intent.Executor,
-                    Reason = $"Auto-ban: {priorKickCount} prior kicks (threshold: {maxKicks})"
+                    Reason = $"Auto-ban: {priorKickCount} prior kicks (threshold: {maxKicks})",
+                    OriginReportId = intent.OriginReportId
                 }, cancellationToken);
             }
 
@@ -567,8 +582,19 @@ public class BotModerationService : IBotModerationService
 
         // Increment kick count (non-critical — kick already succeeded on Telegram)
         await SafeExecuteAsync(
-            () => _telegramUserRepository.IncrementKickCountAsync(intent.User.Id, cancellationToken),
-            $"Increment kick count for user {intent.User.Id}");
+            () => _telegramUserRepository.IncrementKickCountAsync(intent.User, cancellationToken),
+            $"Increment kick count for {intent.User.ToLogDebug()}");
+
+        // Same rules as ban, narrowed to this chat — a kick is a statement about one chat.
+        await SafeExecuteAsync(
+            () => _reportCleanupHandler.CloseOpenReportsAsync(
+                intent.User, intent.Chat, intent.Executor, "Kick", intent.OriginReportId, cancellationToken),
+            $"Close open reports for user {intent.User.Id} in chat {intent.Chat.Id}");
+
+        await SafeExecuteAsync(
+            () => _welcomeCleanupHandler.DeleteStrandedWelcomeMessagesAsync(
+                intent.User, intent.Chat, intent.Executor, cancellationToken),
+            $"Delete stranded welcome message for user {intent.User.Id} in chat {intent.Chat.Id}");
 
         return new ModerationResult
         {
@@ -632,7 +658,7 @@ public class BotModerationService : IBotModerationService
                 return;
             }
 
-            await _reportService.CreateReportAsync(report, intent.TelegramMessage, isAutomated: true, cancellationToken);
+            await _reportService.CreateReportAsync(report, intent.TelegramMessage, Actor.FileScanner, cancellationToken);
         }, "Create malware report");
 
         // Step 4: Notify admins via system notification

@@ -5,6 +5,8 @@ using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Core;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Data;
+using TelegramGroupsAdmin.Core.Extensions;
+using TelegramGroupsAdmin.Telegram.Constants;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using DataModels = TelegramGroupsAdmin.Data.Models;
 using UiModels = TelegramGroupsAdmin.Telegram.Models;
@@ -41,47 +43,30 @@ public class TelegramUserRepository : ITelegramUserRepository
 
     /// <inheritdoc/>
     public async Task<UiModels.TelegramUser> GetOrCreateAsync(
-        long telegramUserId, string? username, string? firstName, string? lastName, bool isBot,
-        CancellationToken cancellationToken = default)
+        UserIdentity user, bool isBot, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var existing = await context.TelegramUsers
-            .AsNoTracking()
-            .FirstOrDefaultAsync(u => u.TelegramUserId == telegramUserId, cancellationToken);
-
-        if (existing != null)
-            return existing.ToModel();
-
         var now = DateTimeOffset.UtcNow;
-        var entity = new DataModels.TelegramUserDto
-        {
-            TelegramUserId = telegramUserId,
-            Username = username,
-            FirstName = firstName,
-            LastName = lastName,
-            IsBot = isBot,
-            IsTrusted = TelegramConstants.IsSystemUser(telegramUserId),
-            IsBanned = false,
-            BotDmEnabled = false,
-            FirstSeenAt = now,
-            LastSeenAt = now,
-            CreatedAt = now,
-            UpdatedAt = now,
-            IsActive = false
-        };
+        var isTrusted = TelegramConstants.IsSystemUser(user.Id);
 
-        context.TelegramUsers.Add(entity);
-        await context.SaveChangesAsync(cancellationToken);
+        await context.Database.ExecuteSqlAsync($"""
+            INSERT INTO telegram_users (
+                telegram_user_id, username, first_name, last_name,
+                is_bot, is_trusted, is_banned, bot_dm_enabled,
+                first_seen_at, last_seen_at, created_at, updated_at, is_active
+            ) VALUES (
+                {user.Id}, {user.Username}, {user.FirstName}, {user.LastName},
+                {isBot}, {isTrusted}, {false}, {false},
+                {now}, {now}, {now}, {now}, {false}
+            )
+            ON CONFLICT (telegram_user_id) DO NOTHING
+            """, cancellationToken);
 
-        if (entity.IsTrusted)
-        {
-            _logger.LogInformation("Created Telegram system account {TelegramUserId} with automatic trust", telegramUserId);
-        }
-        else
-        {
-            _logger.LogInformation("Created Telegram user {FirstName} {LastName} ({TelegramUserId})",
-                firstName, lastName, telegramUserId);
-        }
+        var entity = await context.TelegramUsers
+            .AsNoTracking()
+            .FirstAsync(u => u.TelegramUserId == user.Id, cancellationToken);
+
+        _logger.LogDebug("Ensured Telegram user {User}", user.ToLogDebug());
 
         return entity.ToModel();
     }
@@ -477,10 +462,12 @@ public class TelegramUserRepository : ITelegramUserRepository
                 break;
         }
 
-        // Apply chatIds filter (Admin users have scoped access via messages table)
-        if (chatIds is { Count: > 0 })
+        // Apply chatIds filter (Admin users have scoped access via messages table).
+        // Contains GlobalChatId (0) ⇒ global / no filter. Empty (or null) ⇒ nothing.
+        var scopeIds = chatIds ?? [];
+        if (!scopeIds.Contains(ModerationConstants.GlobalChatId))
         {
-            query = query.Where(u => context.Messages.Any(m => m.UserId == u.TelegramUserId && chatIds.Contains(m.ChatId)));
+            query = query.Where(u => context.Messages.Any(m => m.UserId == u.TelegramUserId && scopeIds.Contains(m.ChatId)));
         }
 
         // Apply search text filter
@@ -656,10 +643,12 @@ public class TelegramUserRepository : ITelegramUserRepository
         // Build base queryable (exclude system user)
         var baseQuery = context.TelegramUsers.AsNoTracking().Where(u => u.TelegramUserId != 0);
 
-        // Apply chatIds filter
-        if (chatIds is { Count: > 0 })
+        // Apply chatIds filter.
+        // Contains GlobalChatId (0) ⇒ global / no filter. Empty or null ⇒ nothing (0 rows).
+        var scopeIds = chatIds ?? [];
+        if (!scopeIds.Contains(ModerationConstants.GlobalChatId))
         {
-            baseQuery = baseQuery.Where(u => context.Messages.Any(m => m.UserId == u.TelegramUserId && chatIds.Contains(m.ChatId)));
+            baseQuery = baseQuery.Where(u => context.Messages.Any(m => m.UserId == u.TelegramUserId && scopeIds.Contains(m.ChatId)));
         }
 
         // Apply search text filter
@@ -1077,12 +1066,12 @@ public class TelegramUserRepository : ITelegramUserRepository
     }
 
     /// <inheritdoc />
-    public async Task<int> IncrementKickCountAsync(long telegramUserId, CancellationToken cancellationToken = default)
+    public async Task<int> IncrementKickCountAsync(UserIdentity user, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         var rowsAffected = await context.TelegramUsers
-            .Where(u => u.TelegramUserId == telegramUserId)
+            .Where(u => u.TelegramUserId == user.Id)
             .ExecuteUpdateAsync(s => s
                 .SetProperty(u => u.KickCount, u => u.KickCount + 1)
                 .SetProperty(u => u.UpdatedAt, DateTimeOffset.UtcNow),
@@ -1090,11 +1079,11 @@ public class TelegramUserRepository : ITelegramUserRepository
 
         if (rowsAffected == 0)
         {
-            _logger.LogWarning("Cannot increment kick count for unknown user {UserId}", telegramUserId);
+            _logger.LogWarning("Cannot increment kick count for unknown user {User}", user.ToLogDebug());
             return 0;
         }
 
-        _logger.LogInformation("Incremented kick count for user {UserId}", telegramUserId);
+        _logger.LogInformation("Incremented kick count for {User}", user.ToLogInfo());
 
         return rowsAffected;
     }

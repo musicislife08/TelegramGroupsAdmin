@@ -82,9 +82,10 @@ public class ImpersonationHandlerTests
 
         await _mockModerationService.Received(1).BanUserAsync(
             Arg.Is<BanIntent>(i =>
-                i.User.Id == TestSuspectedUserId &&
+                i!.User.Id == TestSuspectedUserId &&
                 i.Chat != null && i.Chat.Id == TestChatId &&
-                i.Reason.Contains("impersonating")),
+                i.Reason.Contains("impersonating") &&
+                i.OriginReportId == TestAlertId),
             Arg.Any<CancellationToken>());
     }
 

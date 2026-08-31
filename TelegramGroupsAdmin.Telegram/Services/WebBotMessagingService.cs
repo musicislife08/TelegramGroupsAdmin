@@ -9,6 +9,7 @@ using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.Configuration.Services;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 
@@ -65,7 +66,7 @@ public class WebBotMessagingService : IWebBotMessagingService
             // Check 2: Bot must be enabled globally
             using var scope = _scopeFactory.CreateScope();
             var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
-            var botConfig = await configService.GetAsync<TelegramBotConfig>(ConfigType.TelegramBot, 0);
+            var botConfig = await configService.GetTelegramBotAsync(cancellationToken);
 
             if (botConfig?.BotEnabled != true)
             {

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.ContentDetection.Constants;
@@ -330,7 +331,17 @@ public class StopWordRecommendationService : IStopWordRecommendationService
 
             foreach (var result in detectionResults)
             {
-                var checkResults = CheckResultsSerializer.Deserialize(result.CheckResultsJson!);
+                List<CheckResult> checkResults;
+                try
+                {
+                    checkResults = CheckResultsSerializer.Deserialize(result.CheckResultsJson!);
+                }
+                catch (JsonException ex)
+                {
+                    _logger.LogWarning(ex, "Failed to parse check results JSON for detection result {DetectionResultId} during stop word analysis; skipping malformed record", result.Id);
+                    continue;
+                }
+
                 var stopWordsCheck = checkResults.FirstOrDefault(c => c.CheckName == CheckName.StopWords);
 
                 if (stopWordsCheck == null)

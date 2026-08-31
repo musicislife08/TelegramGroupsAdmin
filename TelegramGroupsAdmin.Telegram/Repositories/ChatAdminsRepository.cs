@@ -24,25 +24,6 @@ public class ChatAdminsRepository : IChatAdminsRepository
     }
 
     /// <inheritdoc/>
-    public async Task<int> GetPermissionLevelAsync(long chatId, long telegramId, CancellationToken cancellationToken = default)
-    {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-
-        var admin = await context.ChatAdmins
-            .AsNoTracking()
-            .Where(ca => ca.ChatId == chatId && ca.TelegramId == telegramId && ca.IsActive == true)
-            .Select(ca => new { ca.IsCreator })
-            .FirstOrDefaultAsync(cancellationToken);
-
-        if (admin == null)
-        {
-            return -1; // Not an admin
-        }
-
-        return admin.IsCreator ? 2 : 1; // Creator = Owner (2), Admin = Admin (1)
-    }
-
-    /// <inheritdoc/>
     public async Task<bool> IsAdminAsync(long chatId, long telegramId, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);

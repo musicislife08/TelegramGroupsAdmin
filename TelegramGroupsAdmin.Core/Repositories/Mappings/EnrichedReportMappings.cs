@@ -150,7 +150,15 @@ internal static class EnrichedReportMappings
             ReviewedBy = view.ReviewedBy,
             ReviewedAt = view.ReviewedAt,
             ActionTaken = view.ActionTaken,
-            AdminNotes = view.AdminNotes
+            AdminNotes = view.AdminNotes,
+            SubjectUserId = (ReportType)view.Type switch
+            {
+                ReportType.ContentReport => view.ContentUserId,
+                ReportType.ImpersonationAlert => view.SuspectedUserId,
+                ReportType.ExamFailure => view.ExamUserId,
+                ReportType.ProfileScanAlert => view.ProfileUserId,
+                _ => null
+            }
         };
     }
 

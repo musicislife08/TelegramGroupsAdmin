@@ -31,7 +31,7 @@ public class ReportsRepositoryTests
     public async Task SetUp()
     {
         _testHelper = new MigrationTestHelper();
-        await _testHelper.CreateDatabaseAndApplyMigrationsAsync();
+        await _testHelper.CreateDatabaseFromEmptyTemplateAsync();
 
         var services = new ServiceCollection();
 
@@ -350,20 +350,54 @@ public class ReportsRepositoryTests
     }
 
     [Test]
-    public async Task GetPendingCountAsync_ReturnsCorrectCount()
+    public async Task GetPendingCountAsync_WithGlobalChatId_CountsAllPending()
     {
-        // Arrange
+        // Arrange — reports in different chats
         await _repository!.InsertContentReportAsync(CreateTestReport(messageId: 1));
         await _repository.InsertContentReportAsync(CreateTestReport(messageId: 2));
         var reviewedId = await _repository.InsertContentReportAsync(CreateTestReport(messageId: 3));
 
         await _repository.UpdateStatusAsync(reviewedId, ReportStatus.Reviewed, "admin", "Spam");
 
-        // Act
-        var count = await _repository.GetPendingCountAsync();
+        // Act — [0] (GlobalChatId) means global / no filter
+        var count = await _repository.GetPendingCountAsync(new long[] { 0L });
+
+        // Assert — 2 pending, 1 reviewed (excluded)
+        Assert.That(count, Is.EqualTo(2));
+    }
+
+    [Test]
+    public async Task GetPendingCountAsync_WithChatIdCollection_CountsOnlyThoseChats()
+    {
+        // Arrange — pending reports across three chats
+        const long chatA = -1001000000001;
+        const long chatB = -1001000000002;
+        const long chatC = -1001000000003;
+
+        await _repository!.InsertContentReportAsync(CreateTestReport(messageId: 1, chatId: chatA));
+        await _repository.InsertContentReportAsync(CreateTestReport(messageId: 2, chatId: chatA));
+        await _repository.InsertContentReportAsync(CreateTestReport(messageId: 3, chatId: chatB));
+        await _repository.InsertContentReportAsync(CreateTestReport(messageId: 4, chatId: chatC)); // excluded
+
+        // Act — count pending only in A and B
+        var count = await _repository.GetPendingCountAsync(new[] { chatA, chatB });
+
+        // Assert — 2 in A + 1 in B, C excluded
+        Assert.That(count, Is.EqualTo(3));
+    }
+
+    [Test]
+    public async Task GetPendingCountAsync_WithEmptyChatIdCollection_ReturnsZero()
+    {
+        // Arrange — seed some pending reports
+        await _repository!.InsertContentReportAsync(CreateTestReport(messageId: 10, chatId: -1001000000010));
+        await _repository.InsertContentReportAsync(CreateTestReport(messageId: 11, chatId: -1001000000011));
+
+        // Act — empty collection ⇒ no accessible chats ⇒ 0 rows (not global)
+        var count = await _repository.GetPendingCountAsync(Array.Empty<long>());
 
         // Assert
-        Assert.That(count, Is.EqualTo(2));
+        Assert.That(count, Is.EqualTo(0));
     }
 
     #endregion
@@ -731,4 +765,75 @@ public class ReportsRepositoryTests
     }
 
     #endregion
+}
+
+/// <summary>
+/// Canonical-dataset tests for cross-type pending lookups.
+/// Uses the golden template because the assertion is about the view's four
+/// subject-user joins resolving against real report/message/user rows.
+/// </summary>
+[TestFixture]
+public class ReportsRepositoryPendingForUserTests
+{
+    private const long SubjectUserId = 9465377455871;
+    private const long ChatWithTwoReports = -100054416618415;
+
+    private MigrationTestHelper? _testHelper;
+    private IServiceProvider? _serviceProvider;
+    private IServiceScope? _scope;
+    private IReportsRepository? _repository;
+
+    [SetUp]
+    public async Task SetUp()
+    {
+        _testHelper = new MigrationTestHelper();
+        await _testHelper.CreateDatabaseFromGoldenTemplateAsync();
+
+        var services = new ServiceCollection();
+        services.AddDbContextFactory<AppDbContext>(options => options.UseNpgsql(_testHelper.ConnectionString));
+        services.AddLogging(builder => builder.AddConsole().SetMinimumLevel(LogLevel.Warning));
+        services.AddScoped<IReportsRepository, ReportsRepository>();
+
+        _serviceProvider = services.BuildServiceProvider();
+        _scope = _serviceProvider.CreateScope();
+        _repository = _scope.ServiceProvider.GetRequiredService<IReportsRepository>();
+    }
+
+    [TearDown]
+    public void TearDown()
+    {
+        _scope?.Dispose();
+        (_serviceProvider as IDisposable)?.Dispose();
+        _testHelper?.Dispose();
+    }
+
+    [Test]
+    public async Task GetPendingForUserAsync_NoChatFilter_ReturnsEveryTypeAcrossChats()
+    {
+        var pending = await _repository!.GetPendingForUserAsync(SubjectUserId);
+
+        Assert.That(pending.Select(r => r.Type), Is.EquivalentTo(new[]
+        {
+            ReportType.ContentReport,
+            ReportType.ExamFailure,
+            ReportType.ProfileScanAlert
+        }));
+    }
+
+    [Test]
+    public async Task GetPendingForUserAsync_WithChatFilter_ReturnsOnlyThatChat()
+    {
+        var pending = await _repository!.GetPendingForUserAsync(SubjectUserId, ChatWithTwoReports);
+
+        Assert.That(pending.Select(r => r.Chat.Id), Is.All.EqualTo(ChatWithTwoReports));
+        Assert.That(pending, Has.Count.EqualTo(2));
+    }
+
+    [Test]
+    public async Task GetPendingForUserAsync_ExcludesAlreadyReviewedReports()
+    {
+        var pending = await _repository!.GetPendingForUserAsync(SubjectUserId);
+
+        Assert.That(pending.Select(r => r.Status), Is.All.EqualTo(ReportStatus.Pending));
+    }
 }

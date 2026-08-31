@@ -37,7 +37,14 @@ public static class ServiceCollectionExtensions
 
         // Note: RetryJobListener is registered by Quartz via AddJobListener<T>() below
 
-        // Register scheduling sync service (syncs database configs to Quartz triggers)
+        // Shared wake-up signal decoupling the config writer from the sync worker (replaces the concrete cast).
+        services.AddSingleton<IScheduleResyncSignal, ScheduleResyncSignal>();
+
+        // Register the Quartz schedule synchronizer (holds the sync business logic).
+        // The hosted worker below is a thin shell that drives this service.
+        services.AddSingleton<IQuartzScheduleSynchronizer, QuartzScheduleSynchronizer>();
+
+        // Register scheduling sync worker (drives IQuartzScheduleSynchronizer on a loop)
         services.AddHostedService<QuartzSchedulingSyncService>();
 
         // Configure Quartz.NET
@@ -103,8 +110,6 @@ public static class ServiceCollectionExtensions
         q.AddJob<RotateBackupPassphraseJob>(opts => opts.WithIdentity(BackgroundJobNames.RotateBackupPassphrase).StoreDurably());
         q.AddJob<TempbanExpiryJob>(opts => opts.WithIdentity(BackgroundJobNames.TempbanExpiry).StoreDurably());
         q.AddJob<WelcomeTimeoutJob>(opts => opts.WithIdentity(BackgroundJobNames.WelcomeTimeout).StoreDurably());
-
-        q.AddJob<ProfileScanJob>(opts => opts.WithIdentity(BackgroundJobNames.ProfileScan).StoreDurably());
 
         // Note: Triggers will be created dynamically by QuartzSchedulingSyncService
         // based on database configuration (BackgroundJobConfig.Schedule)

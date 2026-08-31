@@ -3,7 +3,12 @@ using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Configuration.Models;
+using TelegramGroupsAdmin.Configuration.Services;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
+using TelegramGroupsAdmin.Core.Utilities;
+using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 
@@ -11,7 +16,7 @@ namespace TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
 
 /// <summary>
 /// /invite - Get invite link for current chat (for users in private groups)
-/// Permission level: -1 (everyone, including non-admins)
+/// Permission level: Member (everyone, including non-admins)
 /// Configurable: Global and per-chat enable/disable
 /// Auto-deletes: Command and response after 30 seconds (configurable)
 /// </summary>
@@ -23,7 +28,7 @@ public class InviteCommand : IBotCommand
     public string Name => "invite";
     public string Description => "Get invite link for this chat";
     public string Usage => "/invite";
-    public int MinPermissionLevel => -1; // Everyone can use this
+    public PermissionLevel MinPermissionLevel => PermissionLevel.Member; // everyone
     public bool RequiresReply => false;
     public bool DeleteCommandMessage => true; // Default, overridden by config
     public int? DeleteResponseAfterSeconds => 30; // Default, overridden by config
@@ -39,14 +44,14 @@ public class InviteCommand : IBotCommand
     public async Task<CommandResult> ExecuteAsync(
         Message message,
         string[] args,
-        int userPermissionLevel,
+        PermissionLevel userPermission,
         CancellationToken cancellationToken = default)
     {
         // Only works in groups/supergroups
         if (message.Chat.Type is not (ChatType.Group or ChatType.Supergroup))
         {
             return new CommandResult(
-                "❌ This command only works in group chats.",
+                TelegramMessage.Plain("❌ This command only works in group chats."),
                 DeleteCommandMessage,
                 DeleteResponseAfterSeconds);
         }
@@ -58,19 +63,19 @@ public class InviteCommand : IBotCommand
         var chatService = scope.ServiceProvider.GetRequiredService<IBotChatService>();
 
         // Check if command is enabled (global + per-chat override)
-        var config = await configService.GetEffectiveAsync<InviteCommandConfig>(ConfigType.Moderation, chatId)
+        var config = await configService.GetEffectiveInviteCommandAsync(chatId, cancellationToken)
                      ?? InviteCommandConfig.Default;
 
         if (!config.Enabled)
         {
             return new CommandResult(
-                "❌ The /invite command is disabled in this chat.",
+                TelegramMessage.Plain("❌ The /invite command is disabled in this chat."),
                 config.DeleteCommandMessage,
                 config.DeleteResponseAfterSeconds);
         }
 
         // Get cached invite link (or fetch from Telegram if not cached)
-        var inviteLink = await chatService.GetInviteLinkAsync(chatId, cancellationToken);
+        var inviteLink = await chatService.GetInviteLinkAsync(ChatIdentity.From(message.Chat), cancellationToken);
 
         if (string.IsNullOrEmpty(inviteLink))
         {
@@ -80,7 +85,7 @@ public class InviteCommand : IBotCommand
                 message.Chat.Title ?? "Unknown");
 
             return new CommandResult(
-                "❌ Unable to get invite link. The bot may need admin permissions to export invite links.",
+                TelegramMessage.Plain("❌ Unable to get invite link. The bot may need admin permissions to export invite links."),
                 config.DeleteCommandMessage,
                 config.DeleteResponseAfterSeconds);
         }
@@ -92,14 +97,16 @@ public class InviteCommand : IBotCommand
             chatId,
             message.Chat.Title ?? "Unknown");
 
+        var inviteMessage = new TelegramMessageBuilder()
+            .Text("🔗 ").Bold("Invite Link").LineBreak()
+            .LineBreak()
+            .Text(inviteLink).LineBreak()
+            .LineBreak()
+            .Italic($"This message will auto-delete in {config.DeleteResponseAfterSeconds} seconds")
+            .Build();
+
         return new CommandResult(
-            $$"""
-              🔗 *Invite Link*
-
-              {{inviteLink}}
-
-              _This message will auto-delete in {{config.DeleteResponseAfterSeconds}} seconds_
-              """,
+            inviteMessage,
             config.DeleteCommandMessage,
             config.DeleteResponseAfterSeconds);
     }

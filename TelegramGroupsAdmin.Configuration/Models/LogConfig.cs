@@ -4,7 +4,7 @@ namespace TelegramGroupsAdmin.Configuration.Models;
 
 /// <summary>
 /// Configuration model for dynamic log levels
-/// Stored in configs table with ConfigType.Log
+/// Stored in configs table (log_config column)
 /// </summary>
 public class LogConfig
 {

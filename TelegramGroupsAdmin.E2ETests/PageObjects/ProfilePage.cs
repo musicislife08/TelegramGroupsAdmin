@@ -22,6 +22,8 @@ public class ProfilePage
     private const string AccountInfoSection = ".mud-paper:has(.mud-typography-h6:has-text('Account Information'))";
     private const string ChangePasswordSection = ".mud-paper:has(.mud-typography-h6:has-text('Change Password'))";
     private const string TotpSection = ".mud-paper:has(.mud-typography-h6:has-text('Two-Factor Authentication'))";
+    private const string TotpEnabledAlert = ".mud-alert:has-text('2FA is currently enabled')";
+    private const string TotpDisabledAlert = ".mud-alert:has-text('2FA is not enabled')";
     private const string TelegramLinkingSection = ".mud-paper:has(.mud-typography-h6:has-text('Linked Telegram Accounts'))";
 
     public ProfilePage(IPage page)
@@ -38,14 +40,25 @@ public class ProfilePage
     {
         await _page.GotoAsync(BasePath);
         await Expect(_page.Locator(PageTitle)).ToBeVisibleAsync();
+        await WaitForLoadAsync();
     }
 
     /// <summary>
-    /// Waits for the page to fully load.
+    /// Waits for the page to fully load, including all content sections past the render gate.
     /// </summary>
     public async Task WaitForLoadAsync(int timeoutMs = 15000)
     {
         await Expect(_page.Locator(AccountInfoSection)).ToBeVisibleAsync(new() { Timeout = timeoutMs });
+        await Expect(_page.Locator(TotpSection)).ToBeVisibleAsync(new() { Timeout = timeoutMs });
+        await Expect(_page.Locator(TelegramLinkingSection)).ToBeVisibleAsync(new() { Timeout = timeoutMs });
+        // Wait for the Telegram section's content (table or empty state) to have rendered, not just the paper frame.
+        var telegramTable = _page.Locator($"{TelegramLinkingSection} .mud-table");
+        var telegramNoAccounts = _page.Locator($"{TelegramLinkingSection} .mud-alert");
+        await telegramTable.Or(telegramNoAccounts).WaitForAsync(new LocatorWaitForOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = timeoutMs
+        });
     }
 
     #endregion
@@ -218,8 +231,7 @@ public class ProfilePage
     /// </summary>
     public async Task<bool> IsTotpEnabledAsync()
     {
-        var enabledAlert = _page.Locator(TotpSection).Locator(".mud-alert:has-text('2FA is currently enabled')");
-        return await enabledAlert.IsVisibleAsync();
+        return await _page.Locator(TotpSection).Locator(TotpEnabledAlert).IsVisibleAsync();
     }
 
     /// <summary>
@@ -227,8 +239,28 @@ public class ProfilePage
     /// </summary>
     public async Task<bool> IsTotpDisabledAsync()
     {
-        var disabledAlert = _page.Locator(TotpSection).Locator(".mud-alert:has-text('2FA is not enabled')");
-        return await disabledAlert.IsVisibleAsync();
+        return await _page.Locator(TotpSection).Locator(TotpDisabledAlert).IsVisibleAsync();
+    }
+
+    /// <summary>
+    /// Asserts (auto-retrying) that the TOTP section shows the "enabled" alert. Prefer this
+    /// over IsTotpEnabledAsync() in test assertions: IsVisibleAsync() is a point-in-time
+    /// snapshot and races the alert's async (Blazor) render under load.
+    /// </summary>
+    public async Task AssertTotpEnabledAsync(int? timeoutMs = null)
+    {
+        var locator = _page.Locator(TotpSection).Locator(TotpEnabledAlert);
+        await Expect(locator).ToBeVisibleAsync(timeoutMs is { } t ? new() { Timeout = t } : null);
+    }
+
+    /// <summary>
+    /// Asserts (auto-retrying) that the TOTP section shows the "not enabled" warning.
+    /// Prefer this over IsTotpDisabledAsync() in test assertions (see AssertTotpEnabledAsync).
+    /// </summary>
+    public async Task AssertTotpDisabledAsync(int? timeoutMs = null)
+    {
+        var locator = _page.Locator(TotpSection).Locator(TotpDisabledAlert);
+        await Expect(locator).ToBeVisibleAsync(timeoutMs is { } t ? new() { Timeout = t } : null);
     }
 
     /// <summary>
@@ -580,9 +612,32 @@ public class ProfilePage
     {
         var unlinkButton = _page.Locator($"{TelegramLinkingSection} .mud-table-body tr").Nth(rowIndex)
             .GetByRole(AriaRole.Button, new() { Name = "Unlink" });
+        // Confirm the button is enabled before clicking — ensures the Blazor circuit is live and
+        // the row is fully interactive, not just painted.
+        await Expect(unlinkButton).ToBeEnabledAsync(new() { Timeout = 10000 });
         await unlinkButton.ClickAsync();
-        // Wait for snackbar to appear (indicates operation completed)
-        await Expect(_page.Locator(".mud-snackbar").First).ToBeVisibleAsync();
+        // Wait for snackbar to appear (indicates operation completed).
+        // If the circuit briefly dropped and swallowed the click, the button remains and we retry once.
+        var snackbarLocator = _page.Locator(".mud-snackbar").First;
+        try
+        {
+            await Expect(snackbarLocator).ToBeVisibleAsync(new() { Timeout = 10000 });
+        }
+        catch (PlaywrightException)
+        {
+            // Circuit may have reconnected without processing the click — retry if the row is still there.
+            if (await unlinkButton.IsVisibleAsync())
+            {
+                await Expect(unlinkButton).ToBeEnabledAsync(new() { Timeout = 10000 });
+                await unlinkButton.ClickAsync();
+                await Expect(snackbarLocator).ToBeVisibleAsync(new() { Timeout = 15000 });
+            }
+            else
+            {
+                // Row is gone — the unlink succeeded silently; re-throw to surface any other issue.
+                throw;
+            }
+        }
     }
 
     #endregion

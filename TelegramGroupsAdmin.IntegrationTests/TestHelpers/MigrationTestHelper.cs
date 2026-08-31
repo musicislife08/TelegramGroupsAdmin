@@ -33,30 +33,49 @@ public class MigrationTestHelper : IDisposable
     }
 
     /// <summary>
-    /// Creates the test database and applies all EF Core migrations.
-    /// Call this in test setup to get a fresh database with schema applied.
+    /// Builds a connection string targeting the "postgres" admin DB with pooling disabled.
+    /// Required for CREATE DATABASE … TEMPLATE, where Postgres rejects the operation if any
+    /// other backend session is connected to the source template.
     /// </summary>
-    public async Task CreateDatabaseAndApplyMigrationsAsync()
+    private static string BuildAdminConnectionString()
     {
-        // First, create the database using the postgres database connection
-        var adminBuilder = new NpgsqlConnectionStringBuilder(PostgresFixture.BaseConnectionString)
+        var builder = new NpgsqlConnectionStringBuilder(PostgresFixture.BaseConnectionString)
         {
-            Database = "postgres" // Connect to default postgres DB to create our test DB
+            Database = "postgres",
+            Pooling = false,
         };
+        return builder.ConnectionString;
+    }
 
-        await using (var connection = new NpgsqlConnection(adminBuilder.ConnectionString))
-        {
-            await connection.OpenAsync();
-            await using var cmd = new NpgsqlCommand($"CREATE DATABASE \"{_databaseName}\"", connection);
-            await cmd.ExecuteNonQueryAsync();
-        }
+    /// <summary>
+    /// Creates the test database by cloning the session-built `empty_template`. Per-test
+    /// setup drops to ~50–150ms vs the ~250–550ms of CreateDatabaseAndApplyMigrationsAsync.
+    /// Use this for true-empty consumer tests (asserting on empty state, or exercising a
+    /// write SUT from clean slate).
+    /// </summary>
+    public async Task CreateDatabaseFromEmptyTemplateAsync()
+    {
+        await using var connection = new NpgsqlConnection(BuildAdminConnectionString());
+        await connection.OpenAsync();
+        await using var cmd = new NpgsqlCommand(
+            $"CREATE DATABASE \"{_databaseName}\" TEMPLATE empty_template",
+            connection);
+        await cmd.ExecuteNonQueryAsync();
+    }
 
-        // Now apply migrations to the new database
-        var optionsBuilder = new DbContextOptionsBuilder<AppDbContext>();
-        optionsBuilder.UseNpgsql(_connectionString);
-
-        await using var context = new AppDbContext(optionsBuilder.Options);
-        await context.Database.MigrateAsync();
+    /// <summary>
+    /// Creates the test database by cloning the session-built `golden_template`. The cloned
+    /// DB has full canonical data ready to use; encrypted-column ciphertext is decryptable
+    /// using PostgresFixture.SharedDataProtectionProvider.
+    /// </summary>
+    public async Task CreateDatabaseFromGoldenTemplateAsync()
+    {
+        await using var connection = new NpgsqlConnection(BuildAdminConnectionString());
+        await connection.OpenAsync();
+        await using var cmd = new NpgsqlCommand(
+            $"CREATE DATABASE \"{_databaseName}\" TEMPLATE golden_template",
+            connection);
+        await cmd.ExecuteNonQueryAsync();
     }
 
     /// <summary>

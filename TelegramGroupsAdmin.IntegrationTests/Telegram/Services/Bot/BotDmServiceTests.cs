@@ -7,6 +7,7 @@ using Telegram.Bot.Exceptions;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.JobPayloads;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
 using TelegramGroupsAdmin.Telegram.Repositories;
@@ -29,11 +30,17 @@ namespace TelegramGroupsAdmin.IntegrationTests.Telegram.Services.Bot;
 /// - Real PostgreSQL for user status tracking and pending notifications
 /// - Mocked IBotMessageHandler for API responses (success, 403, exceptions)
 /// - Mocked IJobScheduler for verifying job scheduling
+///
+/// Canonical anchors:
+/// - TestUserId: 9921676191756 (@unhelpfulgrab, "Squeak Degree"), bot_dm_enabled=false, is_banned=false, is_active=true
+/// - TestChatId: -100123456789 (synthetic, outside canonical range [-100099999999999, -100000000000000], seeded inline)
 /// </summary>
 [TestFixture]
 public class BotDmServiceTests
 {
-    private const long TestUserId = 12345L;
+    // Canonical anchor: @unhelpfulgrab, bot_dm_enabled=false, is_banned=false, is_active=true
+    private const long TestUserId = 9921676191756L;
+    // Synthetic chat ID — outside canonical range, seeded inline
     private const long TestChatId = -100123456789L;
     private const string TestChatName = "Test Group";
 
@@ -48,9 +55,9 @@ public class BotDmServiceTests
     [SetUp]
     public async Task SetUp()
     {
-        // Create unique test database with migrations applied
+        // Create unique test database from golden canonical template
         _testHelper = new MigrationTestHelper();
-        await _testHelper.CreateDatabaseAndApplyMigrationsAsync();
+        await _testHelper.CreateDatabaseFromGoldenTemplateAsync();
 
         // Set up mocks for external services
         _mockMessageHandler = Substitute.For<IBotMessageHandler>();
@@ -83,9 +90,6 @@ public class BotDmServiceTests
         _service = scope.ServiceProvider.GetRequiredService<IBotDmService>();
         _userRepository = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
         _pendingNotificationsRepository = scope.ServiceProvider.GetRequiredService<IPendingNotificationsRepository>();
-
-        // Seed test user
-        await SeedTestUser(TestUserId, botDmEnabled: false);
     }
 
     [TearDown]
@@ -107,11 +111,12 @@ public class BotDmServiceTests
             Arg.Any<global::Telegram.Bot.Types.Enums.ParseMode?>(),
             Arg.Any<ReplyParameters?>(),
             Arg.Any<global::Telegram.Bot.Types.ReplyMarkups.InlineKeyboardMarkup?>(),
+            Arg.Any<IReadOnlyList<global::Telegram.Bot.Types.MessageEntity>?>(),
             Arg.Any<CancellationToken>()
         ).Returns(TelegramTestFactory.CreateMessage(messageId: 999, chatId: TestUserId));
 
         // Act
-        var result = await _service!.SendDmAsync(TestUserId, "Test message");
+        var result = await _service!.SendDmAsync(UserIdentity.FromId(TestUserId), "Test message");
 
         // Assert
         using (Assert.EnterMultipleScope())
@@ -138,11 +143,12 @@ public class BotDmServiceTests
             Arg.Any<global::Telegram.Bot.Types.Enums.ParseMode?>(),
             Arg.Any<ReplyParameters?>(),
             Arg.Any<global::Telegram.Bot.Types.ReplyMarkups.InlineKeyboardMarkup?>(),
+            Arg.Any<IReadOnlyList<global::Telegram.Bot.Types.MessageEntity>?>(),
             Arg.Any<CancellationToken>()
         ).ThrowsAsync(new ApiRequestException("Forbidden", 403));
 
         // Act
-        var result = await _service!.SendDmAsync(TestUserId, "Test message");
+        var result = await _service!.SendDmAsync(UserIdentity.FromId(TestUserId), "Test message");
 
         // Assert
         using (Assert.EnterMultipleScope())
@@ -167,6 +173,7 @@ public class BotDmServiceTests
             Arg.Any<global::Telegram.Bot.Types.Enums.ParseMode?>(),
             Arg.Any<ReplyParameters?>(),
             Arg.Any<global::Telegram.Bot.Types.ReplyMarkups.InlineKeyboardMarkup?>(),
+            Arg.Any<IReadOnlyList<global::Telegram.Bot.Types.MessageEntity>?>(),
             Arg.Any<CancellationToken>()
         ).ThrowsAsync(new ApiRequestException("Forbidden", 403));
 
@@ -176,6 +183,7 @@ public class BotDmServiceTests
             Arg.Any<global::Telegram.Bot.Types.Enums.ParseMode?>(),
             Arg.Any<ReplyParameters?>(),
             Arg.Any<global::Telegram.Bot.Types.ReplyMarkups.InlineKeyboardMarkup?>(),
+            Arg.Any<IReadOnlyList<global::Telegram.Bot.Types.MessageEntity>?>(),
             Arg.Any<CancellationToken>()
         ).Returns(TelegramTestFactory.CreateMessage(messageId: 888, chatId: TestChatId));
 
@@ -184,7 +192,7 @@ public class BotDmServiceTests
 
         // Act
         var result = await _service!.SendDmAsync(
-            TestUserId,
+            UserIdentity.FromId(TestUserId),
             "Test message",
             fallbackChatId: TestChatId,
             autoDeleteSeconds: 30);
@@ -202,7 +210,7 @@ public class BotDmServiceTests
         await _mockJobScheduler.Received(1).ScheduleJobAsync(
             "DeleteMessage",
             Arg.Is<DeleteMessagePayload>(p =>
-                p.ChatId == TestChatId &&
+                p!.ChatId == TestChatId &&
                 p.MessageId == 888 &&
                 p.Reason == "dm_fallback"),
             delaySeconds: 30,
@@ -212,10 +220,10 @@ public class BotDmServiceTests
 
     #endregion
 
-    #region SendDmWithQueueAsync Tests
+    #region SendDmWithEntitiesAsync Tests
 
     [Test]
-    public async Task SendDmWithQueueAsync_Success_SetsBotDmEnabledTrue()
+    public async Task SendDmWithEntitiesAsync_Success_SetsBotDmEnabledTrue()
     {
         // Arrange
         _mockMessageHandler.SendAsync(
@@ -224,14 +232,16 @@ public class BotDmServiceTests
             Arg.Any<global::Telegram.Bot.Types.Enums.ParseMode?>(),
             Arg.Any<ReplyParameters?>(),
             Arg.Any<global::Telegram.Bot.Types.ReplyMarkups.InlineKeyboardMarkup?>(),
+            Arg.Any<IReadOnlyList<global::Telegram.Bot.Types.MessageEntity>?>(),
             Arg.Any<CancellationToken>()
         ).Returns(TelegramTestFactory.CreateMessage(messageId: 999, chatId: TestUserId));
 
         // Act
-        var result = await _service!.SendDmWithQueueAsync(
-            TestUserId,
+        var result = await _service!.SendDmWithEntitiesAsync(
+            UserIdentity.FromId(TestUserId),
             "test_notification",
-            "Test message");
+            "Test message",
+            []);
 
         // Assert
         using (Assert.EnterMultipleScope())
@@ -246,7 +256,7 @@ public class BotDmServiceTests
     }
 
     [Test]
-    public async Task SendDmWithQueueAsync_Blocked403_QueuesNotificationForLater()
+    public async Task SendDmWithEntitiesAsync_Blocked403_QueuesNotificationForLater()
     {
         // Arrange
         _mockMessageHandler.SendAsync(
@@ -255,14 +265,16 @@ public class BotDmServiceTests
             Arg.Any<global::Telegram.Bot.Types.Enums.ParseMode?>(),
             Arg.Any<ReplyParameters?>(),
             Arg.Any<global::Telegram.Bot.Types.ReplyMarkups.InlineKeyboardMarkup?>(),
+            Arg.Any<IReadOnlyList<global::Telegram.Bot.Types.MessageEntity>?>(),
             Arg.Any<CancellationToken>()
         ).ThrowsAsync(new ApiRequestException("Forbidden", 403));
 
         // Act
-        var result = await _service!.SendDmWithQueueAsync(
-            TestUserId,
+        var result = await _service!.SendDmWithEntitiesAsync(
+            UserIdentity.FromId(TestUserId),
             "report_resolved",
-            "Your report was resolved!");
+            "Your report was resolved!",
+            []);
 
         // Assert
         using (Assert.EnterMultipleScope())
@@ -306,12 +318,13 @@ public class BotDmServiceTests
             Arg.Any<global::Telegram.Bot.Types.Enums.ParseMode?>(),
             Arg.Any<ReplyParameters?>(),
             Arg.Any<global::Telegram.Bot.Types.ReplyMarkups.InlineKeyboardMarkup?>(),
+            Arg.Any<IReadOnlyList<global::Telegram.Bot.Types.MessageEntity>?>(),
             Arg.Any<CancellationToken>()
         ).Returns(TelegramTestFactory.CreateMessage(messageId: 777, chatId: TestUserId));
 
         // Act
         var result = await _service!.SendDmWithKeyboardAsync(
-            TestUserId,
+            UserIdentity.FromId(TestUserId),
             "Choose an option:",
             keyboard);
 
@@ -342,12 +355,13 @@ public class BotDmServiceTests
             Arg.Any<global::Telegram.Bot.Types.Enums.ParseMode?>(),
             Arg.Any<ReplyParameters?>(),
             Arg.Any<global::Telegram.Bot.Types.ReplyMarkups.InlineKeyboardMarkup?>(),
+            Arg.Any<IReadOnlyList<global::Telegram.Bot.Types.MessageEntity>?>(),
             Arg.Any<CancellationToken>()
         ).ThrowsAsync(new ApiRequestException("Forbidden", 403));
 
         // Act
         var result = await _service!.SendDmWithKeyboardAsync(
-            TestUserId,
+            UserIdentity.FromId(TestUserId),
             "Choose an option:",
             keyboard);
 
@@ -388,28 +402,6 @@ public class BotDmServiceTests
     #endregion
 
     #region Helper Methods
-
-    private async Task SeedTestUser(long userId, bool botDmEnabled)
-    {
-        await using var context = _testHelper!.GetDbContext();
-
-        context.TelegramUsers.Add(new Data.Models.TelegramUserDto
-        {
-            TelegramUserId = userId,
-            FirstName = "TestUser",
-            Username = "testuser",
-            IsBot = false,
-            IsTrusted = false,
-            IsBanned = false,
-            BotDmEnabled = botDmEnabled,
-            FirstSeenAt = DateTimeOffset.UtcNow,
-            LastSeenAt = DateTimeOffset.UtcNow,
-            CreatedAt = DateTimeOffset.UtcNow,
-            UpdatedAt = DateTimeOffset.UtcNow
-        });
-
-        await context.SaveChangesAsync();
-    }
 
     private async Task SeedManagedChat(long chatId, string chatName)
     {

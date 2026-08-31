@@ -13,6 +13,7 @@ using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
 using TelegramGroupsAdmin.Telegram.Services.Welcome;
+using TelegramGroupsAdmin.Configuration.Services;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 
@@ -110,13 +111,7 @@ public class ExamFlowService : IExamFlowService
             var welcomeResponse = await welcomeRepo.GetByUserAndChatAsync(user.Id, chat.Id, cancellationToken);
             var expiresAt = CalculateExamExpiry(welcomeResponse, config.TimeoutSeconds);
 
-            var sessionId = await sessionRepo.CreateSessionAsync(chat.Id, user.Id, expiresAt, cancellationToken);
-
-            _logger.LogInformation(
-                "Created exam session {SessionId} for {User} in {Chat}",
-                sessionId,
-                user.ToLogInfo(),
-                chat.ToLogInfo());
+            var sessionId = await sessionRepo.CreateSessionAsync(ChatIdentity.From(chat), UserIdentity.From(user), expiresAt, cancellationToken);
 
             // Send first question to user's DM (user.Id is the DM chat ID)
             int messageId;
@@ -177,7 +172,7 @@ public class ExamFlowService : IExamFlowService
                         "User {User} already has active exam session in {Chat}, skipping duplicate creation",
                         user.ToLogInfo(), chat.ToLogInfo());
 
-                    await _dmService.SendDmAsync(dmChatId,
+                    await _dmService.SendDmAsync(UserIdentity.From(user),
                         "📝 You already have an active exam session. Please scroll up to find your current question.",
                         cancellationToken: cancellationToken);
 
@@ -193,20 +188,13 @@ public class ExamFlowService : IExamFlowService
             var welcomeResponse = await welcomeRepo.GetByUserAndChatAsync(user.Id, chat.Id, cancellationToken);
             var expiresAt = CalculateExamExpiry(welcomeResponse, config.TimeoutSeconds);
 
-            var sessionId = await sessionRepo.CreateSessionAsync(chat.Id, user.Id, expiresAt, cancellationToken);
-
-            _logger.LogInformation(
-                "Created exam session {SessionId} for {User} in {Chat}",
-                sessionId,
-                user.ToLogInfo(),
-                chat.ToLogInfo());
+            var sessionId = await sessionRepo.CreateSessionAsync(chat, UserIdentity.From(user), expiresAt, cancellationToken);
 
             // Send exam intro (MainWelcomeMessage) first - rules/guidelines without buttons
-            var username = TelegramDisplayName.FormatMention(user);
             var chatName = chat.ChatName ?? "the group";
 
-            var introText = WelcomeMessageBuilder.FormatExamIntro(config, username, chatName);
-            await _dmService.SendDmAsync(dmChatId, introText, cancellationToken: cancellationToken);
+            var introMessage = WelcomeMessageBuilder.FormatExamIntro(config, UserIdentity.From(user), chatName);
+            await _dmService.SendDmAsync(UserIdentity.From(user), introMessage, cancellationToken: cancellationToken);
 
             // Then send first question to DM
             int messageId;
@@ -282,8 +270,8 @@ public class ExamFlowService : IExamFlowService
         }
 
         // Load config
-        var config = await configService.GetEffectiveAsync<WelcomeConfig>(
-            Configuration.ConfigType.Welcome, session.ChatId) ?? WelcomeConfig.Default;
+        var config = await configService.GetEffectiveWelcomeAsync(session.ChatId, cancellationToken)
+                     ?? WelcomeConfig.Default;
 
         if (config.ExamConfig == null)
         {
@@ -373,8 +361,8 @@ public class ExamFlowService : IExamFlowService
         }
 
         // Load config
-        var config = await configService.GetEffectiveAsync<WelcomeConfig>(
-            Configuration.ConfigType.Welcome, chatId) ?? WelcomeConfig.Default;
+        var config = await configService.GetEffectiveWelcomeAsync(chatId, cancellationToken)
+                     ?? WelcomeConfig.Default;
 
         if (config.ExamConfig == null || !config.ExamConfig.HasOpenEndedQuestion)
         {
@@ -422,8 +410,8 @@ public class ExamFlowService : IExamFlowService
             return null;
 
         // Load exam config to determine if awaiting open-ended
-        var config = await configService.GetEffectiveAsync<WelcomeConfig>(
-            Configuration.ConfigType.Welcome, session.ChatId) ?? WelcomeConfig.Default;
+        var config = await configService.GetEffectiveWelcomeAsync(session.ChatId, cancellationToken)
+                     ?? WelcomeConfig.Default;
 
         if (config.ExamConfig == null)
             return null;
@@ -583,7 +571,7 @@ public class ExamFlowService : IExamFlowService
 
         // Send pending message to user in DM
         await _dmService.SendDmAsync(
-            messageChatId,
+            UserIdentity.From(user),
             "⏳ Your answers are being reviewed by an admin. Please wait.",
             cancellationToken: cancellationToken);
 
@@ -603,8 +591,7 @@ public class ExamFlowService : IExamFlowService
         int totalQuestions,
         CancellationToken cancellationToken)
     {
-        var username = TelegramDisplayName.FormatMention(user);
-        var text = ExamMessageBuilder.FormatMcQuestion(username, questionIndex + 1, totalQuestions, question.Question);
+        var text = ExamMessageBuilder.FormatMcQuestion(UserIdentity.From(user), questionIndex + 1, totalQuestions, question.Question);
 
         // Build keyboard with shuffled answers
         var buttons = new List<InlineKeyboardButton[]>();
@@ -620,7 +607,7 @@ public class ExamFlowService : IExamFlowService
         var keyboard = new InlineKeyboardMarkup(buttons);
 
         // Exam questions are always sent to DMs with keyboard
-        var result = await _dmService.SendDmWithKeyboardAsync(dmChatId, text, keyboard, cancellationToken);
+        var result = await _dmService.SendDmWithKeyboardAsync(UserIdentity.From(user), text, keyboard, cancellationToken);
         return result.MessageId ?? throw new InvalidOperationException("Failed to send exam question - no MessageId returned");
     }
 
@@ -630,11 +617,10 @@ public class ExamFlowService : IExamFlowService
         ExamConfig examConfig,
         CancellationToken cancellationToken)
     {
-        var username = TelegramDisplayName.FormatMention(user);
-        var text = ExamMessageBuilder.FormatOpenEndedQuestion(username, examConfig.OpenEndedQuestion!);
+        var text = ExamMessageBuilder.FormatOpenEndedQuestion(UserIdentity.From(user), examConfig.OpenEndedQuestion!);
 
         // Exam questions are always sent to DMs (no keyboard for open-ended)
-        var result = await _dmService.SendDmAsync(dmChatId, text, cancellationToken: cancellationToken);
+        var result = await _dmService.SendDmAsync(UserIdentity.From(user), text, cancellationToken: cancellationToken);
         return result.MessageId ?? throw new InvalidOperationException("Failed to send exam question - no MessageId returned");
     }
 
@@ -780,7 +766,7 @@ public class ExamFlowService : IExamFlowService
             // Profile gate still pending — notify user exam passed but awaiting review
             try
             {
-                await _dmService.SendDmAsync(user.Id,
+                await _dmService.SendDmAsync(user,
                     $"✅ You've passed the entrance exam for {chatName}! ⏳ Your profile is under admin review — you'll be able to participate once approved.",
                     cancellationToken: cancellationToken);
             }
@@ -811,7 +797,7 @@ public class ExamFlowService : IExamFlowService
         bool isManualApproval,
         CancellationToken cancellationToken)
     {
-        var chatDeepLink = await _chatService.GetInviteLinkAsync(chat.Id, cancellationToken);
+        var chatDeepLink = await _chatService.GetInviteLinkAsync(chat, cancellationToken);
 
         InlineKeyboardMarkup? keyboard = null;
         if (chatDeepLink != null)
@@ -827,11 +813,11 @@ public class ExamFlowService : IExamFlowService
         {
             if (keyboard != null)
             {
-                await _dmService.SendDmWithKeyboardAsync(user.Id, messageText, keyboard, cancellationToken);
+                await _dmService.SendDmWithKeyboardAsync(user, messageText, keyboard, cancellationToken);
             }
             else
             {
-                await _dmService.SendDmAsync(user.Id, messageText, cancellationToken: cancellationToken);
+                await _dmService.SendDmAsync(user, messageText, cancellationToken: cancellationToken);
             }
         }
         catch (Exception ex)
@@ -845,6 +831,7 @@ public class ExamFlowService : IExamFlowService
         UserIdentity user,
         ChatIdentity chat,
         Actor executor,
+        long? originReportId = null,
         CancellationToken cancellationToken = default)
     {
         return await ExecuteExamDenialAsync(
@@ -852,6 +839,7 @@ public class ExamFlowService : IExamFlowService
             chat,
             executor,
             banGlobally: false,
+            originReportId,
             cancellationToken);
     }
 
@@ -860,6 +848,7 @@ public class ExamFlowService : IExamFlowService
         UserIdentity user,
         ChatIdentity chat,
         Actor executor,
+        long? originReportId = null,
         CancellationToken cancellationToken = default)
     {
         return await ExecuteExamDenialAsync(
@@ -867,18 +856,21 @@ public class ExamFlowService : IExamFlowService
             chat,
             executor,
             banGlobally: true,
+            originReportId,
             cancellationToken);
     }
 
     /// <summary>
     /// Shared method for completing exam denial (both kick and ban flows).
-    /// Handles: delete teaser, update welcome response, kick/ban user, send DM notification.
+    /// Handles: update welcome response, kick/ban user (the moderation orchestrator deletes
+    /// the teaser message as part of that action), send DM notification.
     /// </summary>
     private async Task<ModerationResult> ExecuteExamDenialAsync(
         UserIdentity user,
         ChatIdentity chat,
         Actor executor,
         bool banGlobally,
+        long? originReportId,
         CancellationToken cancellationToken)
     {
         await using var scope = _serviceProvider.CreateAsyncScope();
@@ -887,23 +879,10 @@ public class ExamFlowService : IExamFlowService
 
         var chatName = chat.ChatName ?? "the chat";
 
-        // 1. Delete teaser and update welcome response
+        // 1. Update welcome response to denied
         var welcomeResponse = await welcomeResponsesRepo.GetByUserAndChatAsync(user.Id, chat.Id, cancellationToken);
         if (welcomeResponse != null)
         {
-            // Delete teaser message via orchestrator (audit trail)
-            await orchestrator.DeleteMessageAsync(
-                new DeleteMessageIntent
-                {
-                    MessageId = welcomeResponse.WelcomeMessageId,
-                    Chat = chat,
-                    User = user,
-                    Executor = executor,
-                    Reason = "Exam teaser cleanup after denial"
-                },
-                cancellationToken);
-
-            // Update welcome response to denied
             await welcomeResponsesRepo.UpdateResponseAsync(
                 welcomeResponse.Id,
                 WelcomeResponseType.Denied,
@@ -921,12 +900,30 @@ public class ExamFlowService : IExamFlowService
                 {
                     User = user,
                     Executor = executor,
-                    Reason = "Exam failed - banned to prevent repeat join spam"
+                    Reason = "Exam failed - banned to prevent repeat join spam",
+                    OriginReportId = originReportId
                 },
                 cancellationToken);
 
             if (!banResult.Success)
             {
+                // The ban failed, so BotModerationService's cleanup never ran and the welcome
+                // response is already Denied — delete the teaser here so it doesn't strand with
+                // live buttons while StartExamInDmAsync has no guard against the Denied state.
+                if (welcomeResponse != null)
+                {
+                    await orchestrator.DeleteMessageAsync(
+                        new DeleteMessageIntent
+                        {
+                            MessageId = welcomeResponse.WelcomeMessageId,
+                            Chat = chat,
+                            User = user,
+                            Executor = executor,
+                            Reason = "Exam teaser cleanup after failed ban"
+                        },
+                        cancellationToken);
+                }
+
                 return banResult;
             }
         }
@@ -939,12 +936,29 @@ public class ExamFlowService : IExamFlowService
                     User = user,
                     Chat = chat,
                     Executor = executor,
-                    Reason = "Exam denied - kicked from chat"
+                    Reason = "Exam denied - kicked from chat",
+                    OriginReportId = originReportId
                 },
                 cancellationToken);
 
             if (!kickResult.Success)
             {
+                // Same as the ban branch above: the kick failed, so the boss's cleanup never
+                // ran, and the welcome response is already Denied.
+                if (welcomeResponse != null)
+                {
+                    await orchestrator.DeleteMessageAsync(
+                        new DeleteMessageIntent
+                        {
+                            MessageId = welcomeResponse.WelcomeMessageId,
+                            Chat = chat,
+                            User = user,
+                            Executor = executor,
+                            Reason = "Exam teaser cleanup after failed kick"
+                        },
+                        cancellationToken);
+                }
+
                 return kickResult;
             }
         }
@@ -957,7 +971,7 @@ public class ExamFlowService : IExamFlowService
         try
         {
             await _dmService.SendDmAsync(
-                user.Id, // DM chat ID = user ID
+                user,
                 notificationText,
                 cancellationToken: cancellationToken);
         }

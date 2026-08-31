@@ -61,9 +61,9 @@ public class BotMessageServiceTests
     [SetUp]
     public async Task SetUp()
     {
-        // Create unique test database with migrations applied
+        // Clone golden_template for per-test isolation with canonical dataset
         _testHelper = new MigrationTestHelper();
-        await _testHelper.CreateDatabaseAndApplyMigrationsAsync();
+        await _testHelper.CreateDatabaseFromGoldenTemplateAsync();
 
         // Create temp directory for media files
         _tempMediaPath = Path.Combine(Path.GetTempPath(), $"BotMessageServiceTests_{Guid.NewGuid():N}");
@@ -153,6 +153,7 @@ public class BotMessageServiceTests
             Arg.Any<ParseMode?>(),
             Arg.Any<ReplyParameters?>(),
             Arg.Any<InlineKeyboardMarkup?>(),
+            Arg.Any<IReadOnlyList<MessageEntity>?>(),
             Arg.Any<CancellationToken>()
         ).Returns(sentMessage);
 
@@ -195,6 +196,7 @@ public class BotMessageServiceTests
             Arg.Any<ParseMode?>(),
             Arg.Any<ReplyParameters?>(),
             Arg.Any<InlineKeyboardMarkup?>(),
+            Arg.Any<IReadOnlyList<MessageEntity>?>(),
             Arg.Any<CancellationToken>()
         ).Returns(sentMessage);
 
@@ -229,6 +231,7 @@ public class BotMessageServiceTests
             Arg.Any<ParseMode?>(),
             Arg.Any<ReplyParameters?>(),
             Arg.Any<InlineKeyboardMarkup?>(),
+            Arg.Any<IReadOnlyList<MessageEntity>?>(),
             Arg.Any<CancellationToken>()
         ).Returns(sentMessage);
 
@@ -275,6 +278,7 @@ public class BotMessageServiceTests
             Arg.Any<string>(),
             Arg.Any<ParseMode?>(),
             Arg.Any<InlineKeyboardMarkup?>(),
+            Arg.Any<IReadOnlyList<MessageEntity>?>(),
             Arg.Any<CancellationToken>()
         ).Returns(editedMessage);
 
@@ -314,6 +318,7 @@ public class BotMessageServiceTests
             Arg.Any<string>(),
             Arg.Any<ParseMode?>(),
             Arg.Any<InlineKeyboardMarkup?>(),
+            Arg.Any<IReadOnlyList<MessageEntity>?>(),
             Arg.Any<CancellationToken>()
         ).Returns(editedMessage);
 
@@ -428,6 +433,7 @@ public class BotMessageServiceTests
             Arg.Any<ParseMode?>(),
             Arg.Any<ReplyParameters?>(),
             Arg.Any<InlineKeyboardMarkup?>(),
+            Arg.Any<IReadOnlyList<MessageEntity>?>(),
             Arg.Any<CancellationToken>()
         ).Returns(sentMessage);
 

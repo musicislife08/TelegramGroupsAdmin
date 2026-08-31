@@ -85,8 +85,8 @@ public class RetryJobListener(ILogger<RetryJobListener> logger, ISchedulerFactor
         // Preserve original payload if present (ad-hoc jobs)
         if (context.JobDetail.JobDataMap.ContainsKey(JobDataKeys.PayloadJson))
         {
-            retryJobData.Put(JobDataKeys.PayloadJson, context.JobDetail.JobDataMap.GetString(JobDataKeys.PayloadJson));
-            retryJobData.Put(JobDataKeys.PayloadType, context.JobDetail.JobDataMap.GetString(JobDataKeys.PayloadType));
+            retryJobData[JobDataKeys.PayloadJson] = context.JobDetail.JobDataMap.GetString(JobDataKeys.PayloadJson)!;
+            retryJobData[JobDataKeys.PayloadType] = context.JobDetail.JobDataMap.GetString(JobDataKeys.PayloadType)!;
         }
 
         var retryTrigger = TriggerBuilder.Create()

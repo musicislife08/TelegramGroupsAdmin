@@ -21,19 +21,20 @@ namespace TelegramGroupsAdmin.IntegrationTests.ML;
 /// - Validates thread safety (semaphore), atomic model swapping, and classification
 /// - Unlike ML.NET, Bayes does NOT persist to disk — no file assertions needed
 ///
-/// Test Coverage (7 tests):
+/// Test Coverage:
 /// - TrainAsync with sufficient data: Classifier trains, metadata reflects sample counts
-/// - TrainAsync with insufficient data: Logs warning, metadata remains null
+/// - TrainAsync threshold gate at MinimumSamplesPerClass - 1 (both below / spam-only-above /
+///   ham-only-above): Metadata remains null in all three failing-corner cases
 /// - Classify after training: Returns non-null result with probability in [0.0, 1.0]
 /// - Classify before training: Returns null (not trained)
 /// - Overlapping TrainAsync calls: Second call skipped by semaphore, classifier still valid
 /// - Classify with null/empty/special chars: Returns valid results after training
 /// - TrainAsync with pre-cancelled token: Throws TaskCanceledException
 ///
-/// GoldenDataset Training Data:
-/// - 3 spam labels: Label1 (Msg1), Label2 (Msg2), Label5 (Msg5)
-/// - 2 ham labels: Label3 (Msg3), Label4 (Msg4)
-/// - MLTrainingData.sql adds 20 spam + 20 ham — total 23 spam + 22 ham
+/// Training Data Substrate:
+/// - Database cloned from the canonical golden_template (`33_training_labels.sql`),
+///   which ships 100 spam (label=0) + 100 ham (label=1) — both classes comfortably
+///   above MLConstants.MinimumSamplesPerClass = 20.
 /// </summary>
 [TestFixture]
 public class BayesClassifierServiceTests
@@ -41,13 +42,12 @@ public class BayesClassifierServiceTests
     private MigrationTestHelper? _testHelper;
     private IServiceProvider? _serviceProvider;
     private IBayesClassifierService? _bayesService;
-    private AppDbContext? _context;
 
     [SetUp]
     public async Task SetUp()
     {
         _testHelper = new MigrationTestHelper();
-        await _testHelper.CreateDatabaseAndApplyMigrationsAsync();
+        await _testHelper.CreateDatabaseFromGoldenTemplateAsync();
 
         var services = new ServiceCollection();
         services.AddDbContextFactory<AppDbContext>(options =>
@@ -73,19 +73,11 @@ public class BayesClassifierServiceTests
 
         _serviceProvider = services.BuildServiceProvider();
         _bayesService = _serviceProvider.GetRequiredService<IBayesClassifierService>();
-
-        // Seed GoldenDataset (23 spam + 22 ham from combined scripts)
-        _context = _testHelper.GetDbContext();
-        await GoldenDataset.SeedAsync(_context);
     }
 
     [TearDown]
-    public async Task TearDown()
+    public void TearDown()
     {
-        if (_context != null)
-        {
-            await _context.DisposeAsync();
-        }
         _testHelper?.Dispose();
         (_bayesService as IDisposable)?.Dispose();
         (_serviceProvider as IDisposable)?.Dispose();
@@ -96,7 +88,7 @@ public class BayesClassifierServiceTests
     [Test]
     public async Task TrainAsync_SufficientData_MetadataReflectsCorrectSampleCounts()
     {
-        // Arrange — GoldenDataset provides 23 spam + 22 ham from combined scripts
+        // Arrange — canonical template clone provides 100 spam + 100 ham labels
 
         // Act
         await _bayesService!.TrainAsync();
@@ -121,23 +113,74 @@ public class BayesClassifierServiceTests
     [Test]
     public async Task TrainAsync_InsufficientData_LogsWarningAndLeavesMetadataNull()
     {
-        // Arrange — Clear all training labels to simulate no training data
+        // Arrange — Reduce both classes to exactly MinimumSamplesPerClass - 1, which
+        // exercises the threshold gate at its boundary. KeepDetectionResults(0) drains
+        // implicit spam; KeepLabeledMessagesOnly drains implicit ham. So the repository
+        // sees exactly (Threshold - 1) explicit + 0 implicit per class.
+        const int BelowThreshold = MLConstants.MinimumSamplesPerClass - 1;
         await using var context = _testHelper!.GetDbContext();
-        await context.Database.ExecuteSqlRawAsync("DELETE FROM training_labels");
+        await GoldenDataset.Reduce(context)
+            .KeepSpam(BelowThreshold)
+            .KeepHam(BelowThreshold)
+            .KeepDetectionResults(0)
+            .KeepLabeledMessagesOnly()
+            .ApplyAsync();
 
         // Act
         await _bayesService!.TrainAsync();
 
-        // Assert — Metadata stays null when insufficient data exists
+        // Assert — Metadata stays null when training data falls below MinimumSamplesPerClass
         var metadata = _bayesService.GetMetadata();
         Assert.That(metadata, Is.Null,
-            "Metadata should remain null when training data falls below MinimumSamplesPerClass");
+            "Metadata should remain null when both classes fall below MinimumSamplesPerClass");
+    }
+
+    [Test]
+    public async Task TrainAsync_OnlyHamAboveThreshold_LeavesMetadataNull()
+    {
+        // Arrange — ham retains canonical 100 labels (above threshold); spam reduced
+        // to threshold - 1. Verifies the gate requires BOTH classes ≥ threshold, not just one.
+        const int BelowThreshold = MLConstants.MinimumSamplesPerClass - 1;
+        await using var context = _testHelper!.GetDbContext();
+        await GoldenDataset.Reduce(context)
+            .KeepSpam(BelowThreshold)
+            .KeepDetectionResults(0)
+            .KeepLabeledMessagesOnly()
+            .ApplyAsync();
+
+        // Act
+        await _bayesService!.TrainAsync();
+
+        // Assert
+        Assert.That(_bayesService.GetMetadata(), Is.Null,
+            "Gate should fail when spam is below threshold even if ham is above");
+    }
+
+    [Test]
+    public async Task TrainAsync_OnlySpamAboveThreshold_LeavesMetadataNull()
+    {
+        // Arrange — spam retains canonical 100 labels (above threshold); ham reduced
+        // to threshold - 1. Verifies the gate requires BOTH classes ≥ threshold, not just one.
+        const int BelowThreshold = MLConstants.MinimumSamplesPerClass - 1;
+        await using var context = _testHelper!.GetDbContext();
+        await GoldenDataset.Reduce(context)
+            .KeepHam(BelowThreshold)
+            .KeepDetectionResults(0)
+            .KeepLabeledMessagesOnly()
+            .ApplyAsync();
+
+        // Act
+        await _bayesService!.TrainAsync();
+
+        // Assert
+        Assert.That(_bayesService.GetMetadata(), Is.Null,
+            "Gate should fail when ham is below threshold even if spam is above");
     }
 
     [Test]
     public async Task TrainAsync_OverlappingCalls_SecondCallSkippedClassifierStillValid()
     {
-        // Arrange — GoldenDataset provides training data
+        // Arrange — canonical template clone provides training data
 
         // Act — Launch two concurrent TrainAsync calls; semaphore should block the second
         var task1 = _bayesService!.TrainAsync();

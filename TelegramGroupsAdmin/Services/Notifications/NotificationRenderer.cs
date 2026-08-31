@@ -1,32 +1,36 @@
 using System.Text;
+using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Utilities;
 
 namespace TelegramGroupsAdmin.Services.Notifications;
 
 /// <summary>
 /// Centralized multi-channel renderer for notification payloads.
 /// Renders the same content blocks differently per delivery channel:
-/// - Telegram HTML: bold headers, tg://user deep links, HTML entities
+/// - Telegram: bold/mention entities (parse_mode-free)
 /// - Email HTML: full CSS-styled layout with container and footer
 /// - Plain text: for web push notifications (no formatting)
 /// </summary>
 internal static class NotificationRenderer
 {
     /// <summary>
-    /// Render payload as Telegram HTML (ParseMode.Html).
-    /// Fields with TelegramUserId get clickable tg://user deep links.
+    /// Render payload as entity-based Telegram message.
+    /// Emits Bold entities for subject, field labels, and section headers;
+    /// TextMention entities with full User object for clickable user mentions.
+    /// No HTML — uses the entities parameter which is mutually exclusive with parse_mode.
     /// </summary>
-    public static string ToTelegramHtml(NotificationPayload payload)
+    public static TelegramMessage ToTelegramMessage(NotificationPayload payload)
     {
-        var sb = new StringBuilder();
-        sb.AppendLine($"<b>{EscapeHtml(payload.Subject)}</b>");
-        sb.AppendLine();
-        RenderBlocksTelegram(sb, payload.Blocks, indent: false);
-        return sb.ToString().TrimEnd();
+        var builder = new TelegramMessageBuilder();
+        builder.Bold(payload.Subject).LineBreak().LineBreak();
+        RenderBlocksTelegram(builder, payload.Blocks);
+        var msg = builder.Build();
+        return new TelegramMessage(msg.Text.TrimEnd(), msg.Entities);
     }
 
     /// <summary>
     /// Render payload as full HTML email with CSS styling.
-    /// tg://user links render as plain text (not actionable in email clients).
+    /// Email clients don't resolve tg://user links, so user fields render as plain text.
     /// </summary>
     public static string ToEmailHtml(NotificationPayload payload)
     {
@@ -46,7 +50,7 @@ internal static class NotificationRenderer
 </head>
 <body>
     <div class=""container"">");
-        sb.AppendLine($"        <h2>{EscapeHtml(payload.Subject)}</h2>");
+        sb.AppendLine($"        <h2>{EncodeHtml(payload.Subject)}</h2>");
         RenderBlocksEmail(sb, payload.Blocks);
         sb.AppendLine(@"        <div class=""footer"">
             <p>This is an automated notification from TelegramGroupsAdmin.</p>
@@ -60,7 +64,7 @@ internal static class NotificationRenderer
 
     /// <summary>
     /// Render payload as plain text for web push notifications.
-    /// No formatting, TelegramUserId ignored.
+    /// No formatting, user mentions ignored.
     /// </summary>
     public static string ToPlainText(NotificationPayload payload)
     {
@@ -71,32 +75,33 @@ internal static class NotificationRenderer
         return sb.ToString().TrimEnd();
     }
 
-    // ── Telegram HTML rendering ──
+    // ── Telegram entity-based rendering ──
 
-    private static void RenderBlocksTelegram(StringBuilder sb, IReadOnlyList<ContentBlock> blocks, bool indent)
+    private static void RenderBlocksTelegram(TelegramMessageBuilder builder, IReadOnlyList<ContentBlock> blocks)
     {
         foreach (var block in blocks)
         {
             switch (block)
             {
                 case TextBlock text:
-                    sb.AppendLine(EscapeHtml(text.Text));
+                    builder.Text(text.Text).LineBreak();
                     break;
 
                 case FieldList fieldList:
                     foreach (var field in fieldList.Fields)
                     {
-                        var value = field.TelegramUserId.HasValue
-                            ? $"<a href=\"tg://user?id={field.TelegramUserId.Value}\">{EscapeHtml(field.Value)}</a>"
-                            : EscapeHtml(field.Value);
-                        sb.AppendLine($"<b>{EscapeHtml(field.Label)}:</b> {value}");
+                        builder.Bold($"{field.Label}:").Text(" ");
+                        if (field.User is { } u)
+                            builder.Mention(u);
+                        else
+                            builder.Text(field.Value);
+                        builder.LineBreak();
                     }
                     break;
 
                 case SectionBlock section:
-                    sb.AppendLine();
-                    sb.AppendLine($"<b>{EscapeHtml(section.Header)}</b>");
-                    RenderBlocksTelegram(sb, section.Content, indent: true);
+                    builder.LineBreak().Bold(section.Header).LineBreak();
+                    RenderBlocksTelegram(builder, section.Content);
                     break;
             }
         }
@@ -111,19 +116,19 @@ internal static class NotificationRenderer
             switch (block)
             {
                 case TextBlock text:
-                    sb.AppendLine($"        <p>{EscapeHtml(text.Text)}</p>");
+                    sb.AppendLine($"        <p>{EncodeHtml(text.Text)}</p>");
                     break;
 
                 case FieldList fieldList:
                     foreach (var field in fieldList.Fields)
                     {
-                        // tg://user links aren't clickable in email — render as plain text
-                        sb.AppendLine($"        <div class=\"field\"><span class=\"field-label\">{EscapeHtml(field.Label)}:</span> {EscapeHtml(field.Value)}</div>");
+                        // User mentions aren't clickable in email — render as plain text
+                        sb.AppendLine($"        <div class=\"field\"><span class=\"field-label\">{EncodeHtml(field.Label)}:</span> {EncodeHtml(field.Value)}</div>");
                     }
                     break;
 
                 case SectionBlock section:
-                    sb.AppendLine($"        <h3>{EscapeHtml(section.Header)}</h3>");
+                    sb.AppendLine($"        <h3>{EncodeHtml(section.Header)}</h3>");
                     RenderBlocksEmail(sb, section.Content);
                     break;
             }
@@ -158,10 +163,8 @@ internal static class NotificationRenderer
         }
     }
 
-    // ── Utilities ──
+    // ── Helpers ──
 
-    internal static string EscapeHtml(string? text) =>
-        string.IsNullOrEmpty(text)
-            ? string.Empty
-            : System.Net.WebUtility.HtmlEncode(text);
+    private static string EncodeHtml(string? value) =>
+        string.IsNullOrEmpty(value) ? string.Empty : System.Net.WebUtility.HtmlEncode(value);
 }

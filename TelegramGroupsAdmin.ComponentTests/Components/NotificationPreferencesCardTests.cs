@@ -95,7 +95,7 @@ public class NotificationPreferencesCardTests : NotificationPreferencesCardTestC
         // Arrange & Act
         var cut = Render<NotificationPreferencesCard>(p => p
             .Add(x => x.UserId, "test-user-id")
-            .Add(x => x.UserPermissionLevel, 2)); // Owner level
+            .Add(x => x.UserPermissionLevel, PermissionLevel.Owner)); // Owner level
 
         // Assert
         Assert.That(cut.Markup, Is.Not.Empty);
@@ -107,7 +107,7 @@ public class NotificationPreferencesCardTests : NotificationPreferencesCardTestC
         // Arrange & Act
         var cut = Render<NotificationPreferencesCard>(p => p
             .Add(x => x.UserId, "test-user-id")
-            .Add(x => x.UserPermissionLevel, 2));
+            .Add(x => x.UserPermissionLevel, PermissionLevel.Owner));
 
         // Assert
         cut.WaitForAssertion(() =>
@@ -122,7 +122,7 @@ public class NotificationPreferencesCardTests : NotificationPreferencesCardTestC
         // Arrange & Act
         var cut = Render<NotificationPreferencesCard>(p => p
             .Add(x => x.UserId, "test-user-id")
-            .Add(x => x.UserPermissionLevel, 2));
+            .Add(x => x.UserPermissionLevel, PermissionLevel.Owner));
 
         // Assert
         cut.WaitForAssertion(() =>
@@ -141,7 +141,7 @@ public class NotificationPreferencesCardTests : NotificationPreferencesCardTestC
         // Arrange & Act
         var cut = Render<NotificationPreferencesCard>(p => p
             .Add(x => x.UserId, "test-user-id")
-            .Add(x => x.UserPermissionLevel, 2));
+            .Add(x => x.UserPermissionLevel, PermissionLevel.Owner));
 
         // Assert
         cut.WaitForAssertion(() =>
@@ -156,7 +156,7 @@ public class NotificationPreferencesCardTests : NotificationPreferencesCardTestC
         // Arrange & Act
         var cut = Render<NotificationPreferencesCard>(p => p
             .Add(x => x.UserId, "test-user-id")
-            .Add(x => x.UserPermissionLevel, 2));
+            .Add(x => x.UserPermissionLevel, PermissionLevel.Owner));
 
         // Assert
         cut.WaitForAssertion(() =>
@@ -171,7 +171,7 @@ public class NotificationPreferencesCardTests : NotificationPreferencesCardTestC
         // Arrange & Act
         var cut = Render<NotificationPreferencesCard>(p => p
             .Add(x => x.UserId, "test-user-id")
-            .Add(x => x.UserPermissionLevel, 2));
+            .Add(x => x.UserPermissionLevel, PermissionLevel.Owner));
 
         // Assert
         cut.WaitForAssertion(() =>
@@ -193,7 +193,7 @@ public class NotificationPreferencesCardTests : NotificationPreferencesCardTestC
         // Act
         var cut = Render<NotificationPreferencesCard>(p => p
             .Add(x => x.UserId, "test-user-id")
-            .Add(x => x.UserPermissionLevel, 2));
+            .Add(x => x.UserPermissionLevel, PermissionLevel.Owner));
 
         // Assert - Telegram DM tab should be disabled when not linked
         cut.WaitForAssertion(() =>
@@ -221,7 +221,7 @@ public class NotificationPreferencesCardTests : NotificationPreferencesCardTestC
         // Act
         var cut = Render<NotificationPreferencesCard>(p => p
             .Add(x => x.UserId, "test-user-id")
-            .Add(x => x.UserPermissionLevel, 2));
+            .Add(x => x.UserPermissionLevel, PermissionLevel.Owner));
 
         // Assert - Telegram DM tab should NOT be disabled when linked
         cut.WaitForAssertion(() =>
@@ -241,7 +241,7 @@ public class NotificationPreferencesCardTests : NotificationPreferencesCardTestC
         // Act
         var cut = Render<NotificationPreferencesCard>(p => p
             .Add(x => x.UserId, "test-user-id")
-            .Add(x => x.UserPermissionLevel, 2));
+            .Add(x => x.UserPermissionLevel, PermissionLevel.Owner));
 
         // Assert - Email tab should be active (first enabled tab)
         cut.WaitForAssertion(() =>
@@ -262,7 +262,7 @@ public class NotificationPreferencesCardTests : NotificationPreferencesCardTestC
         // Arrange & Act
         var cut = Render<NotificationPreferencesCard>(p => p
             .Add(x => x.UserId, "test-user-id")
-            .Add(x => x.UserPermissionLevel, 2));
+            .Add(x => x.UserPermissionLevel, PermissionLevel.Owner));
 
         // Assert
         cut.WaitForAssertion(() =>
@@ -281,7 +281,7 @@ public class NotificationPreferencesCardTests : NotificationPreferencesCardTestC
         // Arrange & Act
         var cut = Render<NotificationPreferencesCard>(p => p
             .Add(x => x.UserId, "test-user-id")
-            .Add(x => x.UserPermissionLevel, 2));
+            .Add(x => x.UserPermissionLevel, PermissionLevel.Owner));
 
         // Assert
         cut.WaitForAssertion(() =>
@@ -296,7 +296,7 @@ public class NotificationPreferencesCardTests : NotificationPreferencesCardTestC
         // Arrange & Act
         var cut = Render<NotificationPreferencesCard>(p => p
             .Add(x => x.UserId, "test-user-id")
-            .Add(x => x.UserPermissionLevel, 2));
+            .Add(x => x.UserPermissionLevel, PermissionLevel.Owner));
 
         // Assert
         cut.WaitForAssertion(() =>
@@ -315,7 +315,7 @@ public class NotificationPreferencesCardTests : NotificationPreferencesCardTestC
         // Arrange & Act - Owner level (2)
         var cut = Render<NotificationPreferencesCard>(p => p
             .Add(x => x.UserId, "test-user-id")
-            .Add(x => x.UserPermissionLevel, 2));
+            .Add(x => x.UserPermissionLevel, PermissionLevel.Owner));
 
         // Assert - Should show owner-only events
         cut.WaitForAssertion(() =>
@@ -327,19 +327,36 @@ public class NotificationPreferencesCardTests : NotificationPreferencesCardTestC
     [Test]
     public void HidesOwnerOnlyEvents_ForAdmin()
     {
-        // Arrange & Act - Admin level (1)
+        // Arrange & Act - Admin tier (non-owner)
         var cut = Render<NotificationPreferencesCard>(p => p
             .Add(x => x.UserId, "test-user-id")
-            .Add(x => x.UserPermissionLevel, 1));
+            .Add(x => x.UserPermissionLevel, PermissionLevel.Admin));
 
-        // Assert - Should not show owner-only events
-        // Note: The actual text in the checkbox is "Backup Failed (Owners)"
-        // but non-owners won't see this option at all
+        // Assert - owner-only events must not appear for non-owners
         cut.WaitForAssertion(() =>
         {
-            // The Backup Failed option should not be visible for non-owners
-            // We check that the general structure renders
             Assert.That(cut.Markup, Does.Contain("Notification Preferences"));
+            Assert.That(cut.Markup, Does.Not.Contain("Backup Failed"));
+            Assert.That(cut.Markup, Does.Not.Contain("Chat Health Warning"));
+            Assert.That(cut.Markup, Does.Not.Contain("Chat Admin Changed"));
+        });
+    }
+
+    [Test]
+    public void HidesOwnerOnlyEvents_ForGlobalAdmin()
+    {
+        // Arrange & Act - GlobalAdmin tier (also a non-owner)
+        var cut = Render<NotificationPreferencesCard>(p => p
+            .Add(x => x.UserId, "test-user-id")
+            .Add(x => x.UserPermissionLevel, PermissionLevel.GlobalAdmin));
+
+        // Assert - GlobalAdmin is below Owner so owner-only events must be hidden
+        cut.WaitForAssertion(() =>
+        {
+            Assert.That(cut.Markup, Does.Contain("Notification Preferences"));
+            Assert.That(cut.Markup, Does.Not.Contain("Backup Failed"));
+            Assert.That(cut.Markup, Does.Not.Contain("Chat Health Warning"));
+            Assert.That(cut.Markup, Does.Not.Contain("Chat Admin Changed"));
         });
     }
 

@@ -25,8 +25,14 @@ public partial class MessageProcessingService
     [LoggerMessage(Level = LogLevel.Debug, Message = "Discovered new private {Chat}, skipping admin cache refresh")]
     private static partial void LogDiscoveredNewPrivateChat(ILogger logger, string chat);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Profile change detected for {User}: {OldProfile} → {NewProfile}, scheduling background scan")]
+    [LoggerMessage(Level = LogLevel.Information, Message = "Profile change detected for {User}: {OldProfile} → {NewProfile}, running profile scan")]
     private static partial void LogProfileChangeDetected(ILogger logger, string user, string oldProfile, string newProfile);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Profile scan on first message banned {User}, skipping content detection")]
+    private static partial void LogFirstMessageScanBanned(ILogger logger, string user);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Profile scan failed for {User}, continuing message processing")]
+    private static partial void LogProfileScanFailed(ILogger logger, Exception exception, string user);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Cached message {MessageId} from {User} in {Chat} (photo: {HasPhoto}, text: {HasText})")]
     private static partial void LogCachedMessage(ILogger logger, int messageId, string user, string chat, bool hasPhoto, bool hasText);

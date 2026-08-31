@@ -18,7 +18,7 @@ public class UserActionRecordDto
     public long UserId { get; set; }
 
     [Column("action_type")]
-    public UserActionType ActionType { get; set; }
+    public int ActionType { get; set; }
 
     [Column("message_id")]
     public int? MessageId { get; set; }

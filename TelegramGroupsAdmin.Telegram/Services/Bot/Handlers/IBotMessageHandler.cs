@@ -18,6 +18,7 @@ public interface IBotMessageHandler
         ParseMode? parseMode = null,
         ReplyParameters? replyParameters = null,
         InlineKeyboardMarkup? replyMarkup = null,
+        IReadOnlyList<MessageEntity>? entities = null,
         CancellationToken ct = default);
 
     /// <summary>Send a photo with optional caption.</summary>
@@ -28,6 +29,7 @@ public interface IBotMessageHandler
         ParseMode? parseMode = null,
         ReplyParameters? replyParameters = null,
         InlineKeyboardMarkup? replyMarkup = null,
+        IReadOnlyList<MessageEntity>? captionEntities = null,
         CancellationToken ct = default);
 
     /// <summary>Send a video with optional caption.</summary>
@@ -38,6 +40,7 @@ public interface IBotMessageHandler
         ParseMode? parseMode = null,
         ReplyParameters? replyParameters = null,
         InlineKeyboardMarkup? replyMarkup = null,
+        IReadOnlyList<MessageEntity>? captionEntities = null,
         CancellationToken ct = default);
 
     /// <summary>Send an animation (GIF) with optional caption.</summary>
@@ -48,6 +51,7 @@ public interface IBotMessageHandler
         ParseMode? parseMode = null,
         ReplyParameters? replyParameters = null,
         InlineKeyboardMarkup? replyMarkup = null,
+        IReadOnlyList<MessageEntity>? captionEntities = null,
         CancellationToken ct = default);
 
     /// <summary>Edit a text message.</summary>
@@ -57,6 +61,7 @@ public interface IBotMessageHandler
         string text,
         ParseMode? parseMode = null,
         InlineKeyboardMarkup? replyMarkup = null,
+        IReadOnlyList<MessageEntity>? entities = null,
         CancellationToken ct = default);
 
     /// <summary>Edit a message caption.</summary>

@@ -5,7 +5,7 @@ using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Services;
 using TelegramGroupsAdmin.Core.Models;
-using TelegramGroupsAdmin.Core.Services.AI;
+using TelegramGroupsAdmin.AI.Services;
 using TelegramGroupsAdmin.Telegram.Services.UserApi;
 
 namespace TelegramGroupsAdmin.UnitTests.Telegram.Services.UserApi;
@@ -572,6 +572,78 @@ public class ProfileScoringEngineTests
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // Layer 2: ExplicitDisplayText flag passthrough
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    [Test]
+    public async Task ScoreAsync_AiReturnsExplicitDisplayTextTrue_ExplicitDisplayTextIsTrue()
+    {
+        EnableAiWithResponse(
+            """{"score": 4.5, "reason": "explicit username", "signals_detected": ["explicit_handle"], "contains_nudity": false, "explicit_display_text": true}""");
+
+        var result = await _sut.ScoreAsync(
+            profile: BuildProfile(),
+            images: [],
+            imageLabels: null,
+            banThreshold: 4.0m,
+            notifyThreshold: 2.0m,
+            cancellationToken: CancellationToken.None);
+
+        Assert.That(result.ExplicitDisplayText, Is.True);
+    }
+
+    [Test]
+    public async Task ScoreAsync_AiReturnsExplicitDisplayTextFalse_ExplicitDisplayTextIsFalse()
+    {
+        EnableAiWithResponse(
+            """{"score": 1.0, "reason": "fine name", "signals_detected": [], "contains_nudity": false, "explicit_display_text": false}""");
+
+        var result = await _sut.ScoreAsync(
+            profile: BuildProfile(),
+            images: [],
+            imageLabels: null,
+            banThreshold: 4.0m,
+            notifyThreshold: 2.0m,
+            cancellationToken: CancellationToken.None);
+
+        Assert.That(result.ExplicitDisplayText, Is.False);
+    }
+
+    [Test]
+    public async Task ScoreAsync_AiOmitsExplicitDisplayTextField_DefaultsToFalse()
+    {
+        EnableAiWithResponse(
+            """{"score": 1.0, "reason": "fine name", "signals_detected": [], "contains_nudity": false}""");
+
+        var result = await _sut.ScoreAsync(
+            profile: BuildProfile(),
+            images: [],
+            imageLabels: null,
+            banThreshold: 4.0m,
+            notifyThreshold: 2.0m,
+            cancellationToken: CancellationToken.None);
+
+        Assert.That(result.ExplicitDisplayText, Is.False);
+    }
+
+    [Test]
+    public async Task ScoreAsync_RuleBasedFastPathBan_ExplicitDisplayTextIsFalse()
+    {
+        var scamProfile = BuildProfile(isScam: true);
+
+        var result = await _sut.ScoreAsync(
+            profile: scamProfile,
+            images: [],
+            imageLabels: null,
+            banThreshold: 4.0m,
+            notifyThreshold: 2.0m,
+            cancellationToken: CancellationToken.None);
+
+        Assert.That(result.Outcome, Is.EqualTo(ProfileScanOutcome.Banned));
+        Assert.That(result.ExplicitDisplayText, Is.False);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // Layer 2: Malformed / null JSON fallback
     // ═══════════════════════════════════════════════════════════════════════════
 
@@ -708,7 +780,7 @@ public class ProfileScoringEngineTests
         // Assert — multi-image overload
         await _chatService.Received(1).GetVisionCompletionAsync(
             AIFeatureType.ProfileScan, Arg.Any<string>(), Arg.Any<string>(),
-            Arg.Is<IReadOnlyList<ImageInput>>(l => l.Count == 2),
+            Arg.Is<IReadOnlyList<ImageInput>>(l => l!.Count == 2),
             Arg.Any<ChatCompletionOptions?>(), Arg.Any<CancellationToken>());
     }
 
@@ -935,7 +1007,7 @@ public class ProfileScoringEngineTests
         _chatService
             .GetCompletionAsync(
                 Arg.Any<AIFeatureType>(), Arg.Any<string>(),
-                Arg.Is<string>(prompt => prompt.Contains("url_metadata")),
+                Arg.Is<string>(prompt => prompt!.Contains("url_metadata")),
                 Arg.Any<ChatCompletionOptions?>(), Arg.Any<CancellationToken>())
             .Returns(AiResponse("""{"score": 4.5, "reason": "adult site URL", "signals_detected": ["adult_url_metadata"], "contains_nudity": false}"""));
 
@@ -945,7 +1017,7 @@ public class ProfileScoringEngineTests
         // Assert — AI was called with a prompt containing URL metadata
         await _chatService.Received(1).GetCompletionAsync(
             AIFeatureType.ProfileScan, Arg.Any<string>(),
-            Arg.Is<string>(prompt => prompt.Contains("url_metadata")),
+            Arg.Is<string>(prompt => prompt!.Contains("url_metadata")),
             Arg.Any<ChatCompletionOptions?>(), Arg.Any<CancellationToken>());
         Assert.That(result.AiScore, Is.EqualTo(4.5m));
     }
@@ -1009,7 +1081,7 @@ public class ProfileScoringEngineTests
         _chatService
             .GetCompletionAsync(
                 Arg.Any<AIFeatureType>(), Arg.Any<string>(),
-                Arg.Is<string>(prompt => !prompt.Contains("url_metadata")),
+                Arg.Is<string>(prompt => !prompt!.Contains("url_metadata")),
                 Arg.Any<ChatCompletionOptions?>(), Arg.Any<CancellationToken>())
             .Returns(AiResponse("""{"score": 0.0, "reason": "clean", "signals_detected": [], "contains_nudity": false}"""));
 
@@ -1019,7 +1091,7 @@ public class ProfileScoringEngineTests
         // Assert — prompt without url_metadata section was used
         await _chatService.Received(1).GetCompletionAsync(
             AIFeatureType.ProfileScan, Arg.Any<string>(),
-            Arg.Is<string>(prompt => !prompt.Contains("url_metadata")),
+            Arg.Is<string>(prompt => !prompt!.Contains("url_metadata")),
             Arg.Any<ChatCompletionOptions?>(), Arg.Any<CancellationToken>());
     }
 }

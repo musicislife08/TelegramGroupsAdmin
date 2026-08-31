@@ -1,10 +1,9 @@
 @using TelegramGroupsAdmin.Configuration
 @using TelegramGroupsAdmin.Configuration.Models
 @using TelegramGroupsAdmin.Core.Services
-@using TelegramGroupsAdmin.Configuration.Repositories
 @using TelegramGroupsAdmin.Telegram.Services
+@using TelegramGroupsAdmin.Configuration.Services
 @inject IConfigService ConfigService
-@inject IConfigRepository ConfigRepository
 @inject ITelegramBotService BotService
 @inject ISnackbar Snackbar
 
@@ -233,6 +232,8 @@
 </MudPaper>
 
 @code {
+    [CascadingParameter] private WebUserIdentity? WebUser { get; set; }
+
     private MudForm? _form;
     private bool _isValid = true;
     private bool _loading = true;
@@ -262,11 +263,11 @@
         try
         {
             // Load global bot config (chat_id = 0 for global config)
-            _botConfig = await ConfigService.GetAsync<TelegramBotConfig>(ConfigType.TelegramBot, 0)
+            _botConfig = await ConfigService.GetTelegramBotAsync()
                          ?? TelegramBotConfig.Default;
 
             // Load bot token (encrypted)
-            var token = await ConfigService.GetTelegramBotTokenAsync();
+            var token = await ConfigService.GetBotTokenAsync();
             _botToken = token ?? "";
             _isBotTokenConfigured = !string.IsNullOrWhiteSpace(token);
         }
@@ -290,15 +291,17 @@
         _savingBotConfig = true;
         try
         {
+            var actor = WebUser!.ToActor();
+
             // Save bot token (encrypted) if provided
             if (!string.IsNullOrWhiteSpace(_botToken))
             {
-                await ConfigService.SaveTelegramBotTokenAsync(_botToken);
+                await ConfigService.SaveBotTokenAsync(_botToken, actor);
                 _isBotTokenConfigured = true;
             }
 
             // Save as global config (chat_id = 0)
-            await ConfigService.SaveAsync(ConfigType.TelegramBot, ChatIdentity.FromId(0), _botConfig);
+            await ConfigService.SaveTelegramBotAsync(_botConfig, actor);
 
             // Notify bot service to check config and start/stop immediately
             BotService.NotifyConfigChange();
@@ -321,7 +324,7 @@
         try
         {
             // Load global bot protection config (chatId=0)
-            _config = await ConfigService.GetEffectiveAsync<BotProtectionConfig>(ConfigType.UrlFilter, 0)
+            _config = await ConfigService.GetEffectiveBotProtectionAsync(0)
                       ?? BotProtectionConfig.Default;
 
             // Convert whitelist to text (one per line)
@@ -352,7 +355,8 @@
                 .ToList();
 
             // Save global bot protection config (chatId=0)
-            await ConfigService.SaveAsync(ConfigType.UrlFilter, ChatIdentity.FromId(0), _config);
+            var actor = WebUser!.ToActor();
+            await ConfigService.SaveBotProtectionAsync(ChatIdentity.FromId(0), _config, actor);
             Snackbar.Add("Bot protection configuration saved globally", Severity.Success);
         }
         catch (Exception ex)
@@ -377,7 +381,7 @@
         _clearingLinks = true;
         try
         {
-            await ConfigRepository.ClearAllInviteLinksAsync();
+            await ConfigService.ClearAllInviteLinksAsync(WebUser!.ToActor());
 
             Snackbar.Add(
                 "Cleared all cached invite links. The next health check (within 1 minute) will fetch fresh links from Telegram.",

@@ -40,7 +40,16 @@
             </MudDrawer>
             <MudMainContent>
                 <MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="my-4">
-                    @Body
+                    @if (_authResolved)
+                    {
+                        @Body
+                    }
+                    else
+                    {
+                        <div class="d-flex justify-center my-8">
+                            <MudProgressCircular Indeterminate="true" />
+                        </div>
+                    }
                 </MudContainer>
             </MudMainContent>
         </MudLayout>
@@ -53,6 +62,7 @@
     private string? _userId;
     private bool _isAuthenticated;
     private bool _isDevelopment;
+    private bool _authResolved;
     private WebUserIdentity? _webUser;
     private TimeZoneInfo? _userTimeZone;
 
@@ -106,22 +116,31 @@
 
         if (user.Identity?.IsAuthenticated ?? false)
         {
-            _isAuthenticated = true;
-            _userEmail = user.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
             _userId = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
 
-            var permissionLevel = PermissionLevel.Admin;
-            var permissionClaim = user.FindFirst(CustomClaimTypes.PermissionLevel);
-            if (permissionClaim != null && int.TryParse(permissionClaim.Value, out var level))
-                permissionLevel = (PermissionLevel)level;
-            _webUser = new WebUserIdentity(_userId!, _userEmail, permissionLevel);
-
-            // Initialize notification state for the authenticated user
-            if (!string.IsNullOrEmpty(_userId))
+            if (string.IsNullOrEmpty(_userId))
             {
+                // An authenticated principal with no subject id is anomalous (and possible now
+                // that principals are re-issued). Treat as not a usable session rather than
+                // constructing a half-valid identity.
+                Logger.LogWarning("Authenticated principal is missing the NameIdentifier claim; treating as unauthenticated");
+            }
+            else
+            {
+                _isAuthenticated = true;
+                _userEmail = user.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
+
+                var permissionLevel = PermissionLevel.Admin;
+                var permissionClaim = user.FindFirst(CustomClaimTypes.PermissionLevel);
+                if (permissionClaim != null && int.TryParse(permissionClaim.Value, out var level))
+                    permissionLevel = (PermissionLevel)level;
+                _webUser = new WebUserIdentity(_userId, _userEmail, permissionLevel);
+
                 await NotificationState.InitializeAsync(_userId);
             }
         }
+
+        _authResolved = true;
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)

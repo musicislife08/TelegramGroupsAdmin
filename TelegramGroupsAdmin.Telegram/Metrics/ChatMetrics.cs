@@ -15,32 +15,32 @@ public sealed class ChatMetrics
     private readonly Counter<long> _userJoinsTotal;
     private readonly Counter<long> _userLeavesTotal;
 
+    private readonly Meter _meter = new("TelegramGroupsAdmin.Chats");
+
     public ChatMetrics(IChatCache chatCache)
     {
-        var meter = new Meter("TelegramGroupsAdmin.Chats");
-
-        meter.CreateObservableGauge(
+        _meter.CreateObservableGauge(
             "tga.chats.managed_count",
             () => chatCache.Count,
             description: "Number of managed chats currently in the cache");
 
-        _healthCheckTotal = meter.CreateCounter<long>(
+        _healthCheckTotal = _meter.CreateCounter<long>(
             "tga.chats.health_check_total",
             description: "Health checks by result");
 
-        _markedInactiveTotal = meter.CreateCounter<long>(
+        _markedInactiveTotal = _meter.CreateCounter<long>(
             "tga.chats.marked_inactive_total",
             description: "Chats marked inactive after consecutive failures");
 
-        _messagesTotal = meter.CreateCounter<long>(
+        _messagesTotal = _meter.CreateCounter<long>(
             "tga.chats.messages_total",
             description: "Messages processed by type");
 
-        _userJoinsTotal = meter.CreateCounter<long>(
+        _userJoinsTotal = _meter.CreateCounter<long>(
             "tga.chats.user_joins_total",
             description: "Users joined managed chats");
 
-        _userLeavesTotal = meter.CreateCounter<long>(
+        _userLeavesTotal = _meter.CreateCounter<long>(
             "tga.chats.user_leaves_total",
             description: "Users left managed chats");
     }

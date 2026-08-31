@@ -35,7 +35,7 @@ public class UserRecordDto
     public string SecurityStamp { get; set; } = string.Empty;
 
     [Column("permission_level")]
-    public PermissionLevel PermissionLevel { get; set; }
+    public int PermissionLevel { get; set; }
 
     [Column("invited_by")]
     public string? InvitedBy { get; set; }
@@ -101,10 +101,6 @@ public class UserRecordDto
     public virtual ICollection<ReportDto> Reports { get; set; } = [];
 
     // Helper properties (not mapped)
-    [NotMapped]
-    [JsonIgnore]
-    public int PermissionLevelInt => (int)PermissionLevel;
-
     [NotMapped]
     [JsonIgnore]
     public bool CanLogin => Status == UserStatus.Active && EmailVerified && !IsLocked;

@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Data.Models;
+using TelegramGroupsAdmin.IntegrationTests.TestData;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
 using TelegramGroupsAdmin.Repositories;
 
@@ -14,6 +15,16 @@ namespace TelegramGroupsAdmin.IntegrationTests.Repositories;
 ///
 /// Regression coverage for #397: InviteFilter.All must return all invites
 /// regardless of status, not silently apply a bogus status filter.
+///
+/// Test Infrastructure:
+/// - Unique PostgreSQL database per test (cloned from golden_template)
+/// - Canonical dataset provides 19 invites: 1 Pending, 13 Used, 5 Revoked.
+/// - created_by FK satisfied via canonical Owner fixture (GoldenDatasetConstants.WebUsers.OwnerId).
+///
+/// Canonical baseline counts (before each test adds its own rows):
+///   All:     19  Pending: 1  Used: 13  Revoked: 5
+/// Each test creates 1 Pending + 1 Used + 1 Revoked = 3 more, so totals become:
+///   All:     22  Pending: 2  Used:  14  Revoked: 6
 /// </summary>
 [TestFixture]
 public class InviteRepositoryTests
@@ -23,13 +34,20 @@ public class InviteRepositoryTests
     private IServiceScope? _scope;
     private IInviteRepository? _repository;
 
-    private const string TestUserId = "test-user-id";
+    // Canonical Owner fixture (owner@example.com) — satisfies invites.created_by FK without raw INSERT.
+    private const string CreatedByUserId = GoldenDatasetConstants.WebUsers.OwnerId;
+
+    // Canonical baseline counts (from 29_invites.sql)
+    private const int CanonicalTotal = 19;
+    private const int CanonicalPending = 1;
+    private const int CanonicalUsed = 13;
+    private const int CanonicalRevoked = 5;
 
     [SetUp]
     public async Task SetUp()
     {
         _testHelper = new MigrationTestHelper();
-        await _testHelper.CreateDatabaseAndApplyMigrationsAsync();
+        await _testHelper.CreateDatabaseFromGoldenTemplateAsync();
 
         var services = new ServiceCollection();
 
@@ -44,9 +62,6 @@ public class InviteRepositoryTests
         _serviceProvider = services.BuildServiceProvider();
         _scope = _serviceProvider.CreateScope();
         _repository = _scope.ServiceProvider.GetRequiredService<IInviteRepository>();
-
-        // Seed a user to satisfy FK constraint on invites.created_by
-        await SeedTestUserAsync();
     }
 
     [TearDown]
@@ -57,27 +72,16 @@ public class InviteRepositoryTests
         _testHelper?.Dispose();
     }
 
-    private async Task SeedTestUserAsync()
-    {
-        await _testHelper!.ExecuteSqlAsync($"""
-            INSERT INTO users (id, email, normalized_email, password_hash, security_stamp,
-                               permission_level, is_active, totp_enabled, created_at, status,
-                               email_verified, failed_login_attempts)
-            VALUES ('{TestUserId}', 'test@test.com', 'TEST@TEST.COM', 'hash', 'stamp',
-                    0, true, false, NOW(), 1, true, 0)
-            """);
-    }
-
     private async Task<InviteRecord> CreateInviteWithStatusAsync(Data.Models.InviteStatus status)
     {
         // Create as pending first
-        var token = await _repository!.CreateAsync(TestUserId, validDays: 7, permissionLevel: 0);
+        var token = await _repository!.CreateAsync(CreatedByUserId, validDays: 7, permissionLevel: 0);
 
         if (status != Data.Models.InviteStatus.Pending)
         {
             if (status == Data.Models.InviteStatus.Used)
             {
-                await _repository.MarkAsUsedAsync(token, TestUserId);
+                await _repository.MarkAsUsedAsync(token, CreatedByUserId);
             }
             else if (status == Data.Models.InviteStatus.Revoked)
             {
@@ -102,8 +106,8 @@ public class InviteRepositoryTests
         // Act
         var results = await _repository!.GetAllAsync(InviteFilter.All);
 
-        // Assert — regression for #397: All must return all 3, not zero
-        Assert.That(results, Has.Count.EqualTo(3));
+        // Assert — regression for #397: All must return all rows (canonical 19 + 3 new)
+        Assert.That(results, Has.Count.EqualTo(CanonicalTotal + 3));
     }
 
     [Test]
@@ -117,8 +121,8 @@ public class InviteRepositoryTests
         // Act
         var results = await _repository!.GetAllWithCreatorEmailAsync(InviteFilter.All);
 
-        // Assert — regression for #397
-        Assert.That(results, Has.Count.EqualTo(3));
+        // Assert — regression for #397 (canonical 19 + 3 new; all have valid created_by FKs)
+        Assert.That(results, Has.Count.EqualTo(CanonicalTotal + 3));
     }
 
     #endregion
@@ -136,9 +140,10 @@ public class InviteRepositoryTests
         // Act
         var results = await _repository!.GetAllAsync(InviteFilter.Pending);
 
-        // Assert
-        Assert.That(results, Has.Count.EqualTo(1));
-        Assert.That(results[0].Status, Is.EqualTo(Core.Models.InviteStatus.Pending));
+        // Assert — count matches canonical baseline (1) + 1 newly created Pending
+        Assert.That(results, Has.Count.EqualTo(CanonicalPending + 1));
+        Assert.That(results.All(r => r.Status == Core.Models.InviteStatus.Pending), Is.True,
+            "All returned invites must have Pending status");
     }
 
     [Test]
@@ -152,9 +157,10 @@ public class InviteRepositoryTests
         // Act
         var results = await _repository!.GetAllAsync(InviteFilter.Used);
 
-        // Assert
-        Assert.That(results, Has.Count.EqualTo(1));
-        Assert.That(results[0].Status, Is.EqualTo(Core.Models.InviteStatus.Used));
+        // Assert — count matches canonical baseline (13) + 1 newly created Used
+        Assert.That(results, Has.Count.EqualTo(CanonicalUsed + 1));
+        Assert.That(results.All(r => r.Status == Core.Models.InviteStatus.Used), Is.True,
+            "All returned invites must have Used status");
     }
 
     [Test]
@@ -168,9 +174,10 @@ public class InviteRepositoryTests
         // Act
         var results = await _repository!.GetAllAsync(InviteFilter.Revoked);
 
-        // Assert
-        Assert.That(results, Has.Count.EqualTo(1));
-        Assert.That(results[0].Status, Is.EqualTo(Core.Models.InviteStatus.Revoked));
+        // Assert — count matches canonical baseline (5) + 1 newly created Revoked
+        Assert.That(results, Has.Count.EqualTo(CanonicalRevoked + 1));
+        Assert.That(results.All(r => r.Status == Core.Models.InviteStatus.Revoked), Is.True,
+            "All returned invites must have Revoked status");
     }
 
     #endregion

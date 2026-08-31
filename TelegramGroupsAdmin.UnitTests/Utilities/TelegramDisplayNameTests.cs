@@ -7,7 +7,7 @@ namespace TelegramGroupsAdmin.UnitTests.Utilities;
 
 /// <summary>
 /// Unit tests for TelegramDisplayName utility.
-/// Tests both Format() for UI display and FormatMention() for bot messages.
+/// Tests Format() for UI display (and the plain display name used by entity text_mentions).
 /// </summary>
 [TestFixture]
 public class TelegramDisplayNameTests
@@ -238,91 +238,6 @@ public class TelegramDisplayNameTests
 
     #endregion
 
-    #region FormatMention - Priority Order Tests
-
-    [Test]
-    public void FormatMention_WithUsername_ReturnsAtUsername()
-    {
-        var result = TelegramDisplayName.FormatMention(new UserIdentity(12345, "John", "Doe", "johndoe"));
-        Assert.That(result, Is.EqualTo("@johndoe"));
-    }
-
-    [Test]
-    public void FormatMention_WithoutUsername_ReturnsFullName()
-    {
-        var result = TelegramDisplayName.FormatMention(new UserIdentity(12345, "John", "Doe", null));
-        Assert.That(result, Is.EqualTo("John Doe"));
-    }
-
-    [Test]
-    public void FormatMention_WithoutUsernameOrLastName_ReturnsFirstName()
-    {
-        var result = TelegramDisplayName.FormatMention(new UserIdentity(12345, "John", null, null));
-        Assert.That(result, Is.EqualTo("John"));
-    }
-
-    [Test]
-    public void FormatMention_WithoutUsernameOrFirstName_ReturnsLastName()
-    {
-        var result = TelegramDisplayName.FormatMention(new UserIdentity(12345, null, "Doe", null));
-        Assert.That(result, Is.EqualTo("Doe"));
-    }
-
-    [Test]
-    public void FormatMention_WithNoNameOrUsername_ReturnsUserId()
-    {
-        var result = TelegramDisplayName.FormatMention(new UserIdentity(12345, null, null, null));
-        Assert.That(result, Is.EqualTo("User 12345"));
-    }
-
-    [Test]
-    public void FormatMention_WithNothing_ReturnsUnknownUser()
-    {
-        var result = TelegramDisplayName.FormatMention((User?)null);
-        Assert.That(result, Is.EqualTo("Unknown User"));
-    }
-
-    #endregion
-
-    #region FormatMention - Whitespace Handling
-
-    [Test]
-    public void FormatMention_EmptyUsername_FallsToName()
-    {
-        var result = TelegramDisplayName.FormatMention(new UserIdentity(12345, "John", "Doe", ""));
-        Assert.That(result, Is.EqualTo("John Doe"));
-    }
-
-    [Test]
-    public void FormatMention_WhitespaceUsername_FallsToName()
-    {
-        var result = TelegramDisplayName.FormatMention(new UserIdentity(12345, "John", "Doe", "   "));
-        Assert.That(result, Is.EqualTo("John Doe"));
-    }
-
-    #endregion
-
-    #region FormatMention - @ Prefix
-
-    [Test]
-    public void FormatMention_Username_HasAtPrefix()
-    {
-        // FormatMention() is for bot messages, should have @ prefix for usernames
-        var result = TelegramDisplayName.FormatMention(new UserIdentity(12345, null, null, "johndoe"));
-        Assert.That(result, Does.StartWith("@"));
-        Assert.That(result, Is.EqualTo("@johndoe"));
-    }
-
-    [Test]
-    public void FormatMention_NoUsername_NoAtPrefix()
-    {
-        // When no username, should NOT add @ prefix to name
-        var result = TelegramDisplayName.FormatMention(new UserIdentity(12345, "John", "Doe", null));
-        Assert.That(result, Does.Not.StartWith("@"));
-    }
-
-    #endregion
-
     #region Edge Cases - Boundary Values
 
     [Test]
@@ -334,13 +249,6 @@ public class TelegramDisplayNameTests
     }
 
     [Test]
-    public void FormatMention_ZeroUserId_ReturnsUserZero()
-    {
-        var result = TelegramDisplayName.FormatMention(new UserIdentity(0, null, null, null));
-        Assert.That(result, Is.EqualTo("User 0"));
-    }
-
-    [Test]
     public void Format_UsernameWithAtPrefix_DoesNotDoublePrefix()
     {
         // Data corruption scenario: username already has @ prefix stored
@@ -348,18 +256,6 @@ public class TelegramDisplayNameTests
         var result = TelegramDisplayName.Format(null, null, "@johndoe", 12345);
         Assert.That(result, Is.EqualTo("@johndoe"));
         Assert.That(result, Does.Not.StartWith("@@"));
-    }
-
-    [Test]
-    public void FormatMention_UsernameWithAtPrefix_ProducesDoublePrefix()
-    {
-        // INTENTIONAL: We do NOT strip the @ prefix before adding our own.
-        // Telegram usernames cannot contain @ (only a-z, 0-9, underscore allowed).
-        // If we see "@johndoe" in the username field, that's DATA CORRUPTION on our side.
-        // Producing "@@johndoe" makes this bug VISIBLE so we can find and fix the root cause.
-        // Silently trimming would hide the bug and make it harder to diagnose.
-        var result = TelegramDisplayName.FormatMention(new UserIdentity(12345, null, null, "@johndoe"));
-        Assert.That(result, Is.EqualTo("@@johndoe"));
     }
 
     #endregion
@@ -381,15 +277,6 @@ public class TelegramDisplayNameTests
         // Database has username='' (empty string), not null
         var result = TelegramDisplayName.Format("Jim", "Smith", "", 1395388788);
         Assert.That(result, Is.EqualTo("Jim Smith"));
-    }
-
-    [Test]
-    public void FormatMention_UserWithNoUsername_ShowsFullNameWithoutAt()
-    {
-        // When mentioning in bot messages, users without username get their name (no @)
-        var result = TelegramDisplayName.FormatMention(new UserIdentity(1395388788, "Jim", "Smith", null));
-        Assert.That(result, Is.EqualTo("Jim Smith"));
-        Assert.That(result, Does.Not.StartWith("@"));
     }
 
     #endregion

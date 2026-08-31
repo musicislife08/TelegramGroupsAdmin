@@ -1,3 +1,4 @@
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
@@ -16,4 +17,34 @@ public interface IUsernameBlacklistService
     Task<UsernameBlacklistEntry?> CheckDisplayNameAsync(
         string displayName,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Adds a new blacklist entry and emits a BlacklistEntryAdded audit event.
+    /// Audit always fires alongside the write — callers cannot opt out.
+    /// </summary>
+    Task<long> AddEntryAsync(
+        string pattern,
+        BlacklistMatchType matchType,
+        string? notes,
+        Actor actor,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// Removes the entry with the given id. Returns true if a row was deleted;
+    /// the BlacklistEntryRemoved audit event fires only on actual deletion.
+    /// </summary>
+    Task<bool> DeleteEntryAsync(long id, string pattern, Actor actor, CancellationToken ct = default);
+
+    /// <summary>
+    /// Toggles entry enabled state. Writes either BlacklistEntryEnabled or
+    /// BlacklistEntryDisabled depending on the new state; audit fires only on
+    /// successful update.
+    /// </summary>
+    Task<bool> SetEnabledAsync(long id, string pattern, bool enabled, Actor actor, CancellationToken ct = default);
+
+    /// <summary>
+    /// Updates the entry's free-text notes. Returns true on actual update;
+    /// the BlacklistEntryNotesChanged audit event fires only on successful update.
+    /// </summary>
+    Task<bool> UpdateNotesAsync(long id, string pattern, string? notes, Actor actor, CancellationToken ct = default);
 }

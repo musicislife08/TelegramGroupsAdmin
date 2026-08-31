@@ -1,6 +1,8 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
+using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Repositories;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
@@ -13,7 +15,7 @@ public class LinkCommand : IBotCommand
     public string Name => "link";
     public string Description => "Link your Telegram account to web app";
     public string Usage => "/link <token>";
-    public int MinPermissionLevel => 0; // Anyone can link
+    public PermissionLevel MinPermissionLevel => PermissionLevel.Member; // everyone
     public bool RequiresReply => false;
     public bool DeleteCommandMessage => true; // Delete for security (contains token)
     public int? DeleteResponseAfterSeconds => null;
@@ -29,15 +31,20 @@ public class LinkCommand : IBotCommand
     public async Task<CommandResult> ExecuteAsync(
         Message message,
         string[] args,
-        int userPermissionLevel,
+        PermissionLevel userPermission,
         CancellationToken cancellationToken = default)
     {
         // Validate token argument
         if (args.Length == 0 || string.IsNullOrWhiteSpace(args[0]))
         {
+            var usageMessage = new TelegramMessageBuilder()
+                .Text("❌ Please provide a link token: ").Code("/link <token>").LineBreak()
+                .LineBreak()
+                .Text("Generate a token at: Profile → Linked Telegram Accounts")
+                .Build();
+
             return new CommandResult(
-                "❌ Please provide a link token: `/link <token>`\n\n" +
-                "Generate a token at: Profile → Linked Telegram Accounts",
+                usageMessage,
                 DeleteCommandMessage,
                 DeleteResponseAfterSeconds);
         }
@@ -54,8 +61,9 @@ public class LinkCommand : IBotCommand
         if (existingMapping != null)
         {
             return new CommandResult(
-                $"❌ Your Telegram account is already linked to a web app user.\n\n" +
-                $"To link a different account, first unlink from the web app.",
+                TelegramMessage.Plain(
+                    "❌ Your Telegram account is already linked to a web app user.\n\n" +
+                    "To link a different account, first unlink from the web app."),
                 DeleteCommandMessage,
                 DeleteResponseAfterSeconds);
         }
@@ -65,7 +73,7 @@ public class LinkCommand : IBotCommand
         if (tokenRecord == null)
         {
             return new CommandResult(
-                "❌ Invalid token. Please generate a new token from the web app.",
+                TelegramMessage.Plain("❌ Invalid token. Please generate a new token from the web app."),
                 DeleteCommandMessage,
                 DeleteResponseAfterSeconds);
         }
@@ -75,7 +83,7 @@ public class LinkCommand : IBotCommand
         if (tokenRecord.ExpiresAt < now)
         {
             return new CommandResult(
-                "❌ Token expired. Please generate a new token from the web app.",
+                TelegramMessage.Plain("❌ Token expired. Please generate a new token from the web app."),
                 DeleteCommandMessage,
                 DeleteResponseAfterSeconds);
         }
@@ -84,7 +92,7 @@ public class LinkCommand : IBotCommand
         if (tokenRecord.UsedAt != null)
         {
             return new CommandResult(
-                "❌ Token already used. Please generate a new token from the web app.",
+                TelegramMessage.Plain("❌ Token already used. Please generate a new token from the web app."),
                 DeleteCommandMessage,
                 DeleteResponseAfterSeconds);
         }
@@ -111,8 +119,9 @@ public class LinkCommand : IBotCommand
             tokenRecord.UserId);
 
         return new CommandResult(
-            $"✅ Successfully linked your Telegram account!\n\n" +
-            $"You can now use bot commands with your web app permissions.",
+            TelegramMessage.Plain(
+                "✅ Successfully linked your Telegram account!\n\n" +
+                "You can now use bot commands with your web app permissions."),
             DeleteCommandMessage,
             DeleteResponseAfterSeconds);
     }

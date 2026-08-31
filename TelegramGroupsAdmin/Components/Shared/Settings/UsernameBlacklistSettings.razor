@@ -1,6 +1,6 @@
 @using TelegramGroupsAdmin.Core.Models
+@inject IUsernameBlacklistService BlacklistService
 @inject IUsernameBlacklistRepository BlacklistRepository
-@inject IAuditService AuditService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 
@@ -129,23 +129,11 @@
                     return;
                 }
 
-                var entry = new UsernameBlacklistEntry(
-                    Id: 0,
-                    Pattern: data.Pattern,
-                    MatchType: BlacklistMatchType.Exact,
-                    Enabled: true,
-                    CreatedAt: DateTimeOffset.UtcNow,
-                    CreatedBy: WebUser!.ToActor(),
-                    Notes: data.Notes);
-
-                await BlacklistRepository.AddEntryAsync(entry);
-
-                var actor = WebUser!.ToActor();
-                await AuditService.LogEventAsync(
-                    AuditEventType.ConfigurationChanged,
-                    actor,
-                    actor,
-                    value: $"username_blacklist:added={data.Pattern}");
+                await BlacklistService.AddEntryAsync(
+                    pattern: data.Pattern,
+                    matchType: BlacklistMatchType.Exact,
+                    notes: data.Notes,
+                    actor: WebUser!.ToActor());
 
                 Snackbar.Add($"Blacklisted \"{data.Pattern}\"", Severity.Success);
                 await LoadEntries();
@@ -163,24 +151,30 @@
 
     private async Task ToggleEnabled(UsernameBlacklistEntry entry)
     {
-        var newState = !entry.Enabled;
-        if (await BlacklistRepository.SetEnabledAsync(entry.Id, enabled: newState))
+        if (_busy) return;
+        _busy = true;
+        try
         {
-            var actor = WebUser!.ToActor();
-            var action = newState ? "enabled" : "disabled";
-            await AuditService.LogEventAsync(
-                AuditEventType.ConfigurationChanged,
-                actor,
-                actor,
-                value: $"username_blacklist:{action}={entry.Pattern}");
-
-            Snackbar.Add($"{(newState ? "Enabled" : "Disabled")} \"{entry.Pattern}\"", Severity.Success);
-            await LoadEntries();
+            var newState = !entry.Enabled;
+            var ok = await BlacklistService.SetEnabledAsync(entry.Id, entry.Pattern, newState, WebUser!.ToActor());
+            if (ok)
+            {
+                Snackbar.Add($"{(newState ? "Enabled" : "Disabled")} \"{entry.Pattern}\"", Severity.Success);
+                await LoadEntries();
+            }
+            else
+            {
+                Snackbar.Add("Entry not found — it may have been deleted", Severity.Warning);
+                await LoadEntries();
+            }
         }
-        else
+        catch (Exception ex)
         {
-            Snackbar.Add("Entry not found — it may have been deleted", Severity.Warning);
-            await LoadEntries();
+            Snackbar.Add($"Error toggling entry: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
         }
     }
 
@@ -192,17 +186,16 @@
             yesText: "Delete",
             cancelText: "Cancel");
 
-        if (confirmed == true)
-        {
-            if (await BlacklistRepository.DeleteEntryAsync(entry.Id))
-            {
-                var actor = WebUser!.ToActor();
-                await AuditService.LogEventAsync(
-                    AuditEventType.ConfigurationChanged,
-                    actor,
-                    actor,
-                    value: $"username_blacklist:deleted={entry.Pattern}");
+        if (confirmed != true)
+            return;
 
+        if (_busy) return;
+        _busy = true;
+        try
+        {
+            var ok = await BlacklistService.DeleteEntryAsync(entry.Id, entry.Pattern, WebUser!.ToActor());
+            if (ok)
+            {
                 Snackbar.Add($"Deleted \"{entry.Pattern}\"", Severity.Success);
                 await LoadEntries();
             }
@@ -211,6 +204,14 @@
                 Snackbar.Add("Entry not found — it may have already been deleted", Severity.Warning);
                 await LoadEntries();
             }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error deleting entry: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
         }
     }
 }

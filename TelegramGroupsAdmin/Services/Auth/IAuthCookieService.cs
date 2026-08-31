@@ -13,7 +13,8 @@ public interface IAuthCookieService
     /// </summary>
     /// <param name="context">The HTTP context to sign into</param>
     /// <param name="user">The web user identity to authenticate</param>
-    Task SignInAsync(HttpContext context, WebUserIdentity user);
+    /// <param name="securityStamp">The security stamp to embed in the cookie claims for later revalidation</param>
+    Task SignInAsync(HttpContext context, WebUserIdentity user, string securityStamp);
 
     /// <summary>
     /// Signs out a user by clearing the authentication cookie.
@@ -26,8 +27,9 @@ public interface IAuthCookieService
     /// Use this in tests to create valid auth cookies programmatically.
     /// </summary>
     /// <param name="user">The web user identity to generate a cookie for</param>
+    /// <param name="securityStamp">The security stamp to embed in the cookie claims for later revalidation</param>
     /// <returns>The encrypted cookie value that can be set in a browser</returns>
-    string GenerateCookieValue(WebUserIdentity user);
+    string GenerateCookieValue(WebUserIdentity user, string securityStamp);
 
     /// <summary>
     /// Gets the name of the authentication cookie.
