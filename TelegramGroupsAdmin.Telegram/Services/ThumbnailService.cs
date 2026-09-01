@@ -92,22 +92,44 @@ public class ThumbnailService : IThumbnailService
             Directory.CreateDirectory(destDir);
         }
 
-        await using var source = File.OpenRead(sourcePath);
-
-        bool success;
-        await using (var destination = File.Create(destinationPath))
+        // Decode and resize into a temp file first, then move it into place. This
+        // guarantees destinationPath is never truncated or replaced until a new
+        // thumbnail has been fully and successfully produced, so a failed
+        // regeneration can never destroy a previously-good thumbnail.
+        var tempPath = destinationPath + ".tmp";
+        try
         {
-            success = await _imageProcessor.ResizeToFitAsync(source, destination, maxSize, ImageEncoding.Png, ct);
-        }
+            await using (var source = File.OpenRead(sourcePath))
+            await using (var destination = File.Create(tempPath))
+            {
+                if (!await _imageProcessor.ResizeToFitAsync(source, destination, maxSize, ImageEncoding.Png, ct))
+                {
+                    _logger.LogWarning("Could not decode image for thumbnail: {Source}", sourcePath);
+                    return false;
+                }
+            }
 
-        if (!success)
+            // Only now is the existing thumbnail, if any, replaced.
+            File.Move(tempPath, destinationPath, overwrite: true);
+            _logger.LogDebug("Generated image thumbnail: {Source} -> {Dest}", sourcePath, destinationPath);
+            return true;
+        }
+        finally
         {
-            _logger.LogWarning("Could not decode image for thumbnail: {Source}", sourcePath);
-            File.Delete(destinationPath);
-            return false;
+            // Covers the decode-failed return AND any exception unwinding through here.
+            if (File.Exists(tempPath))
+            {
+                try
+                {
+                    File.Delete(tempPath);
+                }
+                catch (IOException ex)
+                {
+                    // Best-effort cleanup: a stray .tmp file is harmless and will be
+                    // overwritten by the next regeneration attempt at this path.
+                    _logger.LogDebug(ex, "Could not delete temp thumbnail file: {TempPath}", tempPath);
+                }
+            }
         }
-
-        _logger.LogDebug("Generated image thumbnail: {Source} -> {Dest}", sourcePath, destinationPath);
-        return true;
     }
 }

@@ -239,6 +239,28 @@ public class ThumbnailServiceTests
     #region GenerateThumbnailAsync - Error Cases
 
     [Test]
+    public async Task GenerateThumbnailAsync_RegenerationFailsOverExistingThumbnail_PreservesOriginal()
+    {
+        // Arrange - a good thumbnail already exists at the destination
+        var goodSourcePath = Path.Combine(_tempDir, "good-source.png");
+        var destPath = Path.Combine(_tempDir, "thumb.png");
+        WriteImage(goodSourcePath, 200, 200, SKEncodedImageFormat.Png);
+        var initialResult = await _service.GenerateThumbnailAsync(goodSourcePath, destPath, maxSize: 100);
+        Assert.That(initialResult, Is.True, "Precondition: initial thumbnail generation must succeed");
+        var originalBytes = await File.ReadAllBytesAsync(destPath);
+
+        // Act - regenerate over the same destination from an undecodable source
+        var badSourcePath = Path.Combine(_tempDir, "bad-source.png");
+        await File.WriteAllTextAsync(badSourcePath, "This is not a valid image file");
+        var result = await _service.GenerateThumbnailAsync(badSourcePath, destPath, maxSize: 100);
+
+        // Assert - failure reported, and the original thumbnail is untouched
+        Assert.That(result, Is.False);
+        var bytesAfter = await File.ReadAllBytesAsync(destPath);
+        Assert.That(bytesAfter, Is.EqualTo(originalBytes), "Original thumbnail must survive a failed regeneration");
+    }
+
+    [Test]
     public async Task GenerateThumbnailAsync_SourceFileMissing_ReturnsFalse()
     {
         // Arrange
