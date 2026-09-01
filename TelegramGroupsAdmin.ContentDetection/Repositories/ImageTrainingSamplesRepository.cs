@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.ContentDetection.Models;
+using TelegramGroupsAdmin.Core;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Data;
@@ -40,9 +41,10 @@ public class ImageTrainingSamplesRepository : IImageTrainingSamplesRepository
 
         var samples = await context.ImageTrainingSamples
             .AsNoTracking()
-            // A NULL hash means the source image is gone and the hash could not be
-            // recomputed. Comparing against it would throw in CompareHashes.
-            .Where(its => its.PhotoHash != null)
+            // A NULL or wrong-length hash means the source image is gone (or, after a
+            // migration rollback, was backfilled with a zero-length placeholder) and cannot be
+            // compared. Comparing against it would throw in CompareHashes.
+            .Where(its => its.PhotoHash != null && its.PhotoHash.Length == HashingConstants.PhotoHashByteCount)
             .OrderByDescending(its => its.MarkedAt)
             .Take(limit)
             .Select(its => new { its.PhotoHash, its.IsSpam })
