@@ -1,26 +1,27 @@
 using Microsoft.Extensions.Logging;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.PixelFormats;
-using SixLabors.ImageSharp.Processing;
 using TelegramGroupsAdmin.ContentDetection.Services;
+using TelegramGroupsAdmin.Core.Imaging;
 using TelegramGroupsAdmin.Core.Utilities;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 
 /// <summary>
 /// Service for generating thumbnails from images, GIFs, and videos.
-/// Uses ImageSharp for images/GIFs, FFmpeg (via IVideoFrameExtractionService) for videos.
+/// Uses IImageProcessor for images/GIFs, FFmpeg (via IVideoFrameExtractionService) for videos.
 /// </summary>
 public class ThumbnailService : IThumbnailService
 {
     private readonly IVideoFrameExtractionService _videoFrameService;
+    private readonly IImageProcessor _imageProcessor;
     private readonly ILogger<ThumbnailService> _logger;
 
     public ThumbnailService(
         IVideoFrameExtractionService videoFrameService,
+        IImageProcessor imageProcessor,
         ILogger<ThumbnailService> logger)
     {
         _videoFrameService = videoFrameService;
+        _imageProcessor = imageProcessor;
         _logger = logger;
     }
 
@@ -43,7 +44,7 @@ public class ThumbnailService : IThumbnailService
                 return await GenerateVideoThumbnailAsync(sourcePath, destinationPath, maxSize, ct);
             }
 
-            // Image/GIF processing with ImageSharp
+            // Image/GIF processing with IImageProcessor
             return await GenerateImageThumbnailAsync(sourcePath, destinationPath, maxSize, ct);
         }
         catch (Exception ex)
@@ -80,44 +81,33 @@ public class ThumbnailService : IThumbnailService
     }
 
     /// <summary>
-    /// Generate thumbnail from image/GIF using ImageSharp
+    /// Generate a thumbnail from an image or GIF. Animated sources collapse to their
+    /// first frame during decode, so the output is always a static PNG.
     /// </summary>
     private async Task<bool> GenerateImageThumbnailAsync(string sourcePath, string destinationPath, int maxSize, CancellationToken ct)
     {
-        // Ensure destination directory exists
         var destDir = Path.GetDirectoryName(destinationPath);
         if (!string.IsNullOrEmpty(destDir) && !Directory.Exists(destDir))
         {
             Directory.CreateDirectory(destDir);
         }
 
-        // Load image
-        using var image = await Image.LoadAsync<Rgba32>(sourcePath, ct);
+        await using var source = File.OpenRead(sourcePath);
 
-        // For animated images (GIFs), extract only the first frame
-        // This prevents saving as APNG which would still animate
-        using var firstFrame = ExtractFirstFrame(image);
-
-        // Resize maintaining aspect ratio
-        firstFrame.Mutate(x => x.Resize(new ResizeOptions
+        bool success;
+        await using (var destination = File.Create(destinationPath))
         {
-            Size = new Size(maxSize, maxSize),
-            Mode = ResizeMode.Max
-        }));
+            success = await _imageProcessor.ResizeToFitAsync(source, destination, maxSize, ImageEncoding.Png, ct);
+        }
 
-        // Save as PNG (now guaranteed to be static single-frame)
-        await firstFrame.SaveAsPngAsync(destinationPath, ct);
+        if (!success)
+        {
+            _logger.LogWarning("Could not decode image for thumbnail: {Source}", sourcePath);
+            File.Delete(destinationPath);
+            return false;
+        }
 
         _logger.LogDebug("Generated image thumbnail: {Source} -> {Dest}", sourcePath, destinationPath);
         return true;
-    }
-
-    /// <summary>
-    /// Extracts the first frame from a potentially multi-frame image (GIF/APNG)
-    /// </summary>
-    private static Image<Rgba32> ExtractFirstFrame(Image<Rgba32> source)
-    {
-        // Clone just the first frame into a new single-frame image
-        return source.Frames.CloneFrame(0);
     }
 }

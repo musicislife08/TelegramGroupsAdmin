@@ -1,10 +1,10 @@
 using Microsoft.Extensions.Logging;
 using NSubstitute;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.Formats.Gif;
-using SixLabors.ImageSharp.PixelFormats;
+using SkiaSharp;
 using TelegramGroupsAdmin.ContentDetection.Services;
+using TelegramGroupsAdmin.Core.Imaging;
 using TelegramGroupsAdmin.Telegram.Services;
+using TelegramGroupsAdmin.UnitTests.TestHelpers;
 
 namespace TelegramGroupsAdmin.UnitTests.Telegram.Services;
 
@@ -12,15 +12,15 @@ namespace TelegramGroupsAdmin.UnitTests.Telegram.Services;
 /// Unit tests for ThumbnailService - generates static thumbnails from images, GIFs, and videos.
 ///
 /// Architecture:
-/// - ThumbnailService uses ImageSharp for images/GIFs, FFmpeg for videos
-/// - For animated GIFs, only the first frame is extracted (prevents APNG animation)
+/// - ThumbnailService uses IImageProcessor for images/GIFs, FFmpeg for videos
+/// - For animated GIFs, only the first frame is extracted (Skia's decode collapses to frame 0)
 /// - For videos (MP4, etc.), delegates to IVideoFrameExtractionService
 /// - Output is always a static thumbnail (PNG for images, GIF for videos)
-/// - Maintains aspect ratio using ResizeMode.Max
+/// - Maintains aspect ratio using a max-dimension scale-down
 ///
 /// Test Strategy:
 /// - Uses temporary files for input/output (real file I/O, but isolated)
-/// - Creates test images programmatically using ImageSharp
+/// - Creates test images programmatically using SkiaSharp
 /// - Mocks IVideoFrameExtractionService for video thumbnail tests
 /// - Validates output dimensions and format
 /// - Tests error handling for missing/invalid files
@@ -38,7 +38,7 @@ public class ThumbnailServiceTests
     {
         _mockVideoService = Substitute.For<IVideoFrameExtractionService>();
         _mockLogger = Substitute.For<ILogger<ThumbnailService>>();
-        _service = new ThumbnailService(_mockVideoService, _mockLogger);
+        _service = new ThumbnailService(_mockVideoService, new SkiaImageProcessor(), _mockLogger);
 
         // Create a unique temp directory for each test
         _tempDir = Path.Combine(Path.GetTempPath(), $"ThumbnailServiceTests_{Guid.NewGuid():N}");
@@ -62,6 +62,23 @@ public class ThumbnailServiceTests
         }
     }
 
+    /// <summary>
+    /// Writes a simple test image (a solid background with a circle) to disk using SkiaSharp.
+    /// </summary>
+    private static void WriteImage(string path, int width, int height, SKEncodedImageFormat format, int quality = 100)
+    {
+        using var bitmap = new SKBitmap(width, height);
+        using (var canvas = new SKCanvas(bitmap))
+        {
+            canvas.Clear(SKColors.CornflowerBlue);
+            using var paint = new SKPaint { Color = SKColors.Orange, IsAntialias = true };
+            canvas.DrawCircle(width / 2f, height / 2f, Math.Min(width, height) / 3f, paint);
+        }
+
+        using var fs = File.Create(path);
+        bitmap.Encode(fs, format, quality);
+    }
+
     #region GenerateThumbnailAsync - Success Cases
 
     [Test]
@@ -71,10 +88,7 @@ public class ThumbnailServiceTests
         var sourcePath = Path.Combine(_tempDir, "source.png");
         var destPath = Path.Combine(_tempDir, "thumb.png");
 
-        using (var image = new Image<Rgba32>(400, 300))
-        {
-            image.SaveAsPng(sourcePath);
-        }
+        WriteImage(sourcePath, 400, 300, SKEncodedImageFormat.Png);
 
         // Act
         var result = await _service.GenerateThumbnailAsync(sourcePath, destPath, maxSize: 100);
@@ -88,7 +102,7 @@ public class ThumbnailServiceTests
 
         // Verify dimensions - should be resized to fit within 100x100 maintaining aspect ratio
         // 400x300 -> 100x75 (width constrained)
-        using var thumbnail = await Image.LoadAsync<Rgba32>(destPath);
+        using var thumbnail = SKBitmap.Decode(destPath);
         using (Assert.EnterMultipleScope())
         {
             Assert.That(thumbnail.Width, Is.EqualTo(100));
@@ -103,10 +117,7 @@ public class ThumbnailServiceTests
         var sourcePath = Path.Combine(_tempDir, "tall.png");
         var destPath = Path.Combine(_tempDir, "thumb.png");
 
-        using (var image = new Image<Rgba32>(300, 600))
-        {
-            image.SaveAsPng(sourcePath);
-        }
+        WriteImage(sourcePath, 300, 600, SKEncodedImageFormat.Png);
 
         // Act
         var result = await _service.GenerateThumbnailAsync(sourcePath, destPath, maxSize: 100);
@@ -115,7 +126,7 @@ public class ThumbnailServiceTests
         Assert.That(result, Is.True);
 
         // 300x600 -> 50x100 (height constrained)
-        using var thumbnail = await Image.LoadAsync<Rgba32>(destPath);
+        using var thumbnail = SKBitmap.Decode(destPath);
         using (Assert.EnterMultipleScope())
         {
             Assert.That(thumbnail.Width, Is.EqualTo(50));
@@ -126,33 +137,11 @@ public class ThumbnailServiceTests
     [Test]
     public async Task GenerateThumbnailAsync_AnimatedGif_ExtractsFirstFrame()
     {
-        // Arrange - Create a multi-frame GIF
+        // Arrange - a hand-built 2-frame GIF (frame 0 red, frame 1 blue)
         var sourcePath = Path.Combine(_tempDir, "animated.gif");
         var destPath = Path.Combine(_tempDir, "thumb.png");
 
-        // Create a GIF with 3 frames (each frame is a different color)
-        using (var gifImage = new Image<Rgba32>(200, 200))
-        {
-            // First frame - red
-            for (int y = 0; y < gifImage.Height; y++)
-                for (int x = 0; x < gifImage.Width; x++)
-                    gifImage[x, y] = new Rgba32(255, 0, 0, 255);
-
-            // Add second frame - green
-            var frame2 = gifImage.Frames.AddFrame(gifImage.Frames.RootFrame);
-            for (int y = 0; y < gifImage.Height; y++)
-                for (int x = 0; x < gifImage.Width; x++)
-                    frame2[x, y] = new Rgba32(0, 255, 0, 255);
-
-            // Add third frame - blue
-            var frame3 = gifImage.Frames.AddFrame(gifImage.Frames.RootFrame);
-            for (int y = 0; y < gifImage.Height; y++)
-                for (int x = 0; x < gifImage.Width; x++)
-                    frame3[x, y] = new Rgba32(0, 0, 255, 255);
-
-            var encoder = new GifEncoder();
-            await gifImage.SaveAsync(sourcePath, encoder);
-        }
+        await File.WriteAllBytesAsync(sourcePath, GifTestData.TwoFrameRedThenBlue());
 
         // Act
         var result = await _service.GenerateThumbnailAsync(sourcePath, destPath, maxSize: 100);
@@ -164,18 +153,17 @@ public class ThumbnailServiceTests
             Assert.That(File.Exists(destPath), Is.True);
         }
 
-        // Verify it's a single-frame image (PNG with one frame)
-        using var thumbnail = await Image.LoadAsync<Rgba32>(destPath);
+        // Verify it decoded to a single-frame static PNG, upscaled from the 4x4 source
+        using var thumbnail = SKBitmap.Decode(destPath);
         using (Assert.EnterMultipleScope())
         {
             Assert.That(thumbnail.Width, Is.EqualTo(100));
             Assert.That(thumbnail.Height, Is.EqualTo(100));
-            Assert.That(thumbnail.Frames.Count, Is.EqualTo(1), "Thumbnail should have exactly 1 frame");
         }
 
-        // Verify the first frame color (should be red from first frame)
-        var pixel = thumbnail[50, 50];
-        Assert.That(pixel.R, Is.EqualTo(255), "First frame should be red");
+        // Verify the first frame colour (should be red from frame 0)
+        var pixel = thumbnail.GetPixel(50, 50);
+        Assert.That(pixel.Red, Is.EqualTo(255), "First frame should be red");
     }
 
     [Test]
@@ -185,10 +173,7 @@ public class ThumbnailServiceTests
         var sourcePath = Path.Combine(_tempDir, "small.png");
         var destPath = Path.Combine(_tempDir, "thumb.png");
 
-        using (var image = new Image<Rgba32>(50, 50))
-        {
-            image.SaveAsPng(sourcePath);
-        }
+        WriteImage(sourcePath, 50, 50, SKEncodedImageFormat.Png);
 
         // Act
         var result = await _service.GenerateThumbnailAsync(sourcePath, destPath, maxSize: 100);
@@ -196,8 +181,8 @@ public class ThumbnailServiceTests
         // Assert
         Assert.That(result, Is.True);
 
-        // ResizeMode.Max with a smaller image should not upscale
-        using var thumbnail = await Image.LoadAsync<Rgba32>(destPath);
+        // A smaller image should not be upscaled beyond maxSize
+        using var thumbnail = SKBitmap.Decode(destPath);
         using (Assert.EnterMultipleScope())
         {
             Assert.That(thumbnail.Width, Is.LessThanOrEqualTo(100));
@@ -212,10 +197,7 @@ public class ThumbnailServiceTests
         var sourcePath = Path.Combine(_tempDir, "source.png");
         var nestedDestPath = Path.Combine(_tempDir, "nested", "dir", "thumb.png");
 
-        using (var image = new Image<Rgba32>(200, 200))
-        {
-            image.SaveAsPng(sourcePath);
-        }
+        WriteImage(sourcePath, 200, 200, SKEncodedImageFormat.Png);
 
         // Act
         var result = await _service.GenerateThumbnailAsync(sourcePath, nestedDestPath, maxSize: 100);
@@ -236,10 +218,7 @@ public class ThumbnailServiceTests
         var sourcePath = Path.Combine(_tempDir, "source.png");
         var destPath = Path.Combine(_tempDir, "thumb.png");
 
-        using (var image = new Image<Rgba32>(500, 500))
-        {
-            image.SaveAsPng(sourcePath);
-        }
+        WriteImage(sourcePath, 500, 500, SKEncodedImageFormat.Png);
 
         // Act - Use custom maxSize of 200
         var result = await _service.GenerateThumbnailAsync(sourcePath, destPath, maxSize: 200);
@@ -247,7 +226,7 @@ public class ThumbnailServiceTests
         // Assert
         Assert.That(result, Is.True);
 
-        using var thumbnail = await Image.LoadAsync<Rgba32>(destPath);
+        using var thumbnail = SKBitmap.Decode(destPath);
         using (Assert.EnterMultipleScope())
         {
             Assert.That(thumbnail.Width, Is.EqualTo(200));
@@ -337,15 +316,11 @@ public class ThumbnailServiceTests
     [Test]
     public async Task GenerateThumbnailAsync_OutputIsPng_NotAnimated()
     {
-        // Arrange - Create a simple image
+        // Arrange - Create a simple animated GIF source
         var sourcePath = Path.Combine(_tempDir, "source.gif");
         var destPath = Path.Combine(_tempDir, "thumb.png");
 
-        using (var image = new Image<Rgba32>(200, 200))
-        {
-            var encoder = new GifEncoder();
-            await image.SaveAsync(sourcePath, encoder);
-        }
+        await File.WriteAllBytesAsync(sourcePath, GifTestData.TwoFrameRedThenBlue());
 
         // Act
         var result = await _service.GenerateThumbnailAsync(sourcePath, destPath);
@@ -431,16 +406,13 @@ public class ThumbnailServiceTests
     }
 
     [Test]
-    public async Task GenerateThumbnailAsync_GifFile_UsesImageSharpNotVideoService()
+    public async Task GenerateThumbnailAsync_GifFile_UsesImageProcessorNotVideoService()
     {
-        // Arrange - GIF files should use ImageSharp, not video service
+        // Arrange - GIF files should use the image processor, not video service
         var sourcePath = Path.Combine(_tempDir, "animation.gif");
         var destPath = Path.Combine(_tempDir, "thumb.png");
 
-        using (var image = new Image<Rgba32>(100, 100))
-        {
-            await image.SaveAsGifAsync(sourcePath);
-        }
+        await File.WriteAllBytesAsync(sourcePath, GifTestData.TwoFrameRedThenBlue());
 
         // Act
         var result = await _service.GenerateThumbnailAsync(sourcePath, destPath);
