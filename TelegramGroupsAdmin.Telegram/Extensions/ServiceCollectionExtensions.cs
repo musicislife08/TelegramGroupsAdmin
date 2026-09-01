@@ -1,5 +1,6 @@
 using System.IO.Abstractions;
 using Microsoft.Extensions.DependencyInjection;
+using TelegramGroupsAdmin.Core.Imaging;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
@@ -165,6 +166,7 @@ public static class ServiceCollectionExtensions
             services.AddScoped<TrainingDataDeduplicationService>();
 
             // Phase 4.10: Anti-Impersonation Detection
+            services.AddSingleton<IImageProcessor, SkiaImageProcessor>();
             services.AddSingleton<IPhotoHashService, PhotoHashService>();
             services.AddScoped<IImpersonationDetectionService, ImpersonationDetectionService>();
 

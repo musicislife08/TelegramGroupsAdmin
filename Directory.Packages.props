@@ -95,6 +95,8 @@
     <PackageVersion Include="Panlingo.LanguageIdentification.FastText" Version="0.8.0" />
     <PackageVersion Include="QRCoder" Version="1.8.0" />
     <PackageVersion Include="SendGrid" Version="9.29.3" />
+    <PackageVersion Include="SkiaSharp" Version="4.151.1" />
+    <PackageVersion Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="4.151.1" />
     <!-- Version hold: 4.0.0+ (including 4.1.1) enforces a build-time license key
          (SixLaborsLicenseKey / sixlabors.lic) for any project with a direct dependency.
          OSS projects can apply for a free community license at licensing.sixlabors.com,
