@@ -13,7 +13,8 @@ public sealed class SkiaImageProcessor : IImageProcessor
 
     public ImageDimensions? ReadDimensions(Stream source)
     {
-        using var codec = SKCodec.Create(source);
+        using var skStream = new SKManagedStream(source, disposeManagedStream: false);
+        using var codec = SKCodec.Create(skStream);
         return codec is null ? null : new ImageDimensions(codec.Info.Width, codec.Info.Height);
     }
 
@@ -90,7 +91,8 @@ public sealed class SkiaImageProcessor : IImageProcessor
         if (surface is null) return Task.FromResult(false);
 
         using var image = SKImage.FromBitmap(bitmap);
-        using var paint = new SKPaint { ImageFilter = SKImageFilter.CreateBlur(sigma, sigma) };
+        using var blurFilter = SKImageFilter.CreateBlur(sigma, sigma);
+        using var paint = new SKPaint { ImageFilter = blurFilter };
         surface.Canvas.Clear(SKColors.Transparent);
         surface.Canvas.DrawImage(image, SKPoint.Empty, SKSamplingOptions.Default, paint);
 
@@ -102,12 +104,18 @@ public sealed class SkiaImageProcessor : IImageProcessor
     /// <summary>
     /// Decodes to a bitmap. Animated sources (GIF, APNG, animated WebP) yield frame 0,
     /// which is what every thumbnail path wants.
+    ///
+    /// Wraps <paramref name="source"/> in a non-owning <see cref="SKManagedStream"/>:
+    /// passing the .NET stream straight to Skia lets it take ownership and dispose the
+    /// caller's stream once decoding finishes, which breaks any second operation on the
+    /// same stream.
     /// </summary>
     private static SKBitmap? Decode(Stream source)
     {
         try
         {
-            return SKBitmap.Decode(source);
+            using var skStream = new SKManagedStream(source, disposeManagedStream: false);
+            return SKBitmap.Decode(skStream);
         }
         catch (Exception)
         {

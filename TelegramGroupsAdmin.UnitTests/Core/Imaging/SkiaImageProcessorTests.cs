@@ -129,6 +129,21 @@ public class SkiaImageProcessorTests
     }
 
     [Test]
+    public async Task Operations_DoNotCloseTheCallerStream()
+    {
+        using var source = new MemoryStream(CreateTestImage(240, 160, SKEncodedImageFormat.Png));
+
+        var dimensions = _processor.ReadDimensions(source);
+        Assert.That(dimensions, Is.Not.Null);
+        Assert.That(source.CanRead, Is.True, "ReadDimensions closed the caller's stream");
+
+        source.Position = 0;
+        using var destination = new MemoryStream();
+        Assert.That(await _processor.ResizeToFitAsync(source, destination, 64, ImageEncoding.Png), Is.True,
+            "a second operation on the same stream failed");
+    }
+
+    [Test]
     public async Task BlurAsync_ReducesLocalContrast()
     {
         var original = CreateTestImage(240, 160, SKEncodedImageFormat.Png);
