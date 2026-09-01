@@ -409,6 +409,10 @@ namespace TelegramGroupsAdmin.Core.Imaging;
 ///
 /// All operations read the source stream from its current position and are tolerant
 /// of undecodable input, returning null or false rather than throwing.
+///
+/// STREAM CONTRACT: the source stream is left OPEN but NOT rewound. Skia consumes
+/// bytes while decoding, so a caller making a second call on the same stream must
+/// reset Position = 0 first.
 /// </summary>
 public interface IImageProcessor
 {
@@ -473,7 +477,10 @@ public sealed class SkiaImageProcessor : IImageProcessor
 
     public ImageDimensions? ReadDimensions(Stream source)
     {
-        using var codec = SKCodec.Create(source);
+        // SKCodec/SKBitmap take ownership of a raw Stream and dispose it. The
+        // non-owning wrapper keeps the caller's stream usable for a second call.
+        using var managed = new SKManagedStream(source, disposeManagedStream: false);
+        using var codec = SKCodec.Create(managed);
         return codec is null ? null : new ImageDimensions(codec.Info.Width, codec.Info.Height);
     }
 
@@ -550,7 +557,10 @@ public sealed class SkiaImageProcessor : IImageProcessor
         if (surface is null) return Task.FromResult(false);
 
         using var image = SKImage.FromBitmap(bitmap);
-        using var paint = new SKPaint { ImageFilter = SKImageFilter.CreateBlur(sigma, sigma) };
+        // SKImageFilter is a native ref-counted object owning its own reference;
+        // disposing the SKPaint does not release it.
+        using var blurFilter = SKImageFilter.CreateBlur(sigma, sigma);
+        using var paint = new SKPaint { ImageFilter = blurFilter };
         surface.Canvas.Clear(SKColors.Transparent);
         surface.Canvas.DrawImage(image, SKPoint.Empty, SKSamplingOptions.Default, paint);
 
@@ -567,7 +577,8 @@ public sealed class SkiaImageProcessor : IImageProcessor
     {
         try
         {
-            return SKBitmap.Decode(source);
+            using var managed = new SKManagedStream(source, disposeManagedStream: false);
+            return SKBitmap.Decode(managed);
         }
         catch (Exception)
         {
