@@ -30,6 +30,8 @@ public class PhotoHashRehashServiceTests
 
     private static long _nextUserId = 9_500_000_000_000L;
     private static int _nextMessageId = 500_000;
+    private static long _nextManagedChatId = -100_900_000_000_000L;
+    private static int _nextLinkedChannelId = 1;
 
     [SetUp]
     public async Task SetUp()
@@ -174,6 +176,67 @@ public class PhotoHashRehashServiceTests
         return await context.ImageTrainingSamples.AsNoTracking().SingleAsync(s => s.Id == id);
     }
 
+    private async Task<int> SeedLinkedChannelAsync(string channelIconPath, byte[]? photoHash)
+    {
+        var managedChatId = Interlocked.Decrement(ref _nextManagedChatId);
+        var now = DateTimeOffset.UtcNow;
+
+        await using var context = NewContext();
+        context.ManagedChats.Add(new ManagedChatRecordDto
+        {
+            ChatId = managedChatId,
+            ChatName = "Test Chat",
+            ChatType = ManagedChatType.Supergroup,
+            BotStatus = BotChatStatus.Administrator,
+            IsAdmin = true,
+            AddedAt = now,
+            IsActive = true,
+            IsDeleted = false,
+        });
+        await context.SaveChangesAsync();
+
+        var linkedChannel = new LinkedChannelRecordDto
+        {
+            ManagedChatId = managedChatId,
+            ChannelId = Interlocked.Increment(ref _nextLinkedChannelId),
+            ChannelName = "Test Channel",
+            ChannelIconPath = channelIconPath,
+            PhotoHash = photoHash,
+            LastSynced = now,
+        };
+        context.LinkedChannels.Add(linkedChannel);
+        await context.SaveChangesAsync();
+
+        return linkedChannel.Id;
+    }
+
+    private async Task<LinkedChannelRecordDto> ReloadLinkedChannelAsync(int id)
+    {
+        await using var context = NewContext();
+        return await context.LinkedChannels.AsNoTracking().SingleAsync(c => c.Id == id);
+    }
+
+    private async Task<int> SeedBanCelebrationGifAsync(string filePath, byte[]? photoHash)
+    {
+        await using var context = NewContext();
+        var gif = new BanCelebrationGifDto
+        {
+            FilePath = filePath,
+            PhotoHash = photoHash,
+            CreatedAt = DateTimeOffset.UtcNow,
+        };
+        context.BanCelebrationGifs.Add(gif);
+        await context.SaveChangesAsync();
+
+        return gif.Id;
+    }
+
+    private async Task<BanCelebrationGifDto> ReloadBanCelebrationGifAsync(int id)
+    {
+        await using var context = NewContext();
+        return await context.BanCelebrationGifs.AsNoTracking().SingleAsync(g => g.Id == id);
+    }
+
     [Test]
     public async Task RehashAsync_UserPhotoOnDisk_RecomputesHash()
     {
@@ -254,5 +317,45 @@ public class PhotoHashRehashServiceTests
 
         var reloaded = await ReloadSampleAsync(sampleId);
         Assert.That(reloaded.PhotoHash, Is.Not.Null);
+    }
+
+    [Test]
+    public async Task RehashAsync_LinkedChannelIconOnDisk_RecomputesHash()
+    {
+        var channelId = await SeedLinkedChannelAsync("channel_icons/1.jpg", photoHash: null);
+        WriteTestImage(Path.Combine(_dataPath, "media", "channel_icons", "1.jpg"));
+
+        var result = await _service!.RehashAsync();
+
+        var reloaded = await ReloadLinkedChannelAsync(channelId);
+        Assert.Multiple(() =>
+        {
+            Assert.That(reloaded.PhotoHash, Is.Not.Null);
+            // linked_channels.photo_hash is bytea — an accidental Base64-string write here
+            // (mixing up the users convention with this store) would fail this length check.
+            Assert.That(reloaded.PhotoHash!, Has.Length.EqualTo(8));
+            Assert.That(result.Recomputed, Is.EqualTo(1));
+        });
+    }
+
+    [Test]
+    public async Task RehashAsync_BanCelebrationGifOnDisk_RecomputesHash()
+    {
+        var gifId = await SeedBanCelebrationGifAsync("ban-gifs/1.jpg", photoHash: null);
+        WriteTestImage(Path.Combine(_dataPath, "media", "ban-gifs", "1.jpg"));
+
+        var result = await _service!.RehashAsync();
+
+        var reloaded = await ReloadBanCelebrationGifAsync(gifId);
+        Assert.Multiple(() =>
+        {
+            Assert.That(reloaded.PhotoHash, Is.Not.Null);
+            // ban_celebration_gifs.photo_hash is bytea, and a downstream query filters on
+            // exactly 8 bytes (PhotoHashByteCount) — a wrong-length write is silently
+            // excluded from spam matching rather than throwing, so this assertion is the
+            // one that actually catches a copy-paste type mismatch.
+            Assert.That(reloaded.PhotoHash!, Has.Length.EqualTo(8));
+            Assert.That(result.Recomputed, Is.EqualTo(1));
+        });
     }
 }
