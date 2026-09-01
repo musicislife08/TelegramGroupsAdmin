@@ -97,12 +97,6 @@
     <PackageVersion Include="SendGrid" Version="9.29.3" />
     <PackageVersion Include="SkiaSharp" Version="4.151.1" />
     <PackageVersion Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="4.151.1" />
-    <!-- Version hold: 4.0.0+ (including 4.1.1) enforces a build-time license key
-         (SixLaborsLicenseKey / sixlabors.lic) for any project with a direct dependency.
-         OSS projects can apply for a free community license at licensing.sixlabors.com,
-         but it is application-based, not an automatic no-op opt-out. Tracked by open
-         issue #523. -->
-    <PackageVersion Include="SixLabors.ImageSharp" Version="3.1.12" />
     <PackageVersion Include="System.IO.Hashing" Version="10.0.11" />
     <PackageVersion Include="Testably.Abstractions" Version="10.3.0" />
     <PackageVersion Include="TimeZoneConverter" Version="7.2.0" />

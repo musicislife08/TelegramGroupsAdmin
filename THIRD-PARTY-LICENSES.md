@@ -67,9 +67,8 @@ TelegramGroupsAdmin is built on the shoulders of many excellent open-source proj
 - **AngleSharp** - MIT License - https://github.com/AngleSharp/AngleSharp
 - **CsvHelper** - Dual License (MS-PL or Apache 2.0) - https://github.com/JoshClose/CsvHelper
 - **DiffPlex** - Apache License 2.0 - https://github.com/mmanela/diffplex
-- **SixLabors.ImageSharp** - Split License (Apache 2.0 or Commercial) - https://github.com/SixLabors/ImageSharp
-  - **Important:** Apache 2.0 applies for open source, non-profit, and companies <$1M annual revenue
-  - **Commercial license required** for companies ≥$1M revenue - see https://sixlabors.com/pricing/
+- **SkiaSharp** - MIT License - https://github.com/mono/SkiaSharp
+  - **Note:** Wraps Google's Skia graphics library (BSD-3-Clause). Native binaries supplied by SkiaSharp.NativeAssets.Linux.NoDependencies.
 
 ### Virus Scanning
 - **nClam** - Apache License 2.0 - https://github.com/tekmaven/nClam
@@ -117,7 +116,7 @@ TelegramGroupsAdmin is licensed under the **MIT License**.
 
 All bundled components and dependencies are compatible with MIT licensing:
 - **MIT** - Fully compatible (most NuGet packages)
-- **Apache 2.0** - Fully compatible (Tesseract, ImageSharp, etc.)
+- **Apache 2.0** - Fully compatible (Tesseract, etc.)
 - **LGPL 2.1+** - Compatible when used as separate process (FFmpeg)
 - **PostgreSQL License** - Fully compatible (Npgsql)
 - **BSD 3-Clause** - Fully compatible (NSubstitute)
@@ -151,9 +150,7 @@ https://github.com/weekenders/TelegramGroupsAdmin/issues
 
 ## Commercial Licensing Notes
 
-**SixLabors.ImageSharp** has split licensing that may require a commercial license depending on your organization's revenue. This applies if you're using TelegramGroupsAdmin in a for-profit company with ≥$1M annual revenue. See https://sixlabors.com/pricing/ for details.
-
-All other dependencies use permissive licenses (MIT, Apache 2.0, BSD, PostgreSQL License) with no commercial restrictions.
+All dependencies use permissive licenses (MIT, Apache 2.0, BSD, PostgreSQL License) with no commercial restrictions.
 
 ---
 
