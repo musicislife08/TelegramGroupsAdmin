@@ -34,11 +34,13 @@ public class ImageTrainingSampleDto
     public string PhotoPath { get; set; } = string.Empty;
 
     /// <summary>
-    /// Perceptual hash (64-bit aHash) for similarity matching
+    /// Perceptual hash (64-bit aHash) for similarity matching.
+    /// NULL means the hash could not be recomputed after the v1 to v2 hash
+    /// migration because the source image no longer exists on disk. Rows with a
+    /// NULL hash are excluded from similarity queries.
     /// </summary>
     [Column("photo_hash")]
-    [Required]
-    public byte[] PhotoHash { get; set; } = [];
+    public byte[]? PhotoHash { get; set; }
 
     /// <summary>
     /// File size in bytes (metadata feature)

@@ -428,6 +428,12 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 "CK_image_training_exclusive_actor",
                 "(marked_by_web_user_id IS NOT NULL)::int + (marked_by_telegram_user_id IS NOT NULL)::int + (marked_by_system_identifier IS NOT NULL)::int = 1"));
 
+        // photo_hash is nullable: a sample whose source image no longer exists on
+        // disk cannot have its hash recomputed after the v1 to v2 hash migration.
+        modelBuilder.Entity<ImageTrainingSampleDto>()
+            .Property(its => its.PhotoHash)
+            .IsRequired(false);
+
         // MessageTranslations: Exactly one of (message_id+chat_id, edit_id) must be non-null
         modelBuilder.Entity<MessageTranslationDto>()
             .ToTable(t => t.HasCheckConstraint(

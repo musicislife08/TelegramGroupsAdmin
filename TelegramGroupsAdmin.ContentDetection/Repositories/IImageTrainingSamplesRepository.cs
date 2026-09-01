@@ -1,3 +1,4 @@
+using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.Core.Models;
 
 namespace TelegramGroupsAdmin.ContentDetection.Repositories;
@@ -9,14 +10,16 @@ namespace TelegramGroupsAdmin.ContentDetection.Repositories;
 public interface IImageTrainingSamplesRepository
 {
     /// <summary>
-    /// Get recent image training samples with their photo hashes
-    /// Returns samples ordered by most recent first
+    /// Get recent image training samples with their photo hashes.
+    /// Samples with a NULL hash (source image gone, hash not recomputed after the
+    /// v1 to v2 hash migration) are excluded. Returns samples ordered by most
+    /// recent first.
     /// </summary>
     /// <param name="limit">Maximum number of samples to return (for performance)</param>
     /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>List of (PhotoHash, IsSpam) tuples</returns>
-    Task<List<(byte[] PhotoHash, bool IsSpam)>> GetRecentSamplesAsync(
-        int limit = 1000,
+    /// <returns>List of usable training samples</returns>
+    Task<List<ImageTrainingSample>> GetRecentSamplesAsync(
+        int limit,
         CancellationToken cancellationToken = default);
 
     /// <summary>
