@@ -996,17 +996,34 @@ In `TelegramGroupsAdmin.Telegram/Services/ThumbnailService.cs`: delete the three
             Directory.CreateDirectory(destDir);
         }
 
-        await using var source = File.OpenRead(sourcePath);
-        await using var destination = File.Create(destinationPath);
-
-        if (!await _imageProcessor.ResizeToFitAsync(source, destination, maxSize, ImageEncoding.Png, ct))
+        // Write to a temp file and move into place only on success. File.Create
+        // truncates the moment it opens, so writing straight to destinationPath
+        // would destroy an existing good thumbnail whenever regeneration failed.
+        var tempPath = destinationPath + ".tmp";
+        try
         {
-            _logger.LogWarning("Could not decode image for thumbnail: {Source}", sourcePath);
-            return false;
-        }
+            await using (var source = File.OpenRead(sourcePath))
+            await using (var destination = File.Create(tempPath))
+            {
+                if (!await _imageProcessor.ResizeToFitAsync(source, destination, maxSize, ImageEncoding.Png, ct))
+                {
+                    _logger.LogWarning("Could not decode image for thumbnail: {Source}", sourcePath);
+                    return false;
+                }
+            }
 
-        _logger.LogDebug("Generated image thumbnail: {Source} -> {Dest}", sourcePath, destinationPath);
-        return true;
+            File.Move(tempPath, destinationPath, overwrite: true);
+            _logger.LogDebug("Generated image thumbnail: {Source} -> {Dest}", sourcePath, destinationPath);
+            return true;
+        }
+        finally
+        {
+            if (File.Exists(tempPath))
+            {
+                try { File.Delete(tempPath); }
+                catch (IOException) { /* best effort; a stray temp file is harmless */ }
+            }
+        }
     }
 ```
 
