@@ -1,12 +1,11 @@
 using System.IO.Abstractions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.Processing;
 using Telegram.Bot.Exceptions;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Core.Extensions;
+using TelegramGroupsAdmin.Core.Imaging;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Models;
@@ -23,6 +22,7 @@ public class BotMediaService : IBotMediaService
     private readonly IBotMediaHandler _mediaHandler;
     private readonly IBotChatHandler _chatHandler;
     private readonly IFileSystem _fileSystem;
+    private readonly IImageProcessor _imageProcessor;
     private readonly ILogger<BotMediaService> _logger;
     private readonly string _chatIconsPath;
     private readonly string _userPhotosPath;
@@ -32,11 +32,13 @@ public class BotMediaService : IBotMediaService
         IBotChatHandler chatHandler,
         IFileSystem fileSystem,
         IOptions<AppOptions> appOptions,
+        IImageProcessor imageProcessor,
         ILogger<BotMediaService> logger)
     {
         _mediaHandler = mediaHandler;
         _chatHandler = chatHandler;
         _fileSystem = fileSystem;
+        _imageProcessor = imageProcessor;
         _logger = logger;
 
         // Create subdirectories for chat icons and user photos under media/
@@ -227,9 +229,8 @@ public class BotMediaService : IBotMediaService
     }
 
     /// <summary>
-    /// Resize image to square icon using ImageSharp.
-    /// Uses IFileSystem streams for testability - all I/O goes through the abstraction,
-    /// leaving ImageSharp to only handle the image mutation.
+    /// Resize image to square icon, cropping to fill.
+    /// I/O goes through IFileSystem for testability; IImageProcessor only transforms.
     /// </summary>
     private async Task ResizeImageAsync(
         string sourcePath,
@@ -237,24 +238,8 @@ public class BotMediaService : IBotMediaService
         int size,
         CancellationToken ct = default)
     {
-        // Read source image through IFileSystem
         await using var sourceStream = _fileSystem.File.OpenRead(sourcePath);
-        using var image = await Image.LoadAsync(sourceStream, ct);
-
-        // Crop to center square, then resize (ImageSharp handles mutation)
-        image.Mutate(x => x
-            .Resize(new ResizeOptions
-            {
-                Size = new Size(size, size),
-                Mode = ResizeMode.Crop,
-                Position = AnchorPositionMode.Center
-            }));
-
-        // Write target image through IFileSystem
         await using var targetStream = _fileSystem.File.Create(targetPath);
-        await image.SaveAsJpegAsync(targetStream, new SixLabors.ImageSharp.Formats.Jpeg.JpegEncoder
-        {
-            Quality = 85
-        }, ct);
+        await _imageProcessor.ResizeToFillAsync(sourceStream, targetStream, size, ImageEncoding.Jpeg(85), ct);
     }
 }

@@ -3,6 +3,7 @@ using NSubstitute;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Core.Imaging;
 using TelegramGroupsAdmin.Core.Metrics;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
@@ -62,6 +63,7 @@ public class ChatHealthRefreshOrchestratorTests
             Substitute.For<ILogger<TelegramPhotoService>>(),
             Substitute.For<IBotMediaService>(),
             Substitute.For<IBotChatService>(),
+            new SkiaImageProcessor(),
             Microsoft.Extensions.Options.Options.Create(new AppOptions { DataPath = Path.GetTempPath() }));
         _photoHashService = Substitute.For<IPhotoHashService>();
         _notificationService = Substitute.For<INotificationService>();

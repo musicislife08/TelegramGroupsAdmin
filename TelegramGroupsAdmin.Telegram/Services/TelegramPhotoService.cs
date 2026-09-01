@@ -1,10 +1,9 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.Processing;
 using Telegram.Bot.Exceptions;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Core.Extensions;
+using TelegramGroupsAdmin.Core.Imaging;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Models;
@@ -24,6 +23,7 @@ public class TelegramPhotoService
     private readonly ILogger<TelegramPhotoService> _logger;
     private readonly IBotMediaService _mediaService;
     private readonly IBotChatService _chatService;
+    private readonly IImageProcessor _imageProcessor;
     private readonly string _chatIconsPath;
     private readonly string _userPhotosPath;
 
@@ -31,11 +31,13 @@ public class TelegramPhotoService
         ILogger<TelegramPhotoService> logger,
         IBotMediaService mediaService,
         IBotChatService chatService,
+        IImageProcessor imageProcessor,
         IOptions<AppOptions> appOptions)
     {
         _logger = logger;
         _mediaService = mediaService;
         _chatService = chatService;
+        _imageProcessor = imageProcessor;
 
         // Create subdirectories for chat icons and user photos under media/
         var mediaPath = Path.Combine(appOptions.Value.DataPath, "media");
@@ -242,24 +244,12 @@ public class TelegramPhotoService
     }
 
     /// <summary>
-    /// Resize image to square icon using ImageSharp
+    /// Resize an image to a square icon, cropping to fill.
     /// </summary>
     private async Task ResizeImageAsync(string sourcePath, string targetPath, int size, CancellationToken cancellationToken = default)
     {
-        using var image = await Image.LoadAsync(sourcePath, cancellationToken);
-
-        // Crop to center square, then resize
-        image.Mutate(x => x
-            .Resize(new ResizeOptions
-            {
-                Size = new Size(size, size),
-                Mode = ResizeMode.Crop, // Crop to fill square
-                Position = AnchorPositionMode.Center
-            }));
-
-        await image.SaveAsJpegAsync(targetPath, new SixLabors.ImageSharp.Formats.Jpeg.JpegEncoder
-        {
-            Quality = 85
-        }, cancellationToken);
+        await using var source = File.OpenRead(sourcePath);
+        await using var target = File.Create(targetPath);
+        await _imageProcessor.ResizeToFillAsync(source, target, size, ImageEncoding.Jpeg(85), cancellationToken);
     }
 }

@@ -1,9 +1,9 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using NSubstitute;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.PixelFormats;
+using SkiaSharp;
 using Testably.Abstractions.Testing;
+using TelegramGroupsAdmin.Core.Imaging;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramBot = Telegram.Bot;
 using TelegramBotTypes = Telegram.Bot.Types;
@@ -21,13 +21,13 @@ namespace TelegramGroupsAdmin.UnitTests.Telegram.Services.Bot;
 /// - BotMediaService wraps IBotMediaHandler/IBotChatHandler with local file caching
 /// - User photo cache invalidation uses file_unique_id comparison
 /// - Chat icon caching is simpler (no invalidation, just existence check)
-/// - IFileSystem abstraction enables pure in-memory testing with real ImageSharp processing
+/// - IFileSystem abstraction enables pure in-memory testing with real IImageProcessor processing
 ///
 /// Test Strategy:
 /// - MockFileSystem for all file I/O (read/write/delete)
 /// - Mocked handlers for Telegram API responses
-/// - Real ImageSharp processing (mutation only - our code controls I/O)
-/// - Programmatic test images via ImageSharp
+/// - Real SkiaImageProcessor processing (mutation only - our code controls I/O)
+/// - Programmatic test images via SkiaSharp
 /// </summary>
 [TestFixture]
 public class BotMediaServiceTests
@@ -56,13 +56,16 @@ public class BotMediaServiceTests
 
     /// <summary>
     /// Creates a valid JPEG image for testing.
-    /// Uses ImageSharp to generate a real image that can be processed.
+    /// Uses SkiaSharp to generate a real image that can be processed.
     /// </summary>
     private static byte[] CreateTestImage()
     {
-        using var image = new Image<Rgba32>(200, 200);
+        using var bitmap = new SKBitmap(200, 200);
+        using var canvas = new SKCanvas(bitmap);
+        canvas.Clear(SKColors.CornflowerBlue);
+
         using var ms = new MemoryStream();
-        image.SaveAsJpeg(ms);
+        bitmap.Encode(ms, SKEncodedImageFormat.Jpeg, 100);
         return ms.ToArray();
     }
 
@@ -95,6 +98,7 @@ public class BotMediaServiceTests
             _mockChatHandler,
             _mockFileSystem,
             options,
+            new SkiaImageProcessor(),
             _mockLogger);
     }
 
@@ -379,7 +383,7 @@ public class BotMediaServiceTests
         _mockMediaHandler.GetFileAsync(fileId, Arg.Any<CancellationToken>()).Returns(file);
 
         // Mock the download to write real image bytes to the stream
-        // This flows through MockFileSystem and can be processed by ImageSharp
+        // This flows through MockFileSystem and can be processed by SkiaImageProcessor
         _mockMediaHandler.DownloadFileAsync(filePath, Arg.Any<Stream>(), Arg.Any<CancellationToken>())
             .Returns(callInfo =>
             {
