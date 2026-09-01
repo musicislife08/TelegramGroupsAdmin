@@ -107,7 +107,11 @@ public class BotMediaService : IBotMediaService
                 }
 
                 // Resize to 64x64 icon
-                await ResizeImageAsync(tempPath, localPath, 64, ct);
+                if (!await ResizeImageAsync(tempPath, localPath, 64, ct))
+                {
+                    _logger.LogWarning("Could not decode downloaded photo for user {User}", user.ToLogDebug(userId));
+                    return null;
+                }
 
                 _logger.LogDebug("Cached user photo for {User}: {Path}", user.ToLogDebug(userId), relativePath);
                 return new UserPhotoResult(relativePath, currentPhotoId);
@@ -182,7 +186,11 @@ public class BotMediaService : IBotMediaService
                 }
 
                 // Resize to 64x64 icon
-                await ResizeImageAsync(tempPath, localPath, 64, ct);
+                if (!await ResizeImageAsync(tempPath, localPath, 64, ct))
+                {
+                    _logger.LogWarning("Could not decode downloaded photo for chat {Chat}", chat.ToLogDebug());
+                    return null;
+                }
 
                 _logger.LogDebug("Cached chat icon for {Chat}", chat.ToLogDebug());
                 return relativePath;
@@ -231,15 +239,52 @@ public class BotMediaService : IBotMediaService
     /// <summary>
     /// Resize image to square icon, cropping to fill.
     /// I/O goes through IFileSystem for testability; IImageProcessor only transforms.
+    ///
+    /// Decodes and resizes into a temp file first, then moves it into place. This
+    /// guarantees targetPath is never truncated or replaced until a new icon has
+    /// been fully and successfully produced, so a failed regeneration (e.g. a
+    /// truncated or non-image download from Telegram) can never destroy a
+    /// previously-cached icon. Returns false when the source was not a decodable
+    /// image, in which case targetPath is left untouched.
     /// </summary>
-    private async Task ResizeImageAsync(
+    private async Task<bool> ResizeImageAsync(
         string sourcePath,
         string targetPath,
         int size,
         CancellationToken ct = default)
     {
-        await using var sourceStream = _fileSystem.File.OpenRead(sourcePath);
-        await using var targetStream = _fileSystem.File.Create(targetPath);
-        await _imageProcessor.ResizeToFillAsync(sourceStream, targetStream, size, ImageEncoding.Jpeg(85), ct);
+        var tempPath = targetPath + ".tmp";
+        try
+        {
+            await using (var sourceStream = _fileSystem.File.OpenRead(sourcePath))
+            await using (var targetStream = _fileSystem.File.Create(tempPath))
+            {
+                if (!await _imageProcessor.ResizeToFillAsync(sourceStream, targetStream, size, ImageEncoding.Jpeg(85), ct))
+                {
+                    return false;
+                }
+            }
+
+            // Only now is the existing icon, if any, replaced.
+            _fileSystem.File.Move(tempPath, targetPath, overwrite: true);
+            return true;
+        }
+        finally
+        {
+            // Covers the decode-failed return AND any exception unwinding through here.
+            if (_fileSystem.File.Exists(tempPath))
+            {
+                try
+                {
+                    _fileSystem.File.Delete(tempPath);
+                }
+                catch (IOException ex)
+                {
+                    // Best-effort cleanup: a stray .tmp file is harmless and will be
+                    // overwritten by the next regeneration attempt at this path.
+                    _logger.LogDebug(ex, "Could not delete temp icon file: {TempPath}", tempPath);
+                }
+            }
+        }
     }
 }

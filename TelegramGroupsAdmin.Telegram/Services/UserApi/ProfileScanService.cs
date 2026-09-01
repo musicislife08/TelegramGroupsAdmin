@@ -836,16 +836,28 @@ public sealed class ProfileScanService(
         {
             // Already within bounds, or undecodable — hand back the original bytes
             // rather than re-encoding.
-            imageStream.Position = 0;
-            using var passthrough = new MemoryStream((int)imageStream.Length);
-            await imageStream.CopyToAsync(passthrough);
-            return passthrough.ToArray();
+            return await ReadAllBytesAsync(imageStream);
         }
 
         imageStream.Position = 0;
         using var output = new MemoryStream();
-        await imageProcessor.ResizeToFitAsync(imageStream, output, maxDimension, ImageEncoding.Jpeg(85));
+        if (!await imageProcessor.ResizeToFitAsync(imageStream, output, maxDimension, ImageEncoding.Jpeg(85)))
+        {
+            // Dimensions parsed from the header, but the full decode failed (e.g. a
+            // truncated download) — fall back to the original bytes rather than
+            // sending an empty image to the vision model.
+            return await ReadAllBytesAsync(imageStream);
+        }
+
         return output.ToArray();
+    }
+
+    private static async Task<byte[]> ReadAllBytesAsync(Stream imageStream)
+    {
+        imageStream.Position = 0;
+        using var passthrough = new MemoryStream((int)imageStream.Length);
+        await imageStream.CopyToAsync(passthrough);
+        return passthrough.ToArray();
     }
 
     private static string ToMimeType(Storage_FileType fileType) => fileType switch

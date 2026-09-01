@@ -245,6 +245,51 @@ public class BotMediaServiceTests
 
     #endregion
 
+    #region GetUserPhotoAsync - Undecodable Download Tests
+
+    [Test]
+    public async Task GetUserPhotoAsync_UndecodableDownload_ReturnsNullAndLeavesNoFile()
+    {
+        // Arrange - Telegram serves a photo, but the download is not a decodable image
+        // (e.g. a truncated body or an HTML error page).
+        SetupUserHasProfilePhoto(TestFileId, TestFileUniqueId);
+        SetupCorruptFileDownload(TestFileId, TestFilePath);
+
+        // Act
+        var result = await _service.GetUserPhotoAsync(TestUserId);
+
+        // Assert - failure reported, and no broken 0-byte file is left at the target
+        Assert.That(result, Is.Null);
+        var expectedPath = Path.Combine(_userPhotosPath, $"{TestUserId}.jpg");
+        Assert.That(_mockFileSystem.File.Exists(expectedPath), Is.False);
+    }
+
+    [Test]
+    public async Task GetUserPhotoAsync_RegenerationFailsOverExistingCachedPhoto_PreservesOriginal()
+    {
+        // Arrange - a good cached photo already exists
+        SetupUserHasProfilePhoto(TestFileId, TestFileUniqueId);
+        SetupFileDownload(TestFileId, TestFilePath);
+        var initial = await _service.GetUserPhotoAsync(TestUserId);
+        Assert.That(initial, Is.Not.Null, "Precondition: initial cache must succeed");
+
+        var cachedPath = Path.Combine(_userPhotosPath, $"{TestUserId}.jpg");
+        var originalBytes = _mockFileSystem.File.ReadAllBytes(cachedPath);
+
+        // Act - the user's photo changed on Telegram's side, but the re-download is undecodable
+        const string newFileUniqueId = "AQADAgATnew_unique";
+        SetupUserHasProfilePhoto(TestFileId, newFileUniqueId);
+        SetupCorruptFileDownload(TestFileId, TestFilePath);
+        var result = await _service.GetUserPhotoAsync(TestUserId, knownPhotoId: TestFileUniqueId);
+
+        // Assert - failure reported, and the previously-cached photo survives untouched
+        Assert.That(result, Is.Null);
+        var bytesAfter = _mockFileSystem.File.ReadAllBytes(cachedPath);
+        Assert.That(bytesAfter, Is.EqualTo(originalBytes), "Original cached photo must survive a failed regeneration");
+    }
+
+    #endregion
+
     #region GetChatIconAsync - Cache Tests
 
     [Test]
@@ -305,6 +350,26 @@ public class BotMediaServiceTests
 
         // Assert
         Assert.That(result, Is.Null);
+    }
+
+    #endregion
+
+    #region GetChatIconAsync - Undecodable Download Tests
+
+    [Test]
+    public async Task GetChatIconAsync_UndecodableDownload_ReturnsNullAndLeavesNoFile()
+    {
+        // Arrange - Telegram serves a chat photo, but the download is not a decodable image
+        SetupChatHasPhoto(TestChatId, "Test Chat", TestFileId);
+        SetupCorruptFileDownload(TestFileId, TestFilePath);
+
+        // Act
+        var result = await _service.GetChatIconAsync(ChatIdentity.FromId(TestChatId));
+
+        // Assert - failure reported, and no broken 0-byte file is left at the target
+        Assert.That(result, Is.Null);
+        var expectedPath = Path.Combine(_chatIconsPath, $"{Math.Abs(TestChatId)}.jpg");
+        Assert.That(_mockFileSystem.File.Exists(expectedPath), Is.False);
     }
 
     #endregion
@@ -389,6 +454,30 @@ public class BotMediaServiceTests
             {
                 var stream = callInfo.Arg<Stream>();
                 stream!.Write(TestImageBytes);
+                return Task.CompletedTask;
+            });
+    }
+
+    /// <summary>
+    /// Mocks a download that succeeds at the Telegram-API level but delivers bytes that
+    /// are not a decodable image (e.g. a truncated body or an HTML error page).
+    /// </summary>
+    private void SetupCorruptFileDownload(string fileId, string filePath)
+    {
+        var file = new TelegramBotTypes.TGFile
+        {
+            FileId = fileId,
+            FilePath = filePath,
+            FileSize = 12
+        };
+
+        _mockMediaHandler.GetFileAsync(fileId, Arg.Any<CancellationToken>()).Returns(file);
+
+        _mockMediaHandler.DownloadFileAsync(filePath, Arg.Any<Stream>(), Arg.Any<CancellationToken>())
+            .Returns(callInfo =>
+            {
+                var stream = callInfo.Arg<Stream>();
+                stream!.Write("not an image"u8.ToArray());
                 return Task.CompletedTask;
             });
     }

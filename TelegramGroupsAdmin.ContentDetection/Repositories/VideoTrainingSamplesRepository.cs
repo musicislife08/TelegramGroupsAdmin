@@ -47,6 +47,9 @@ public class VideoTrainingSamplesRepository : IVideoTrainingSamplesRepository
         {
             var samples = await context.VideoTrainingSamples
                 .AsNoTracking()
+                // A "[]" hash means the source keyframes are gone (or were cleared) and
+                // cannot be compared. Mirrors the ImageTrainingSamplesRepository filter.
+                .Where(vts => vts.KeyframeHashes != "[]")
                 .OrderByDescending(vts => vts.MarkedAt)
                 .Take(limit)
                 .Select(vts => new { vts.KeyframeHashes, vts.IsSpam })
