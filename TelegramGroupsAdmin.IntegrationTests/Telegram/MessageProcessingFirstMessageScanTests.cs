@@ -12,6 +12,7 @@ using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Services;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Extensions;
+using TelegramGroupsAdmin.Core.Imaging;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Data;
@@ -170,6 +171,7 @@ public class MessageProcessingFirstMessageScanTests
         //    dependencies and short-circuit for a plain-text, non-command message. ──
         services.AddSingleton<CommandRouter>();
         services.AddScoped<AdminMentionHandler>();
+        services.AddSingleton<IImageProcessor, SkiaImageProcessor>();
         services.AddScoped<ImageProcessingHandler>();
         services.AddScoped<TelegramMediaService>();
         services.AddScoped<MediaProcessingHandler>();
