@@ -505,7 +505,26 @@ public class ExamFlowService : IExamFlowService
             passed = false;
         }
 
-        // Delete session
+        var outcome = passed ? ExamOutcome.Passed : ExamOutcome.Failed;
+
+        // Persist the exam record BEFORE deleting the session — the session row is
+        // the only source of the raw answers (#515: never destroy them unrecorded).
+        var examResult = new ExamResultRecord
+        {
+            User = UserIdentity.From(user),
+            Chat = ChatIdentity.FromId(session.ChatId),
+            McAnswers = session.McAnswers,
+            ShuffleState = session.ShuffleState,
+            OpenEndedAnswer = session.OpenEndedAnswer,
+            Score = mcScore,
+            PassingThreshold = examConfig.McPassingThreshold,
+            AiEvaluation = aiReasoning,
+            Outcome = outcome,
+            CompletedAt = DateTimeOffset.UtcNow
+        };
+
+        var examResultId = await reportsRepo.InsertExamResultAsync(examResult, cancellationToken);
+
         await sessionRepo.DeleteSessionAsync(session.Id, cancellationToken);
 
         // Send messages to user's DM (in Telegram, private chat ID = user ID)
@@ -529,24 +548,25 @@ public class ExamFlowService : IExamFlowService
                     user.ToLogDebug(), session.ChatId, approvalResult.ErrorMessage);
             }
 
+            var passChat = await scope.ServiceProvider.GetRequiredService<IManagedChatsRepository>()
+                .GetByChatIdAsync(session.ChatId, cancellationToken);
+            var passNotificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
+
+            await passNotificationService.SendExamPassNotificationAsync(
+                chat: passChat?.Identity ?? ChatIdentity.FromId(session.ChatId),
+                user: UserIdentity.From(user),
+                mcCorrectCount: mcCorrectCount,
+                mcTotal: examConfig.McQuestions.Count,
+                mcScore: mcScore,
+                mcPassingThreshold: examConfig.McPassingThreshold,
+                openEndedQuestion: examConfig.OpenEndedQuestion,
+                openEndedAnswer: session.OpenEndedAnswer,
+                aiReasoning: aiReasoning,
+                examResultId: examResultId,
+                ct: cancellationToken);
+
             return new ExamAnswerResult(ExamComplete: true, Passed: true, SentToReview: false, GroupChatId: session.ChatId);
         }
-
-        // Create exam failure review (include shuffle state for review display)
-        var examFailure = new ExamFailureRecord
-        {
-            User = UserIdentity.From(user),
-            Chat = ChatIdentity.FromId(session.ChatId),
-            McAnswers = session.McAnswers,
-            ShuffleState = session.ShuffleState,
-            OpenEndedAnswer = session.OpenEndedAnswer,
-            Score = mcScore,
-            PassingThreshold = examConfig.McPassingThreshold,
-            AiEvaluation = aiReasoning,
-            FailedAt = DateTimeOffset.UtcNow
-        };
-
-        var examFailureId = await reportsRepo.InsertExamFailureAsync(examFailure, cancellationToken);
 
         // Get chat info for notification
         var managedChatsRepo = scope.ServiceProvider.GetRequiredService<IManagedChatsRepository>();
@@ -566,7 +586,7 @@ public class ExamFlowService : IExamFlowService
             openEndedQuestion: examConfig.OpenEndedQuestion,
             openEndedAnswer: session.OpenEndedAnswer,
             aiReasoning: aiReasoning,
-            examFailureId: examFailureId,
+            examResultId: examResultId,
             ct: cancellationToken);
 
         // Send pending message to user in DM
@@ -686,14 +706,14 @@ public class ExamFlowService : IExamFlowService
     }
 
     /// <inheritdoc />
-    public async Task<ModerationResult> ApproveExamFailureAsync(
+    public async Task<ModerationResult> ApproveExamResultAsync(
         UserIdentity user,
         ChatIdentity chat,
-        long examFailureId,
+        long examResultId,
         Actor executor,
         CancellationToken cancellationToken = default)
     {
-        var reason = $"Exam failure #{examFailureId} - manually approved after review";
+        var reason = $"Exam result #{examResultId} - manually approved after review";
         return await ExecuteExamApprovalAsync(
             user,
             chat,
@@ -827,7 +847,7 @@ public class ExamFlowService : IExamFlowService
     }
 
     /// <inheritdoc />
-    public async Task<ModerationResult> DenyExamFailureAsync(
+    public async Task<ModerationResult> DenyExamResultAsync(
         UserIdentity user,
         ChatIdentity chat,
         Actor executor,
@@ -844,7 +864,7 @@ public class ExamFlowService : IExamFlowService
     }
 
     /// <inheritdoc />
-    public async Task<ModerationResult> DenyAndBanExamFailureAsync(
+    public async Task<ModerationResult> DenyAndBanExamResultAsync(
         UserIdentity user,
         ChatIdentity chat,
         Actor executor,

@@ -94,7 +94,7 @@ public sealed class ReportCallbackService(
         {
             ReportType.ContentReport => await RouteContentReportAsync(reviewId, actionInt, executor, cancellationToken),
             ReportType.ImpersonationAlert => await RouteImpersonationAsync(reviewId, actionInt, executor, cancellationToken),
-            ReportType.ExamFailure => await RouteExamAsync(reviewId, actionInt, executor, cancellationToken),
+            ReportType.ExamResult => await RouteExamAsync(reviewId, actionInt, executor, cancellationToken),
             ReportType.ProfileScanAlert => await RouteProfileScanAsync(reviewId, actionInt, executor, cancellationToken),
             _ => new ReviewActionResult(false, $"Unknown review type: {reportType}")
         };
@@ -134,7 +134,7 @@ public sealed class ReportCallbackService(
     private async Task<ReviewActionResult> RouteExamAsync(
         long reviewId, int actionInt, Actor executor, CancellationToken cancellationToken)
     {
-        if (actionInt < 0 || actionInt > (int)ExamAction.DenyAndBan)
+        if (actionInt < 0 || actionInt > (int)ExamAction.Dismiss)
             return new ReviewActionResult(false, "Invalid action");
 
         return (ExamAction)actionInt switch
@@ -142,6 +142,7 @@ public sealed class ReportCallbackService(
             ExamAction.Approve => await reportActionsService.HandleExamApproveAsync(reviewId, executor, cancellationToken: cancellationToken),
             ExamAction.Deny => await reportActionsService.HandleExamDenyAsync(reviewId, executor, cancellationToken: cancellationToken),
             ExamAction.DenyAndBan => await reportActionsService.HandleExamDenyAndBanAsync(reviewId, executor, cancellationToken: cancellationToken),
+            ExamAction.Dismiss => await reportActionsService.HandleExamDismissAsync(reviewId, executor, cancellationToken: cancellationToken),
             _ => new ReviewActionResult(false, "Unknown action")
         };
     }

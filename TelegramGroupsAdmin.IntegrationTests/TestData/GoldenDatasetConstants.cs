@@ -11,6 +11,7 @@ namespace TelegramGroupsAdmin.IntegrationTests.TestData;
 ///   • <see cref="Chats"/>      — managed_chats.id anchors
 ///   • <see cref="Retention"/>  — anchors for retention-cleanup tests
 ///   • <see cref="Analytics"/>  — anchors for analytics-aggregation tests
+///   • <see cref="Reports"/>    — anchors for exam-result repository tests
 ///
 /// Promote a constant up to a top-level domain class (e.g. <see cref="WebUsers"/>,
 /// <see cref="Chats"/>) once a second consumer wants it; until then, keep it next
@@ -362,5 +363,23 @@ internal static class GoldenDatasetConstants
         public const double ExpectedDeniedPercentage = 100.0 / 6.0;     // ~16.67%
         public const double ExpectedTimeoutPercentage = 100.0 / 6.0;
         public const double ExpectedLeftPercentage = 100.0 / 6.0;
+    }
+
+    /// <summary>
+    /// Report anchors from <c>canonical/30_reports.sql</c> used by exam-result tests.
+    /// </summary>
+    public static class Reports
+    {
+        /// <summary>Synthetic pending exam failure (status=0, user 9465377455871, chat -100054416618415).</summary>
+        public const long PendingExamFailureId = 187;
+
+        /// <summary>Real resolved exam failure (status=1, action_taken='approve', reviewed by globaladmin).</summary>
+        public const long ResolvedExamFailureId = 185;
+
+        /// <summary>Synthetic auto-approved exam pass (status=1, reviewed_by='Exam Flow', action_taken='auto-approved', outcome=1) in MainChat.</summary>
+        public const long AutoApprovedExamPassId = 189;
+
+        /// <summary>telegram_user_id behind <see cref="AutoApprovedExamPassId"/> (@sillywolf, ham).</summary>
+        public const long AutoApprovedExamPassUserId = 9960171136314;
     }
 }

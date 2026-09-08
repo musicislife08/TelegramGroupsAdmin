@@ -92,6 +92,11 @@ internal sealed class ReportActionsService(
             scope.ServiceProvider.GetRequiredService<IExamHandler>()
                 .DenyAndBanAsync(examId, executor, cancellationToken: cancellationToken), cancellationToken);
 
+    public Task<ReviewActionResult> HandleExamDismissAsync(long examId, Actor executor, CancellationToken cancellationToken)
+        => ExecuteWithLockAsync(examId, "exam_failure", "dismiss", scope =>
+            scope.ServiceProvider.GetRequiredService<IExamHandler>()
+                .DismissAsync(examId, executor, cancellationToken: cancellationToken), cancellationToken);
+
     private async Task<ReviewActionResult> ExecuteWithLockAsync(
         long reportId,
         string reportType,

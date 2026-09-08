@@ -187,7 +187,7 @@ public sealed class NotificationService : INotificationService
         string? openEndedQuestion,
         string? openEndedAnswer,
         string? aiReasoning,
-        long examFailureId,
+        long examResultId,
         CancellationToken ct = default)
     {
         var payload = NotificationPayloadBuilder.Create("Entrance Exam Review Required")
@@ -204,10 +204,46 @@ public sealed class NotificationService : INotificationService
                 if (openEndedAnswer != null) s.WithField("Answer", openEndedAnswer);
                 if (aiReasoning != null) s.WithField("AI Reasoning", aiReasoning);
             })
-            .WithKeyboard(new ActionKeyboardContext(examFailureId, chat.Id, user.Id, ReportType.ExamFailure))
+            .WithKeyboard(new ActionKeyboardContext(examResultId, chat.Id, user.Id, ReportType.ExamResult))
             .Build();
 
         return SendToChatAudienceAsync(chat, NotificationEventType.ExamFailed, payload, ct);
+    }
+
+    public Task<Dictionary<string, bool>> SendExamPassNotificationAsync(
+        ChatIdentity chat,
+        UserIdentity user,
+        int mcCorrectCount,
+        int mcTotal,
+        int mcScore,
+        int mcPassingThreshold,
+        string? openEndedQuestion,
+        string? openEndedAnswer,
+        string? aiReasoning,
+        long examResultId,
+        CancellationToken ct = default)
+    {
+        var payload = NotificationPayloadBuilder.Create("User Auto-Admitted: Passed Entrance Exam")
+            .WithField("User", user)
+            .WithField("Chat", chat.ChatName ?? chat.Id.ToString())
+            .WithSection("Results", s =>
+            {
+                if (mcTotal > 0)
+                {
+                    s.WithField("Answered", $"{mcCorrectCount}/{mcTotal} correct");
+                    s.WithField("Score", $"{mcScore}% (Required: {mcPassingThreshold}%)");
+                }
+            })
+            .WithSection("Open-Ended Response", s =>
+            {
+                if (openEndedQuestion != null) s.WithField("Question", openEndedQuestion);
+                if (openEndedAnswer != null) s.WithField("Answer", openEndedAnswer);
+                if (aiReasoning != null) s.WithField("AI Reasoning", aiReasoning);
+            })
+            .WithKeyboard(new ActionKeyboardContext(examResultId, chat.Id, user.Id, ReportType.ExamResult, ExamOutcome.Passed))
+            .Build();
+
+        return SendToChatAudienceAsync(chat, NotificationEventType.ExamPassed, payload, ct);
     }
 
     public Task<Dictionary<string, bool>> SendBanNotificationAsync(
@@ -549,7 +585,7 @@ public sealed class NotificationService : INotificationService
         if (payload.Keyboard is { } kb)
         {
             keyboard = await BuildReportActionKeyboardAsync(
-                kb.EntityId, kb.ChatId, kb.UserId, kb.KeyboardType, ct);
+                kb.EntityId, kb.ChatId, kb.UserId, kb.KeyboardType, kb.Outcome, ct);
         }
 
         if (keyboard != null || !string.IsNullOrWhiteSpace(payload.PhotoPath) || !string.IsNullOrWhiteSpace(payload.VideoPath))
@@ -633,6 +669,7 @@ public sealed class NotificationService : INotificationService
         long chatId,
         long userId,
         ReportType reportType,
+        ExamOutcome? examOutcome,
         CancellationToken cancellationToken)
     {
         var context = new ReportCallbackContext(
@@ -646,7 +683,19 @@ public sealed class NotificationService : INotificationService
 
         return reportType switch
         {
-            ReportType.ExamFailure => new InlineKeyboardMarkup(new[]
+            ReportType.ExamResult when examOutcome == ExamOutcome.Passed => new InlineKeyboardMarkup(new[]
+            {
+                new[]
+                {
+                    InlineKeyboardButton.WithCallbackData("✓ Dismiss", $"rev:{contextId}:{(int)ExamAction.Dismiss}"),
+                    InlineKeyboardButton.WithCallbackData("✗ Deny", $"rev:{contextId}:{(int)ExamAction.Deny}")
+                },
+                new[]
+                {
+                    InlineKeyboardButton.WithCallbackData("🚫 Deny & Ban", $"rev:{contextId}:{(int)ExamAction.DenyAndBan}")
+                }
+            }),
+            ReportType.ExamResult => new InlineKeyboardMarkup(new[]
             {
                 new[]
                 {

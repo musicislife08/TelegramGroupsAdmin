@@ -42,7 +42,7 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
             .BuildAsync();
 
         // Create exam failure
-        await new TestExamFailureBuilder(SharedFactory.Services)
+        await new TestExamResultBuilder(SharedFactory.Services)
             .WithUser(600001, "examuser", "Exam", "Taker")
             .InChat(chat)
             .WithScore(50, 80) // 50% score, 80% threshold (failed)
@@ -83,7 +83,7 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
             .WithName("Title", "Test")
             .BuildAsync();
 
-        await new TestExamFailureBuilder(SharedFactory.Services)
+        await new TestExamResultBuilder(SharedFactory.Services)
             .WithUser(600002, "titletest", "Title", "Test")
             .InChat(chat)
             .AsFailing()
@@ -113,7 +113,7 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
             .WithName("John", "Smith")
             .BuildAsync();
 
-        await new TestExamFailureBuilder(SharedFactory.Services)
+        await new TestExamResultBuilder(SharedFactory.Services)
             .WithUser(600003, "johnsmith", "John", "Smith")
             .InChat(chat)
             .AsFailing()
@@ -165,7 +165,7 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
             .WithName("Exam", "Fail")
             .BuildAsync();
 
-        await new TestExamFailureBuilder(SharedFactory.Services)
+        await new TestExamResultBuilder(SharedFactory.Services)
             .WithUser(600012, "examfail", "Exam", "Fail")
             .InChat(chat)
             .AsFailing()
@@ -224,7 +224,7 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
             .WithName("AllTypes", "Exam")
             .BuildAsync();
 
-        await new TestExamFailureBuilder(SharedFactory.Services)
+        await new TestExamResultBuilder(SharedFactory.Services)
             .WithUser(600022, "alltypesexam", "AllTypes", "Exam")
             .InChat(chat)
             .AsFailing()
@@ -287,7 +287,7 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
             .WithName("Exam", "Fail")
             .BuildAsync();
 
-        await new TestExamFailureBuilder(SharedFactory.Services)
+        await new TestExamResultBuilder(SharedFactory.Services)
             .WithUser(700005, "examfailuser", "Exam", "Fail")
             .InChat(chat)
             .AsFailing()
@@ -358,7 +358,7 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
             .WithName("MC", "User")
             .BuildAsync();
 
-        await new TestExamFailureBuilder(SharedFactory.Services)
+        await new TestExamResultBuilder(SharedFactory.Services)
             .WithUser(600030, "mcuser", "MC", "User")
             .InChat(chat)
             .WithMcAnswers(
@@ -402,7 +402,7 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
             .WithName("Failed", "User")
             .BuildAsync();
 
-        await new TestExamFailureBuilder(SharedFactory.Services)
+        await new TestExamResultBuilder(SharedFactory.Services)
             .WithUser(600031, "faileduser", "Failed", "User")
             .InChat(chat)
             .WithScore(40, 80) // 40% score, 80% threshold (failed)
@@ -443,7 +443,7 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
             .WithName("OpenEnded", "User")
             .BuildAsync();
 
-        await new TestExamFailureBuilder(SharedFactory.Services)
+        await new TestExamResultBuilder(SharedFactory.Services)
             .WithUser(600040, "openendeduser", "OpenEnded", "User")
             .InChat(chat)
             .WithOpenEndedAnswer("I want to join because I love technology and want to learn more.")
@@ -481,7 +481,7 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
             .WithName("AIEval", "User")
             .BuildAsync();
 
-        await new TestExamFailureBuilder(SharedFactory.Services)
+        await new TestExamResultBuilder(SharedFactory.Services)
             .WithUser(600041, "aievaluser", "AIEval", "User")
             .InChat(chat)
             .WithOpenEndedAnswer(
@@ -519,7 +519,7 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
             .WithName("Action", "User")
             .BuildAsync();
 
-        await new TestExamFailureBuilder(SharedFactory.Services)
+        await new TestExamResultBuilder(SharedFactory.Services)
             .WithUser(600050, "actionuser", "Action", "User")
             .InChat(chat)
             .AsFailing()
@@ -561,7 +561,7 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
             .WithName("Approve", "User")
             .BuildAsync();
 
-        await new TestExamFailureBuilder(SharedFactory.Services)
+        await new TestExamResultBuilder(SharedFactory.Services)
             .WithUser(600051, "approveuser", "Approve", "User")
             .InChat(chat)
             .AsFailing()
@@ -600,7 +600,7 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
             .WithName("Deny", "User")
             .BuildAsync();
 
-        await new TestExamFailureBuilder(SharedFactory.Services)
+        await new TestExamResultBuilder(SharedFactory.Services)
             .WithUser(600052, "denyuser", "Deny", "User")
             .InChat(chat)
             .AsFailing()
@@ -640,7 +640,7 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
             .WithName("DenyBan", "User")
             .BuildAsync();
 
-        await new TestExamFailureBuilder(SharedFactory.Services)
+        await new TestExamResultBuilder(SharedFactory.Services)
             .WithUser(600053, "denybanuser", "DenyBan", "User")
             .InChat(chat)
             .AsFailing()
@@ -691,7 +691,7 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
             .BuildAsync();
 
         // Create already-reviewed exam failure
-        await new TestExamFailureBuilder(SharedFactory.Services)
+        await new TestExamResultBuilder(SharedFactory.Services)
             .WithUser(600060, "revieweduser", "Reviewed", "User")
             .InChat(chat)
             .AsFailing()
@@ -736,7 +736,7 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
             .BuildAsync();
 
         // Create approved exam failure
-        await new TestExamFailureBuilder(SharedFactory.Services)
+        await new TestExamResultBuilder(SharedFactory.Services)
             .WithUser(600061, "actiontakenuser", "ActionTaken", "User")
             .InChat(chat)
             .AsFailing()
@@ -752,6 +752,68 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
 
         // Assert - should show action taken (in card actions: "Action: approved")
         await Expect(Page.GetByText("Action: approved")).ToBeVisibleAsync();
+    }
+
+    #endregion
+
+    #region Passed Exam Tests
+
+    [Test]
+    public async Task PassedExam_VisibleUnderAllStatuses_WithAutoAdmittedChip()
+    {
+        // Arrange
+        await LoginAsOwnerAsync();
+
+        var chat = await new TestChatBuilder(SharedFactory.Services)
+            .WithTitle("Passed Exam Chat")
+            .BuildAsync();
+
+        await new TestTelegramUserBuilder(SharedFactory.Services)
+            .WithUserId(600080)
+            .WithUsername("passeduser")
+            .WithName("Passed", "User")
+            .BuildAsync();
+
+        await new TestExamResultBuilder(SharedFactory.Services)
+            .WithUser(600080, "passeduser", "Passed", "User")
+            .InChat(chat)
+            .AsPassed()
+            .WithOpenEndedAnswer("I love self-hosting and want to compare notes", "Genuine, on-topic answer")
+            .BuildAsync();
+
+        // Act
+        await _reportsPage.NavigateAsync();
+        await _reportsPage.WaitForLoadAsync();
+
+        // Passed exams are born reviewed, so they only show up once we widen the type/status filters
+        await _reportsPage.SelectTypeFilterAsync("Exam Reviews");
+        await _reportsPage.SelectStatusFilterAsync("All Statuses");
+
+        // Assert - card visible with the auto-admitted chip
+        await Expect(Page.GetByText("Exam Review", new() { Exact = true })).ToBeVisibleAsync();
+        await Expect(Page.GetByText("Passed — auto-admitted")).ToBeVisibleAsync();
+
+        var examCard = Page.Locator(".mud-card:has-text('Exam Review')").First;
+
+        // Assert - Dismiss/Deny/Deny+Ban are shown, Approve is not (this is an override, not a first decision)
+        using (Assert.EnterMultipleScope())
+        {
+            var buttons = await _reportsPage.GetVisibleActionButtonsAsync();
+            Assert.That(buttons, Has.Some.Contain("Dismiss"),
+                "Dismiss button should be visible for an auto-admitted pass");
+            Assert.That(buttons, Has.Some.Contain("Deny"),
+                "Deny button should be visible to override an auto-admitted pass");
+            Assert.That(buttons, Has.Some.Contain("Ban").IgnoreCase,
+                "Deny + Ban button should be visible to override an auto-admitted pass");
+            Assert.That(buttons, Has.None.Contain("Approve"),
+                "Approve should not be offered for an already-passed exam");
+        }
+
+        // Act - switch to Pending Only
+        await _reportsPage.SelectStatusFilterAsync("Pending Only");
+
+        // Assert - the passed exam is not pending, so it disappears from the queue
+        await Expect(examCard).Not.ToBeVisibleAsync();
     }
 
     #endregion
@@ -774,7 +836,7 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
             .WithName("GlobalAdmin", "Exam")
             .BuildAsync();
 
-        await new TestExamFailureBuilder(SharedFactory.Services)
+        await new TestExamResultBuilder(SharedFactory.Services)
             .WithUser(600070, "globaladminexam", "GlobalAdmin", "Exam")
             .InChat(chat)
             .AsFailing()
@@ -805,7 +867,7 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
             .WithName("Admin", "Exam")
             .BuildAsync();
 
-        await new TestExamFailureBuilder(SharedFactory.Services)
+        await new TestExamResultBuilder(SharedFactory.Services)
             .WithUser(600071, "adminexam", "Admin", "Exam")
             .InChat(chat)
             .AsFailing()

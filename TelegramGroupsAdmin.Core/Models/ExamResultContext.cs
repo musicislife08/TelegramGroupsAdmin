@@ -3,10 +3,10 @@ using System.Text.Json.Serialization;
 namespace TelegramGroupsAdmin.Core.Models;
 
 /// <summary>
-/// Context for ExamFailure reviews stored in JSONB.
+/// Context for ExamResult reviews stored in JSONB.
 /// Contains exam results and configuration details.
 /// </summary>
-public record ExamFailureContext
+public record ExamResultContext
 {
     [JsonPropertyName("userId")]
     public long UserId { get; init; }
@@ -45,4 +45,13 @@ public record ExamFailureContext
     /// </summary>
     [JsonPropertyName("aiEvaluation")]
     public string? AiEvaluation { get; init; }
+
+    /// <summary>
+    /// Final exam outcome. Serializes as int (0=Failed, 1=Passed).
+    /// Live rows are always stamped (migration); the key can only be absent after restoring
+    /// a backup taken before ExamOutcome existed — every row from that era is a failure,
+    /// so the enum default (0 = Failed) is the correct fallback.
+    /// </summary>
+    [JsonPropertyName("outcome")]
+    public ExamOutcome Outcome { get; init; }
 }

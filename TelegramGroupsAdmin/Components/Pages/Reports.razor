@@ -35,7 +35,7 @@
                 <MudSelectItem T="ReportTypeFilter" Value="@ReportTypeFilter.All">All Types</MudSelectItem>
                 <MudSelectItem T="ReportTypeFilter" Value="@ReportTypeFilter.Spam">Moderation Reports</MudSelectItem>
                 <MudSelectItem T="ReportTypeFilter" Value="@ReportTypeFilter.Impersonation">Impersonation Alerts</MudSelectItem>
-                <MudSelectItem T="ReportTypeFilter" Value="@ReportTypeFilter.ExamFailure">Exam Reviews</MudSelectItem>
+                <MudSelectItem T="ReportTypeFilter" Value="@ReportTypeFilter.ExamResult">Exam Reviews</MudSelectItem>
                 <MudSelectItem T="ReportTypeFilter" Value="@ReportTypeFilter.ProfileScan">Profile Scan Alerts</MudSelectItem>
             </MudSelect>
 
@@ -111,9 +111,9 @@
                     <ImpersonationAlertCard Alert="@item.ImpersonationAlert"
                                             OnAction="@HandleImpersonationAction" />
                 }
-                else if (item.ExamFailure != null)
+                else if (item.ExamResult != null)
                 {
-                    <ExamReviewCard ExamFailure="@item.ExamFailure"
+                    <ExamReviewCard ExamResult="@item.ExamResult"
                                     OnAction="@HandleExamAction" />
                 }
                 else if (item.ProfileScanAlert != null)
@@ -148,7 +148,7 @@
 @implements IDisposable
 
 @code {
-    private enum ReportTypeFilter { All, Spam, Impersonation, ExamFailure, ProfileScan }
+    private enum ReportTypeFilter { All, Spam, Impersonation, ExamResult, ProfileScan }
     private enum StatusFilter { Pending, All }
 
     private List<ReportQueueItem> _allReports = [];
@@ -215,7 +215,7 @@
                     IsPending = report.Status == ReportStatus.Pending,
                     SpamReport = report,
                     ImpersonationAlert = null,
-                    ExamFailure = null,
+                    ExamResult = null,
                     DisplayTitle = "Moderation Report",
                     UserId = report.ReportedByUserId ?? 0,
                     UserName = report.ReportedByUserName
@@ -235,7 +235,7 @@
                     IsPending = !alert.ReviewedAt.HasValue,
                     SpamReport = null,
                     ImpersonationAlert = alert,
-                    ExamFailure = null,
+                    ExamResult = null,
                     DisplayTitle = "Impersonation Alert",
                     UserId = alert.SuspectedUser.Id,
                     UserName = alert.SuspectedUser.Username
@@ -243,22 +243,22 @@
             }
 
             // Load all exam failures (filter by status is done client-side in ApplyFilters)
-            var examFailures = await ReportsRepository.GetExamFailuresAsync(
+            var examResults = await ReportsRepository.GetExamResultsAsync(
                 pendingOnly: false, cancellationToken: _cancellationTokenSource.Token);
-            foreach (var examFailure in examFailures.Where(e => accessibleChatIds.Contains(e.Chat.Id) || (isElevated && e.Chat.Id == 0)))
+            foreach (var examResult in examResults.Where(e => accessibleChatIds.Contains(e.Chat.Id) || (isElevated && e.Chat.Id == 0)))
             {
                 unifiedQueue.Add(new ReportQueueItem
                 {
-                    Type = ReportType.ExamFailure,
-                    Timestamp = examFailure.FailedAt,
-                    Priority = CalculateExamPriority(examFailure),
-                    IsPending = !examFailure.ReviewedAt.HasValue,
+                    Type = ReportType.ExamResult,
+                    Timestamp = examResult.CompletedAt,
+                    Priority = CalculateExamPriority(examResult),
+                    IsPending = !examResult.ReviewedAt.HasValue,
                     SpamReport = null,
                     ImpersonationAlert = null,
-                    ExamFailure = examFailure,
+                    ExamResult = examResult,
                     DisplayTitle = "Exam Review",
-                    UserId = examFailure.User.Id,
-                    UserName = examFailure.User.Username
+                    UserId = examResult.User.Id,
+                    UserName = examResult.User.Username
                 });
             }
 
@@ -289,7 +289,7 @@
             // Update counts
             _pendingSpamCount = unifiedQueue.Count(x => x.Type == ReportType.ContentReport && x.IsPending);
             _pendingImpersonationCount = unifiedQueue.Count(x => x.Type == ReportType.ImpersonationAlert && x.IsPending);
-            _pendingExamCount = unifiedQueue.Count(x => x.Type == ReportType.ExamFailure && x.IsPending);
+            _pendingExamCount = unifiedQueue.Count(x => x.Type == ReportType.ExamResult && x.IsPending);
             _pendingProfileScanCount = unifiedQueue.Count(x => x.Type == ReportType.ProfileScanAlert && x.IsPending);
 
             ApplyFilters();
@@ -317,7 +317,7 @@
             {
                 ReportTypeFilter.Spam => ReportType.ContentReport,
                 ReportTypeFilter.Impersonation => ReportType.ImpersonationAlert,
-                ReportTypeFilter.ExamFailure => ReportType.ExamFailure,
+                ReportTypeFilter.ExamResult => ReportType.ExamResult,
                 ReportTypeFilter.ProfileScan => ReportType.ProfileScanAlert,
                 _ => ReportType.ContentReport
             };
@@ -367,12 +367,12 @@
         return 500 + alert.TotalScore;
     }
 
-    private int CalculateExamPriority(ExamFailureRecord examFailure)
+    private int CalculateExamPriority(ExamResultRecord examResult)
     {
-        if (examFailure.ReviewedAt.HasValue) return 0;
+        if (examResult.ReviewedAt.HasValue) return 0;
 
         // Higher priority for recent failures (users waiting for approval)
-        var age = (DateTimeOffset.UtcNow - examFailure.FailedAt).TotalHours;
+        var age = (DateTimeOffset.UtcNow - examResult.CompletedAt).TotalHours;
         return (int)(200 - age); // Higher base priority than reports
     }
 
@@ -438,14 +438,15 @@
         await LoadReportsAsync();
     }
 
-    private async Task HandleExamAction((ExamFailureRecord ExamFailure, ExamAction Action) args)
+    private async Task HandleExamAction(ExamCardAction args)
     {
         var executor = WebUser!.ToActor();
         var result = args.Action switch
         {
-            ExamAction.Approve => await ReportActionsService.HandleExamApproveAsync(args.ExamFailure.Id, executor, cancellationToken: _cancellationTokenSource.Token),
-            ExamAction.Deny => await ReportActionsService.HandleExamDenyAsync(args.ExamFailure.Id, executor, cancellationToken: _cancellationTokenSource.Token),
-            ExamAction.DenyAndBan => await ReportActionsService.HandleExamDenyAndBanAsync(args.ExamFailure.Id, executor, cancellationToken: _cancellationTokenSource.Token),
+            ExamAction.Approve => await ReportActionsService.HandleExamApproveAsync(args.ExamResult.Id, executor, cancellationToken: _cancellationTokenSource.Token),
+            ExamAction.Deny => await ReportActionsService.HandleExamDenyAsync(args.ExamResult.Id, executor, cancellationToken: _cancellationTokenSource.Token),
+            ExamAction.DenyAndBan => await ReportActionsService.HandleExamDenyAndBanAsync(args.ExamResult.Id, executor, cancellationToken: _cancellationTokenSource.Token),
+            ExamAction.Dismiss => await ReportActionsService.HandleExamDismissAsync(args.ExamResult.Id, executor, cancellationToken: _cancellationTokenSource.Token),
             _ => new ReviewActionResult(false, "Unknown action")
         };
         var severity = result.Success ? Severity.Success

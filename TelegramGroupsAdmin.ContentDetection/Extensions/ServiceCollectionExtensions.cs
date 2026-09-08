@@ -64,7 +64,7 @@ public static class ServiceCollectionExtensions
             // Register prompt version repository (Phase 4.X: AI-powered prompt builder)
             services.AddScoped<IPromptVersionRepository, PromptVersionRepository>();
 
-            // Register unified reports repository (handles Reports, ImpersonationAlerts, ExamFailures)
+            // Register unified reports repository (handles Reports, ImpersonationAlerts, ExamResults)
             services.AddScoped<IReportsRepository, ReportsRepository>();
 
             // Register URL filtering services (Phase 4.13)
