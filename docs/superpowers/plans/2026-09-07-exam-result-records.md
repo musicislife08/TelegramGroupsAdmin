@@ -16,7 +16,7 @@
 
 - Never commit to `master`/`develop`; conventional commits; heredoc for multi-line commit messages (`git commit -F- <<'EOF'`).
 - One type per file — every new class/record/enum gets its own file named after it.
-- No tuples in signatures — use named records (this plan converts the exam card's tuple callback while touching it).
+- No tuples crossing a method boundary (parameters, returns, event callbacks) — use named records there; tuples local to a method body are fine (this plan converts the exam card's tuple callback while touching it).
 - No `[Obsolete]`, no backward-compat aliases — clean renames.
 - JSONB enums serialize as **ints** — never add `JsonStringEnumConverter` to exam context serialization.
 - EF Core: modify models + `AppDbContext` first, then `dotnet ef migrations add <Name> -p TelegramGroupsAdmin.Data -s TelegramGroupsAdmin`. Apply locally with `dotnet run --migrate-only` (from `TelegramGroupsAdmin/`).
