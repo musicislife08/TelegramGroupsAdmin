@@ -224,13 +224,21 @@ Three results worth carrying into implementation:
 flattened `/usr/lib` payload (`Dockerfile:200`) is not load-bearing for SkiaSharp, so this design
 does not quietly depend on the OCR stage continuing to exist.
 
-**arm64 is covered.** The package ships `runtimes/linux-arm64/native/libSkiaSharp.so` (11.6MB), and
-`readelf -d` shows it declares an identical dependency set to the verified x64 build —
-`libstdc++.so.6`, `libpthread.so.0`, `libdl.so.2`, `libm.so.6`, `libc.so.6`, `librt.so.1`, all
-glibc core plus libstdc++. Nothing exotic, and the arm64 chiseled image is built from the same
-Ubuntu noble package set. No arm64 emulator is registered on this machine, so this is a static
-verification rather than an execution one — worth one confirming run on real arm64 hardware
-post-merge, but not a design risk.
+**arm64 is verified by execution, not inference.** The full probe suite was re-run under
+`qemu-aarch64` on a `linux/arm64` build of the chiseled runtime: all twelve checks pass, including
+decode/encode of PNG, JPEG and WebP, both resize modes, Gaussian blur, and animated-GIF
+first-frame handling. The production image built for `linux/arm64` carries
+`/app/libSkiaSharp.so` at 11,596,392 bytes, `Machine: AArch64`, declaring only glibc core plus
+`libstdc++.so.6`.
+
+**The hash is architecture-independent.** The same fixture hashes to `FF49499292242400` on both
+amd64 and arm64 — byte-identical. This matters beyond this change: stored hashes stay comparable
+across a hardware migration, and a mixed-architecture deployment cannot silently split the corpus
+into two incomparable generations.
+
+The remaining caveat is narrow: this is qemu emulation of AArch64, not physical arm64 hardware.
+Emulation executes real AArch64 instructions, so the result is strong, but a confirming run on the
+real host after deployment costs nothing.
 
 **The box-average hash is more decoder-stable than predicted.** The design argued the box average
 would absorb per-decoder rounding to within a couple of bits. Measured drift across PNG, JPEG(85),
@@ -275,7 +283,9 @@ with SkiaSharp (MIT) and Skia itself (BSD-3-Clause).
 
 - [ ] No `SixLabors.*` package reference or `using` remains anywhere in the solution, tests included.
 - [x] `libSkiaSharp.so` loads and operates in the `linux/amd64` chiseled image (probe, verified).
-- [ ] Confirming run on real `linux/arm64` hardware post-merge (statically verified only).
+- [x] Same, verified on `linux/arm64` under qemu emulation; hash output byte-identical across
+      both architectures. A confirming run on physical arm64 hardware post-deploy remains cheap
+      and worthwhile.
 - [ ] Thumbnail, profile-photo, and media handling preserve current behavior across PNG, JPEG,
       animated GIF, and WebP.
 - [ ] `PhotoHashService` computes its 8×8 downsample in managed code; a golden test pins the output.
