@@ -466,12 +466,12 @@ public class ExamReviewCardTests : ExamReviewCardTestContext
     public async Task InvokesOnAction_WhenApproveClicked()
     {
         // Arrange
-        (ExamResultRecord failure, ExamAction action)? receivedAction = null;
+        ExamCardAction? receivedAction = null;
         var failure = CreateExamResult(reviewedAt: null);
 
         var cut = Render<ExamReviewCard>(p => p
             .Add(x => x.ExamResult, failure)
-            .Add(x => x.OnAction, EventCallback.Factory.Create<(ExamResultRecord, ExamAction)>(
+            .Add(x => x.OnAction, EventCallback.Factory.Create<ExamCardAction>(
                 this, args => receivedAction = args)));
 
         // Act
@@ -482,8 +482,8 @@ public class ExamReviewCardTests : ExamReviewCardTestContext
         Assert.That(receivedAction, Is.Not.Null);
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(receivedAction!.Value.action, Is.EqualTo(ExamAction.Approve));
-            Assert.That(receivedAction!.Value.failure.Id, Is.EqualTo(failure.Id));
+            Assert.That(receivedAction!.Action, Is.EqualTo(ExamAction.Approve));
+            Assert.That(receivedAction!.ExamResult.Id, Is.EqualTo(failure.Id));
         }
     }
 
@@ -491,12 +491,12 @@ public class ExamReviewCardTests : ExamReviewCardTestContext
     public async Task InvokesOnAction_WhenDenyClicked()
     {
         // Arrange
-        (ExamResultRecord failure, ExamAction action)? receivedAction = null;
+        ExamCardAction? receivedAction = null;
         var failure = CreateExamResult(reviewedAt: null);
 
         var cut = Render<ExamReviewCard>(p => p
             .Add(x => x.ExamResult, failure)
-            .Add(x => x.OnAction, EventCallback.Factory.Create<(ExamResultRecord, ExamAction)>(
+            .Add(x => x.OnAction, EventCallback.Factory.Create<ExamCardAction>(
                 this, args => receivedAction = args)));
 
         // Act
@@ -506,19 +506,19 @@ public class ExamReviewCardTests : ExamReviewCardTestContext
 
         // Assert
         Assert.That(receivedAction, Is.Not.Null);
-        Assert.That(receivedAction!.Value.action, Is.EqualTo(ExamAction.Deny));
+        Assert.That(receivedAction!.Action, Is.EqualTo(ExamAction.Deny));
     }
 
     [Test]
     public async Task InvokesOnAction_WhenDenyAndBanClicked()
     {
         // Arrange
-        (ExamResultRecord failure, ExamAction action)? receivedAction = null;
+        ExamCardAction? receivedAction = null;
         var failure = CreateExamResult(reviewedAt: null);
 
         var cut = Render<ExamReviewCard>(p => p
             .Add(x => x.ExamResult, failure)
-            .Add(x => x.OnAction, EventCallback.Factory.Create<(ExamResultRecord, ExamAction)>(
+            .Add(x => x.OnAction, EventCallback.Factory.Create<ExamCardAction>(
                 this, args => receivedAction = args)));
 
         // Act
@@ -527,7 +527,66 @@ public class ExamReviewCardTests : ExamReviewCardTestContext
 
         // Assert
         Assert.That(receivedAction, Is.Not.Null);
-        Assert.That(receivedAction!.Value.action, Is.EqualTo(ExamAction.DenyAndBan));
+        Assert.That(receivedAction!.Action, Is.EqualTo(ExamAction.DenyAndBan));
+    }
+
+    [Test]
+    public void PassedRecord_AutoApproved_ShowsDismissDenyDenyBan_NoApprove()
+    {
+        // Arrange & Act
+        var record = CreateExamResult() with
+        {
+            Outcome = ExamOutcome.Passed,
+            ReviewedAt = DateTimeOffset.UtcNow,
+            ReviewedBy = "Exam Flow",
+            ActionTaken = ExamResultRecord.AutoApprovedActionTaken
+        };
+
+        var cut = Render<ExamReviewCard>(p => p
+            .Add(x => x.ExamResult, record));
+
+        // Assert
+        var buttons = cut.FindAll("button").Select(b => b.TextContent.Trim()).ToList();
+        Assert.That(buttons, Does.Contain("Dismiss"));
+        Assert.That(buttons, Does.Contain("Deny"));
+        Assert.That(buttons, Does.Contain("Deny + Ban"));
+        Assert.That(buttons, Does.Not.Contain("Approve"));
+    }
+
+    [Test]
+    public void FailedRecord_Pending_NeverShowsDismiss()
+    {
+        // Arrange & Act
+        var record = CreateExamResult() with { Outcome = ExamOutcome.Failed };
+
+        var cut = Render<ExamReviewCard>(p => p
+            .Add(x => x.ExamResult, record));
+
+        // Assert
+        var buttons = cut.FindAll("button").Select(b => b.TextContent.Trim()).ToList();
+        Assert.That(buttons, Does.Contain("Approve"));
+        Assert.That(buttons, Does.Not.Contain("Dismiss"), "a failed exam is never dismissible");
+    }
+
+    [Test]
+    public void PassedRecord_AlreadyOverridden_ShowsActionTextOnly()
+    {
+        // Arrange & Act
+        var record = CreateExamResult() with
+        {
+            Outcome = ExamOutcome.Passed,
+            ReviewedAt = DateTimeOffset.UtcNow,
+            ReviewedBy = "admin@test.com",
+            ActionTaken = "dismissed (auto-admit acknowledged)"
+        };
+
+        var cut = Render<ExamReviewCard>(p => p
+            .Add(x => x.ExamResult, record));
+
+        // Assert
+        Assert.That(cut.FindAll("button").Select(b => b.TextContent.Trim()),
+            Does.Not.Contain("Dismiss").And.Not.Contain("Deny"));
+        Assert.That(cut.Markup, Does.Contain("dismissed (auto-admit acknowledged)"));
     }
 
     #endregion

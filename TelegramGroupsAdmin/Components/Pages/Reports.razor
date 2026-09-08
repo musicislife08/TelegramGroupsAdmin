@@ -438,7 +438,7 @@
         await LoadReportsAsync();
     }
 
-    private async Task HandleExamAction((ExamResultRecord ExamResult, ExamAction Action) args)
+    private async Task HandleExamAction(ExamCardAction args)
     {
         var executor = WebUser!.ToActor();
         var result = args.Action switch
@@ -446,6 +446,7 @@
             ExamAction.Approve => await ReportActionsService.HandleExamApproveAsync(args.ExamResult.Id, executor, cancellationToken: _cancellationTokenSource.Token),
             ExamAction.Deny => await ReportActionsService.HandleExamDenyAsync(args.ExamResult.Id, executor, cancellationToken: _cancellationTokenSource.Token),
             ExamAction.DenyAndBan => await ReportActionsService.HandleExamDenyAndBanAsync(args.ExamResult.Id, executor, cancellationToken: _cancellationTokenSource.Token),
+            ExamAction.Dismiss => await ReportActionsService.HandleExamDismissAsync(args.ExamResult.Id, executor, cancellationToken: _cancellationTokenSource.Token),
             _ => new ReviewActionResult(false, "Unknown action")
         };
         var severity = result.Success ? Severity.Success

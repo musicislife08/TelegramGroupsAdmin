@@ -19,6 +19,10 @@
                 <MudIcon Icon="@Icons.Material.Filled.Quiz" Color="Color.Warning" Size="Size.Small" />
                 <MudText Typo="Typo.h6">Exam Review</MudText>
                 <MudSpacer />
+                @if (ExamResult.Outcome == ExamOutcome.Passed)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Success">Passed — auto-admitted</MudChip>
+                }
                 @if (ExamResult.ReviewedAt.HasValue)
                 {
                     <MudChip T="string" Size="Size.Small" Color="Color.Success">Reviewed</MudChip>
@@ -239,7 +243,34 @@
         </MudStack>
     </MudCardContent>
     <MudCardActions>
-        @if (!ExamResult.ReviewedAt.HasValue)
+        @if (ExamResult.Outcome == ExamOutcome.Passed
+             && ExamResult.ActionTaken == ExamResultRecord.AutoApprovedActionTaken)
+        {
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Success"
+                       StartIcon="@Icons.Material.Filled.Check"
+                       OnClick="@OnDismiss"
+                       Disabled="@_actionInProgress">
+                Dismiss
+            </MudButton>
+
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Warning"
+                       StartIcon="@Icons.Material.Filled.Close"
+                       OnClick="@OnDeny"
+                       Disabled="@_actionInProgress">
+                Deny
+            </MudButton>
+
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Error"
+                       StartIcon="@Icons.Material.Filled.Block"
+                       OnClick="@OnDenyAndBan"
+                       Disabled="@_actionInProgress">
+                Deny + Ban
+            </MudButton>
+        }
+        else if (!ExamResult.ReviewedAt.HasValue)
         {
             <MudButton Variant="Variant.Filled"
                        Color="Color.Success"
@@ -279,7 +310,7 @@
     public required ExamResultRecord ExamResult { get; set; }
 
     [Parameter]
-    public EventCallback<(ExamResultRecord ExamResult, ExamAction Action)> OnAction { get; set; }
+    public EventCallback<ExamCardAction> OnAction { get; set; }
 
     private bool _actionInProgress;
     private TelegramUser? _user;
@@ -431,7 +462,7 @@
         _actionInProgress = true;
         try
         {
-            await OnAction.InvokeAsync((ExamResult, ExamAction.Approve));
+            await OnAction.InvokeAsync(new ExamCardAction(ExamResult, ExamAction.Approve));
         }
         finally
         {
@@ -444,7 +475,7 @@
         _actionInProgress = true;
         try
         {
-            await OnAction.InvokeAsync((ExamResult, ExamAction.Deny));
+            await OnAction.InvokeAsync(new ExamCardAction(ExamResult, ExamAction.Deny));
         }
         finally
         {
@@ -457,7 +488,20 @@
         _actionInProgress = true;
         try
         {
-            await OnAction.InvokeAsync((ExamResult, ExamAction.DenyAndBan));
+            await OnAction.InvokeAsync(new ExamCardAction(ExamResult, ExamAction.DenyAndBan));
+        }
+        finally
+        {
+            _actionInProgress = false;
+        }
+    }
+
+    private async Task OnDismiss()
+    {
+        _actionInProgress = true;
+        try
+        {
+            await OnAction.InvokeAsync(new ExamCardAction(ExamResult, ExamAction.Dismiss));
         }
         finally
         {
