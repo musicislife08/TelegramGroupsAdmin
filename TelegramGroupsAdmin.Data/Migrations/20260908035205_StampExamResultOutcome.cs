@@ -25,7 +25,10 @@ namespace TelegramGroupsAdmin.Data.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-
+            // Intentionally empty. Rolling back would need to strip the 'outcome' key from JSONB context,
+            // but by the time anyone rolls back, real pass records (outcome=1) may exist. Stripping the key
+            // would destroy that data with no way to distinguish it from a pre-migration row. Leaving Down empty
+            // prevents accidental data loss.
         }
     }
 }
