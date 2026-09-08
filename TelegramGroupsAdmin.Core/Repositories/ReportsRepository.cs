@@ -9,7 +9,7 @@ using TelegramGroupsAdmin.Data.Models;
 namespace TelegramGroupsAdmin.Core.Repositories;
 
 /// <summary>
-/// Unified repository for all report types (ContentReport, ImpersonationAlert, ExamFailure).
+/// Unified repository for all report types (ContentReport, ImpersonationAlert, ExamResult).
 /// Uses enriched_reports view for efficient queries with pre-joined user/chat data.
 /// </summary>
 public class ReportsRepository : IReportsRepository
@@ -594,32 +594,32 @@ public class ReportsRepository : IReportsRepository
     }
 
     // ============================================================
-    // ExamFailure-specific operations (Type = ExamFailure)
+    // ExamResult-specific operations (Type = ExamResult)
     // ============================================================
 
-    public async Task<long> InsertExamFailureAsync(
-        ExamFailureRecord examFailure,
+    public async Task<long> InsertExamResultAsync(
+        ExamResultRecord examResult,
         CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         // Build context JSONB
-        var examContext = new ExamFailureContext
+        var examContext = new ExamResultContext
         {
-            UserId = examFailure.User.Id,
-            McAnswers = examFailure.McAnswers,
-            ShuffleState = examFailure.ShuffleState,
-            OpenEndedAnswer = examFailure.OpenEndedAnswer,
-            Score = examFailure.Score,
-            PassingThreshold = examFailure.PassingThreshold,
-            AiEvaluation = examFailure.AiEvaluation
+            UserId = examResult.User.Id,
+            McAnswers = examResult.McAnswers,
+            ShuffleState = examResult.ShuffleState,
+            OpenEndedAnswer = examResult.OpenEndedAnswer,
+            Score = examResult.Score,
+            PassingThreshold = examResult.PassingThreshold,
+            AiEvaluation = examResult.AiEvaluation
         };
 
         var entity = new ReportDto
         {
-            Type = (short)ReportType.ExamFailure,
-            ChatId = examFailure.Chat.Id,
-            ReportedAt = examFailure.FailedAt,
+            Type = (short)ReportType.ExamResult,
+            ChatId = examResult.Chat.Id,
+            ReportedAt = examResult.CompletedAt,
             Status = (int)ReportStatus.Pending,
             Context = JsonSerializer.Serialize(examContext, JsonOptions)
         };
@@ -630,15 +630,15 @@ public class ReportsRepository : IReportsRepository
         _logger.LogInformation(
             "Created exam failure report #{ReportId}: User {UserId} in chat {ChatId} (score: {Score}/{Threshold})",
             entity.Id,
-            examFailure.User.Id,
-            examFailure.Chat.Id,
-            examFailure.Score,
-            examFailure.PassingThreshold);
+            examResult.User.Id,
+            examResult.Chat.Id,
+            examResult.Score,
+            examResult.PassingThreshold);
 
         return entity.Id;
     }
 
-    public async Task<ExamFailureRecord?> GetExamFailureAsync(
+    public async Task<ExamResultRecord?> GetExamResultAsync(
         long id,
         CancellationToken cancellationToken = default)
     {
@@ -646,12 +646,12 @@ public class ReportsRepository : IReportsRepository
 
         var view = await context.EnrichedReports
             .AsNoTracking()
-            .FirstOrDefaultAsync(r => r.Id == id && r.Type == (short)ReportType.ExamFailure, cancellationToken);
+            .FirstOrDefaultAsync(r => r.Id == id && r.Type == (short)ReportType.ExamResult, cancellationToken);
 
-        return view?.ToExamFailure();
+        return view?.ToExamResult();
     }
 
-    public async Task<List<ExamFailureRecord>> GetExamFailuresAsync(
+    public async Task<List<ExamResultRecord>> GetExamResultsAsync(
         long? chatId = null,
         bool pendingOnly = true,
         CancellationToken cancellationToken = default)
@@ -660,7 +660,7 @@ public class ReportsRepository : IReportsRepository
 
         var query = context.EnrichedReports
             .AsNoTracking()
-            .Where(r => r.Type == (short)ReportType.ExamFailure);
+            .Where(r => r.Type == (short)ReportType.ExamResult);
 
         if (pendingOnly)
             query = query.Where(r => r.Status == (int)ReportStatus.Pending);
@@ -673,9 +673,9 @@ public class ReportsRepository : IReportsRepository
             .ToListAsync(cancellationToken);
 
         return results
-            .Select(r => r.ToExamFailure())
+            .Select(r => r.ToExamResult())
             .Where(r => r != null)
-            .Cast<ExamFailureRecord>()
+            .Cast<ExamResultRecord>()
             .ToList();
     }
 }

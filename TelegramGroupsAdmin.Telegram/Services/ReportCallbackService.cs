@@ -94,7 +94,7 @@ public sealed class ReportCallbackService(
         {
             ReportType.ContentReport => await RouteContentReportAsync(reviewId, actionInt, executor, cancellationToken),
             ReportType.ImpersonationAlert => await RouteImpersonationAsync(reviewId, actionInt, executor, cancellationToken),
-            ReportType.ExamFailure => await RouteExamAsync(reviewId, actionInt, executor, cancellationToken),
+            ReportType.ExamResult => await RouteExamAsync(reviewId, actionInt, executor, cancellationToken),
             ReportType.ProfileScanAlert => await RouteProfileScanAsync(reviewId, actionInt, executor, cancellationToken),
             _ => new ReviewActionResult(false, $"Unknown review type: {reportType}")
         };

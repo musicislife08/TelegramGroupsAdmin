@@ -316,7 +316,7 @@ public class ReportCallbackServiceTests
     [Test]
     public async Task HandleCallbackAsync_ExamApprove_RoutesCorrectly()
     {
-        SetupContext(ReportType.ExamFailure);
+        SetupContext(ReportType.ExamResult);
         _mockReportActionsService.HandleExamApproveAsync(TestReportId, Arg.Any<Actor>(), Arg.Any<CancellationToken>())
             .Returns(new ReviewActionResult(true, "Approved"));
 
@@ -329,7 +329,7 @@ public class ReportCallbackServiceTests
     [Test]
     public async Task HandleCallbackAsync_ExamDeny_RoutesCorrectly()
     {
-        SetupContext(ReportType.ExamFailure);
+        SetupContext(ReportType.ExamResult);
         _mockReportActionsService.HandleExamDenyAsync(TestReportId, Arg.Any<Actor>(), Arg.Any<CancellationToken>())
             .Returns(new ReviewActionResult(true, "Denied"));
 
@@ -342,7 +342,7 @@ public class ReportCallbackServiceTests
     [Test]
     public async Task HandleCallbackAsync_ExamDenyAndBan_RoutesCorrectly()
     {
-        SetupContext(ReportType.ExamFailure);
+        SetupContext(ReportType.ExamResult);
         _mockReportActionsService.HandleExamDenyAndBanAsync(TestReportId, Arg.Any<Actor>(), Arg.Any<CancellationToken>())
             .Returns(new ReviewActionResult(true, "Banned"));
 
@@ -357,7 +357,7 @@ public class ReportCallbackServiceTests
     [TestCase(99)]
     public async Task HandleCallbackAsync_ExamInvalidAction_ReturnsInvalidAction(int invalidAction)
     {
-        SetupContext(ReportType.ExamFailure);
+        SetupContext(ReportType.ExamResult);
 
         await _service.HandleCallbackAsync(CreateCallbackQuery(data: $"rev:{TestContextId}:{invalidAction}"));
 

@@ -5,7 +5,7 @@ namespace TelegramGroupsAdmin.Telegram.Services;
 /// <summary>
 /// Application-level service for handling report moderation callback queries from inline buttons in DMs.
 /// Orchestrates the report review workflow, calling bot services for Telegram operations
-/// and routing to type-specific handlers based on ReportType (ContentReport, ImpersonationAlert, ExamFailure).
+/// and routing to type-specific handlers based on ReportType (ContentReport, ImpersonationAlert, ExamResult).
 /// </summary>
 public interface IReportCallbackService
 {

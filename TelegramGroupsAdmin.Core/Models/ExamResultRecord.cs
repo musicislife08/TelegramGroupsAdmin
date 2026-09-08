@@ -1,10 +1,10 @@
 namespace TelegramGroupsAdmin.Core.Models;
 
 /// <summary>
-/// Domain model for exam failure reviews.
-/// Created when a user fails the entrance exam and needs admin review.
+/// Domain model for completed entrance exam reviews (pass or fail).
+/// Created when a user completes the entrance exam; failures need admin review.
 /// </summary>
-public record ExamFailureRecord
+public record ExamResultRecord
 {
     public long Id { get; init; }
 
@@ -42,9 +42,9 @@ public record ExamFailureRecord
     public string? AiEvaluation { get; init; }
 
     /// <summary>
-    /// When the exam was completed and failed.
+    /// When the exam was completed.
     /// </summary>
-    public DateTimeOffset FailedAt { get; init; }
+    public DateTimeOffset CompletedAt { get; init; }
 
     /// <summary>
     /// Admin review status and metadata.

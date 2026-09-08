@@ -3,10 +3,10 @@ using System.Text.Json.Serialization;
 namespace TelegramGroupsAdmin.Core.Models;
 
 /// <summary>
-/// Context for ExamFailure reviews stored in JSONB.
+/// Context for ExamResult reviews stored in JSONB.
 /// Contains exam results and configuration details.
 /// </summary>
-public record ExamFailureContext
+public record ExamResultContext
 {
     [JsonPropertyName("userId")]
     public long UserId { get; init; }

@@ -533,7 +533,7 @@ public class ExamFlowService : IExamFlowService
         }
 
         // Create exam failure review (include shuffle state for review display)
-        var examFailure = new ExamFailureRecord
+        var examResult = new ExamResultRecord
         {
             User = UserIdentity.From(user),
             Chat = ChatIdentity.FromId(session.ChatId),
@@ -543,10 +543,10 @@ public class ExamFlowService : IExamFlowService
             Score = mcScore,
             PassingThreshold = examConfig.McPassingThreshold,
             AiEvaluation = aiReasoning,
-            FailedAt = DateTimeOffset.UtcNow
+            CompletedAt = DateTimeOffset.UtcNow
         };
 
-        var examFailureId = await reportsRepo.InsertExamFailureAsync(examFailure, cancellationToken);
+        var examResultId = await reportsRepo.InsertExamResultAsync(examResult, cancellationToken);
 
         // Get chat info for notification
         var managedChatsRepo = scope.ServiceProvider.GetRequiredService<IManagedChatsRepository>();
@@ -566,7 +566,7 @@ public class ExamFlowService : IExamFlowService
             openEndedQuestion: examConfig.OpenEndedQuestion,
             openEndedAnswer: session.OpenEndedAnswer,
             aiReasoning: aiReasoning,
-            examFailureId: examFailureId,
+            examResultId: examResultId,
             ct: cancellationToken);
 
         // Send pending message to user in DM
@@ -686,14 +686,14 @@ public class ExamFlowService : IExamFlowService
     }
 
     /// <inheritdoc />
-    public async Task<ModerationResult> ApproveExamFailureAsync(
+    public async Task<ModerationResult> ApproveExamResultAsync(
         UserIdentity user,
         ChatIdentity chat,
-        long examFailureId,
+        long examResultId,
         Actor executor,
         CancellationToken cancellationToken = default)
     {
-        var reason = $"Exam failure #{examFailureId} - manually approved after review";
+        var reason = $"Exam failure #{examResultId} - manually approved after review";
         return await ExecuteExamApprovalAsync(
             user,
             chat,
@@ -827,7 +827,7 @@ public class ExamFlowService : IExamFlowService
     }
 
     /// <inheritdoc />
-    public async Task<ModerationResult> DenyExamFailureAsync(
+    public async Task<ModerationResult> DenyExamResultAsync(
         UserIdentity user,
         ChatIdentity chat,
         Actor executor,
@@ -844,7 +844,7 @@ public class ExamFlowService : IExamFlowService
     }
 
     /// <inheritdoc />
-    public async Task<ModerationResult> DenyAndBanExamFailureAsync(
+    public async Task<ModerationResult> DenyAndBanExamResultAsync(
         UserIdentity user,
         ChatIdentity chat,
         Actor executor,

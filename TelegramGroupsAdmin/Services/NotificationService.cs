@@ -187,7 +187,7 @@ public sealed class NotificationService : INotificationService
         string? openEndedQuestion,
         string? openEndedAnswer,
         string? aiReasoning,
-        long examFailureId,
+        long examResultId,
         CancellationToken ct = default)
     {
         var payload = NotificationPayloadBuilder.Create("Entrance Exam Review Required")
@@ -204,7 +204,7 @@ public sealed class NotificationService : INotificationService
                 if (openEndedAnswer != null) s.WithField("Answer", openEndedAnswer);
                 if (aiReasoning != null) s.WithField("AI Reasoning", aiReasoning);
             })
-            .WithKeyboard(new ActionKeyboardContext(examFailureId, chat.Id, user.Id, ReportType.ExamFailure))
+            .WithKeyboard(new ActionKeyboardContext(examResultId, chat.Id, user.Id, ReportType.ExamResult))
             .Build();
 
         return SendToChatAudienceAsync(chat, NotificationEventType.ExamFailed, payload, ct);
@@ -646,7 +646,7 @@ public sealed class NotificationService : INotificationService
 
         return reportType switch
         {
-            ReportType.ExamFailure => new InlineKeyboardMarkup(new[]
+            ReportType.ExamResult => new InlineKeyboardMarkup(new[]
             {
                 new[]
                 {

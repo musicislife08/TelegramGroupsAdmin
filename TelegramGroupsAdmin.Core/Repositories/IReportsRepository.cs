@@ -3,7 +3,7 @@ using TelegramGroupsAdmin.Core.Models;
 namespace TelegramGroupsAdmin.Core.Repositories;
 
 /// <summary>
-/// Unified repository for all report types (ContentReport, ImpersonationAlert, ExamFailure).
+/// Unified repository for all report types (ContentReport, ImpersonationAlert, ExamResult).
 /// </summary>
 public interface IReportsRepository
 {
@@ -28,7 +28,7 @@ public interface IReportsRepository
     /// <summary>
     /// Get every pending report whose subject is the given user, regardless of report type.
     /// Subject resolution per type: ContentReport → reported message author,
-    /// ImpersonationAlert → suspected user, ExamFailure / ProfileScanAlert → the user.
+    /// ImpersonationAlert → suspected user, ExamResult / ProfileScanAlert → the user.
     /// </summary>
     /// <param name="userId">Telegram user id of the report subject.</param>
     /// <param name="chatId">When supplied, narrows to reports in that chat.</param>
@@ -215,20 +215,20 @@ public interface IReportsRepository
         CancellationToken cancellationToken = default);
 
     // ============================================================
-    // ExamFailure-specific operations (Type = ExamFailure)
+    // ExamResult-specific operations (Type = ExamResult)
     // ============================================================
 
     /// <summary>
     /// Insert a new exam failure report.
     /// </summary>
-    Task<long> InsertExamFailureAsync(
-        ExamFailureRecord examFailure,
+    Task<long> InsertExamResultAsync(
+        ExamResultRecord examResult,
         CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Get exam failure by ID with full context.
     /// </summary>
-    Task<ExamFailureRecord?> GetExamFailureAsync(
+    Task<ExamResultRecord?> GetExamResultAsync(
         long id,
         CancellationToken cancellationToken = default);
 
@@ -238,7 +238,7 @@ public interface IReportsRepository
     /// <param name="chatId">Optional chat ID filter</param>
     /// <param name="pendingOnly">If true, only returns pending (unreviewed) failures. Default true for backward compatibility.</param>
     /// <param name="cancellationToken">Cancellation token</param>
-    Task<List<ExamFailureRecord>> GetExamFailuresAsync(
+    Task<List<ExamResultRecord>> GetExamResultsAsync(
         long? chatId = null,
         bool pendingOnly = true,
         CancellationToken cancellationToken = default);

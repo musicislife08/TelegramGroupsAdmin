@@ -412,9 +412,9 @@ public class ReportsRepositoryTests
 
     #endregion
 
-    #region ExamFailure Tests (Phase 2 - Entrance Exam)
+    #region ExamResult Tests (Phase 2 - Entrance Exam)
 
-    private static ExamFailureRecord CreateTestExamFailure(
+    private static ExamResultRecord CreateTestExamResult(
         long chatId = -1001234567890,
         long userId = 123456789,
         int score = 40,
@@ -422,9 +422,9 @@ public class ReportsRepositoryTests
         Dictionary<int, string>? mcAnswers = null,
         Dictionary<int, int[]>? shuffleState = null,
         string? openEndedAnswer = null,
-        DateTimeOffset? failedAt = null)
+        DateTimeOffset? completedAt = null)
     {
-        return new ExamFailureRecord
+        return new ExamResultRecord
         {
             User = new UserIdentity(userId, "Test", "User", null),
             Chat = new ChatIdentity(chatId, "Test Chat"),
@@ -443,38 +443,38 @@ public class ReportsRepositoryTests
             OpenEndedAnswer = openEndedAnswer,
             Score = score,
             PassingThreshold = passingThreshold,
-            FailedAt = failedAt ?? DateTimeOffset.UtcNow
+            CompletedAt = completedAt ?? DateTimeOffset.UtcNow
         };
     }
 
     [Test]
-    public async Task InsertExamFailureAsync_WithValidData_ReturnsId()
+    public async Task InsertExamResultAsync_WithValidData_ReturnsId()
     {
         // Arrange
-        var examFailure = CreateTestExamFailure();
+        var examResult = CreateTestExamResult();
 
         // Act
-        var id = await _repository!.InsertExamFailureAsync(examFailure);
+        var id = await _repository!.InsertExamResultAsync(examResult);
 
         // Assert
         Assert.That(id, Is.GreaterThan(0));
     }
 
     [Test]
-    public async Task GetExamFailureAsync_WithExistingId_ReturnsRecord()
+    public async Task GetExamResultAsync_WithExistingId_ReturnsRecord()
     {
         // Arrange
-        var examFailure = CreateTestExamFailure(
+        var examResult = CreateTestExamResult(
             chatId: -1009876543210,
             userId: 111222333,
             score: 60,
             passingThreshold: 80,
             openEndedAnswer: "I want to learn about crypto trading");
 
-        var id = await _repository!.InsertExamFailureAsync(examFailure);
+        var id = await _repository!.InsertExamResultAsync(examResult);
 
         // Act
-        var retrieved = await _repository.GetExamFailureAsync(id);
+        var retrieved = await _repository.GetExamResultAsync(id);
 
         // Assert
         Assert.That(retrieved, Is.Not.Null);
@@ -490,7 +490,7 @@ public class ReportsRepositoryTests
     }
 
     [Test]
-    public async Task GetExamFailureAsync_PreservesJsonbData()
+    public async Task GetExamResultAsync_PreservesJsonbData()
     {
         // Arrange - Test JSONB serialization/deserialization
         var mcAnswers = new Dictionary<int, string>
@@ -508,14 +508,14 @@ public class ReportsRepositoryTests
             { 3, [2, 3, 0, 1] }
         };
 
-        var examFailure = CreateTestExamFailure(
+        var examResult = CreateTestExamResult(
             mcAnswers: mcAnswers,
             shuffleState: shuffleState);
 
-        var id = await _repository!.InsertExamFailureAsync(examFailure);
+        var id = await _repository!.InsertExamResultAsync(examResult);
 
         // Act
-        var retrieved = await _repository.GetExamFailureAsync(id);
+        var retrieved = await _repository.GetExamResultAsync(id);
 
         // Assert - JSONB should roundtrip correctly
         Assert.That(retrieved, Is.Not.Null);
@@ -537,14 +537,14 @@ public class ReportsRepositoryTests
     }
 
     [Test]
-    public async Task GetExamFailuresAsync_WithPendingOnly_ReturnsOnlyPending()
+    public async Task GetExamResultsAsync_WithPendingOnly_ReturnsOnlyPending()
     {
         // Arrange
-        var pending1 = CreateTestExamFailure(userId: 1);
-        var pending2 = CreateTestExamFailure(userId: 2);
+        var pending1 = CreateTestExamResult(userId: 1);
+        var pending2 = CreateTestExamResult(userId: 2);
 
-        var id1 = await _repository!.InsertExamFailureAsync(pending1);
-        await _repository.InsertExamFailureAsync(pending2);
+        var id1 = await _repository!.InsertExamResultAsync(pending1);
+        await _repository.InsertExamResultAsync(pending2);
 
         // Mark first as reviewed
         await _repository.TryUpdateStatusAsync(
@@ -554,7 +554,7 @@ public class ReportsRepositoryTests
             actionTaken: "Approved");
 
         // Act
-        var pending = await _repository.GetExamFailuresAsync(pendingOnly: true);
+        var pending = await _repository.GetExamResultsAsync(pendingOnly: true);
 
         // Assert - only the unreviewed one
         Assert.That(pending, Has.Count.EqualTo(1));
@@ -562,14 +562,14 @@ public class ReportsRepositoryTests
     }
 
     [Test]
-    public async Task GetExamFailuresAsync_WithPendingOnlyFalse_ReturnsAll()
+    public async Task GetExamResultsAsync_WithPendingOnlyFalse_ReturnsAll()
     {
         // Arrange
-        var pending1 = CreateTestExamFailure(userId: 1);
-        var pending2 = CreateTestExamFailure(userId: 2);
+        var pending1 = CreateTestExamResult(userId: 1);
+        var pending2 = CreateTestExamResult(userId: 2);
 
-        var id1 = await _repository!.InsertExamFailureAsync(pending1);
-        await _repository.InsertExamFailureAsync(pending2);
+        var id1 = await _repository!.InsertExamResultAsync(pending1);
+        await _repository.InsertExamResultAsync(pending2);
 
         // Mark first as reviewed
         await _repository.TryUpdateStatusAsync(
@@ -579,24 +579,24 @@ public class ReportsRepositoryTests
             actionTaken: "Approved");
 
         // Act
-        var all = await _repository.GetExamFailuresAsync(pendingOnly: false);
+        var all = await _repository.GetExamResultsAsync(pendingOnly: false);
 
         // Assert - both items returned
         Assert.That(all, Has.Count.EqualTo(2));
     }
 
     [Test]
-    public async Task GetExamFailuresAsync_FiltersByChatId()
+    public async Task GetExamResultsAsync_FiltersByChatId()
     {
         // Arrange
         const long targetChatId = -1001111111111;
 
-        await _repository!.InsertExamFailureAsync(CreateTestExamFailure(chatId: targetChatId, userId: 1));
-        await _repository.InsertExamFailureAsync(CreateTestExamFailure(chatId: targetChatId, userId: 2));
-        await _repository.InsertExamFailureAsync(CreateTestExamFailure(chatId: -1002222222222, userId: 3));
+        await _repository!.InsertExamResultAsync(CreateTestExamResult(chatId: targetChatId, userId: 1));
+        await _repository.InsertExamResultAsync(CreateTestExamResult(chatId: targetChatId, userId: 2));
+        await _repository.InsertExamResultAsync(CreateTestExamResult(chatId: -1002222222222, userId: 3));
 
         // Act
-        var pending = await _repository.GetExamFailuresAsync(chatId: targetChatId);
+        var pending = await _repository.GetExamResultsAsync(chatId: targetChatId);
 
         // Assert
         Assert.That(pending, Has.Count.EqualTo(2));
@@ -815,7 +815,7 @@ public class ReportsRepositoryPendingForUserTests
         Assert.That(pending.Select(r => r.Type), Is.EquivalentTo(new[]
         {
             ReportType.ContentReport,
-            ReportType.ExamFailure,
+            ReportType.ExamResult,
             ReportType.ProfileScanAlert
         }));
     }

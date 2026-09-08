@@ -50,9 +50,9 @@ public class ExamHandlerTests
     public async Task ApproveAsync_Success_ReturnsSuccessAndDoesNotDeleteCallbackContextsByReportId()
     {
         var exam = CreateTestExam();
-        _mockReportsRepo.GetExamFailureAsync(TestExamId, Arg.Any<CancellationToken>())
+        _mockReportsRepo.GetExamResultAsync(TestExamId, Arg.Any<CancellationToken>())
             .Returns(exam);
-        _mockExamFlowService.ApproveExamFailureAsync(
+        _mockExamFlowService.ApproveExamResultAsync(
                 Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(),
                 TestExamId, Arg.Any<Actor>(), Arg.Any<CancellationToken>())
             .Returns(new ModerationResult { Success = true });
@@ -70,8 +70,8 @@ public class ExamHandlerTests
     [Test]
     public async Task ApproveAsync_ExamNotFound_ReturnsFailure()
     {
-        _mockReportsRepo.GetExamFailureAsync(TestExamId, Arg.Any<CancellationToken>())
-            .Returns((ExamFailureRecord?)null);
+        _mockReportsRepo.GetExamResultAsync(TestExamId, Arg.Any<CancellationToken>())
+            .Returns((ExamResultRecord?)null);
 
         var result = await _handler.ApproveAsync(TestExamId, TestExecutor, CancellationToken.None);
 
@@ -83,7 +83,7 @@ public class ExamHandlerTests
     public async Task ApproveAsync_AlreadyHandled_ReturnsFailureWithAttribution()
     {
         var exam = CreateTestExam(reviewed: true);
-        _mockReportsRepo.GetExamFailureAsync(TestExamId, Arg.Any<CancellationToken>())
+        _mockReportsRepo.GetExamResultAsync(TestExamId, Arg.Any<CancellationToken>())
             .Returns(exam);
 
         var result = await _handler.ApproveAsync(TestExamId, TestExecutor, CancellationToken.None);
@@ -98,9 +98,9 @@ public class ExamHandlerTests
     public async Task ApproveAsync_ExamFlowFails_ReturnsFailure()
     {
         var exam = CreateTestExam();
-        _mockReportsRepo.GetExamFailureAsync(TestExamId, Arg.Any<CancellationToken>())
+        _mockReportsRepo.GetExamResultAsync(TestExamId, Arg.Any<CancellationToken>())
             .Returns(exam);
-        _mockExamFlowService.ApproveExamFailureAsync(
+        _mockExamFlowService.ApproveExamResultAsync(
                 Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(),
                 TestExamId, Arg.Any<Actor>(), Arg.Any<CancellationToken>())
             .Returns(ModerationResult.Failed("User already left"));
@@ -119,9 +119,9 @@ public class ExamHandlerTests
     public async Task DenyAsync_Success_ReturnsSuccessAndDoesNotDeleteCallbackContextsByReportId()
     {
         var exam = CreateTestExam();
-        _mockReportsRepo.GetExamFailureAsync(TestExamId, Arg.Any<CancellationToken>())
+        _mockReportsRepo.GetExamResultAsync(TestExamId, Arg.Any<CancellationToken>())
             .Returns(exam);
-        _mockExamFlowService.DenyExamFailureAsync(
+        _mockExamFlowService.DenyExamResultAsync(
                 Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(),
                 Arg.Any<Actor>(), Arg.Any<long?>(), Arg.Any<CancellationToken>())
             .Returns(new ModerationResult { Success = true });
@@ -140,7 +140,7 @@ public class ExamHandlerTests
     public async Task DenyAsync_AlreadyHandled_ReturnsFailure()
     {
         var exam = CreateTestExam(reviewed: true);
-        _mockReportsRepo.GetExamFailureAsync(TestExamId, Arg.Any<CancellationToken>())
+        _mockReportsRepo.GetExamResultAsync(TestExamId, Arg.Any<CancellationToken>())
             .Returns(exam);
 
         var result = await _handler.DenyAsync(TestExamId, TestExecutor, CancellationToken.None);
@@ -153,9 +153,9 @@ public class ExamHandlerTests
     public async Task DenyAsync_FlowFails_ReturnsFailure()
     {
         var exam = CreateTestExam();
-        _mockReportsRepo.GetExamFailureAsync(TestExamId, Arg.Any<CancellationToken>())
+        _mockReportsRepo.GetExamResultAsync(TestExamId, Arg.Any<CancellationToken>())
             .Returns(exam);
-        _mockExamFlowService.DenyExamFailureAsync(
+        _mockExamFlowService.DenyExamResultAsync(
                 Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(),
                 Arg.Any<Actor>(), Arg.Any<long?>(), Arg.Any<CancellationToken>())
             .Returns(ModerationResult.Failed("Chat not found"));
@@ -174,9 +174,9 @@ public class ExamHandlerTests
     public async Task DenyAndBanAsync_Success_ReturnsSuccessAndDoesNotDeleteCallbackContextsByReportId()
     {
         var exam = CreateTestExam();
-        _mockReportsRepo.GetExamFailureAsync(TestExamId, Arg.Any<CancellationToken>())
+        _mockReportsRepo.GetExamResultAsync(TestExamId, Arg.Any<CancellationToken>())
             .Returns(exam);
-        _mockExamFlowService.DenyAndBanExamFailureAsync(
+        _mockExamFlowService.DenyAndBanExamResultAsync(
                 Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(),
                 Arg.Any<Actor>(), Arg.Any<long?>(), Arg.Any<CancellationToken>())
             .Returns(new ModerationResult { Success = true });
@@ -195,7 +195,7 @@ public class ExamHandlerTests
     public async Task DenyAndBanAsync_AlreadyHandled_ReturnsFailure()
     {
         var exam = CreateTestExam(reviewed: true);
-        _mockReportsRepo.GetExamFailureAsync(TestExamId, Arg.Any<CancellationToken>())
+        _mockReportsRepo.GetExamResultAsync(TestExamId, Arg.Any<CancellationToken>())
             .Returns(exam);
 
         var result = await _handler.DenyAndBanAsync(TestExamId, TestExecutor, CancellationToken.None);
@@ -208,9 +208,9 @@ public class ExamHandlerTests
     public async Task DenyAndBanAsync_FlowFails_ReturnsFailure()
     {
         var exam = CreateTestExam();
-        _mockReportsRepo.GetExamFailureAsync(TestExamId, Arg.Any<CancellationToken>())
+        _mockReportsRepo.GetExamResultAsync(TestExamId, Arg.Any<CancellationToken>())
             .Returns(exam);
-        _mockExamFlowService.DenyAndBanExamFailureAsync(
+        _mockExamFlowService.DenyAndBanExamResultAsync(
                 Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(),
                 Arg.Any<Actor>(), Arg.Any<long?>(), Arg.Any<CancellationToken>())
             .Returns(ModerationResult.Failed("Ban API error"));
@@ -229,9 +229,9 @@ public class ExamHandlerTests
     public async Task ApproveAsync_RaceCondition_TryUpdateFails_ReturnsFailureWithAttribution()
     {
         var exam = CreateTestExam();
-        _mockReportsRepo.GetExamFailureAsync(TestExamId, Arg.Any<CancellationToken>())
+        _mockReportsRepo.GetExamResultAsync(TestExamId, Arg.Any<CancellationToken>())
             .Returns(exam);
-        _mockExamFlowService.ApproveExamFailureAsync(
+        _mockExamFlowService.ApproveExamResultAsync(
                 Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(),
                 TestExamId, Arg.Any<Actor>(), Arg.Any<CancellationToken>())
             .Returns(new ModerationResult { Success = true });
@@ -243,7 +243,7 @@ public class ExamHandlerTests
 
         // Re-fetch shows handled
         var handled = CreateTestExam(reviewed: true);
-        _mockReportsRepo.GetExamFailureAsync(TestExamId, Arg.Any<CancellationToken>())
+        _mockReportsRepo.GetExamResultAsync(TestExamId, Arg.Any<CancellationToken>())
             .Returns(exam, handled);
 
         var result = await _handler.ApproveAsync(TestExamId, TestExecutor, CancellationToken.None);
@@ -257,9 +257,9 @@ public class ExamHandlerTests
     public async Task DenyAsync_RaceCondition_TryUpdateFails_ReturnsFailureWithAttribution()
     {
         var exam = CreateTestExam();
-        _mockReportsRepo.GetExamFailureAsync(TestExamId, Arg.Any<CancellationToken>())
+        _mockReportsRepo.GetExamResultAsync(TestExamId, Arg.Any<CancellationToken>())
             .Returns(exam);
-        _mockExamFlowService.DenyExamFailureAsync(
+        _mockExamFlowService.DenyExamResultAsync(
                 Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(),
                 Arg.Any<Actor>(), Arg.Any<long?>(), Arg.Any<CancellationToken>())
             .Returns(new ModerationResult { Success = true });
@@ -270,7 +270,7 @@ public class ExamHandlerTests
             .Returns(false);
 
         var handled = CreateTestExam(reviewed: true);
-        _mockReportsRepo.GetExamFailureAsync(TestExamId, Arg.Any<CancellationToken>())
+        _mockReportsRepo.GetExamResultAsync(TestExamId, Arg.Any<CancellationToken>())
             .Returns(exam, handled);
 
         var result = await _handler.DenyAsync(TestExamId, TestExecutor, CancellationToken.None);
@@ -284,9 +284,9 @@ public class ExamHandlerTests
     public async Task DenyAndBanAsync_RaceCondition_TryUpdateFails_ReturnsFailureWithAttribution()
     {
         var exam = CreateTestExam();
-        _mockReportsRepo.GetExamFailureAsync(TestExamId, Arg.Any<CancellationToken>())
+        _mockReportsRepo.GetExamResultAsync(TestExamId, Arg.Any<CancellationToken>())
             .Returns(exam);
-        _mockExamFlowService.DenyAndBanExamFailureAsync(
+        _mockExamFlowService.DenyAndBanExamResultAsync(
                 Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(),
                 Arg.Any<Actor>(), Arg.Any<long?>(), Arg.Any<CancellationToken>())
             .Returns(new ModerationResult { Success = true });
@@ -297,7 +297,7 @@ public class ExamHandlerTests
             .Returns(false);
 
         var handled = CreateTestExam(reviewed: true);
-        _mockReportsRepo.GetExamFailureAsync(TestExamId, Arg.Any<CancellationToken>())
+        _mockReportsRepo.GetExamResultAsync(TestExamId, Arg.Any<CancellationToken>())
             .Returns(exam, handled);
 
         var result = await _handler.DenyAndBanAsync(TestExamId, TestExecutor, CancellationToken.None);
@@ -311,16 +311,16 @@ public class ExamHandlerTests
 
     #region Helper Methods
 
-    private static ExamFailureRecord CreateTestExam(bool reviewed = false)
+    private static ExamResultRecord CreateTestExam(bool reviewed = false)
     {
-        return new ExamFailureRecord
+        return new ExamResultRecord
         {
             Id = TestExamId,
             User = new UserIdentity(TestUserId, "Test", null, "testuser"),
             Chat = new ChatIdentity(TestChatId, "Test Chat"),
             Score = 40,
             PassingThreshold = 70,
-            FailedAt = DateTimeOffset.UtcNow.AddMinutes(-10),
+            CompletedAt = DateTimeOffset.UtcNow.AddMinutes(-10),
             ReviewedAt = reviewed ? DateTimeOffset.UtcNow.AddMinutes(-5) : null,
             ReviewedBy = reviewed ? "other@test.com" : null,
             ActionTaken = reviewed ? "approve" : null

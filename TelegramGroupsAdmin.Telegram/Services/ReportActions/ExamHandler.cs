@@ -23,7 +23,7 @@ internal sealed class ExamHandler(
 
         var exam = fetch.Value!;
 
-        var result = await examFlowService.ApproveExamFailureAsync(
+        var result = await examFlowService.ApproveExamResultAsync(
             exam.User, exam.Chat, examId, executor, cancellationToken);
 
         if (!result.Success)
@@ -34,7 +34,7 @@ internal sealed class ExamHandler(
             "Manually approved after exam failure",
             async () =>
             {
-                var current = await reportsRepository.GetExamFailureAsync(examId, cancellationToken);
+                var current = await reportsRepository.GetExamResultAsync(examId, cancellationToken);
                 return current != null
                     ? ReportStatusHelper.CheckAlreadyHandled(current.ReviewedBy, current.ActionTaken, current.ReviewedAt)
                     : new ReviewActionResult(false, $"Exam failure {examId} could not be updated");
@@ -58,7 +58,7 @@ internal sealed class ExamHandler(
 
         var exam = fetch.Value!;
 
-        var result = await examFlowService.DenyExamFailureAsync(
+        var result = await examFlowService.DenyExamResultAsync(
             exam.User, exam.Chat, executor, examId, cancellationToken);
 
         if (!result.Success)
@@ -69,7 +69,7 @@ internal sealed class ExamHandler(
             "Denied entry after exam review",
             async () =>
             {
-                var current = await reportsRepository.GetExamFailureAsync(examId, cancellationToken);
+                var current = await reportsRepository.GetExamResultAsync(examId, cancellationToken);
                 return current != null
                     ? ReportStatusHelper.CheckAlreadyHandled(current.ReviewedBy, current.ActionTaken, current.ReviewedAt)
                     : new ReviewActionResult(false, $"Exam failure {examId} could not be updated");
@@ -93,7 +93,7 @@ internal sealed class ExamHandler(
 
         var exam = fetch.Value!;
 
-        var result = await examFlowService.DenyAndBanExamFailureAsync(
+        var result = await examFlowService.DenyAndBanExamResultAsync(
             exam.User, exam.Chat, executor, examId, cancellationToken);
 
         if (!result.Success)
@@ -104,7 +104,7 @@ internal sealed class ExamHandler(
             "Denied and banned after exam review",
             async () =>
             {
-                var current = await reportsRepository.GetExamFailureAsync(examId, cancellationToken);
+                var current = await reportsRepository.GetExamResultAsync(examId, cancellationToken);
                 return current != null
                     ? ReportStatusHelper.CheckAlreadyHandled(current.ReviewedBy, current.ActionTaken, current.ReviewedAt)
                     : new ReviewActionResult(false, $"Exam failure {examId} could not be updated");
@@ -120,17 +120,17 @@ internal sealed class ExamHandler(
             ActionName: "DenyAndBan");
     }
 
-    private async Task<FetchResult<ExamFailureRecord>> FetchExamAsync(long examId, CancellationToken cancellationToken)
+    private async Task<FetchResult<ExamResultRecord>> FetchExamAsync(long examId, CancellationToken cancellationToken)
     {
-        var exam = await reportsRepository.GetExamFailureAsync(examId, cancellationToken);
+        var exam = await reportsRepository.GetExamResultAsync(examId, cancellationToken);
         if (exam == null)
-            return FetchResult<ExamFailureRecord>.Fail($"Exam failure {examId} not found");
+            return FetchResult<ExamResultRecord>.Fail($"Exam failure {examId} not found");
 
         var alreadyHandled = ReportStatusHelper.CheckAlreadyHandled(
             exam.ReviewedBy, exam.ActionTaken, exam.ReviewedAt);
         if (alreadyHandled != null)
-            return FetchResult<ExamFailureRecord>.Handled(alreadyHandled.Message);
+            return FetchResult<ExamResultRecord>.Handled(alreadyHandled.Message);
 
-        return FetchResult<ExamFailureRecord>.Ok(exam);
+        return FetchResult<ExamResultRecord>.Ok(exam);
     }
 }

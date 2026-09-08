@@ -849,7 +849,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .HasColumnType("jsonb");
 
         // Partial unique index: Only ONE pending ContentReport per message (prevents duplicate reports)
-        // ExamFailures and ImpersonationAlerts don't have message IDs, so exclude them
+        // ExamResults and ImpersonationAlerts don't have message IDs, so exclude them
         modelBuilder.Entity<ReportDto>()
             .HasIndex(r => new { r.MessageId, r.ChatId })
             .HasFilter("status = 0 AND type = 0")

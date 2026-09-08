@@ -5,13 +5,13 @@ using TelegramGroupsAdmin.Core.Repositories;
 namespace TelegramGroupsAdmin.E2ETests.Infrastructure;
 
 /// <summary>
-/// Fluent builder for creating exam failure records in the database for E2E testing.
-/// Uses IReportsRepository to create unified review entries with Type=ExamFailure.
+/// Fluent builder for creating exam result records in the database for E2E testing.
+/// Uses IReportsRepository to create unified review entries with Type=ExamResult.
 /// </summary>
 /// <remarks>
 /// Usage:
 /// <code>
-/// var examFailure = await new TestExamFailureBuilder(Factory.Services)
+/// var examResult = await new TestExamResultBuilder(Factory.Services)
 ///     .WithUser(123456789, "testuser", "Test", "User")
 ///     .InChat(chat)
 ///     .WithScore(50, 80) // 50% score, 80% threshold (failed)
@@ -20,7 +20,7 @@ namespace TelegramGroupsAdmin.E2ETests.Infrastructure;
 ///     .BuildAsync();
 /// </code>
 /// </remarks>
-public class TestExamFailureBuilder
+public class TestExamResultBuilder
 {
     private readonly IServiceProvider _services;
 
@@ -32,7 +32,7 @@ public class TestExamFailureBuilder
     private Dictionary<int, int[]>? _shuffleState;
     private string? _openEndedAnswer;
     private string? _aiEvaluation;
-    private DateTimeOffset _failedAt = DateTimeOffset.UtcNow;
+    private DateTimeOffset _completedAt = DateTimeOffset.UtcNow;
     private string? _reviewedBy;
     private DateTimeOffset? _reviewedAt;
     private string? _actionTaken;
@@ -45,7 +45,7 @@ public class TestExamFailureBuilder
     private string? _userPhotoPath;
     private string? _chatName;
 
-    public TestExamFailureBuilder(IServiceProvider services)
+    public TestExamResultBuilder(IServiceProvider services)
     {
         _services = services;
         // Generate random user ID and chat ID by default
@@ -62,9 +62,9 @@ public class TestExamFailureBuilder
     }
 
     /// <summary>
-    /// Sets the user who failed the exam.
+    /// Sets the user who took the exam.
     /// </summary>
-    public TestExamFailureBuilder WithUser(long userId, string? username = null, string? firstName = null, string? lastName = null)
+    public TestExamResultBuilder WithUser(long userId, string? username = null, string? firstName = null, string? lastName = null)
     {
         _userId = userId;
         _userName = username;
@@ -76,7 +76,7 @@ public class TestExamFailureBuilder
     /// <summary>
     /// Sets the chat where the exam was taken.
     /// </summary>
-    public TestExamFailureBuilder InChat(long chatId, string? chatName = null)
+    public TestExamResultBuilder InChat(long chatId, string? chatName = null)
     {
         _chatId = chatId;
         _chatName = chatName;
@@ -86,7 +86,7 @@ public class TestExamFailureBuilder
     /// <summary>
     /// Sets the chat using a TestChat.
     /// </summary>
-    public TestExamFailureBuilder InChat(TestChat chat)
+    public TestExamResultBuilder InChat(TestChat chat)
     {
         _chatId = chat.ChatId;
         _chatName = chat.ChatName;
@@ -96,7 +96,7 @@ public class TestExamFailureBuilder
     /// <summary>
     /// Sets the exam score and passing threshold.
     /// </summary>
-    public TestExamFailureBuilder WithScore(int score, int passingThreshold = 80)
+    public TestExamResultBuilder WithScore(int score, int passingThreshold = 80)
     {
         _score = score;
         _passingThreshold = passingThreshold;
@@ -106,7 +106,7 @@ public class TestExamFailureBuilder
     /// <summary>
     /// Sets as a passing score (still recorded for review).
     /// </summary>
-    public TestExamFailureBuilder AsPassing()
+    public TestExamResultBuilder AsPassing()
     {
         _score = 100;
         _passingThreshold = 80;
@@ -116,7 +116,7 @@ public class TestExamFailureBuilder
     /// <summary>
     /// Sets as a failing score.
     /// </summary>
-    public TestExamFailureBuilder AsFailing()
+    public TestExamResultBuilder AsFailing()
     {
         _score = 50;
         _passingThreshold = 80;
@@ -126,7 +126,7 @@ public class TestExamFailureBuilder
     /// <summary>
     /// Sets the MC answers and shuffle state.
     /// </summary>
-    public TestExamFailureBuilder WithMcAnswers(Dictionary<int, string> answers, Dictionary<int, int[]>? shuffleState = null)
+    public TestExamResultBuilder WithMcAnswers(Dictionary<int, string> answers, Dictionary<int, int[]>? shuffleState = null)
     {
         _mcAnswers = answers;
         _shuffleState = shuffleState ?? new Dictionary<int, int[]>
@@ -140,7 +140,7 @@ public class TestExamFailureBuilder
     /// <summary>
     /// Sets the open-ended answer and AI evaluation.
     /// </summary>
-    public TestExamFailureBuilder WithOpenEndedAnswer(string answer, string? aiEvaluation = null)
+    public TestExamResultBuilder WithOpenEndedAnswer(string answer, string? aiEvaluation = null)
     {
         _openEndedAnswer = answer;
         _aiEvaluation = aiEvaluation;
@@ -150,7 +150,7 @@ public class TestExamFailureBuilder
     /// <summary>
     /// Sets the open-ended answer with a passing AI evaluation.
     /// </summary>
-    public TestExamFailureBuilder WithPassingOpenEnded(string answer = "I am genuinely interested in this community")
+    public TestExamResultBuilder WithPassingOpenEnded(string answer = "I am genuinely interested in this community")
     {
         _openEndedAnswer = answer;
         _aiEvaluation = "PASS - The answer demonstrates genuine interest and understanding of the group's purpose.";
@@ -160,7 +160,7 @@ public class TestExamFailureBuilder
     /// <summary>
     /// Sets the open-ended answer with a failing AI evaluation.
     /// </summary>
-    public TestExamFailureBuilder WithFailingOpenEnded(string answer = "idk")
+    public TestExamResultBuilder WithFailingOpenEnded(string answer = "idk")
     {
         _openEndedAnswer = answer;
         _aiEvaluation = "FAIL - Response is too short and does not demonstrate genuine interest.";
@@ -168,18 +168,18 @@ public class TestExamFailureBuilder
     }
 
     /// <summary>
-    /// Sets the failure timestamp.
+    /// Sets the completion timestamp.
     /// </summary>
-    public TestExamFailureBuilder FailedAt(DateTimeOffset timestamp)
+    public TestExamResultBuilder CompletedAt(DateTimeOffset timestamp)
     {
-        _failedAt = timestamp;
+        _completedAt = timestamp;
         return this;
     }
 
     /// <summary>
     /// Marks as reviewed with the specified action.
     /// </summary>
-    public TestExamFailureBuilder AsReviewed(string reviewedBy, string actionTaken, string? adminNotes = null)
+    public TestExamResultBuilder AsReviewed(string reviewedBy, string actionTaken, string? adminNotes = null)
     {
         _reviewedBy = reviewedBy;
         _reviewedAt = DateTimeOffset.UtcNow;
@@ -191,7 +191,7 @@ public class TestExamFailureBuilder
     /// <summary>
     /// Marks as approved.
     /// </summary>
-    public TestExamFailureBuilder AsApproved(string reviewedBy)
+    public TestExamResultBuilder AsApproved(string reviewedBy)
     {
         return AsReviewed(reviewedBy, "approved");
     }
@@ -199,7 +199,7 @@ public class TestExamFailureBuilder
     /// <summary>
     /// Marks as denied.
     /// </summary>
-    public TestExamFailureBuilder AsDenied(string reviewedBy)
+    public TestExamResultBuilder AsDenied(string reviewedBy)
     {
         return AsReviewed(reviewedBy, "denied");
     }
@@ -207,7 +207,7 @@ public class TestExamFailureBuilder
     /// <summary>
     /// Marks as denied and banned.
     /// </summary>
-    public TestExamFailureBuilder AsDeniedAndBanned(string reviewedBy)
+    public TestExamResultBuilder AsDeniedAndBanned(string reviewedBy)
     {
         return AsReviewed(reviewedBy, "denied_ban");
     }
@@ -215,21 +215,21 @@ public class TestExamFailureBuilder
     /// <summary>
     /// Sets the user's photo path.
     /// </summary>
-    public TestExamFailureBuilder WithUserPhoto(string photoPath)
+    public TestExamResultBuilder WithUserPhoto(string photoPath)
     {
         _userPhotoPath = photoPath;
         return this;
     }
 
     /// <summary>
-    /// Builds and persists the exam failure to the database.
+    /// Builds and persists the exam result to the database.
     /// </summary>
-    public async Task<TestExamFailure> BuildAsync(CancellationToken cancellationToken = default)
+    public async Task<TestExamResult> BuildAsync(CancellationToken cancellationToken = default)
     {
         using var scope = _services.CreateScope();
         var reportsRepository = scope.ServiceProvider.GetRequiredService<IReportsRepository>();
 
-        var examFailure = new ExamFailureRecord
+        var examResult = new ExamResultRecord
         {
             Id = 0, // Will be assigned by database
             McAnswers = _mcAnswers,
@@ -238,7 +238,7 @@ public class TestExamFailureBuilder
             Score = _score,
             PassingThreshold = _passingThreshold,
             AiEvaluation = _aiEvaluation,
-            FailedAt = _failedAt,
+            CompletedAt = _completedAt,
             ReviewedBy = _reviewedBy,
             ReviewedAt = _reviewedAt,
             ActionTaken = _actionTaken,
@@ -249,10 +249,10 @@ public class TestExamFailureBuilder
             UserPhotoPath = _userPhotoPath
         };
 
-        var id = await reportsRepository.InsertExamFailureAsync(examFailure, cancellationToken);
+        var id = await reportsRepository.InsertExamResultAsync(examResult, cancellationToken);
 
-        // InsertExamFailureAsync always creates with Pending status
-        // If this exam failure is already reviewed, update the status separately
+        // InsertExamResultAsync always creates with Pending status
+        // If this exam result is already reviewed, update the status separately
         if (_reviewedAt.HasValue && !string.IsNullOrEmpty(_reviewedBy) && !string.IsNullOrEmpty(_actionTaken))
         {
             await reportsRepository.UpdateStatusAsync(
@@ -264,27 +264,27 @@ public class TestExamFailureBuilder
                 cancellationToken);
         }
 
-        return new TestExamFailure(
+        return new TestExamResult(
             Id: (int)id,
             UserId: _userId,
             ChatId: _chatId,
             Score: _score,
             PassingThreshold: _passingThreshold,
-            FailedAt: _failedAt,
+            CompletedAt: _completedAt,
             ActionTaken: _actionTaken
         );
     }
 }
 
 /// <summary>
-/// Represents a test exam failure for E2E testing.
+/// Represents a test exam result for E2E testing.
 /// </summary>
-public record TestExamFailure(
+public record TestExamResult(
     int Id,
     long UserId,
     long ChatId,
     int Score,
     int PassingThreshold,
-    DateTimeOffset FailedAt,
+    DateTimeOffset CompletedAt,
     string? ActionTaken
 );

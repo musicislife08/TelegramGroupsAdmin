@@ -12,8 +12,8 @@ public enum ReportType
     /// <summary>Auto-detected account impersonation</summary>
     ImpersonationAlert = 1,
 
-    /// <summary>Failed entrance exam awaiting admin decision</summary>
-    ExamFailure = 2,
+    /// <summary>Completed entrance exam (pass or fail); failures await admin decision</summary>
+    ExamResult = 2,
 
     /// <summary>Profile scan flagged user for admin review</summary>
     ProfileScanAlert = 3

@@ -25,7 +25,7 @@ public record ReportBase
     /// <summary>
     /// For ImpersonationAlert: the suspected user ID
     /// For ContentReport: the message author user ID
-    /// For ExamFailure: the user who failed the exam
+    /// For ExamResult: the user who failed the exam
     /// </summary>
     public long? SubjectUserId { get; init; }
 
