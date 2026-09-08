@@ -53,7 +53,7 @@ Origin: prod DB snapshot from 2026-04-30. Bootstrap pipeline (full detail in `do
 | 27 | user_tags | 12 | |
 | 28 | welcome_responses | 11 | Deliberately trimmed from 293 (Pre-3A.7 audit): no test exercised the prod-derived volume. Kept: 5 synthetics 999001..999005 (one per WelcomeResponseType, anchors `WelcomeTimeoutJobTests`), 4 prod-derived MainChat anchors (ids 73/75/94/128) for AnalyticsRepositoryTests' status-distributed shape (3 Accepted + 1 Timeout + the synthetic Denied/Left filling out the 6 analytics windows), 2 non-MainChat keepers (ids 55/121) for chat-grouping shape diversity. |
 | 29 | invites | 19 | |
-| 30 | reports | 13 | `reviewed_by` mapped via deterministic hashtext to canonical fixture emails. Ids 186-188 are synthetic pending fixtures (one user, three report types) added for join-gate cleanup tests. |
+| 30 | reports | 14 | `reviewed_by` mapped via deterministic hashtext to canonical fixture emails. Ids 186-188 are synthetic pending fixtures (one user, three report types) added for join-gate cleanup tests. All six pre-existing exam (`type=2`) contexts carry `"outcome": 0`. |
 | 31 | message_edits | 23 | Edit history for messages whose canonical row carries `edit_count > 0`. |
 | 32 | detection_results | 376 | URL hostnames in `check_results_json` scrubbed to `canonical-spam.test`. `is_spam` is a generated column. |
 | 33 | training_labels | 200 | 185 prod-derived + 15 synthetic explicit_ham promotions (`reason='canonical_synthetic_promotion'`). |
@@ -93,6 +93,7 @@ Layout (`internal static class GoldenDatasetConstants` with nested static classe
 - `Chats` — `MainChatId`
 - `Retention` — message anchors, `MessageShifts`, `AllMessageRefs`, `ExpectedDeletionsWith30DayRetention` (consumed by `MessageHistoryRepositoryTests.CleanupExpiredAsync_*`)
 - `Analytics` — DR / WR anchors, `DetectionResultShifts`, `WelcomeResponseShifts`, `AllMessageRefs`, expected counts (consumed by `AnalyticsRepositoryTests`)
+- `Reports` — `PendingExamFailureId`, `ResolvedExamFailureId`, `AutoApprovedExamPassId`, `AutoApprovedExamPassUserId` (consumed by `ExamResultRepositoryTests`)
 
 Promote a constant to its top-level domain class (`WebUsers`, `Chats`) once a second consumer wants it; until then, keep it under a test-domain nested class next to the tests that use it. The `GoldenDataset.cs` loader file holds the canonical *behavior* (`LoadCanonicalAsync`, `Reduce`, `Mutate`); the constants file holds canonical *data*.
 
@@ -253,7 +254,8 @@ Recipe format: a heading, the anchor id(s), a one-line description, and "use whe
 - `welcome_responses` IDs `999001..999005`: 5 status branches anchored on `(MainChat_Id=-100026957614982, user_id=9196379650113, username='canonical_user1')`. Mapping: `999001`=Pending, `999002`=Accepted, `999003`=Denied, `999004`=Timeout, `999005`=Left.
 - `username_blacklist` IDs `999001` (`pattern='spambot_admin'`, enabled, Exact match) + `999005` (`pattern='archived_pattern'`, disabled, Exact match). No Contains/Regex/StartsWith fixtures (feature not yet implemented).
 - `training_labels` rows with `reason='canonical_synthetic_promotion'`: 15 explicit_ham promotions. `labeled_by_user_id` is the rotated id of prod user `1312830442` (a stable canonical synthetic-promotion attribution anchor).
-- `reports` IDs `186..188`: 3 pending (`status=0`) fixtures, all for `9465377455871`, added for join-gate cleanup tests (the golden dataset's real reports are all already resolved). `186`=ContentReport pointing at real message `(70989, -100054416618415)` so the `enriched_reports.content_user_id` join resolves; `187`=ExamFailure in chat `-100054416618415`; `188`=ProfileScanAlert in chat `-100048429560480`. `188` is also the one pre-existing pending profile-scan alert `ProfileScanAlertMappingTests` must account for.
+- `reports` IDs `186..188`: 3 pending (`status=0`) fixtures, all for `9465377455871`, added for join-gate cleanup tests (the golden dataset's real reports are all already resolved). `186`=ContentReport pointing at real message `(70989, -100054416618415)` so the `enriched_reports.content_user_id` join resolves; `187`=ExamResult (failure) in chat `-100054416618415`; `188`=ProfileScanAlert in chat `-100048429560480`. `188` is also the one pre-existing pending profile-scan alert `ProfileScanAlertMappingTests` must account for.
+- `reports` ID `189`: synthetic auto-approved ExamResult pass (status=1, `reviewed_by='Exam Flow'`, `action_taken='auto-approved'`, context `outcome=1`) for user `9960171136314` in MainChat, anchoring the auto-approval override tests. All six pre-existing exam contexts (`179, 181, 182, 183, 185, 187`) now carry `"outcome": 0`.
 
 ### Cross-references
 - **Auth password (all 9 web users):** `Passw0rd!SaidNoSecurityAuditorEver`. Hash baked into `01_users.sql`.

@@ -41,6 +41,12 @@ public record ExamResultRecord
     /// </summary>
     public string? AiEvaluation { get; init; }
 
+    /// <summary>ActionTaken sentinel for a pass record no human has touched yet.</summary>
+    public const string AutoApprovedActionTaken = "auto-approved";
+
+    /// <summary>Final exam outcome (from JSONB context).</summary>
+    public ExamOutcome Outcome { get; init; }
+
     /// <summary>
     /// When the exam was completed.
     /// </summary>

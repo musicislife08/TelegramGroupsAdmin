@@ -612,15 +612,21 @@ public class ReportsRepository : IReportsRepository
             OpenEndedAnswer = examResult.OpenEndedAnswer,
             Score = examResult.Score,
             PassingThreshold = examResult.PassingThreshold,
-            AiEvaluation = examResult.AiEvaluation
+            AiEvaluation = examResult.AiEvaluation,
+            Outcome = examResult.Outcome
         };
 
+        var isPass = examResult.Outcome == ExamOutcome.Passed;
         var entity = new ReportDto
         {
             Type = (short)ReportType.ExamResult,
             ChatId = examResult.Chat.Id,
             ReportedAt = examResult.CompletedAt,
-            Status = (int)ReportStatus.Pending,
+            Status = (int)(isPass ? ReportStatus.Reviewed : ReportStatus.Pending),
+            ReviewedBy = isPass ? Actor.ExamFlow.GetDisplayText() : null,
+            ActionTaken = isPass ? ExamResultRecord.AutoApprovedActionTaken : null,
+            ReviewedAt = isPass ? DateTimeOffset.UtcNow : null,
+            AdminNotes = isPass ? examResult.AiEvaluation : null,
             Context = JsonSerializer.Serialize(examContext, JsonOptions)
         };
 
@@ -628,12 +634,13 @@ public class ReportsRepository : IReportsRepository
         await context.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation(
-            "Created exam failure report #{ReportId}: User {UserId} in chat {ChatId} (score: {Score}/{Threshold})",
+            "Created exam result report #{ReportId}: User {UserId} in chat {ChatId} (score: {Score}/{Threshold}, outcome: {Outcome})",
             entity.Id,
             examResult.User.Id,
             examResult.Chat.Id,
             examResult.Score,
-            examResult.PassingThreshold);
+            examResult.PassingThreshold,
+            examResult.Outcome);
 
         return entity.Id;
     }

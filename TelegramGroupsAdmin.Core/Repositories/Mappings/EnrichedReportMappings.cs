@@ -103,6 +103,7 @@ internal static class EnrichedReportMappings
             Score = examContext.Score,
             PassingThreshold = examContext.PassingThreshold,
             AiEvaluation = examContext.AiEvaluation,
+            Outcome = examContext.Outcome,
 
             // From view joins (no more N+1!)
             User = new UserIdentity(examContext.UserId, view.ExamFirstName, view.ExamLastName, view.ExamUsername),
