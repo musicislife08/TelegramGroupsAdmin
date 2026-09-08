@@ -303,6 +303,10 @@ public class ExamFlowServiceTests
                 Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(new ExamEvaluationResult(Passed: true, Reasoning: "Genuine, on-topic answer", Confidence: 0.9));
 
+        const long insertedExamResultId = 4242L;
+        _reportsRepo.InsertExamResultAsync(Arg.Any<ExamResultRecord>(), Arg.Any<CancellationToken>())
+            .Returns(insertedExamResultId);
+
         // Act
         var result = await _service.HandleOpenEndedAnswerAsync(TestChatId, user, "Because I want to learn and contribute.");
 
@@ -317,11 +321,13 @@ public class ExamFlowServiceTests
             _sessionRepo.DeleteSessionAsync(Arg.Any<long>(), Arg.Any<CancellationToken>());
         });
 
+        // Pins the examResultId returned by the insert to the value threaded into the
+        // notification call — proves propagation, not just "some long was passed".
         await _notificationService.Received(1).SendExamPassNotificationAsync(
             Arg.Any<ChatIdentity>(), Arg.Any<UserIdentity>(),
             Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>(),
             Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<string?>(),
-            Arg.Any<long>(), Arg.Any<CancellationToken>());
+            insertedExamResultId, Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -343,6 +349,10 @@ public class ExamFlowServiceTests
                 Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(new ExamEvaluationResult(Passed: false, Reasoning: "Off-topic, generic response", Confidence: 0.8));
 
+        const long insertedExamResultId = 4242L;
+        _reportsRepo.InsertExamResultAsync(Arg.Any<ExamResultRecord>(), Arg.Any<CancellationToken>())
+            .Returns(insertedExamResultId);
+
         // Act
         var result = await _service.HandleOpenEndedAnswerAsync(TestChatId, user, "nah");
 
@@ -356,6 +366,14 @@ public class ExamFlowServiceTests
                 Arg.Any<CancellationToken>());
             _sessionRepo.DeleteSessionAsync(Arg.Any<long>(), Arg.Any<CancellationToken>());
         });
+
+        // Pins the examResultId returned by the insert to the value threaded into the
+        // notification call — proves propagation, not just "some long was passed".
+        await _notificationService.Received(1).SendExamFailureNotificationAsync(
+            Arg.Any<ChatIdentity>(), Arg.Any<UserIdentity>(),
+            Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>(),
+            Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<string?>(),
+            insertedExamResultId, Arg.Any<CancellationToken>());
 
         await _notificationService.DidNotReceiveWithAnyArgs().SendExamPassNotificationAsync(
             default!, default!, default, default, default, default,
