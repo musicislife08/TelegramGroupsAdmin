@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using TelegramGroupsAdmin.ContentDetection.Models;
+using TelegramGroupsAdmin.Core;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Data;
@@ -31,29 +33,26 @@ public class ImageTrainingSamplesRepository : IImageTrainingSamplesRepository
     /// Get recent image training samples with their photo hashes
     /// Returns samples ordered by most recent first
     /// </summary>
-    public async Task<List<(byte[] PhotoHash, bool IsSpam)>> GetRecentSamplesAsync(
-        int limit = 1000,
+    public async Task<List<ImageTrainingSample>> GetRecentSamplesAsync(
+        int limit,
         CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        try
-        {
-            var samples = await context.ImageTrainingSamples
-                .AsNoTracking()
-                .OrderByDescending(its => its.MarkedAt)
-                .Take(limit)
-                .Select(its => new { its.PhotoHash, its.IsSpam })
-                .ToListAsync(cancellationToken);
 
-            _logger.LogDebug("Retrieved {Count} image training samples for hash comparison", samples.Count);
+        var samples = await context.ImageTrainingSamples
+            .AsNoTracking()
+            // A NULL or wrong-length hash means the source image is gone (or, after a
+            // migration rollback, was backfilled with a zero-length placeholder) and cannot be
+            // compared. Comparing against it would throw in CompareHashes.
+            .Where(its => its.PhotoHash != null && its.PhotoHash.Length == HashingConstants.PhotoHashByteCount)
+            .OrderByDescending(its => its.MarkedAt)
+            .Take(limit)
+            .Select(its => new { its.PhotoHash, its.IsSpam })
+            .ToListAsync(cancellationToken);
 
-            return samples.Select(s => (s.PhotoHash, s.IsSpam)).ToList();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to retrieve image training samples");
-            return [];
-        }
+        _logger.LogDebug("Retrieved {Count} image training samples for hash comparison", samples.Count);
+
+        return samples.Select(s => new ImageTrainingSample(s.PhotoHash!, s.IsSpam)).ToList();
     }
 
     /// <summary>

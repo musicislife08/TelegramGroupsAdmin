@@ -1,12 +1,11 @@
 using System.IO.Abstractions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.Processing;
 using Telegram.Bot.Exceptions;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Core.Extensions;
+using TelegramGroupsAdmin.Core.Imaging;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Models;
@@ -23,6 +22,7 @@ public class BotMediaService : IBotMediaService
     private readonly IBotMediaHandler _mediaHandler;
     private readonly IBotChatHandler _chatHandler;
     private readonly IFileSystem _fileSystem;
+    private readonly IImageProcessor _imageProcessor;
     private readonly ILogger<BotMediaService> _logger;
     private readonly string _chatIconsPath;
     private readonly string _userPhotosPath;
@@ -32,11 +32,13 @@ public class BotMediaService : IBotMediaService
         IBotChatHandler chatHandler,
         IFileSystem fileSystem,
         IOptions<AppOptions> appOptions,
+        IImageProcessor imageProcessor,
         ILogger<BotMediaService> logger)
     {
         _mediaHandler = mediaHandler;
         _chatHandler = chatHandler;
         _fileSystem = fileSystem;
+        _imageProcessor = imageProcessor;
         _logger = logger;
 
         // Create subdirectories for chat icons and user photos under media/
@@ -105,7 +107,11 @@ public class BotMediaService : IBotMediaService
                 }
 
                 // Resize to 64x64 icon
-                await ResizeImageAsync(tempPath, localPath, 64, ct);
+                if (!await ResizeImageAsync(tempPath, localPath, 64, ct))
+                {
+                    _logger.LogWarning("Could not decode downloaded photo for user {User}", user.ToLogDebug(userId));
+                    return null;
+                }
 
                 _logger.LogDebug("Cached user photo for {User}: {Path}", user.ToLogDebug(userId), relativePath);
                 return new UserPhotoResult(relativePath, currentPhotoId);
@@ -180,7 +186,11 @@ public class BotMediaService : IBotMediaService
                 }
 
                 // Resize to 64x64 icon
-                await ResizeImageAsync(tempPath, localPath, 64, ct);
+                if (!await ResizeImageAsync(tempPath, localPath, 64, ct))
+                {
+                    _logger.LogWarning("Could not decode downloaded photo for chat {Chat}", chat.ToLogDebug());
+                    return null;
+                }
 
                 _logger.LogDebug("Cached chat icon for {Chat}", chat.ToLogDebug());
                 return relativePath;
@@ -227,34 +237,54 @@ public class BotMediaService : IBotMediaService
     }
 
     /// <summary>
-    /// Resize image to square icon using ImageSharp.
-    /// Uses IFileSystem streams for testability - all I/O goes through the abstraction,
-    /// leaving ImageSharp to only handle the image mutation.
+    /// Resize image to square icon, cropping to fill.
+    /// I/O goes through IFileSystem for testability; IImageProcessor only transforms.
+    ///
+    /// Decodes and resizes into a temp file first, then moves it into place. This
+    /// guarantees targetPath is never truncated or replaced until a new icon has
+    /// been fully and successfully produced, so a failed regeneration (e.g. a
+    /// truncated or non-image download from Telegram) can never destroy a
+    /// previously-cached icon. Returns false when the source was not a decodable
+    /// image, in which case targetPath is left untouched.
     /// </summary>
-    private async Task ResizeImageAsync(
+    private async Task<bool> ResizeImageAsync(
         string sourcePath,
         string targetPath,
         int size,
         CancellationToken ct = default)
     {
-        // Read source image through IFileSystem
-        await using var sourceStream = _fileSystem.File.OpenRead(sourcePath);
-        using var image = await Image.LoadAsync(sourceStream, ct);
-
-        // Crop to center square, then resize (ImageSharp handles mutation)
-        image.Mutate(x => x
-            .Resize(new ResizeOptions
-            {
-                Size = new Size(size, size),
-                Mode = ResizeMode.Crop,
-                Position = AnchorPositionMode.Center
-            }));
-
-        // Write target image through IFileSystem
-        await using var targetStream = _fileSystem.File.Create(targetPath);
-        await image.SaveAsJpegAsync(targetStream, new SixLabors.ImageSharp.Formats.Jpeg.JpegEncoder
+        var tempPath = targetPath + ".tmp";
+        try
         {
-            Quality = 85
-        }, ct);
+            await using (var sourceStream = _fileSystem.File.OpenRead(sourcePath))
+            await using (var targetStream = _fileSystem.File.Create(tempPath))
+            {
+                if (!await _imageProcessor.ResizeToFillAsync(sourceStream, targetStream, size, ImageEncoding.Jpeg(85), ct))
+                {
+                    return false;
+                }
+            }
+
+            // Only now is the existing icon, if any, replaced.
+            _fileSystem.File.Move(tempPath, targetPath, overwrite: true);
+            return true;
+        }
+        finally
+        {
+            // Covers the decode-failed return AND any exception unwinding through here.
+            if (_fileSystem.File.Exists(tempPath))
+            {
+                try
+                {
+                    _fileSystem.File.Delete(tempPath);
+                }
+                catch (IOException ex)
+                {
+                    // Best-effort cleanup: a stray .tmp file is harmless and will be
+                    // overwritten by the next regeneration attempt at this path.
+                    _logger.LogDebug(ex, "Could not delete temp icon file: {TempPath}", tempPath);
+                }
+            }
+        }
     }
 }

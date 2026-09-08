@@ -7,6 +7,7 @@ using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Data.Services;
 using TelegramGroupsAdmin.Endpoints;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Telegram.Services.Hashing;
 
 namespace TelegramGroupsAdmin;
 
@@ -142,6 +143,26 @@ public static class WebApplicationExtensions
                 app.Logger.LogWarning(ex, "Failed to seed default ban celebration captions (non-fatal)");
             }
 
+        }
+
+        /// <summary>
+        /// Refills perceptual hashes cleared by the v1-to-v2 hash migration. Runs on
+        /// every start; it is a cheap no-op once every recoverable hash is filled.
+        /// </summary>
+        public async Task RunPhotoHashRehashAsync()
+        {
+            using var scope = app.Services.CreateScope();
+            var service = scope.ServiceProvider.GetRequiredService<IPhotoHashRehashService>();
+
+            try
+            {
+                await service.RehashAsync();
+            }
+            catch (Exception ex)
+            {
+                // Detection degrades to misses without this; it must never block startup.
+                app.Logger.LogError(ex, "Photo hash rehash failed; hashes remain NULL and will be retried on next start");
+            }
         }
     }
 

@@ -1,9 +1,11 @@
 using System.IO.Abstractions;
 using Microsoft.Extensions.DependencyInjection;
+using TelegramGroupsAdmin.Core.Imaging;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
+using TelegramGroupsAdmin.Telegram.Services.Hashing;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.Bot.Handlers;
 using TelegramGroupsAdmin.Telegram.Services.ReportActions;
@@ -165,8 +167,10 @@ public static class ServiceCollectionExtensions
             services.AddScoped<TrainingDataDeduplicationService>();
 
             // Phase 4.10: Anti-Impersonation Detection
+            services.AddSingleton<IImageProcessor, SkiaImageProcessor>();
             services.AddSingleton<IPhotoHashService, PhotoHashService>();
             services.AddScoped<IImpersonationDetectionService, ImpersonationDetectionService>();
+            services.AddScoped<IPhotoHashRehashService, PhotoHashRehashService>(); // Refills photo_hash values cleared by the v1-to-v2 hash migration (#523)
 
             // Entrance exam evaluation (uses content moderation AI connection)
             services.AddScoped<IExamEvaluationService, ExamEvaluationService>();

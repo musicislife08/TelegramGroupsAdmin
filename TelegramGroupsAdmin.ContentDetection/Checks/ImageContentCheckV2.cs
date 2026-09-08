@@ -106,13 +106,13 @@ public class ImageContentCheckV2(
                         double bestSimilarity = 0.0;
                         bool? matchedSpamLabel = null;
 
-                        foreach (var (sampleHash, isSpam) in trainingSamples)
+                        foreach (var sample in trainingSamples)
                         {
-                            var similarity = photoHashService.CompareHashes(photoHash, sampleHash);
+                            var similarity = photoHashService.CompareHashes(photoHash, sample.PhotoHash);
                             if (similarity > bestSimilarity)
                             {
                                 bestSimilarity = similarity;
-                                matchedSpamLabel = isSpam;
+                                matchedSpamLabel = sample.IsSpam;
                             }
                         }
 

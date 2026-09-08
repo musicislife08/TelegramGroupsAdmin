@@ -1,10 +1,9 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.Processing;
 using Telegram.Bot.Exceptions;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Core.Extensions;
+using TelegramGroupsAdmin.Core.Imaging;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Models;
@@ -24,6 +23,7 @@ public class TelegramPhotoService
     private readonly ILogger<TelegramPhotoService> _logger;
     private readonly IBotMediaService _mediaService;
     private readonly IBotChatService _chatService;
+    private readonly IImageProcessor _imageProcessor;
     private readonly string _chatIconsPath;
     private readonly string _userPhotosPath;
 
@@ -31,11 +31,13 @@ public class TelegramPhotoService
         ILogger<TelegramPhotoService> logger,
         IBotMediaService mediaService,
         IBotChatService chatService,
+        IImageProcessor imageProcessor,
         IOptions<AppOptions> appOptions)
     {
         _logger = logger;
         _mediaService = mediaService;
         _chatService = chatService;
+        _imageProcessor = imageProcessor;
 
         // Create subdirectories for chat icons and user photos under media/
         var mediaPath = Path.Combine(appOptions.Value.DataPath, "media");
@@ -93,7 +95,11 @@ public class TelegramPhotoService
                 }
 
                 // Resize to 64x64 icon
-                await ResizeImageAsync(tempPath, localPath, 64, cancellationToken);
+                if (!await ResizeImageAsync(tempPath, localPath, 64, cancellationToken))
+                {
+                    _logger.LogWarning("Could not decode downloaded photo for chat {Chat}", chat.ToLogDebug());
+                    return null;
+                }
 
                 _logger.LogDebug("Cached chat icon for {Chat}", chat.ToLogDebug());
                 return relativePath;
@@ -206,7 +212,11 @@ public class TelegramPhotoService
                 }
 
                 // Resize to 64x64 icon
-                await ResizeImageAsync(tempPath, localPath, 64, cancellationToken);
+                if (!await ResizeImageAsync(tempPath, localPath, 64, cancellationToken))
+                {
+                    _logger.LogWarning("Could not decode downloaded photo for user {User}", user.ToLogDebug(userId));
+                    return null;
+                }
 
                 _logger.LogDebug("Cached user photo for {User}: {Path}", user.ToLogDebug(userId), relativePath);
                 return new UserPhotoResult(relativePath, currentPhotoId);
@@ -242,24 +252,49 @@ public class TelegramPhotoService
     }
 
     /// <summary>
-    /// Resize image to square icon using ImageSharp
+    /// Resize an image to a square icon, cropping to fill.
+    ///
+    /// Decodes and resizes into a temp file first, then moves it into place. This
+    /// guarantees targetPath is never truncated or replaced until a new icon has
+    /// been fully and successfully produced, so a failed regeneration (e.g. a
+    /// truncated or non-image download from Telegram) can never destroy a
+    /// previously-cached icon. Returns false when the source was not a decodable
+    /// image, in which case targetPath is left untouched.
     /// </summary>
-    private async Task ResizeImageAsync(string sourcePath, string targetPath, int size, CancellationToken cancellationToken = default)
+    private async Task<bool> ResizeImageAsync(string sourcePath, string targetPath, int size, CancellationToken cancellationToken = default)
     {
-        using var image = await Image.LoadAsync(sourcePath, cancellationToken);
-
-        // Crop to center square, then resize
-        image.Mutate(x => x
-            .Resize(new ResizeOptions
-            {
-                Size = new Size(size, size),
-                Mode = ResizeMode.Crop, // Crop to fill square
-                Position = AnchorPositionMode.Center
-            }));
-
-        await image.SaveAsJpegAsync(targetPath, new SixLabors.ImageSharp.Formats.Jpeg.JpegEncoder
+        var tempPath = targetPath + ".tmp";
+        try
         {
-            Quality = 85
-        }, cancellationToken);
+            await using (var source = File.OpenRead(sourcePath))
+            await using (var target = File.Create(tempPath))
+            {
+                if (!await _imageProcessor.ResizeToFillAsync(source, target, size, ImageEncoding.Jpeg(85), cancellationToken))
+                {
+                    return false;
+                }
+            }
+
+            // Only now is the existing icon, if any, replaced.
+            File.Move(tempPath, targetPath, overwrite: true);
+            return true;
+        }
+        finally
+        {
+            // Covers the decode-failed return AND any exception unwinding through here.
+            if (File.Exists(tempPath))
+            {
+                try
+                {
+                    File.Delete(tempPath);
+                }
+                catch (IOException ex)
+                {
+                    // Best-effort cleanup: a stray .tmp file is harmless and will be
+                    // overwritten by the next regeneration attempt at this path.
+                    _logger.LogDebug(ex, "Could not delete temp icon file: {TempPath}", tempPath);
+                }
+            }
+        }
     }
 }

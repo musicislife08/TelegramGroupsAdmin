@@ -1,11 +1,10 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.IO;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.Processing;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Models.Welcome;
 using TelegramGroupsAdmin.Core.Extensions;
+using TelegramGroupsAdmin.Core.Imaging;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Repositories;
 using TelegramGroupsAdmin.Core.Services;
@@ -32,6 +31,7 @@ public sealed class ProfileScanService(
     IServiceScopeFactory scopeFactory,
     PipelineMetrics pipelineMetrics,
     RecyclableMemoryStreamManager streamManager,
+    IImageProcessor imageProcessor,
     ILogger<ProfileScanService> logger) : IProfileScanService
 {
     /// <summary>
@@ -658,20 +658,61 @@ public sealed class ProfileScanService(
         if (!File.Exists(photoPath))
             return;
 
+        var tempPath = photoPath + ".censoring";
         try
         {
-            using var image = await Image.LoadAsync(photoPath, ct);
-            // ImageSharp GaussianBlur kernel is ~6*sigma+1 pixels; clamp so it fits the image
-            var maxSigma = Math.Min(image.Width, image.Height) / 6f;
+            // Blur to a temporary file first: the source and destination are the
+            // same path, so streaming straight back would truncate the input.
+            var dimensions = ReadDimensions(photoPath);
+            if (dimensions is null)
+            {
+                logger.LogWarning("Profile scan: could not decode profile photo for {User}", user.ToLogDebug());
+                return;
+            }
+
+            // Skia's blur kernel spans roughly 6*sigma; clamp so it fits the image.
+            var maxSigma = Math.Min(dimensions.Width, dimensions.Height) / 6f;
             var sigma = Math.Min(40f, maxSigma);
-            image.Mutate(x => x.GaussianBlur(sigma));
-            await image.SaveAsJpegAsync(photoPath, ct);
+
+            await using (var source = File.OpenRead(photoPath))
+            await using (var target = File.Create(tempPath))
+            {
+                if (!await imageProcessor.BlurAsync(source, target, sigma, ImageEncoding.Jpeg(85), ct))
+                {
+                    logger.LogWarning("Profile scan: blur failed for {User}", user.ToLogDebug());
+                    return;
+                }
+            }
+
+            File.Move(tempPath, photoPath, overwrite: true);
             logger.LogInformation("Profile scan: censored profile photo for banned {User}", user.ToLogInfo());
         }
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Profile scan: failed to censor profile photo for {User}", user.ToLogDebug());
         }
+        finally
+        {
+            if (File.Exists(tempPath))
+            {
+                try
+                {
+                    File.Delete(tempPath);
+                }
+                catch (IOException ex)
+                {
+                    // Best-effort cleanup: a stray .censoring file is harmless and will
+                    // be overwritten by the next censoring attempt at this path.
+                    logger.LogDebug(ex, "Could not delete temp censoring file: {TempPath}", tempPath);
+                }
+            }
+        }
+    }
+
+    private ImageDimensions? ReadDimensions(string path)
+    {
+        using var stream = File.OpenRead(path);
+        return imageProcessor.ReadDimensions(stream);
     }
 
     private record ImageCollectionResult(List<ImageInput> Images, string? Labels);
@@ -786,29 +827,37 @@ public sealed class ProfileScanService(
         return new ImageCollectionResult(images, labelString);
     }
 
-    private static async Task<byte[]> ResizeForVisionAsync(Stream imageStream, int maxDimension = VisionMaxDimension)
+    private async Task<byte[]> ResizeForVisionAsync(Stream imageStream, int maxDimension = VisionMaxDimension)
     {
         imageStream.Position = 0;
-        using var image = await Image.LoadAsync(imageStream);
+        var dimensions = imageProcessor.ReadDimensions(imageStream);
 
-        if (image.Width <= maxDimension && image.Height <= maxDimension)
+        if (dimensions is null || (dimensions.Width <= maxDimension && dimensions.Height <= maxDimension))
         {
-            // Image fits — return raw bytes without re-encoding
-            imageStream.Position = 0;
-            using var passthrough = new MemoryStream((int)imageStream.Length);
-            await imageStream.CopyToAsync(passthrough);
-            return passthrough.ToArray();
+            // Already within bounds, or undecodable — hand back the original bytes
+            // rather than re-encoding.
+            return await ReadAllBytesAsync(imageStream);
         }
 
-        image.Mutate(x => x.Resize(new ResizeOptions
-        {
-            Size = new Size(maxDimension, maxDimension),
-            Mode = ResizeMode.Max // Scale largest dimension, preserve aspect ratio
-        }));
-
+        imageStream.Position = 0;
         using var output = new MemoryStream();
-        await image.SaveAsJpegAsync(output, new SixLabors.ImageSharp.Formats.Jpeg.JpegEncoder { Quality = 85 });
+        if (!await imageProcessor.ResizeToFitAsync(imageStream, output, maxDimension, ImageEncoding.Jpeg(85)))
+        {
+            // Dimensions parsed from the header, but the full decode failed (e.g. a
+            // truncated download) — fall back to the original bytes rather than
+            // sending an empty image to the vision model.
+            return await ReadAllBytesAsync(imageStream);
+        }
+
         return output.ToArray();
+    }
+
+    private static async Task<byte[]> ReadAllBytesAsync(Stream imageStream)
+    {
+        imageStream.Position = 0;
+        using var passthrough = new MemoryStream((int)imageStream.Length);
+        await imageStream.CopyToAsync(passthrough);
+        return passthrough.ToArray();
     }
 
     private static string ToMimeType(Storage_FileType fileType) => fileType switch

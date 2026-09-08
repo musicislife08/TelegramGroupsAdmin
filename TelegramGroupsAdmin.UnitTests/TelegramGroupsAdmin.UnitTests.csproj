@@ -23,7 +23,6 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <PackageReference Include="NUnit3TestAdapter" />
-    <PackageReference Include="SixLabors.ImageSharp" />
     <PackageReference Include="Testably.Abstractions.Testing" />
     <PackageReference Include="WireMock.Net" />
     <PackageReference Include="Microsoft.Extensions.Caching.Hybrid" />
