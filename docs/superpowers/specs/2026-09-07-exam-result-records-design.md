@@ -211,8 +211,9 @@ The audit event is written only when the action actually won the race (no audit 
   logs a `ReportReviewed` audit event (override wording for pass actions) and race losers log
   nothing.
 - **Integration** — `ReportsRepositoryTests`: `TryOverrideAutoDecisionAsync` atomicity (two
-  concurrent overrides, one winner); outcome round-trips as int in JSONB; migration stamps
-  legacy rows with `outcome = 0`.
+  concurrent overrides, one winner); outcome round-trips as int in JSONB. Unit: a context
+  missing the `outcome` key (only possible after restoring a pre-outcome backup — live rows
+  are always stamped by the migration) deserializes as `Failed`.
 - **E2E** — extend `ExamReportsTests` / `ExamFlowE2ETests`: passing the exam produces a
   completed report visible under "All Statuses" with correct content; existing failure tests
   keep passing (renames only).

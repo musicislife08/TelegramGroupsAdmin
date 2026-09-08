@@ -151,12 +151,16 @@ public class ExamResultContextTests
     }
 
     [Test]
-    public void Outcome_MissingInLegacyJson_DeserializesAsFailed()
+    public void Outcome_MissingAfterPreOutcomeBackupRestore_DeserializesAsFailed()
     {
-        // Pre-migration rows have no outcome key; all legacy rows are failures.
-        const string legacyJson = """{"userId":42,"score":50,"passingThreshold":80}""";
+        // The migration stamps every live row, so this key is never absent through the
+        // normal path. It CAN be absent after restoring a backup taken before ExamOutcome
+        // existed: BackupService re-inserts DTO rows verbatim and migrations don't re-run
+        // on restore. Every exam row from that era is a failure, so the enum default (0)
+        // must be Failed.
+        const string preOutcomeBackupJson = """{"userId":42,"score":50,"passingThreshold":80}""";
 
-        var context = JsonSerializer.Deserialize<ExamResultContext>(legacyJson, JsonOptions);
+        var context = JsonSerializer.Deserialize<ExamResultContext>(preOutcomeBackupJson, JsonOptions);
 
         Assert.That(context!.Outcome, Is.EqualTo(ExamOutcome.Failed));
     }
@@ -194,7 +198,9 @@ public enum ExamOutcome
 ```csharp
     /// <summary>
     /// Final exam outcome. Serializes as int (0=Failed, 1=Passed).
-    /// Absent in pre-outcome rows, which are all failures — the default (0) is correct.
+    /// Live rows are always stamped (migration); the key can only be absent after restoring
+    /// a backup taken before ExamOutcome existed — every row from that era is a failure,
+    /// so the enum default (0 = Failed) is the correct fallback.
     /// </summary>
     [JsonPropertyName("outcome")]
     public ExamOutcome Outcome { get; init; }
