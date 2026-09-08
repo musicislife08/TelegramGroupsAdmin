@@ -40,7 +40,7 @@ internal sealed class ExamHandler(
 
         var statusResult = await ReportStatusHelper.TryUpdateStatusAsync(
             reportsRepository, examId, ReportStatus.Reviewed, executor, "approve",
-            "Manually approved after exam failure",
+            "Manually approved after exam review",
             async () =>
             {
                 var current = await reportsRepository.GetExamResultAsync(examId, cancellationToken);

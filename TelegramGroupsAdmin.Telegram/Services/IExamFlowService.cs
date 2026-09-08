@@ -109,7 +109,7 @@ public interface IExamFlowService
     /// </summary>
     /// <param name="user">Identity of the user being approved</param>
     /// <param name="chat">Identity of the chat where the exam was taken</param>
-    /// <param name="examResultId">ID of the exam failure record</param>
+    /// <param name="examResultId">ID of the exam result record</param>
     /// <param name="executor">Actor performing the approval</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Result indicating success or failure</returns>

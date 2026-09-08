@@ -713,7 +713,7 @@ public class ExamFlowService : IExamFlowService
         Actor executor,
         CancellationToken cancellationToken = default)
     {
-        var reason = $"Exam failure #{examResultId} - manually approved after review";
+        var reason = $"Exam result #{examResultId} - manually approved after review";
         return await ExecuteExamApprovalAsync(
             user,
             chat,
