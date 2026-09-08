@@ -28,6 +28,7 @@ public class TestExamResultBuilder
     private long _chatId;
     private int _score = 50;
     private int _passingThreshold = 80;
+    private ExamOutcome _outcome = ExamOutcome.Failed;
     private Dictionary<int, string>? _mcAnswers;
     private Dictionary<int, int[]>? _shuffleState;
     private string? _openEndedAnswer;
@@ -120,6 +121,17 @@ public class TestExamResultBuilder
     {
         _score = 50;
         _passingThreshold = 80;
+        return this;
+    }
+
+    /// <summary>
+    /// Marks the exam as passed (outcome-based). The record is born completed:
+    /// InsertExamResultAsync auto-reviews it (ReviewedBy=ExamFlow, ActionTaken=AutoApprovedActionTaken).
+    /// </summary>
+    public TestExamResultBuilder AsPassed()
+    {
+        _outcome = ExamOutcome.Passed;
+        _score = 100;
         return this;
     }
 
@@ -238,6 +250,7 @@ public class TestExamResultBuilder
             Score = _score,
             PassingThreshold = _passingThreshold,
             AiEvaluation = _aiEvaluation,
+            Outcome = _outcome,
             CompletedAt = _completedAt,
             ReviewedBy = _reviewedBy,
             ReviewedAt = _reviewedAt,

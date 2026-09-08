@@ -756,6 +756,68 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
 
     #endregion
 
+    #region Passed Exam Tests
+
+    [Test]
+    public async Task PassedExam_VisibleUnderAllStatuses_WithAutoAdmittedChip()
+    {
+        // Arrange
+        await LoginAsOwnerAsync();
+
+        var chat = await new TestChatBuilder(SharedFactory.Services)
+            .WithTitle("Passed Exam Chat")
+            .BuildAsync();
+
+        await new TestTelegramUserBuilder(SharedFactory.Services)
+            .WithUserId(600080)
+            .WithUsername("passeduser")
+            .WithName("Passed", "User")
+            .BuildAsync();
+
+        await new TestExamResultBuilder(SharedFactory.Services)
+            .WithUser(600080, "passeduser", "Passed", "User")
+            .InChat(chat)
+            .AsPassed()
+            .WithOpenEndedAnswer("I love self-hosting and want to compare notes", "Genuine, on-topic answer")
+            .BuildAsync();
+
+        // Act
+        await _reportsPage.NavigateAsync();
+        await _reportsPage.WaitForLoadAsync();
+
+        // Passed exams are born reviewed, so they only show up once we widen the type/status filters
+        await _reportsPage.SelectTypeFilterAsync("Exam Reviews");
+        await _reportsPage.SelectStatusFilterAsync("All Statuses");
+
+        // Assert - card visible with the auto-admitted chip
+        await Expect(Page.GetByText("Exam Review", new() { Exact = true })).ToBeVisibleAsync();
+        await Expect(Page.GetByText("Passed — auto-admitted")).ToBeVisibleAsync();
+
+        var examCard = Page.Locator(".mud-card:has-text('Exam Review')").First;
+
+        // Assert - Dismiss/Deny/Deny+Ban are shown, Approve is not (this is an override, not a first decision)
+        using (Assert.EnterMultipleScope())
+        {
+            var buttons = await _reportsPage.GetVisibleActionButtonsAsync();
+            Assert.That(buttons, Has.Some.Contain("Dismiss"),
+                "Dismiss button should be visible for an auto-admitted pass");
+            Assert.That(buttons, Has.Some.Contain("Deny"),
+                "Deny button should be visible to override an auto-admitted pass");
+            Assert.That(buttons, Has.Some.Contain("Ban").IgnoreCase,
+                "Deny + Ban button should be visible to override an auto-admitted pass");
+            Assert.That(buttons, Has.None.Contain("Approve"),
+                "Approve should not be offered for an already-passed exam");
+        }
+
+        // Act - switch to Pending Only
+        await _reportsPage.SelectStatusFilterAsync("Pending Only");
+
+        // Assert - the passed exam is not pending, so it disappears from the queue
+        await Expect(examCard).Not.ToBeVisibleAsync();
+    }
+
+    #endregion
+
     #region Permission Tests
 
     [Test]
