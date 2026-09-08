@@ -58,6 +58,19 @@ public interface INotificationService
         long examResultId,
         CancellationToken ct = default);
 
+    Task<Dictionary<string, bool>> SendExamPassNotificationAsync(
+        ChatIdentity chat,
+        UserIdentity user,
+        int mcCorrectCount,
+        int mcTotal,
+        int mcScore,
+        int mcPassingThreshold,
+        string? openEndedQuestion,
+        string? openEndedAnswer,
+        string? aiReasoning,
+        long examResultId,
+        CancellationToken ct = default);
+
     Task<Dictionary<string, bool>> SendBanNotificationAsync(
         UserIdentity user,
         Actor executor,
