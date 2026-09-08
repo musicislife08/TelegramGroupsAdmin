@@ -132,7 +132,7 @@ public class PhotoHashRehashServiceTests
             .SingleAsync(u => u.TelegramUserId == telegramUserId);
     }
 
-    private async Task<long> SeedImageTrainingSampleAsync(string mediaLocalPath, byte[]? photoHash)
+    private async Task<long> SeedImageTrainingSampleAsync(string photoLocalPath, byte[]? photoHash)
     {
         var messageId = Interlocked.Increment(ref _nextMessageId);
         const long chatId = -100_012_345_678_901L;
@@ -145,7 +145,7 @@ public class PhotoHashRehashServiceTests
             ChatId = chatId,
             UserId = 1,
             Timestamp = now,
-            MediaLocalPath = mediaLocalPath,
+            PhotoLocalPath = photoLocalPath,
         });
         await context.SaveChangesAsync();
 
@@ -154,7 +154,7 @@ public class PhotoHashRehashServiceTests
             MessageId = messageId,
             ChatId = chatId,
             // [Required] on the model, but production code never assigns it either — the
-            // real source path comes from the joined message's MediaLocalPath.
+            // real source path comes from the joined message's PhotoLocalPath.
             PhotoPath = string.Empty,
             PhotoHash = photoHash,
             FileSizeBytes = 1,
@@ -308,7 +308,7 @@ public class PhotoHashRehashServiceTests
     }
 
     [Test]
-    public async Task RehashAsync_TrainingSampleWithLiveMessageMedia_RecomputesHash()
+    public async Task RehashAsync_TrainingSampleWithLiveMessagePhoto_RecomputesHash()
     {
         var sampleId = await SeedImageTrainingSampleAsync("full/1/photo.jpg", photoHash: null);
         WriteTestImage(Path.Combine(_dataPath, "media", "full", "1", "photo.jpg"));
@@ -356,6 +356,62 @@ public class PhotoHashRehashServiceTests
             // one that actually catches a copy-paste type mismatch.
             Assert.That(reloaded.PhotoHash!, Has.Length.EqualTo(8));
             Assert.That(result.Recomputed, Is.EqualTo(1));
+        });
+    }
+
+    /// <summary>
+    /// One unreadable image must not cost the rest of the batch its hashes. Every prior test
+    /// seeds a single candidate, so a decode failure that aborted the enclosing loop would
+    /// pass all of them and still lose the whole corpus in production.
+    /// </summary>
+    [Test]
+    public async Task RehashAsync_UndecodableRowMidBatch_StillRehashesTheRest()
+    {
+        var before = await SeedUserAsync("user_photos/mid_a.jpg", photoHash: null, bannedAt: null);
+        var broken = await SeedUserAsync("user_photos/mid_b.jpg", photoHash: null, bannedAt: null);
+        var after = await SeedUserAsync("user_photos/mid_c.jpg", photoHash: null, bannedAt: null);
+
+        WriteTestImage(Path.Combine(_dataPath, "media", "user_photos", "mid_a.jpg"));
+        WriteTestImage(Path.Combine(_dataPath, "media", "user_photos", "mid_c.jpg"));
+        // Present on disk and non-empty, but not an image: this exercises the decode
+        // failure path rather than the missing-file path.
+        await File.WriteAllTextAsync(
+            Path.Combine(_dataPath, "media", "user_photos", "mid_b.jpg"),
+            "not an image");
+
+        var result = await _service!.RehashAsync();
+
+        Assert.Multiple(async () =>
+        {
+            Assert.That((await ReloadUserAsync(before)).PhotoHash, Is.Not.Null, "row before the failure");
+            Assert.That((await ReloadUserAsync(broken)).PhotoHash, Is.Null, "the undecodable row");
+            Assert.That((await ReloadUserAsync(after)).PhotoHash, Is.Not.Null, "row after the failure");
+            Assert.That(result.Recomputed, Is.EqualTo(2));
+            Assert.That(result.Unrecoverable, Is.EqualTo(1));
+        });
+    }
+
+    /// <summary>
+    /// A truncated photo decodes into a mostly-black bitmap rather than failing, so without
+    /// an explicit completeness check the rehash would store a hash of the truncation — one
+    /// that any other truncated photo would also match.
+    /// </summary>
+    [Test]
+    public async Task RehashAsync_TruncatedPhoto_LeavesHashNull()
+    {
+        var userId = await SeedUserAsync("user_photos/truncated.jpg", photoHash: null, bannedAt: null);
+
+        var path = Path.Combine(_dataPath, "media", "user_photos", "truncated.jpg");
+        WriteTestImage(path);
+        var full = await File.ReadAllBytesAsync(path);
+        await File.WriteAllBytesAsync(path, full[..(full.Length / 2)]);
+
+        var result = await _service!.RehashAsync();
+
+        Assert.Multiple(async () =>
+        {
+            Assert.That((await ReloadUserAsync(userId)).PhotoHash, Is.Null);
+            Assert.That(result.Unrecoverable, Is.EqualTo(1));
         });
     }
 }

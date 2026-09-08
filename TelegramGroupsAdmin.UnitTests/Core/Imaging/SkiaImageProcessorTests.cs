@@ -212,4 +212,133 @@ public class SkiaImageProcessorTests
         }
         return n == 0 ? 0 : total / n;
     }
+
+    /// <summary>
+    /// Skia decodes a truncated image rather than rejecting it: the header is valid, so it
+    /// commits to a full-size canvas and leaves the rows it never received as solid black.
+    /// <see cref="SkiaImageProcessor.ReadLuminanceGrid"/> must refuse that input — a hash of
+    /// a mostly-black image is an identity derived from the failure, and two unrelated
+    /// truncated downloads would converge on the same near-black hash and compare as a
+    /// match. The action behind that comparison deletes messages permanently.
+    /// </summary>
+    [TestCase(4)]
+    [TestCase(16)]
+    [TestCase(50)]
+    [TestCase(90)]
+    public void ReadLuminanceGrid_TruncatedImage_ReturnsNull(int keepPercent)
+    {
+        var full = CreateTestImage(240, 160, SKEncodedImageFormat.Png);
+        using var source = new MemoryStream(full[..(full.Length * keepPercent / 100)]);
+
+        Assert.That(_processor.ReadLuminanceGrid(source, 8), Is.Null);
+    }
+
+    /// <summary>
+    /// The thumbnail paths deliberately take the opposite trade: a partly-black preview is
+    /// cosmetic, and refusing it would drop the thumbnail altogether. They must still not
+    /// throw on a truncated source.
+    /// </summary>
+    [TestCase(16)]
+    [TestCase(50)]
+    [TestCase(90)]
+    public async Task ThumbnailOperations_TruncatedImage_StillProduceOutput(int keepPercent)
+    {
+        var full = CreateTestImage(240, 160, SKEncodedImageFormat.Png);
+        var truncated = full[..(full.Length * keepPercent / 100)];
+
+        using (var source = new MemoryStream(truncated))
+        using (var destination = new MemoryStream())
+        {
+            Assert.That(await _processor.ResizeToFitAsync(source, destination, 64, ImageEncoding.Png), Is.True);
+            Assert.That(destination.Length, Is.GreaterThan(0));
+        }
+
+        using (var source = new MemoryStream(truncated))
+        using (var destination = new MemoryStream())
+            Assert.That(await _processor.BlurAsync(source, destination, 8f, ImageEncoding.Png), Is.True);
+    }
+
+    /// <summary>
+    /// Garbage that never yields a codec at all must fail everywhere, without throwing.
+    /// </summary>
+    [Test]
+    public async Task Operations_UndecodableInput_ReportFailureAndDoNotThrow()
+    {
+        var garbage = "this is not an image"u8.ToArray();
+
+        using (var source = new MemoryStream(garbage))
+            Assert.That(_processor.ReadLuminanceGrid(source, 8), Is.Null);
+
+        using (var source = new MemoryStream(garbage))
+            Assert.That(_processor.ReadDimensions(source), Is.Null);
+
+        using (var source = new MemoryStream(garbage))
+        using (var destination = new MemoryStream())
+            Assert.That(await _processor.ResizeToFillAsync(source, destination, 64, ImageEncoding.Png), Is.False);
+
+        using (var source = new MemoryStream(garbage))
+        using (var destination = new MemoryStream())
+            Assert.That(await _processor.BlurAsync(source, destination, 8f, ImageEncoding.Png), Is.False);
+    }
+
+    [Test]
+    public void ReadLuminanceGrid_NotAnImage_ReturnsNull()
+    {
+        using var source = new MemoryStream("this is not an image"u8.ToArray());
+
+        Assert.That(_processor.ReadLuminanceGrid(source, 8), Is.Null);
+    }
+
+    /// <summary>
+    /// The grid is read straight out of the pixel buffer for common colour layouts and
+    /// via Skia's own per-pixel conversion otherwise. Both paths must agree exactly, or
+    /// a photo's hash would depend on which layout its codec happened to decode into.
+    /// </summary>
+    [TestCase(SKEncodedImageFormat.Png)]
+    [TestCase(SKEncodedImageFormat.Jpeg)]
+    [TestCase(SKEncodedImageFormat.Webp)]
+    public void ReadLuminanceGrid_MatchesPerPixelConversion(SKEncodedImageFormat format)
+    {
+        var encoded = CreateTestImage(240, 160, format);
+
+        using var source = new MemoryStream(encoded);
+        var grid = _processor.ReadLuminanceGrid(source, 8)!;
+
+        using var bitmap = SKBitmap.Decode(encoded);
+        var expected = ReferenceLuminanceGrid(bitmap, 8);
+
+        Assert.That(grid, Is.EqualTo(expected));
+    }
+
+    /// <summary>
+    /// Deliberately naive reference implementation: one <see cref="SKBitmap.GetPixel"/>
+    /// per source pixel, no buffer access.
+    /// </summary>
+    private static byte[] ReferenceLuminanceGrid(SKBitmap bitmap, int gridSize)
+    {
+        var grid = new byte[gridSize * gridSize];
+        for (var cellY = 0; cellY < gridSize; cellY++)
+        {
+            var y0 = (int)((long)cellY * bitmap.Height / gridSize);
+            var y1 = Math.Max(y0 + 1, (int)((long)(cellY + 1) * bitmap.Height / gridSize));
+            for (var cellX = 0; cellX < gridSize; cellX++)
+            {
+                var x0 = (int)((long)cellX * bitmap.Width / gridSize);
+                var x1 = Math.Max(x0 + 1, (int)((long)(cellX + 1) * bitmap.Width / gridSize));
+
+                double sum = 0;
+                var count = 0;
+                for (var y = y0; y < y1 && y < bitmap.Height; y++)
+                for (var x = x0; x < x1 && x < bitmap.Width; x++)
+                {
+                    var pixel = bitmap.GetPixel(x, y);
+                    sum += 0.299 * pixel.Red + 0.587 * pixel.Green + 0.114 * pixel.Blue;
+                    count++;
+                }
+
+                grid[cellY * gridSize + cellX] = count == 0 ? (byte)0 : (byte)Math.Clamp(sum / count, 0, 255);
+            }
+        }
+        return grid;
+    }
 }

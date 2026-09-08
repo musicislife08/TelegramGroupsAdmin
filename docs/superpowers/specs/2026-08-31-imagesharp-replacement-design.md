@@ -166,6 +166,16 @@ window in which old and new hashes coexist and silently fail to match.
 
 Per row: **file present → recompute; file missing → `NULL`; user banned → `NULL`** (the blur trap).
 
+Per row: **file truncated → `NULL`** as well. Skia does not reject a truncated image the way a
+missing file fails: the header is valid, so it commits to a full-size canvas and leaves the rows it
+never received as solid black — and `SKBitmap.Decode` explicitly treats `SKCodecResult.IncompleteInput`
+as success. Hashing that yields an identity derived from the failure, and because every truncated
+image tends toward the same near-black grid, two unrelated partial downloads compare as a match.
+That is a *false positive* on the irreversible path, so `ReadLuminanceGrid` decodes through
+`SKCodec` and refuses anything short of `SKCodecResult.Success`. The thumbnail operations
+deliberately take the opposite trade — a partly-black preview is cosmetic, and refusing it would
+drop the thumbnail entirely.
+
 Video keyframes need FFmpeg re-extraction at the same percent positions. `ExtractKeyframesAsync` is
 deterministic given the same source and positions, so this works — it is simply the slowest part of
 the job.

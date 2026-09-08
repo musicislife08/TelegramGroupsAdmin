@@ -136,13 +136,15 @@ public sealed class PhotoHashRehashService(
 
         // PhotoPath on the sample row is never populated (it is [Required] but never
         // assigned on insert), so the source image has to come from the joined message.
+        // Photos live in photo_local_path; media_local_path holds non-photo attachments
+        // and is not a usable source for a photo hash (see #527).
         var candidates = await context.ImageTrainingSamples
             .Where(its => its.PhotoHash == null)
             .Join(context.Messages,
                 its => new { its.MessageId, its.ChatId },
                 m => new { m.MessageId, m.ChatId },
-                (its, m) => new { its.Id, m.MediaLocalPath })
-            .Where(x => x.MediaLocalPath != null)
+                (its, m) => new { its.Id, m.PhotoLocalPath })
+            .Where(x => x.PhotoLocalPath != null)
             .ToListAsync(ct);
 
         var recomputed = 0;
@@ -150,7 +152,7 @@ public sealed class PhotoHashRehashService(
 
         foreach (var candidate in candidates)
         {
-            var hash = await ComputeAsync(candidate.MediaLocalPath!);
+            var hash = await ComputeAsync(candidate.PhotoLocalPath!);
             if (hash is null) { unrecoverable++; continue; }
 
             await context.ImageTrainingSamples
