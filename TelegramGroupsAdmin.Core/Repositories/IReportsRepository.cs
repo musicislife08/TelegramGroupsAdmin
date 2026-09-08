@@ -219,24 +219,24 @@ public interface IReportsRepository
     // ============================================================
 
     /// <summary>
-    /// Insert a new exam failure report.
+    /// Insert a new completed exam result report.
     /// </summary>
     Task<long> InsertExamResultAsync(
         ExamResultRecord examResult,
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Get exam failure by ID with full context.
+    /// Get exam result by ID with full context.
     /// </summary>
     Task<ExamResultRecord?> GetExamResultAsync(
         long id,
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Get exam failures, optionally filtered by chat and status.
+    /// Get exam results, optionally filtered by chat and status.
     /// </summary>
     /// <param name="chatId">Optional chat ID filter</param>
-    /// <param name="pendingOnly">If true, only returns pending (unreviewed) failures. Default true for backward compatibility.</param>
+    /// <param name="pendingOnly">If true, only returns pending (unreviewed) exam results. Default true for backward compatibility.</param>
     /// <param name="cancellationToken">Cancellation token</param>
     Task<List<ExamResultRecord>> GetExamResultsAsync(
         long? chatId = null,
