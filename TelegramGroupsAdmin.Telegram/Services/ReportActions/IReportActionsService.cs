@@ -28,4 +28,5 @@ public interface IReportActionsService
     Task<ReviewActionResult> HandleExamApproveAsync(long examId, Actor executor, CancellationToken cancellationToken = default);
     Task<ReviewActionResult> HandleExamDenyAsync(long examId, Actor executor, CancellationToken cancellationToken = default);
     Task<ReviewActionResult> HandleExamDenyAndBanAsync(long examId, Actor executor, CancellationToken cancellationToken = default);
+    Task<ReviewActionResult> HandleExamDismissAsync(long examId, Actor executor, CancellationToken cancellationToken = default);
 }

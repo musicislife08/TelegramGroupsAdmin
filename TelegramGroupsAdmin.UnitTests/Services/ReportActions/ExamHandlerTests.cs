@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Repositories;
+using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
@@ -23,6 +24,7 @@ public class ExamHandlerTests
     private IReportsRepository _mockReportsRepo = null!;
     private IExamFlowService _mockExamFlowService = null!;
     private IReportCallbackContextRepository _mockCallbackContextRepo = null!;
+    private IAuditService _mockAuditService = null!;
 
     private ExamHandler _handler = null!;
 
@@ -32,15 +34,22 @@ public class ExamHandlerTests
         _mockReportsRepo = Substitute.For<IReportsRepository>();
         _mockExamFlowService = Substitute.For<IExamFlowService>();
         _mockCallbackContextRepo = Substitute.For<IReportCallbackContextRepository>();
+        _mockAuditService = Substitute.For<IAuditService>();
 
         _mockReportsRepo.TryUpdateStatusAsync(
                 Arg.Any<long>(), Arg.Any<ReportStatus>(), Arg.Any<string>(),
                 Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns(true);
 
+        _mockReportsRepo.TryOverrideAutoDecisionAsync(
+                Arg.Any<long>(), Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(true);
+
         _handler = new ExamHandler(
             _mockReportsRepo,
             _mockExamFlowService,
+            _mockAuditService,
             NullLogger<ExamHandler>.Instance);
     }
 
@@ -309,6 +318,116 @@ public class ExamHandlerTests
 
     #endregion
 
+    #region Dismiss / Outcome-Aware Routing Tests
+
+    [Test]
+    public async Task DismissAsync_PassedRecord_StampsOverrideWithoutModerationAction()
+    {
+        var exam = CreateTestPassedExam();
+        _mockReportsRepo.GetExamResultAsync(TestExamId, Arg.Any<CancellationToken>()).Returns(exam);
+
+        var result = await _handler.DismissAsync(TestExamId, TestExecutor, CancellationToken.None);
+
+        Assert.That(result.Success, Is.True);
+        await _mockReportsRepo.Received(1).TryOverrideAutoDecisionAsync(
+            TestExamId, Arg.Any<string>(),
+            Arg.Is<string>(a => a!.StartsWith("dismissed")), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+        await _mockExamFlowService.DidNotReceiveWithAnyArgs().DenyExamResultAsync(default!, default!, default!, default, default);
+        await _mockAuditService.Received(1).LogEventAsync(
+            AuditEventType.ReportReviewed, TestExecutor, Arg.Any<Actor?>(),
+            Arg.Is<string>(v => v!.Contains("Dismissed")), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task DismissAsync_FailedRecord_Rejected()
+    {
+        var exam = CreateTestExam(); // Outcome = Failed, pending
+        _mockReportsRepo.GetExamResultAsync(TestExamId, Arg.Any<CancellationToken>()).Returns(exam);
+
+        var result = await _handler.DismissAsync(TestExamId, TestExecutor, CancellationToken.None);
+
+        Assert.That(result.Success, Is.False, "a failed exam must be resolved, never dismissed");
+        await _mockReportsRepo.DidNotReceiveWithAnyArgs()
+            .TryOverrideAutoDecisionAsync(default, default!, default!, default, default);
+        await _mockAuditService.DidNotReceiveWithAnyArgs()
+            .LogEventAsync(default, default!, default, default, default);
+    }
+
+    [Test]
+    public async Task ApproveAsync_PassedRecord_Rejected()
+    {
+        var exam = CreateTestPassedExam();
+        _mockReportsRepo.GetExamResultAsync(TestExamId, Arg.Any<CancellationToken>()).Returns(exam);
+
+        var result = await _handler.ApproveAsync(TestExamId, TestExecutor, CancellationToken.None);
+
+        Assert.That(result.Success, Is.False, "nothing to approve on an auto-approved pass");
+        await _mockExamFlowService.DidNotReceiveWithAnyArgs().ApproveExamResultAsync(default!, default!, default, default!, default);
+    }
+
+    [Test]
+    public async Task DenyAsync_PassedRecord_KicksAndStampsOverride()
+    {
+        var exam = CreateTestPassedExam();
+        _mockReportsRepo.GetExamResultAsync(TestExamId, Arg.Any<CancellationToken>()).Returns(exam);
+        _mockExamFlowService.DenyExamResultAsync(
+                Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<Actor>(),
+                Arg.Any<long?>(), Arg.Any<CancellationToken>())
+            .Returns(new ModerationResult { Success = true });
+
+        var result = await _handler.DenyAsync(TestExamId, TestExecutor, CancellationToken.None);
+
+        Assert.That(result.Success, Is.True);
+        await _mockReportsRepo.Received(1).TryOverrideAutoDecisionAsync(
+            TestExamId, Arg.Any<string>(),
+            Arg.Is<string>(a => a!.Contains("override")), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+        await _mockReportsRepo.DidNotReceiveWithAnyArgs().TryUpdateStatusAsync(
+            default, default, default!, default!, default, default);
+        await _mockAuditService.Received(1).LogEventAsync(
+            AuditEventType.ReportReviewed, TestExecutor, Arg.Any<Actor?>(),
+            Arg.Is<string>(v => v!.Contains("Overrode")), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task DenyAsync_PassedRecord_RaceLost_ReturnsAlreadyHandledAndNoAudit()
+    {
+        var exam = CreateTestPassedExam();
+        _mockReportsRepo.GetExamResultAsync(TestExamId, Arg.Any<CancellationToken>()).Returns(exam);
+        _mockExamFlowService.DenyExamResultAsync(
+                Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<Actor>(),
+                Arg.Any<long?>(), Arg.Any<CancellationToken>())
+            .Returns(new ModerationResult { Success = true });
+        _mockReportsRepo.TryOverrideAutoDecisionAsync(
+                Arg.Any<long>(), Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        var result = await _handler.DenyAsync(TestExamId, TestExecutor, CancellationToken.None);
+
+        Assert.That(result.Success, Is.False);
+        await _mockAuditService.DidNotReceiveWithAnyArgs()
+            .LogEventAsync(default, default!, default, default, default);
+    }
+
+    [Test]
+    public async Task ApproveAsync_FailedRecord_LogsAuditEvent()
+    {
+        var exam = CreateTestExam();
+        _mockReportsRepo.GetExamResultAsync(TestExamId, Arg.Any<CancellationToken>()).Returns(exam);
+        _mockExamFlowService.ApproveExamResultAsync(
+                Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), TestExamId,
+                Arg.Any<Actor>(), Arg.Any<CancellationToken>())
+            .Returns(new ModerationResult { Success = true });
+
+        await _handler.ApproveAsync(TestExamId, TestExecutor, CancellationToken.None);
+
+        await _mockAuditService.Received(1).LogEventAsync(
+            AuditEventType.ReportReviewed, TestExecutor, Arg.Any<Actor?>(),
+            Arg.Is<string>(v => v!.Contains($"exam #{TestExamId}")), Arg.Any<CancellationToken>());
+    }
+
+    #endregion
+
     #region Helper Methods
 
     private static ExamResultRecord CreateTestExam(bool reviewed = false)
@@ -324,6 +443,23 @@ public class ExamHandlerTests
             ReviewedAt = reviewed ? DateTimeOffset.UtcNow.AddMinutes(-5) : null,
             ReviewedBy = reviewed ? "other@test.com" : null,
             ActionTaken = reviewed ? "approve" : null
+        };
+    }
+
+    private static ExamResultRecord CreateTestPassedExam()
+    {
+        return new ExamResultRecord
+        {
+            Id = TestExamId,
+            User = new UserIdentity(TestUserId, "Test", null, "testuser"),
+            Chat = new ChatIdentity(TestChatId, "Test Chat"),
+            Score = 90,
+            PassingThreshold = 70,
+            CompletedAt = DateTimeOffset.UtcNow.AddMinutes(-10),
+            Outcome = ExamOutcome.Passed,
+            ActionTaken = ExamResultRecord.AutoApprovedActionTaken,
+            ReviewedAt = DateTimeOffset.UtcNow,
+            ReviewedBy = "Exam Flow"
         };
     }
 

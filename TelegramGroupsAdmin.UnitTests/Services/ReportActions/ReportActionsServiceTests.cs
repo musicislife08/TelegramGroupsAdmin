@@ -108,6 +108,18 @@ public class ReportActionsServiceTests
         Assert.That(result, Is.EqualTo(expected));
     }
 
+    [Test]
+    public async Task HandleExamDismissAsync_DelegatesToExamHandler()
+    {
+        var expected = new ReviewActionResult(true, "Acknowledged", "Dismiss");
+        _mockExamHandler.DismissAsync(101L, TestExecutor, Arg.Any<CancellationToken>())
+            .Returns(expected);
+
+        var result = await _service.HandleExamDismissAsync(101L, TestExecutor, CancellationToken.None);
+
+        Assert.That(result, Is.EqualTo(expected));
+    }
+
     #endregion
 
     #region Scope Lifecycle Tests
