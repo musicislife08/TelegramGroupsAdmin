@@ -175,6 +175,24 @@ race → existing "already handled by {ReviewedBy}" formatting. `Status` stays `
     (`ActionTaken = "deny (override auto-approval)"` / `"deny+ban (override auto-approval)"`).
   - `Passed` + Approve → **rejected** (stale-keyboard safety; nothing to approve).
 
+### Audit logging
+
+`ContentReportHandler` logs `AuditEventType.ReportReviewed` for every action; `ExamHandler`
+currently logs nothing — an existing gap. Every exam review action gains an audit event after
+its status stamp succeeds, following the `ContentReportHandler` pattern
+(`IAuditService.LogEventAsync(AuditEventType.ReportReviewed, executor, target, details)`):
+
+- Failure actions: `"Approved after exam failure (exam #id)"`, `"Denied entry — kicked (exam #id)"`,
+  `"Denied entry — banned (exam #id)"`.
+- Override actions call out the override explicitly:
+  `"Overrode exam auto-approval — denied/kicked (exam #id)"`,
+  `"Overrode exam auto-approval — denied & banned (exam #id)"`,
+  `"Dismissed exam auto-admit notification (exam #id)"`.
+
+The audit event is written only when the action actually won the race (no audit rows for
+"already handled" losers). No new `AuditEventType` value — `ReportReviewed` already means
+"report reviewed and actioned".
+
 ## UI (Reports page)
 
 - Filter label "Exam Reviews" now covers both outcomes (type unchanged); default
@@ -189,7 +207,9 @@ race → existing "already handled by {ReviewedBy}" formatting. `Status` stays `
 - **Unit** — `ExamFlowServiceTests`: pass writes the record before session delete; born-state
   fields correct per outcome; AI-unavailable still yields `Failed`/`Pending`.
   `ExamHandlerTests`: Dismiss on pass; Deny/DenyAndBan override on pass; Dismiss on failure
-  rejected; Approve on pass rejected; override race → "already handled".
+  rejected; Approve on pass rejected; override race → "already handled"; every winning action
+  logs a `ReportReviewed` audit event (override wording for pass actions) and race losers log
+  nothing.
 - **Integration** — `ReportsRepositoryTests`: `TryOverrideAutoDecisionAsync` atomicity (two
   concurrent overrides, one winner); outcome round-trips as int in JSONB; migration stamps
   legacy rows with `outcome = 0`.
