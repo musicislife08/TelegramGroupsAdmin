@@ -23,6 +23,7 @@
 - NSubstitute 6 matcher lambdas: `Arg.Is<T>(x => x!.Prop == y)` — null-forgiving `!` on first dereference, never `?.`.
 - Build: `dotnet build TelegramGroupsAdmin.sln`. Unit tests: `dotnet test TelegramGroupsAdmin.UnitTests`. Component: `dotnet test TelegramGroupsAdmin.ComponentTests`. Integration: `dotnet test TelegramGroupsAdmin.IntegrationTests` (needs Docker/Postgres — see `E2E_TESTING.md`). E2E: `dotnet test TelegramGroupsAdmin.E2ETests`.
 - Do not touch files under `TelegramGroupsAdmin.Data/Migrations/` except the one new migration; historical migrations keep old names.
+- Integration tests assert against **golden canonical rows** (`TestData/SQL/canonical`, anchors in `GoldenDatasetConstants`); a SUT write appears only when that write is the test subject; writer tests use the golden template; inline/raw seeding is the last resort. Legacy tests that violate this get converted when a task touches them (fix as we find). See `TelegramGroupsAdmin.IntegrationTests/CLAUDE.md`.
 
 ---
 
@@ -105,21 +106,32 @@ EOF
 
 ---
 
-### Task 2: `ExamOutcome` + born-state insert + stamp migration
+### Task 2: `ExamOutcome`, canonical exam rows, born-state insert, stamp migration
+
+**Test-data rules for this task and Task 3** (from `TelegramGroupsAdmin.IntegrationTests/CLAUDE.md` and the `tga_feedback_no_inline_test_data_injection` / `tga_feedback_writer_tests_prefer_golden` memories):
+
+- Assert against **real golden rows first**. Canonical already has six exam reports (`type=2`): resolved failures `179, 181, 185` (`approve`), `182, 183` (`deny_ban`), and one pending failure `187` (synthetic, user `9465377455871`). No pass exists anywhere yet (the feature is new), so a **synthetic auto-approved pass row** is added to canonical — hierarchy tier 3 is satisfied because every assertion on it depends on structural properties (type, status, the `auto-approved` sentinel, `outcome`), never on answer content.
+- A SUT write appears in a test **only when that write is the subject** (the `InsertExamResultAsync` born-state tests). Never seed a precondition with a SUT write.
+- Writer tests run on the **golden** template; assertions are scoped to the returned id, never a table count.
+- Canonical is loaded **after** migrations when the golden template is built, so the stamp migration never touches canonical rows — the canonical SQL itself must carry `"outcome": 0` on the six existing exam contexts.
+- Legacy exam tests in `ReportsRepositoryTests` (empty template, SUT-seeded reads) are **replaced** by golden-based tests in a new fixture file — fix as we find.
 
 **Files:**
 - Create: `TelegramGroupsAdmin.Core/Models/ExamOutcome.cs`
-- Modify: `TelegramGroupsAdmin.Core/Models/ExamResultContext.cs`
-- Modify: `TelegramGroupsAdmin.Core/Models/ExamResultRecord.cs`
+- Modify: `TelegramGroupsAdmin.Core/Models/ExamResultContext.cs`, `ExamResultRecord.cs`
 - Modify: `TelegramGroupsAdmin.Core/Repositories/ReportsRepository.cs` (`InsertExamResultAsync`, ~line 599)
 - Modify: `TelegramGroupsAdmin.Core/Repositories/Mappings/EnrichedReportMappings.cs` (`ToExamResult`)
+- Modify: `TelegramGroupsAdmin.IntegrationTests/TestData/SQL/canonical/30_reports.sql` (stamp six rows, add row 189)
+- Modify: `TelegramGroupsAdmin.IntegrationTests/TestData/GoldenDatasetConstants.cs` (new `Reports` nested class)
+- Modify: `TelegramGroupsAdmin.IntegrationTests/CLAUDE.md` (reports count, synthetic-rows recipe)
 - Create: migration `StampExamResultOutcome` (generated, then edited)
-- Test: `TelegramGroupsAdmin.UnitTests/Telegram/Models/ExamResultContextTests.cs` (new)
-- Test: `TelegramGroupsAdmin.IntegrationTests/ContentDetection/Repositories/ReportsRepositoryTests.cs`
+- Create test: `TelegramGroupsAdmin.UnitTests/Telegram/Models/ExamResultContextTests.cs`
+- Create test: `TelegramGroupsAdmin.IntegrationTests/ContentDetection/Repositories/ExamResultRepositoryTests.cs` (golden fixture)
+- Modify test: `TelegramGroupsAdmin.IntegrationTests/ContentDetection/Repositories/ReportsRepositoryTests.cs` (delete the legacy exam region, ~lines 415–606 after Task 1's rename)
 
 **Interfaces:**
 - Consumes: Task 1 names.
-- Produces: `enum ExamOutcome { Failed = 0, Passed = 1 }`; `ExamResultContext.Outcome`; `ExamResultRecord.Outcome`; `ExamResultRecord.AutoApprovedActionTaken` (`const string`, value `"auto-approved"`); `InsertExamResultAsync` writes outcome-dependent born-state.
+- Produces: `enum ExamOutcome { Failed = 0, Passed = 1 }`; `ExamResultContext.Outcome`; `ExamResultRecord.Outcome`; `ExamResultRecord.AutoApprovedActionTaken` (`const string`, value `"auto-approved"`); `InsertExamResultAsync` writes outcome-dependent born-state; canonical anchors `GoldenDatasetConstants.Reports.PendingExamFailureId = 187`, `ResolvedExamFailureId = 185`, `AutoApprovedExamPassId = 189`, `AutoApprovedExamPassUserId = 9960171136314`.
 
 - [ ] **Step 1: Write failing serialization tests**
 
@@ -221,66 +233,225 @@ public enum ExamOutcome
 Run: `dotnet test TelegramGroupsAdmin.UnitTests --filter ExamResultContextTests`
 Expected: PASS (System.Text.Json serializes enums as numbers by default — no converter added anywhere).
 
-- [ ] **Step 5: Write failing integration test for born-state**
+- [ ] **Step 5: Update canonical — stamp existing exam rows, add the synthetic pass**
 
-Add to `ReportsRepositoryTests` (follow the file's existing fixture pattern for repo construction; adapt an existing exam insert test as the template):
+In `TelegramGroupsAdmin.IntegrationTests/TestData/SQL/canonical/30_reports.sql`:
+
+1. For each `type = 2` row (`179, 181, 182, 183, 185, 187`) append `, "outcome": 0` inside the context JSON object (before the closing `}`), so canonical matches a migrated prod database.
+2. Append the synthetic pass row. The user is the canonical "second active MainChat author" (ham, `@sillywolf`), the chat is MainChat:
+
+```sql
+INSERT INTO reports (id, message_id, chat_id, report_command_message_id, reported_by_user_id, reported_by_user_name, reported_at, status, reviewed_by, reviewed_at, action_taken, admin_notes, web_user_id, type, context) VALUES (189, 0, -100026957614982, NULL, NULL, NULL, '2026-05-02 09:00:00+00', 1, 'Exam Flow', '2026-05-02 09:00:01+00', 'auto-approved', 'Answer shows genuine interest in the community.', NULL, 2, '{"score": 100, "userId": 9960171136314, "mcAnswers": {"0": "A"}, "aiEvaluation": "Answer shows genuine interest in the community.", "shuffleState": {"0": [0, 1]}, "openEndedAnswer": "I run a small homelab and want to compare notes.", "passingThreshold": 80, "outcome": 1}');
+```
+
+(`reviewed_by` must equal the literal `Actor.ExamFlow.GetDisplayText()` produces — `"Exam Flow"`, from `Actor.cs`.) If the file ends with a sequence reset (`setval`) for `reports_id_seq`, bump it past 189.
+
+`GoldenDatasetConstants` — add a nested class (register it in the class-level doc comment list too):
 
 ```csharp
-[Test]
-public async Task InsertExamResultAsync_PassedOutcome_BornCompleted()
-{
-    var record = new ExamResultRecord
+    /// <summary>
+    /// Report anchors from <c>canonical/30_reports.sql</c> used by exam-result tests.
+    /// </summary>
+    public static class Reports
     {
-        User = new UserIdentity(12345, "Pat", null, "pat"),
-        Chat = ChatIdentity.FromId(-100123),
-        Outcome = ExamOutcome.Passed,
-        Score = 100,
-        PassingThreshold = 80,
-        AiEvaluation = "Genuine interest, on-topic answer",
-        CompletedAt = DateTimeOffset.UtcNow
-    };
+        /// <summary>Synthetic pending exam failure (status=0, user 9465377455871, chat -100054416618415).</summary>
+        public const long PendingExamFailureId = 187;
 
-    var id = await _repository.InsertExamResultAsync(record);
+        /// <summary>Real resolved exam failure (status=1, action_taken='approve', reviewed by globaladmin).</summary>
+        public const long ResolvedExamFailureId = 185;
 
-    var stored = await _repository.GetExamResultAsync(id);
-    Assert.That(stored, Is.Not.Null);
-    Assert.That(stored!.Outcome, Is.EqualTo(ExamOutcome.Passed));
-    Assert.That(stored.ReviewedAt, Is.Not.Null, "pass records are born completed");
-    Assert.That(stored.ActionTaken, Is.EqualTo(ExamResultRecord.AutoApprovedActionTaken));
-    Assert.That(stored.ReviewedBy, Is.EqualTo(Actor.ExamFlow.GetDisplayText()));
-    Assert.That(stored.AdminNotes, Is.EqualTo("Genuine interest, on-topic answer"));
-}
+        /// <summary>Synthetic auto-approved exam pass (status=1, reviewed_by='Exam Flow', action_taken='auto-approved', outcome=1) in MainChat.</summary>
+        public const long AutoApprovedExamPassId = 189;
 
-[Test]
-public async Task InsertExamResultAsync_FailedOutcome_BornPending()
+        /// <summary>telegram_user_id behind <see cref="AutoApprovedExamPassId"/> (@sillywolf, ham).</summary>
+        public const long AutoApprovedExamPassUserId = 9960171136314;
+    }
+```
+
+`TelegramGroupsAdmin.IntegrationTests/CLAUDE.md` — same commit: reports row count `13` → `14` in the table, and extend the `reports` line of "Synthetic / reserved rows" with: `189` = auto-approved ExamResult pass (status=1, `reviewed_by='Exam Flow'`, `action_taken='auto-approved'`, context `outcome=1`) for user `9960171136314` in MainChat, anchoring the auto-approval override tests. Also note all six pre-existing exam contexts now carry `"outcome": 0`.
+
+- [ ] **Step 6: Write the golden-based exam repository fixture (failing)**
+
+New file `TelegramGroupsAdmin.IntegrationTests/ContentDetection/Repositories/ExamResultRepositoryTests.cs` — golden template per test, repository constructed the same way `ReportsRepositoryTests` does (copy its `SetUp`/`TearDown` wiring, swapping in `CreateDatabaseFromGoldenTemplateAsync`):
+
+```csharp
+using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.IntegrationTests.TestData;
+using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
+
+namespace TelegramGroupsAdmin.IntegrationTests.ContentDetection.Repositories;
+
+/// <summary>
+/// Exam result reads/writes against the golden template. Read tests assert on real
+/// canonical exam rows; the only SUT writes are the inserts whose born-state IS the subject.
+/// </summary>
+[TestFixture]
+public class ExamResultRepositoryTests
 {
-    var record = new ExamResultRecord
+    // fixture fields + SetUp/TearDown copied from ReportsRepositoryTests, using
+    // await _testHelper.CreateDatabaseFromGoldenTemplateAsync();
+
+    [Test]
+    public async Task GetExamResultAsync_PendingFailure_MapsFailedAndPending()
     {
-        User = new UserIdentity(12346, "Sam", null, "sam"),
-        Chat = ChatIdentity.FromId(-100123),
-        Outcome = ExamOutcome.Failed,
-        Score = 20,
-        PassingThreshold = 80,
-        CompletedAt = DateTimeOffset.UtcNow
-    };
+        var result = await _repository!.GetExamResultAsync(GoldenDatasetConstants.Reports.PendingExamFailureId);
 
-    var id = await _repository.InsertExamResultAsync(record);
+        Assert.That(result, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result!.Outcome, Is.EqualTo(ExamOutcome.Failed));
+            Assert.That(result.ReviewedAt, Is.Null);
+            Assert.That(result.ActionTaken, Is.Null);
+            Assert.That(result.Score, Is.EqualTo(20));
+            Assert.That(result.PassingThreshold, Is.EqualTo(80));
+        }
+    }
 
-    var stored = await _repository.GetExamResultAsync(id);
-    Assert.That(stored!.Outcome, Is.EqualTo(ExamOutcome.Failed));
-    Assert.That(stored.ReviewedAt, Is.Null, "failures stay pending, unchanged");
-    Assert.That(stored.ActionTaken, Is.Null);
+    [Test]
+    public async Task GetExamResultAsync_PendingFailure_PreservesJsonb()
+    {
+        var result = await _repository!.GetExamResultAsync(GoldenDatasetConstants.Reports.PendingExamFailureId);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result!.McAnswers, Is.EqualTo(new Dictionary<int, string> { { 0, "A" } }));
+            Assert.That(result.ShuffleState!.Count, Is.EqualTo(1));
+            Assert.That(result.ShuffleState[0], Is.EqualTo(new[] { 0, 1 }));
+            Assert.That(result.OpenEndedAnswer, Is.EqualTo("Lorem ipsum"));
+        }
+    }
+
+    [Test]
+    public async Task GetExamResultAsync_ResolvedFailure_MapsFailedAndReviewed()
+    {
+        var result = await _repository!.GetExamResultAsync(GoldenDatasetConstants.Reports.ResolvedExamFailureId);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result!.Outcome, Is.EqualTo(ExamOutcome.Failed));
+            Assert.That(result.ReviewedAt, Is.Not.Null);
+            Assert.That(result.ActionTaken, Is.EqualTo("approve"));
+        }
+    }
+
+    [Test]
+    public async Task GetExamResultAsync_AutoApprovedPass_MapsPassedWithSentinel()
+    {
+        var result = await _repository!.GetExamResultAsync(GoldenDatasetConstants.Reports.AutoApprovedExamPassId);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result!.Outcome, Is.EqualTo(ExamOutcome.Passed));
+            Assert.That(result.ReviewedAt, Is.Not.Null);
+            Assert.That(result.ReviewedBy, Is.EqualTo(Actor.ExamFlow.GetDisplayText()));
+            Assert.That(result.ActionTaken, Is.EqualTo(ExamResultRecord.AutoApprovedActionTaken));
+            Assert.That(result.User.Id, Is.EqualTo(GoldenDatasetConstants.Reports.AutoApprovedExamPassUserId));
+            Assert.That(result.Chat.Id, Is.EqualTo(GoldenDatasetConstants.Chats.MainChatId));
+        }
+    }
+
+    [Test]
+    public async Task GetExamResultsAsync_PendingOnly_IncludesPendingFailureExcludesResolvedAndPass()
+    {
+        var pending = await _repository!.GetExamResultsAsync(pendingOnly: true);
+
+        var ids = pending.Select(r => r.Id).ToList();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(ids, Does.Contain(GoldenDatasetConstants.Reports.PendingExamFailureId));
+            Assert.That(ids, Does.Not.Contain(GoldenDatasetConstants.Reports.ResolvedExamFailureId));
+            Assert.That(ids, Does.Not.Contain(GoldenDatasetConstants.Reports.AutoApprovedExamPassId));
+            Assert.That(pending.All(r => r.ReviewedAt == null), Is.True);
+        }
+    }
+
+    [Test]
+    public async Task GetExamResultsAsync_All_IncludesAutoApprovedPass()
+    {
+        var all = await _repository!.GetExamResultsAsync(pendingOnly: false);
+
+        var pass = all.SingleOrDefault(r => r.Id == GoldenDatasetConstants.Reports.AutoApprovedExamPassId);
+        Assert.That(pass, Is.Not.Null);
+        Assert.That(pass!.Outcome, Is.EqualTo(ExamOutcome.Passed));
+    }
+
+    [Test]
+    public async Task GetExamResultsAsync_FiltersByChatId()
+    {
+        var mainChat = await _repository!.GetExamResultsAsync(
+            chatId: GoldenDatasetConstants.Chats.MainChatId, pendingOnly: false);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(mainChat.Select(r => r.Id), Does.Contain(GoldenDatasetConstants.Reports.AutoApprovedExamPassId));
+            Assert.That(mainChat.All(r => r.Chat.Id == GoldenDatasetConstants.Chats.MainChatId), Is.True);
+        }
+    }
+
+    // ---- Writer tests: the insert's born-state IS the subject ----
+
+    [Test]
+    public async Task InsertExamResultAsync_PassedOutcome_BornCompleted()
+    {
+        var record = new ExamResultRecord
+        {
+            User = new UserIdentity(GoldenDatasetConstants.Reports.AutoApprovedExamPassUserId, "Early", "Spirits", "sillywolf"),
+            Chat = ChatIdentity.FromId(GoldenDatasetConstants.Chats.MainChatId),
+            Outcome = ExamOutcome.Passed,
+            Score = 100,
+            PassingThreshold = 80,
+            AiEvaluation = "Genuine interest, on-topic answer",
+            CompletedAt = DateTimeOffset.UtcNow
+        };
+
+        var id = await _repository!.InsertExamResultAsync(record);
+
+        var stored = await _repository.GetExamResultAsync(id);
+        Assert.That(stored, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(stored!.Outcome, Is.EqualTo(ExamOutcome.Passed));
+            Assert.That(stored.ReviewedAt, Is.Not.Null, "pass records are born completed");
+            Assert.That(stored.ActionTaken, Is.EqualTo(ExamResultRecord.AutoApprovedActionTaken));
+            Assert.That(stored.ReviewedBy, Is.EqualTo(Actor.ExamFlow.GetDisplayText()));
+            Assert.That(stored.AdminNotes, Is.EqualTo("Genuine interest, on-topic answer"));
+        }
+    }
+
+    [Test]
+    public async Task InsertExamResultAsync_FailedOutcome_BornPending()
+    {
+        var record = new ExamResultRecord
+        {
+            User = new UserIdentity(GoldenDatasetConstants.Reports.AutoApprovedExamPassUserId, "Early", "Spirits", "sillywolf"),
+            Chat = ChatIdentity.FromId(GoldenDatasetConstants.Chats.MainChatId),
+            Outcome = ExamOutcome.Failed,
+            Score = 20,
+            PassingThreshold = 80,
+            CompletedAt = DateTimeOffset.UtcNow
+        };
+
+        var id = await _repository!.InsertExamResultAsync(record);
+
+        var stored = await _repository.GetExamResultAsync(id);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(stored!.Outcome, Is.EqualTo(ExamOutcome.Failed));
+            Assert.That(stored.ReviewedAt, Is.Null, "failures stay pending, unchanged");
+            Assert.That(stored.ActionTaken, Is.Null);
+        }
+    }
 }
 ```
 
-(`GetExamResultAsync` reads through the `EnrichedReports` view — if the view join yields no user row for the random test user, follow the pattern existing exam tests use to seed user data.)
+Then **delete the legacy `#region ExamFailure Tests`** block from `ReportsRepositoryTests.cs` (the `CreateTestExamFailure` helper and its six SUT-seeded tests) — every behavior it covered is now asserted above against real rows.
 
-- [ ] **Step 6: Run to verify the pass-record assertions fail**
+- [ ] **Step 7: Run the new fixture to verify failure**
 
-Run: `dotnet test TelegramGroupsAdmin.IntegrationTests --filter "InsertExamResultAsync_PassedOutcome_BornCompleted|InsertExamResultAsync_FailedOutcome_BornPending"`
-Expected: `BornCompleted` FAILS (`ReviewedAt` null, `Outcome` not persisted); `BornPending` may fail on `Outcome` until Step 7.
+Run: `dotnet test TelegramGroupsAdmin.IntegrationTests --filter ExamResultRepositoryTests`
+Expected: outcome/born-state assertions FAIL (mapping doesn't read `outcome`; insert ignores it); the pure-read JSONB test may already pass.
 
-- [ ] **Step 7: Implement born-state insert + mapping**
+- [ ] **Step 8: Implement born-state insert + mapping**
 
 `ReportsRepository.InsertExamResultAsync` — write outcome into the context and branch the born-state:
 
@@ -312,16 +483,16 @@ Expected: `BornCompleted` FAILS (`ReviewedAt` null, `Outcome` not persisted); `B
         };
 ```
 
-(`Actor.GetDisplayText()` is the same extension `ReportStatusHelper` uses — check its namespace via `Actor` usages there.) Update the log line to include the outcome. In `EnrichedReportMappings.ToExamResult`, map `Outcome = examContext.Outcome` and `CompletedAt = view.ReportedAt`.
+Update the log line to include the outcome. In `EnrichedReportMappings.ToExamResult`, map `Outcome = examContext.Outcome` and `CompletedAt = view.ReportedAt`.
 
-- [ ] **Step 8: Run integration tests**
+- [ ] **Step 9: Run integration tests**
 
-Run: `dotnet test TelegramGroupsAdmin.IntegrationTests --filter ReportsRepositoryTests`
-Expected: PASS (new tests and all pre-existing exam tests).
+Run: `dotnet test TelegramGroupsAdmin.IntegrationTests --filter "ExamResultRepositoryTests|ReportsRepositoryTests|GoldenReducePlanTests|LoadCanonical"`
+Expected: PASS — including canonical-loading tests (adding row 189 must not break any full-set assertion; the memory notes reports is not count-asserted, but this run proves it).
 
-- [ ] **Step 9: Create the stamp migration**
+- [ ] **Step 10: Create the stamp migration**
 
-No model/schema change (outcome lives inside the existing JSONB `context`), so the generated migration will be empty — it exists to stamp legacy rows:
+No model/schema change (outcome lives inside the existing JSONB `context`), so the generated migration will be empty — it exists to stamp legacy rows in real deployments:
 
 ```bash
 cd TelegramGroupsAdmin && dotnet ef migrations add StampExamResultOutcome -p ../TelegramGroupsAdmin.Data -s .
@@ -345,12 +516,12 @@ Edit the generated `Up` (leave `Down` empty — removing the key would destroy r
     }
 ```
 
-- [ ] **Step 10: Apply migration locally and verify**
+- [ ] **Step 11: Apply migration locally and verify**
 
 Run: `cd TelegramGroupsAdmin && dotnet run --migrate-only`
 Expected: exits cleanly, migration applied.
 
-- [ ] **Step 11: Commit**
+- [ ] **Step 12: Commit**
 
 ```bash
 git add -A
@@ -361,6 +532,10 @@ Passes are born completed (Reviewed, auto-approved sentinel, ExamFlow
 reviewer, AI reasoning in notes); failures born Pending exactly as
 before. Outcome serializes as int in JSONB; legacy rows stamped 0
 (Failed) by migration.
+
+Canonical: six existing exam contexts carry outcome=0; synthetic
+auto-approved pass 189 added for override tests. Legacy SUT-seeded exam
+repo tests replaced by golden-based ExamResultRepositoryTests.
 
 Part of #515.
 EOF
@@ -373,10 +548,10 @@ EOF
 **Files:**
 - Modify: `TelegramGroupsAdmin.Core/Repositories/IReportsRepository.cs`
 - Modify: `TelegramGroupsAdmin.Core/Repositories/ReportsRepository.cs`
-- Test: `TelegramGroupsAdmin.IntegrationTests/ContentDetection/Repositories/ReportsRepositoryTests.cs`
+- Test: `TelegramGroupsAdmin.IntegrationTests/ContentDetection/Repositories/ExamResultRepositoryTests.cs`
 
 **Interfaces:**
-- Consumes: Task 2 (`ExamResultRecord.AutoApprovedActionTaken`, born-state insert).
+- Consumes: Task 2 canonical anchors (`GoldenDatasetConstants.Reports.*`), `ExamResultRecord.AutoApprovedActionTaken`.
 - Produces:
 
 ```csharp
@@ -390,35 +565,52 @@ Task<bool> TryOverrideAutoDecisionAsync(
 
 - [ ] **Step 1: Write failing integration tests**
 
+Add to `ExamResultRepositoryTests`. The precondition (an untouched auto-approved pass) is real canonical row 189 — the only SUT call in each test is the method under test:
+
 ```csharp
-[Test]
-public async Task TryOverrideAutoDecisionAsync_AutoApprovedRecord_FirstCallWinsSecondLoses()
-{
-    var id = await InsertPassedExamAsync(); // helper: insert ExamResultRecord with Outcome=Passed (as in Task 2 test)
+    [Test]
+    public async Task TryOverrideAutoDecisionAsync_AutoApprovedPass_FirstCallWinsSecondLoses()
+    {
+        var id = GoldenDatasetConstants.Reports.AutoApprovedExamPassId;
 
-    var first = await _repository.TryOverrideAutoDecisionAsync(
-        id, "admin@test.com", "deny (override auto-approval)", "kicked");
-    var second = await _repository.TryOverrideAutoDecisionAsync(
-        id, "other@test.com", "dismissed (auto-admit acknowledged)");
+        var first = await _repository!.TryOverrideAutoDecisionAsync(
+            id, "admin@example.com", "deny (override auto-approval)", "User kicked");
+        var second = await _repository.TryOverrideAutoDecisionAsync(
+            id, "owner@example.com", "dismissed (auto-admit acknowledged)");
 
-    Assert.That(first, Is.True);
-    Assert.That(second, Is.False, "sentinel already consumed — race loser");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(first, Is.True);
+            Assert.That(second, Is.False, "sentinel already consumed — race loser");
+        }
 
-    var stored = await _repository.GetExamResultAsync(id);
-    Assert.That(stored!.ReviewedBy, Is.EqualTo("admin@test.com"));
-    Assert.That(stored.ActionTaken, Is.EqualTo("deny (override auto-approval)"));
-}
+        var stored = await _repository.GetExamResultAsync(id);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(stored!.ReviewedBy, Is.EqualTo("admin@example.com"));
+            Assert.That(stored.ActionTaken, Is.EqualTo("deny (override auto-approval)"));
+            Assert.That(stored.AdminNotes, Is.EqualTo("User kicked"));
+            Assert.That(stored.Outcome, Is.EqualTo(ExamOutcome.Passed), "outcome is history, not overwritten");
+        }
+    }
 
-[Test]
-public async Task TryOverrideAutoDecisionAsync_PendingFailure_DoesNotMatch()
-{
-    var id = await InsertFailedExamAsync(); // helper: Outcome=Failed → born Pending, ActionTaken null
+    [Test]
+    public async Task TryOverrideAutoDecisionAsync_PendingFailure_DoesNotMatch()
+    {
+        var result = await _repository!.TryOverrideAutoDecisionAsync(
+            GoldenDatasetConstants.Reports.PendingExamFailureId, "admin@example.com", "deny (override auto-approval)");
 
-    var result = await _repository.TryOverrideAutoDecisionAsync(
-        id, "admin@test.com", "deny (override auto-approval)");
+        Assert.That(result, Is.False, "only the auto-approved sentinel is overridable");
+    }
 
-    Assert.That(result, Is.False, "only the auto-approved sentinel is overridable");
-}
+    [Test]
+    public async Task TryOverrideAutoDecisionAsync_HumanResolvedFailure_DoesNotMatch()
+    {
+        var result = await _repository!.TryOverrideAutoDecisionAsync(
+            GoldenDatasetConstants.Reports.ResolvedExamFailureId, "admin@example.com", "deny (override auto-approval)");
+
+        Assert.That(result, Is.False, "a human decision is never silently overridden");
+    }
 ```
 
 - [ ] **Step 2: Run to verify failure**
@@ -467,7 +659,7 @@ Interface doc + method in `IReportsRepository` (next to `TryUpdateStatusAsync`);
 
 - [ ] **Step 4: Run integration tests**
 
-Run: `dotnet test TelegramGroupsAdmin.IntegrationTests --filter ReportsRepositoryTests`
+Run: `dotnet test TelegramGroupsAdmin.IntegrationTests --filter ExamResultRepositoryTests`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -478,7 +670,8 @@ git commit -F- <<'EOF'
 feat: atomic override of auto-approved exam decisions
 
 ExecuteUpdate guarded on the auto-approved ActionTaken sentinel; first
-admin action wins, concurrent clicks lose the race.
+admin action wins, concurrent clicks lose the race. Tests run against
+canonical row 189 (synthetic auto-approved pass) and real rows 185/187.
 
 Part of #515.
 EOF

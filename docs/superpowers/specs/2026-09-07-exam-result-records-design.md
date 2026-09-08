@@ -210,10 +210,15 @@ The audit event is written only when the action actually won the race (no audit 
   rejected; Approve on pass rejected; override race → "already handled"; every winning action
   logs a `ReportReviewed` audit event (override wording for pass actions) and race losers log
   nothing.
-- **Integration** — `ReportsRepositoryTests`: `TryOverrideAutoDecisionAsync` atomicity (two
-  concurrent overrides, one winner); outcome round-trips as int in JSONB. Unit: a context
-  missing the `outcome` key (only possible after restoring a pre-outcome backup — live rows
-  are always stamped by the migration) deserializes as `Failed`.
+- **Integration** — new golden-template fixture `ExamResultRepositoryTests` (replaces the legacy
+  SUT-seeded exam tests in `ReportsRepositoryTests`): reads assert against real canonical exam
+  rows (pending failure 187, resolved failure 185); `TryOverrideAutoDecisionAsync` atomicity
+  (first wins, second loses) runs against a synthetic auto-approved pass row 189 added to
+  canonical; born-state insert tests are the only SUT writes (the insert is their subject).
+  Canonical's six pre-existing exam contexts gain `"outcome": 0` because the golden template
+  loads canonical after migrations. Unit: a context missing the `outcome` key (only possible
+  after restoring a pre-outcome backup — live rows are always stamped by the migration)
+  deserializes as `Failed`.
 - **E2E** — extend `ExamReportsTests` / `ExamFlowE2ETests`: passing the exam produces a
   completed report visible under "All Statuses" with correct content; existing failure tests
   keep passing (renames only).
