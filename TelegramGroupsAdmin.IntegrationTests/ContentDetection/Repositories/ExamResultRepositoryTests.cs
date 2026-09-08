@@ -205,4 +205,48 @@ public class ExamResultRepositoryTests
             Assert.That(stored.ActionTaken, Is.Null);
         }
     }
+
+    [Test]
+    public async Task TryOverrideAutoDecisionAsync_AutoApprovedPass_FirstCallWinsSecondLoses()
+    {
+        var id = GoldenDatasetConstants.Reports.AutoApprovedExamPassId;
+
+        var first = await _repository!.TryOverrideAutoDecisionAsync(
+            id, "admin@example.com", "deny (override auto-approval)", "User kicked");
+        var second = await _repository.TryOverrideAutoDecisionAsync(
+            id, "owner@example.com", "dismissed (auto-admit acknowledged)");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(first, Is.True);
+            Assert.That(second, Is.False, "sentinel already consumed — race loser");
+        }
+
+        var stored = await _repository.GetExamResultAsync(id);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(stored!.ReviewedBy, Is.EqualTo("admin@example.com"));
+            Assert.That(stored.ActionTaken, Is.EqualTo("deny (override auto-approval)"));
+            Assert.That(stored.AdminNotes, Is.EqualTo("User kicked"));
+            Assert.That(stored.Outcome, Is.EqualTo(ExamOutcome.Passed), "outcome is history, not overwritten");
+        }
+    }
+
+    [Test]
+    public async Task TryOverrideAutoDecisionAsync_PendingFailure_DoesNotMatch()
+    {
+        var result = await _repository!.TryOverrideAutoDecisionAsync(
+            GoldenDatasetConstants.Reports.PendingExamFailureId, "admin@example.com", "deny (override auto-approval)");
+
+        Assert.That(result, Is.False, "only the auto-approved sentinel is overridable");
+    }
+
+    [Test]
+    public async Task TryOverrideAutoDecisionAsync_HumanResolvedFailure_DoesNotMatch()
+    {
+        var result = await _repository!.TryOverrideAutoDecisionAsync(
+            GoldenDatasetConstants.Reports.ResolvedExamFailureId, "admin@example.com", "deny (override auto-approval)");
+
+        Assert.That(result, Is.False, "a human decision is never silently overridden");
+    }
 }

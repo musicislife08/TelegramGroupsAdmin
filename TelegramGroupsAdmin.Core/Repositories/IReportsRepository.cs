@@ -84,6 +84,19 @@ public interface IReportsRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Atomically override an auto-approved exam decision. Succeeds only if the report
+    /// is an ExamResult with the auto-approved sentinel ActionTaken value. First admin
+    /// action wins; concurrent clicks lose the race and return false. Does not change
+    /// the Outcome (history is immutable).
+    /// </summary>
+    Task<bool> TryOverrideAutoDecisionAsync(
+        long reportId,
+        string reviewedBy,
+        string actionTaken,
+        string? notes = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Delete old resolved reports (cleanup). Returns count deleted.
     /// </summary>
     Task<int> DeleteOldReportsAsync(

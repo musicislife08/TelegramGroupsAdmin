@@ -685,4 +685,37 @@ public class ReportsRepository : IReportsRepository
             .Cast<ExamResultRecord>()
             .ToList();
     }
+
+    public async Task<bool> TryOverrideAutoDecisionAsync(
+        long reportId,
+        string reviewedBy,
+        string actionTaken,
+        string? notes = null,
+        CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        // Atomic guard on the auto-approved sentinel: the first admin action wins,
+        // concurrent clicks lose the race and surface "already handled".
+        // Status stays Reviewed — the record was born completed.
+        var rowsAffected = await context.Reports
+            .Where(r => r.Id == reportId
+                && r.Type == (short)ReportType.ExamResult
+                && r.ActionTaken == ExamResultRecord.AutoApprovedActionTaken)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(r => r.ReviewedBy, reviewedBy)
+                .SetProperty(r => r.ActionTaken, actionTaken)
+                .SetProperty(r => r.ReviewedAt, DateTimeOffset.UtcNow)
+                .SetProperty(r => r.AdminNotes, notes),
+                cancellationToken);
+
+        if (rowsAffected > 0)
+        {
+            _logger.LogInformation(
+                "Overrode auto-decision on exam report {ReportId} by {ReviewedBy} (action: {ActionTaken})",
+                reportId, reviewedBy, actionTaken);
+        }
+
+        return rowsAffected > 0;
+    }
 }
