@@ -1,7 +1,8 @@
 # Exam Result Records + Auto-Admit Notification — Design
 
 **Date:** 2026-09-07
-**Issues:** Closes #515 (part 1). Part 2 (auto-admit notification) is new scope from this brainstorm.
+**Issues:** Closes #515 — the issue is taken over as the tracker for both parts; part 2
+(auto-admit notification) is new scope from this brainstorm, delivered in the same PR.
 
 ## Summary
 
@@ -55,6 +56,12 @@ This design:
 | `IExamFlowService.ApproveExamFailureAsync` / `DenyExamFailureAsync` / `DenyAndBanExamFailureAsync` | `ApproveExamResultAsync` / `DenyExamResultAsync` / `DenyAndBanExamResultAsync` |
 
 All call sites, tests, and UI references rename with them. One type per file throughout.
+
+**String-value audit (verified 2026-09-07):** nothing depends on the enum's *name*. `reports.type`
+and `report_callback_contexts.report_type` are `short` columns; there is no `Enum.Parse`/`TryParse`
+of `ReportType`, no `"ExamFailure"` string literal, no `ReportType.ToString()`; `BackupService`'s
+`JsonStringEnumConverter` only sees `ReportDto.Type` which is already `short`. The rename touches
+compiled identifiers only.
 
 ### New: `ExamOutcome`
 
