@@ -11,7 +11,7 @@ Settings marked with **per-chat** can be customized for individual groups via th
 | **General** | App display name, timezone, general system behavior | — |
 | **Security** | Two-factor authentication enforcement, session timeout | [Getting Started](../01-getting-started.md) |
 | **Admin Accounts** | Manage web admin users, roles, invitations | [Web User Management](01-web-user-management.md) |
-| **AI Providers** | OpenAI API key, model selection, provider configuration | [AI Prompt Builder](../features/06-ai-prompt-builder.md) |
+| **AI Providers** | AI provider connections (OpenAI, Azure OpenAI, Anthropic, OpenRouter, OpenAI-compatible) and their API keys/endpoints | [Integrations](05-integrations.md) |
 | **Email** | SendGrid API key, sender address for verification emails | — |
 | **ClamAV** | Local antivirus scanner connection settings | [Integrations](05-integrations.md) |
 | **VirusTotal** | API key for cloud-based file and URL scanning | [Integrations](05-integrations.md) |
@@ -44,7 +44,7 @@ Settings marked with **per-chat** can be customized for individual groups via th
 | Subsection | What's In There | Learn More |
 |------------|----------------|------------|
 | **Detection Algorithms** | Enable/disable individual checks, Training Mode, thresholds (defaults: Auto-Ban 4.0, Review Queue 2.5) **per-chat** | [Spam Detection](../features/03-spam-detection.md) |
-| **AI Integration** | OpenAI Veto, image/video analysis, custom system prompt **per-chat** | [AI Prompt Builder](../features/06-ai-prompt-builder.md) |
+| **AI Integration** | Assign a provider connection and model to each AI feature (Spam Detection, Translation, Image/Video Analysis, Profile Scan, Prompt Builder) **per-chat** | [AI Prompt Builder](../features/06-ai-prompt-builder.md) |
 | **URL Filtering** | Blocklists, whitelists, manual domains **per-chat** | [URL Filtering](../features/04-url-filtering.md) |
 | **File Scanning** | ClamAV and VirusTotal file scanning toggles | [Spam Detection](../features/03-spam-detection.md) |
 

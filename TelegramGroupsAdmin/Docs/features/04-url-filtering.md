@@ -468,7 +468,7 @@ approved-partner-2.com
 ### Updating Blocklists
 
 **Built-in blocklists auto-update**:
-- Frequency: Weekly (Sunday 2 AM)
+- Frequency: Weekly (Sunday 3 AM)
 - Source: The Block List Project GitHub
 - Automatic: No action required
 

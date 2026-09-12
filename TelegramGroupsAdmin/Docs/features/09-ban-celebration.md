@@ -48,7 +48,7 @@ Ban celebrations use a **shuffle-bag** (Fisher-Yates shuffle) to select GIFs and
 
 **Result:** If you have 10 GIFs and 10 captions, you will see all 10 GIFs and all 10 captions before any repeats. Since GIFs and captions are paired independently, you get up to 100 unique combinations before patterns emerge.
 
-The shuffle-bag state is held in a **singleton cache** (`BanCelebrationCache`) that persists across requests for the lifetime of the application. The cache is thread-safe and handles race conditions gracefully.
+The shuffle-bag state is **persisted in the database**, not held in memory: each GIF/caption row has a `dispensed_at` column, and a Postgres advisory lock (`pg_advisory_xact_lock`) guards each claim so concurrent bans can't dispense the same row twice. When every row in a cycle has been dispensed, the next claim starts a fresh cycle by clearing the stamps and reshuffling.
 
 ---
 
@@ -76,6 +76,8 @@ Captions support three placeholder variables that are replaced at send time:
 | `{bancount}` | Today's count | Today's count | Total bans across all chats today (resets at midnight) |
 
 Placeholders are case-insensitive (`{Username}`, `{USERNAME}`, and `{username}` all work).
+
+**Explicit username masking:** if [Profile Scanning](08-profile-scanning.md#explicit-username-masking) flagged the banned user's display name as explicit, the chat caption substitutes the chat's configured redaction text (default `[explicit username redacted]`) for `{username}` instead of the real name. The DM version is unaffected (it already says "You"), and admin notifications always show the real name. This is on by default whenever Profile Scan is enabled for the chat; turn it off under Profile Scan settings.
 
 ### Chat vs. DM Grammar
 
@@ -275,7 +277,6 @@ This is useful for verifying that your captions render correctly and that GIF + 
 ### Same GIF or caption appearing frequently
 
 - **Small library** -- With only 2-3 GIFs, repeats will be noticeable even with the shuffle bag. Add more variety to the library
-- **Application restart** -- The shuffle-bag state is in-memory. After a restart, bags are repopulated from scratch with a new random order
 
 ---
 

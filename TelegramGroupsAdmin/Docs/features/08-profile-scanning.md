@@ -4,13 +4,22 @@ Profile scanning inspects a user's full Telegram profile when they join a chat, 
 
 ## How It Works
 
-When a user joins a monitored chat, the profile scan pipeline runs an 8-step process that collects profile data, scores it for risk, and takes moderation action based on configurable thresholds.
+When a scan is triggered, the profile scan pipeline runs an 8-step process that collects profile data, scores it for risk, and takes moderation action based on configurable thresholds.
+
+A scan can be triggered by:
+
+- **Join** — the user joins a monitored chat (on by default)
+- **Profile change** — the Bot API reports a changed name or username (on by default)
+- **First message** — a user who has never been scanned posts their first message (off by default). This covers members who joined before the bot was added to the chat, and accounts that arrive without a join event, such as people commenting on channel posts in a linked discussion group. A banned outcome stops the message from reaching content detection.
+- **Periodic rescan** — the Profile Rescan [background job](13-background-jobs.md), if enabled
+
+All automatic triggers go through the same eligibility gate: the check is skipped for trusted users, chat admins, bots, and users explicitly excluded from scanning. The first-message trigger also skips anyone who already has a scan on record (join deliberately rescans).
 
 ### Prerequisites
 
-- At least one **User API session** connected (Settings > User API Settings)
-- **Profile Scan enabled** per chat (Settings > Welcome > Join Security > Profile Scan)
-- **OpenAI API key** configured for AI vision scoring (optional but recommended)
+- At least one **User API session** connected (Settings > Telegram > User API)
+- **Profile Scan enabled** per chat (Chat Management > Configure > Welcome System > Security on Join > Profile Scan)
+- An **AI provider connection** assigned to the **Profile Scan** feature (Settings > Content Detection > AI Integration) for AI vision scoring — optional but recommended. Any provider with a vision-capable model works (OpenAI, Azure OpenAI, Anthropic, OpenRouter, or an OpenAI-compatible server).
 
 ---
 
@@ -155,7 +164,7 @@ If the rule-based score alone reaches the ban threshold, **Layer 2 is skipped en
 
 ### Layer 2: AI Vision Analysis
 
-When Layer 1 does not trigger a ban, the AI layer runs OpenAI vision analysis on all collected images plus profile text. The AI receives:
+When Layer 1 does not trigger a ban, the AI layer sends all collected images plus profile text to the vision model of the AI connection assigned to the Profile Scan feature. The AI receives:
 
 - Profile name, username, bio
 - Personal channel title and description
@@ -169,6 +178,7 @@ The AI returns a structured JSON response with:
 - **reason** -- human-readable explanation
 - **signals_detected** -- array of identified risk signals
 - **contains_nudity** -- whether any image contains visible nudity (triggers blur censoring)
+- **explicit_display_text** -- whether the user's display name or @username is itself explicit content (used by [explicit username masking](#explicit-username-masking))
 
 The AI returns the score directly on the 0.0-5.0 scale — no mapping needed. The score is clamped to the valid range via `Math.Clamp`.
 
@@ -262,10 +272,26 @@ The dedup check reads `ProfileScannedAt` and `ProfileScanScore` from the user re
 When a banned user's profile contains nudity (as detected by the AI `contains_nudity` flag), the stored profile photo is **censored with a Gaussian blur**:
 
 - Blur sigma: 40 (clamped to fit the image dimensions)
-- Applied using ImageSharp's `GaussianBlur` processor
+- Applied using SkiaSharp's `SKImageFilter.CreateBlur`
 - The censored image overwrites the original at `/data/media/user_photos/{userId}.jpg`
 
 This prevents explicit images from appearing in the admin UI when reviewing banned users.
+
+---
+
+## Explicit Username Masking
+
+Some spam accounts put the explicit content in the display name itself. During the AI layer, the model also judges whether the user's display name or @username is explicit, and the result is stored with the scan.
+
+When such a user is later banned and [Ban Celebration](09-ban-celebration.md) posts a caption in the chat, the `{username}` placeholder is replaced with the configured **Redaction text** (default `[explicit username redacted]`) instead of the real name. Admin DMs and alerts are never masked — you always see the real name when reviewing.
+
+Masking only happens when all three are true:
+
+1. Ban Celebration is enabled for the chat
+2. Profile Scan is enabled for the chat
+3. **Mask explicit usernames in public ban posts** is on (the default)
+
+Turn it off, or change the substitute text, in the Profile Scan settings below.
 
 ---
 
@@ -291,21 +317,24 @@ Profile scanning is configured in two places:
 
 ### Global: User API Sessions
 
-**Settings > User API Settings**
+**Settings > Telegram > User API**
 
 Connect at least one Telegram User API session. The scanner selects the best available client -- preferring one that has access to the triggering chat for more reliable user resolution.
 
 ### Per-Chat: Join Security
 
-**Settings > Welcome > Join Security > Profile Scan**
+**Chat Management > Configure > Welcome System > Security on Join > Profile Scan**
 
 | Setting | Default | Description |
 |---|---|---|
 | Enabled | Off | Master toggle for profile scanning in this chat |
-| Scan on Join | On | Trigger scan when a user joins the chat |
-| Scan on Profile Change | On | Re-scan when Bot API detects name/username changes |
-| Ban Threshold | 4.0 | Score at or above which users are auto-banned |
-| Notify Threshold | 2.0 | Score at or above which an alert is created for admin review |
+| Auto-Ban Threshold | 4.0 | Score at or above which users are auto-banned |
+| Admin Notify Threshold | 2.0 | Score at or above which an alert is created for admin review |
+| Scan on join | On | Trigger scan when a user joins the chat |
+| Scan on profile change | On | Re-scan when Bot API detects name/username changes |
+| Scan on first message | Off | Scan a never-scanned user on their first message (see [How It Works](#how-it-works)) |
+| Mask explicit usernames in public ban posts | On | Replace an AI-flagged explicit display name with the redaction text in public ban-celebration captions |
+| Redaction text | `[explicit username redacted]` | Substitute text shown in place of the name |
 
 [Screenshot: Profile Scan configuration in Welcome > Join Security settings]
 
@@ -360,3 +389,4 @@ This prevents a temporary rate limit from permanently excluding users who should
 - **[Reports Queue](02-reports.md)** -- Review profile scan alerts alongside message reports
 - **[URL Filtering](04-url-filtering.md)** -- URL blocklists used by the rule-based scoring layer
 - **[AI Prompt Builder](06-ai-prompt-builder.md)** -- Customize AI prompts for other detection features
+- **[Ban Celebration](09-ban-celebration.md)** -- Where explicit username masking is applied

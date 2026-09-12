@@ -32,12 +32,12 @@ Custom prompts tell the AI:
 
 ## How to Access
 
-1. Navigate to **Settings** → **Content Detection** → **AI Integration**
-2. Scroll to **OpenAI Integration** section
-3. Find **Custom Prompt Configuration**
-4. Click **Open Prompt Builder** button
+1. Navigate to **Settings** → **Content Detection** → **Detection Algorithms**
+2. Find the **AI Veto** check and click **AI Veto Configuration**
+3. In the dialog, find the prompt field and its **Version History**
+4. Use the **AI Prompt Builder** below the prompt field to generate or modify prompts
 
-[Screenshot: OpenAI Integration section with Prompt Builder button]
+[Screenshot: AI Veto Configuration dialog with Prompt Builder button]
 
 ---
 
@@ -303,8 +303,8 @@ Every prompt change creates a new version.
 ### Version History
 
 **View all versions**:
-1. Settings → Content Detection → External Services → OpenAI Integration
-2. Scroll to **Prompt Version History**
+1. Settings → Content Detection → Detection Algorithms → **AI Veto Configuration**
+2. Scroll to **Version History**
 3. See list of all versions with metadata
 
 **For each version**:

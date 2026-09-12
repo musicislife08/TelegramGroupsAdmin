@@ -41,7 +41,7 @@ Tracks all moderation actions across your Telegram groups:
 
 Each entry shows:
 - **Telegram User** — Avatar, display name, and Telegram ID
-- **Issued By** — Who triggered the action: "Bot Protection" (automatic), "Auto-system" (rule-based), a web admin email, or a Telegram user
+- **Issued By** — Who triggered the action: "Bot Protection" (automatic), another system actor (e.g. "Auto-Ban", "Auto-Detection", rule-based), a web admin email, or a Telegram user
 - **Reason** — Why the action was taken (if provided)
 - **Expires At** — When the action expires, or "Permanent"
 

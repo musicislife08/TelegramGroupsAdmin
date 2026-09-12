@@ -2,11 +2,24 @@
 
 TGA connects to several external services to provide its detection and moderation capabilities. This page explains what each service does for you, whether you need to set it up, and what happens if it's unavailable.
 
-## OpenAI (or Compatible AI Provider)
+## AI Provider (OpenAI, Azure OpenAI, Anthropic, OpenRouter, or OpenAI-compatible)
 
-**What it does for you:** Powers the AI Veto system (reduces false positives by 80-90%), image spam detection, video spam detection, and the AI Prompt Builder for custom detection rules.
+**What it does for you:** Powers the AI Veto system (reduces false positives by 80-90%), image spam detection, video spam detection, message translation, profile scanning, and the AI Prompt Builder for custom detection rules.
 
-**Do you need to configure it?** Optional but recommended. Go to **Settings** -> **System** -> **AI Providers** and enter your API key.
+**Supported providers:**
+
+| Provider | Notes |
+|----------|-------|
+| **OpenAI** | api.openai.com; API key from platform.openai.com |
+| **Azure OpenAI Service** | Your Azure endpoint plus a deployment name per feature |
+| **Anthropic (Claude)** | api.anthropic.com; API key from console.anthropic.com |
+| **OpenRouter** | Aggregator for many models behind one key (openrouter.ai) |
+| **OpenAI-compatible** | Any server that speaks the OpenAI API — Ollama, LM Studio, vLLM, etc. Enter the local endpoint URL; an API key is optional |
+
+**Do you need to configure it?** Optional but recommended. Setup is two steps:
+
+1. **Settings** -> **System** -> **AI Providers** — add a **connection**: pick the provider type, give it a connection ID, and enter the API key or endpoint. You can add several connections (for example, a cloud provider and a local one).
+2. **Settings** -> **Content Detection** -> **AI Integration** — for each AI feature (Spam Detection, Translation, Image Analysis, Video Analysis, Profile Scan, Prompt Builder), choose which connection to use and the model. Features with no connection assigned stay off.
 
 **What happens if it's unavailable:** AI-powered checks are skipped — TGA falls back to its rule-based and ML detection checks. No messages are missed, but you lose the AI layer's accuracy boost.
 
