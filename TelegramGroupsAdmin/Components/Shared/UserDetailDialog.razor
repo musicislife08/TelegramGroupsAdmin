@@ -403,6 +403,12 @@
                                                         @action.Reason
                                                     </MudText>
                                                 }
+                                                @if (action.ChatId is not null)
+                                                {
+                                                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="action-chat-context">
+                                                        in @(action.ChatName ?? action.ChatId.Value.ToString())
+                                                    </MudText>
+                                                }
                                                 <MudText Typo="Typo.caption" Color="Color.Secondary">
                                                     by @action.IssuedBy.GetDisplayText() · <LocalTimestamp Value="@action.IssuedAt" />
                                                 </MudText>
