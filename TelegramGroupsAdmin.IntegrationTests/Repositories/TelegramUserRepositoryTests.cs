@@ -579,4 +579,72 @@ public class TelegramUserRepositoryTests
     }
 
     #endregion
+
+    #region User Detail Action Chat Name
+
+    [Test]
+    public async Task GetUserDetailAsync_Actions_IncludeChatNameForManagedChat_AndNullForUnknownChat()
+    {
+        var userId = Random.Shared.NextInt64(100_000_000_000L, 999_999_999_999L);
+        await SeedActiveUserAsync(userId, username: $"actions_{Guid.NewGuid().ToString("N")[..12]}");
+        const long unknownChatId = -100_099_999_999_999L;
+
+        string? mainChatName;
+        await using (var scope = _serviceProvider!.CreateAsyncScope())
+        {
+            var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<AppDbContext>>();
+            await using var ctx = await factory.CreateDbContextAsync();
+            mainChatName = await ctx.ManagedChats
+                .Where(c => c.ChatId == GoldenDatasetConstants.Chats.MainChatId)
+                .Select(c => c.ChatName)
+                .SingleAsync();
+
+            var now = DateTimeOffset.UtcNow;
+            ctx.UserActions.AddRange(
+                new TelegramGroupsAdmin.Data.Models.UserActionRecordDto
+                {
+                    UserId = userId,
+                    ActionType = (int)UserActionType.RestorePermissions,
+                    ChatId = GoldenDatasetConstants.Chats.MainChatId,
+                    SystemIdentifier = "WelcomeFlow",
+                    IssuedAt = now.AddMinutes(-2),
+                    Reason = "Completed welcome/rules flow"
+                },
+                new TelegramGroupsAdmin.Data.Models.UserActionRecordDto
+                {
+                    UserId = userId,
+                    ActionType = (int)UserActionType.Kick,
+                    ChatId = unknownChatId,
+                    SystemIdentifier = "WelcomeFlow",
+                    IssuedAt = now.AddMinutes(-1),
+                    Reason = "Welcome timeout"
+                },
+                new TelegramGroupsAdmin.Data.Models.UserActionRecordDto
+                {
+                    UserId = userId,
+                    ActionType = (int)UserActionType.Trust,
+                    ChatId = null,
+                    SystemIdentifier = "AutoTrust",
+                    IssuedAt = now,
+                    Reason = "Global action"
+                });
+            await ctx.SaveChangesAsync();
+        }
+
+        var detail = await _repository!.GetUserDetailAsync(userId);
+
+        Assert.That(detail, Is.Not.Null);
+        var byType = detail!.Actions.ToDictionary(a => a.ActionType);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(mainChatName, Is.Not.Null.And.Not.Empty, "golden dataset main chat must have a name");
+            Assert.That(byType[UserActionType.RestorePermissions].ChatName, Is.EqualTo(mainChatName));
+            Assert.That(byType[UserActionType.Kick].ChatId, Is.EqualTo(unknownChatId));
+            Assert.That(byType[UserActionType.Kick].ChatName, Is.Null, "unmanaged chat has no name to show");
+            Assert.That(byType[UserActionType.Trust].ChatId, Is.Null);
+            Assert.That(byType[UserActionType.Trust].ChatName, Is.Null);
+        }
+    }
+
+    #endregion
 }

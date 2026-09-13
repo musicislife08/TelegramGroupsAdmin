@@ -861,22 +861,24 @@ public class TelegramUserRepository : ITelegramUserRepository
         })
         .ToList();
 
-        // Get user actions with actor display name enrichment (LEFT JOINs for IssuedBy)
+        // Get user actions with actor display name enrichment (LEFT JOINs for IssuedBy) and chat name
         var actions = await context.UserActions
             .AsNoTracking()
             .Where(ua => ua.UserId == telegramUserId)
             .LeftJoin(context.TelegramUsers, ua => ua.TelegramUserId, tu => tu.TelegramUserId, (ua, ta) => new { ua, ta })
             .LeftJoin(context.Users, x => x.ua.WebUserId, wu => wu.Id, (x, wa) => new { x.ua, x.ta, wa })
-            .LeftJoin(context.TelegramUsers, x => x.ua.UserId, t => t.TelegramUserId, (x, t) => new
+            .LeftJoin(context.TelegramUsers, x => x.ua.UserId, t => t.TelegramUserId, (x, t) => new { x.ua, x.ta, x.wa, t })
+            .LeftJoin(context.ManagedChats, x => x.ua.ChatId, c => (long?)c.ChatId, (x, c) => new
             {
                 Action = x.ua,
                 TelegramActorUsername = x.ta != null ? x.ta.Username : null,
                 TelegramActorFirstName = x.ta != null ? x.ta.FirstName : null,
                 TelegramActorLastName = x.ta != null ? x.ta.LastName : null,
                 WebActorEmail = x.wa != null ? x.wa.Email : null,
-                TargetUsername = t != null ? t.Username : null,
-                TargetFirstName = t != null ? t.FirstName : null,
-                TargetLastName = t != null ? t.LastName : null
+                TargetUsername = x.t != null ? x.t.Username : null,
+                TargetFirstName = x.t != null ? x.t.FirstName : null,
+                TargetLastName = x.t != null ? x.t.LastName : null,
+                ChatName = c != null ? c.ChatName : null
             })
             .OrderByDescending(x => x.Action.IssuedAt)
             .ToListAsync(cancellationToken);
@@ -955,7 +957,8 @@ public class TelegramUserRepository : ITelegramUserRepository
                 telegramLastName: a.TelegramActorLastName,
                 targetUsername: a.TargetUsername,
                 targetFirstName: a.TargetFirstName,
-                targetLastName: a.TargetLastName)).ToList(),
+                targetLastName: a.TargetLastName,
+                chatName: a.ChatName)).ToList(),
             Warnings = activeWarnings,
             DetectionHistory = detectionHistory.Select(d => d.ToModel()).ToList(),
             Notes = notes.Select(n => n.ToModel()).ToList(),
