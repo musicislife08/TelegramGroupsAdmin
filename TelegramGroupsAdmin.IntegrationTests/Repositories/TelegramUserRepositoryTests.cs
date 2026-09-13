@@ -560,5 +560,23 @@ public class TelegramUserRepositoryTests
         Assert.That(items.Select(i => i.TelegramUserId), Does.Not.Contain(userId));
     }
 
+    [Test]
+    public async Task GetPagedUsersAsync_Trusted_IncludesInactiveTrustedUser()
+    {
+        var userId = await SeedInactiveUserAsync($"trusted_{Guid.NewGuid().ToString("N")[..12]}", "Trusted");
+        await _repository!.TrustUserAsync(userId);
+
+        var (items, _) = await _repository.GetPagedUsersAsync(
+            UiModels.UserListFilter.Trusted, skip: 0, take: 5000,
+            searchText: null, chatIds: GlobalScope, sortLabel: null, sortDescending: false);
+        var counts = await _repository.GetUserTabCountsAsync(chatIds: GlobalScope, searchText: null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(items.Select(i => i.TelegramUserId), Does.Contain(userId), "Trust is global; gate state must not hide it");
+            Assert.That(counts.TrustedCount, Is.EqualTo(items.Count), "count must match the listed rows");
+        }
+    }
+
     #endregion
 }

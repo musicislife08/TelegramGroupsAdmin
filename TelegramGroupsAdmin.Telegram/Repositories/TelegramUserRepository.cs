@@ -459,7 +459,7 @@ public class TelegramUserRepository : ITelegramUserRepository
                      u.Warnings!.Any()));
                 break;
             case UiModels.UserListFilter.Trusted:
-                query = query.Where(u => u.IsActive && u.IsTrusted);
+                query = query.Where(u => u.IsTrusted);
                 break;
             case UiModels.UserListFilter.Kicked:
                 query = query.Where(u => !u.IsActive && !u.IsBanned);
@@ -670,7 +670,7 @@ public class TelegramUserRepository : ITelegramUserRepository
             (context.AdminNotes.Any(n => n.TelegramUserId == u.TelegramUserId) ||
              context.UserTags.Any(t => t.TelegramUserId == u.TelegramUserId) ||
              u.Warnings!.Any())).CountAsync(cancellationToken);
-        var trustedCount = await baseQuery.Where(u => u.IsActive && u.IsTrusted).CountAsync(cancellationToken);
+        var trustedCount = await baseQuery.Where(u => u.IsTrusted).CountAsync(cancellationToken);
         var bannedCount = await baseQuery.Where(u => u.IsBanned && (u.BanExpiresAt == null || u.BanExpiresAt > now)).CountAsync(cancellationToken);
         var kickedCount = await baseQuery.Where(u => !u.IsActive && !u.IsBanned).CountAsync(cancellationToken);
 
