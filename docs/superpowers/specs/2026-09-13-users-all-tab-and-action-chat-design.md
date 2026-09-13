@@ -158,16 +158,29 @@ injection. `WelcomeService` still uses it for `GetOrCreateAsync` and the bypass 
 
 Test types follow the repo's four-type boundary rule.
 
-**Integration (`TelegramUserRepositoryTests`)**
-- `GetPagedUsersAsync_All_ReturnsInactiveNonBannedUser` (the pending-joiner case)
-- `GetPagedUsersAsync_All_ReturnsUserWithExpiredBanFlagStillSet` (the gap no other tab covers)
+**Integration (`TelegramUserRepositoryTests`)** — preconditions come from canonical
+(golden) rows pinned in `GoldenDatasetConstants`, never from SUT writes or raw inserts in the
+test body (Kass, 2026-09-13; see the integration-test data rules in context-keep). Canonical
+already holds four welcome-timeout kicked joiners (`is_active=false`, no messages); two of
+them are edited in place so the dataset stays scrubbed-real rather than growing synthetic
+rows:
+
+| Anchor | Canonical row | Edit |
+|---|---|---|
+| Kicked joiner | `9171379870502` (@luminanceflagstick) | none |
+| Trusted kicked joiner | `9301917046112` (@tadpolesleek) | `is_trusted` → `true` |
+| Expired temp-ban, flag still set | `9995544961449` (@curveabdominal) | `is_banned` → `true`, `ban_expires_at` → 12h after the kick, `banned_at` → kick time |
+| Chat-scoped + global actions | `9110930357318` (Delete in Main Community; Ban and Untrust with no chat) | none |
+
+- `GetPagedUsersAsync_All_ReturnsKickedJoiner_ThatActiveHides`
+- `GetPagedUsersAsync_All_ReturnsUserWithExpiredBanFlagStillSet` (the gap no other tab covers; guards its precondition by reading the row)
 - `GetPagedUsersAsync_All_ExcludesSystemUser`
 - `GetPagedUsersAsync_All_ProjectsIsActive`
-- `GetPagedUsersAsync_All_SearchFindsInactiveUser`
+- `GetPagedUsersAsync_All_SearchFindsKickedJoiner`
 - `GetUserTabCountsAsync_AllCount_EqualsNonSystemRowCount_UnderGlobalScope`
-- `GetPagedUsersAsync_All_RespectsChatScope` (scoped admin, user without messages in scope is absent)
-- `GetPagedUsersAsync_Trusted_IncludesInactiveTrustedUser` (only if the Trusted change is approved)
-- `GetUserDetailAsync_Actions_IncludeChatNameForManagedChat_AndNullForUnknownChat`
+- `GetPagedUsersAsync_All_RespectsChatScope` (kicked joiner has no messages, so a MainChat-scoped admin does not see them)
+- `GetPagedUsersAsync_Trusted_IncludesInactiveTrustedUser` (guards its precondition by reading the row)
+- `GetUserDetailAsync_Actions_IncludeChatNameForChatScopedAction_AndNullForGlobalAction` (the unmanaged-chat fallback has no real data; it is covered by the component test's id-fallback render only)
 
 **Unit**
 - `WelcomeAdmissionHandlerTests`: `TryAdmitUserAsync_Admitted_ActivatesUser`;

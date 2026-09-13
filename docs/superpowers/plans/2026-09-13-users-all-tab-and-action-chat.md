@@ -1123,3 +1123,619 @@ EOF
 ```
 
 No `Closes #N` line: no issue exists for these bugs. If Kass files one, add it to the top of the body.
+
+---
+
+### Task 9: Rewrite the new integration tests against canonical (golden) data
+
+**Why this task exists:** Tasks 1, 2, and 6 seeded their preconditions with SUT writes
+(`GetOrCreateAsync`, `UpsertAsync`, `SetBanStatusAsync`, `TrustUserAsync`) and one raw
+`UserActions.AddRange`. Kass's rule for this repo: a test asserts its logic against the
+scrubbed-real canonical dataset; SUT write methods appear only when that write IS the thing
+under test; never seed. Where canonical lacks a shape, edit an existing unreferenced canonical
+row in place — do not add rows.
+
+**Files:**
+- Modify: `TelegramGroupsAdmin.IntegrationTests/TestData/SQL/canonical/02_telegram_users.sql` (two rows: `9301917046112` at ~line 328, `9995544961449` at ~line 333)
+- Modify: `TelegramGroupsAdmin.IntegrationTests/TestData/GoldenDatasetConstants.cs` (new nested class `UsersPage`)
+- Modify: `TelegramGroupsAdmin.IntegrationTests/CLAUDE.md` (Part 2 recipes under `### Telegram users`)
+- Modify: `TelegramGroupsAdmin.IntegrationTests/Repositories/TelegramUserRepositoryTests.cs` (`#region All Filter Tests` and `#region User Detail Action Chat Name`)
+
+**Interfaces:**
+- Consumes: `UserListFilter.All`, `TelegramUserListItem.IsActive`, `UserTabCounts.AllCount` (Task 1); Trusted predicate (Task 2); `UserActionRecord.ChatName` (Task 6); existing fixture members `_repository`, `_serviceProvider`, `TopHamAuthorId`, `GoldenDatasetConstants.Chats.MainChatId`.
+- Produces: `GoldenDatasetConstants.UsersPage.*` constants.
+
+- [ ] **Step 1: Edit the two canonical rows in place**
+
+In `02_telegram_users.sql` the column order is: `telegram_user_id, username, first_name, last_name, user_photo_path, photo_hash, photo_file_unique_id, is_bot, is_trusted, is_active, is_banned, ban_expires_at, bot_dm_enabled, first_seen_at, last_seen_at, created_at, updated_at, warnings, ..., kick_count, banned_at` (`banned_at` is the last value).
+
+Row `VALUES (9301917046112, 'tadpolesleek', 'Supply', ...)`: change the 9th value (`is_trusted`) from `false` to `true`. Nothing else on that row changes. Story: a welcome-timeout kick followed by an admin trusting the account.
+
+Row `VALUES (9995544961449, 'curveabdominal', 'Crawling', ...)`: change the 11th value (`is_banned`) from `false` to `true`; the 12th value (`ban_expires_at`) from `NULL` to `'2026-04-30 12:56:53.398146+00'`; the final value (`banned_at`) from `NULL` to `'2026-04-30 00:56:53.398146+00'`. Story: a 12-hour temp-ban issued at the kick time that has since expired while the flag was never cleared — exactly the shape the All tab exists to catch.
+
+Verify with `grep -c "VALUES (9995544961449," …/02_telegram_users.sql` (1) and by eyeballing the edited values; do not reformat the lines.
+
+- [ ] **Step 2: Add canonical anchors**
+
+In `GoldenDatasetConstants.cs`, add a nested class after `TelegramUsers`:
+
+```csharp
+    /// <summary>
+    /// Anchors for the Users page tab tests (<c>TelegramUserRepositoryTests</c>, All / Trusted
+    /// filters and action-history chat names). All four are welcome-timeout kicked joiners in
+    /// <see cref="Chats.MainChatId"/> with zero messages, except the last which is a spammer
+    /// with one chat-scoped Delete and two global (chat-less) actions.
+    /// Two rows are edited in canonical (2026-09-13) to carry shapes real data never keeps
+    /// long enough to snapshot; see the per-constant notes.
+    /// </summary>
+    public static class UsersPage
+    {
+        /// <summary>@luminanceflagstick — is_active=false, is_banned=false, is_trusted=false. Untouched canonical row.</summary>
+        public const long KickedJoinerId = 9171379870502L;
+
+        /// <summary>Username of <see cref="KickedJoinerId"/>; unique across canonical usernames, first names, and username_history.</summary>
+        public const string KickedJoinerUsername = "luminanceflagstick";
+
+        /// <summary>@tadpolesleek — is_active=false, is_trusted=true (canonical edit: trusted after a timeout kick).</summary>
+        public const long TrustedKickedJoinerId = 9301917046112L;
+
+        /// <summary>@curveabdominal — is_active=false, is_banned=true with ban_expires_at in the past (canonical edit: expired temp-ban whose flag was never cleared).</summary>
+        public const long ExpiredBanUserId = 9995544961449L;
+
+        /// <summary>User with a Delete action in <see cref="Chats.MainChatId"/> plus a Ban and an Untrust with no chat.</summary>
+        public const long ChatScopedActionsUserId = 9110930357318L;
+
+        /// <summary>user_actions.id of the Delete action (chat_id = MainChat) for <see cref="ChatScopedActionsUserId"/>.</summary>
+        public const long ChatScopedDeleteActionId = 2179L;
+
+        /// <summary>user_actions.id of the Ban action (chat_id NULL) for <see cref="ChatScopedActionsUserId"/>.</summary>
+        public const long GlobalBanActionId = 2180L;
+    }
+```
+
+- [ ] **Step 3: Document the recipes**
+
+In `TelegramGroupsAdmin.IntegrationTests/CLAUDE.md`, under `### Telegram users`, add before `#### Heavily-banned spammer`:
+
+```markdown
+#### Kicked joiner (welcome timeout, never verified)
+- `telegram_user_id` = `9171379870502`
+- `@luminanceflagstick`, "Agnostic", `is_active=false`, `is_banned=false`, 0 messages, 2 `user_actions` (Mute "Pending welcome verification", Kick "Welcome timeout") in MainChat
+- Use when: a test needs a user who never passed the join gate (hidden from the Active tab, shown on All with the Unverified chip). Constant: `GoldenDatasetConstants.UsersPage.KickedJoinerId`.
+
+#### Trusted kicked joiner (canonical edit 2026-09-13)
+- `telegram_user_id` = `9301917046112`
+- `@tadpolesleek`, "Supply", `is_active=false`, `is_trusted=true` (flag edited in place; row is otherwise a welcome-timeout kick like the one above)
+- Use when: a test needs trust independent of join-gate state. Constant: `UsersPage.TrustedKickedJoinerId`.
+
+#### Expired temp-ban with the flag still set (canonical edit 2026-09-13)
+- `telegram_user_id` = `9995544961449`
+- `@curveabdominal`, "Crawling", `is_active=false`, `is_banned=true`, `ban_expires_at=2026-04-30 12:56:53+00` (past), `banned_at=2026-04-30 00:56:53+00`
+- Use when: a test needs a user the Banned tab drops (expired) that every other status tab also excludes — the shape the All tab guarantees. Constant: `UsersPage.ExpiredBanUserId`.
+
+#### User with chat-scoped and global actions
+- `telegram_user_id` = `9110930357318`
+- 3 `user_actions`: Delete (id 2179, `chat_id` = MainChat), Ban (id 2180, `chat_id` NULL), Untrust (id 2181, `chat_id` NULL)
+- Use when: a test needs both a chat-attributed and a global audit row on one user (e.g. chat-name resolution in the user detail dialog). Constants: `UsersPage.ChatScopedActionsUserId`, `ChatScopedDeleteActionId`, `GlobalBanActionId`.
+```
+
+Also amend the Part 1 table row for `02 | telegram_users` to end with: "Two rows flag-edited 2026-09-13 for Users-tab tests (see Part 2 recipes)."
+
+- [ ] **Step 4: Rewrite the tests**
+
+Replace the entire `#region All Filter Tests … #endregion` block with:
+
+```csharp
+    #region All Filter Tests
+
+    private static readonly List<long> GlobalScope = [0L];
+
+    private async Task<AppDbContext> OpenContextAsync()
+    {
+        var factory = _serviceProvider!.GetRequiredService<IDbContextFactory<AppDbContext>>();
+        return await factory.CreateDbContextAsync();
+    }
+
+    [Test]
+    public async Task GetPagedUsersAsync_All_ReturnsKickedJoiner_ThatActiveHides()
+    {
+        var (allItems, _) = await _repository!.GetPagedUsersAsync(
+            UiModels.UserListFilter.All, skip: 0, take: 5000,
+            searchText: null, chatIds: GlobalScope, sortLabel: null, sortDescending: false);
+        var (activeItems, _) = await _repository.GetPagedUsersAsync(
+            UiModels.UserListFilter.Active, skip: 0, take: 5000,
+            searchText: null, chatIds: GlobalScope, sortLabel: null, sortDescending: false);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(allItems.Select(i => i.TelegramUserId), Does.Contain(GoldenDatasetConstants.UsersPage.KickedJoinerId), "All must include a joiner who never passed the gate");
+            Assert.That(activeItems.Select(i => i.TelegramUserId), Does.Not.Contain(GoldenDatasetConstants.UsersPage.KickedJoinerId), "Active still excludes unverified users");
+        }
+    }
+
+    [Test]
+    public async Task GetPagedUsersAsync_All_ReturnsUserWithExpiredBanFlagStillSet()
+    {
+        const long userId = GoldenDatasetConstants.UsersPage.ExpiredBanUserId;
+
+        // Precondition guard: canonical must still carry the edited shape.
+        await using (var ctx = await OpenContextAsync())
+        {
+            var row = await ctx.TelegramUsers.AsNoTracking().SingleAsync(u => u.TelegramUserId == userId);
+            Assert.That(row.IsBanned && row.BanExpiresAt < DateTimeOffset.UtcNow, Is.True,
+                "canonical anchor must be is_banned=true with an expired ban_expires_at");
+        }
+
+        var (allItems, _) = await _repository!.GetPagedUsersAsync(
+            UiModels.UserListFilter.All, skip: 0, take: 5000,
+            searchText: null, chatIds: GlobalScope, sortLabel: null, sortDescending: false);
+        var (activeItems, _) = await _repository.GetPagedUsersAsync(
+            UiModels.UserListFilter.Active, skip: 0, take: 5000,
+            searchText: null, chatIds: GlobalScope, sortLabel: null, sortDescending: false);
+        var (bannedItems, _) = await _repository.GetPagedBannedUsersWithDetailsAsync(
+            skip: 0, take: 5000, searchText: null, sortLabel: null, sortDescending: false);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(allItems.Select(i => i.TelegramUserId), Does.Contain(userId), "All must include the expired-ban user");
+            Assert.That(activeItems.Select(i => i.TelegramUserId), Does.Not.Contain(userId), "Active excludes is_banned rows");
+            Assert.That(bannedItems.Select(i => i.TelegramUserId), Does.Not.Contain(userId), "Banned excludes expired bans");
+        }
+    }
+
+    [Test]
+    public async Task GetPagedUsersAsync_All_ExcludesSystemUser()
+    {
+        var (allItems, _) = await _repository!.GetPagedUsersAsync(
+            UiModels.UserListFilter.All, skip: 0, take: 5000,
+            searchText: null, chatIds: GlobalScope, sortLabel: null, sortDescending: false);
+
+        Assert.That(allItems.Select(i => i.TelegramUserId), Does.Not.Contain(0L));
+    }
+
+    [Test]
+    public async Task GetPagedUsersAsync_All_ProjectsIsActive()
+    {
+        var (allItems, _) = await _repository!.GetPagedUsersAsync(
+            UiModels.UserListFilter.All, skip: 0, take: 5000,
+            searchText: null, chatIds: GlobalScope, sortLabel: null, sortDescending: false);
+
+        var kicked = allItems.Single(i => i.TelegramUserId == GoldenDatasetConstants.UsersPage.KickedJoinerId);
+        var canonicalActive = allItems.Single(i => i.TelegramUserId == TopHamAuthorId);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(kicked.IsActive, Is.False);
+            Assert.That(canonicalActive.IsActive, Is.True);
+        }
+    }
+
+    [Test]
+    public async Task GetPagedUsersAsync_All_SearchFindsKickedJoiner()
+    {
+        var (items, totalCount) = await _repository!.GetPagedUsersAsync(
+            UiModels.UserListFilter.All, skip: 0, take: 50,
+            searchText: GoldenDatasetConstants.UsersPage.KickedJoinerUsername,
+            chatIds: GlobalScope, sortLabel: null, sortDescending: false);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(totalCount, Is.EqualTo(1));
+            Assert.That(items.Single().TelegramUserId, Is.EqualTo(GoldenDatasetConstants.UsersPage.KickedJoinerId));
+        }
+    }
+
+    [Test]
+    public async Task GetUserTabCountsAsync_AllCount_EqualsNonSystemRowCount_UnderGlobalScope()
+    {
+        var counts = await _repository!.GetUserTabCountsAsync(chatIds: GlobalScope, searchText: null);
+
+        int rowCount;
+        await using (var ctx = await OpenContextAsync())
+        {
+            rowCount = await ctx.TelegramUsers.CountAsync(u => u.TelegramUserId != 0);
+        }
+
+        Assert.That(counts.AllCount, Is.EqualTo(rowCount));
+    }
+
+    [Test]
+    public async Task GetPagedUsersAsync_All_RespectsChatScope()
+    {
+        // The kicked joiner has no messages anywhere, so a MainChat-scoped admin must not see them.
+        var (items, _) = await _repository!.GetPagedUsersAsync(
+            UiModels.UserListFilter.All, skip: 0, take: 5000,
+            searchText: null, chatIds: new List<long> { GoldenDatasetConstants.Chats.MainChatId },
+            sortLabel: null, sortDescending: false);
+
+        Assert.That(items.Select(i => i.TelegramUserId), Does.Not.Contain(GoldenDatasetConstants.UsersPage.KickedJoinerId));
+    }
+
+    [Test]
+    public async Task GetPagedUsersAsync_Trusted_IncludesInactiveTrustedUser()
+    {
+        const long userId = GoldenDatasetConstants.UsersPage.TrustedKickedJoinerId;
+
+        // Precondition guard: canonical must still carry the edited shape.
+        await using (var ctx = await OpenContextAsync())
+        {
+            var row = await ctx.TelegramUsers.AsNoTracking().SingleAsync(u => u.TelegramUserId == userId);
+            Assert.That(row.IsTrusted && !row.IsActive, Is.True, "canonical anchor must be is_trusted=true, is_active=false");
+        }
+
+        var (items, _) = await _repository!.GetPagedUsersAsync(
+            UiModels.UserListFilter.Trusted, skip: 0, take: 5000,
+            searchText: null, chatIds: GlobalScope, sortLabel: null, sortDescending: false);
+        var counts = await _repository.GetUserTabCountsAsync(chatIds: GlobalScope, searchText: null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(items.Select(i => i.TelegramUserId), Does.Contain(userId), "Trust is global; gate state must not hide it");
+            Assert.That(counts.TrustedCount, Is.EqualTo(items.Count), "count must match the listed rows");
+        }
+    }
+
+    #endregion
+```
+
+Replace the entire `#region User Detail Action Chat Name … #endregion` block with:
+
+```csharp
+    #region User Detail Action Chat Name
+
+    [Test]
+    public async Task GetUserDetailAsync_Actions_IncludeChatNameForChatScopedAction_AndNullForGlobalAction()
+    {
+        const long userId = GoldenDatasetConstants.UsersPage.ChatScopedActionsUserId;
+
+        string? mainChatName;
+        int expectedActionCount;
+        await using (var ctx = await OpenContextAsync())
+        {
+            mainChatName = await ctx.ManagedChats.AsNoTracking()
+                .Where(c => c.ChatId == GoldenDatasetConstants.Chats.MainChatId)
+                .Select(c => c.ChatName)
+                .SingleAsync();
+            expectedActionCount = await ctx.UserActions.CountAsync(a => a.UserId == userId);
+        }
+
+        var detail = await _repository!.GetUserDetailAsync(userId);
+
+        Assert.That(detail, Is.Not.Null);
+        var byId = detail!.Actions.ToDictionary(a => a.Id);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(mainChatName, Is.Not.Null.And.Not.Empty, "golden dataset main chat must have a name");
+            Assert.That(detail.Actions, Has.Count.EqualTo(expectedActionCount), "LEFT JOIN must keep chat-less actions");
+            Assert.That(byId[GoldenDatasetConstants.UsersPage.ChatScopedDeleteActionId].ChatId, Is.EqualTo(GoldenDatasetConstants.Chats.MainChatId));
+            Assert.That(byId[GoldenDatasetConstants.UsersPage.ChatScopedDeleteActionId].ChatName, Is.EqualTo(mainChatName));
+            Assert.That(byId[GoldenDatasetConstants.UsersPage.GlobalBanActionId].ChatId, Is.Null);
+            Assert.That(byId[GoldenDatasetConstants.UsersPage.GlobalBanActionId].ChatName, Is.Null);
+        }
+    }
+
+    #endregion
+```
+
+Delete the now-unused `SeedInactiveUserAsync` helper. Keep `SeedActiveUserAsync` — pre-existing tests outside this plan still use it.
+
+- [ ] **Step 5: Run the fixture**
+
+Run: `dotnet test TelegramGroupsAdmin.IntegrationTests --filter "FullyQualifiedName~TelegramUserRepositoryTests"`
+Expected: all passed (the golden template is rebuilt from the edited SQL on fixture start). Also run `dotnet test TelegramGroupsAdmin.IntegrationTests --filter "FullyQualifiedName~LoadCanonicalAsyncTests"` to confirm the canonical loader still accepts the edited rows.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add TelegramGroupsAdmin.IntegrationTests/TestData/SQL/canonical/02_telegram_users.sql TelegramGroupsAdmin.IntegrationTests/TestData/GoldenDatasetConstants.cs TelegramGroupsAdmin.IntegrationTests/CLAUDE.md TelegramGroupsAdmin.IntegrationTests/Repositories/TelegramUserRepositoryTests.cs
+git commit -F- <<'EOF'
+test(users): assert All/Trusted/chat-name behaviour against canonical rows
+
+Replaces SUT-write and raw-insert seeding with golden anchors; two
+unreferenced canonical users are flag-edited in place to carry the
+trusted-inactive and expired-ban shapes.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01TGukJYySot6Y6hrMrX7eE7
+
+---
+
+### Task 9: Rewrite the new integration tests against canonical (golden) data
+
+**Why this task exists:** Tasks 1, 2, and 6 seeded their preconditions with SUT writes
+(`GetOrCreateAsync`, `UpsertAsync`, `SetBanStatusAsync`, `TrustUserAsync`) and one raw
+`UserActions.AddRange`. Kass's rule for this repo: a test asserts its logic against the
+scrubbed-real canonical dataset; SUT write methods appear only when that write IS the thing
+under test; never seed. Where canonical lacks a shape, edit an existing unreferenced canonical
+row in place — do not add rows.
+
+**Files:**
+- Modify: `TelegramGroupsAdmin.IntegrationTests/TestData/SQL/canonical/02_telegram_users.sql` (two rows: `9301917046112` at ~line 328, `9995544961449` at ~line 333)
+- Modify: `TelegramGroupsAdmin.IntegrationTests/TestData/GoldenDatasetConstants.cs` (new nested class `UsersPage`)
+- Modify: `TelegramGroupsAdmin.IntegrationTests/CLAUDE.md` (Part 2 recipes under `### Telegram users`; Part 1 table row 02)
+- Modify: `TelegramGroupsAdmin.IntegrationTests/Repositories/TelegramUserRepositoryTests.cs` (`#region All Filter Tests` and `#region User Detail Action Chat Name`)
+
+**Interfaces:**
+- Consumes: `UserListFilter.All`, `TelegramUserListItem.IsActive`, `UserTabCounts.AllCount` (Task 1); Trusted predicate (Task 2); `UserActionRecord.ChatName` (Task 6); existing fixture members `_repository`, `_serviceProvider`, `TopHamAuthorId`, `GoldenDatasetConstants.Chats.MainChatId`.
+- Produces: `GoldenDatasetConstants.UsersPage.*` constants.
+
+- [ ] **Step 1: Edit the two canonical rows in place**
+
+In `02_telegram_users.sql` the column order is: `telegram_user_id, username, first_name, last_name, user_photo_path, photo_hash, photo_file_unique_id, is_bot, is_trusted, is_active, is_banned, ban_expires_at, bot_dm_enabled, first_seen_at, last_seen_at, created_at, updated_at, warnings, ..., kick_count, banned_at` (`banned_at` is the last value).
+
+Row `VALUES (9301917046112, 'tadpolesleek', 'Supply', ...)`: change the 9th value (`is_trusted`) from `false` to `true`. Nothing else on that row changes. Story: a welcome-timeout kick followed by an admin trusting the account.
+
+Row `VALUES (9995544961449, 'curveabdominal', 'Crawling', ...)`: change the 11th value (`is_banned`) from `false` to `true`; the 12th value (`ban_expires_at`) from `NULL` to `'2026-04-30 12:56:53.398146+00'`; the final value (`banned_at`) from `NULL` to `'2026-04-30 00:56:53.398146+00'`. Story: a 12-hour temp-ban issued at the kick time that has since expired while the flag was never cleared — exactly the shape the All tab exists to catch.
+
+Verify with `grep -c "VALUES (9995544961449," …/02_telegram_users.sql` (1) and by eyeballing the edited values; do not reformat the lines.
+
+- [ ] **Step 2: Add canonical anchors**
+
+In `GoldenDatasetConstants.cs`, add a nested class after `TelegramUsers`:
+
+```csharp
+    /// <summary>
+    /// Anchors for the Users page tab tests (<c>TelegramUserRepositoryTests</c>, All / Trusted
+    /// filters and action-history chat names). The first three are welcome-timeout kicked
+    /// joiners in <see cref="Chats.MainChatId"/> with zero messages; the last is a spammer with
+    /// one chat-scoped Delete and two global (chat-less) actions. Two rows were flag-edited in
+    /// canonical (2026-09-13) to carry shapes real data never keeps long enough to snapshot;
+    /// see the per-constant notes.
+    /// </summary>
+    public static class UsersPage
+    {
+        /// <summary>@luminanceflagstick — is_active=false, is_banned=false, is_trusted=false. Untouched canonical row.</summary>
+        public const long KickedJoinerId = 9171379870502L;
+
+        /// <summary>Username of <see cref="KickedJoinerId"/>; unique across canonical usernames, first names, and username_history.</summary>
+        public const string KickedJoinerUsername = "luminanceflagstick";
+
+        /// <summary>@tadpolesleek — is_active=false, is_trusted=true (canonical edit: trusted after a timeout kick).</summary>
+        public const long TrustedKickedJoinerId = 9301917046112L;
+
+        /// <summary>@curveabdominal — is_active=false, is_banned=true with ban_expires_at in the past (canonical edit: expired temp-ban whose flag was never cleared).</summary>
+        public const long ExpiredBanUserId = 9995544961449L;
+
+        /// <summary>User with a Delete action in <see cref="Chats.MainChatId"/> plus a Ban and an Untrust with no chat.</summary>
+        public const long ChatScopedActionsUserId = 9110930357318L;
+
+        /// <summary>user_actions.id of the Delete action (chat_id = MainChat) for <see cref="ChatScopedActionsUserId"/>.</summary>
+        public const long ChatScopedDeleteActionId = 2179L;
+
+        /// <summary>user_actions.id of the Ban action (chat_id NULL) for <see cref="ChatScopedActionsUserId"/>.</summary>
+        public const long GlobalBanActionId = 2180L;
+    }
+```
+
+- [ ] **Step 3: Document the recipes**
+
+In `TelegramGroupsAdmin.IntegrationTests/CLAUDE.md`, under `### Telegram users`, add before `#### Heavily-banned spammer`:
+
+```markdown
+#### Kicked joiner (welcome timeout, never verified)
+- `telegram_user_id` = `9171379870502`
+- `@luminanceflagstick`, "Agnostic", `is_active=false`, `is_banned=false`, 0 messages, 2 `user_actions` (Mute "Pending welcome verification", Kick "Welcome timeout") in MainChat
+- Use when: a test needs a user who never passed the join gate (hidden from the Active tab, shown on All with the Unverified chip). Constant: `GoldenDatasetConstants.UsersPage.KickedJoinerId`.
+
+#### Trusted kicked joiner (canonical edit 2026-09-13)
+- `telegram_user_id` = `9301917046112`
+- `@tadpolesleek`, "Supply", `is_active=false`, `is_trusted=true` (flag edited in place; row is otherwise a welcome-timeout kick like the one above)
+- Use when: a test needs trust independent of join-gate state. Constant: `UsersPage.TrustedKickedJoinerId`.
+
+#### Expired temp-ban with the flag still set (canonical edit 2026-09-13)
+- `telegram_user_id` = `9995544961449`
+- `@curveabdominal`, "Crawling", `is_active=false`, `is_banned=true`, `ban_expires_at=2026-04-30 12:56:53+00` (past), `banned_at=2026-04-30 00:56:53+00`
+- Use when: a test needs a user the Banned tab drops (expired) that every other status tab also excludes — the shape the All tab guarantees. Constant: `UsersPage.ExpiredBanUserId`.
+
+#### User with chat-scoped and global actions
+- `telegram_user_id` = `9110930357318`
+- 3 `user_actions`: Delete (id 2179, `chat_id` = MainChat), Ban (id 2180, `chat_id` NULL), Untrust (id 2181, `chat_id` NULL)
+- Use when: a test needs both a chat-attributed and a global audit row on one user (e.g. chat-name resolution in the user detail dialog). Constants: `UsersPage.ChatScopedActionsUserId`, `ChatScopedDeleteActionId`, `GlobalBanActionId`.
+```
+
+Also amend the Part 1 table row for `02 | telegram_users` so its description ends with: "Two rows flag-edited 2026-09-13 for Users-tab tests (see Part 2 recipes)."
+
+- [ ] **Step 4: Rewrite the tests**
+
+Replace the entire `#region All Filter Tests … #endregion` block with:
+
+```csharp
+    #region All Filter Tests
+
+    private static readonly List<long> GlobalScope = [0L];
+
+    private async Task<AppDbContext> OpenContextAsync()
+    {
+        var factory = _serviceProvider!.GetRequiredService<IDbContextFactory<AppDbContext>>();
+        return await factory.CreateDbContextAsync();
+    }
+
+    [Test]
+    public async Task GetPagedUsersAsync_All_ReturnsKickedJoiner_ThatActiveHides()
+    {
+        var (allItems, _) = await _repository!.GetPagedUsersAsync(
+            UiModels.UserListFilter.All, skip: 0, take: 5000,
+            searchText: null, chatIds: GlobalScope, sortLabel: null, sortDescending: false);
+        var (activeItems, _) = await _repository.GetPagedUsersAsync(
+            UiModels.UserListFilter.Active, skip: 0, take: 5000,
+            searchText: null, chatIds: GlobalScope, sortLabel: null, sortDescending: false);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(allItems.Select(i => i.TelegramUserId), Does.Contain(GoldenDatasetConstants.UsersPage.KickedJoinerId), "All must include a joiner who never passed the gate");
+            Assert.That(activeItems.Select(i => i.TelegramUserId), Does.Not.Contain(GoldenDatasetConstants.UsersPage.KickedJoinerId), "Active still excludes unverified users");
+        }
+    }
+
+    [Test]
+    public async Task GetPagedUsersAsync_All_ReturnsUserWithExpiredBanFlagStillSet()
+    {
+        const long userId = GoldenDatasetConstants.UsersPage.ExpiredBanUserId;
+
+        // Precondition guard: canonical must still carry the edited shape.
+        await using (var ctx = await OpenContextAsync())
+        {
+            var row = await ctx.TelegramUsers.AsNoTracking().SingleAsync(u => u.TelegramUserId == userId);
+            Assert.That(row.IsBanned && row.BanExpiresAt < DateTimeOffset.UtcNow, Is.True,
+                "canonical anchor must be is_banned=true with an expired ban_expires_at");
+        }
+
+        var (allItems, _) = await _repository!.GetPagedUsersAsync(
+            UiModels.UserListFilter.All, skip: 0, take: 5000,
+            searchText: null, chatIds: GlobalScope, sortLabel: null, sortDescending: false);
+        var (activeItems, _) = await _repository.GetPagedUsersAsync(
+            UiModels.UserListFilter.Active, skip: 0, take: 5000,
+            searchText: null, chatIds: GlobalScope, sortLabel: null, sortDescending: false);
+        var (bannedItems, _) = await _repository.GetPagedBannedUsersWithDetailsAsync(
+            skip: 0, take: 5000, searchText: null, sortLabel: null, sortDescending: false);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(allItems.Select(i => i.TelegramUserId), Does.Contain(userId), "All must include the expired-ban user");
+            Assert.That(activeItems.Select(i => i.TelegramUserId), Does.Not.Contain(userId), "Active excludes is_banned rows");
+            Assert.That(bannedItems.Select(i => i.TelegramUserId), Does.Not.Contain(userId), "Banned excludes expired bans");
+        }
+    }
+
+    [Test]
+    public async Task GetPagedUsersAsync_All_ExcludesSystemUser()
+    {
+        var (allItems, _) = await _repository!.GetPagedUsersAsync(
+            UiModels.UserListFilter.All, skip: 0, take: 5000,
+            searchText: null, chatIds: GlobalScope, sortLabel: null, sortDescending: false);
+
+        Assert.That(allItems.Select(i => i.TelegramUserId), Does.Not.Contain(0L));
+    }
+
+    [Test]
+    public async Task GetPagedUsersAsync_All_ProjectsIsActive()
+    {
+        var (allItems, _) = await _repository!.GetPagedUsersAsync(
+            UiModels.UserListFilter.All, skip: 0, take: 5000,
+            searchText: null, chatIds: GlobalScope, sortLabel: null, sortDescending: false);
+
+        var kicked = allItems.Single(i => i.TelegramUserId == GoldenDatasetConstants.UsersPage.KickedJoinerId);
+        var canonicalActive = allItems.Single(i => i.TelegramUserId == TopHamAuthorId);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(kicked.IsActive, Is.False);
+            Assert.That(canonicalActive.IsActive, Is.True);
+        }
+    }
+
+    [Test]
+    public async Task GetPagedUsersAsync_All_SearchFindsKickedJoiner()
+    {
+        var (items, totalCount) = await _repository!.GetPagedUsersAsync(
+            UiModels.UserListFilter.All, skip: 0, take: 50,
+            searchText: GoldenDatasetConstants.UsersPage.KickedJoinerUsername,
+            chatIds: GlobalScope, sortLabel: null, sortDescending: false);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(totalCount, Is.EqualTo(1));
+            Assert.That(items.Single().TelegramUserId, Is.EqualTo(GoldenDatasetConstants.UsersPage.KickedJoinerId));
+        }
+    }
+
+    [Test]
+    public async Task GetUserTabCountsAsync_AllCount_EqualsNonSystemRowCount_UnderGlobalScope()
+    {
+        var counts = await _repository!.GetUserTabCountsAsync(chatIds: GlobalScope, searchText: null);
+
+        int rowCount;
+        await using (var ctx = await OpenContextAsync())
+        {
+            rowCount = await ctx.TelegramUsers.CountAsync(u => u.TelegramUserId != 0);
+        }
+
+        Assert.That(counts.AllCount, Is.EqualTo(rowCount));
+    }
+
+    [Test]
+    public async Task GetPagedUsersAsync_All_RespectsChatScope()
+    {
+        // The kicked joiner has no messages anywhere, so a MainChat-scoped admin must not see them.
+        var (items, _) = await _repository!.GetPagedUsersAsync(
+            UiModels.UserListFilter.All, skip: 0, take: 5000,
+            searchText: null, chatIds: new List<long> { GoldenDatasetConstants.Chats.MainChatId },
+            sortLabel: null, sortDescending: false);
+
+        Assert.That(items.Select(i => i.TelegramUserId), Does.Not.Contain(GoldenDatasetConstants.UsersPage.KickedJoinerId));
+    }
+
+    [Test]
+    public async Task GetPagedUsersAsync_Trusted_IncludesInactiveTrustedUser()
+    {
+        const long userId = GoldenDatasetConstants.UsersPage.TrustedKickedJoinerId;
+
+        // Precondition guard: canonical must still carry the edited shape.
+        await using (var ctx = await OpenContextAsync())
+        {
+            var row = await ctx.TelegramUsers.AsNoTracking().SingleAsync(u => u.TelegramUserId == userId);
+            Assert.That(row.IsTrusted && !row.IsActive, Is.True, "canonical anchor must be is_trusted=true, is_active=false");
+        }
+
+        var (items, _) = await _repository!.GetPagedUsersAsync(
+            UiModels.UserListFilter.Trusted, skip: 0, take: 5000,
+            searchText: null, chatIds: GlobalScope, sortLabel: null, sortDescending: false);
+        var counts = await _repository.GetUserTabCountsAsync(chatIds: GlobalScope, searchText: null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(items.Select(i => i.TelegramUserId), Does.Contain(userId), "Trust is global; gate state must not hide it");
+            Assert.That(counts.TrustedCount, Is.EqualTo(items.Count), "count must match the listed rows");
+        }
+    }
+
+    #endregion
+```
+
+Replace the entire `#region User Detail Action Chat Name … #endregion` block with:
+
+```csharp
+    #region User Detail Action Chat Name
+
+    [Test]
+    public async Task GetUserDetailAsync_Actions_IncludeChatNameForChatScopedAction_AndNullForGlobalAction()
+    {
+        const long userId = GoldenDatasetConstants.UsersPage.ChatScopedActionsUserId;
+
+        string? mainChatName;
+        int expectedActionCount;
+        await using (var ctx = await OpenContextAsync())
+        {
+            mainChatName = await ctx.ManagedChats.AsNoTracking()
+                .Where(c => c.ChatId == GoldenDatasetConstants.Chats.MainChatId)
+                .Select(c => c.ChatName)
+                .SingleAsync();
+            expectedActionCount = await ctx.UserActions.CountAsync(a => a.UserId == userId);
+        }
+
+        var detail = await _repository!.GetUserDetailAsync(userId);
+
+        Assert.That(detail, Is.Not.Null);
+        var byId = detail!.Actions.ToDictionary(a => a.Id);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(mainChatName, Is.Not.Null.And.Not.Empty, "golden dataset main chat must have a name");
+            Assert.That(detail.Actions, Has.Count.EqualTo(expectedActionCount), "LEFT JOIN must keep chat-less actions");
+            Assert.That(byId[GoldenDatasetConstants.UsersPage.ChatScopedDeleteActionId].ChatId, Is.EqualTo(GoldenDatasetConstants.Chats.MainChatId));
+            Assert.That(byId[GoldenDatasetConstants.UsersPage.ChatScopedDeleteActionId].ChatName, Is.EqualTo(mainChatName));
+            Assert.That(byId[GoldenDatasetConstants.UsersPage.GlobalBanActionId].ChatId, Is.Null);
+            Assert.That(byId[GoldenDatasetConstants.UsersPage.GlobalBanActionId].ChatName, Is.Null);
+        }
+    }
+
+    #endregion
+```
+
+Delete the now-unused `SeedInactiveUserAsync` helper. Keep `SeedActiveUserAsync` — pre-existing tests outside this plan still use it.
+
+- [ ] **Step 5: Run the fixture**
+
+Run: `dotnet test TelegramGroupsAdmin.IntegrationTests --filter "FullyQualifiedName~TelegramUserRepositoryTests"`
+Expected: all passed (the golden template is rebuilt from the edited SQL on fixture start). Also run `dotnet test TelegramGroupsAdmin.IntegrationTests --filter "FullyQualifiedName~LoadCanonicalAsyncTests"` to confirm the canonical loader still accepts the edited rows.
+
+- [ ] **Step 6: Commit**
+
+Stage the four files and commit with subject `test(users): assert All/Trusted/chat-name behaviour against canonical rows`, body "Replaces SUT-write and raw-insert seeding with golden anchors; two unreferenced canonical users are flag-edited in place to carry the trusted-inactive and expired-ban shapes.", and the two standard trailer lines (`Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>` and `Claude-Session: https://claude.ai/code/session_01TGukJYySot6Y6hrMrX7eE7`), using a `git commit -F- <<'EOF'` heredoc.
