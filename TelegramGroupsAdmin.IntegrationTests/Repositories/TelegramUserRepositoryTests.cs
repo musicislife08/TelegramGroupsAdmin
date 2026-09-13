@@ -429,21 +429,17 @@ public class TelegramUserRepositoryTests
 
     #region All Filter Tests
 
-    private async Task<long> SeedInactiveUserAsync(string username, string firstName)
-    {
-        // GetOrCreateAsync mirrors the join path: inserts is_active = false.
-        var userId = Random.Shared.NextInt64(100_000_000_000L, 999_999_999_999L);
-        await _repository!.GetOrCreateAsync(new UserIdentity(userId, firstName, null, username), isBot: false);
-        return userId;
-    }
-
     private static readonly List<long> GlobalScope = [0L];
 
-    [Test]
-    public async Task GetPagedUsersAsync_All_ReturnsInactiveNonBannedUser()
+    private async Task<AppDbContext> OpenContextAsync()
     {
-        var userId = await SeedInactiveUserAsync($"pending_{Guid.NewGuid().ToString("N")[..12]}", "Pending");
+        var factory = _serviceProvider!.GetRequiredService<IDbContextFactory<AppDbContext>>();
+        return await factory.CreateDbContextAsync();
+    }
 
+    [Test]
+    public async Task GetPagedUsersAsync_All_ReturnsKickedJoiner_ThatActiveHides()
+    {
         var (allItems, _) = await _repository!.GetPagedUsersAsync(
             UiModels.UserListFilter.All, skip: 0, take: 5000,
             searchText: null, chatIds: GlobalScope, sortLabel: null, sortDescending: false);
@@ -453,20 +449,25 @@ public class TelegramUserRepositoryTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(allItems.Select(i => i.TelegramUserId), Does.Contain(userId), "All must include a pending joiner");
-            Assert.That(activeItems.Select(i => i.TelegramUserId), Does.Not.Contain(userId), "Active still excludes unverified users");
+            Assert.That(allItems.Select(i => i.TelegramUserId), Does.Contain(GoldenDatasetConstants.UsersPage.KickedJoinerId), "All must include a joiner who never passed the gate");
+            Assert.That(activeItems.Select(i => i.TelegramUserId), Does.Not.Contain(GoldenDatasetConstants.UsersPage.KickedJoinerId), "Active still excludes unverified users");
         }
     }
 
     [Test]
     public async Task GetPagedUsersAsync_All_ReturnsUserWithExpiredBanFlagStillSet()
     {
-        // The gap no other tab covers: is_banned = true but the ban already expired.
-        var userId = Random.Shared.NextInt64(100_000_000_000L, 999_999_999_999L);
-        await SeedActiveUserAsync(userId, username: $"expired_{Guid.NewGuid().ToString("N")[..12]}");
-        await _repository!.SetBanStatusAsync(userId, isBanned: true, expiresAt: DateTimeOffset.UtcNow.AddDays(-1));
+        const long userId = GoldenDatasetConstants.UsersPage.ExpiredBanUserId;
 
-        var (allItems, _) = await _repository.GetPagedUsersAsync(
+        // Precondition guard: canonical must still carry the edited shape.
+        await using (var ctx = await OpenContextAsync())
+        {
+            var row = await ctx.TelegramUsers.AsNoTracking().SingleAsync(u => u.TelegramUserId == userId);
+            Assert.That(row.IsBanned && row.BanExpiresAt < DateTimeOffset.UtcNow, Is.True,
+                "canonical anchor must be is_banned=true with an expired ban_expires_at");
+        }
+
+        var (allItems, _) = await _repository!.GetPagedUsersAsync(
             UiModels.UserListFilter.All, skip: 0, take: 5000,
             searchText: null, chatIds: GlobalScope, sortLabel: null, sortDescending: false);
         var (activeItems, _) = await _repository.GetPagedUsersAsync(
@@ -496,50 +497,42 @@ public class TelegramUserRepositoryTests
     [Test]
     public async Task GetPagedUsersAsync_All_ProjectsIsActive()
     {
-        var inactiveId = await SeedInactiveUserAsync($"inactive_{Guid.NewGuid().ToString("N")[..12]}", "Inactive");
-
         var (allItems, _) = await _repository!.GetPagedUsersAsync(
             UiModels.UserListFilter.All, skip: 0, take: 5000,
             searchText: null, chatIds: GlobalScope, sortLabel: null, sortDescending: false);
 
-        var inactive = allItems.Single(i => i.TelegramUserId == inactiveId);
+        var kicked = allItems.Single(i => i.TelegramUserId == GoldenDatasetConstants.UsersPage.KickedJoinerId);
         var canonicalActive = allItems.Single(i => i.TelegramUserId == TopHamAuthorId);
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(inactive.IsActive, Is.False);
+            Assert.That(kicked.IsActive, Is.False);
             Assert.That(canonicalActive.IsActive, Is.True);
         }
     }
 
     [Test]
-    public async Task GetPagedUsersAsync_All_SearchFindsInactiveUser()
+    public async Task GetPagedUsersAsync_All_SearchFindsKickedJoiner()
     {
-        var marker = Guid.NewGuid().ToString("N")[..12];
-        var userId = await SeedInactiveUserAsync($"find_{marker}", "Findable");
-
         var (items, totalCount) = await _repository!.GetPagedUsersAsync(
             UiModels.UserListFilter.All, skip: 0, take: 50,
-            searchText: marker, chatIds: GlobalScope, sortLabel: null, sortDescending: false);
+            searchText: GoldenDatasetConstants.UsersPage.KickedJoinerUsername,
+            chatIds: GlobalScope, sortLabel: null, sortDescending: false);
 
         using (Assert.EnterMultipleScope())
         {
             Assert.That(totalCount, Is.EqualTo(1));
-            Assert.That(items.Single().TelegramUserId, Is.EqualTo(userId));
+            Assert.That(items.Single().TelegramUserId, Is.EqualTo(GoldenDatasetConstants.UsersPage.KickedJoinerId));
         }
     }
 
     [Test]
     public async Task GetUserTabCountsAsync_AllCount_EqualsNonSystemRowCount_UnderGlobalScope()
     {
-        await SeedInactiveUserAsync($"count_{Guid.NewGuid().ToString("N")[..12]}", "Counted");
-
         var counts = await _repository!.GetUserTabCountsAsync(chatIds: GlobalScope, searchText: null);
 
         int rowCount;
-        await using (var scope = _serviceProvider!.CreateAsyncScope())
+        await using (var ctx = await OpenContextAsync())
         {
-            var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<AppDbContext>>();
-            await using var ctx = await factory.CreateDbContextAsync();
             rowCount = await ctx.TelegramUsers.CountAsync(u => u.TelegramUserId != 0);
         }
 
@@ -549,24 +542,28 @@ public class TelegramUserRepositoryTests
     [Test]
     public async Task GetPagedUsersAsync_All_RespectsChatScope()
     {
-        // A pending joiner has no messages, so a chat-scoped admin must not see them.
-        var userId = await SeedInactiveUserAsync($"scoped_{Guid.NewGuid().ToString("N")[..12]}", "Scoped");
-
+        // The kicked joiner has no messages anywhere, so a MainChat-scoped admin must not see them.
         var (items, _) = await _repository!.GetPagedUsersAsync(
             UiModels.UserListFilter.All, skip: 0, take: 5000,
             searchText: null, chatIds: new List<long> { GoldenDatasetConstants.Chats.MainChatId },
             sortLabel: null, sortDescending: false);
 
-        Assert.That(items.Select(i => i.TelegramUserId), Does.Not.Contain(userId));
+        Assert.That(items.Select(i => i.TelegramUserId), Does.Not.Contain(GoldenDatasetConstants.UsersPage.KickedJoinerId));
     }
 
     [Test]
     public async Task GetPagedUsersAsync_Trusted_IncludesInactiveTrustedUser()
     {
-        var userId = await SeedInactiveUserAsync($"trusted_{Guid.NewGuid().ToString("N")[..12]}", "Trusted");
-        await _repository!.TrustUserAsync(userId);
+        const long userId = GoldenDatasetConstants.UsersPage.TrustedKickedJoinerId;
 
-        var (items, _) = await _repository.GetPagedUsersAsync(
+        // Precondition guard: canonical must still carry the edited shape.
+        await using (var ctx = await OpenContextAsync())
+        {
+            var row = await ctx.TelegramUsers.AsNoTracking().SingleAsync(u => u.TelegramUserId == userId);
+            Assert.That(row.IsTrusted && !row.IsActive, Is.True, "canonical anchor must be is_trusted=true, is_active=false");
+        }
+
+        var (items, _) = await _repository!.GetPagedUsersAsync(
             UiModels.UserListFilter.Trusted, skip: 0, take: 5000,
             searchText: null, chatIds: GlobalScope, sortLabel: null, sortDescending: false);
         var counts = await _repository.GetUserTabCountsAsync(chatIds: GlobalScope, searchText: null);
@@ -583,66 +580,33 @@ public class TelegramUserRepositoryTests
     #region User Detail Action Chat Name
 
     [Test]
-    public async Task GetUserDetailAsync_Actions_IncludeChatNameForManagedChat_AndNullForUnknownChat()
+    public async Task GetUserDetailAsync_Actions_IncludeChatNameForChatScopedAction_AndNullForGlobalAction()
     {
-        var userId = Random.Shared.NextInt64(100_000_000_000L, 999_999_999_999L);
-        await SeedActiveUserAsync(userId, username: $"actions_{Guid.NewGuid().ToString("N")[..12]}");
-        const long unknownChatId = -100_099_999_999_999L;
+        const long userId = GoldenDatasetConstants.UsersPage.ChatScopedActionsUserId;
 
         string? mainChatName;
-        await using (var scope = _serviceProvider!.CreateAsyncScope())
+        int expectedActionCount;
+        await using (var ctx = await OpenContextAsync())
         {
-            var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<AppDbContext>>();
-            await using var ctx = await factory.CreateDbContextAsync();
-            mainChatName = await ctx.ManagedChats
+            mainChatName = await ctx.ManagedChats.AsNoTracking()
                 .Where(c => c.ChatId == GoldenDatasetConstants.Chats.MainChatId)
                 .Select(c => c.ChatName)
                 .SingleAsync();
-
-            var now = DateTimeOffset.UtcNow;
-            ctx.UserActions.AddRange(
-                new TelegramGroupsAdmin.Data.Models.UserActionRecordDto
-                {
-                    UserId = userId,
-                    ActionType = (int)UserActionType.RestorePermissions,
-                    ChatId = GoldenDatasetConstants.Chats.MainChatId,
-                    SystemIdentifier = "WelcomeFlow",
-                    IssuedAt = now.AddMinutes(-2),
-                    Reason = "Completed welcome/rules flow"
-                },
-                new TelegramGroupsAdmin.Data.Models.UserActionRecordDto
-                {
-                    UserId = userId,
-                    ActionType = (int)UserActionType.Kick,
-                    ChatId = unknownChatId,
-                    SystemIdentifier = "WelcomeFlow",
-                    IssuedAt = now.AddMinutes(-1),
-                    Reason = "Welcome timeout"
-                },
-                new TelegramGroupsAdmin.Data.Models.UserActionRecordDto
-                {
-                    UserId = userId,
-                    ActionType = (int)UserActionType.Trust,
-                    ChatId = null,
-                    SystemIdentifier = "AutoTrust",
-                    IssuedAt = now,
-                    Reason = "Global action"
-                });
-            await ctx.SaveChangesAsync();
+            expectedActionCount = await ctx.UserActions.CountAsync(a => a.UserId == userId);
         }
 
         var detail = await _repository!.GetUserDetailAsync(userId);
 
         Assert.That(detail, Is.Not.Null);
-        var byType = detail!.Actions.ToDictionary(a => a.ActionType);
+        var byId = detail!.Actions.ToDictionary(a => a.Id);
         using (Assert.EnterMultipleScope())
         {
             Assert.That(mainChatName, Is.Not.Null.And.Not.Empty, "golden dataset main chat must have a name");
-            Assert.That(byType[UserActionType.RestorePermissions].ChatName, Is.EqualTo(mainChatName));
-            Assert.That(byType[UserActionType.Kick].ChatId, Is.EqualTo(unknownChatId));
-            Assert.That(byType[UserActionType.Kick].ChatName, Is.Null, "unmanaged chat has no name to show");
-            Assert.That(byType[UserActionType.Trust].ChatId, Is.Null);
-            Assert.That(byType[UserActionType.Trust].ChatName, Is.Null);
+            Assert.That(detail.Actions, Has.Count.EqualTo(expectedActionCount), "LEFT JOIN must keep chat-less actions");
+            Assert.That(byId[GoldenDatasetConstants.UsersPage.ChatScopedDeleteActionId].ChatId, Is.EqualTo(GoldenDatasetConstants.Chats.MainChatId));
+            Assert.That(byId[GoldenDatasetConstants.UsersPage.ChatScopedDeleteActionId].ChatName, Is.EqualTo(mainChatName));
+            Assert.That(byId[GoldenDatasetConstants.UsersPage.GlobalBanActionId].ChatId, Is.Null);
+            Assert.That(byId[GoldenDatasetConstants.UsersPage.GlobalBanActionId].ChatName, Is.Null);
         }
     }
 
