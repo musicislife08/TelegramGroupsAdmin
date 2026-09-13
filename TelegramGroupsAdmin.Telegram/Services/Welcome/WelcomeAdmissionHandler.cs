@@ -18,7 +18,7 @@ namespace TelegramGroupsAdmin.Telegram.Services.Welcome;
 /// 1. Profile scan gate — no pending ProfileScanAlert for user+chat
 /// 2. Welcome gate — WelcomeResponse is Accepted (or null = welcome disabled = cleared)
 ///
-/// User is admitted only when ALL gates are clear.
+/// User is admitted only when ALL gates are clear; admission restores permissions and marks the user active.
 /// </summary>
 public sealed class WelcomeAdmissionHandler(
     IServiceScopeFactory scopeFactory,
@@ -70,6 +70,12 @@ public sealed class WelcomeAdmissionHandler(
         };
 
         await moderationService.RestoreUserPermissionsAsync(intent, ct);
+
+        // Single place where a user crosses the join gate. Every admission path (group welcome,
+        // DM welcome, exam pass, profile-scan allow) flows through here, so callers must not
+        // activate on their own.
+        var telegramUserRepo = sp.GetRequiredService<ITelegramUserRepository>();
+        await telegramUserRepo.ActivateAsync(user.Id, ct);
 
         logger.LogInformation("Admission: {User} admitted to {Chat} — all gates clear ({Reason})",
             user.ToLogInfo(), chat.ToLogInfo(), reason);
