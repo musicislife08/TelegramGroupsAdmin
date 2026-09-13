@@ -114,6 +114,8 @@ public class UsersTests : SharedAuthenticatedTestBase
         var tabNames = await _usersPage.GetTabNamesAsync();
         using (Assert.EnterMultipleScope())
         {
+            Assert.That(tabNames.FirstOrDefault()?.Contains("ALL", StringComparison.OrdinalIgnoreCase), Is.True,
+                "'All' should be the first tab");
             Assert.That(tabNames.Any(t => t.Contains("ACTIVE", StringComparison.OrdinalIgnoreCase)),
                       "Should have 'Active' tab");
             Assert.That(tabNames.Any(t => t.Contains("TAGGED", StringComparison.OrdinalIgnoreCase)),
