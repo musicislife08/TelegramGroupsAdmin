@@ -6,7 +6,7 @@ Web User Management allows you to invite and manage additional administrators wh
 
 ## Permission Levels
 
-TelegramGroupsAdmin has a **hierarchical permission system** with three levels:
+TelegramGroupsAdmin has a **hierarchical permission system** with three assignable levels. The same ladder is used by the web UI and by the Telegram bot's commands (see [How Telegram-Side Permissions Are Resolved](#how-telegram-side-permissions-are-resolved)).
 
 ### Level 0: Admin
 
@@ -15,14 +15,15 @@ TelegramGroupsAdmin has a **hierarchical permission system** with three levels:
 **Can access**:
 - Messages page (only chats they're Telegram admin in)
 - Reports page (only for their chats)
-- Tools (Content Tester)
+- Users page (only users from their chats)
+- Analytics — the chat-scoped **Message Trends** tab only; the global tabs (Content Detection, Performance, Welcome Analytics) and the global dashboard cards are shown greyed-out with no data
 - Profile settings
 - Documentation
 
 **Cannot access**:
 - Settings pages
-- Analytics
-- Users management
+- Tools (Content Tester)
+- Chat Management
 - Audit logs
 - Admin account management
 
@@ -72,6 +73,18 @@ TelegramGroupsAdmin has a **hierarchical permission system** with three levels:
 ---
 
 ## Permission Hierarchy Rules
+
+### How Telegram-Side Permissions Are Resolved
+
+When someone runs a [bot command](../features/20-bot-commands.md) in a chat, the bot works out their tier for **that chat**:
+
+| Tier | Who gets it in a given chat |
+|------|-----------------------------|
+| **Owner** / **GlobalAdmin** | Their Telegram account is linked to a web account at that level — applies in every chat |
+| **Admin** | They are a Telegram admin or creator of that chat, **or** their linked web account is Admin level (which only counts in chats they administer on Telegram) |
+| **Member** | Everyone else — regular members, including web Admins in chats they don't administer |
+
+Member is not an assignable level; it is simply "no privileges" and is never stored. A chat creator is treated as Admin, not Owner. `/help` lists only the commands available at your tier.
 
 ### Escalation Protection
 
@@ -215,6 +228,8 @@ Navigate to **Settings** → **System** → **Admin Accounts**:
 - Cannot change your own permission level
 - Cannot change users at your level or higher (unless you're Owner)
 - Cannot demote the last remaining Owner
+
+**Effect**: The change invalidates all of the user's existing sessions. They are signed out on their next page load, or within about two minutes if they have a page open, and see the new permissions after logging back in. No manual log-out is needed.
 
 ### Disabling Accounts
 
@@ -375,9 +390,8 @@ Navigate to **Settings** → **System** → **Admin Accounts**:
 
 **Solution**:
 - This is incorrect behavior, should see all chats
+- Verify the user's permission level in Admin Accounts — a recent promotion signs them out automatically, so if they are still seeing the old view they may be looking at a page loaded before the change; a reload will pick up the new permissions
 - Check chat_admins table in database
-- Verify user's permission level in database
-- Log out and log back in (refresh permissions)
 
 ### Can't delete/disable last Owner
 

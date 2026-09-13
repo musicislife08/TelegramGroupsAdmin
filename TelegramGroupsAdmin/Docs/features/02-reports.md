@@ -1,6 +1,6 @@
 # Reports Queue - Moderation Central
 
-The **Reports** page is your central hub for reviewing and managing spam detections that need human judgment. This is where borderline spam (scores between 2.5-3.9 points), suspected impersonators, exam failures, and profile scan alerts land for your review.
+The **Reports** page is your central hub for reviewing and managing spam detections that need human judgment. This is where borderline spam (scores between 2.5-3.9 points), suspected impersonators, exam reviews, and profile scan alerts land for your review.
 
 **Think of it as**: Your moderation inbox - messages that aren't clearly spam or ham need your decision.
 
@@ -10,7 +10,7 @@ The Reports page uses a unified queue with type filters:
 
 1. **Moderation Reports** - Spam detections needing manual review
 2. **Impersonation Alerts** - Suspected impersonators (duplicate photos, similar usernames)
-3. **Exam Reviews** - Users who failed the welcome exam and need manual approval
+3. **Exam Reviews** - Users who failed the welcome exam and need manual approval, plus users who passed and are available for admin override
 4. **Profile Scan Alerts** - Suspicious user profiles flagged by automated scanning
 
 All types follow the same workflow: **Review → Decide → Act → Train**
@@ -344,6 +344,32 @@ Each alert shows:
 Profile scanning also feeds into the Reports queue. When a user's profile is scanned and the outcome is **HeldForReview**, a Profile Scan Alert is created for admin review. These alerts show the user's profile score breakdown (rule-based + AI scoring on a 0.0-5.0 scale), AI reasoning, and detected signals. From the alert, you can **Allow**, **Kick**, or **Ban** the user.
 
 For details on how profile scanning works, see **[Profile Scanning](08-profile-scanning.md)**.
+
+---
+
+## Exam Reviews
+
+The Exam Reviews filter shows completed entrance exams -- both failures awaiting manual approval and passes available for admin override.
+
+### Failed Exams
+
+When a user fails the welcome exam, they're held pending until an admin reviews the result:
+
+- **Approve** - Restores the user's permissions (overrides the failure)
+- **Deny** - Kicks the user from the chat
+- **Deny + Ban** - Kicks and permanently bans the user
+
+### Passed Exams
+
+Passing users are **auto-admitted immediately** -- a passed exam lands in the queue as a record of that auto-admit, not a pending decision. From a passed exam card, an admin can still override the auto-approval:
+
+- **Dismiss** - Acknowledges the auto-admit; no change to the user
+- **Deny** - Overrides the auto-approval and kicks the user
+- **Deny + Ban** - Overrides the auto-approval and permanently bans the user
+
+Only the first admin action on a passed exam takes effect -- if a second admin tries to act on the same record, they're told it's already been handled.
+
+Admins can also act on exam results directly from Telegram DM: **Exam Failed** notifications include Approve/Deny/Deny+Ban buttons, and **Exam Passed** notifications include Dismiss/Deny/Deny+Ban buttons. See **[Notifications](18-dm-notifications.md)**.
 
 ---
 

@@ -605,8 +605,8 @@ While no dedicated keyboard shortcuts exist yet, you can use browser shortcuts:
 
 ### Translations not working
 
-- **Check OpenAI API key** - Settings → External Services → OpenAI Integration
-- **Verify message length** - Only messages ≥10 characters are translated
+- **Check OpenAI API key** - Settings → System → AI Providers
+- **Verify message length** - Only messages ≥20 characters are translated
 - **Check language** - Already-English messages won't translate
 - **Manual translate** - Use actions menu to force translation
 

@@ -53,7 +53,7 @@ A self-hosted Blazor Server application designed for homelab deployment, combini
 - **Prompt Builder** - Meta-AI tool to generate/improve custom spam detection prompts
 - **Multi-Language Translation** - Automatic translation for non-Latin script messages
 - **Profile Scanning** - AI-powered join security using WTelegram User API to inspect bios, stories, personal channels, and profile photos with rule-based pre-filters and AI vision analysis
-- **Multi-Provider AI Support** - OpenAI, Azure OpenAI, or local OpenAI-compatible servers (Ollama, LM Studio, vLLM)
+- **Multi-Provider AI Support** - OpenAI, Azure OpenAI, Anthropic (Claude), OpenRouter, or local OpenAI-compatible servers (Ollama, LM Studio, vLLM)
 
 ### User API Features
 
@@ -86,7 +86,7 @@ A self-hosted Blazor Server application designed for homelab deployment, combini
 
 **Required Services (API keys needed):**
 
-- **AI Provider** (one of): OpenAI, Azure OpenAI, or local OpenAI-compatible server (Ollama, LM Studio, vLLM) - for spam detection and vision analysis
+- **AI Provider** (one of): OpenAI, Azure OpenAI, Anthropic (Claude), OpenRouter, or local OpenAI-compatible server (Ollama, LM Studio, vLLM) - for spam detection and vision analysis
 - **VirusTotal** - File threat intelligence
 - **SendGrid** - Email verification and notifications
 
@@ -107,7 +107,7 @@ A self-hosted Blazor Server application designed for homelab deployment, combini
 - Docker & Docker Compose
 - API Keys:
   - [Telegram Bot Token](https://t.me/BotFather)
-  - [OpenAI API Key](https://platform.openai.com/api-keys)
+  - AI Provider API Key (one of): [OpenAI](https://platform.openai.com/api-keys), [Anthropic](https://console.anthropic.com/settings/keys), Azure OpenAI, OpenRouter, or a local OpenAI-compatible server
   - [VirusTotal API Key](https://www.virustotal.com/gui/my-apikey)
   - [CAS.chat](https://cas.chat/) (free, no key needed)
   - [SendGrid API Key](https://app.sendgrid.com/settings/api_keys)
@@ -224,6 +224,7 @@ See [examples/README.md](examples/README.md) for detailed configuration guide in
 - **TelegramGroupsAdmin.Core** - Shared models, enums, interfaces
 - **TelegramGroupsAdmin.Configuration** - IOptions configuration classes
 - **TelegramGroupsAdmin.Data** - EF Core DbContext, migrations, Data Protection
+- **TelegramGroupsAdmin.AI** - AI provider abstractions (chat completion, translation) via Microsoft.Extensions.AI
 - **TelegramGroupsAdmin.Telegram** - Bot services, bot commands, repositories
 - **TelegramGroupsAdmin.BackgroundJobs** - Quartz.NET background jobs
 - **TelegramGroupsAdmin.ContentDetection** - 14 content detection checks, URL filtering, impersonation, file scanning
@@ -677,6 +678,7 @@ TelegramGroupsAdmin includes and depends on various open-source libraries and to
 - [MudBlazor](https://mudblazor.com/) - Material Design components for Blazor
 - [Quartz.NET](https://www.quartz-scheduler.net/) - PostgreSQL-based background job scheduler
 - [OpenAI](https://platform.openai.com/) - GPT-4 and Vision API
+- [Anthropic](https://www.anthropic.com/) - Claude chat and vision models
 - [VirusTotal](https://www.virustotal.com/) - File threat intelligence
 - [CAS.chat](https://cas.chat/) - Spam user database
 

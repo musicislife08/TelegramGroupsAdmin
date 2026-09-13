@@ -25,6 +25,12 @@ A backup contains everything TGA needs to fully restore your instance:
 - Reports and review queue items
 - Audit logs
 - Training data (spam/ham samples, stop words)
+- AI provider connections, API keys, Telegram User API sessions, and other encrypted secrets
+- Ban celebration GIF files
+
+Encrypted values are decrypted into the backup (which is itself protected by your passphrase) and re-encrypted on restore, so a backup made on one machine restores cleanly onto another — see [Restoring onto a different machine](#restoring-onto-a-different-machine).
+
+The only table left out is the cached URL blocklist, which is re-downloaded by the Blocklist Sync job after a restore.
 
 ## Creating a Backup
 
@@ -38,11 +44,11 @@ TGA uses a Grandfather-Father-Son rotation to keep backups manageable:
 
 | Tier | Default | What It Keeps |
 |------|---------|---------------|
-| Hourly | Up to 168 (1 week) | Recent backups for quick recovery |
-| Daily | Up to 31 | One backup per day for the last month |
-| Weekly | Up to 52 | One backup per week for the last year |
-| Monthly | Up to 60 | One backup per month for 5 years |
-| Yearly | Up to 20 | Long-term archive |
+| Hourly | Up to 24 | Recent backups for quick recovery |
+| Daily | Up to 7 | One backup per day for the last week |
+| Weekly | Up to 4 | One backup per week for the last month |
+| Monthly | Up to 12 | One backup per month for the last year |
+| Yearly | Up to 3 | Long-term archive |
 
 Older backups are automatically pruned when new ones are created. Adjust these numbers in the Backup Configuration settings to match your storage capacity.
 
@@ -59,12 +65,16 @@ To restore:
 5. Click **Wipe & Restore**
 6. Wait for the restore to complete, then log back in
 
+### Restoring onto a different machine
+
+You only need the backup file and its passphrase — there is nothing to copy from the old server. API keys, Telegram User API sessions, and other secrets are re-encrypted for the new machine during the restore, so profile scanning and Send As Admin keep working without reconnecting your Telegram account.
+
 ## Rotating the Encryption Passphrase
 
 If you need to change your encryption passphrase:
 
 1. Go to **Settings** -> **System** -> **Backup Configuration**
-2. Click **Rotate Passphrase**
+2. Click **Rotate Encryption Passphrase**
 3. Enter your new passphrase
 4. TGA will re-encrypt all existing backups with the new passphrase
 
