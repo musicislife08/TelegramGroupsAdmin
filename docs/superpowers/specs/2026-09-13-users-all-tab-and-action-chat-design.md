@@ -107,10 +107,10 @@ is a lookup-and-render gap.
 - New `MudTabPanel Text="All"` as the first panel. Icon `Groups`, badge `AllCount`, badge
   colour `Color.Default`. Description: "Every user the bot has seen in your groups. Use this
   tab when you cannot find someone elsewhere."
-- Columns: User (with badges), Last Seen (default sort descending so new joiners are on top),
-  Actions (View Details; Trust / Remove Trust toggle). The User cell additionally renders an
-  "Unverified" `MudChip` (size small, `Color.Default`, outlined) when
-  `!context.IsActive && !context.IsBanned`.
+- Columns: User (with badges), Status (the existing status chip; sortable), Last Seen (default
+  sort descending so new joiners are on top), Actions (View Details; Trust / Remove Trust
+  toggle). The Status cell additionally renders an "Unverified" `MudChip` (size small,
+  `Color.Default`, outlined) next to the status chip when `!context.IsActive && !context.IsBanned`.
 - `_allTable` ref, `LoadAllServerDataAsync` delegating to the shared loader, and an `_allTable`
   line in the existing `ReloadServerData()` block that runs after trust / ban actions.
 - `MudTabs` default `ActivePanelIndex` is the All tab (index 0 after insertion).
