@@ -11,9 +11,9 @@ namespace TelegramGroupsAdmin.Core.Utilities;
 public static class AuditReason
 {
     /// <summary>
-    /// Prefixes <paramref name="reason"/> with <c>[chat]</c> using the <c>ChatIdentity.ToLogInfo()</c>
-    /// log formatter (chat name, or <c>Chat {id}</c> when unnamed). Returns the reason unchanged when
-    /// there is no chat, and the tag alone when the caller supplied no reason.
+    /// Prefixes <paramref name="reason"/> with <c>[chat]</c> using the <see cref="CoreLoggingExtensions"/>
+    /// <c>ToLogInfo()</c> log formatter (chat name, or <c>Chat {id}</c> when unnamed). Returns the reason
+    /// unchanged when there is no chat, and the tag alone when the caller supplied no reason.
     /// </summary>
     public static string? WithChatTag(ChatIdentity? chat, string? reason)
     {

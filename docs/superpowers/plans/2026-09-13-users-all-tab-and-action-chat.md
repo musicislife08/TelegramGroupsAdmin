@@ -1542,7 +1542,7 @@ public static class AuditReason
 }
 ```
 
-If `ToLogInfo` on `ChatIdentity` is declared with a different receiver form (check `TelegramGroupsAdmin.Core/Extensions/CoreLoggingExtensions.cs` ~line 36), call it exactly as declared; the `<see cref>` may need adjusting to compile the XML doc. Run Step 1's tests: `dotnet test TelegramGroupsAdmin.UnitTests --filter "FullyQualifiedName~AuditReasonTests"` → 6 passed.
+If `ToLogInfo` on `ChatIdentity` is declared with a different receiver form (check `TelegramGroupsAdmin.Core/Extensions/CoreLoggingExtensions.cs` ~line 36), call it exactly as declared; the `<see cref>` may need adjusting to compile the XML doc. Run Step 1's tests: `dotnet test TelegramGroupsAdmin.UnitTests --filter "FullyQualifiedName~AuditReasonTests"` → 7 passed (the three `TestCase` variants count individually).
 
 - [ ] **Step 4: Update the AuditHandler tests first (they define the new contract)**
 
