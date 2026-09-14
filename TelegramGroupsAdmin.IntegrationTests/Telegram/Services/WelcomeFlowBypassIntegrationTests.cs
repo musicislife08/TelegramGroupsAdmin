@@ -64,6 +64,13 @@ public class WelcomeFlowBypassIntegrationTests
     // the range [-100_099_999_999_999, -100_000_000_000_000]).
     private const long TestChatId = -1009876543210L;
 
+    // The chat's display name. Production builds ChatIdentity from the Telegram update (or a
+    // managed_chats lookup), so the name is present on the join path — and AuditHandler tags
+    // every audit reason with it. Tests therefore pass a named identity, not an id-only one.
+    private const string TestChatName = "Test Chat";
+
+    private static readonly ChatIdentity TestChat = new(TestChatId, TestChatName);
+
     // ── infrastructure ────────────────────────────────────────────────────────
     private MigrationTestHelper? _testHelper;
     private IServiceProvider? _serviceProvider;
@@ -164,7 +171,7 @@ public class WelcomeFlowBypassIntegrationTests
             context.ManagedChats.Add(new ManagedChatRecordDto
             {
                 ChatId = TestChatId,
-                ChatName = "Test Chat",
+                ChatName = TestChatName,
                 ChatType = ManagedChatType.Supergroup,
                 AddedAt = DateTimeOffset.UtcNow,
                 IsActive = true,
@@ -175,7 +182,7 @@ public class WelcomeFlowBypassIntegrationTests
         await _chatAdminsRepository!.UpsertAsync(TestChatId, TrustedUserTelegramId, isCreator: false, CancellationToken.None);
 
         var user = UserIdentity.FromId(TrustedUserTelegramId);
-        var chat = ChatIdentity.FromId(TestChatId);
+        var chat = TestChat;
 
         // Act — resolver classifies the join, then audit handler logs the decision.
         var resolution = await _bypassResolver!.ResolveAsync(user, chat, CancellationToken.None);
@@ -187,7 +194,7 @@ public class WelcomeFlowBypassIntegrationTests
         Assert.That(decision, Is.EqualTo(BypassDecision.Admin));
         await AssertBypassAuditRowAsync(
             TrustedUserTelegramId,
-            expectedReason: "Telegram chat admin (1 chats)");
+            expectedReason: $"[{TestChatName}] Telegram chat admin (1 chats)");
         await AssertNoWelcomeResponseAsync(TrustedUserTelegramId);
     }
 
@@ -227,7 +234,7 @@ public class WelcomeFlowBypassIntegrationTests
             """);
 
         var user = UserIdentity.FromId(LinkedOwnerTelegramUserId);
-        var chat = ChatIdentity.FromId(TestChatId);
+        var chat = TestChat;
 
         // Act
         var resolution = await _bypassResolver!.ResolveAsync(user, chat, CancellationToken.None);
@@ -239,7 +246,7 @@ public class WelcomeFlowBypassIntegrationTests
         Assert.That(decision, Is.EqualTo(BypassDecision.Admin));
         await AssertBypassAuditRowAsync(
             LinkedOwnerTelegramUserId,
-            expectedReason: "Linked web admin (Owner)");
+            expectedReason: $"[{TestChatName}] Linked web admin (Owner)");
         await AssertNoWelcomeResponseAsync(LinkedOwnerTelegramUserId);
     }
 
@@ -267,7 +274,7 @@ public class WelcomeFlowBypassIntegrationTests
         await _configService!.SaveWelcomeAsync(ChatIdentity.FromId(0), welcomeConfig, Actor.SystemSeed);
 
         var user = UserIdentity.FromId(TrustedUserTelegramId);
-        var chat = ChatIdentity.FromId(TestChatId);
+        var chat = TestChat;
 
         // Act
         var resolution = await _bypassResolver!.ResolveAsync(user, chat, CancellationToken.None);
@@ -279,7 +286,7 @@ public class WelcomeFlowBypassIntegrationTests
         Assert.That(decision, Is.EqualTo(BypassDecision.Trusted));
         await AssertBypassAuditRowAsync(
             TrustedUserTelegramId,
-            expectedReason: "Trusted user");
+            expectedReason: $"[{TestChatName}] Trusted user");
         await AssertNoWelcomeResponseAsync(TrustedUserTelegramId);
     }
 
@@ -318,7 +325,7 @@ public class WelcomeFlowBypassIntegrationTests
         await _configService!.SaveWelcomeAsync(ChatIdentity.FromId(0), welcomeConfig, Actor.SystemSeed);
 
         var user = UserIdentity.FromId(TrustedUserTelegramId);
-        var chat = ChatIdentity.FromId(TestChatId);
+        var chat = TestChat;
 
         // Act — resolver classifies the join. In WelcomeService, a None decision means
         // LogWelcomeBypassAsync is never called, so we deliberately mirror that here:
@@ -422,6 +429,12 @@ public class WelcomeFlowBypassIntegrationTests
     /// Asserts exactly one user_actions row exists for the given user with
     /// <see cref="UserActionType.WelcomeBypass"/>, the expected reason, and
     /// <c>system_identifier = "welcome_bypass"</c> (from <see cref="Actor.WelcomeBypass"/>).
+    ///
+    /// <para>
+    /// <paramref name="expectedReason"/> includes the <c>[chat]</c> prefix that
+    /// <see cref="TelegramGroupsAdmin.Core.Utilities.AuditReason"/> stamps onto every audit
+    /// reason at write time, so the detail page can name the chat without a read-time join.
+    /// </para>
     /// </summary>
     private async Task AssertBypassAuditRowAsync(long telegramUserId, string expectedReason)
     {
