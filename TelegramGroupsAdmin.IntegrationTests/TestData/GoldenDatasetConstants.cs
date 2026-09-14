@@ -117,6 +117,28 @@ internal static class GoldenDatasetConstants
     }
 
     /// <summary>
+    /// Anchors for the Users page tab tests (<c>TelegramUserRepositoryTests</c>, All / Trusted
+    /// filters). All three are welcome-timeout kicked joiners in <see cref="Chats.MainChatId"/>
+    /// with zero messages.
+    /// Two rows are edited in canonical (2026-09-13) to carry shapes real data never keeps
+    /// long enough to snapshot; see the per-constant notes.
+    /// </summary>
+    public static class UsersPage
+    {
+        /// <summary>@luminanceflagstick — is_active=false, is_banned=false, is_trusted=false. Untouched canonical row.</summary>
+        public const long KickedJoinerId = 9171379870502L;
+
+        /// <summary>Username of <see cref="KickedJoinerId"/>; unique across canonical usernames, first names, and username_history.</summary>
+        public const string KickedJoinerUsername = "luminanceflagstick";
+
+        /// <summary>@tadpolesleek — is_active=false, is_trusted=true (canonical edit: trusted after a timeout kick).</summary>
+        public const long TrustedKickedJoinerId = 9301917046112L;
+
+        /// <summary>@curveabdominal — is_active=false, is_banned=true with ban_expires_at in the past (canonical edit: expired temp-ban whose flag was never cleared).</summary>
+        public const long ExpiredBanUserId = 9995544961449L;
+    }
+
+    /// <summary>
     /// Canonical anchors used by <c>TrainingLabelsRepositoryTests</c> to pin existing
     /// spam/ham label rows and FK-valid-but-unlabeled message rows. The chat side of
     /// each anchor is in <see cref="Chats.TrainingFixturesChatId"/> for the labeled set

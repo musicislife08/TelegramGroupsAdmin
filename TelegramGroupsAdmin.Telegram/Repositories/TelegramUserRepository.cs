@@ -445,6 +445,10 @@ public class TelegramUserRepository : ITelegramUserRepository
         // Apply tab filter
         switch (filter)
         {
+            case UiModels.UserListFilter.All:
+                // No status predicate — the guaranteed-visible view. Base filter (system user),
+                // chat scope, and search still apply below.
+                break;
             case UiModels.UserListFilter.Active:
                 query = query.Where(u => u.IsActive && !u.IsBanned);
                 break;
@@ -455,7 +459,7 @@ public class TelegramUserRepository : ITelegramUserRepository
                      u.Warnings!.Any()));
                 break;
             case UiModels.UserListFilter.Trusted:
-                query = query.Where(u => u.IsActive && u.IsTrusted);
+                query = query.Where(u => u.IsTrusted);
                 break;
             case UiModels.UserListFilter.Kicked:
                 query = query.Where(u => !u.IsActive && !u.IsBanned);
@@ -510,6 +514,7 @@ public class TelegramUserRepository : ITelegramUserRepository
                 LastName = u.LastName,
                 UserPhotoPath = u.UserPhotoPath,
                 IsTrusted = u.IsTrusted,
+                IsActive = u.IsActive,
                 IsBanned = u.IsBanned,
                 LastSeenAt = u.LastSeenAt,
                 ProfileScanScore = u.ProfileScanScore,
@@ -658,18 +663,20 @@ public class TelegramUserRepository : ITelegramUserRepository
             baseQuery = ApplySearchFilter(baseQuery, context, search);
         }
 
-        // Run 5 count queries sequentially (DbContext is not thread-safe)
+        // Run 6 count queries sequentially (DbContext is not thread-safe)
+        var allCount = await baseQuery.CountAsync(cancellationToken);
         var activeCount = await baseQuery.Where(u => u.IsActive && !u.IsBanned).CountAsync(cancellationToken);
         var taggedCount = await baseQuery.Where(u => u.IsActive &&
             (context.AdminNotes.Any(n => n.TelegramUserId == u.TelegramUserId) ||
              context.UserTags.Any(t => t.TelegramUserId == u.TelegramUserId) ||
              u.Warnings!.Any())).CountAsync(cancellationToken);
-        var trustedCount = await baseQuery.Where(u => u.IsActive && u.IsTrusted).CountAsync(cancellationToken);
+        var trustedCount = await baseQuery.Where(u => u.IsTrusted).CountAsync(cancellationToken);
         var bannedCount = await baseQuery.Where(u => u.IsBanned && (u.BanExpiresAt == null || u.BanExpiresAt > now)).CountAsync(cancellationToken);
         var kickedCount = await baseQuery.Where(u => !u.IsActive && !u.IsBanned).CountAsync(cancellationToken);
 
         return new UiModels.UserTabCounts
         {
+            AllCount = allCount,
             ActiveCount = activeCount,
             TaggedCount = taggedCount,
             TrustedCount = trustedCount,

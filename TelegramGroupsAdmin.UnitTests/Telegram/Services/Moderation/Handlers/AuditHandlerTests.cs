@@ -43,9 +43,9 @@ public class AuditHandlerTests
     }
 
     [Test]
-    public async Task LogWelcomeBypassAsync_AdminDecision_PersistsCallerSuppliedReason()
+    public async Task LogWelcomeBypassAsync_AdminDecision_PersistsChatTaggedReason()
     {
-        const string expectedReason = "Telegram chat admin (3 chats)";
+        const string suppliedReason = "Telegram chat admin (3 chats)";
         UserActionRecord? captured = null;
         _userActionsRepo.InsertAsync(Arg.Do<UserActionRecord>(r => captured = r), Arg.Any<CancellationToken>())
             .Returns(1L);
@@ -54,7 +54,7 @@ public class AuditHandlerTests
             UserIdentity.FromId(100),
             ChatIdentity.FromId(-200),
             BypassDecision.Admin,
-            expectedReason,
+            suppliedReason,
             CancellationToken.None);
 
         Assert.That(captured, Is.Not.Null);
@@ -64,13 +64,13 @@ public class AuditHandlerTests
             "Bypass audit rows record the chat where the join occurred.");
         Assert.That(captured.MessageId, Is.Null,
             "Bypass has no specific message context.");
-        Assert.That(captured.Reason, Is.EqualTo(expectedReason));
+        Assert.That(captured.Reason, Is.EqualTo("[Chat -200] Telegram chat admin (3 chats)"));
     }
 
     [Test]
-    public async Task LogWelcomeBypassAsync_TrustedDecision_PersistsCallerSuppliedReason()
+    public async Task LogWelcomeBypassAsync_TrustedDecision_PersistsChatTaggedReason()
     {
-        const string expectedReason = "Trusted user";
+        const string suppliedReason = "Trusted user";
         UserActionRecord? captured = null;
         _userActionsRepo.InsertAsync(Arg.Do<UserActionRecord>(r => captured = r), Arg.Any<CancellationToken>())
             .Returns(1L);
@@ -79,19 +79,19 @@ public class AuditHandlerTests
             UserIdentity.FromId(100),
             ChatIdentity.FromId(-200),
             BypassDecision.Trusted,
-            expectedReason,
+            suppliedReason,
             CancellationToken.None);
 
         Assert.That(captured!.ActionType, Is.EqualTo(UserActionType.WelcomeBypass));
         Assert.That(captured.ChatId, Is.EqualTo(-200));
         Assert.That(captured.MessageId, Is.Null);
-        Assert.That(captured.Reason, Is.EqualTo(expectedReason));
+        Assert.That(captured.Reason, Is.EqualTo("[Chat -200] Trusted user"));
     }
 
     [Test]
-    public async Task LogWelcomeBypassAsync_WebAdminReason_PersistsVerbatim()
+    public async Task LogWelcomeBypassAsync_WebAdminReason_PersistsChatTagged()
     {
-        const string expectedReason = "Linked web admin (GlobalAdmin)";
+        const string suppliedReason = "Linked web admin (GlobalAdmin)";
         UserActionRecord? captured = null;
         _userActionsRepo.InsertAsync(Arg.Do<UserActionRecord>(r => captured = r), Arg.Any<CancellationToken>())
             .Returns(1L);
@@ -100,10 +100,10 @@ public class AuditHandlerTests
             UserIdentity.FromId(100),
             ChatIdentity.FromId(-200),
             BypassDecision.Admin,
-            expectedReason,
+            suppliedReason,
             CancellationToken.None);
 
-        Assert.That(captured!.Reason, Is.EqualTo(expectedReason));
+        Assert.That(captured!.Reason, Is.EqualTo("[Chat -200] Linked web admin (GlobalAdmin)"));
     }
 
     [Test]
@@ -127,7 +127,7 @@ public class AuditHandlerTests
             "Kick audit row records the chat where the kick happened.");
         Assert.That(captured.MessageId, Is.Null,
             "Kick is not scoped to a specific message.");
-        Assert.That(captured.Reason, Is.EqualTo("test reason"));
+        Assert.That(captured.Reason, Is.EqualTo("[Chat -200] test reason"));
     }
 
     [Test]
@@ -151,7 +151,7 @@ public class AuditHandlerTests
             "RestorePermissions audit row records the chat where permissions were restored.");
         Assert.That(captured.MessageId, Is.Null,
             "RestorePermissions is not scoped to a specific message.");
-        Assert.That(captured.Reason, Is.EqualTo("exam passed"));
+        Assert.That(captured.Reason, Is.EqualTo("[Chat -200] exam passed"));
     }
 
     [Test]
@@ -190,5 +190,72 @@ public class AuditHandlerTests
         Assert.That(captured, Is.Not.Null);
         Assert.That(captured!.ChatId, Is.Null, "Global mute (null chat) leaves chat_id null");
         Assert.That(captured.MessageId, Is.Null);
+    }
+
+    private static readonly ChatIdentity MainCommunity = new(-100026957614982L, "Main Community");
+
+    [Test]
+    public async Task LogKickAsync_TagsReasonWithChat()
+    {
+        UserActionRecord? captured = null;
+        _userActionsRepo.InsertAsync(Arg.Do<UserActionRecord>(r => captured = r), Arg.Any<CancellationToken>()).Returns(1L);
+
+        await _handler.LogKickAsync(UserIdentity.FromId(100), MainCommunity, Actor.WelcomeFlow, "Welcome timeout", CancellationToken.None);
+
+        Assert.That(captured, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(captured!.ChatId, Is.EqualTo(MainCommunity.Id));
+            Assert.That(captured.Reason, Is.EqualTo("[Main Community] Welcome timeout"));
+        }
+    }
+
+    [Test]
+    public async Task LogDeleteAsync_NoReason_StoresTagOnly()
+    {
+        UserActionRecord? captured = null;
+        _userActionsRepo.InsertAsync(Arg.Do<UserActionRecord>(r => captured = r), Arg.Any<CancellationToken>()).Returns(1L);
+
+        await _handler.LogDeleteAsync(4242, MainCommunity, UserIdentity.FromId(100), Actor.AutoDetection, CancellationToken.None);
+
+        Assert.That(captured, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(captured!.MessageId, Is.EqualTo(4242));
+            Assert.That(captured.Reason, Is.EqualTo("[Main Community]"));
+        }
+    }
+
+    [Test]
+    public async Task LogRestorePermissionsAsync_TagsReasonWithChat()
+    {
+        UserActionRecord? captured = null;
+        _userActionsRepo.InsertAsync(Arg.Do<UserActionRecord>(r => captured = r), Arg.Any<CancellationToken>()).Returns(1L);
+
+        await _handler.LogRestorePermissionsAsync(UserIdentity.FromId(100), MainCommunity, Actor.WelcomeFlow, "Completed welcome/rules flow", CancellationToken.None);
+
+        Assert.That(captured?.Reason, Is.EqualTo("[Main Community] Completed welcome/rules flow"));
+    }
+
+    [Test]
+    public async Task LogRestrictAsync_NullChat_LeavesReasonUntagged()
+    {
+        UserActionRecord? captured = null;
+        _userActionsRepo.InsertAsync(Arg.Do<UserActionRecord>(r => captured = r), Arg.Any<CancellationToken>()).Returns(1L);
+
+        await _handler.LogRestrictAsync(UserIdentity.FromId(100), null, Actor.WelcomeFlow, "Pending welcome verification", CancellationToken.None);
+
+        Assert.That(captured?.Reason, Is.EqualTo("Pending welcome verification"));
+    }
+
+    [Test]
+    public async Task LogBanAsync_GlobalAction_StoresReasonVerbatim()
+    {
+        UserActionRecord? captured = null;
+        _userActionsRepo.InsertAsync(Arg.Do<UserActionRecord>(r => captured = r), Arg.Any<CancellationToken>()).Returns(1L);
+
+        await _handler.LogBanAsync(UserIdentity.FromId(100), Actor.AutoDetection, "Auto-ban: High confidence spam", CancellationToken.None);
+
+        Assert.That(captured?.Reason, Is.EqualTo("Auto-ban: High confidence spam"));
     }
 }

@@ -738,7 +738,6 @@ public class ExamFlowService : IExamFlowService
         await using var scope = _serviceProvider.CreateAsyncScope();
         var orchestrator = scope.ServiceProvider.GetRequiredService<IBotModerationService>();
         var welcomeResponsesRepo = scope.ServiceProvider.GetRequiredService<IWelcomeResponsesRepository>();
-        var telegramUserRepo = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
 
         var chatName = chat.ChatName ?? "the chat";
 
@@ -775,10 +774,7 @@ public class ExamFlowService : IExamFlowService
                     cancellationToken);
             }
 
-            // 4. Mark user as active
-            await telegramUserRepo.ActivateAsync(user.Id, cancellationToken);
-
-            // 5. Send success DM with deeplink to return to chat
+            // 4. Send success DM with deeplink to return to chat
             await SendExamApprovalDmAsync(user, chat, chatName, isManualApproval, cancellationToken);
         }
         else

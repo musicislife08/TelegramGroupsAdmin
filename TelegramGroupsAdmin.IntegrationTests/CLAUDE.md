@@ -2,6 +2,15 @@
 
 This file is auto-loaded by Claude Code when working under `TelegramGroupsAdmin.IntegrationTests/`. It is the discovery surface for the canonical test dataset. **Do not embed example row contents here**: read the SQL files directly when you need exemplars. Counts and structural description belong here; rows do not.
 
+## Part 0 - Test data rules (MANDATORY — read before writing any test here)
+
+The binding rule set lives in `.claude/rules/integration-test-data.md` and is injected automatically when you edit files in this project or a superpowers plan/spec. The short form:
+
+- A test asserts its logic against canonical rows. **Never seed a precondition** — no SUT write method (`GetOrCreateAsync`, `UpsertAsync`, `SetBanStatusAsync`, `TrustUserAsync`, …) as setup, no `ctx.<Table>.Add`, no raw `INSERT`. A SUT write appears only when that write **is** the assertion subject.
+- Canonical lacks a shape? **Do not add rows.** Find a canonical row no test or doc references and flag-edit it in place; keep the story plausible; pin it in `TestData/GoldenDatasetConstants.cs`; add a Part 2 recipe marked "(canonical edit <date>)"; guard the precondition in the test by reading the row back.
+- Read expected counts/names at runtime, never hard-code them.
+- Hit an infrastructure problem (template build, FK, sequence, missing shape)? Escalate — never change the assertion to make it pass.
+
 ## Part 1 - Dataset orientation
 
 ### What this is
@@ -25,7 +34,7 @@ Origin: prod DB snapshot from 2026-04-30. Bootstrap pipeline (full detail in `do
 | Order | Table | Rows | Notes |
 |-------|-------|------|-------|
 | 01 | users | 9 | Web users: 4 canonical fixtures + 5 prod-derived. All share one bcrypt hash. |
-| 02 | telegram_users | 335 | Anchor set after Strict-Plus prune (every row referenced by >=1 child). |
+| 02 | telegram_users | 335 | Anchor set after Strict-Plus prune (every row referenced by >=1 child). Two rows flag-edited 2026-09-13 for Users-tab tests (see Part 2 recipes). |
 | 03 | managed_chats | 21 | Synthetic themed names; one disambiguated duplicate via `is_deleted`. |
 | 04 | configs | 20 | `chat_id=0` global row + 19 per-chat. Encrypted JSONB columns NULL; `welcome_config` populated only on global + Main Chat. |
 | 05 | content_detection_configs | 18 | One per non-deleted managed_chat. |
@@ -149,6 +158,21 @@ Recipe format: a heading, the anchor id(s), a one-line description, and "use whe
 - `@strainermaroon`, "Obtrusive Impure", `is_banned=false`
 - `admin_notes` row 5 ties this account to `@unhelpfulgrab` ("Same account as @unhelpfulgrab").
 - Use when: a test needs an account with a non-trivial `admin_notes` narrative (free-text cross-reference to another canonical user).
+
+#### Kicked joiner (welcome timeout, never verified)
+- `telegram_user_id` = `9171379870502`
+- `@luminanceflagstick`, "Agnostic", `is_active=false`, `is_banned=false`, 0 messages, 2 `user_actions` (Mute "Pending welcome verification", Kick "Welcome timeout") in MainChat
+- Use when: a test needs a user who never passed the join gate (hidden from the Active tab, shown on All with the Unverified chip). Constant: `GoldenDatasetConstants.UsersPage.KickedJoinerId`.
+
+#### Trusted kicked joiner (canonical edit 2026-09-13)
+- `telegram_user_id` = `9301917046112`
+- `@tadpolesleek`, "Supply", `is_active=false`, `is_trusted=true` (flag edited in place; row is otherwise a welcome-timeout kick like the one above)
+- Use when: a test needs trust independent of join-gate state. Constant: `UsersPage.TrustedKickedJoinerId`.
+
+#### Expired temp-ban with the flag still set (canonical edit 2026-09-13)
+- `telegram_user_id` = `9995544961449`
+- `@curveabdominal`, "Crawling", `is_active=false`, `is_banned=true`, `ban_expires_at=2026-04-30 12:56:53+00` (past), `banned_at=2026-04-30 00:56:53+00`
+- Use when: a test needs a user the Banned tab drops (expired) that every other status tab also excludes — the shape the All tab guarantees. Constant: `UsersPage.ExpiredBanUserId`.
 
 #### Heavily-banned spammer
 - `telegram_user_id` = `9971261287520`

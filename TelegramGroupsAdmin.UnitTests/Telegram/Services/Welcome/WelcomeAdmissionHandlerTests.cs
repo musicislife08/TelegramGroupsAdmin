@@ -29,6 +29,7 @@ public class WelcomeAdmissionHandlerTests
     private IReportsRepository _reportsRepo = null!;
     private IWelcomeResponsesRepository _welcomeRepo = null!;
     private IBotModerationService _moderationService = null!;
+    private ITelegramUserRepository _telegramUserRepo = null!;
     private IServiceScopeFactory _scopeFactory = null!;
     private WelcomeAdmissionHandler _handler = null!;
 
@@ -49,6 +50,7 @@ public class WelcomeAdmissionHandlerTests
         _reportsRepo = Substitute.For<IReportsRepository>();
         _welcomeRepo = Substitute.For<IWelcomeResponsesRepository>();
         _moderationService = Substitute.For<IBotModerationService>();
+        _telegramUserRepo = Substitute.For<ITelegramUserRepository>();
 
         // Build a real service provider with mock registrations so that
         // GetRequiredService<T>() calls inside the handler resolve correctly.
@@ -56,6 +58,7 @@ public class WelcomeAdmissionHandlerTests
         services.AddSingleton(_reportsRepo);
         services.AddSingleton(_welcomeRepo);
         services.AddSingleton(_moderationService);
+        services.AddSingleton(_telegramUserRepo);
         var serviceProvider = services.BuildServiceProvider();
 
         // Substitute only the factory — its CreateScope() returns the real scope.
@@ -231,6 +234,61 @@ public class WelcomeAdmissionHandlerTests
             CreatedAt: DateTimeOffset.UtcNow.AddMinutes(-5),
             TimeoutJobId: null
         );
+
+    #endregion
+
+    #region Activation
+
+    [Test]
+    public async Task TryAdmitUserAsync_Admitted_ActivatesUser()
+    {
+        _reportsRepo
+            .HasPendingProfileScanAlertAsync(TestUserId, Arg.Any<long?>(), Arg.Any<CancellationToken>())
+            .Returns(false);
+        _welcomeRepo
+            .GetByUserAndChatAsync(TestUserId, TestChatId, Arg.Any<CancellationToken>())
+            .Returns(CreateWelcomeResponse(WelcomeResponseType.Accepted));
+        _moderationService
+            .RestoreUserPermissionsAsync(Arg.Any<RestorePermissionsIntent>(), Arg.Any<CancellationToken>())
+            .Returns(new ModerationResult { Success = true, ChatsAffected = 1 });
+
+        var result = await _handler.TryAdmitUserAsync(
+            TestUser, TestChat, TestExecutor, TestReason, CancellationToken.None);
+
+        Assert.That(result, Is.EqualTo(AdmissionResult.Admitted));
+        await _telegramUserRepo.Received(1).ActivateAsync(TestUserId, Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task TryAdmitUserAsync_ProfileHold_DoesNotActivate()
+    {
+        _reportsRepo
+            .HasPendingProfileScanAlertAsync(TestUserId, Arg.Any<long?>(), Arg.Any<CancellationToken>())
+            .Returns(true);
+
+        var result = await _handler.TryAdmitUserAsync(
+            TestUser, TestChat, TestExecutor, TestReason, CancellationToken.None);
+
+        Assert.That(result, Is.EqualTo(AdmissionResult.StillWaiting));
+        await _telegramUserRepo.DidNotReceive().ActivateAsync(Arg.Any<long>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task TryAdmitUserAsync_WelcomePending_DoesNotActivate()
+    {
+        _reportsRepo
+            .HasPendingProfileScanAlertAsync(TestUserId, Arg.Any<long?>(), Arg.Any<CancellationToken>())
+            .Returns(false);
+        _welcomeRepo
+            .GetByUserAndChatAsync(TestUserId, TestChatId, Arg.Any<CancellationToken>())
+            .Returns(CreateWelcomeResponse(WelcomeResponseType.Pending));
+
+        var result = await _handler.TryAdmitUserAsync(
+            TestUser, TestChat, TestExecutor, TestReason, CancellationToken.None);
+
+        Assert.That(result, Is.EqualTo(AdmissionResult.StillWaiting));
+        await _telegramUserRepo.DidNotReceive().ActivateAsync(Arg.Any<long>(), Arg.Any<CancellationToken>());
+    }
 
     #endregion
 }

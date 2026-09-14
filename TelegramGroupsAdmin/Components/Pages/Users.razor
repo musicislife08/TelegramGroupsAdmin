@@ -38,6 +38,58 @@
     }
 
     <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" TabPanelsClass="pa-6">
+        <MudTabPanel Text="All" Icon="@Icons.Material.Filled.Groups" BadgeData="@_tabCounts.AllCount" BadgeColor="Color.Default">
+            <MudText Typo="Typo.body2" Class="mb-4" Color="Color.Secondary">
+                Every user the bot has seen in your groups. Use this tab when you cannot find someone elsewhere.
+            </MudText>
+            <MudTable T="TelegramUserListItem"
+                     @ref="_allTable"
+                     ServerData="@LoadAllServerDataAsync"
+                     Hover="true" Breakpoint="Breakpoint.Sm" Dense="true">
+                <HeaderContent>
+                    <MudTh><MudTableSortLabel T="TelegramUserListItem" SortLabel="User">User</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel T="TelegramUserListItem" SortLabel="Status">Status</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel T="TelegramUserListItem" SortLabel="LastSeen" InitialDirection="SortDirection.Descending">Last Seen</MudTableSortLabel></MudTh>
+                    <MudTh>Actions</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="User">
+                        <UserInfoCell User="context" />
+                    </MudTd>
+                    <MudTd DataLabel="Status">
+                        <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                            <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(context.Status)">
+                                @GetStatusIcon(context.Status) @context.Status.ToString()
+                            </MudChip>
+                            @if (!context.IsActive && !context.IsBanned)
+                            {
+                                <MudTooltip Text="Has not passed welcome verification, the entrance exam, or profile review">
+                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default">Unverified</MudChip>
+                                </MudTooltip>
+                            }
+                        </MudStack>
+                    </MudTd>
+                    <MudTd DataLabel="Last Seen">
+                        <LocalTimestamp Value="@context.LastSeenAt" />
+                    </MudTd>
+                    <MudTd DataLabel="Actions">
+                        <MudTooltip Text="View Details">
+                            <MudIconButton Icon="@Icons.Material.Filled.Visibility" Size="Size.Small" OnClick="@(() => ViewUserDetail(context.TelegramUserId))" />
+                        </MudTooltip>
+                        <MudTooltip Text="@(context.IsTrusted ? "Remove Trust" : "Trust User")">
+                            <MudIconButton Icon="@(context.IsTrusted ? Icons.Material.Filled.PersonOff : Icons.Material.Filled.VerifiedUser)"
+                                          Size="Size.Small"
+                                          Color="@(context.IsTrusted ? Color.Default : Color.Success)"
+                                          OnClick="@(() => ToggleTrust(context))" />
+                        </MudTooltip>
+                    </MudTd>
+                </RowTemplate>
+                <PagerContent>
+                    <MudTablePager PageSizeOptions="[25, 50, 100]" />
+                </PagerContent>
+            </MudTable>
+        </MudTabPanel>
+
         <MudTabPanel Text="Active" Icon="@Icons.Material.Filled.People" BadgeData="@_tabCounts.ActiveCount">
             <MudTable T="TelegramUserListItem"
                      @ref="_activeTable"
@@ -243,7 +295,7 @@
 
         <MudTabPanel Text="Kicked" Icon="@Icons.Material.Filled.PersonRemove" BadgeData="@_tabCounts.KickedCount" BadgeColor="Color.Default">
             <MudText Typo="Typo.body2" Class="mb-4" Color="Color.Secondary">
-                Users who were removed from the group but not banned. Typically from failed welcome verification or admin kicks.
+                Users who have not passed the join gate and are not banned — welcome timeouts, declined rules, left before verifying, admin kicks, and users still waiting to verify.
             </MudText>
             <MudTable T="TelegramUserListItem"
                      @ref="_kickedTable"
@@ -289,6 +341,7 @@
     [CascadingParameter] private WebUserIdentity? WebUser { get; set; }
 
     // Table refs for server-side data reload
+    private MudTable<TelegramUserListItem> _allTable = null!;
     private MudTable<TelegramUserListItem> _activeTable = null!;
     private MudTable<TelegramUserListItem> _taggedTable = null!;
     private MudTable<TelegramUserListItem> _trustedTable = null!;
@@ -324,6 +377,9 @@
     // ============================================================================
     // ServerData Callbacks
     // ============================================================================
+
+    private Task<TableData<TelegramUserListItem>> LoadAllServerDataAsync(TableState state, CancellationToken ct)
+        => LoadUsersServerDataAsync(UserListFilter.All, state, ct);
 
     private Task<TableData<TelegramUserListItem>> LoadActiveServerDataAsync(TableState state, CancellationToken ct)
         => LoadUsersServerDataAsync(UserListFilter.Active, state, ct);
@@ -516,6 +572,7 @@
 
     private async Task ReloadAllTablesAsync()
     {
+        if (_allTable != null) await _allTable.ReloadServerData();
         if (_activeTable != null) await _activeTable.ReloadServerData();
         if (_taggedTable != null) await _taggedTable.ReloadServerData();
         if (_trustedTable != null) await _trustedTable.ReloadServerData();

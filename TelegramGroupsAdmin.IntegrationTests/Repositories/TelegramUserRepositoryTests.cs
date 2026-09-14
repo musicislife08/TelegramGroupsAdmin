@@ -426,4 +426,154 @@ public class TelegramUserRepositoryTests
     }
 
     #endregion
+
+    #region All Filter Tests
+
+    private static readonly List<long> GlobalScope = [0L];
+
+    private async Task<AppDbContext> OpenContextAsync()
+    {
+        var factory = _serviceProvider!.GetRequiredService<IDbContextFactory<AppDbContext>>();
+        return await factory.CreateDbContextAsync();
+    }
+
+    [Test]
+    public async Task GetPagedUsersAsync_All_ReturnsKickedJoiner_ThatActiveHides()
+    {
+        var (allItems, _) = await _repository!.GetPagedUsersAsync(
+            UiModels.UserListFilter.All, skip: 0, take: 5000,
+            searchText: null, chatIds: GlobalScope, sortLabel: null, sortDescending: false);
+        var (activeItems, _) = await _repository.GetPagedUsersAsync(
+            UiModels.UserListFilter.Active, skip: 0, take: 5000,
+            searchText: null, chatIds: GlobalScope, sortLabel: null, sortDescending: false);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(allItems.Select(i => i.TelegramUserId), Does.Contain(GoldenDatasetConstants.UsersPage.KickedJoinerId), "All must include a joiner who never passed the gate");
+            Assert.That(activeItems.Select(i => i.TelegramUserId), Does.Not.Contain(GoldenDatasetConstants.UsersPage.KickedJoinerId), "Active still excludes unverified users");
+        }
+    }
+
+    [Test]
+    public async Task GetPagedUsersAsync_All_ReturnsUserWithExpiredBanFlagStillSet()
+    {
+        const long userId = GoldenDatasetConstants.UsersPage.ExpiredBanUserId;
+
+        // Precondition guard: canonical must still carry the edited shape.
+        await using (var ctx = await OpenContextAsync())
+        {
+            var row = await ctx.TelegramUsers.AsNoTracking().SingleAsync(u => u.TelegramUserId == userId);
+            Assert.That(row.IsBanned && row.BanExpiresAt < DateTimeOffset.UtcNow, Is.True,
+                "canonical anchor must be is_banned=true with an expired ban_expires_at");
+        }
+
+        var (allItems, _) = await _repository!.GetPagedUsersAsync(
+            UiModels.UserListFilter.All, skip: 0, take: 5000,
+            searchText: null, chatIds: GlobalScope, sortLabel: null, sortDescending: false);
+        var (activeItems, _) = await _repository.GetPagedUsersAsync(
+            UiModels.UserListFilter.Active, skip: 0, take: 5000,
+            searchText: null, chatIds: GlobalScope, sortLabel: null, sortDescending: false);
+        var (bannedItems, _) = await _repository.GetPagedBannedUsersWithDetailsAsync(
+            skip: 0, take: 5000, searchText: null, sortLabel: null, sortDescending: false);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(allItems.Select(i => i.TelegramUserId), Does.Contain(userId), "All must include the expired-ban user");
+            Assert.That(activeItems.Select(i => i.TelegramUserId), Does.Not.Contain(userId), "Active excludes is_banned rows");
+            Assert.That(bannedItems.Select(i => i.TelegramUserId), Does.Not.Contain(userId), "Banned excludes expired bans");
+        }
+    }
+
+    [Test]
+    public async Task GetPagedUsersAsync_All_ExcludesSystemUser()
+    {
+        var (allItems, _) = await _repository!.GetPagedUsersAsync(
+            UiModels.UserListFilter.All, skip: 0, take: 5000,
+            searchText: null, chatIds: GlobalScope, sortLabel: null, sortDescending: false);
+
+        Assert.That(allItems.Select(i => i.TelegramUserId), Does.Not.Contain(0L));
+    }
+
+    [Test]
+    public async Task GetPagedUsersAsync_All_ProjectsIsActive()
+    {
+        var (allItems, _) = await _repository!.GetPagedUsersAsync(
+            UiModels.UserListFilter.All, skip: 0, take: 5000,
+            searchText: null, chatIds: GlobalScope, sortLabel: null, sortDescending: false);
+
+        var kicked = allItems.Single(i => i.TelegramUserId == GoldenDatasetConstants.UsersPage.KickedJoinerId);
+        var canonicalActive = allItems.Single(i => i.TelegramUserId == TopHamAuthorId);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(kicked.IsActive, Is.False);
+            Assert.That(canonicalActive.IsActive, Is.True);
+        }
+    }
+
+    [Test]
+    public async Task GetPagedUsersAsync_All_SearchFindsKickedJoiner()
+    {
+        var (items, totalCount) = await _repository!.GetPagedUsersAsync(
+            UiModels.UserListFilter.All, skip: 0, take: 50,
+            searchText: GoldenDatasetConstants.UsersPage.KickedJoinerUsername,
+            chatIds: GlobalScope, sortLabel: null, sortDescending: false);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(totalCount, Is.EqualTo(1));
+            Assert.That(items.Single().TelegramUserId, Is.EqualTo(GoldenDatasetConstants.UsersPage.KickedJoinerId));
+        }
+    }
+
+    [Test]
+    public async Task GetUserTabCountsAsync_AllCount_EqualsNonSystemRowCount_UnderGlobalScope()
+    {
+        var counts = await _repository!.GetUserTabCountsAsync(chatIds: GlobalScope, searchText: null);
+
+        int rowCount;
+        await using (var ctx = await OpenContextAsync())
+        {
+            rowCount = await ctx.TelegramUsers.CountAsync(u => u.TelegramUserId != 0);
+        }
+
+        Assert.That(counts.AllCount, Is.EqualTo(rowCount));
+    }
+
+    [Test]
+    public async Task GetPagedUsersAsync_All_RespectsChatScope()
+    {
+        // The kicked joiner has no messages anywhere, so a MainChat-scoped admin must not see them.
+        var (items, _) = await _repository!.GetPagedUsersAsync(
+            UiModels.UserListFilter.All, skip: 0, take: 5000,
+            searchText: null, chatIds: new List<long> { GoldenDatasetConstants.Chats.MainChatId },
+            sortLabel: null, sortDescending: false);
+
+        Assert.That(items.Select(i => i.TelegramUserId), Does.Not.Contain(GoldenDatasetConstants.UsersPage.KickedJoinerId));
+    }
+
+    [Test]
+    public async Task GetPagedUsersAsync_Trusted_IncludesInactiveTrustedUser()
+    {
+        const long userId = GoldenDatasetConstants.UsersPage.TrustedKickedJoinerId;
+
+        // Precondition guard: canonical must still carry the edited shape.
+        await using (var ctx = await OpenContextAsync())
+        {
+            var row = await ctx.TelegramUsers.AsNoTracking().SingleAsync(u => u.TelegramUserId == userId);
+            Assert.That(row.IsTrusted && !row.IsActive, Is.True, "canonical anchor must be is_trusted=true, is_active=false");
+        }
+
+        var (items, _) = await _repository!.GetPagedUsersAsync(
+            UiModels.UserListFilter.Trusted, skip: 0, take: 5000,
+            searchText: null, chatIds: GlobalScope, sortLabel: null, sortDescending: false);
+        var counts = await _repository.GetUserTabCountsAsync(chatIds: GlobalScope, searchText: null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(items.Select(i => i.TelegramUserId), Does.Contain(userId), "Trust is global; gate state must not hide it");
+            Assert.That(counts.TrustedCount, Is.EqualTo(items.Count), "count must match the listed rows");
+        }
+    }
+
+    #endregion
 }
