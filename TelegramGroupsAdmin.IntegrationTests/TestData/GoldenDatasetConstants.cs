@@ -118,9 +118,8 @@ internal static class GoldenDatasetConstants
 
     /// <summary>
     /// Anchors for the Users page tab tests (<c>TelegramUserRepositoryTests</c>, All / Trusted
-    /// filters and action-history chat names). All four are welcome-timeout kicked joiners in
-    /// <see cref="Chats.MainChatId"/> with zero messages, except the last which is a spammer
-    /// with one chat-scoped Delete and two global (chat-less) actions.
+    /// filters). All three are welcome-timeout kicked joiners in <see cref="Chats.MainChatId"/>
+    /// with zero messages.
     /// Two rows are edited in canonical (2026-09-13) to carry shapes real data never keeps
     /// long enough to snapshot; see the per-constant notes.
     /// </summary>
@@ -137,15 +136,6 @@ internal static class GoldenDatasetConstants
 
         /// <summary>@curveabdominal — is_active=false, is_banned=true with ban_expires_at in the past (canonical edit: expired temp-ban whose flag was never cleared).</summary>
         public const long ExpiredBanUserId = 9995544961449L;
-
-        /// <summary>User with a Delete action in <see cref="Chats.MainChatId"/> plus a Ban and an Untrust with no chat.</summary>
-        public const long ChatScopedActionsUserId = 9110930357318L;
-
-        /// <summary>user_actions.id of the Delete action (chat_id = MainChat) for <see cref="ChatScopedActionsUserId"/>.</summary>
-        public const long ChatScopedDeleteActionId = 2179L;
-
-        /// <summary>user_actions.id of the Ban action (chat_id NULL) for <see cref="ChatScopedActionsUserId"/>.</summary>
-        public const long GlobalBanActionId = 2180L;
     }
 
     /// <summary>

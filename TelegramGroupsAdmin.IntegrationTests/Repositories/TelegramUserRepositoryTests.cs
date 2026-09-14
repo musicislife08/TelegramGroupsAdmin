@@ -576,39 +576,4 @@ public class TelegramUserRepositoryTests
     }
 
     #endregion
-
-    #region User Detail Action Chat Name
-
-    [Test]
-    public async Task GetUserDetailAsync_Actions_IncludeChatNameForChatScopedAction_AndNullForGlobalAction()
-    {
-        const long userId = GoldenDatasetConstants.UsersPage.ChatScopedActionsUserId;
-
-        string? mainChatName;
-        int expectedActionCount;
-        await using (var ctx = await OpenContextAsync())
-        {
-            mainChatName = await ctx.ManagedChats.AsNoTracking()
-                .Where(c => c.ChatId == GoldenDatasetConstants.Chats.MainChatId)
-                .Select(c => c.ChatName)
-                .SingleAsync();
-            expectedActionCount = await ctx.UserActions.CountAsync(a => a.UserId == userId);
-        }
-
-        var detail = await _repository!.GetUserDetailAsync(userId);
-
-        Assert.That(detail, Is.Not.Null);
-        var byId = detail!.Actions.ToDictionary(a => a.Id);
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(mainChatName, Is.Not.Null.And.Not.Empty, "golden dataset main chat must have a name");
-            Assert.That(detail.Actions, Has.Count.EqualTo(expectedActionCount), "LEFT JOIN must keep chat-less actions");
-            Assert.That(byId[GoldenDatasetConstants.UsersPage.ChatScopedDeleteActionId].ChatId, Is.EqualTo(GoldenDatasetConstants.Chats.MainChatId));
-            Assert.That(byId[GoldenDatasetConstants.UsersPage.ChatScopedDeleteActionId].ChatName, Is.EqualTo(mainChatName));
-            Assert.That(byId[GoldenDatasetConstants.UsersPage.GlobalBanActionId].ChatId, Is.Null);
-            Assert.That(byId[GoldenDatasetConstants.UsersPage.GlobalBanActionId].ChatName, Is.Null);
-        }
-    }
-
-    #endregion
 }

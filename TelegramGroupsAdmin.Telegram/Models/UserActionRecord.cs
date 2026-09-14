@@ -22,9 +22,7 @@ public record UserActionRecord(
     // Target user display name fields (from telegram_users JOIN)
     string? TargetUsername = null,
     string? TargetFirstName = null,
-    string? TargetLastName = null,
-    // Chat display name resolved from managed_chats (null when ChatId is null or the chat is no longer managed)
-    string? ChatName = null
+    string? TargetLastName = null
 )
 {
     /// <summary>

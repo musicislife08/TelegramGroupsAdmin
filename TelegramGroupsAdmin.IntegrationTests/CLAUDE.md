@@ -174,11 +174,6 @@ Recipe format: a heading, the anchor id(s), a one-line description, and "use whe
 - `@curveabdominal`, "Crawling", `is_active=false`, `is_banned=true`, `ban_expires_at=2026-04-30 12:56:53+00` (past), `banned_at=2026-04-30 00:56:53+00`
 - Use when: a test needs a user the Banned tab drops (expired) that every other status tab also excludes — the shape the All tab guarantees. Constant: `UsersPage.ExpiredBanUserId`.
 
-#### User with chat-scoped and global actions
-- `telegram_user_id` = `9110930357318`
-- 3 `user_actions`: Delete (id 2179, `chat_id` = MainChat), Ban (id 2180, `chat_id` NULL), Untrust (id 2181, `chat_id` NULL)
-- Use when: a test needs both a chat-attributed and a global audit row on one user (e.g. chat-name resolution in the user detail dialog). Constants: `UsersPage.ChatScopedActionsUserId`, `ChatScopedDeleteActionId`, `GlobalBanActionId`.
-
 #### Heavily-banned spammer
 - `telegram_user_id` = `9971261287520`
 - `@lazinessunsheathe`, "Reappear Math"

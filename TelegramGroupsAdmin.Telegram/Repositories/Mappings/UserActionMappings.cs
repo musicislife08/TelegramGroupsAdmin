@@ -23,7 +23,6 @@ public static class UserActionMappings
         /// <param name="targetUsername">Username of the target user (from telegram_users JOIN)</param>
         /// <param name="targetFirstName">First name of the target user (from telegram_users JOIN)</param>
         /// <param name="targetLastName">Last name of the target user (from telegram_users JOIN)</param>
-        /// <param name="chatName">Managed chat name for ChatId (from managed_chats LEFT JOIN)</param>
         public UiModels.UserActionRecord ToModel(
             string? webUserEmail = null,
             string? telegramUsername = null,
@@ -31,8 +30,7 @@ public static class UserActionMappings
             string? telegramLastName = null,
             string? targetUsername = null,
             string? targetFirstName = null,
-            string? targetLastName = null,
-            string? chatName = null) => new(
+            string? targetLastName = null) => new(
             Id: data.Id,
             UserId: data.UserId,
             ActionType: (UserActionType)data.ActionType,
@@ -44,8 +42,7 @@ public static class UserActionMappings
             Reason: data.Reason,
             TargetUsername: targetUsername,
             TargetFirstName: targetFirstName,
-            TargetLastName: targetLastName,
-            ChatName: chatName
+            TargetLastName: targetLastName
         );
     }
 
