@@ -35,10 +35,12 @@ A second, independent defect in the same area: allowing a profile-scan alert
 calls `ActivateAsync`. Activation is duplicated across four `WelcomeService` sites and one
 `ExamFlowService` site, and this fifth admission path was simply missed.
 
-**Bug 2 — action history entries do not say which group.** `UserActionRecord` carries `ChatId`
-but no chat name, and the dialog timeline never renders either. Newer RestorePermissions,
-Kick, Mute, Delete, and WelcomeBypass rows all have `chat_id` populated; the data is there, it
-is a lookup-and-render gap.
+**Bug 2 — action history entries do not say which group.** The audit row is a log entry, and
+its `reason` is written without the chat even though every chat-scoped write site in
+`AuditHandler` holds a `ChatIdentity` at that moment and drops it to `chat_id` one hop before
+storage. The description must be composed where the identity exists, at write time, with the
+log formatter; the Data project stores ids only and the read path never reconstructs names for
+this purpose.
 
 ## Decisions (from brainstorm)
 
@@ -65,10 +67,14 @@ is a lookup-and-render gap.
   `TryAdmitUserAsync` on the `Admitted` path. The `WelcomeService` and `ExamFlowService` call
   sites that follow an `Admitted` result are removed. The `WelcomeBypass` path does not go
   through the admission handler and keeps its own call.
-- **Bug 2: add `ChatName` to `UserActionRecord`, render "in {chat}".** Follow the existing
-  `Target*` enrichment pattern: an optional trailing record field populated by a
-  `LeftJoin` on `managed_chats` in the detail query. Fall back to the raw chat id when the chat
-  is no longer managed.
+- **Bug 2: tag the audit reason with the chat at write time — `[Main Community] Welcome timeout`.**
+  Kass (2026-09-13): the audit table is a form of log, so the log formatter is the right tool,
+  and the string is computed above the Data project where the `ChatIdentity` already exists.
+  Prefix chosen over a suffix or per-action sentence because it never produces a broken
+  fragment (830 Delete rows have no reason at all) and needs nothing from the action type.
+  `chat.ToLogInfo()` supplies the name or `Chat {id}`. Names are frozen at write time, as in any
+  log line; existing rows keep their current text, no backfill. The read path and the dialog do
+  not change for this: the timeline already renders `Reason`.
 - **No data backfill.** Legacy admitted-but-inactive rows are left alone; they are visible on
   All with the Unverified chip.
 
@@ -143,16 +149,24 @@ injection. `WelcomeService` still uses it for `GetOrCreateAsync` and the bypass 
 
 ## Part 3 — Action history chat context
 
-- `UserActionRecord` gains `string? ChatName = null` as the final optional parameter.
-- `UserActionMappings.ToModel(...)` gains `string? chatName = null` and passes it through.
-- `GetUserDetailAsync` actions query adds a fourth `LeftJoin(context.ManagedChats,
-  x => x.ua.ChatId, c => c.ChatId, ...)` projecting `ChatName = c != null ? c.ChatName : null`.
-- `UserDetailDialog.razor` timeline: when `action.ChatId is not null`, render a second caption
-  line `in {action.ChatName ?? action.ChatId.ToString()}` between the reason and the
-  "by … · timestamp" line. No change when `ChatId` is null (global actions such as Trust/Ban
-  stay as they are).
-- The `UserActionsRepository` list methods (moderation queue, audit views) are **not** changed;
-  only the detail dialog is in scope.
+- New `TelegramGroupsAdmin.Core/Utilities/AuditReason.cs` (one type per file):
+  `static string? WithChatTag(ChatIdentity? chat, string? reason)` — returns `reason` unchanged
+  when `chat` is null; otherwise `"[" + chat.ToLogInfo() + "]"`, followed by a space and the
+  reason when the reason is non-blank.
+- `AuditHandler.CreateRecord` takes `ChatIdentity? chat` instead of `long? chatId`, stores
+  `ChatId: chat?.Id`, and stores `Reason: AuditReason.WithChatTag(chat, reason)`. The five
+  chat-scoped `Log*Async` methods (Delete, Restrict, RestorePermissions, Kick, WelcomeBypass)
+  pass their `ChatIdentity` through. Global actions (Ban, TempBan, Unban, Warn, Trust, Untrust)
+  are untouched.
+- The one direct `user_actions` write outside `AuditHandler` that carries a chat — the
+  ProfileChange row in `MessageProcessingService` — uses the same helper with
+  `ChatIdentity.From(message.Chat)`.
+- The two `BotChatService` auto-trust rows that hand-build `"Admin in chat {id} ({title})"`
+  into the reason switch to `$"Admin in {ChatIdentity.From(chat).ToLogInfo()}"`. Their
+  `ChatId` stays null (trust is global); this is the same formatter rule applied consistently.
+- **Reverted from the earlier design:** no `ChatName` on `UserActionRecord`, no `managed_chats`
+  join in `GetUserDetailAsync`, no chat line in the dialog timeline. The timeline renders
+  `Reason` as it always did.
 
 ## Testing
 
@@ -170,7 +184,6 @@ rows:
 | Kicked joiner | `9171379870502` (@luminanceflagstick) | none |
 | Trusted kicked joiner | `9301917046112` (@tadpolesleek) | `is_trusted` → `true` |
 | Expired temp-ban, flag still set | `9995544961449` (@curveabdominal) | `is_banned` → `true`, `ban_expires_at` → 12h after the kick, `banned_at` → kick time |
-| Chat-scoped + global actions | `9110930357318` (Delete in Main Community; Ban and Untrust with no chat) | none |
 
 - `GetPagedUsersAsync_All_ReturnsKickedJoiner_ThatActiveHides`
 - `GetPagedUsersAsync_All_ReturnsUserWithExpiredBanFlagStillSet` (the gap no other tab covers; guards its precondition by reading the row)
@@ -180,7 +193,6 @@ rows:
 - `GetUserTabCountsAsync_AllCount_EqualsNonSystemRowCount_UnderGlobalScope`
 - `GetPagedUsersAsync_All_RespectsChatScope` (kicked joiner has no messages, so a MainChat-scoped admin does not see them)
 - `GetPagedUsersAsync_Trusted_IncludesInactiveTrustedUser` (guards its precondition by reading the row)
-- `GetUserDetailAsync_Actions_IncludeChatNameForChatScopedAction_AndNullForGlobalAction` (the unmanaged-chat fallback has no real data; it is covered by the component test's id-fallback render only)
 
 **Unit**
 - `WelcomeAdmissionHandlerTests`: `TryAdmitUserAsync_Admitted_ActivatesUser`;
@@ -189,11 +201,17 @@ rows:
   service itself calls `ActivateAsync` (one existing reference in `WelcomeServiceTests`).
 - `ProfileScanHandlerTests`: no direct activation assertion needed — the handler is mocked;
   covered by the admission handler tests.
+- `AuditReasonTests` (Core utilities): null chat → reason unchanged; named chat + reason →
+  `[Main Community] reason`; named chat + null/blank reason → `[Main Community]`; unnamed chat →
+  `[Chat -100…] reason`.
+- `AuditHandlerTests`: every chat-scoped `Log*Async` stores the tagged reason (Kick, Delete with
+  null reason, RestorePermissions, Restrict with and without chat, WelcomeBypass); a global
+  action (Ban) stores the caller's reason verbatim. The three existing WelcomeBypass tests that
+  asserted the caller text verbatim now assert the tagged form.
 
 **Component (`UserDetailDialogTests`)**
-- Timeline renders "in {ChatName}" when an action has a chat name.
-- Timeline renders the raw chat id when `ChatId` is set and `ChatName` is null.
-- Timeline renders no chat line when `ChatId` is null.
+- No chat-specific assertions; the timeline renders `Reason` unchanged. The fixture keeps the
+  `[SetUp]` that disposes rendered components between tests.
 
 **E2E (`UsersTests`)**
 - `Users_HasExpectedTabs` asserts the new "All" tab is present and first.
@@ -203,4 +221,5 @@ rows:
 - Redefining `is_active`, adding a membership/status column, or clearing `is_active` on kick.
 - Changing the Active, Tagged, Kicked, or Banned predicates.
 - Backfilling legacy admitted-but-inactive rows or clearing expired ban flags.
-- Chat names on the moderation-queue / audit list views that also consume `UserActionRecord`.
+- Backfilling the chat tag onto existing audit rows.
+- Any read-time name resolution for audit rows (the description is complete when written).

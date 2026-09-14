@@ -1739,3 +1739,260 @@ Expected: all passed (the golden template is rebuilt from the edited SQL on fixt
 - [ ] **Step 6: Commit**
 
 Stage the four files and commit with subject `test(users): assert All/Trusted/chat-name behaviour against canonical rows`, body "Replaces SUT-write and raw-insert seeding with golden anchors; two unreferenced canonical users are flag-edited in place to carry the trusted-inactive and expired-ban shapes.", and the two standard trailer lines (`Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>` and `Claude-Session: https://claude.ai/code/session_01TGukJYySot6Y6hrMrX7eE7`), using a `git commit -F- <<'EOF'` heredoc.
+
+---
+
+### Task 10: Chat tag on audit reasons at write time; revert read-time chat name
+
+**Why this task exists:** Review of Tasks 6–7. The audit row is a log entry; the Data project
+stores ids only and the read path must not reconstruct names for a description. The chat goes
+into the reason text where the `ChatIdentity` already exists (write time), formatted with the log
+formatter as a prefix tag: `[Main Community] Welcome timeout`. Everything Tasks 6 and 7 added for
+read-time chat names is removed.
+
+**Files:**
+- Create: `TelegramGroupsAdmin.Core/Utilities/AuditReason.cs`
+- Create: `TelegramGroupsAdmin.UnitTests/Utilities/AuditReasonTests.cs`
+- Modify: `TelegramGroupsAdmin.Telegram/Services/Moderation/Handlers/AuditHandler.cs` (`CreateRecord` and the five chat-scoped `Log*Async` calls)
+- Modify: `TelegramGroupsAdmin.Telegram/Services/BackgroundServices/MessageProcessingService.cs` (ProfileChange record, ~line 691)
+- Modify: `TelegramGroupsAdmin.Telegram/Services/Bot/BotChatService.cs` (two auto-trust reasons, ~lines 311 and 492)
+- Modify: `TelegramGroupsAdmin.UnitTests/Telegram/Services/Moderation/Handlers/AuditHandlerTests.cs`
+- Revert (Task 6): `TelegramGroupsAdmin.Telegram/Models/UserActionRecord.cs`, `TelegramGroupsAdmin.Telegram/Repositories/Mappings/UserActionMappings.cs`, `TelegramGroupsAdmin.Telegram/Repositories/TelegramUserRepository.cs` (`GetUserDetailAsync` actions query), `TelegramGroupsAdmin.IntegrationTests/Repositories/TelegramUserRepositoryTests.cs` (`#region User Detail Action Chat Name`), `TelegramGroupsAdmin.IntegrationTests/TestData/GoldenDatasetConstants.cs` (three `UsersPage` constants), `TelegramGroupsAdmin.IntegrationTests/CLAUDE.md` (one recipe)
+- Revert (Task 7): `TelegramGroupsAdmin/Components/Shared/UserDetailDialog.razor` (chat caption), `TelegramGroupsAdmin.ComponentTests/Components/UserDetailDialogTests.cs` (`CreateAction` helper and the `Action History Chat Context` region; keep the `[SetUp]`)
+
+**Interfaces:**
+- Consumes: `ChatIdentity` (`TelegramGroupsAdmin.Core.Models`), `ChatIdentity.ToLogInfo()` (`TelegramGroupsAdmin.Core.Extensions.CoreLoggingExtensions`), `ChatIdentity.From(Chat)` (`TelegramGroupsAdmin.Telegram.Extensions.IdentityExtensions`).
+- Produces: `AuditReason.WithChatTag(ChatIdentity? chat, string? reason)`.
+
+- [ ] **Step 1: Write the failing helper tests**
+
+Create `TelegramGroupsAdmin.UnitTests/Utilities/AuditReasonTests.cs` (sits beside `LogDisplayNameTests.cs`):
+
+```csharp
+using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Utilities;
+
+namespace TelegramGroupsAdmin.UnitTests.Utilities;
+
+/// <summary>
+/// AuditReason.WithChatTag composes an audit row's description at write time: the chat, formatted
+/// by the log formatter, as a leading tag. The tag never produces a dangling fragment when the
+/// caller supplied no reason (Delete rows have none).
+/// </summary>
+[TestFixture]
+public class AuditReasonTests
+{
+    private static readonly ChatIdentity NamedChat = new(-100026957614982L, "Main Community");
+    private static readonly ChatIdentity UnnamedChat = ChatIdentity.FromId(-100055500000001L);
+
+    [Test]
+    public void WithChatTag_NullChat_ReturnsReasonUnchanged()
+    {
+        Assert.That(AuditReason.WithChatTag(null, "Manually marked as spam"), Is.EqualTo("Manually marked as spam"));
+    }
+
+    [Test]
+    public void WithChatTag_NullChatAndNullReason_ReturnsNull()
+    {
+        Assert.That(AuditReason.WithChatTag(null, null), Is.Null);
+    }
+
+    [Test]
+    public void WithChatTag_NamedChatWithReason_PrefixesTag()
+    {
+        Assert.That(AuditReason.WithChatTag(NamedChat, "Welcome timeout"), Is.EqualTo("[Main Community] Welcome timeout"));
+    }
+
+    [TestCase(null)]
+    [TestCase("")]
+    [TestCase("   ")]
+    public void WithChatTag_NamedChatWithoutReason_ReturnsTagOnly(string? reason)
+    {
+        Assert.That(AuditReason.WithChatTag(NamedChat, reason), Is.EqualTo("[Main Community]"));
+    }
+
+    [Test]
+    public void WithChatTag_UnnamedChat_UsesLogFormatterFallback()
+    {
+        Assert.That(AuditReason.WithChatTag(UnnamedChat, "Welcome timeout"), Is.EqualTo("[Chat -100055500000001] Welcome timeout"));
+    }
+}
+```
+
+- [ ] **Step 2: Run to verify they fail to compile**
+
+Run: `dotnet build TelegramGroupsAdmin.UnitTests 2>&1 | grep -E "error CS" | head -3`
+Expected: `The type or namespace name 'AuditReason' does not exist`.
+
+- [ ] **Step 3: Implement the helper**
+
+Create `TelegramGroupsAdmin.Core/Utilities/AuditReason.cs`:
+
+```csharp
+using TelegramGroupsAdmin.Core.Extensions;
+using TelegramGroupsAdmin.Core.Models;
+
+namespace TelegramGroupsAdmin.Core.Utilities;
+
+/// <summary>
+/// Composes the human-readable description stored on a <c>user_actions</c> row. The audit
+/// table is a log: the description is complete when written, using the same formatter as log
+/// lines, and is never re-derived at read time. The Data layer stores <c>chat_id</c> only.
+/// </summary>
+public static class AuditReason
+{
+    /// <summary>
+    /// Prefixes <paramref name="reason"/> with <c>[chat]</c> using <see cref="CoreLoggingExtensions.ToLogInfo(ChatIdentity)"/>
+    /// (chat name, or <c>Chat {id}</c> when unnamed). Returns the reason unchanged when there is
+    /// no chat, and the tag alone when the caller supplied no reason.
+    /// </summary>
+    public static string? WithChatTag(ChatIdentity? chat, string? reason)
+    {
+        if (chat is null) return reason;
+        var tag = $"[{chat.ToLogInfo()}]";
+        return string.IsNullOrWhiteSpace(reason) ? tag : $"{tag} {reason}";
+    }
+}
+```
+
+If `ToLogInfo` on `ChatIdentity` is declared with a different receiver form (check `TelegramGroupsAdmin.Core/Extensions/CoreLoggingExtensions.cs` ~line 36), call it exactly as declared; the `<see cref>` may need adjusting to compile the XML doc. Run Step 1's tests: `dotnet test TelegramGroupsAdmin.UnitTests --filter "FullyQualifiedName~AuditReasonTests"` → 6 passed.
+
+- [ ] **Step 4: Update the AuditHandler tests first (they define the new contract)**
+
+In `AuditHandlerTests.cs`:
+
+- The three `LogWelcomeBypassAsync_*` tests pass `ChatIdentity.FromId(-200)` and assert the reason verbatim. Change each expected reason to the tagged form, e.g. `"[Chat -200] Telegram chat admin (3 chats)"`. Rename `_PersistsCallerSuppliedReason` → `_PersistsChatTaggedReason` and `_PersistsVerbatim` → `_PersistsChatTagged` so the names match what they assert.
+- Add these tests (same capture pattern as the existing ones):
+
+```csharp
+    private static readonly ChatIdentity MainCommunity = new(-100026957614982L, "Main Community");
+
+    [Test]
+    public async Task LogKickAsync_TagsReasonWithChat()
+    {
+        UserActionRecord? captured = null;
+        _userActionsRepo.InsertAsync(Arg.Do<UserActionRecord>(r => captured = r), Arg.Any<CancellationToken>()).Returns(1L);
+
+        await _handler.LogKickAsync(UserIdentity.FromId(100), MainCommunity, Actor.WelcomeFlow, "Welcome timeout", CancellationToken.None);
+
+        Assert.That(captured, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(captured!.ChatId, Is.EqualTo(MainCommunity.Id));
+            Assert.That(captured.Reason, Is.EqualTo("[Main Community] Welcome timeout"));
+        }
+    }
+
+    [Test]
+    public async Task LogDeleteAsync_NoReason_StoresTagOnly()
+    {
+        UserActionRecord? captured = null;
+        _userActionsRepo.InsertAsync(Arg.Do<UserActionRecord>(r => captured = r), Arg.Any<CancellationToken>()).Returns(1L);
+
+        await _handler.LogDeleteAsync(4242, MainCommunity, UserIdentity.FromId(100), Actor.AutoDetection, CancellationToken.None);
+
+        Assert.That(captured, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(captured!.MessageId, Is.EqualTo(4242));
+            Assert.That(captured.Reason, Is.EqualTo("[Main Community]"));
+        }
+    }
+
+    [Test]
+    public async Task LogRestorePermissionsAsync_TagsReasonWithChat()
+    {
+        UserActionRecord? captured = null;
+        _userActionsRepo.InsertAsync(Arg.Do<UserActionRecord>(r => captured = r), Arg.Any<CancellationToken>()).Returns(1L);
+
+        await _handler.LogRestorePermissionsAsync(UserIdentity.FromId(100), MainCommunity, Actor.WelcomeFlow, "Completed welcome/rules flow", CancellationToken.None);
+
+        Assert.That(captured?.Reason, Is.EqualTo("[Main Community] Completed welcome/rules flow"));
+    }
+
+    [Test]
+    public async Task LogRestrictAsync_NullChat_LeavesReasonUntagged()
+    {
+        UserActionRecord? captured = null;
+        _userActionsRepo.InsertAsync(Arg.Do<UserActionRecord>(r => captured = r), Arg.Any<CancellationToken>()).Returns(1L);
+
+        await _handler.LogRestrictAsync(UserIdentity.FromId(100), null, Actor.WelcomeFlow, "Pending welcome verification", CancellationToken.None);
+
+        Assert.That(captured?.Reason, Is.EqualTo("Pending welcome verification"));
+    }
+
+    [Test]
+    public async Task LogBanAsync_GlobalAction_StoresReasonVerbatim()
+    {
+        UserActionRecord? captured = null;
+        _userActionsRepo.InsertAsync(Arg.Do<UserActionRecord>(r => captured = r), Arg.Any<CancellationToken>()).Returns(1L);
+
+        await _handler.LogBanAsync(UserIdentity.FromId(100), Actor.AutoDetection, "Auto-ban: High confidence spam", CancellationToken.None);
+
+        Assert.That(captured?.Reason, Is.EqualTo("Auto-ban: High confidence spam"));
+    }
+```
+
+`Actor.WelcomeFlow` and `Actor.AutoDetection` are existing static actors (used throughout `WelcomeService` and `AuditHandler`); if the exact member names differ, use the ones the production code uses. Run the fixture: the new tests and the three renamed ones must FAIL on the reason assertion (untagged today), the rest pass.
+
+- [ ] **Step 5: Implement in AuditHandler**
+
+Change `CreateRecord`'s `long? chatId = null` parameter to `ChatIdentity? chat = null`, and inside it:
+
+```csharp
+            ChatId: chat?.Id,
+            ...
+            Reason: AuditReason.WithChatTag(chat, reason));
+```
+
+Update the five callers inside the file: `chatId: chat.Id` → `chat: chat` in `LogDeleteAsync`, `LogRestorePermissionsAsync`, `LogKickAsync`, `LogWelcomeBypassAsync`; `chatId: chat?.Id` → `chat: chat` in `LogRestrictAsync`. Add `using TelegramGroupsAdmin.Core.Utilities;` if not present. Update the class or method XML docs that say the reason is stored verbatim, if any.
+
+Run: `dotnet test TelegramGroupsAdmin.UnitTests --filter "FullyQualifiedName~AuditHandlerTests"` → all passed.
+
+- [ ] **Step 6: The two write sites outside AuditHandler**
+
+`MessageProcessingService.cs` ProfileChange record (~line 691): `message` is the Telegram SDK `Message`. Replace
+
+```csharp
+                    ChatId: message.Chat.Id,
+                    ...
+                    Reason: changeReason), cancellationToken);
+```
+
+with
+
+```csharp
+                    ChatId: message.Chat.Id,
+                    ...
+                    Reason: AuditReason.WithChatTag(ChatIdentity.From(message.Chat), changeReason)), cancellationToken);
+```
+
+(`using TelegramGroupsAdmin.Core.Utilities;` is already present in that file; `ChatIdentity.From(Chat)` comes from `TelegramGroupsAdmin.Telegram.Extensions`, also already imported.)
+
+`BotChatService.cs`: the two auto-trust rows keep `ChatId: null` (trust is global) but stop hand-formatting the chat. Replace `Reason: $"Admin in chat {chat.Id} ({chat.Title ?? "Unknown"})"` (~311) and `Reason: $"Admin in chat {chat.Id}"` (~492) with `Reason: $"Admin in {ChatIdentity.From(chat).ToLogInfo()}"`. Both files already import `TelegramGroupsAdmin.Core.Extensions` and `TelegramGroupsAdmin.Telegram.Extensions`; confirm `chat` at each site is the SDK `Chat` (it has `.Title`).
+
+Run: `dotnet build TelegramGroupsAdmin.Telegram 2>&1 | grep -E "error" | head` → clean. Then `dotnet test TelegramGroupsAdmin.UnitTests --filter "FullyQualifiedName~BotChatService|FullyQualifiedName~MessageProcessingService"` → all passed; if any test asserted the old reason text, update it to the new form and say so in the report.
+
+- [ ] **Step 7: Revert the read-time chat name (Tasks 6 and 7)**
+
+- `UserActionRecord.cs`: remove the `string? ChatName = null` parameter and its comment; `TargetLastName` is the last parameter again.
+- `UserActionMappings.cs`: remove the `chatName` parameter, its `<param>` doc, and `ChatName: chatName`.
+- `TelegramUserRepository.GetUserDetailAsync`: remove the fourth `LeftJoin(context.ManagedChats, …)` and restore the third join's projection so it produces the anonymous type directly (the pre-Task-6 shape, visible in `git show 5fd1c450:TelegramGroupsAdmin.Telegram/Repositories/TelegramUserRepository.cs`); remove `chatName: a.ChatName` from the `Actions = …` mapping.
+- `UserDetailDialog.razor`: remove the `@if (action.ChatId is not null) { … action-chat-context … }` block.
+- `UserDetailDialogTests.cs`: remove the `CreateAction` helper and the `#region Action History Chat Context … #endregion` block. Keep the `[SetUp]` that calls `DisposeComponentsAsync()`.
+- `TelegramUserRepositoryTests.cs`: remove the `#region User Detail Action Chat Name … #endregion` block.
+- `GoldenDatasetConstants.cs`: remove `ChatScopedActionsUserId`, `ChatScopedDeleteActionId`, `GlobalBanActionId` from `UsersPage` and trim the class summary's last sentence about "the last is a spammer…".
+- `TelegramGroupsAdmin.IntegrationTests/CLAUDE.md`: remove the recipe `#### User with chat-scoped and global actions`.
+
+Confirm nothing else references the removed names: `grep -rn "ChatName\b" TelegramGroupsAdmin.Telegram/Models/UserActionRecord.cs TelegramGroupsAdmin.Telegram/Repositories/Mappings/UserActionMappings.cs; grep -rn "ChatScopedActionsUserId\|ChatScopedDeleteActionId\|GlobalBanActionId\|action-chat-context" --include=*.cs --include=*.razor --include=*.md . | grep -v "docs/superpowers/plans"` → no hits.
+
+- [ ] **Step 8: Verify**
+
+Run: `dotnet build 2>&1 | grep -E "error|warning CS" | head` → clean.
+Run: `dotnet test TelegramGroupsAdmin.UnitTests 2>&1 | tail -3` → all passed.
+Run: `dotnet test TelegramGroupsAdmin.ComponentTests --filter "FullyQualifiedName~UserDetailDialog" 2>&1 | tail -3` → all passed.
+Run: `dotnet test TelegramGroupsAdmin.IntegrationTests --filter "FullyQualifiedName~TelegramUserRepositoryTests" 2>&1 | tail -3` → all passed (one fewer test than before).
+
+- [ ] **Step 9: Commit**
+
+Stage every file above and commit with subject `feat(audit): tag audit reasons with the chat at write time; drop read-time chat name`, body "The audit row is a log line: the chat is formatted with the log formatter where the ChatIdentity exists and stored in the reason as a [chat] prefix. Reverts the managed_chats join, ChatName field, and dialog chat caption.", and the two standard trailer lines (`Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>` and `Claude-Session: https://claude.ai/code/session_01TGukJYySot6Y6hrMrX7eE7`), via a `git commit -F- <<'EOF'` heredoc.
