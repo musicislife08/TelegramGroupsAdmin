@@ -24,6 +24,16 @@ esac
 rule_file="$root/.claude/rules/integration-test-data.md"
 [[ -f "$rule_file" ]] || exit 0
 
+# Inject once per session: the rule stays in context after the first injection, and repeating
+# it on every edit of a plan or test file is pure noise. Subagents that share the session id
+# still get the rule from the root CLAUDE.md pointer.
+session_id="$(jq -r '.session_id // empty' <<<"$input")"
+if [[ -n "$session_id" ]]; then
+  marker="${TMPDIR:-/tmp}/claude-test-data-rules-${session_id}"
+  [[ -e "$marker" ]] && exit 0
+  : > "$marker"
+fi
+
 # Strip the YAML front matter; the rule body is what the model needs.
 body="$(awk 'BEGIN{fm=0} NR==1&&/^---$/{fm=1;next} fm==1&&/^---$/{fm=2;next} fm!=1{print}' "$rule_file")"
 
