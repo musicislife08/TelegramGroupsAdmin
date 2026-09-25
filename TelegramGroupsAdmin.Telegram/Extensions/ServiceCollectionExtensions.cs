@@ -203,6 +203,7 @@ public static class ServiceCollectionExtensions
             services.AddKeyedScoped<IBotCommand, InviteCommand>(CommandNames.Invite);
             services.AddKeyedScoped<IBotCommand, DeleteCommand>(CommandNames.Delete);
             services.AddKeyedScoped<IBotCommand, MyStatusCommand>(CommandNames.MyStatus);
+            services.AddKeyedScoped<IBotCommand, DmCelebrationsCommand>(CommandNames.DmCelebrations);
             services.AddSingleton<CommandRouter>();
             services.AddSingleton<PipelineMetrics>();
 

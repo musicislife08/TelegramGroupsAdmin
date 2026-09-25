@@ -19,6 +19,7 @@ public static class CommandNames
     public const string Invite = "invite";
     public const string Delete = "delete";
     public const string MyStatus = "mystatus";
+    public const string DmCelebrations = "dmcelebrations";
 
     /// <summary>
     /// All command names for validation and iteration
@@ -26,6 +27,6 @@ public static class CommandNames
     public static readonly HashSet<string> All = new(StringComparer.OrdinalIgnoreCase)
     {
         Start, Help, Link, Spam, Ban, Trust, Unban,
-        Warn, TempBan, Mute, Report, Invite, Delete, MyStatus
+        Warn, TempBan, Mute, Report, Invite, Delete, MyStatus, DmCelebrations
     };
 }
