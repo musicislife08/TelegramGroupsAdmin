@@ -56,12 +56,12 @@ public class BanCelebrationSubscriptionServiceTests
             new PipelineMetrics(), NullLogger<BanCelebrationSubscriptionService>.Instance);
     }
 
-    private void DmEnabled(bool enabled) =>
+    private void DmEnabled(bool enabled, bool isBanned = false) =>
         _telegramUsers.GetOrCreateAsync(Arg.Is<UserIdentity>(u => u!.Id == UserId), false, Arg.Any<CancellationToken>())
             .Returns(new TelegramUser(
                 TelegramUserId: UserId, Username: "kim", FirstName: "Kim", LastName: null,
                 UserPhotoPath: null, PhotoHash: null, PhotoFileUniqueId: null,
-                IsBot: false, IsTrusted: false, IsBanned: false, KickCount: 0, BotDmEnabled: enabled,
+                IsBot: false, IsTrusted: false, IsBanned: isBanned, KickCount: 0, BotDmEnabled: enabled,
                 FirstSeenAt: DateTimeOffset.UtcNow, LastSeenAt: DateTimeOffset.UtcNow,
                 CreatedAt: DateTimeOffset.UtcNow, UpdatedAt: DateTimeOffset.UtcNow));
 
@@ -83,6 +83,19 @@ public class BanCelebrationSubscriptionServiceTests
         Assert.That(result, Is.EqualTo(DmCelebrationSubscribeResult.Subscribed));
         await _repository.Received(1).UpsertAsync(UserId, ChatId, Arg.Any<CancellationToken>());
         await _messages.DidNotReceiveWithAnyArgs().SendAndSaveMessageAsync(default, default(TelegramMessage)!);
+    }
+
+    [Test]
+    public async Task SubscribeAsync_BannedUser_ReturnsNotAllowedWithoutUpsertOrPrompt()
+    {
+        DmEnabled(false, isBanned: true);
+
+        var result = await _sut.SubscribeAsync(Chat, User);
+
+        Assert.That(result, Is.EqualTo(DmCelebrationSubscribeResult.NotAllowed));
+        await _repository.DidNotReceiveWithAnyArgs().UpsertAsync(default, default);
+        await _messages.DidNotReceiveWithAnyArgs().SendAndSaveMessageAsync(default, default(TelegramMessage)!);
+        await _jobs.DidNotReceiveWithAnyArgs().ScheduleJobAsync(default!, default(DeleteMessagePayload)!, default);
     }
 
     [Test]

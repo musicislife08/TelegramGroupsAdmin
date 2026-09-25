@@ -51,10 +51,16 @@ public sealed class DmCelebrationsCommand(IBanCelebrationSubscriptionService sub
         {
             case "on":
                 var result = await subscriptionService.SubscribeAsync(chat, user, cancellationToken);
-                // AwaitingStart: the start prompt (with its button) is already posted and self-cleans.
-                return Reply(result == DmCelebrationSubscribeResult.Subscribed
-                    ? TelegramMessage.Plain($"✅ You'll get {chatName}'s ban celebrations in your DMs.")
-                    : TelegramMessage.Empty);
+                return Reply(result switch
+                {
+                    DmCelebrationSubscribeResult.Subscribed =>
+                        TelegramMessage.Plain($"✅ You'll get {chatName}'s ban celebrations in your DMs."),
+                    // The start prompt (with its button) is already posted and self-cleans.
+                    DmCelebrationSubscribeResult.AwaitingStart => TelegramMessage.Empty,
+                    // Silent refusal for banned users; the command message is still deleted.
+                    DmCelebrationSubscribeResult.NotAllowed => TelegramMessage.Empty,
+                    _ => throw new ArgumentOutOfRangeException(nameof(result), result, null)
+                });
 
             case "off":
                 await subscriptionService.UnsubscribeAsync(chat, user, cancellationToken);

@@ -55,6 +55,21 @@ public class DmCelebrationsCommandTests
     }
 
     [Test]
+    public async Task Execute_OnWhenNotAllowed_RepliesWithNothing()
+    {
+        _subscriptions.SubscribeAsync(Arg.Any<ChatIdentity>(), Arg.Any<UserIdentity>(), Arg.Any<CancellationToken>())
+            .Returns(DmCelebrationSubscribeResult.NotAllowed);
+
+        var result = await _sut.ExecuteAsync(GroupMessage(), ["on"], PermissionLevel.Member);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Message.Text, Is.Empty);
+            Assert.That(result.DeleteCommandMessage, Is.True);
+        }
+    }
+
+    [Test]
     public async Task Execute_UppercaseOnWithTrailingWords_Subscribes()
     {
         _subscriptions.SubscribeAsync(Arg.Any<ChatIdentity>(), Arg.Any<UserIdentity>(), Arg.Any<CancellationToken>())

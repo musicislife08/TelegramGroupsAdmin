@@ -36,6 +36,12 @@ public sealed class BanCelebrationSubscriptionService(
         // never posted has no telegram_users row yet; the subscription row's FK needs one.
         var telegramUser = await telegramUserRepository.GetOrCreateAsync(user, isBot: false, ct);
 
+        // Posting the start prompt mentions the user by name; never let a banned user trigger that.
+        if (telegramUser.IsBanned)
+        {
+            return DmCelebrationSubscribeResult.NotAllowed;
+        }
+
         if (await subscriberRepository.UpsertAsync(user.Id, chat.Id, ct))
         {
             pipelineMetrics.RecordBanCelebrationSubscription("subscribe");
