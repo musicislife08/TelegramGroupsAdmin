@@ -38,6 +38,11 @@ internal sealed class NotificationDmDispatcher(
 
         if (payload.Animation is { } animation)
         {
+            if (keyboard is not null)
+            {
+                throw new InvalidOperationException("Animation notifications cannot carry an inline keyboard.");
+            }
+
             return dmService.SendDmWithAnimationEntitiesAsync(recipient, rendered, animation.FileId, animation.Path, ct);
         }
 

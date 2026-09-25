@@ -46,6 +46,19 @@ public class NotificationDmDispatcherTests
     }
 
     [Test]
+    public void DispatchAsync_AnimationWithKeyboard_Throws()
+    {
+        var payload = NotificationPayloadBuilder.Create("Workshop Alumni")
+            .WithText("Spammer got banned!")
+            .WithAnimation("/data/media/ban-gifs/1.gif", "file-1")
+            .Build();
+        var keyboard = new InlineKeyboardMarkup(InlineKeyboardButton.WithCallbackData("OK", "ok"));
+
+        Assert.Throws<InvalidOperationException>(() =>
+            _sut.DispatchAsync(Recipient, payload, keyboard, CancellationToken.None));
+    }
+
+    [Test]
     public async Task DispatchAsync_TextOnlyPayload_SendsEntitiesDm()
     {
         var payload = NotificationPayloadBuilder.Create("Subject").WithText("body").Build();
