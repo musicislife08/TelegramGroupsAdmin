@@ -48,7 +48,7 @@ public class BotModerationService : IBotModerationService
     // Services
     private readonly IBanCelebrationService _banCelebrationService;
     private readonly IReportService _reportService;
-    private readonly INotificationService _notificationService;
+    private readonly IAdminNotificationService _notificationService;
 
     // Repositories
     private readonly ITelegramUserRepository _telegramUserRepository;
@@ -70,7 +70,7 @@ public class BotModerationService : IBotModerationService
         ITrainingHandler trainingHandler,
         IBanCelebrationService banCelebrationService,
         IReportService reportService,
-        INotificationService notificationService,
+        IAdminNotificationService notificationService,
         ITelegramUserRepository telegramUserRepository,
         IConfigService configService,
         ILogger<BotModerationService> logger)

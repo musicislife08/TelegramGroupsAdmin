@@ -155,7 +155,7 @@ public static class ServiceCollectionExtensions
             services.AddScoped<Services.Email.IEmailService, Services.Email.SendGridEmailService>();
 
             // Notification services (User notification preferences with Telegram DM, Email, and Web Push channels)
-            services.AddScoped<INotificationService, NotificationService>();
+            services.AddScoped<IAdminNotificationService, AdminNotificationService>();
             services.AddScoped<IWebPushNotificationService, WebPushNotificationService>();
             services.AddScoped<INotificationStateService, NotificationStateService>(); // Blazor state for notification bell
 

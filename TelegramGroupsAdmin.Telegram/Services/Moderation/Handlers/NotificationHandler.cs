@@ -17,7 +17,7 @@ internal sealed record InviteLink(string DisplayName, string Url);
 
 /// <summary>
 /// Domain expert for all moderation-related notifications.
-/// Handles both user DM notifications and admin notifications via NotificationService.
+/// Handles both user DM notifications and admin notifications via AdminNotificationService.
 /// Called directly by orchestrator after successful actions.
 ///
 /// User DM notifications:
@@ -31,7 +31,7 @@ internal sealed record InviteLink(string DisplayName, string Url);
 public class NotificationHandler : INotificationHandler
 {
     private readonly INotificationOrchestrator _notificationOrchestrator;
-    private readonly INotificationService _notificationService;
+    private readonly IAdminNotificationService _notificationService;
     private readonly IManagedChatsRepository _managedChatsRepository;
     private readonly IBotChatService _chatService;
     private readonly IChatCache _chatCache;
@@ -39,7 +39,7 @@ public class NotificationHandler : INotificationHandler
 
     public NotificationHandler(
         INotificationOrchestrator notificationOrchestrator,
-        INotificationService notificationService,
+        IAdminNotificationService notificationService,
         IManagedChatsRepository managedChatsRepository,
         IBotChatService chatService,
         IChatCache chatCache,

@@ -34,7 +34,7 @@ namespace TelegramGroupsAdmin.UnitTests.Telegram.Services.Moderation.Handlers;
 public class NotificationHandlerTests
 {
     private INotificationOrchestrator _mockNotificationOrchestrator = null!;
-    private INotificationService _mockNotificationService = null!;
+    private IAdminNotificationService _mockNotificationService = null!;
     private IManagedChatsRepository _mockManagedChatsRepository = null!;
     private IBotChatService _mockChatService = null!;
     private IChatCache _mockChatCache = null!;
@@ -45,7 +45,7 @@ public class NotificationHandlerTests
     public void Setup()
     {
         _mockNotificationOrchestrator = Substitute.For<INotificationOrchestrator>();
-        _mockNotificationService = Substitute.For<INotificationService>();
+        _mockNotificationService = Substitute.For<IAdminNotificationService>();
         _mockManagedChatsRepository = Substitute.For<IManagedChatsRepository>();
         _mockChatService = Substitute.For<IBotChatService>();
         _mockChatCache = Substitute.For<IChatCache>();

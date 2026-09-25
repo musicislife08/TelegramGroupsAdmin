@@ -37,7 +37,7 @@ public class ExamFlowServiceTests
     private IReportsRepository _reportsRepo = null!;
     private IConfigService _configService = null!;
     private IManagedChatsRepository _managedChatsRepo = null!;
-    private INotificationService _notificationService = null!;
+    private IAdminNotificationService _notificationService = null!;
     private IBotModerationService _moderationService = null!;
     private IWelcomeResponsesRepository _welcomeResponsesRepo = null!;
     private ITelegramUserRepository _telegramUserRepo = null!;
@@ -67,7 +67,7 @@ public class ExamFlowServiceTests
         _reportsRepo = Substitute.For<IReportsRepository>();
         _configService = Substitute.For<IConfigService>();
         _managedChatsRepo = Substitute.For<IManagedChatsRepository>();
-        _notificationService = Substitute.For<INotificationService>();
+        _notificationService = Substitute.For<IAdminNotificationService>();
         _moderationService = Substitute.For<IBotModerationService>();
         _welcomeResponsesRepo = Substitute.For<IWelcomeResponsesRepository>();
         _telegramUserRepo = Substitute.For<ITelegramUserRepository>();

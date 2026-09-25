@@ -19,7 +19,7 @@ namespace TelegramGroupsAdmin.Services;
 /// Callers pass identity objects and raw domain values — this service owns all formatting
 /// via NotificationRenderer and routes to the correct audience via two-pool routing.
 /// </summary>
-public sealed class NotificationService : INotificationService
+public sealed class AdminNotificationService : IAdminNotificationService
 {
     private readonly INotificationPreferencesRepository _preferencesRepo;
     private readonly IEmailService _emailService;
@@ -30,9 +30,9 @@ public sealed class NotificationService : INotificationService
     private readonly IChatAdminsRepository _chatAdminsRepo;
     private readonly IUserRepository _userRepo;
     private readonly IReportCallbackContextRepository _callbackContextRepo;
-    private readonly ILogger<NotificationService> _logger;
+    private readonly ILogger<AdminNotificationService> _logger;
 
-    public NotificationService(
+    public AdminNotificationService(
         INotificationPreferencesRepository preferencesRepo,
         IEmailService emailService,
         IBotDmService dmDeliveryService,
@@ -42,7 +42,7 @@ public sealed class NotificationService : INotificationService
         IChatAdminsRepository chatAdminsRepo,
         IUserRepository userRepo,
         IReportCallbackContextRepository callbackContextRepo,
-        ILogger<NotificationService> logger)
+        ILogger<AdminNotificationService> logger)
     {
         _preferencesRepo = preferencesRepo;
         _emailService = emailService;

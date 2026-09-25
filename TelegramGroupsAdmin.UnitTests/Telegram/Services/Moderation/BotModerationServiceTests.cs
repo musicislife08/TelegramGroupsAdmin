@@ -40,7 +40,7 @@ public class BotModerationServiceTests
     private ITrainingHandler _mockTrainingHandler = null!;
     private IBanCelebrationService _mockBanCelebrationService = null!;
     private IReportService _mockReportService = null!;
-    private INotificationService _mockNotificationService = null!;
+    private IAdminNotificationService _mockNotificationService = null!;
     private ITelegramUserRepository _mockTelegramUserRepository = null!;
     private IConfigService _mockConfigService = null!;
     private ILogger<BotModerationService> _mockLogger = null!;
@@ -61,7 +61,7 @@ public class BotModerationServiceTests
         _mockTrainingHandler = Substitute.For<ITrainingHandler>();
         _mockBanCelebrationService = Substitute.For<IBanCelebrationService>();
         _mockReportService = Substitute.For<IReportService>();
-        _mockNotificationService = Substitute.For<INotificationService>();
+        _mockNotificationService = Substitute.For<IAdminNotificationService>();
         _mockTelegramUserRepository = Substitute.For<ITelegramUserRepository>();
         _mockConfigService = Substitute.For<IConfigService>();
         _mockLogger = Substitute.For<ILogger<BotModerationService>>();

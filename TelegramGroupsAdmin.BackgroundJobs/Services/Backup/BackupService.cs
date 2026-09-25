@@ -28,7 +28,7 @@ public class BackupService : IBackupService
     private readonly ILogger<BackupService> _logger;
     private readonly IDataProtectionService _totpProtection;
     private readonly IDataProtectionProvider _dataProtectionProvider;
-    private readonly INotificationService _notificationService;
+    private readonly IAdminNotificationService _notificationService;
     private readonly IBackupEncryptionService _encryptionService;
     private readonly IServiceProvider _serviceProvider;
     private readonly TableDiscoveryService _tableDiscoveryService;
@@ -47,7 +47,7 @@ public class BackupService : IBackupService
         ILogger<BackupService> logger,
         IDataProtectionService totpProtection,
         IDataProtectionProvider dataProtectionProvider,
-        INotificationService notificationService,
+        IAdminNotificationService notificationService,
         IBackupEncryptionService encryptionService,
         IServiceProvider serviceProvider,
         TableDiscoveryService tableDiscoveryService,

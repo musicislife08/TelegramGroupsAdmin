@@ -128,7 +128,7 @@ public class BackupServiceTests
         // Add mock services (BackupService dependencies)
         services.AddSingleton<IBotDmService, MockBotDmService>();
         services.AddSingleton<IDataProtectionService, MockDataProtectionService>();
-        services.AddSingleton<INotificationService, MockNotificationService>();
+        services.AddSingleton<IAdminNotificationService, MockNotificationService>();
         services.AddSingleton(Substitute.For<TelegramGroupsAdmin.Telegram.Services.IThumbnailService>());
 
         // Add IJobScheduler mock (required by PassphraseManagementService)
@@ -1106,7 +1106,7 @@ public class BackupServiceTests
     /// <summary>
     /// Mock Notification service
     /// </summary>
-    private class MockNotificationService : INotificationService
+    private class MockNotificationService : IAdminNotificationService
     {
         private static readonly Dictionary<string, bool> EmptyResults = new();
 

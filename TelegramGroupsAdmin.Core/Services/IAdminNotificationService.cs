@@ -3,11 +3,11 @@ using TelegramGroupsAdmin.Core.Models;
 namespace TelegramGroupsAdmin.Core.Services;
 
 /// <summary>
-/// Service for sending notifications to users through configured channels (Telegram DM, Email, Web Push).
-/// Typed intent-based methods accept identity objects and raw domain values.
-/// The service owns all formatting, subject lines, and channel-specific rendering.
+/// Admin-facing notifications: routed to web users with chat access and unlinked Telegram
+/// chat admins, filtered by each web user's per-event channel preferences (DM, email, web push).
+/// User-facing, opt-in notifications live on IUserNotificationService.
 /// </summary>
-public interface INotificationService
+public interface IAdminNotificationService
 {
     // ── Chat-contextual (audience = chat admins + global admins + owners, deduplicated) ──
 

@@ -38,7 +38,7 @@ public class ChatHealthRefreshOrchestratorTests
     private IBotChatService _chatService = null!;
     private TelegramPhotoService _photoService = null!;
     private IPhotoHashService _photoHashService = null!;
-    private INotificationService _notificationService = null!;
+    private IAdminNotificationService _notificationService = null!;
     private ChatMetrics _chatMetrics = null!;
     private ILogger<ChatHealthRefreshOrchestrator> _logger = null!;
 
@@ -66,7 +66,7 @@ public class ChatHealthRefreshOrchestratorTests
             new SkiaImageProcessor(),
             Microsoft.Extensions.Options.Options.Create(new AppOptions { DataPath = Path.GetTempPath() }));
         _photoHashService = Substitute.For<IPhotoHashService>();
-        _notificationService = Substitute.For<INotificationService>();
+        _notificationService = Substitute.For<IAdminNotificationService>();
         _chatMetrics = new ChatMetrics(_chatCache);
         _logger = Substitute.For<ILogger<ChatHealthRefreshOrchestrator>>();
 
