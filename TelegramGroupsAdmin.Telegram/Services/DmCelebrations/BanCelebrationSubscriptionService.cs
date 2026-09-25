@@ -33,14 +33,17 @@ public sealed class BanCelebrationSubscriptionService(
 
     public async Task<DmCelebrationSubscribeResult> SubscribeAsync(ChatIdentity chat, UserIdentity user, CancellationToken ct = default)
     {
+        // Group commands run before the message pipeline upserts the sender, so a member who has
+        // never posted has no telegram_users row yet; the subscription row's FK needs one.
+        var telegramUser = await telegramUserRepository.GetOrCreateAsync(user, isBot: false, ct);
+
         if (await subscriberRepository.UpsertAsync(user.Id, chat.Id, ct))
         {
             pipelineMetrics.RecordBanCelebrationSubscription("subscribe");
             logger.LogInformation("{User} subscribed to DM ban celebrations from {Chat}", user.ToLogInfo(), chat.ToLogInfo());
         }
 
-        var telegramUser = await telegramUserRepository.GetByTelegramIdAsync(user.Id, ct);
-        if (telegramUser?.BotDmEnabled == true)
+        if (telegramUser.BotDmEnabled)
         {
             return DmCelebrationSubscribeResult.Subscribed;
         }

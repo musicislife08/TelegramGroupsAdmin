@@ -57,7 +57,7 @@ public class BanCelebrationSubscriptionServiceTests
     }
 
     private void DmEnabled(bool enabled) =>
-        _telegramUsers.GetByTelegramIdAsync(UserId, Arg.Any<CancellationToken>())
+        _telegramUsers.GetOrCreateAsync(Arg.Is<UserIdentity>(u => u!.Id == UserId), false, Arg.Any<CancellationToken>())
             .Returns(new TelegramUser(
                 TelegramUserId: UserId, Username: "kim", FirstName: "Kim", LastName: null,
                 UserPhotoPath: null, PhotoHash: null, PhotoFileUniqueId: null,
@@ -83,6 +83,21 @@ public class BanCelebrationSubscriptionServiceTests
         Assert.That(result, Is.EqualTo(DmCelebrationSubscribeResult.Subscribed));
         await _repository.Received(1).UpsertAsync(UserId, ChatId, Arg.Any<CancellationToken>());
         await _messages.DidNotReceiveWithAnyArgs().SendAndSaveMessageAsync(default, default(TelegramMessage)!);
+    }
+
+    [Test]
+    public async Task SubscribeAsync_EnsuresTelegramUserExistsBeforeUpsert()
+    {
+        DmEnabled(true);
+
+        await _sut.SubscribeAsync(Chat, User);
+
+        Received.InOrder(() =>
+        {
+            _telegramUsers.GetOrCreateAsync(Arg.Is<UserIdentity>(u => u!.Id == UserId), false, Arg.Any<CancellationToken>());
+            _repository.UpsertAsync(UserId, ChatId, Arg.Any<CancellationToken>());
+        });
+        await _telegramUsers.DidNotReceiveWithAnyArgs().GetByTelegramIdAsync(default);
     }
 
     [Test]
