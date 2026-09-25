@@ -1074,15 +1074,6 @@ public class BackupServiceTests
             CancellationToken cancellationToken = default)
             => Task.FromResult(SuccessResult);
 
-        public Task<DmDeliveryResult> SendDmWithMediaEntitiesAsync(
-            UserIdentity user,
-            string notificationType,
-            TelegramMessage message,
-            string? photoPath = null,
-            string? videoPath = null,
-            CancellationToken cancellationToken = default)
-            => Task.FromResult(SuccessResult);
-
         public Task<DmDeliveryResult> SendDmWithMediaAndKeyboardEntitiesAsync(
             UserIdentity user,
             string notificationType,

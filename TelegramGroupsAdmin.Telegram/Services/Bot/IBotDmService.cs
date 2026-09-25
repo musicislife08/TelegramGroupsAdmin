@@ -111,18 +111,6 @@ public interface IBotDmService
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Attempt to send a DM with media and an entity-based caption (no parse_mode, no keyboard).
-    /// If DM fails (403), queues the text for later delivery (without media/entities).
-    /// </summary>
-    Task<DmDeliveryResult> SendDmWithMediaEntitiesAsync(
-        UserIdentity user,
-        string notificationType,
-        TelegramMessage message,
-        string? photoPath = null,
-        string? videoPath = null,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>
     /// Attempt to send a DM with media, entities, and optional inline keyboard (no parse_mode).
     /// If DM fails (403), queues the text for later delivery (without media/buttons/entities).
     /// </summary>

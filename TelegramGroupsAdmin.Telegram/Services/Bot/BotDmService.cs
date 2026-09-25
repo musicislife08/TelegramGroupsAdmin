@@ -427,24 +427,6 @@ public class BotDmService(
     }
 
     /// <inheritdoc />
-    public Task<DmDeliveryResult> SendDmWithMediaEntitiesAsync(
-        UserIdentity user,
-        string notificationType,
-        TelegramMessage message,
-        string? photoPath = null,
-        string? videoPath = null,
-        CancellationToken cancellationToken = default)
-        => SendDmWithMediaAndKeyboardEntitiesAsync(
-            user,
-            notificationType,
-            message.Text,
-            message.Entities,
-            photoPath,
-            videoPath,
-            keyboard: null,
-            cancellationToken: cancellationToken);
-
-    /// <inheritdoc />
     public Task<DmDeliveryResult> SendDmWithMediaAndKeyboardEntitiesAsync(
         UserIdentity user,
         string notificationType,
