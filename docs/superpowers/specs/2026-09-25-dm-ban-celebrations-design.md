@@ -119,8 +119,8 @@ Repository surface: upsert, delete for `(user, chat)`, delete all for a user,
 `HasDeliverableSubscribersAsync(chatId)` (an `EXISTS` query joined to `telegram_users.bot_dm_enabled`;
 the join happens in the repository, not the caller), `GetDeliverableSubscribersAsync(chatId)`, and
 get/set/clear for the prompt columns. Every write path in this spec goes through these methods:
-the command, the `/start` branch, `HandleUserLeftAsync`, `BanUserAsync`, the `BotChatService` block
-branch, and the worker.
+the command, the `/start` branch, `BanCelebrationSubscriptionService` (leave, block, and ban removal),
+and the worker.
 
 ### Backup naming contract
 
@@ -130,24 +130,19 @@ in namespace `TelegramGroupsAdmin.Data.Models`, whose name ends in `Dto`, and th
 DTO above follows all three rules. Restore order is computed from foreign keys, so the new table is
 restored after `telegram_users` and `managed_chats` with no extra code.
 
-The existing guard, `TableDiscoveryServiceTests.EveryTableBackedDtoHasTableAttribute`, only catches
-a missing attribute. This work adds a stronger guard, `EveryDbContextEntityIsDiscoveredForBackup`:
-every `public` base table in the migrated schema must come back from `DiscoverTablesAsync`, except
-an explicit allow-list with a reason for each entry. That list starts with `__EFMigrationsHistory`.
-Quartz tables live in the `quartz` schema, so discovery never sees them. `cached_blocked_domains`
-is excluded later, by `BackupService`, not by discovery. Any other public table found without a DTO
-when the test is first written goes on the allow-list only if it is intentionally not backed up.
-Otherwise it's an existing bug that gets fixed or reported. A new
-table can then no longer silently fall out of backups, whether it's this one or a future one.
+A schema-wide guard already exists. `BackupServiceTests` asserts that the discovered table count
+equals the live `public` base-table count (minus `__EFMigrationsHistory`, `cached_blocked_domains`,
+`file_scan_quota`), so a table whose DTO breaks the contract fails that test. This work bumps
+`ExpectedBackupTableCount` 43 → 44 and adds a direct `DiscoverTablesAsync` mapping test for the new table.
 
 ## Subscription removal
 
 | Trigger | Scope | Where |
 |---|---|---|
 | `/dmcelebrations off` | that chat | `DmCelebrationsCommand` |
-| User leaves or is kicked | that chat | `WelcomeService.HandleUserLeftAsync` |
-| User is banned | all of the user's rows | `BotModerationService.BanUserAsync`, **before** the celebration step |
-| User blocks the bot | all of the user's rows | new private-chat branch in `BotChatService.HandleBotMembershipUpdateAsync` (`MyChatMember` with new status `Kicked`); also calls `DisableBotDmAsync` |
+| User leaves or is kicked (any prior status, admins included) | that chat | `BanCelebrationSubscriptionService.HandleChatMemberUpdateAsync`, dispatched by `UpdateRouter` |
+| User is banned | all of the user's rows | `BotModerationService.BanUserAsync` **and** `MarkAsSpamAndBanAsync` (which does not delegate to `BanUserAsync`), **before** the celebration step |
+| User blocks the bot | all of the user's rows | `BanCelebrationSubscriptionService.HandleBotMembershipUpdateAsync` (private-chat `MyChatMember` with new status `Kicked`), dispatched by `UpdateRouter`; also calls `DisableBotDmAsync` |
 | 403 during fan-out | all of the user's rows | fan-out worker (backstop for blocks that happened while the bot was offline) |
 
 The ban-path delete must run before the fan-out is enqueued. Otherwise the worker can read
@@ -169,7 +164,8 @@ subscriptions were already deleted when the user blocked the bot.
 2. **Build.** Claim the GIF and caption, get the ban count, apply explicit-username masking. This
    is unchanged. Masking runs once, and every recipient gets the masked text.
 3. **Chat post** if `postToChat`: inline, `SendAndSaveAnimationAsync`, caches the `file_id` (unchanged).
-4. **Banned-user DM** (existing `SendToBannedUser`): now sent as an **animation** through the shared
+4. **Banned-user DM** (existing `SendToBannedUser`): now sent as an **animation** via
+   `IUserNotificationService.SendBanCelebrationToBannedUserAsync`, which uses the shared
    dispatcher, reusing the cached `file_id`. This replaces the current video re-upload.
 5. **Fan-out** if `hasSubscribers`:
    `IUserNotificationService.SendBanCelebrationAsync(chat, renderedCaption, gifId)`, which only
@@ -210,11 +206,12 @@ never fail a ban.
   `NotificationPayloadBuilder.WithAnimation(path, fileId)`.
 - `IBotDmService.SendDmWithAnimationEntitiesAsync` accepts either a `file_id` or a path, following
   the photo and video methods. `IBotMessageHandler.SendAnimationAsync` already exists.
-- The dispatcher gains the animation branch and a `queueOnBlock` flag. The admin path passes `true`
-  (today's behaviour). Celebrations pass `false`, so a returning user never gets a stale, text-only
-  "X got banned!" replayed from `pending_notifications`.
-- The dispatcher returns a result with `Sent`, `Blocked` (a distinct 403 signal) and
-  `ReturnedFileId`.
+- The dispatcher gains the animation branch. Animation DMs never queue on 403 (the same rule as
+  keyboard DMs), so a returning user never gets a stale, text-only "X got banned!" replayed from
+  `pending_notifications`. Admin payloads never carry animations, so the admin path is unchanged.
+- `DmDeliveryResult` gains `Blocked` (a distinct 403 signal) and `AnimationFileId` (the file_id
+  Telegram returned). A cached `file_id` that Telegram rejects is retried as an upload inside
+  `BotDmService`.
 
 ### Fan-out channel and worker
 
@@ -231,7 +228,7 @@ Follows the existing `MediaRefetchQueueService` / `MediaRefetchWorkerService` pa
      were banned in between are excluded.
   2. Reload the GIF row for the current `file_id`. The chat post may have cached one after enqueue.
   3. Build the payload once: subject = chat name, text = caption, `.WithAnimation(path, fileId)`.
-  4. For each subscriber, dispatch with `queueOnBlock: false`:
+  4. For each subscriber, dispatch (animation DMs never queue):
      - `ReturnedFileId` and no cached id yet → `UpdateFileIdAsync`, rebuild the payload with the id
      - `Blocked` → delete all of that user's subscriptions
      - ~50ms between sends (under Telegram's ~30 msg/s global limit)
@@ -284,8 +281,8 @@ All integration tests follow `.claude/rules/integration-test-data.md`.
 
 | Layer | Coverage |
 |---|---|
-| Unit (NSubstitute) | Guard matrix: chat-only, subscribers-only, both, neither (asserts **no claim**). Dispatcher animation branch, `file_id` vs upload. `queueOnBlock: false` writes nothing to pending notifications. Worker saves the first returned `file_id` and reuses it for later recipients. Blocked result → user's subscriptions deleted. `DmCelebrationsCommand` argument parsing, including the DM refusal. Prompt cleanup cancels the job before deleting the message. |
-| Integration (canonical DB) | Repository: upsert idempotency, delete for chat, delete all for user, deliverable query returns only `bot_dm_enabled` users. Migration: composite PK and cascade FKs. Ban path: a banned subscriber's rows are gone before the fan-out is enqueued, through the real `BanUserAsync`. `/start dmcel_{chat}` nulls both prompt columns. Backup: `DiscoverTablesAsync` maps `ban_celebration_subscribers` → `BanCelebrationSubscriberDto`, plus the new schema-wide guard `EveryDbContextEntityIsDiscoveredForBackup`. |
+| Unit (NSubstitute) | Guard matrix: chat-only, subscribers-only, both, neither (asserts **no claim**). Dispatcher animation branch, `file_id` vs upload. Animation DMs write nothing to pending notifications on 403. Worker saves the first returned `file_id` and reuses it for later recipients. Blocked result → user's subscriptions deleted. `DmCelebrationsCommand` argument parsing, including the DM refusal. Prompt cleanup cancels the job before deleting the message. |
+| Integration (canonical DB) | Repository: upsert idempotency, delete for chat, delete all for user, deliverable query returns only `bot_dm_enabled` users. Migration: composite PK and cascade FKs. Ban-path ordering (removal before celebration, both ban paths) is pinned with `Received.InOrder` unit tests, following the `ExamFlowServiceTests` precedent, because `BanUserAsync` has no integration harness. `/start dmcel_{chat}` nulls both prompt columns. Backup: `DiscoverTablesAsync` maps `ban_celebration_subscribers` → `BanCelebrationSubscriberDto`, plus the existing live-count guard in `BackupServiceTests`. |
 | Existing tests | Mechanical updates for the `IAdminNotificationService` rename. Banned-user DM tests change from video to animation. |
 
 Tests where subscribing is the assertion subject write the row through the SUT, which the rule
