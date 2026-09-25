@@ -25,10 +25,18 @@ internal sealed class BanCelebrationFanoutQueue : IBanCelebrationFanoutQueue
             },
             dropped =>
             {
-                pipelineMetrics.RecordBanCelebrationDm("dropped");
-                logger.LogWarning(
-                    "Ban celebration fan-out queue full; dropped the oldest celebration for {Chat}",
-                    dropped.Chat.ToLogDebug());
+                try
+                {
+                    pipelineMetrics.RecordBanCelebrationDm("dropped");
+                    logger.LogWarning(
+                        "Ban celebration fan-out queue full; dropped the oldest celebration for {Chat}",
+                        dropped.Chat.ToLogDebug());
+                }
+                catch
+                {
+                    // Runs synchronously inside another caller's enqueue; it must never throw into
+                    // that unrelated write, so a failed metric or log is deliberately swallowed.
+                }
             });
     }
 
