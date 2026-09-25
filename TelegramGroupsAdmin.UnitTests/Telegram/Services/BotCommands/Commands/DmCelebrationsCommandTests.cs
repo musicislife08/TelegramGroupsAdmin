@@ -99,6 +99,20 @@ public class DmCelebrationsCommandTests
     }
 
     [Test]
+    public async Task Execute_SentAsTheGroupOrAChannel_RefusesAndTouchesNothing()
+    {
+        // Anonymous admins arrive as GroupAnonymousBot with SenderChat set to the group.
+        var anonymous = GroupMessage();
+        anonymous.From = new User { Id = 1087968824, IsBot = true, FirstName = "Group", Username = "GroupAnonymousBot" };
+        anonymous.SenderChat = new Chat { Id = ChatId, Type = ChatType.Supergroup, Title = "Workshop Alumni" };
+
+        var result = await _sut.ExecuteAsync(anonymous, ["on"], PermissionLevel.Member);
+
+        Assert.That(result.Message.Text, Does.Contain("your own account"));
+        await _subscriptions.DidNotReceiveWithAnyArgs().SubscribeAsync(default!, default!);
+    }
+
+    [Test]
     public void Metadata_MatchesTheSpec()
     {
         using (Assert.EnterMultipleScope())

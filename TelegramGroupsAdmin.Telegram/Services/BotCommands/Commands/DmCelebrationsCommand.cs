@@ -32,6 +32,12 @@ public sealed class DmCelebrationsCommand(IBanCelebrationSubscriptionService sub
             return Reply(TelegramMessage.Empty);
         }
 
+        // Anonymous admins and channels posting as the chat carry a placeholder From, not a person.
+        if (message.SenderChat is not null)
+        {
+            return Reply(TelegramMessage.Plain("Send this from your own account, not as the group or a channel."));
+        }
+
         if (message.Chat.Type == ChatType.Private)
         {
             return Reply(TelegramMessage.Plain("Run /dmcelebrations on in the group you want celebrations from."));
