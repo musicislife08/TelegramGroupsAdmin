@@ -39,7 +39,8 @@ public class BanCelebrationFanoutProcessorTests
         _gifs.GetByIdAsync(9, Arg.Any<CancellationToken>())
             .Returns(new BanCelebrationGif { Id = 9, FilePath = "ban-gifs/9.gif", FileId = null });
 
-        var sender = new BanCelebrationDmSender(new NotificationDmDispatcher(_dm, Substitute.For<ITelegramUserRepository>()), _gifs);
+        var sender = new BanCelebrationDmSender(new NotificationDmDispatcher(_dm, Substitute.For<ITelegramUserRepository>()), _gifs,
+            NullLogger<BanCelebrationDmSender>.Instance);
         _sut = new BanCelebrationFanoutProcessor(_subscribers, _gifs, _subscriptions, sender,
             new PipelineMetrics(), NullLogger<BanCelebrationFanoutProcessor>.Instance);
     }

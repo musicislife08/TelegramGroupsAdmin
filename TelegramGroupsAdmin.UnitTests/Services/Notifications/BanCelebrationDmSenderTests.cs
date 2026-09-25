@@ -1,4 +1,6 @@
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
+using NSubstitute.ExceptionExtensions;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Services.Notifications;
@@ -24,7 +26,8 @@ public class BanCelebrationDmSenderTests
         _dm = Substitute.For<IBotDmService>();
         _gifs = Substitute.For<IBanCelebrationGifRepository>();
         _gifs.GetFullPath(Arg.Any<string>()).Returns(ci => "/data/media/" + ci.Arg<string>());
-        _sut = new BanCelebrationDmSender(new NotificationDmDispatcher(_dm, Substitute.For<ITelegramUserRepository>()), _gifs);
+        _sut = new BanCelebrationDmSender(new NotificationDmDispatcher(_dm, Substitute.For<ITelegramUserRepository>()), _gifs,
+            NullLogger<BanCelebrationDmSender>.Instance);
     }
 
     private void DmReturns(DmDeliveryResult result) =>
@@ -44,6 +47,23 @@ public class BanCelebrationDmSenderTests
         Assert.That(gif.FileId, Is.EqualTo("new-id"));
         await _dm.Received(1).SendDmWithAnimationEntitiesAsync(Recipient, Arg.Any<TelegramMessage>(),
             null, "/data/media/ban-gifs/3.gif", Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task SendAsync_CacheWriteFails_StillReportsSentAndKeepsFileIdOnGif()
+    {
+        var gif = new BanCelebrationGif { Id = 3, FilePath = "ban-gifs/3.gif", FileId = null };
+        DmReturns(new DmDeliveryResult { DmSent = true, AnimationFileId = "new-id" });
+        _gifs.UpdateFileIdAsync(3, "new-id", Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException("db down"));
+
+        var result = await _sut.SendAsync(Recipient, new ChatIdentity(-100L, "Workshop Alumni"), "banned!", gif, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.DmSent, Is.True);
+            Assert.That(gif.FileId, Is.EqualTo("new-id"));
+        }
     }
 
     [Test]

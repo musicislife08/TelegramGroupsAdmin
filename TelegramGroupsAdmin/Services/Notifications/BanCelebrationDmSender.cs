@@ -12,7 +12,8 @@ namespace TelegramGroupsAdmin.Services.Notifications;
 /// </summary>
 internal sealed class BanCelebrationDmSender(
     NotificationDmDispatcher dispatcher,
-    IBanCelebrationGifRepository gifRepository)
+    IBanCelebrationGifRepository gifRepository,
+    ILogger<BanCelebrationDmSender> logger)
 {
     public async Task<DmDeliveryResult> SendAsync(
         UserIdentity recipient,
@@ -30,8 +31,17 @@ internal sealed class BanCelebrationDmSender(
 
         if (result.AnimationFileId is { } returned && returned != gif.FileId)
         {
-            await gifRepository.UpdateFileIdAsync(gif.Id, returned, ct);
+            // The DM was delivered; a failed cache write must not turn that into a failure.
+            // Keep the id on the in-memory GIF so later sends in this fan-out still reuse it.
             gif.FileId = returned;
+            try
+            {
+                await gifRepository.UpdateFileIdAsync(gif.Id, returned, ct);
+            }
+            catch (Exception ex) when (!ct.IsCancellationRequested)
+            {
+                logger.LogWarning(ex, "Failed to cache file_id for ban celebration GIF {GifId}", gif.Id);
+            }
         }
 
         return result;
