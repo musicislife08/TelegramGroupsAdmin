@@ -5,7 +5,7 @@ namespace TelegramGroupsAdmin.Core.Services;
 /// <summary>
 /// Admin-facing notifications: routed to web users with chat access and unlinked Telegram
 /// chat admins, filtered by each web user's per-event channel preferences (DM, email, web push).
-/// User-facing, opt-in notifications live on IUserNotificationService.
+/// User-facing, opt-in notifications live on <see cref="IUserNotificationService"/>.
 /// </summary>
 public interface IAdminNotificationService
 {

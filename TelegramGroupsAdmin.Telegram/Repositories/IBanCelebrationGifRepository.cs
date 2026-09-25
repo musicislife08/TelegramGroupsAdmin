@@ -18,6 +18,11 @@ public interface IBanCelebrationGifRepository
     Task<BanCelebrationGif?> GetRandomAsync(CancellationToken ct = default);
 
     /// <summary>
+    /// Gets a GIF by id, or null if it no longer exists
+    /// </summary>
+    Task<BanCelebrationGif?> GetByIdAsync(int id, CancellationToken ct = default);
+
+    /// <summary>
     /// Claims the next GIF in the current rotation cycle: picks a random GIF not yet dispensed,
     /// marks it dispensed, and returns it. When the cycle is exhausted, starts a fresh cycle —
     /// holding back the GIF dispensed last so it cannot repeat immediately — and claims from it.

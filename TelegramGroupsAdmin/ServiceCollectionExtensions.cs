@@ -161,6 +161,13 @@ public static class ServiceCollectionExtensions
             services.AddScoped<IWebPushNotificationService, WebPushNotificationService>();
             services.AddScoped<INotificationStateService, NotificationStateService>(); // Blazor state for notification bell
 
+            // User-facing notifications (opt-in DMs) — DM ban celebrations fan out via a single-reader channel
+            services.AddScoped<BanCelebrationDmSender>();
+            services.AddScoped<IUserNotificationService, UserNotificationService>();
+            services.AddScoped<BanCelebrationFanoutProcessor>();
+            services.AddSingleton<IBanCelebrationFanoutQueue, BanCelebrationFanoutQueue>();
+            services.AddHostedService<BanCelebrationFanoutWorker>();
+
             // Web Push browser notifications (PushServiceClient + VAPID auto-generation)
             services.AddHttpClient<Lib.Net.Http.WebPush.PushServiceClient>();
             services.AddHostedService<VapidKeyGenerationService>(); // Auto-generates VAPID keys on first startup

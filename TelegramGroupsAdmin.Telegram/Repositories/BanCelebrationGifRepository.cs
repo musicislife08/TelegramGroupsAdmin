@@ -70,6 +70,13 @@ public class BanCelebrationGifRepository : IBanCelebrationGifRepository
         return dto?.ToModel();
     }
 
+    public async Task<BanCelebrationGif?> GetByIdAsync(int id, CancellationToken ct = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(ct);
+        var dto = await context.BanCelebrationGifs.AsNoTracking().FirstOrDefaultAsync(g => g.Id == id, ct);
+        return dto?.ToModel();
+    }
+
     public async Task<BanCelebrationGif?> ClaimNextForCycleAsync(CancellationToken ct = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(ct);
