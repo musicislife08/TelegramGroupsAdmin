@@ -68,7 +68,7 @@ Origin: prod DB snapshot from 2026-04-30. Bootstrap pipeline (full detail in `do
 | 33 | training_labels | 200 | 185 prod-derived + 15 synthetic explicit_ham promotions (`reason='canonical_synthetic_promotion'`). |
 | 34 | user_actions | 993 | Bootstrap missed adding 7 synthetic ban-celebration anchor rows; see Part 2 ban-celebration note. |
 | 35 | message_translations | 14 | Non-noop translations only; URL hostnames scrubbed. |
-| 36 | ban_celebration_subscribers | 4 | Approved canonical addition 2026-09-25 (new table — no row to flag-edit). See Part 2 "DM ban celebration subscribers". |
+| 36 | ban_celebration_subscribers | 5 | Approved canonical addition 2026-09-25 (new table — no row to flag-edit). See Part 2 "DM ban celebration subscribers". |
 
 ### What's NOT in the dataset
 - **Encrypted JSONB credentials** in `configs` (sendgrid keys, web push keys, AI provider keys) - left NULL. Populated at runtime by the app via `IDataProtectionProvider`.
@@ -285,6 +285,7 @@ Anchors are in code as `GoldenDatasetConstants.DmCelebrations`. None of these us
 | @thudupper | `9011393194616` | false | Workshop Alumni, stale prompt `424242` / `canonical-stale-prompt-job` | a subscriber who is not deliverable; cleanup of a timed-out prompt |
 | @deepnessunmapped | `9689750659830` | false | Workshop Alumni + Poultry Community | removing one chat must leave the other |
 | @chummyrepair | `9306234060091` | true | none (MainChat member) | the subscribe path, where the SUT upsert is the assertion subject |
+| @ToniBaronePaul | `9782251136844` | true (and `is_banned=true`) | Workshop Alumni | a subscription row that outlived its owner's ban; "deliverable" must exclude banned users |
 
 Workshop Alumni (`-100059667856554`) has no `ban_celebration_config`, so its effective celebration config is disabled: a subscribers-only chat.
 

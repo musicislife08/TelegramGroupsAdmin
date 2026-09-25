@@ -57,21 +57,26 @@ public class BanCelebrationSubscriberRepositoryTests
         var rows = await ctx.BanCelebrationSubscribers.AsNoTracking()
             .Select(s => new { s.TelegramUserId, s.ChatId })
             .ToListAsync();
-        Assert.That(rows, Has.Count.EqualTo(4), "canonical ban_celebration_subscribers changed");
+        Assert.That(rows, Has.Count.EqualTo(5), "canonical ban_celebration_subscribers changed");
 
-        var dm = await ctx.TelegramUsers.AsNoTracking()
+        var users = await ctx.TelegramUsers.AsNoTracking()
             .Where(u => u.TelegramUserId == Anchors.DeliverableSubscriberId
                         || u.TelegramUserId == Anchors.UndeliverableSubscriberId
                         || u.TelegramUserId == Anchors.TwoChatSubscriberId
-                        || u.TelegramUserId == Anchors.UnsubscribedMemberId)
-            .ToDictionaryAsync(u => u.TelegramUserId, u => u.BotDmEnabled);
+                        || u.TelegramUserId == Anchors.UnsubscribedMemberId
+                        || u.TelegramUserId == Anchors.BannedSubscriberId)
+            .ToDictionaryAsync(u => u.TelegramUserId);
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(dm[Anchors.DeliverableSubscriberId], Is.True);
-            Assert.That(dm[Anchors.UndeliverableSubscriberId], Is.False);
-            Assert.That(dm[Anchors.TwoChatSubscriberId], Is.False);
-            Assert.That(dm[Anchors.UnsubscribedMemberId], Is.True);
+            Assert.That(users[Anchors.DeliverableSubscriberId].BotDmEnabled, Is.True);
+            Assert.That(users[Anchors.DeliverableSubscriberId].IsBanned, Is.False);
+            Assert.That(users[Anchors.UndeliverableSubscriberId].BotDmEnabled, Is.False);
+            Assert.That(users[Anchors.TwoChatSubscriberId].BotDmEnabled, Is.False);
+            Assert.That(users[Anchors.UnsubscribedMemberId].BotDmEnabled, Is.True);
+            Assert.That(users[Anchors.BannedSubscriberId].BotDmEnabled, Is.True);
+            Assert.That(users[Anchors.BannedSubscriberId].IsBanned, Is.True);
+            Assert.That(rows.Any(r => r.TelegramUserId == Anchors.BannedSubscriberId && r.ChatId == Anchors.WorkshopAlumniChatId), Is.True);
         }
     }
 
@@ -91,6 +96,16 @@ public class BanCelebrationSubscriberRepositoryTests
     public async Task HasDeliverableSubscribersAsync_ChatWithNoSubscribers_ReturnsFalse()
     {
         Assert.That(await _repository.HasDeliverableSubscribersAsync(MainChatId), Is.False);
+    }
+
+    [Test]
+    public async Task GetDeliverableSubscribersAsync_ExcludesBannedSubscriberEvenWithDmsEnabled()
+    {
+        // Workshop Alumni holds a row for a banned user with DMs enabled (the ban-time removal
+        // never ran). A banned user must never receive a celebration DM, whatever the row says.
+        var subscribers = await _repository.GetDeliverableSubscribersAsync(Anchors.WorkshopAlumniChatId);
+
+        Assert.That(subscribers.Select(s => s.Id), Does.Not.Contain(Anchors.BannedSubscriberId));
     }
 
     [Test]

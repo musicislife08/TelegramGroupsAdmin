@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using TelegramGroupsAdmin.Core.Models;
@@ -13,6 +14,14 @@ namespace TelegramGroupsAdmin.Telegram.Repositories;
 public sealed class BanCelebrationSubscriberRepository(
     IDbContextFactory<AppDbContext> contextFactory) : IBanCelebrationSubscriberRepository
 {
+    /// <summary>
+    /// A subscriber can be sent a celebration DM only while they have bot DMs enabled and are not
+    /// banned. The ban check does not rely on the ban-time subscription removal having succeeded:
+    /// a banned user must never be DM'd a celebration, even if their row outlived the ban.
+    /// </summary>
+    private static readonly Expression<Func<BanCelebrationSubscriberDto, bool>> IsDeliverable =
+        s => s.TelegramUser!.BotDmEnabled && !s.TelegramUser.IsBanned;
+
     public async Task<bool> UpsertAsync(long telegramUserId, long chatId, CancellationToken ct = default)
     {
         await using var context = await contextFactory.CreateDbContextAsync(ct);
@@ -71,14 +80,17 @@ public sealed class BanCelebrationSubscriberRepository(
     {
         await using var context = await contextFactory.CreateDbContextAsync(ct);
         return await context.BanCelebrationSubscribers
-            .AnyAsync(s => s.ChatId == chatId && s.TelegramUser!.BotDmEnabled, ct);
+            .Where(s => s.ChatId == chatId)
+            .Where(IsDeliverable)
+            .AnyAsync(ct);
     }
 
     public async Task<List<UserIdentity>> GetDeliverableSubscribersAsync(long chatId, CancellationToken ct = default)
     {
         await using var context = await contextFactory.CreateDbContextAsync(ct);
         var users = await context.BanCelebrationSubscribers.AsNoTracking()
-            .Where(s => s.ChatId == chatId && s.TelegramUser!.BotDmEnabled)
+            .Where(s => s.ChatId == chatId)
+            .Where(IsDeliverable)
             .OrderBy(s => s.SubscribedAt)
             .Select(s => s.TelegramUser!)
             .ToListAsync(ct);

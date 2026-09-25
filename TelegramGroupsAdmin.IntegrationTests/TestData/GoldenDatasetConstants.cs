@@ -164,6 +164,13 @@ internal static class GoldenDatasetConstants
         /// <summary>@chummyrepair — bot_dm_enabled=true; MainChat member with no subscription row.</summary>
         public const long UnsubscribedMemberId = 9306234060091L;
 
+        /// <summary>
+        /// @ToniBaronePaul — is_banned=true, bot_dm_enabled=true; subscribed to Workshop Alumni (canonical
+        /// addition 2026-09-25). A subscription row that outlived its owner's ban, i.e. the ban-time removal
+        /// did not run. Pins that "deliverable" excludes banned users regardless of the row surviving.
+        /// </summary>
+        public const long BannedSubscriberId = 9782251136844L;
+
         /// <summary>Stale prompt message id on <see cref="UndeliverableSubscriberId"/>'s Workshop Alumni row.</summary>
         public const int StalePromptMessageId = 424242;
 

@@ -98,7 +98,9 @@ New table `ban_celebration_subscribers`, configured with the Fluent API in `AppD
 
 - Composite PK `(telegram_user_id, chat_id)`. Subscribe is an upsert, unsubscribe is a delete.
 - There is **no status column**. Whether a subscriber can receive DMs comes from the join to
-  `telegram_users.bot_dm_enabled`, so there is a single source of truth that can't drift.
+  `telegram_users.bot_dm_enabled` and `telegram_users.is_banned`, so there is a single source of truth that can't drift.
+  A banned user is never deliverable, even if their subscription row survived the ban (e.g. the ban-time
+  removal failed) — this is what keeps a banned subscriber from getting a second DM about their own ban.
 - Named "subscribers" to avoid confusion with the unrelated `blocklist_subscriptions`.
 
 ### Layering
@@ -116,7 +118,7 @@ repository interface and domain model. None of them sees the DTO or the context.
 | Repository | `IBanCelebrationSubscriberRepository` / `BanCelebrationSubscriberRepository` | `TelegramGroupsAdmin.Telegram/Repositories/` |
 
 Repository surface: upsert, delete for `(user, chat)`, delete all for a user,
-`HasDeliverableSubscribersAsync(chatId)` (an `EXISTS` query joined to `telegram_users.bot_dm_enabled`;
+`HasDeliverableSubscribersAsync(chatId)` (an `EXISTS` query joined to `telegram_users.bot_dm_enabled` and `NOT is_banned`;
 the join happens in the repository, not the caller), `GetDeliverableSubscribersAsync(chatId)`, and
 get/set/clear for the prompt columns. Every write path in this spec goes through these methods:
 the command, the `/start` branch, `BanCelebrationSubscriptionService` (leave, block, and ban removal),
@@ -282,7 +284,7 @@ All integration tests follow `.claude/rules/integration-test-data.md`.
 | Layer | Coverage |
 |---|---|
 | Unit (NSubstitute) | Guard matrix: chat-only, subscribers-only, both, neither (asserts **no claim**). Dispatcher animation branch, `file_id` vs upload. Animation DMs write nothing to pending notifications on 403. Worker saves the first returned `file_id` and reuses it for later recipients. Blocked result → user's subscriptions deleted. `DmCelebrationsCommand` argument parsing, including the DM refusal. Prompt cleanup cancels the job before deleting the message. |
-| Integration (canonical DB) | Repository: upsert idempotency, delete for chat, delete all for user, deliverable query returns only `bot_dm_enabled` users. Migration: composite PK and cascade FKs. Ban-path ordering (removal before celebration, both ban paths) is pinned with `Received.InOrder` unit tests, following the `ExamFlowServiceTests` precedent, because `BanUserAsync` has no integration harness. `/start dmcel_{chat}` nulls both prompt columns. Backup: `DiscoverTablesAsync` maps `ban_celebration_subscribers` → `BanCelebrationSubscriberDto`, plus the existing live-count guard in `BackupServiceTests`. |
+| Integration (canonical DB) | Repository: upsert idempotency, delete for chat, delete all for user, deliverable query returns only `bot_dm_enabled`, non-banned users. Migration: composite PK and cascade FKs. Ban-path ordering (removal before celebration, both ban paths) is pinned with `Received.InOrder` unit tests, following the `ExamFlowServiceTests` precedent, because `BanUserAsync` has no integration harness. `/start dmcel_{chat}` nulls both prompt columns. Backup: `DiscoverTablesAsync` maps `ban_celebration_subscribers` → `BanCelebrationSubscriberDto`, plus the existing live-count guard in `BackupServiceTests`. |
 | Existing tests | Mechanical updates for the `IAdminNotificationService` rename. Banned-user DM tests change from video to animation. |
 
 Tests where subscribing is the assertion subject write the row through the SUT, which the rule
@@ -308,7 +310,8 @@ Chats: **Workshop Alumni** `-100059667856554`, **Poultry Community** `-100017608
 
 **Canonical-rule exception (approved by owner 2026-09-25):** `ban_celebration_subscribers` is a new table, so there is
 no existing row to flag-edit, and the rule forbids adding rows to canonical. Add
-a new `36_ban_celebration_subscribers.sql` with exactly four rows, one per subscription in the
+a new `36_ban_celebration_subscribers.sql` with exactly five rows (the fifth, @ToniBaronePaul — banned,
+DMs enabled — was added and approved 2026-09-25 to pin that banned users are never deliverable), one per subscription in the
 table above (`magnetismvoucher`/Workshop Alumni, `thudupper`/Workshop Alumni, `deepnessunmapped`/
 Workshop Alumni and Poultry Community). Prompt columns are all NULL, except that one row carries a
 stale `prompt_message_id`/`prompt_delete_job_id` pair for the "cleanup after timeout tolerates

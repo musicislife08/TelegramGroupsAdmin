@@ -6,7 +6,7 @@ namespace TelegramGroupsAdmin.Telegram.Repositories;
 /// <summary>
 /// Repository for DM ban celebration opt-ins. The only component that touches the
 /// ban_celebration_subscribers table. "Deliverable" always means the subscriber's
-/// telegram_users.bot_dm_enabled is true — the join lives here, never in callers.
+/// telegram_users.bot_dm_enabled is true and is_banned is false — the join lives here, never in callers.
 /// </summary>
 public interface IBanCelebrationSubscriberRepository
 {
@@ -21,10 +21,10 @@ public interface IBanCelebrationSubscriberRepository
     /// <summary>Deletes every row for the user. Returns the number of rows removed.</summary>
     Task<int> DeleteAllForUserAsync(long telegramUserId, CancellationToken ct = default);
 
-    /// <summary>True when the chat has at least one subscriber with bot DMs enabled.</summary>
+    /// <summary>True when the chat has at least one deliverable subscriber (bot DMs enabled, not banned).</summary>
     Task<bool> HasDeliverableSubscribersAsync(long chatId, CancellationToken ct = default);
 
-    /// <summary>Subscribers of the chat with bot DMs enabled, oldest subscription first.</summary>
+    /// <summary>Deliverable subscribers of the chat (bot DMs enabled, not banned), oldest subscription first.</summary>
     Task<List<UserIdentity>> GetDeliverableSubscribersAsync(long chatId, CancellationToken ct = default);
 
     Task SetPromptAsync(long telegramUserId, long chatId, int promptMessageId, string promptDeleteJobId, CancellationToken ct = default);

@@ -71,7 +71,7 @@ public static class GoldenDataset
             // Layer 3 — child of messages AND message_edits
             "SQL.canonical.35_message_translations.sql",
             // Layer 1 (late addition) — child of telegram_users + managed_chats
-            "SQL.canonical.36_ban_celebration_subscribers.sql", // 4 rows (approved addition 2026-09-25)
+            "SQL.canonical.36_ban_celebration_subscribers.sql", // 5 rows (approved addition 2026-09-25)
         };
 
         foreach (var fixture in fixtures)
