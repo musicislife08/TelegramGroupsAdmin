@@ -1,5 +1,7 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
+using NSubstitute.ExceptionExtensions;
+using Telegram.Bot.Exceptions;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
@@ -47,6 +49,7 @@ public class BanCelebrationSubscriptionServiceTests
             .Returns(new Message { Id = 777, Chat = new Chat { Id = ChatId } });
         _jobs.ScheduleJobAsync(Arg.Any<string>(), Arg.Any<DeleteMessagePayload>(), Arg.Any<int>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns("job-777");
+        _jobs.CancelJobAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(true);
 
         _sut = new BanCelebrationSubscriptionService(
             _repository, _telegramUsers, _managedChats, _messages, _botUser, _jobs,
@@ -171,6 +174,51 @@ public class BanCelebrationSubscriptionServiceTests
         Assert.That(chat!.ChatName, Is.EqualTo("Workshop Alumni"));
         await _jobs.Received(1).CancelJobAsync("job-500", Arg.Any<CancellationToken>());
         await _messages.Received(1).DeleteAndMarkMessageAsync(ChatId, 500, Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _repository.Received(1).ClearPromptAsync(UserId, ChatId, Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task UnsubscribeAsync_PromptAlreadyDeleted_StillClearsAndDeletes()
+    {
+        _repository.GetAsync(UserId, ChatId, Arg.Any<CancellationToken>()).Returns(Row(500, "job-500"));
+        _messages.DeleteAndMarkMessageAsync(ChatId, 500, Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new ApiRequestException("Bad Request: message to delete not found", 400));
+
+        bool removed = false;
+        Assert.DoesNotThrowAsync(async () => removed = await _sut.UnsubscribeAsync(Chat, User));
+
+        Assert.That(removed, Is.True);
+        await _repository.Received(1).ClearPromptAsync(UserId, ChatId, Arg.Any<CancellationToken>());
+        await _repository.Received(1).DeleteAsync(UserId, ChatId, Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task SubscribeAsync_StalePromptWhoseJobAlreadyRan_SkipsDeleteAndPostsNewPrompt()
+    {
+        DmEnabled(false);
+        _repository.GetAsync(UserId, ChatId, Arg.Any<CancellationToken>()).Returns(Row(500, "job-500"));
+        _jobs.CancelJobAsync("job-500", Arg.Any<CancellationToken>()).Returns(false);
+
+        await _sut.SubscribeAsync(Chat, User);
+
+        await _messages.DidNotReceiveWithAnyArgs().DeleteAndMarkMessageAsync(default, default);
+        await _repository.Received(1).ClearPromptAsync(UserId, ChatId, Arg.Any<CancellationToken>());
+        await _messages.Received(1).SendAndSaveMessageAsync(ChatId, Arg.Any<TelegramMessage>(), Arg.Any<ReplyParameters?>(),
+            Arg.Any<InlineKeyboardMarkup?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task ConfirmFromStartAsync_PromptAlreadyDeleted_ReturnsChatAndClears()
+    {
+        _repository.GetAsync(UserId, ChatId, Arg.Any<CancellationToken>()).Returns(Row(500, "job-500"));
+        _managedChats.GetByChatIdAsync(ChatId, Arg.Any<CancellationToken>())
+            .Returns(ManagedChat(ChatId, "Workshop Alumni"));
+        _messages.DeleteAndMarkMessageAsync(ChatId, 500, Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new ApiRequestException("Bad Request: message to delete not found", 400));
+
+        var chat = await _sut.ConfirmFromStartAsync(ChatId, User);
+
+        Assert.That(chat!.ChatName, Is.EqualTo("Workshop Alumni"));
         await _repository.Received(1).ClearPromptAsync(UserId, ChatId, Arg.Any<CancellationToken>());
     }
 

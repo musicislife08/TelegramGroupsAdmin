@@ -158,8 +158,8 @@ public sealed class BanCelebrationSubscriptionService(
     }
 
     /// <summary>
-    /// Cancels the pending delete job, deletes the prompt, and clears the columns. Tolerates a
-    /// job or message that is already gone (the timeout job ran, or the message was removed by hand).
+    /// Cancels the pending delete job, deletes the prompt, and always clears the columns. A job that
+    /// already ran skips the delete; a message that is already gone is logged and treated as success.
     /// </summary>
     private async Task CleanupPromptAsync(BanCelebrationSubscriber row, CancellationToken ct)
     {
@@ -168,14 +168,20 @@ public sealed class BanCelebrationSubscriptionService(
             return;
         }
 
-        if (row.PromptDeleteJobId is { } jobId)
-        {
-            await jobScheduler.CancelJobAsync(jobId, ct);
-        }
+        // A job that could not be cancelled has already run and deleted the prompt itself.
+        var promptStillPosted = row.PromptDeleteJobId is not { } jobId
+            || await jobScheduler.CancelJobAsync(jobId, ct);
 
-        if (row.PromptMessageId is { } messageId)
+        if (promptStillPosted && row.PromptMessageId is { } messageId)
         {
-            await messageService.DeleteAndMarkMessageAsync(row.ChatId, messageId, PromptCleanupSource, ct);
+            try
+            {
+                await messageService.DeleteAndMarkMessageAsync(row.ChatId, messageId, PromptCleanupSource, ct);
+            }
+            catch (Exception ex) when (!ct.IsCancellationRequested)
+            {
+                logger.LogDebug(ex, "Prompt {MessageId} in {Chat} was already gone", messageId, row.ChatId);
+            }
         }
 
         await subscriberRepository.ClearPromptAsync(row.TelegramUserId, row.ChatId, ct);
