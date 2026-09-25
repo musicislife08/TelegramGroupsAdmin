@@ -27,7 +27,6 @@ public sealed class BanCelebrationSubscriptionService(
     ILogger<BanCelebrationSubscriptionService> logger) : IBanCelebrationSubscriptionService
 {
     internal const int PromptLifetimeSeconds = 60;
-    private const string DeleteMessageJobName = "DeleteMessage";
     private const string PromptTimeoutReason = "dmcelebrations_prompt_timeout";
     private const string PromptCleanupSource = "dmcelebrations_prompt";
 
@@ -151,7 +150,7 @@ public sealed class BanCelebrationSubscriptionService(
 
         var prompt = await messageService.SendAndSaveMessageAsync(chat.Id, text, replyMarkup: keyboard, cancellationToken: ct);
         var jobId = await jobScheduler.ScheduleJobAsync(
-            DeleteMessageJobName,
+            BackgroundJobNames.DeleteMessage,
             new DeleteMessagePayload(chat.Id, prompt.MessageId, PromptTimeoutReason),
             PromptLifetimeSeconds,
             DeduplicationKeys.None,
