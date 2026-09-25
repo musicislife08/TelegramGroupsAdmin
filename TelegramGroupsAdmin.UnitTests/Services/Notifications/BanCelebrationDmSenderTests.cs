@@ -67,6 +67,20 @@ public class BanCelebrationDmSenderTests
     }
 
     [Test]
+    public async Task SendAsync_CancelledTokenAndCacheWriteThrowsOce_Propagates()
+    {
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+        var gif = new BanCelebrationGif { Id = 3, FilePath = "ban-gifs/3.gif", FileId = null };
+        DmReturns(new DmDeliveryResult { DmSent = true, AnimationFileId = "new-id" });
+        _gifs.UpdateFileIdAsync(3, "new-id", Arg.Any<CancellationToken>())
+            .ThrowsAsync(new OperationCanceledException(cts.Token));
+
+        Assert.ThrowsAsync<OperationCanceledException>(() =>
+            _sut.SendAsync(Recipient, new ChatIdentity(-100L, "Workshop Alumni"), "banned!", gif, cts.Token));
+    }
+
+    [Test]
     public async Task SendAsync_SameFileIdReturned_DoesNotRewriteCache()
     {
         var gif = new BanCelebrationGif { Id = 3, FilePath = "ban-gifs/3.gif", FileId = "same" };

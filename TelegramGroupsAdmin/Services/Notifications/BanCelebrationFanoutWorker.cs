@@ -23,7 +23,11 @@ internal sealed class BanCelebrationFanoutWorker(
                     var processor = scope.ServiceProvider.GetRequiredService<BanCelebrationFanoutProcessor>();
                     await processor.ProcessAsync(item, stoppingToken);
                 }
-                catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception ex)
                 {
                     logger.LogError(ex, "Ban celebration fan-out failed for {Chat}", item.Chat.ToLogDebug());
                 }

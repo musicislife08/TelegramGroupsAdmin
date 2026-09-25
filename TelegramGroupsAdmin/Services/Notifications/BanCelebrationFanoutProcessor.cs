@@ -66,7 +66,11 @@ internal sealed class BanCelebrationFanoutProcessor(
                     pipelineMetrics.RecordBanCelebrationDm("failed");
                 }
             }
-            catch (Exception ex) when (!ct.IsCancellationRequested)
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
             {
                 failed++;
                 pipelineMetrics.RecordBanCelebrationDm("failed");

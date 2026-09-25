@@ -110,6 +110,32 @@ public class BanCelebrationFanoutProcessorTests
     }
 
     [Test]
+    public async Task ProcessAsync_CancelledTokenDuringSend_PropagatesCancellation()
+    {
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+        Subscribers(A, B);
+        _dm.SendDmWithAnimationEntitiesAsync(A, Arg.Any<TelegramMessage>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new OperationCanceledException(cts.Token));
+
+        Assert.ThrowsAsync<OperationCanceledException>(() => _sut.ProcessAsync(Item, cts.Token));
+
+        await _dm.DidNotReceive().SendDmWithAnimationEntitiesAsync(B, Arg.Any<TelegramMessage>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task ProcessAsync_NonCancellationExceptionWhileTokenCancelled_IsCountedFailedNotThrown()
+    {
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+        Subscribers(A);
+        _dm.SendDmWithAnimationEntitiesAsync(A, Arg.Any<TelegramMessage>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException("connection pool disposed"));
+
+        Assert.DoesNotThrowAsync(() => _sut.ProcessAsync(Item, cts.Token));
+    }
+
+    [Test]
     public async Task ProcessAsync_NoDeliverableSubscribers_DoesNotLoadGif()
     {
         Subscribers();

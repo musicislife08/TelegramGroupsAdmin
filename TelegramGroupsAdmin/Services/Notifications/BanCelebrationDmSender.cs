@@ -38,7 +38,11 @@ internal sealed class BanCelebrationDmSender(
             {
                 await gifRepository.UpdateFileIdAsync(gif.Id, returned, ct);
             }
-            catch (Exception ex) when (!ct.IsCancellationRequested)
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
             {
                 logger.LogWarning(ex, "Failed to cache file_id for ban celebration GIF {GifId}", gif.Id);
             }
