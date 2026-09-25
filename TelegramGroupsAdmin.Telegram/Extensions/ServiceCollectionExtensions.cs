@@ -11,6 +11,7 @@ using TelegramGroupsAdmin.Telegram.Services.Bot.Handlers;
 using TelegramGroupsAdmin.Telegram.Services.ReportActions;
 using TelegramGroupsAdmin.Telegram.Services.BotCommands;
 using TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
+using TelegramGroupsAdmin.Telegram.Services.DmCelebrations;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Handlers;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Infrastructure;
@@ -160,6 +161,7 @@ public static class ServiceCollectionExtensions
             services.AddScoped<IWebBotMessagingService, WebBotMessagingService>(); // Phase 1: Web UI bot messaging with signature
             services.AddScoped<IWebUserMessagingService, WebUserMessagingService>(); // Send/edit as admin's personal Telegram account
             services.AddScoped<IBanCelebrationService, BanCelebrationService>(); // Scoped: rotation state is database-backed
+            services.AddScoped<IBanCelebrationSubscriptionService, BanCelebrationSubscriptionService>(); // DM celebration opt-in rules
             services.AddScoped<IThumbnailService, ThumbnailService>(); // Thumbnail generation for images/GIFs
 
             // Training data quality services
