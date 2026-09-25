@@ -96,6 +96,19 @@ public class BanCelebrationFanoutProcessorTests
     }
 
     [Test]
+    public async Task ProcessAsync_NonShutdownCancellationFromOneSend_ContinuesWithTheRest()
+    {
+        Subscribers(A, B);
+        _dm.SendDmWithAnimationEntitiesAsync(A, Arg.Any<TelegramMessage>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new OperationCanceledException());
+        DmFor(B, new DmDeliveryResult { DmSent = true, AnimationFileId = "fresh" });
+
+        await _sut.ProcessAsync(Item, CancellationToken.None);
+
+        await _dm.Received(1).SendDmWithAnimationEntitiesAsync(B, Arg.Any<TelegramMessage>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
     public async Task ProcessAsync_NoDeliverableSubscribers_DoesNotLoadGif()
     {
         Subscribers();
