@@ -21,7 +21,7 @@ public class LoadCanonicalAsyncTests
     public void TearDown() => _helper?.Dispose();
 
     [Test]
-    public async Task LoadCanonicalAsync_PopulatesAllThirtyFiveTables()
+    public async Task LoadCanonicalAsync_PopulatesAllThirtySixTables()
     {
         await using var ctx = _helper!.GetDbContext();
         await GoldenDataset.LoadCanonicalAsync(ctx, PostgresFixture.SharedDataProtectionProvider);
@@ -32,6 +32,8 @@ public class LoadCanonicalAsyncTests
         Assert.That(await ctx.Messages.CountAsync(), Is.EqualTo(407), "messages should be exactly 407");
         Assert.That(await ctx.TrainingLabels.CountAsync(), Is.EqualTo(200), "training_labels should be exactly 200");
         Assert.That(await ctx.WelcomeResponses.CountAsync(), Is.EqualTo(11), "welcome_responses should be exactly 11 (deliberate trim)");
+        Assert.That(await ctx.BanCelebrationSubscribers.CountAsync(), Is.EqualTo(4),
+            "ban_celebration_subscribers should be exactly 4 (approved canonical addition 2026-09-25)");
         // 5 tables are intentionally EMPTY in canonical: domain_filters, recovery_codes,
         // image_training_samples, video_training_samples, web_notifications.
     }

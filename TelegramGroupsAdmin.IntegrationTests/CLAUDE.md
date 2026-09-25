@@ -14,7 +14,7 @@ The binding rule set lives in `.claude/rules/integration-test-data.md` and is in
 ## Part 1 - Dataset orientation
 
 ### What this is
-The canonical dataset is a frozen superset of every entity type the integration suite needs to read from. Tests clone it per-method via Postgres template DBs (`MigrationTestHelper.CreateDatabaseFromGoldenTemplateAsync`) and either consume it as-is, reduce it down with `GoldenDataset.Reduce(ctx).KeepMessages(...).ApplyAsync()` (subtractive — FK CASCADE drops everything outside the allowlist), or mutate it in-place with `GoldenDataset.Mutate(ctx).ShiftDetectionResultTimestamps(...).ApplyAsync()` (NOW()-relative re-timing for windowed aggregations). Source: `TestData/SQL/canonical/*.sql` (35 files, 3,174 INSERT statements).
+The canonical dataset is a frozen superset of every entity type the integration suite needs to read from. Tests clone it per-method via Postgres template DBs (`MigrationTestHelper.CreateDatabaseFromGoldenTemplateAsync`) and either consume it as-is, reduce it down with `GoldenDataset.Reduce(ctx).KeepMessages(...).ApplyAsync()` (subtractive — FK CASCADE drops everything outside the allowlist), or mutate it in-place with `GoldenDataset.Mutate(ctx).ShiftDetectionResultTimestamps(...).ApplyAsync()` (NOW()-relative re-timing for windowed aggregations). Source: `TestData/SQL/canonical/*.sql` (36 files, 3,178 INSERT statements).
 
 True-empty tests use `MigrationTestHelper.CreateDatabaseFromEmptyTemplateAsync` instead (post-migrate, zero rows) — cheaper than a golden clone, and the right choice when the SUT writes its own state from scratch.
 
@@ -68,6 +68,7 @@ Origin: prod DB snapshot from 2026-04-30. Bootstrap pipeline (full detail in `do
 | 33 | training_labels | 200 | 185 prod-derived + 15 synthetic explicit_ham promotions (`reason='canonical_synthetic_promotion'`). |
 | 34 | user_actions | 993 | Bootstrap missed adding 7 synthetic ban-celebration anchor rows; see Part 2 ban-celebration note. |
 | 35 | message_translations | 14 | Non-noop translations only; URL hostnames scrubbed. |
+| 36 | ban_celebration_subscribers | 4 | Approved canonical addition 2026-09-25 (new table — no row to flag-edit). See Part 2 "DM ban celebration subscribers". |
 
 ### What's NOT in the dataset
 - **Encrypted JSONB credentials** in `configs` (sendgrid keys, web push keys, AI provider keys) - left NULL. Populated at runtime by the app via `IDataProtectionProvider`.
@@ -273,6 +274,19 @@ Recipe format: a heading, the anchor id(s), a one-line description, and "use whe
 - `content_detection_configs.id` = `2`, `chat_id` = `0` (global baseline)
 - 17 additional per-chat rows (one per active managed_chat).
 - Use when: a test needs a representative content-detection config row.
+
+### DM ban celebration subscribers (canonical addition 2026-09-25)
+
+Anchors are in code as `GoldenDatasetConstants.DmCelebrations`. None of these users was referenced by any test or doc before this addition.
+
+| User | Id | `bot_dm_enabled` | Rows | Use when |
+|---|---|---|---|---|
+| @magnetismvoucher | `9183753414221` | true | Workshop Alumni | a subscriber who is deliverable |
+| @thudupper | `9011393194616` | false | Workshop Alumni, stale prompt `424242` / `canonical-stale-prompt-job` | a subscriber who is not deliverable; cleanup of a timed-out prompt |
+| @deepnessunmapped | `9689750659830` | false | Workshop Alumni + Poultry Community | removing one chat must leave the other |
+| @chummyrepair | `9306234060091` | true | none (MainChat member) | the subscribe path, where the SUT upsert is the assertion subject |
+
+Workshop Alumni (`-100059667856554`) has no `ban_celebration_config`, so its effective celebration config is disabled: a subscribers-only chat.
 
 ### Synthetic / reserved rows (do not regenerate)
 - `welcome_responses` IDs `999001..999005`: 5 status branches anchored on `(MainChat_Id=-100026957614982, user_id=9196379650113, username='canonical_user1')`. Mapping: `999001`=Pending, `999002`=Accepted, `999003`=Denied, `999004`=Timeout, `999005`=Left.

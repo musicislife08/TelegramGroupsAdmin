@@ -86,4 +86,22 @@ public class TableDiscoveryServiceTests
             $"Expected username_blacklist in mapping. Actual keys: {string.Join(", ", mapping.Keys.OrderBy(k => k))}");
         Assert.That(mapping["username_blacklist"].Name, Is.EqualTo("UsernameBlacklistEntryDto"));
     }
+
+    [Test]
+    public async Task DiscoverTablesAsync_IncludesBanCelebrationSubscribers()
+    {
+        using var testHelper = new MigrationTestHelper();
+        await testHelper.CreateDatabaseFromGoldenTemplateAsync();
+
+        await using var connection = new NpgsqlConnection(testHelper.ConnectionString);
+        await connection.OpenAsync();
+
+        var service = new TableDiscoveryService(Substitute.For<ILogger<TableDiscoveryService>>());
+
+        var mapping = await service.DiscoverTablesAsync(connection);
+
+        Assert.That(mapping.ContainsKey("ban_celebration_subscribers"), Is.True,
+            $"Expected ban_celebration_subscribers in mapping. Actual keys: {string.Join(", ", mapping.Keys.OrderBy(k => k))}");
+        Assert.That(mapping["ban_celebration_subscribers"].Name, Is.EqualTo("BanCelebrationSubscriberDto"));
+    }
 }

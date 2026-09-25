@@ -139,6 +139,39 @@ internal static class GoldenDatasetConstants
     }
 
     /// <summary>
+    /// DM ban celebration subscriber anchors from <c>canonical/36_ban_celebration_subscribers.sql</c>
+    /// (canonical addition 2026-09-25 — a new table has no row to flag-edit; approved by owner).
+    /// Every user is active, not banned, not a bot, and has real messages in the chats they are
+    /// subscribed to.
+    /// </summary>
+    public static class DmCelebrations
+    {
+        /// <summary>Workshop Alumni — hosts three of the four subscriber rows.</summary>
+        public const long WorkshopAlumniChatId = -100059667856554L;
+
+        /// <summary>Poultry Community — second chat for the two-chat subscriber.</summary>
+        public const long PoultryCommunityChatId = -100017608907459L;
+
+        /// <summary>@magnetismvoucher — bot_dm_enabled=true; subscribed to Workshop Alumni. The deliverable subscriber.</summary>
+        public const long DeliverableSubscriberId = 9183753414221L;
+
+        /// <summary>@thudupper — bot_dm_enabled=false; subscribed to Workshop Alumni with a stale open prompt (never started the bot, prompt timed out).</summary>
+        public const long UndeliverableSubscriberId = 9011393194616L;
+
+        /// <summary>@deepnessunmapped — bot_dm_enabled=false; subscribed to Workshop Alumni and Poultry Community.</summary>
+        public const long TwoChatSubscriberId = 9689750659830L;
+
+        /// <summary>@chummyrepair — bot_dm_enabled=true; MainChat member with no subscription row.</summary>
+        public const long UnsubscribedMemberId = 9306234060091L;
+
+        /// <summary>Stale prompt message id on <see cref="UndeliverableSubscriberId"/>'s Workshop Alumni row.</summary>
+        public const int StalePromptMessageId = 424242;
+
+        /// <summary>Stale prompt delete-job id on <see cref="UndeliverableSubscriberId"/>'s Workshop Alumni row.</summary>
+        public const string StalePromptJobId = "canonical-stale-prompt-job";
+    }
+
+    /// <summary>
     /// Canonical anchors used by <c>TrainingLabelsRepositoryTests</c> to pin existing
     /// spam/ham label rows and FK-valid-but-unlabeled message rows. The chat side of
     /// each anchor is in <see cref="Chats.TrainingFixturesChatId"/> for the labeled set

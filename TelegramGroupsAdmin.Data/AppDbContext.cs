@@ -69,6 +69,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     // Ban celebration tables
     public DbSet<BanCelebrationGifDto> BanCelebrationGifs => Set<BanCelebrationGifDto>();
     public DbSet<BanCelebrationCaptionDto> BanCelebrationCaptions => Set<BanCelebrationCaptionDto>();
+    public DbSet<BanCelebrationSubscriberDto> BanCelebrationSubscribers => Set<BanCelebrationSubscriberDto>();
 
     // Welcome system (Phase 4.4)
     public DbSet<WelcomeResponseDto> WelcomeResponses => Set<WelcomeResponseDto>();
@@ -108,6 +109,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.Entity<TelegramLinkTokenRecordDto>().Property(t => t.Token).ValueGeneratedNever();
         modelBuilder.Entity<InviteRecordDto>().Property(i => i.Token).ValueGeneratedNever();
         modelBuilder.Entity<TrainingLabelDto>().HasKey(tl => new { tl.MessageId, tl.ChatId });
+        modelBuilder.Entity<BanCelebrationSubscriberDto>().HasKey(s => new { s.TelegramUserId, s.ChatId });
 
         // Configure relationships
         ConfigureRelationships(modelBuilder);
@@ -548,6 +550,20 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 .HasDatabaseName("IX_username_blacklist_unique_enabled_pattern");
         });
 
+        // BanCelebrationSubscribers → TelegramUsers / ManagedChats (cascade: a subscription
+        // cannot outlive the user or the chat it refers to)
+        modelBuilder.Entity<BanCelebrationSubscriberDto>()
+            .HasOne(s => s.TelegramUser)
+            .WithMany()
+            .HasForeignKey(s => s.TelegramUserId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<BanCelebrationSubscriberDto>()
+            .HasOne(s => s.ManagedChat)
+            .WithMany()
+            .HasForeignKey(s => s.ChatId)
+            .OnDelete(DeleteBehavior.Cascade);
+
     }
 
     private static void ConfigureIndexes(ModelBuilder modelBuilder)
@@ -819,6 +835,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.Entity<BanCelebrationCaptionDto>()
             .HasIndex(c => c.CreatedAt)
             .HasDatabaseName("ix_ban_celebration_captions_created_at");
+
+        // BanCelebrationSubscribers index — fan-out reads subscribers by chat
+        modelBuilder.Entity<BanCelebrationSubscriberDto>()
+            .HasIndex(s => s.ChatId);
     }
 
     private static void ConfigureValueConversions(ModelBuilder modelBuilder)

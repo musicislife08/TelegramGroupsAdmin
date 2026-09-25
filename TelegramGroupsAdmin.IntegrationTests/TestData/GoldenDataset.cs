@@ -9,7 +9,7 @@ namespace TelegramGroupsAdmin.IntegrationTests.TestData;
 public static class GoldenDataset
 {
     /// <summary>
-    /// Loads the 35 canonical/*.sql fixtures FK-ordered into the target context, then
+    /// Loads the 36 canonical/*.sql fixtures FK-ordered into the target context, then
     /// runs the encrypted-column UPDATE post-step using the supplied DataProtection
     /// provider. Used by PostgresFixture.[OneTimeSetUp] to build golden_template, and
     /// by GoldenReducePlanTests to exercise Reduce against canonical without depending
@@ -24,7 +24,7 @@ public static class GoldenDataset
         IDataProtectionProvider dataProtection,
         CancellationToken ct = default)
     {
-        // FK-safe load order matching TestData/SQL/canonical/ exactly (35 files;
+        // FK-safe load order matching TestData/SQL/canonical/ exactly (36 files;
         // numeric on-disk order IS the FK-safe order — Pre-1b enforced this).
         // Resource names use '.' separators per .NET embedded-resource conventions:
         // path "TestData/SQL/canonical/01_users.sql" -> "SQL.canonical.01_users.sql".
@@ -70,6 +70,8 @@ public static class GoldenDataset
             "SQL.canonical.34_user_actions.sql",         // 993 rows
             // Layer 3 — child of messages AND message_edits
             "SQL.canonical.35_message_translations.sql",
+            // Layer 1 (late addition) — child of telegram_users + managed_chats
+            "SQL.canonical.36_ban_celebration_subscribers.sql", // 4 rows (approved addition 2026-09-25)
         };
 
         foreach (var fixture in fixtures)
