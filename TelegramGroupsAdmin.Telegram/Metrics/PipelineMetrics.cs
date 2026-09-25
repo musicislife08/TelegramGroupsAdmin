@@ -19,6 +19,8 @@ public sealed class PipelineMetrics
     private readonly Counter<long> _profileScanSkippedTotal;
     private readonly Counter<long> _profileScanExplicitUsernameTotal;
     private readonly Counter<long> _banCelebrationMaskedUsernameTotal;
+    private readonly Counter<long> _banCelebrationDmTotal;
+    private readonly Counter<long> _banCelebrationSubscriptionTotal;
 
     private readonly Histogram<double> _processingDuration;
     private readonly Histogram<double> _profileScanDuration;
@@ -56,6 +58,13 @@ public sealed class PipelineMetrics
         _banCelebrationMaskedUsernameTotal = _meter.CreateCounter<long>(
             "tga.pipeline.ban_celebration.masked_username_total",
             description: "Ban celebrations where the banned user's display name was masked, by trigger");
+
+        _banCelebrationDmTotal = _meter.CreateCounter<long>(
+            "tga.pipeline.ban_celebration.dm_total",
+            description: "DM ban celebration deliveries by outcome (sent, blocked, failed, dropped)");
+        _banCelebrationSubscriptionTotal = _meter.CreateCounter<long>(
+            "tga.pipeline.ban_celebration.subscription_total",
+            description: "DM ban celebration subscription changes by action (subscribe, unsubscribe, left, banned, blocked)");
 
         _processingDuration = _meter.CreateHistogram<double>(
             "tga.pipeline.processing.duration",
@@ -120,5 +129,15 @@ public sealed class PipelineMetrics
     public void RecordMaskedUsername(string trigger)
     {
         _banCelebrationMaskedUsernameTotal.Add(1, new TagList { { "trigger", trigger } });
+    }
+
+    public void RecordBanCelebrationDm(string outcome)
+    {
+        _banCelebrationDmTotal.Add(1, new TagList { { "outcome", outcome } });
+    }
+
+    public void RecordBanCelebrationSubscription(string action, long count = 1)
+    {
+        _banCelebrationSubscriptionTotal.Add(count, new TagList { { "action", action } });
     }
 }

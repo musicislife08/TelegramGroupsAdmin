@@ -9,6 +9,7 @@ using TelegramGroupsAdmin.Core.JobPayloads;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using static TelegramGroupsAdmin.Core.BackgroundJobs.DeduplicationKeys;
 using TelegramGroupsAdmin.Telegram.Extensions;
+using TelegramGroupsAdmin.Telegram.Helpers;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot.Handlers;
 
@@ -301,6 +302,105 @@ public class BotDmService(
                 ErrorMessage = ex.Message
             };
         }
+    }
+
+    /// <inheritdoc />
+    public async Task<DmDeliveryResult> SendDmWithAnimationEntitiesAsync(
+        UserIdentity user,
+        TelegramMessage caption,
+        string? fileId,
+        string? filePath,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var sent = await SendAnimationWithFallbackAsync(user, caption, fileId, filePath, cancellationToken);
+            if (sent is null)
+            {
+                logger.LogWarning(
+                    "Animation DM to {User} skipped: no cached file_id and file not found at {Path}",
+                    user.ToLogDebug(), filePath);
+                return new DmDeliveryResult
+                {
+                    DmSent = false,
+                    Failed = true,
+                    ErrorMessage = "No cached file_id and the animation file was not found on disk"
+                };
+            }
+
+            await telegramUserRepository.EnableBotDmAsync(user.Id, cancellationToken);
+            logger.LogDebug("Animation DM sent to {User} (MessageId: {MessageId})", user.ToLogDebug(), sent.MessageId);
+
+            return new DmDeliveryResult
+            {
+                DmSent = true,
+                MessageId = sent.MessageId,
+                AnimationFileId = sent.Animation?.FileId
+            };
+        }
+        catch (ApiRequestException ex) when (ex.ErrorCode == 403)
+        {
+            logger.LogInformation("{User} has blocked bot DMs (403) - animation not queued", user.ToLogInfo());
+            await telegramUserRepository.DisableBotDmAsync(user.Id, cancellationToken);
+
+            return new DmDeliveryResult
+            {
+                DmSent = false,
+                Failed = true,
+                Blocked = true,
+                ErrorMessage = "User has blocked bot DMs - animations are not queued"
+            };
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to send animation DM to {User}", user.ToLogDebug());
+            return new DmDeliveryResult { DmSent = false, Failed = true, ErrorMessage = ex.Message };
+        }
+    }
+
+    /// <summary>
+    /// Sends by cached file_id when possible; on an invalid-file_id error, uploads from disk.
+    /// Returns null when there is nothing to send (no usable file_id and no file on disk).
+    /// A 403 or any other error propagates to the caller's handling.
+    /// </summary>
+    private async Task<Message?> SendAnimationWithFallbackAsync(
+        UserIdentity user,
+        TelegramMessage caption,
+        string? fileId,
+        string? filePath,
+        CancellationToken cancellationToken)
+    {
+        if (!string.IsNullOrEmpty(fileId))
+        {
+            try
+            {
+                return await messageHandler.SendAnimationAsync(
+                    chatId: user.Id,
+                    animation: InputFile.FromFileId(fileId),
+                    caption: caption.Text,
+                    captionEntities: caption.Entities,
+                    ct: cancellationToken);
+            }
+            catch (Exception ex) when (TelegramFileIdErrors.IsInvalidFileId(ex))
+            {
+                logger.LogWarning(
+                    "Cached animation file_id rejected for DM to {User}; uploading from disk",
+                    user.ToLogDebug());
+            }
+        }
+
+        if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath))
+        {
+            return null;
+        }
+
+        await using var stream = File.OpenRead(filePath);
+        return await messageHandler.SendAnimationAsync(
+            chatId: user.Id,
+            animation: InputFile.FromStream(stream, Path.GetFileName(filePath)),
+            caption: caption.Text,
+            captionEntities: caption.Entities,
+            ct: cancellationToken);
     }
 
     /// <inheritdoc />

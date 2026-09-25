@@ -7,6 +7,7 @@ using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
+using TelegramGroupsAdmin.Telegram.Helpers;
 using TelegramGroupsAdmin.Telegram.Metrics;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
@@ -196,7 +197,7 @@ public class BanCelebrationService(
                         caption,
                         cancellationToken);
                 }
-                catch (Exception ex) when (IsInvalidFileIdError(ex))
+                catch (Exception ex) when (TelegramFileIdErrors.IsInvalidFileId(ex))
                 {
                     // Cached file_id is stale - clear it and fall back to local upload
                     logger.LogWarning(
@@ -330,17 +331,5 @@ public class BanCelebrationService(
             .Replace("{username}", username, StringComparison.OrdinalIgnoreCase)
             .Replace("{chatname}", chatName, StringComparison.OrdinalIgnoreCase)
             .Replace("{bancount}", banCount.ToString(), StringComparison.OrdinalIgnoreCase);
-    }
-
-    /// <summary>
-    /// Checks if the exception indicates an invalid/expired file_id.
-    /// Telegram returns errors like "Bad Request: wrong file identifier" when file_ids become stale.
-    /// </summary>
-    private static bool IsInvalidFileIdError(Exception ex)
-    {
-        var message = ex.Message.ToLowerInvariant();
-        return message.Contains("wrong file identifier") ||
-               message.Contains("file_id") ||
-               message.Contains("invalid file");
     }
 }

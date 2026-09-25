@@ -135,4 +135,18 @@ public interface IBotDmService
         string? videoPath = null,
         InlineKeyboardMarkup? keyboard = null,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Send an animation (GIF) DM with an entity-based caption. Uses <paramref name="fileId"/>
+    /// when given, falling back to uploading <paramref name="filePath"/> if Telegram rejects it.
+    /// Does NOT queue on failure: a 403 returns <see cref="DmDeliveryResult.Blocked"/> and
+    /// disables bot DMs for the user. <see cref="DmDeliveryResult.AnimationFileId"/> carries the
+    /// file_id Telegram returned so callers can cache it.
+    /// </summary>
+    Task<DmDeliveryResult> SendDmWithAnimationEntitiesAsync(
+        UserIdentity user,
+        TelegramMessage caption,
+        string? fileId,
+        string? filePath,
+        CancellationToken cancellationToken = default);
 }

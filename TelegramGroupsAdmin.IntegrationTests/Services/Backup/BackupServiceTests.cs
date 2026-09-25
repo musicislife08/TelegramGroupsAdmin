@@ -1093,6 +1093,14 @@ public class BackupServiceTests
             InlineKeyboardMarkup? keyboard = null,
             CancellationToken cancellationToken = default)
             => Task.FromResult(SuccessResult);
+
+        public Task<DmDeliveryResult> SendDmWithAnimationEntitiesAsync(
+            UserIdentity user,
+            TelegramMessage caption,
+            string? fileId,
+            string? filePath,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult(SuccessResult);
     }
 
     /// <summary>

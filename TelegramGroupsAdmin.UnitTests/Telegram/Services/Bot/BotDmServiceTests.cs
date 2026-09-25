@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
+using Telegram.Bot.Exceptions;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
@@ -212,6 +213,120 @@ public class BotDmServiceTests
 
         // Assert
         await _userRepository.Received(1).EnableBotDmAsync(TestUser.Id, Arg.Any<CancellationToken>());
+    }
+
+    #endregion
+
+    #region SendDmWithAnimationEntitiesAsync
+
+    private void SetupAnimationReturns(string returnedFileId) =>
+        _messageHandler
+            .SendAnimationAsync(
+                Arg.Any<long>(), Arg.Any<InputFile>(), Arg.Any<string?>(), Arg.Any<ParseMode?>(),
+                Arg.Any<ReplyParameters?>(), Arg.Any<InlineKeyboardMarkup?>(),
+                Arg.Any<IReadOnlyList<MessageEntity>?>(), Arg.Any<CancellationToken>())
+            .Returns(new Message
+            {
+                Id = 7,
+                Chat = new Chat { Id = TestUser.Id },
+                Animation = new Animation { FileId = returnedFileId, FileUniqueId = "u1" }
+            });
+
+    [Test]
+    public async Task SendDmWithAnimationEntitiesAsync_CachedFileId_SendsByFileIdAndReportsReturnedId()
+    {
+        SetupAnimationReturns("cached-id");
+        var caption = new TelegramMessageBuilder().Bold("Workshop Alumni").LineBreak().Text("banned!").Build();
+
+        var result = await _service.SendDmWithAnimationEntitiesAsync(TestUser, caption, "cached-id", "/nope.gif");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.DmSent, Is.True);
+            Assert.That(result.Blocked, Is.False);
+            Assert.That(result.AnimationFileId, Is.EqualTo("cached-id"));
+        }
+        await _messageHandler.Received(1).SendAnimationAsync(
+            TestUser.Id,
+            Arg.Is<InputFile>(f => f is InputFileId && ((InputFileId)f).Id == "cached-id"),
+            caption.Text, Arg.Any<ParseMode?>(), Arg.Any<ReplyParameters?>(), Arg.Any<InlineKeyboardMarkup?>(),
+            caption.Entities, Arg.Any<CancellationToken>());
+        await _userRepository.Received(1).EnableBotDmAsync(TestUser.Id, Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task SendDmWithAnimationEntitiesAsync_Forbidden_ReportsBlockedDisablesDmAndDoesNotQueue()
+    {
+        _messageHandler
+            .SendAnimationAsync(
+                Arg.Any<long>(), Arg.Any<InputFile>(), Arg.Any<string?>(), Arg.Any<ParseMode?>(),
+                Arg.Any<ReplyParameters?>(), Arg.Any<InlineKeyboardMarkup?>(),
+                Arg.Any<IReadOnlyList<MessageEntity>?>(), Arg.Any<CancellationToken>())
+            .Returns<Message>(_ => throw new ApiRequestException("Forbidden: bot was blocked by the user", 403));
+
+        var result = await _service.SendDmWithAnimationEntitiesAsync(TestUser, TelegramMessage.Plain("x"), "cached-id", null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.DmSent, Is.False);
+            Assert.That(result.Blocked, Is.True);
+            Assert.That(result.Failed, Is.True);
+        }
+        await _userRepository.Received(1).DisableBotDmAsync(TestUser.Id, Arg.Any<CancellationToken>());
+        await _pendingNotificationsRepository.DidNotReceiveWithAnyArgs().AddPendingNotificationAsync(default, default!, default!, default);
+    }
+
+    [Test]
+    public async Task SendDmWithAnimationEntitiesAsync_StaleFileId_RetriesWithUploadAndReportsNewId()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"anim_{Guid.NewGuid():N}.gif");
+        await File.WriteAllBytesAsync(path, [0x47, 0x49, 0x46]);
+        try
+        {
+            _messageHandler
+                .SendAnimationAsync(
+                    Arg.Any<long>(), Arg.Is<InputFile>(f => f is InputFileId), Arg.Any<string?>(), Arg.Any<ParseMode?>(),
+                    Arg.Any<ReplyParameters?>(), Arg.Any<InlineKeyboardMarkup?>(),
+                    Arg.Any<IReadOnlyList<MessageEntity>?>(), Arg.Any<CancellationToken>())
+                .Returns<Message>(_ => throw new ApiRequestException("Bad Request: wrong file identifier/HTTP URL specified", 400));
+            _messageHandler
+                .SendAnimationAsync(
+                    Arg.Any<long>(), Arg.Is<InputFile>(f => f is InputFileStream), Arg.Any<string?>(), Arg.Any<ParseMode?>(),
+                    Arg.Any<ReplyParameters?>(), Arg.Any<InlineKeyboardMarkup?>(),
+                    Arg.Any<IReadOnlyList<MessageEntity>?>(), Arg.Any<CancellationToken>())
+                .Returns(new Message
+                {
+                    Id = 8,
+                    Chat = new Chat { Id = TestUser.Id },
+                    Animation = new Animation { FileId = "fresh-id", FileUniqueId = "u2" }
+                });
+
+            var result = await _service.SendDmWithAnimationEntitiesAsync(TestUser, TelegramMessage.Plain("x"), "stale-id", path);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(result.DmSent, Is.True);
+                Assert.That(result.AnimationFileId, Is.EqualTo("fresh-id"));
+            }
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Test]
+    public async Task SendDmWithAnimationEntitiesAsync_NoFileIdAndMissingFile_FailsWithoutCallingTelegram()
+    {
+        var result = await _service.SendDmWithAnimationEntitiesAsync(TestUser, TelegramMessage.Plain("x"), null, "/does/not/exist.gif");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.DmSent, Is.False);
+            Assert.That(result.Failed, Is.True);
+            Assert.That(result.Blocked, Is.False);
+        }
+        await _messageHandler.DidNotReceiveWithAnyArgs().SendAnimationAsync(default, default!);
     }
 
     #endregion
