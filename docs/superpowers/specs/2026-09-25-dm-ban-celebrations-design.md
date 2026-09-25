@@ -309,15 +309,15 @@ has real messages in the chats listed, so the subscriptions look plausible. No e
 Chats: **Workshop Alumni** `-100059667856554`, **Poultry Community** `-100017608907459`,
 **Main Community** `-100026957614982`.
 
-**Open question for the canonical rule:** `ban_celebration_subscribers` is a new table, so there is
-no existing row to flag-edit, and the rule forbids adding rows to canonical. Proposed exception: add
+**Canonical-rule exception (approved by owner 2026-09-25):** `ban_celebration_subscribers` is a new table, so there is
+no existing row to flag-edit, and the rule forbids adding rows to canonical. Add
 a new `36_ban_celebration_subscribers.sql` with exactly four rows, one per subscription in the
 table above (`magnetismvoucher`/Workshop Alumni, `thudupper`/Workshop Alumni, `deepnessunmapped`/
 Workshop Alumni and Poultry Community). Prompt columns are all NULL, except that one row carries a
 stale `prompt_message_id`/`prompt_delete_job_id` pair for the "cleanup after timeout tolerates
 missing job/message" test. Pin the rows in `GoldenDatasetConstants.BanCelebrationSubscribers` and
 add a Part 2 recipe marked "(canonical addition 2026-09-25)". Check `LoadCanonicalAsyncTests` for
-exact table-count assertions. **This needs owner sign-off before the plan is written.**
+exact table-count assertions.
 
 ## Out of scope
 
