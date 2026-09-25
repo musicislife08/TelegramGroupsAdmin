@@ -86,7 +86,9 @@ public sealed class BanCelebrationSubscriptionService(
             return;
         }
 
-        if (update.NewChatMember.Status is not (ChatMemberStatus.Left or ChatMemberStatus.Kicked))
+        var left = update.NewChatMember.Status is ChatMemberStatus.Left or ChatMemberStatus.Kicked
+            || update.NewChatMember is ChatMemberRestricted { IsMember: false };
+        if (!left)
         {
             return;
         }

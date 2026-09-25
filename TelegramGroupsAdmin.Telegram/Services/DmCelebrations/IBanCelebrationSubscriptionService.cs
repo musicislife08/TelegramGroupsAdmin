@@ -22,7 +22,11 @@ public interface IBanCelebrationSubscriptionService
     /// </summary>
     Task<ChatIdentity?> ConfirmFromStartAsync(long chatId, UserIdentity user, CancellationToken ct = default);
 
-    /// <summary>ChatMember updates in groups: leaving or being kicked removes that chat's subscription.</summary>
+    /// <summary>
+    /// ChatMember updates in groups: leaving, being kicked, or a restricted member who is no
+    /// longer a member (<see cref="Telegram.Bot.Types.ChatMemberRestricted.IsMember"/> false)
+    /// removes that chat's subscription.
+    /// </summary>
     Task HandleChatMemberUpdateAsync(ChatMemberUpdated update, CancellationToken ct = default);
 
     /// <summary>MyChatMember updates in private chats: blocking the bot removes every subscription.</summary>

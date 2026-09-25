@@ -204,6 +204,26 @@ public class BanCelebrationSubscriptionServiceTests
     }
 
     [Test]
+    public async Task HandleChatMemberUpdateAsync_RestrictedMemberLeaves_RemovesThatChat()
+    {
+        await _sut.HandleChatMemberUpdateAsync(MemberUpdate(ChatType.Supergroup,
+            new ChatMemberRestricted { User = TgUser, IsMember = true },
+            new ChatMemberRestricted { User = TgUser, IsMember = false }));
+
+        await _repository.Received(1).DeleteAsync(UserId, ChatId, Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task HandleChatMemberUpdateAsync_MemberRestrictedButStillInChat_DoesNothing()
+    {
+        await _sut.HandleChatMemberUpdateAsync(MemberUpdate(ChatType.Supergroup,
+            new ChatMemberMember { User = TgUser },
+            new ChatMemberRestricted { User = TgUser, IsMember = true }));
+
+        await _repository.DidNotReceiveWithAnyArgs().DeleteAsync(default, default);
+    }
+
+    [Test]
     public async Task HandleChatMemberUpdateAsync_AdministratorLeaves_RemovesThatChat()
     {
         await _sut.HandleChatMemberUpdateAsync(MemberUpdate(ChatType.Supergroup,
