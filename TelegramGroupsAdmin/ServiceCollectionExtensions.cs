@@ -13,6 +13,7 @@ using TelegramGroupsAdmin.Auth;
 using TelegramGroupsAdmin.Constants;
 using TelegramGroupsAdmin.Data.Services;
 using TelegramGroupsAdmin.Services;
+using TelegramGroupsAdmin.Services.Notifications;
 
 namespace TelegramGroupsAdmin;
 
@@ -155,6 +156,7 @@ public static class ServiceCollectionExtensions
             services.AddScoped<Services.Email.IEmailService, Services.Email.SendGridEmailService>();
 
             // Notification services (User notification preferences with Telegram DM, Email, and Web Push channels)
+            services.AddScoped<NotificationDmDispatcher>(); // Shared payload → Telegram DM path (admin + user notifications)
             services.AddScoped<IAdminNotificationService, AdminNotificationService>();
             services.AddScoped<IWebPushNotificationService, WebPushNotificationService>();
             services.AddScoped<INotificationStateService, NotificationStateService>(); // Blazor state for notification bell

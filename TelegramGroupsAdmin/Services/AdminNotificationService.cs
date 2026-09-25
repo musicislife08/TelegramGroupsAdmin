@@ -19,14 +19,13 @@ namespace TelegramGroupsAdmin.Services;
 /// Callers pass identity objects and raw domain values — this service owns all formatting
 /// via NotificationRenderer and routes to the correct audience via two-pool routing.
 /// </summary>
-public sealed class AdminNotificationService : IAdminNotificationService
+internal sealed class AdminNotificationService : IAdminNotificationService
 {
     private readonly INotificationPreferencesRepository _preferencesRepo;
     private readonly IEmailService _emailService;
-    private readonly IBotDmService _dmDeliveryService;
+    private readonly NotificationDmDispatcher _dmDispatcher;
     private readonly IWebPushNotificationService _webPushService;
     private readonly ITelegramUserMappingRepository _telegramMappingRepo;
-    private readonly ITelegramUserRepository _telegramUserRepo;
     private readonly IChatAdminsRepository _chatAdminsRepo;
     private readonly IUserRepository _userRepo;
     private readonly IReportCallbackContextRepository _callbackContextRepo;
@@ -35,10 +34,9 @@ public sealed class AdminNotificationService : IAdminNotificationService
     public AdminNotificationService(
         INotificationPreferencesRepository preferencesRepo,
         IEmailService emailService,
-        IBotDmService dmDeliveryService,
+        NotificationDmDispatcher dmDispatcher,
         IWebPushNotificationService webPushService,
         ITelegramUserMappingRepository telegramMappingRepo,
-        ITelegramUserRepository telegramUserRepo,
         IChatAdminsRepository chatAdminsRepo,
         IUserRepository userRepo,
         IReportCallbackContextRepository callbackContextRepo,
@@ -46,10 +44,9 @@ public sealed class AdminNotificationService : IAdminNotificationService
     {
         _preferencesRepo = preferencesRepo;
         _emailService = emailService;
-        _dmDeliveryService = dmDeliveryService;
+        _dmDispatcher = dmDispatcher;
         _webPushService = webPushService;
         _telegramMappingRepo = telegramMappingRepo;
-        _telegramUserRepo = telegramUserRepo;
         _chatAdminsRepo = chatAdminsRepo;
         _userRepo = userRepo;
         _callbackContextRepo = callbackContextRepo;
@@ -569,18 +566,13 @@ public sealed class AdminNotificationService : IAdminNotificationService
     }
 
     /// <summary>
-    /// Render payload and dispatch via the appropriate entity-based DM overload.
-    /// Picks the media+keyboard variant when media or keyboard is present, otherwise the
-    /// text-only entities variant. Used by both the linked-web-user and unlinked-admin paths.
+    /// Build the admin action keyboard (if any) and hand the payload to the shared dispatcher.
     /// </summary>
     private async Task<DmDeliveryResult> DispatchEntityDmAsync(
         long telegramId,
         NotificationPayload payload,
         CancellationToken ct)
     {
-        var rendered = NotificationRenderer.ToTelegramMessage(payload);
-        var recipient = await UserIdentity.FromAsync(telegramId, _telegramUserRepo, ct);
-
         InlineKeyboardMarkup? keyboard = null;
         if (payload.Keyboard is { } kb)
         {
@@ -588,25 +580,7 @@ public sealed class AdminNotificationService : IAdminNotificationService
                 kb.EntityId, kb.ChatId, kb.UserId, kb.KeyboardType, kb.Outcome, ct);
         }
 
-        if (keyboard != null || !string.IsNullOrWhiteSpace(payload.PhotoPath) || !string.IsNullOrWhiteSpace(payload.VideoPath))
-        {
-            return await _dmDeliveryService.SendDmWithMediaAndKeyboardEntitiesAsync(
-                recipient,
-                "notification",
-                rendered.Text,
-                rendered.Entities,
-                photoPath: payload.PhotoPath,
-                videoPath: payload.VideoPath,
-                keyboard: keyboard,
-                cancellationToken: ct);
-        }
-
-        return await _dmDeliveryService.SendDmWithEntitiesAsync(
-            recipient,
-            "notification",
-            rendered.Text,
-            rendered.Entities,
-            cancellationToken: ct);
+        return await _dmDispatcher.DispatchAsync(telegramId, payload, keyboard, ct);
     }
 
     /// <summary>

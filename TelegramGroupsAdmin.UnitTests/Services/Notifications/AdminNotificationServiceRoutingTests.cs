@@ -5,6 +5,7 @@ using TelegramGroupsAdmin.Core.Repositories;
 using TelegramGroupsAdmin.Repositories;
 using TelegramGroupsAdmin.Services;
 using TelegramGroupsAdmin.Services.Email;
+using TelegramGroupsAdmin.Services.Notifications;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
@@ -67,10 +68,9 @@ public class AdminNotificationServiceRoutingTests
         _service = new AdminNotificationService(
             _mockPrefsRepo,
             _mockEmailService,
-            _mockDmService,
+            new NotificationDmDispatcher(_mockDmService, _mockTelegramUserRepo),
             _mockWebPushService,
             _mockTelegramMappingRepo,
-            _mockTelegramUserRepo,
             _mockChatAdminsRepo,
             _mockUserRepo,
             _mockCallbackContextRepo,

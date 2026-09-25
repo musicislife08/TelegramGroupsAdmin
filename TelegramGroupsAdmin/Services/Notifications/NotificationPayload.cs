@@ -10,5 +10,6 @@ internal sealed record NotificationPayload
     public IReadOnlyList<ContentBlock> Blocks { get; init; } = [];
     public string? PhotoPath { get; init; }
     public string? VideoPath { get; init; }
+    public NotificationAnimation? Animation { get; init; }
     public ActionKeyboardContext? Keyboard { get; init; }
 }
