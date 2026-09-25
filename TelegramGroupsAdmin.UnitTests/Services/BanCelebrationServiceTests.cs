@@ -791,5 +791,38 @@ public class BanCelebrationServiceTests
         await _mockUserNotificationService.ReceivedWithAnyArgs(1).EnqueueBanCelebrationAsync(default!, default!, default);
     }
 
+    [Test]
+    public async Task ChatPosted_FileIdCacheWriteFails_StillQueuesFanout()
+    {
+        // The upload path checks File.Exists, so a real temp file is needed for the chat post.
+        var tempDir = Path.Combine(Path.GetTempPath(), "ban-celebration-test-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        var tempFile = Path.Combine(tempDir, "1.gif");
+        await File.WriteAllBytesAsync(tempFile, [0x47, 0x49, 0x46]);
+
+        try
+        {
+            ChatEnabled(true);
+            HasSubscribers(true);
+            var gif = new BanCelebrationGif { Id = 1, FilePath = "ban-gifs/1.gif", FileId = null };
+            _mockGifRepository.ClaimNextForCycleAsync(Arg.Any<CancellationToken>()).Returns(gif);
+            _mockGifRepository.GetFullPath(gif.FilePath).Returns(tempFile);
+            _mockCaptionRepository.ClaimNextForCycleAsync(Arg.Any<CancellationToken>())
+                .Returns(new BanCelebrationCaption { Id = 1, Text = "Banned!", DmText = "Banned" });
+            SetupSuccessfulSendAnimation("new_telegram_file_id");
+            _mockGifRepository.UpdateFileIdAsync(1, "new_telegram_file_id", Arg.Any<CancellationToken>())
+                .ThrowsAsync(new InvalidOperationException("db down"));
+
+            var result = await _sut.SendBanCelebrationAsync(TestChat, TestBannedUser, isAutoBan: true);
+
+            Assert.That(result, Is.True);
+            await _mockUserNotificationService.Received(1).EnqueueBanCelebrationAsync(TestChat, "Banned!", 1, Arg.Any<CancellationToken>());
+        }
+        finally
+        {
+            Directory.Delete(tempDir, true);
+        }
+    }
+
     #endregion
 }

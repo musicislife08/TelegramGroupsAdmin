@@ -119,7 +119,16 @@ public class BanCelebrationService(
                 {
                     if (string.IsNullOrEmpty(gif.FileId) && sentMessage.Animation?.FileId != null)
                     {
-                        await gifRepository.UpdateFileIdAsync(gif.Id, sentMessage.Animation.FileId, cancellationToken);
+                        // The chat post already went out; a failed cache write must not skip the
+                        // banned-user DM or the subscriber fan-out.
+                        try
+                        {
+                            await gifRepository.UpdateFileIdAsync(gif.Id, sentMessage.Animation.FileId, cancellationToken);
+                        }
+                        catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+                        {
+                            logger.LogWarning(ex, "Failed to cache file_id for ban celebration GIF {GifId}", gif.Id);
+                        }
                     }
 
                     logger.LogInformation(
