@@ -69,11 +69,12 @@ public class UpdateRouter(
             // Check for admin status changes (instant permission updates)
             await chatService.HandleAdminStatusChangeAsync(chatMember, cancellationToken);
 
-            // Leaving or being kicked drops that chat's DM celebration subscription
-            await celebrationSubscriptions.HandleChatMemberUpdateAsync(chatMember, cancellationToken);
-
             // Handle joins/leaves (welcome system)
             await welcomeService.HandleChatMemberUpdateAsync(chatMember, cancellationToken);
+
+            // Leaving or being kicked drops that chat's DM celebration subscription. Runs after the
+            // welcome system so a subscription DB error cannot skip welcome leave cleanup.
+            await celebrationSubscriptions.HandleChatMemberUpdateAsync(chatMember, cancellationToken);
             return;
         }
 

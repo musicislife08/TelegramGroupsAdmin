@@ -334,6 +334,19 @@ public class UpdateRouterTests
         await _mockCelebrationSubscriptions.Received(1).HandleChatMemberUpdateAsync(update.ChatMember!, Arg.Any<CancellationToken>());
     }
 
+    [Test]
+    public async Task RouteUpdateAsync_WithChatMember_CelebrationSubscriptionFailureDoesNotSkipWelcome()
+    {
+        var update = CreateChatMemberUpdate();
+        _mockCelebrationSubscriptions
+            .HandleChatMemberUpdateAsync(Arg.Any<ChatMemberUpdated>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException("db down"));
+
+        Assert.ThrowsAsync<InvalidOperationException>(async () => await _sut.RouteUpdateAsync(update));
+
+        await _mockWelcomeService.Received(1).HandleChatMemberUpdateAsync(update.ChatMember!, Arg.Any<CancellationToken>());
+    }
+
     #endregion
 
     #region CallbackQuery Update Tests
