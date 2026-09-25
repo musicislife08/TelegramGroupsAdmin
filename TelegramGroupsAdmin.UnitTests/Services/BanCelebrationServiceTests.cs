@@ -1,5 +1,4 @@
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using Telegram.Bot.Types;
@@ -37,9 +36,9 @@ public class BanCelebrationServiceTests
     private IBanCelebrationCaptionRepository _mockCaptionRepository = null!;
     private IProfileScanResultsRepository _mockScanRepository = null!;
     private IBotMessageService _mockMessageService = null!;
-    private IBotDmService _mockDmService = null!;
     private IUserActionsRepository _mockUserActionsRepository = null!;
-    private IOptions<AppOptions> _appOptions = null!;
+    private IBanCelebrationSubscriberRepository _mockSubscriberRepository = null!;
+    private IUserNotificationService _mockUserNotificationService = null!;
     private ILogger<BanCelebrationService> _mockLogger = null!;
     private PipelineMetrics _pipelineMetrics = null!;
     private BanCelebrationService _sut = null!;
@@ -52,13 +51,14 @@ public class BanCelebrationServiceTests
         _mockCaptionRepository = Substitute.For<IBanCelebrationCaptionRepository>();
         _mockScanRepository = Substitute.For<IProfileScanResultsRepository>();
         _mockMessageService = Substitute.For<IBotMessageService>();
-        _mockDmService = Substitute.For<IBotDmService>();
         _mockUserActionsRepository = Substitute.For<IUserActionsRepository>();
+        _mockSubscriberRepository = Substitute.For<IBanCelebrationSubscriberRepository>();
+        _mockUserNotificationService = Substitute.For<IUserNotificationService>();
         _mockLogger = Substitute.For<ILogger<BanCelebrationService>>();
         _pipelineMetrics = new PipelineMetrics();
 
-        // Setup AppOptions
-        _appOptions = Options.Create(new AppOptions { DataPath = "/data" });
+        _mockSubscriberRepository.HasDeliverableSubscribersAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
+            .Returns(false);
 
         // Default config setup - enabled celebration
         var defaultConfig = new BanCelebrationConfig
@@ -85,9 +85,9 @@ public class BanCelebrationServiceTests
             _mockCaptionRepository,
             _mockScanRepository,
             _mockMessageService,
-            _mockDmService,
             _mockUserActionsRepository,
-            _appOptions,
+            _mockSubscriberRepository,
+            _mockUserNotificationService,
             _mockLogger,
             _pipelineMetrics);
     }
@@ -711,6 +711,84 @@ public class BanCelebrationServiceTests
             Arg.Any<ParseMode?>(),
             Arg.Any<IReadOnlyList<MessageEntity>?>(),
             Arg.Any<CancellationToken>());
+    }
+
+    #endregion
+
+    #region Delivery guard
+
+    private void ChatEnabled(bool enabled) =>
+        _mockConfigService.GetEffectiveBanCelebrationAsync(Arg.Any<long>())
+            .Returns(new BanCelebrationConfig { Enabled = enabled, TriggerOnAutoBan = true, TriggerOnManualBan = true, SendToBannedUser = false });
+
+    private void HasSubscribers(bool has) =>
+        _mockSubscriberRepository.HasDeliverableSubscribersAsync(TestChatId, Arg.Any<CancellationToken>()).Returns(has);
+
+    [Test]
+    public async Task Guard_ChatDisabledAndNoSubscribers_ClaimsNothing()
+    {
+        ChatEnabled(false);
+        HasSubscribers(false);
+
+        var result = await _sut.SendBanCelebrationAsync(TestChat, TestBannedUser, isAutoBan: true);
+
+        Assert.That(result, Is.False);
+        await _mockGifRepository.DidNotReceiveWithAnyArgs().ClaimNextForCycleAsync();
+        await _mockCaptionRepository.DidNotReceiveWithAnyArgs().ClaimNextForCycleAsync();
+    }
+
+    [Test]
+    public async Task Guard_ChatDisabledWithSubscribers_QueuesFanoutWithoutPostingToChat()
+    {
+        ChatEnabled(false);
+        HasSubscribers(true);
+        SeedOneGifAndOneCaption("🔨 {username} banned!");
+
+        var result = await _sut.SendBanCelebrationAsync(TestChat, TestBannedUser, isAutoBan: true);
+
+        Assert.That(result, Is.True);
+        await _mockMessageService.DidNotReceiveWithAnyArgs().SendAndSaveAnimationAsync(default, default!, default(TelegramMessage)!);
+        await _mockUserNotificationService.Received(1).EnqueueBanCelebrationAsync(TestChat, "🔨 Bad User banned!", 1, Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task Guard_ChatEnabledWithSubscribers_PostsToChatAndQueuesFanout()
+    {
+        ChatEnabled(true);
+        HasSubscribers(true);
+        SeedOneGifAndOneCaption("🔨 {username} banned!");
+
+        var result = await _sut.SendBanCelebrationAsync(TestChat, TestBannedUser, isAutoBan: true);
+
+        Assert.That(result, Is.True);
+        await _mockMessageService.ReceivedWithAnyArgs(1).SendAndSaveAnimationAsync(default, default!, default(TelegramMessage)!);
+        await _mockUserNotificationService.Received(1).EnqueueBanCelebrationAsync(TestChat, Arg.Any<string>(), 1, Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task Guard_ChatEnabledNoSubscribers_PostsToChatOnly()
+    {
+        ChatEnabled(true);
+        HasSubscribers(false);
+        SeedOneGifAndOneCaption("🔨 {username} banned!");
+
+        await _sut.SendBanCelebrationAsync(TestChat, TestBannedUser, isAutoBan: true);
+
+        await _mockUserNotificationService.DidNotReceiveWithAnyArgs().EnqueueBanCelebrationAsync(default!, default!, default);
+    }
+
+    [Test]
+    public async Task Guard_TriggerOffButSubscribers_SkipsChatButStillQueuesFanout()
+    {
+        _mockConfigService.GetEffectiveBanCelebrationAsync(Arg.Any<long>())
+            .Returns(new BanCelebrationConfig { Enabled = true, TriggerOnAutoBan = false, TriggerOnManualBan = true });
+        HasSubscribers(true);
+        SeedOneGifAndOneCaption("🔨 {username} banned!");
+
+        await _sut.SendBanCelebrationAsync(TestChat, TestBannedUser, isAutoBan: true);
+
+        await _mockMessageService.DidNotReceiveWithAnyArgs().SendAndSaveAnimationAsync(default, default!, default(TelegramMessage)!);
+        await _mockUserNotificationService.ReceivedWithAnyArgs(1).EnqueueBanCelebrationAsync(default!, default!, default);
     }
 
     #endregion
