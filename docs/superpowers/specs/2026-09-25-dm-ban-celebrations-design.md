@@ -101,10 +101,44 @@ New table `ban_celebration_subscribers`, configured with the Fluent API in `AppD
   `telegram_users.bot_dm_enabled`, so there is a single source of truth that can't drift.
 - Named "subscribers" to avoid confusion with the unrelated `blocklist_subscriptions`.
 
-`IBanCelebrationSubscriberRepository` (Telegram project, next to `BanCelebrationGifRepository`):
-upsert, delete for `(user, chat)`, delete all for a user, `HasDeliverableSubscribersAsync(chatId)`
-(an `EXISTS` query joined to `bot_dm_enabled`), `GetDeliverableSubscribersAsync(chatId)`, and
-get/set/clear for the prompt columns.
+### Layering
+
+This follows the existing `BanCelebrationGif` stack exactly. **Only the repository touches
+`AppDbContext`.** Commands, services, handlers, and the fan-out worker all work through the
+repository interface and domain model. None of them sees the DTO or the context.
+
+| Layer | Type | Location |
+|---|---|---|
+| EF entity (DTO) | `BanCelebrationSubscriberDto`, `[Table("ban_celebration_subscribers")]`, `[Column(...)]` on every property | `TelegramGroupsAdmin.Data/Models/` (namespace `TelegramGroupsAdmin.Data.Models`) |
+| DbContext | `DbSet<BanCelebrationSubscriberDto> BanCelebrationSubscribers`; composite key, FKs, cascade configured with the Fluent API | `AppDbContext` |
+| Domain model | `BanCelebrationSubscriber` record | `TelegramGroupsAdmin.Telegram/Models/` |
+| Mapping | `BanCelebrationSubscriberMappings` (`ToModel` / `ToDto`) | `TelegramGroupsAdmin.Telegram/Repositories/Mappings/` |
+| Repository | `IBanCelebrationSubscriberRepository` / `BanCelebrationSubscriberRepository` | `TelegramGroupsAdmin.Telegram/Repositories/` |
+
+Repository surface: upsert, delete for `(user, chat)`, delete all for a user,
+`HasDeliverableSubscribersAsync(chatId)` (an `EXISTS` query joined to `telegram_users.bot_dm_enabled`;
+the join happens in the repository, not the caller), `GetDeliverableSubscribersAsync(chatId)`, and
+get/set/clear for the prompt columns. Every write path in this spec goes through these methods:
+the command, the `/start` branch, `HandleUserLeftAsync`, `BanUserAsync`, the `BotChatService` block
+branch, and the worker.
+
+### Backup naming contract
+
+`TableDiscoveryService` pairs each database table with a type by reflection. It only matches types
+in namespace `TelegramGroupsAdmin.Data.Models`, whose name ends in `Dto`, and that carry
+`[Table("<table>")]`. A table with no match is **dropped from backups with only a Debug log**. The
+DTO above follows all three rules. Restore order is computed from foreign keys, so the new table is
+restored after `telegram_users` and `managed_chats` with no extra code.
+
+The existing guard, `TableDiscoveryServiceTests.EveryTableBackedDtoHasTableAttribute`, only catches
+a missing attribute. This work adds a stronger guard, `EveryDbContextEntityIsDiscoveredForBackup`:
+every `public` base table in the migrated schema must come back from `DiscoverTablesAsync`, except
+an explicit allow-list with a reason for each entry. That list starts with `__EFMigrationsHistory`.
+Quartz tables live in the `quartz` schema, so discovery never sees them. `cached_blocked_domains`
+is excluded later, by `BackupService`, not by discovery. Any other public table found without a DTO
+when the test is first written goes on the allow-list only if it is intentionally not backed up.
+Otherwise it's an existing bug that gets fixed or reported. A new
+table can then no longer silently fall out of backups, whether it's this one or a future one.
 
 ## Subscription removal
 
@@ -211,7 +245,8 @@ Follows the existing `MediaRefetchQueueService` / `MediaRefetchWorkerService` pa
 |---|---|
 | `IAdminNotificationService`, `IUserNotificationService` | Core |
 | Both implementations, dispatcher, payload/builder, channel, worker | Web (`Services/Notifications/`) — `NotificationPayload` is `internal` there |
-| Subscriber model + repository | Telegram |
+| Subscriber DTO + DbSet | Data |
+| Subscriber domain model, mappings, repository | Telegram |
 | `DmCelebrationsCommand`, `StartCommand` branch, `BotChatService` block branch | Telegram |
 | `SendDmWithAnimationEntitiesAsync` | Telegram (`BotDmService`) |
 
@@ -238,9 +273,10 @@ per fan-out item ("sent X, blocked Y to {chat}"), not one line per DM.
 
 ## Backup and restore
 
-`BackupService` finds tables from the `DbContext` model, excluding only `cached_blocked_domains`.
-The new table is backed up and restored with no code change. Restored prompt columns may point at
-messages and jobs that no longer exist, and cleanup already treats that as success.
+The new table is backed up and restored with no backup-code change, **provided the DTO follows the
+naming contract** in Data model → Backup naming contract. That contract is enforced by the new
+discovery guard test. Restored prompt columns may point at messages and jobs that no longer exist,
+and cleanup already treats that as success.
 
 ## Testing
 
@@ -249,7 +285,7 @@ All integration tests follow `.claude/rules/integration-test-data.md`.
 | Layer | Coverage |
 |---|---|
 | Unit (NSubstitute) | Guard matrix: chat-only, subscribers-only, both, neither (asserts **no claim**). Dispatcher animation branch, `file_id` vs upload. `queueOnBlock: false` writes nothing to pending notifications. Worker saves the first returned `file_id` and reuses it for later recipients. Blocked result → user's subscriptions deleted. `DmCelebrationsCommand` argument parsing, including the DM refusal. Prompt cleanup cancels the job before deleting the message. |
-| Integration (canonical DB) | Repository: upsert idempotency, delete for chat, delete all for user, deliverable query returns only `bot_dm_enabled` users. Migration: composite PK and cascade FKs. Ban path: a banned subscriber's rows are gone before the fan-out is enqueued, through the real `BanUserAsync`. `/start dmcel_{chat}` nulls both prompt columns. |
+| Integration (canonical DB) | Repository: upsert idempotency, delete for chat, delete all for user, deliverable query returns only `bot_dm_enabled` users. Migration: composite PK and cascade FKs. Ban path: a banned subscriber's rows are gone before the fan-out is enqueued, through the real `BanUserAsync`. `/start dmcel_{chat}` nulls both prompt columns. Backup: `DiscoverTablesAsync` maps `ban_celebration_subscribers` → `BanCelebrationSubscriberDto`, plus the new schema-wide guard `EveryDbContextEntityIsDiscoveredForBackup`. |
 | Existing tests | Mechanical updates for the `IAdminNotificationService` rename. Banned-user DM tests change from video to animation. |
 
 Tests where subscribing is the assertion subject write the row through the SUT, which the rule
