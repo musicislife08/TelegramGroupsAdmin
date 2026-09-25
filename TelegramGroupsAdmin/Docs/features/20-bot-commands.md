@@ -17,8 +17,9 @@ Commands are gated by the same tiers the web app uses — see [How Telegram-Side
 | `/report` (reply to a message) | Sends the message to the [Reports](02-reports.md) queue for admin review | One pending report per message; the command stays visible as confirmation |
 | `/invite` | Posts the chat's invite link | Groups only. The command and its response are removed after 30 seconds. Can be disabled globally. |
 | `/mystatus` | Shows your trust status, active and recent warnings, account created / last active dates, and whether bot DMs are enabled | Private by design: if you run it in a group, the bot deletes your command and DMs you the answer. If your DMs to the bot are closed, it tells you so in the chat. |
+| `/dmcelebrations on` · `/dmcelebrations off` · `/dmcelebrations` | Subscribes you to (or unsubscribes you from) this chat's [ban celebrations](09-ban-celebration.md#dm-subscribers) by DM; bare `/dmcelebrations` shows whether you're subscribed | Groups only (refused in a DM or when posting as the group or a channel). If you haven't started the bot, it posts a prompt with a button that deletes itself after 60 seconds. The command message is deleted and the response is removed after 30 seconds. |
 | `/link <token>` | Links your Telegram account to your web account | Get the token from your [Profile](../user/01-profile-security.md#telegram-account-linking) page; the command message is deleted |
-| `/start` | Starts a private conversation with the bot | DM only (ignored in groups). Enables DM notifications, delivers anything queued for you, and handles the "Read Rules" / entrance-exam deep links from the welcome system. |
+| `/start` | Starts a private conversation with the bot | DM only (ignored in groups). Enables DM notifications, delivers anything queued for you, and handles the "Read Rules" / entrance-exam deep links from the welcome system and the `/dmcelebrations` start prompt. |
 
 ## Admin Commands
 
@@ -54,7 +55,7 @@ Note that `m` is minutes and `M` is months. Anything the bot can't parse falls b
 
 ## Housekeeping
 
-Moderation commands (`/ban`, `/tempban`, `/mute`, `/spam`, `/delete`) delete the command message itself to keep the chat tidy. `/report`, `/warn`, `/unban`, and `/trust` leave the command visible so other members and admins can see what happened.
+Moderation commands (`/ban`, `/tempban`, `/mute`, `/spam`, `/delete`) and `/dmcelebrations` delete the command message itself to keep the chat tidy. `/report`, `/warn`, `/unban`, and `/trust` leave the command visible so other members and admins can see what happened.
 
 ## Related Documentation
 
