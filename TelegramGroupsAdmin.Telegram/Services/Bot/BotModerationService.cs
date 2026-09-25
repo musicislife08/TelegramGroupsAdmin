@@ -9,6 +9,7 @@ using TelegramGroupsAdmin.Telegram.Constants;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot.Handlers;
+using TelegramGroupsAdmin.Telegram.Services.DmCelebrations;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Handlers;
@@ -47,6 +48,7 @@ public class BotModerationService : IBotModerationService
 
     // Services
     private readonly IBanCelebrationService _banCelebrationService;
+    private readonly IBanCelebrationSubscriptionService _celebrationSubscriptionService;
     private readonly IReportService _reportService;
     private readonly IAdminNotificationService _notificationService;
 
@@ -69,6 +71,7 @@ public class BotModerationService : IBotModerationService
         INotificationHandler notificationHandler,
         ITrainingHandler trainingHandler,
         IBanCelebrationService banCelebrationService,
+        IBanCelebrationSubscriptionService celebrationSubscriptionService,
         IReportService reportService,
         IAdminNotificationService notificationService,
         ITelegramUserRepository telegramUserRepository,
@@ -86,6 +89,7 @@ public class BotModerationService : IBotModerationService
         _notificationHandler = notificationHandler;
         _trainingHandler = trainingHandler;
         _banCelebrationService = banCelebrationService;
+        _celebrationSubscriptionService = celebrationSubscriptionService;
         _reportService = reportService;
         _notificationService = notificationService;
         _telegramUserRepository = telegramUserRepository;
@@ -143,6 +147,8 @@ public class BotModerationService : IBotModerationService
         await SafeExecuteAsync(
             () => _trainingHandler.CreateSpamSampleAsync(intent.MessageId, intent.Chat, intent.Executor, cancellationToken),
             $"Create training data for message {intent.MessageId}");
+
+        await RemoveDmCelebrationSubscriptionsAsync(intent.User, cancellationToken);
 
         // Step 5: Send ban celebration (non-critical - failure doesn't affect ban success)
         await SafeExecuteAsync(
@@ -227,6 +233,8 @@ public class BotModerationService : IBotModerationService
             () => _welcomeCleanupHandler.DeleteStrandedWelcomeMessagesAsync(
                 intent.User, chat: null, intent.Executor, cancellationToken),
             $"Delete stranded welcome messages for user {intent.User.Id}");
+
+        await RemoveDmCelebrationSubscriptionsAsync(intent.User, cancellationToken);
 
         // Bug 3 fix: Ban celebration when chat context is provided
         // (enables celebrations for CAS/Impersonation bans that carry the originating chat)
@@ -752,6 +760,15 @@ public class BotModerationService : IBotModerationService
 
         return untrustResult.Success;
     }
+
+    /// <summary>
+    /// Business rule: a banned user loses every DM ban celebration subscription. Must run before
+    /// the celebration so the fan-out can never DM the banned user a celebration of their own ban.
+    /// </summary>
+    private Task RemoveDmCelebrationSubscriptionsAsync(UserIdentity user, CancellationToken cancellationToken) =>
+        SafeExecuteAsync(
+            () => _celebrationSubscriptionService.RemoveAllForUserAsync(user, SubscriptionRemovalReason.Banned, cancellationToken),
+            $"Remove DM celebration subscriptions for user {user.Id}");
 
     /// <summary>
     /// Safely executes an audit operation, logging any failures without blocking the main operation.

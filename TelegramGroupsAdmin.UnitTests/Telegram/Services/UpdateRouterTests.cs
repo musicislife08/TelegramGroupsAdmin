@@ -9,6 +9,7 @@ using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.Telegram.Services.DmCelebrations;
 
 namespace TelegramGroupsAdmin.UnitTests.Telegram.Services;
 
@@ -33,6 +34,7 @@ public class UpdateRouterTests
     private IReportCallbackService _mockReportCallbackService = null!;
     private IBotMessageService _mockMessageService = null!;
     private IChatHealthRefreshOrchestrator _mockHealthOrchestrator = null!;
+    private IBanCelebrationSubscriptionService _mockCelebrationSubscriptions = null!;
 
     private UpdateRouter _sut = null!;
 
@@ -52,6 +54,7 @@ public class UpdateRouterTests
         _mockReportCallbackService = Substitute.For<IReportCallbackService>();
         _mockMessageService = Substitute.For<IBotMessageService>();
         _mockHealthOrchestrator = Substitute.For<IChatHealthRefreshOrchestrator>();
+        _mockCelebrationSubscriptions = Substitute.For<IBanCelebrationSubscriptionService>();
 
         // Wire up scope factory pattern
         var mockScopeFactory = Substitute.For<IServiceScopeFactory>();
@@ -68,6 +71,7 @@ public class UpdateRouterTests
         _mockScopeServiceProvider.GetService(typeof(IReportCallbackService)).Returns(_mockReportCallbackService);
         _mockScopeServiceProvider.GetService(typeof(IBotMessageService)).Returns(_mockMessageService);
         _mockScopeServiceProvider.GetService(typeof(IChatHealthRefreshOrchestrator)).Returns(_mockHealthOrchestrator);
+        _mockScopeServiceProvider.GetService(typeof(IBanCelebrationSubscriptionService)).Returns(_mockCelebrationSubscriptions);
 
         // Wire up IBotUserService for bot message filtering (bot ID 999 won't match test user ID 456)
         var mockBotUserService = Substitute.For<IBotUserService>();
@@ -254,6 +258,16 @@ public class UpdateRouterTests
             .HandleBotMembershipUpdateAsync(Arg.Any<ChatMemberUpdated>(), token);
     }
 
+    [Test]
+    public async Task RouteUpdateAsync_WithMyChatMember_RoutesToCelebrationSubscriptions()
+    {
+        var update = CreateMyChatMemberUpdate();
+
+        await _sut.RouteUpdateAsync(update);
+
+        await _mockCelebrationSubscriptions.Received(1).HandleBotMembershipUpdateAsync(update.MyChatMember!, Arg.Any<CancellationToken>());
+    }
+
     #endregion
 
     #region ChatMember Update Tests
@@ -308,6 +322,16 @@ public class UpdateRouterTests
             .HandleAdminStatusChangeAsync(Arg.Any<ChatMemberUpdated>(), token);
         await _mockWelcomeService.Received(1)
             .HandleChatMemberUpdateAsync(Arg.Any<ChatMemberUpdated>(), token);
+    }
+
+    [Test]
+    public async Task RouteUpdateAsync_WithChatMember_RoutesToCelebrationSubscriptions()
+    {
+        var update = CreateChatMemberUpdate();
+
+        await _sut.RouteUpdateAsync(update);
+
+        await _mockCelebrationSubscriptions.Received(1).HandleChatMemberUpdateAsync(update.ChatMember!, Arg.Any<CancellationToken>());
     }
 
     #endregion

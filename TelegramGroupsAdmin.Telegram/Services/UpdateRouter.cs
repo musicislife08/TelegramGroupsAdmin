@@ -5,6 +5,7 @@ using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.Telegram.Services.DmCelebrations;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 
@@ -38,6 +39,7 @@ public class UpdateRouter(
         var reportCallbackService = services.GetRequiredService<IReportCallbackService>();
         var messageService = services.GetRequiredService<IBotMessageService>();
         var healthOrchestrator = services.GetRequiredService<IChatHealthRefreshOrchestrator>();
+        var celebrationSubscriptions = services.GetRequiredService<IBanCelebrationSubscriptionService>();
 
         // Handle bot's chat member status changes (added/removed from chats)
         if (update.MyChatMember is { } myChatMember)
@@ -46,6 +48,9 @@ public class UpdateRouter(
                 "Routing MyChatMember update for chat {Chat}",
                 myChatMember.Chat.ToLogDebug());
             await chatService.HandleBotMembershipUpdateAsync(myChatMember, cancellationToken);
+
+            // Private-chat block/unblock of the bot (blocking drops DM celebration subscriptions)
+            await celebrationSubscriptions.HandleBotMembershipUpdateAsync(myChatMember, cancellationToken);
 
             // Trigger immediate health check when bot status changes
             await healthOrchestrator.RefreshHealthForChatAsync(ChatIdentity.From(myChatMember.Chat), cancellationToken);
@@ -63,6 +68,9 @@ public class UpdateRouter(
 
             // Check for admin status changes (instant permission updates)
             await chatService.HandleAdminStatusChangeAsync(chatMember, cancellationToken);
+
+            // Leaving or being kicked drops that chat's DM celebration subscription
+            await celebrationSubscriptions.HandleChatMemberUpdateAsync(chatMember, cancellationToken);
 
             // Handle joins/leaves (welcome system)
             await welcomeService.HandleChatMemberUpdateAsync(chatMember, cancellationToken);
