@@ -53,6 +53,7 @@ public static class ServiceCollectionExtensions
             services.AddScoped<IMessageHistoryRepository, MessageHistoryRepository>();
             services.AddScoped<IExamSessionRepository, ExamSessionRepository>(); // Phase 2: Entrance exam state tracking
             services.AddScoped<IBanCelebrationGifRepository, BanCelebrationGifRepository>(); // Ban celebration GIF library
+            services.AddScoped<IBanCelebrationSubscriberRepository, BanCelebrationSubscriberRepository>(); // DM ban celebration opt-ins
             services.AddScoped<IBanCelebrationCaptionRepository, BanCelebrationCaptionRepository>(); // Ban celebration caption library
             // REFACTOR-3: Extracted services from MessageHistoryRepository
             // NOTE: IMessageStatsService moved to main app (analytics consolidation)
