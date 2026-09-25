@@ -136,6 +136,19 @@ public class BanCelebrationFanoutProcessorTests
     }
 
     [Test]
+    public async Task ProcessAsync_NonBlockedFailure_CountsFailedAndKeepsSubscriptions()
+    {
+        Subscribers(A, B);
+        DmFor(A, new DmDeliveryResult { DmSent = false, Failed = true, Blocked = false });
+        DmFor(B, new DmDeliveryResult { DmSent = true, AnimationFileId = "fresh" });
+
+        await _sut.ProcessAsync(Item, CancellationToken.None);
+
+        await _subscriptions.DidNotReceiveWithAnyArgs().RemoveAllForUserAsync(default!, default);
+        await _dm.Received(1).SendDmWithAnimationEntitiesAsync(B, Arg.Any<TelegramMessage>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
     public async Task ProcessAsync_NoDeliverableSubscribers_DoesNotLoadGif()
     {
         Subscribers();

@@ -172,6 +172,20 @@ public class BanCelebrationSubscriptionServiceTests
     }
 
     [Test]
+    public async Task UnsubscribeAsync_RowWithoutPrompt_DeletesWithoutTouchingJobsOrMessages()
+    {
+        _repository.GetAsync(UserId, ChatId, Arg.Any<CancellationToken>()).Returns(Row());
+
+        var removed = await _sut.UnsubscribeAsync(Chat, User);
+
+        Assert.That(removed, Is.True);
+        await _repository.Received(1).DeleteAsync(UserId, ChatId, Arg.Any<CancellationToken>());
+        await _jobs.DidNotReceiveWithAnyArgs().CancelJobAsync(default!);
+        await _messages.DidNotReceiveWithAnyArgs().DeleteAndMarkMessageAsync(default, default);
+        await _repository.DidNotReceiveWithAnyArgs().ClearPromptAsync(default, default);
+    }
+
+    [Test]
     public async Task UnsubscribeAsync_NoRow_ReturnsFalseAndDeletesNothing()
     {
         var removed = await _sut.UnsubscribeAsync(Chat, User);

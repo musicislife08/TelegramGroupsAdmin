@@ -81,6 +81,33 @@ public class NotificationDmDispatcherTests
     }
 
     [Test]
+    public async Task DispatchAsync_KeyboardOnlyPayload_SendsMediaAndKeyboardDmWithKeyboard()
+    {
+        // Admin report path: text payload plus action buttons, no media.
+        var payload = NotificationPayloadBuilder.Create("Report").WithText("body").Build();
+        var keyboard = new InlineKeyboardMarkup(InlineKeyboardButton.WithCallbackData("Ban", "ban"));
+
+        await _sut.DispatchAsync(Recipient, payload, keyboard, CancellationToken.None);
+
+        await _dm.Received(1).SendDmWithMediaAndKeyboardEntitiesAsync(Recipient, "notification", Arg.Any<string>(),
+            Arg.Any<IReadOnlyList<MessageEntity>>(), Arg.Is<string?>(x => x == null), Arg.Is<string?>(x => x == null),
+            Arg.Is<InlineKeyboardMarkup?>(k => ReferenceEquals(k, keyboard)), Arg.Any<CancellationToken>());
+        await _dm.DidNotReceiveWithAnyArgs().SendDmWithEntitiesAsync(default!, default!, default!, default!);
+    }
+
+    [Test]
+    public async Task DispatchAsync_VideoOnlyPayload_SendsMediaDm()
+    {
+        var payload = NotificationPayloadBuilder.Create("Subject").WithVideo("/v.mp4").Build();
+
+        await _sut.DispatchAsync(Recipient, payload, keyboard: null, CancellationToken.None);
+
+        await _dm.Received(1).SendDmWithMediaAndKeyboardEntitiesAsync(Recipient, "notification", Arg.Any<string>(),
+            Arg.Any<IReadOnlyList<MessageEntity>>(), Arg.Is<string?>(x => x == null), "/v.mp4",
+            Arg.Is<InlineKeyboardMarkup?>(k => k == null), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
     public async Task DispatchAsync_ByTelegramId_ResolvesIdentityFromRepository()
     {
         var payload = NotificationPayloadBuilder.Create("Subject").WithText("body").Build();

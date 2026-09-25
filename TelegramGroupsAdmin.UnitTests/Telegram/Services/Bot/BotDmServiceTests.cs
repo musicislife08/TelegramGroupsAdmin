@@ -277,6 +277,27 @@ public class BotDmServiceTests
     }
 
     [Test]
+    public async Task SendDmWithAnimationEntitiesAsync_NonForbiddenApiError_FailsWithoutBlocking()
+    {
+        _messageHandler
+            .SendAnimationAsync(
+                Arg.Any<long>(), Arg.Any<InputFile>(), Arg.Any<string?>(), Arg.Any<ParseMode?>(),
+                Arg.Any<ReplyParameters?>(), Arg.Any<InlineKeyboardMarkup?>(),
+                Arg.Any<IReadOnlyList<MessageEntity>?>(), Arg.Any<CancellationToken>())
+            .Returns<Message>(_ => throw new ApiRequestException("Bad Request: message caption is too long", 400));
+
+        var result = await _service.SendDmWithAnimationEntitiesAsync(TestUser, TelegramMessage.Plain("x"), "cached-id", null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.DmSent, Is.False);
+            Assert.That(result.Failed, Is.True);
+            Assert.That(result.Blocked, Is.False);
+        }
+        await _userRepository.DidNotReceiveWithAnyArgs().DisableBotDmAsync(default);
+    }
+
+    [Test]
     public async Task SendDmWithAnimationEntitiesAsync_StaleFileId_RetriesWithUploadAndReportsNewId()
     {
         var path = Path.Combine(Path.GetTempPath(), $"anim_{Guid.NewGuid():N}.gif");

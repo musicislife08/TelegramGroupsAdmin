@@ -752,6 +752,23 @@ public class BanCelebrationServiceTests
     }
 
     [Test]
+    public async Task Guard_ChatDisabledWithSubscribersAndSendToBannedUser_DoesNotDmBannedUser()
+    {
+        // Pins current behaviour: the banned-user DM only accompanies a successful chat post.
+        _mockConfigService.GetEffectiveBanCelebrationAsync(Arg.Any<long>())
+            .Returns(new BanCelebrationConfig { Enabled = false, TriggerOnAutoBan = true, TriggerOnManualBan = true, SendToBannedUser = true });
+        HasSubscribers(true);
+        SeedOneGifAndOneCaption("🔨 {username} banned!");
+
+        var result = await _sut.SendBanCelebrationAsync(TestChat, TestBannedUser, isAutoBan: true);
+
+        Assert.That(result, Is.True);
+        await _mockUserNotificationService.DidNotReceiveWithAnyArgs()
+            .SendBanCelebrationToBannedUserAsync(default!, default!, default!, default);
+        await _mockUserNotificationService.ReceivedWithAnyArgs(1).EnqueueBanCelebrationAsync(default!, default!, default);
+    }
+
+    [Test]
     public async Task Guard_ChatEnabledWithSubscribers_PostsToChatAndQueuesFanout()
     {
         ChatEnabled(true);

@@ -58,6 +58,20 @@ public class UserNotificationServiceTests
     }
 
     [Test]
+    public async Task SendBanCelebrationToBannedUserAsync_DeliveryFails_ReturnsFalse()
+    {
+        _gifs.GetByIdAsync(9, Arg.Any<CancellationToken>())
+            .Returns(new BanCelebrationGif { Id = 9, FilePath = "ban-gifs/9.gif", FileId = "cached" });
+        _dm.SendDmWithAnimationEntitiesAsync(Arg.Any<UserIdentity>(), Arg.Any<TelegramMessage>(), "cached", Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(new DmDeliveryResult { DmSent = false, Failed = true });
+
+        var sent = await _sut.SendBanCelebrationToBannedUserAsync(
+            new ChatIdentity(-100L, "Workshop Alumni"), new UserIdentity(7L, "Bad", null, null), "You got banned!", 9);
+
+        Assert.That(sent, Is.False);
+    }
+
+    [Test]
     public async Task SendBanCelebrationToBannedUserAsync_UnknownGif_ReturnsFalse()
     {
         var sent = await _sut.SendBanCelebrationToBannedUserAsync(
