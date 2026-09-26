@@ -34,4 +34,15 @@ public record DmDeliveryResult
     /// Message ID of the successfully sent DM (if DM was sent)
     /// </summary>
     public int? MessageId { get; init; }
+
+    /// <summary>
+    /// True when the recipient has blocked the bot (Telegram 403). Only set by delivery
+    /// paths that do not queue, so callers can act on the block (e.g. drop opt-in subscriptions).
+    /// </summary>
+    public bool Blocked { get; init; }
+
+    /// <summary>
+    /// The animation file_id Telegram returned for a sent animation, for callers that cache it.
+    /// </summary>
+    public string? AnimationFileId { get; init; }
 }

@@ -348,4 +348,124 @@ public class CascadeBehaviorTests
         // If FK cascade DELETE was configured instead, this test would fail, alerting us
         // to unwanted data loss.
     }
+
+    /// <summary>
+    /// Test 9: Telegram User Deletion Cascade (ban_celebration_subscribers)
+    ///
+    /// **What it tests**: Validates that deleting a Telegram user CASCADE deletes every one of
+    /// their DM ban celebration subscriptions, and only theirs.
+    ///
+    /// **Why it matters**: A subscription is meaningless without the user it delivers to; the
+    /// fan-out joins to telegram_users for deliverability, so orphans must not survive.
+    ///
+    /// **Production scenario**: A Telegram user row is removed → their opt-ins across all chats
+    /// disappear with it, other users' opt-ins are untouched.
+    /// </summary>
+    [Test]
+    public async Task TelegramUserDeletionCascade_ShouldDeleteBanCelebrationSubscribers()
+    {
+        // Arrange - Create database and apply migrations
+        using var helper = new MigrationTestHelper();
+        await helper.CreateDatabaseFromEmptyTemplateAsync();
+        await SeedBanCelebrationSubscribersAsync(helper);
+
+        // Act - Delete user 9101 (subscribed in both chats)
+        await using (var context = helper.GetDbContext())
+        {
+            var user = await context.TelegramUsers.FindAsync(9101L);
+            Assert.That(user, Is.Not.Null, "Telegram user should exist before deletion");
+
+            context.TelegramUsers.Remove(user!);
+            await context.SaveChangesAsync();
+        }
+
+        // Assert - Only the other user's subscription remains
+        var deletedUserRows = await helper.ExecuteScalarAsync<long>(
+            "SELECT COUNT(*) FROM ban_celebration_subscribers WHERE telegram_user_id = 9101");
+        var otherUserRows = await helper.ExecuteScalarAsync<long>(
+            "SELECT COUNT(*) FROM ban_celebration_subscribers WHERE telegram_user_id = 9102");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(deletedUserRows, Is.EqualTo(0),
+                "Subscriptions should be CASCADE deleted when the Telegram user is deleted");
+            Assert.That(otherUserRows, Is.EqualTo(1),
+                "Another user's subscription must not be affected");
+        }
+    }
+
+    /// <summary>
+    /// Test 10: Managed Chat Deletion Cascade (ban_celebration_subscribers)
+    ///
+    /// **What it tests**: Validates that deleting a managed chat CASCADE deletes every DM ban
+    /// celebration subscription for that chat, and only that chat.
+    ///
+    /// **Why it matters**: A subscription is to one chat's celebrations; once the chat row is
+    /// gone there is nothing left to celebrate from.
+    ///
+    /// **Production scenario**: A managed chat row is removed → its subscribers' opt-ins for it
+    /// disappear, their opt-ins in other chats are untouched.
+    /// </summary>
+    [Test]
+    public async Task ManagedChatDeletionCascade_ShouldDeleteBanCelebrationSubscribers()
+    {
+        // Arrange - Create database and apply migrations
+        using var helper = new MigrationTestHelper();
+        await helper.CreateDatabaseFromEmptyTemplateAsync();
+        await SeedBanCelebrationSubscribersAsync(helper);
+
+        // Act - Delete chat 300 (two subscribers)
+        await using (var context = helper.GetDbContext())
+        {
+            var chat = await context.ManagedChats.FindAsync(300L);
+            Assert.That(chat, Is.Not.Null, "Managed chat should exist before deletion");
+
+            context.ManagedChats.Remove(chat!);
+            await context.SaveChangesAsync();
+        }
+
+        // Assert - Only the other chat's subscription remains
+        var deletedChatRows = await helper.ExecuteScalarAsync<long>(
+            "SELECT COUNT(*) FROM ban_celebration_subscribers WHERE chat_id = 300");
+        var otherChatRows = await helper.ExecuteScalarAsync<long>(
+            "SELECT COUNT(*) FROM ban_celebration_subscribers WHERE chat_id = 301");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(deletedChatRows, Is.EqualTo(0),
+                "Subscriptions should be CASCADE deleted when the managed chat is deleted");
+            Assert.That(otherChatRows, Is.EqualTo(1),
+                "Another chat's subscription must not be affected");
+        }
+    }
+
+    /// <summary>
+    /// Two chats (300, 301) and two users (9101, 9102) with subscriptions
+    /// (9101, 300), (9102, 300) and (9101, 301).
+    /// </summary>
+    private static async Task SeedBanCelebrationSubscribersAsync(MigrationTestHelper helper)
+    {
+        await using (var context = helper.GetDbContext())
+        {
+            context.ManagedChats.AddRange(
+                new ManagedChatRecordDto { ChatId = 300, ChatName = "Chat A", IsActive = true, AddedAt = DateTimeOffset.UtcNow },
+                new ManagedChatRecordDto { ChatId = 301, ChatName = "Chat B", IsActive = true, AddedAt = DateTimeOffset.UtcNow });
+            context.TelegramUsers.AddRange(
+                new TelegramUserDto { TelegramUserId = 9101, FirstName = "Subscriber", IsTrusted = false, FirstSeenAt = DateTimeOffset.UtcNow },
+                new TelegramUserDto { TelegramUserId = 9102, FirstName = "Other", IsTrusted = false, FirstSeenAt = DateTimeOffset.UtcNow });
+            await context.SaveChangesAsync();
+        }
+
+        await using (var context = helper.GetDbContext())
+        {
+            context.BanCelebrationSubscribers.AddRange(
+                new BanCelebrationSubscriberDto { TelegramUserId = 9101, ChatId = 300, SubscribedAt = DateTimeOffset.UtcNow },
+                new BanCelebrationSubscriberDto { TelegramUserId = 9102, ChatId = 300, SubscribedAt = DateTimeOffset.UtcNow },
+                new BanCelebrationSubscriberDto { TelegramUserId = 9101, ChatId = 301, SubscribedAt = DateTimeOffset.UtcNow });
+            await context.SaveChangesAsync();
+        }
+
+        var initialCount = await helper.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM ban_celebration_subscribers");
+        Assert.That(initialCount, Is.EqualTo(3), "Should have 3 subscriptions before deletion");
+    }
 }

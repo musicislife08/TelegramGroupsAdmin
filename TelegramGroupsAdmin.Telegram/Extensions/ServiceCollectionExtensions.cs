@@ -11,6 +11,7 @@ using TelegramGroupsAdmin.Telegram.Services.Bot.Handlers;
 using TelegramGroupsAdmin.Telegram.Services.ReportActions;
 using TelegramGroupsAdmin.Telegram.Services.BotCommands;
 using TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
+using TelegramGroupsAdmin.Telegram.Services.DmCelebrations;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Handlers;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Infrastructure;
@@ -53,6 +54,7 @@ public static class ServiceCollectionExtensions
             services.AddScoped<IMessageHistoryRepository, MessageHistoryRepository>();
             services.AddScoped<IExamSessionRepository, ExamSessionRepository>(); // Phase 2: Entrance exam state tracking
             services.AddScoped<IBanCelebrationGifRepository, BanCelebrationGifRepository>(); // Ban celebration GIF library
+            services.AddScoped<IBanCelebrationSubscriberRepository, BanCelebrationSubscriberRepository>(); // DM ban celebration opt-ins
             services.AddScoped<IBanCelebrationCaptionRepository, BanCelebrationCaptionRepository>(); // Ban celebration caption library
             // REFACTOR-3: Extracted services from MessageHistoryRepository
             // NOTE: IMessageStatsService moved to main app (analytics consolidation)
@@ -159,6 +161,7 @@ public static class ServiceCollectionExtensions
             services.AddScoped<IWebBotMessagingService, WebBotMessagingService>(); // Phase 1: Web UI bot messaging with signature
             services.AddScoped<IWebUserMessagingService, WebUserMessagingService>(); // Send/edit as admin's personal Telegram account
             services.AddScoped<IBanCelebrationService, BanCelebrationService>(); // Scoped: rotation state is database-backed
+            services.AddScoped<IBanCelebrationSubscriptionService, BanCelebrationSubscriptionService>(); // DM celebration opt-in rules
             services.AddScoped<IThumbnailService, ThumbnailService>(); // Thumbnail generation for images/GIFs
 
             // Training data quality services
@@ -200,6 +203,7 @@ public static class ServiceCollectionExtensions
             services.AddKeyedScoped<IBotCommand, InviteCommand>(CommandNames.Invite);
             services.AddKeyedScoped<IBotCommand, DeleteCommand>(CommandNames.Delete);
             services.AddKeyedScoped<IBotCommand, MyStatusCommand>(CommandNames.MyStatus);
+            services.AddKeyedScoped<IBotCommand, DmCelebrationsCommand>(CommandNames.DmCelebrations);
             services.AddSingleton<CommandRouter>();
             services.AddSingleton<PipelineMetrics>();
 

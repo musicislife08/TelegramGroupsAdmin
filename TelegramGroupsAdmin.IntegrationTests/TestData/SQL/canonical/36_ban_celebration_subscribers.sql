@@ -1,0 +1,5 @@
+INSERT INTO ban_celebration_subscribers (telegram_user_id, chat_id, subscribed_at, prompt_message_id, prompt_delete_job_id) VALUES (9183753414221, -100059667856554, '2026-09-20 18:04:11+00', NULL, NULL);
+INSERT INTO ban_celebration_subscribers (telegram_user_id, chat_id, subscribed_at, prompt_message_id, prompt_delete_job_id) VALUES (9011393194616, -100059667856554, '2026-09-21 02:13:40+00', 424242, 'canonical-stale-prompt-job');
+INSERT INTO ban_celebration_subscribers (telegram_user_id, chat_id, subscribed_at, prompt_message_id, prompt_delete_job_id) VALUES (9689750659830, -100059667856554, '2026-09-22 15:30:02+00', NULL, NULL);
+INSERT INTO ban_celebration_subscribers (telegram_user_id, chat_id, subscribed_at, prompt_message_id, prompt_delete_job_id) VALUES (9689750659830, -100017608907459, '2026-09-22 15:31:47+00', NULL, NULL);
+INSERT INTO ban_celebration_subscribers (telegram_user_id, chat_id, subscribed_at, prompt_message_id, prompt_delete_job_id) VALUES (9782251136844, -100059667856554, '2026-09-19 21:47:05+00', NULL, NULL);

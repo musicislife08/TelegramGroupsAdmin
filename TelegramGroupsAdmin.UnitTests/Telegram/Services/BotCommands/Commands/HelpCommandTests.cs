@@ -40,7 +40,7 @@ public class HelpCommandTests
         var services = new ServiceCollection();
 
         // Public (Member-tier) commands
-        foreach (var name in new[] { "help", "start", "mystatus", "report", "link", "invite" })
+        foreach (var name in new[] { "help", "start", "mystatus", "dmcelebrations", "report", "link", "invite" })
         {
             services.AddKeyedScoped<IBotCommand>(name, (_, _) => new StubCommand
             {

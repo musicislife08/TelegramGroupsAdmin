@@ -28,7 +28,7 @@ public class BotChatService(
     IChatAdminsRepository chatAdminsRepo,
     ITelegramUserRepository userRepo,
     IUserActionsRepository userActionsRepo,
-    INotificationService notificationService,
+    IAdminNotificationService notificationService,
     ApiMetrics apiMetrics,
     ILogger<BotChatService> logger) : IBotChatService
 {

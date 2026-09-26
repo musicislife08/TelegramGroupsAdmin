@@ -111,18 +111,6 @@ public interface IBotDmService
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Attempt to send a DM with media and an entity-based caption (no parse_mode, no keyboard).
-    /// If DM fails (403), queues the text for later delivery (without media/entities).
-    /// </summary>
-    Task<DmDeliveryResult> SendDmWithMediaEntitiesAsync(
-        UserIdentity user,
-        string notificationType,
-        TelegramMessage message,
-        string? photoPath = null,
-        string? videoPath = null,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>
     /// Attempt to send a DM with media, entities, and optional inline keyboard (no parse_mode).
     /// If DM fails (403), queues the text for later delivery (without media/buttons/entities).
     /// </summary>
@@ -134,5 +122,19 @@ public interface IBotDmService
         string? photoPath = null,
         string? videoPath = null,
         InlineKeyboardMarkup? keyboard = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Send an animation (GIF) DM with an entity-based caption. Uses <paramref name="fileId"/>
+    /// when given, falling back to uploading <paramref name="filePath"/> if Telegram rejects it.
+    /// Does NOT queue on failure: a 403 returns <see cref="DmDeliveryResult.Blocked"/> and
+    /// disables bot DMs for the user. <see cref="DmDeliveryResult.AnimationFileId"/> carries the
+    /// file_id Telegram returned so callers can cache it.
+    /// </summary>
+    Task<DmDeliveryResult> SendDmWithAnimationEntitiesAsync(
+        UserIdentity user,
+        TelegramMessage caption,
+        string? fileId,
+        string? filePath,
         CancellationToken cancellationToken = default);
 }

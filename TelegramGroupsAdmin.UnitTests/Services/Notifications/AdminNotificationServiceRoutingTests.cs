@@ -5,6 +5,7 @@ using TelegramGroupsAdmin.Core.Repositories;
 using TelegramGroupsAdmin.Repositories;
 using TelegramGroupsAdmin.Services;
 using TelegramGroupsAdmin.Services.Email;
+using TelegramGroupsAdmin.Services.Notifications;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
@@ -13,13 +14,13 @@ using TelegramGroupsAdmin.Telegram.Services.Bot;
 namespace TelegramGroupsAdmin.UnitTests.Services.Notifications;
 
 /// <summary>
-/// Unit tests for NotificationService audience routing.
+/// Unit tests for AdminNotificationService audience routing.
 /// Tests the two routing methods through public API:
 /// - SendToChatAudienceAsync: Pool 1 (web users) + Pool 2 (unlinked Telegram admins) with dedup
 /// - SendToOwnersAsync: Owner-only filtering at DB level
 /// </summary>
 [TestFixture]
-public class NotificationServiceRoutingTests
+public class AdminNotificationServiceRoutingTests
 {
     private INotificationPreferencesRepository _mockPrefsRepo = null!;
     private IEmailService _mockEmailService = null!;
@@ -30,9 +31,9 @@ public class NotificationServiceRoutingTests
     private IChatAdminsRepository _mockChatAdminsRepo = null!;
     private IUserRepository _mockUserRepo = null!;
     private IReportCallbackContextRepository _mockCallbackContextRepo = null!;
-    private ILogger<NotificationService> _mockLogger = null!;
+    private ILogger<AdminNotificationService> _mockLogger = null!;
 
-    private NotificationService _service = null!;
+    private AdminNotificationService _service = null!;
 
     [SetUp]
     public void Setup()
@@ -46,7 +47,7 @@ public class NotificationServiceRoutingTests
         _mockChatAdminsRepo = Substitute.For<IChatAdminsRepository>();
         _mockUserRepo = Substitute.For<IUserRepository>();
         _mockCallbackContextRepo = Substitute.For<IReportCallbackContextRepository>();
-        _mockLogger = Substitute.For<ILogger<NotificationService>>();
+        _mockLogger = Substitute.For<ILogger<AdminNotificationService>>();
 
         // Default: notification preferences return all-disabled config (no channels deliver)
         _mockPrefsRepo.GetOrCreateAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
@@ -64,13 +65,12 @@ public class NotificationServiceRoutingTests
                 Arg.Any<IEnumerable<string>>(), Arg.Any<CancellationToken>())
             .Returns(new HashSet<long>());
 
-        _service = new NotificationService(
+        _service = new AdminNotificationService(
             _mockPrefsRepo,
             _mockEmailService,
-            _mockDmService,
+            new NotificationDmDispatcher(_mockDmService, _mockTelegramUserRepo),
             _mockWebPushService,
             _mockTelegramMappingRepo,
-            _mockTelegramUserRepo,
             _mockChatAdminsRepo,
             _mockUserRepo,
             _mockCallbackContextRepo,

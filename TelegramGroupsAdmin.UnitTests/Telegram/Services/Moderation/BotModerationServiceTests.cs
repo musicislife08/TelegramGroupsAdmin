@@ -11,6 +11,7 @@ using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.Bot.Handlers;
+using TelegramGroupsAdmin.Telegram.Services.DmCelebrations;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions.Results;
@@ -39,8 +40,9 @@ public class BotModerationServiceTests
     private INotificationHandler _mockNotificationHandler = null!;
     private ITrainingHandler _mockTrainingHandler = null!;
     private IBanCelebrationService _mockBanCelebrationService = null!;
+    private IBanCelebrationSubscriptionService _mockCelebrationSubscriptions = null!;
     private IReportService _mockReportService = null!;
-    private INotificationService _mockNotificationService = null!;
+    private IAdminNotificationService _mockNotificationService = null!;
     private ITelegramUserRepository _mockTelegramUserRepository = null!;
     private IConfigService _mockConfigService = null!;
     private ILogger<BotModerationService> _mockLogger = null!;
@@ -60,8 +62,9 @@ public class BotModerationServiceTests
         _mockNotificationHandler = Substitute.For<INotificationHandler>();
         _mockTrainingHandler = Substitute.For<ITrainingHandler>();
         _mockBanCelebrationService = Substitute.For<IBanCelebrationService>();
+        _mockCelebrationSubscriptions = Substitute.For<IBanCelebrationSubscriptionService>();
         _mockReportService = Substitute.For<IReportService>();
-        _mockNotificationService = Substitute.For<INotificationService>();
+        _mockNotificationService = Substitute.For<IAdminNotificationService>();
         _mockTelegramUserRepository = Substitute.For<ITelegramUserRepository>();
         _mockConfigService = Substitute.For<IConfigService>();
         _mockLogger = Substitute.For<ILogger<BotModerationService>>();
@@ -78,6 +81,7 @@ public class BotModerationServiceTests
             _mockNotificationHandler,
             _mockTrainingHandler,
             _mockBanCelebrationService,
+            _mockCelebrationSubscriptions,
             _mockReportService,
             _mockNotificationService,
             _mockTelegramUserRepository,
@@ -256,6 +260,54 @@ public class BotModerationServiceTests
             Arg.Any<Actor>(),
             Arg.Any<string>(),
             Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task BanUserAsync_RemovesDmCelebrationSubscriptionsBeforeCelebrating()
+    {
+        const long userId = 12345L;
+        var executor = Actor.FromSystem("SpamDetection");
+        _mockBanHandler.BanAsync(Arg.Any<UserIdentity>(), executor, Arg.Any<string>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
+            .Returns(BanResult.Succeeded(chatsAffected: 5, chatsFailed: 0));
+        _mockTrustHandler.UntrustAsync(Arg.Any<UserIdentity>(), executor, Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(UntrustResult.Succeeded());
+
+        await _orchestrator.BanUserAsync(new BanIntent
+        {
+            User = UserIdentity.FromId(userId),
+            Executor = executor,
+            Reason = "Spam violation",
+            Chat = ChatIdentity.FromId(-100123456789L)
+        });
+
+        Received.InOrder(() =>
+        {
+            _mockCelebrationSubscriptions.RemoveAllForUserAsync(
+                Arg.Is<UserIdentity>(u => u!.Id == userId), SubscriptionRemovalReason.Banned, Arg.Any<CancellationToken>());
+            _mockBanCelebrationService.SendBanCelebrationAsync(
+                Arg.Any<ChatIdentity>(), Arg.Is<UserIdentity>(u => u!.Id == userId), Arg.Any<bool>(), Arg.Any<CancellationToken>());
+        });
+    }
+
+    [Test]
+    public async Task BanUserAsync_WithoutChat_StillRemovesDmCelebrationSubscriptions()
+    {
+        const long userId = 12345L;
+        var executor = Actor.FromSystem("SpamDetection");
+        _mockBanHandler.BanAsync(Arg.Any<UserIdentity>(), executor, Arg.Any<string>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
+            .Returns(BanResult.Succeeded(chatsAffected: 5, chatsFailed: 0));
+        _mockTrustHandler.UntrustAsync(Arg.Any<UserIdentity>(), executor, Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(UntrustResult.Succeeded());
+
+        await _orchestrator.BanUserAsync(new BanIntent
+        {
+            User = UserIdentity.FromId(userId),
+            Executor = executor,
+            Reason = "Spam violation"
+        });
+
+        await _mockCelebrationSubscriptions.Received(1).RemoveAllForUserAsync(
+            Arg.Is<UserIdentity>(u => u!.Id == userId), SubscriptionRemovalReason.Banned, Arg.Any<CancellationToken>());
     }
 
     #endregion
@@ -599,6 +651,40 @@ public class BotModerationServiceTests
             Arg.Any<ChatIdentity>(),
             Arg.Any<Actor>(),
             Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task MarkAsSpamAndBanAsync_RemovesDmCelebrationSubscriptionsBeforeCelebrating()
+    {
+        const int messageId = 42;
+        const long userId = 12345L;
+        const long chatId = -100123456789L;
+        var executor = Actor.FromSystem("SpamDetection");
+        _mockMessageHandler.EnsureExistsAsync(messageId, Arg.Any<ChatIdentity>(), Arg.Any<global::Telegram.Bot.Types.Message?>(), Arg.Any<CancellationToken>())
+            .Returns(BackfillResult.AlreadyExists());
+        _mockMessageHandler.DeleteAsync(Arg.Any<ChatIdentity>(), messageId, executor, Arg.Any<CancellationToken>())
+            .Returns(DeleteResult.Succeeded(messageDeleted: true));
+        _mockBanHandler.BanAsync(Arg.Any<UserIdentity>(), executor, Arg.Any<string>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
+            .Returns(BanResult.Succeeded(chatsAffected: 5, chatsFailed: 0));
+        _mockTrustHandler.UntrustAsync(Arg.Any<UserIdentity>(), executor, Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(UntrustResult.Succeeded());
+
+        await _orchestrator.MarkAsSpamAndBanAsync(new SpamBanIntent
+        {
+            User = UserIdentity.FromId(userId),
+            MessageId = messageId,
+            Chat = ChatIdentity.FromId(chatId),
+            Executor = executor,
+            Reason = "Spam detected"
+        });
+
+        Received.InOrder(() =>
+        {
+            _mockCelebrationSubscriptions.RemoveAllForUserAsync(
+                Arg.Is<UserIdentity>(u => u!.Id == userId), SubscriptionRemovalReason.Banned, Arg.Any<CancellationToken>());
+            _mockBanCelebrationService.SendBanCelebrationAsync(
+                Arg.Any<ChatIdentity>(), Arg.Is<UserIdentity>(u => u!.Id == userId), Arg.Any<bool>(), Arg.Any<CancellationToken>());
+        });
     }
 
     #endregion

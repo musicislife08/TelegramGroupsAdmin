@@ -10,6 +10,7 @@ using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.Telegram.Services.DmCelebrations;
 using TelegramGroupsAdmin.Telegram.Services.Welcome;
 using TelegramGroupsAdmin.Configuration.Services;
 
@@ -28,6 +29,7 @@ public class StartCommand : IBotCommand
     private readonly IBotMessageService _messageService;
     private readonly IBotChatService _chatService;
     private readonly IBotDmService _dmService;
+    private readonly IBanCelebrationSubscriptionService _celebrationSubscriptionService;
 
     public StartCommand(
         ILogger<StartCommand> logger,
@@ -37,7 +39,8 @@ public class StartCommand : IBotCommand
         IServiceProvider serviceProvider,
         IBotMessageService messageService,
         IBotChatService chatService,
-        IBotDmService dmService)
+        IBotDmService dmService,
+        IBanCelebrationSubscriptionService celebrationSubscriptionService)
     {
         _logger = logger;
         _welcomeResponsesRepository = welcomeResponsesRepository;
@@ -47,6 +50,7 @@ public class StartCommand : IBotCommand
         _messageService = messageService;
         _chatService = chatService;
         _dmService = dmService;
+        _celebrationSubscriptionService = celebrationSubscriptionService;
     }
 
     public string Name => "start";
@@ -79,6 +83,13 @@ public class StartCommand : IBotCommand
             await DeliverPendingNotificationsAsync(message.From.Id, cancellationToken);
         }
 
+        // Deep link from the /dmcelebrations start prompt
+        if (args.Length > 0 && message.From != null &&
+            DmCelebrationDeepLink.TryParseChatId(args[0], out var celebrationChatId))
+        {
+            return await HandleDmCelebrationsDeepLinkAsync(message.From, celebrationChatId, cancellationToken);
+        }
+
         // Check if this is a deep link for welcome system
         if (args.Length > 0 && args[0].StartsWith("welcome_"))
         {
@@ -99,6 +110,20 @@ public class StartCommand : IBotCommand
                 "Use /help to see available commands."),
             DeleteCommandMessage,
             DeleteResponseAfterSeconds);
+    }
+
+    private async Task<CommandResult> HandleDmCelebrationsDeepLinkAsync(
+        User from,
+        long chatId,
+        CancellationToken cancellationToken)
+    {
+        var chat = await _celebrationSubscriptionService.ConfirmFromStartAsync(chatId, UserIdentity.From(from), cancellationToken);
+
+        var reply = chat is null
+            ? "You're not signed up for ban celebrations from that chat. Run /dmcelebrations on in the group to sign up."
+            : $"🎉 You're all set — you'll get {chat.ChatName ?? "that chat"}'s ban celebrations here.";
+
+        return new CommandResult(TelegramMessage.Plain(reply), DeleteCommandMessage, DeleteResponseAfterSeconds);
     }
 
     private async Task<CommandResult> HandleWelcomeDeepLinkAsync(

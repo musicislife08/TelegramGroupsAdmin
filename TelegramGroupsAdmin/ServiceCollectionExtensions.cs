@@ -13,6 +13,7 @@ using TelegramGroupsAdmin.Auth;
 using TelegramGroupsAdmin.Constants;
 using TelegramGroupsAdmin.Data.Services;
 using TelegramGroupsAdmin.Services;
+using TelegramGroupsAdmin.Services.Notifications;
 
 namespace TelegramGroupsAdmin;
 
@@ -155,9 +156,17 @@ public static class ServiceCollectionExtensions
             services.AddScoped<Services.Email.IEmailService, Services.Email.SendGridEmailService>();
 
             // Notification services (User notification preferences with Telegram DM, Email, and Web Push channels)
-            services.AddScoped<INotificationService, NotificationService>();
+            services.AddScoped<NotificationDmDispatcher>(); // Shared payload → Telegram DM path (admin + user notifications)
+            services.AddScoped<IAdminNotificationService, AdminNotificationService>();
             services.AddScoped<IWebPushNotificationService, WebPushNotificationService>();
             services.AddScoped<INotificationStateService, NotificationStateService>(); // Blazor state for notification bell
+
+            // User-facing notifications (opt-in DMs) — DM ban celebrations fan out via a single-reader channel
+            services.AddScoped<BanCelebrationDmSender>();
+            services.AddScoped<IUserNotificationService, UserNotificationService>();
+            services.AddScoped<BanCelebrationFanoutProcessor>();
+            services.AddSingleton<IBanCelebrationFanoutQueue, BanCelebrationFanoutQueue>();
+            services.AddHostedService<BanCelebrationFanoutWorker>();
 
             // Web Push browser notifications (PushServiceClient + VAPID auto-generation)
             services.AddHttpClient<Lib.Net.Http.WebPush.PushServiceClient>();

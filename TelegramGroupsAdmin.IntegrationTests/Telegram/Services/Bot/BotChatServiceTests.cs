@@ -66,7 +66,7 @@ public class BotChatServiceTests
     private IBotChatHandler _mockChatHandler = null!;
     private IChatCache _mockChatCache = null!;
     private IChatHealthCache _mockHealthCache = null!;
-    private INotificationService _mockNotificationService = null!;
+    private IAdminNotificationService _mockNotificationService = null!;
     private IConfigService _mockConfigService = null!;
 
     [SetUp]
@@ -78,7 +78,7 @@ public class BotChatServiceTests
         _mockChatHandler = Substitute.For<IBotChatHandler>();
         _mockChatCache = Substitute.For<IChatCache>();
         _mockHealthCache = Substitute.For<IChatHealthCache>();
-        _mockNotificationService = Substitute.For<INotificationService>();
+        _mockNotificationService = Substitute.For<IAdminNotificationService>();
         _mockConfigService = Substitute.For<IConfigService>();
 
         var services = new ServiceCollection();

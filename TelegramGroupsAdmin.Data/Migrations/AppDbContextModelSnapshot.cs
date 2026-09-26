@@ -17,7 +17,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.11")
+                .HasAnnotation("ProductVersion", "10.0.12")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -693,6 +693,36 @@ namespace TelegramGroupsAdmin.Data.Migrations
                         .HasDatabaseName("ix_ban_celebration_gifs_photo_hash");
 
                     b.ToTable("ban_celebration_gifs");
+                });
+
+            modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.BanCelebrationSubscriberDto", b =>
+                {
+                    b.Property<long>("TelegramUserId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("telegram_user_id");
+
+                    b.Property<long>("ChatId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("chat_id");
+
+                    b.Property<string>("PromptDeleteJobId")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("prompt_delete_job_id");
+
+                    b.Property<int?>("PromptMessageId")
+                        .HasColumnType("integer")
+                        .HasColumnName("prompt_message_id");
+
+                    b.Property<DateTimeOffset>("SubscribedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("subscribed_at");
+
+                    b.HasKey("TelegramUserId", "ChatId");
+
+                    b.HasIndex("ChatId");
+
+                    b.ToTable("ban_celebration_subscribers");
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.BlocklistSubscriptionDto", b =>
@@ -3910,6 +3940,25 @@ namespace TelegramGroupsAdmin.Data.Migrations
                         .WithMany()
                         .HasForeignKey("TargetWebUserId")
                         .OnDelete(DeleteBehavior.Cascade);
+                });
+
+            modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.BanCelebrationSubscriberDto", b =>
+                {
+                    b.HasOne("TelegramGroupsAdmin.Data.Models.ManagedChatRecordDto", "ManagedChat")
+                        .WithMany()
+                        .HasForeignKey("ChatId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("TelegramGroupsAdmin.Data.Models.TelegramUserDto", "TelegramUser")
+                        .WithMany()
+                        .HasForeignKey("TelegramUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ManagedChat");
+
+                    b.Navigation("TelegramUser");
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.ChatAdminRecordDto", b =>

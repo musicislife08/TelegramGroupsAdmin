@@ -67,7 +67,8 @@ public class BackupServiceTests
     // Tables with DTOs that BackupService can export (excludes __EFMigrationsHistory,
     // file_scan_quota, ticker.*). Updated 2026-04-09: +file_scan_results (FileScanResultDto rename).
     // Updated 2026-05-27: +username_blacklist (UsernameBlacklistEntryDto now discovered via [Table] attribute).
-    private const int ExpectedBackupTableCount = 43;
+    // Updated 2026-09-25: +ban_celebration_subscribers (DM ban celebrations).
+    private const int ExpectedBackupTableCount = 44;
 
     // Synthetic outside-canonical-range ID used by RestoreAsync_ShouldWipeAllTablesFirst
     private const long SyntheticExtraUserId = 7777777777777L;
@@ -128,7 +129,7 @@ public class BackupServiceTests
         // Add mock services (BackupService dependencies)
         services.AddSingleton<IBotDmService, MockBotDmService>();
         services.AddSingleton<IDataProtectionService, MockDataProtectionService>();
-        services.AddSingleton<INotificationService, MockNotificationService>();
+        services.AddSingleton<IAdminNotificationService, MockNotificationService>();
         services.AddSingleton(Substitute.For<TelegramGroupsAdmin.Telegram.Services.IThumbnailService>());
 
         // Add IJobScheduler mock (required by PassphraseManagementService)
@@ -1073,15 +1074,6 @@ public class BackupServiceTests
             CancellationToken cancellationToken = default)
             => Task.FromResult(SuccessResult);
 
-        public Task<DmDeliveryResult> SendDmWithMediaEntitiesAsync(
-            UserIdentity user,
-            string notificationType,
-            TelegramMessage message,
-            string? photoPath = null,
-            string? videoPath = null,
-            CancellationToken cancellationToken = default)
-            => Task.FromResult(SuccessResult);
-
         public Task<DmDeliveryResult> SendDmWithMediaAndKeyboardEntitiesAsync(
             UserIdentity user,
             string notificationType,
@@ -1090,6 +1082,14 @@ public class BackupServiceTests
             string? photoPath = null,
             string? videoPath = null,
             InlineKeyboardMarkup? keyboard = null,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult(SuccessResult);
+
+        public Task<DmDeliveryResult> SendDmWithAnimationEntitiesAsync(
+            UserIdentity user,
+            TelegramMessage caption,
+            string? fileId,
+            string? filePath,
             CancellationToken cancellationToken = default)
             => Task.FromResult(SuccessResult);
     }
@@ -1106,7 +1106,7 @@ public class BackupServiceTests
     /// <summary>
     /// Mock Notification service
     /// </summary>
-    private class MockNotificationService : INotificationService
+    private class MockNotificationService : IAdminNotificationService
     {
         private static readonly Dictionary<string, bool> EmptyResults = new();
 

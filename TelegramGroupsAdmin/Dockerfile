@@ -24,34 +24,38 @@ RUN sed -i 's|http://|https://|g' /etc/apt/sources.list.d/ubuntu.sources && \
     xz-utils \
     && rm -rf /var/lib/apt/lists/*
 
-# Download FFmpeg static build (architecture-specific) with checksum validation
+# Download FFmpeg (architecture-specific) from BtbN/FFmpeg-Builds GitHub releases
 # Uses TARGETPLATFORM to download correct binary during cross-compilation
 # Example: TARGETPLATFORM=linux/arm64 downloads arm64 binary on amd64 host
-# Uses rolling "release" channel — always downloads latest stable version
-# Security: MD5 validation ensures binary integrity and reproducible builds
+# Pinned to a stable FFmpeg release branch (the "latest" release carries the newest
+# build of that branch). Bump FFMPEG_VERSION when a new release branch ships; the
+# build fails loudly if BtbN stops publishing the pinned branch.
+# LGPL build: the app only uses native decoders, native filters (scale, fps,
+# palettegen/paletteuse, avgblur) and the PNG/MJPEG/GIF encoders, so no GPL-only
+# libraries (x264, x265, ...) are needed.
+# Served from GitHub's CDN: the previous host (johnvansickle.com) started answering
+# CI runners with a JavaScript bot-challenge page instead of the files.
+# Security: SHA-256 validation against the release's checksums.sha256
+ARG FFMPEG_VERSION=9.0
 RUN case "$TARGETPLATFORM" in \
-        "linux/amd64") FFMPEG_ARCH="amd64" ;; \
-        "linux/arm64") FFMPEG_ARCH="arm64" ;; \
+        "linux/amd64") FFMPEG_ARCH="linux64" ;; \
+        "linux/arm64") FFMPEG_ARCH="linuxarm64" ;; \
         *) echo "Unsupported platform: $TARGETPLATFORM" && exit 1 ;; \
     esac && \
-    echo "Downloading FFmpeg (release) for ${FFMPEG_ARCH} (target: $TARGETPLATFORM, building on: $BUILDPLATFORM)..." && \
-    wget -q https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-${FFMPEG_ARCH}-static.tar.xz \
-        -O /tmp/ffmpeg.tar.xz && \
-    wget -q https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-${FFMPEG_ARCH}-static.tar.xz.md5 \
-        -O /tmp/ffmpeg.tar.xz.md5 && \
-    echo "Validating checksum..." && \
+    FFMPEG_ASSET="ffmpeg-n${FFMPEG_VERSION}-latest-${FFMPEG_ARCH}-lgpl-${FFMPEG_VERSION}.tar.xz" && \
+    FFMPEG_BASE_URL="https://github.com/BtbN/FFmpeg-Builds/releases/download/latest" && \
+    echo "Downloading ${FFMPEG_ASSET} (target: $TARGETPLATFORM, building on: $BUILDPLATFORM)..." && \
     cd /tmp && \
-    EXPECTED_MD5=$(awk '{print $1}' ffmpeg.tar.xz.md5) && \
-    ACTUAL_MD5=$(md5sum ffmpeg.tar.xz | awk '{print $1}') && \
-    echo "Expected: ${EXPECTED_MD5}" && \
-    echo "Actual:   ${ACTUAL_MD5}" && \
-    [ "${EXPECTED_MD5}" = "${ACTUAL_MD5}" ] || (echo "MD5 mismatch!" && exit 1) && \
-    echo "Checksum validated successfully" && \
+    wget -q "${FFMPEG_BASE_URL}/${FFMPEG_ASSET}" -O "${FFMPEG_ASSET}" && \
+    wget -q "${FFMPEG_BASE_URL}/checksums.sha256" -O checksums.sha256 && \
+    echo "Validating checksum..." && \
+    grep " ${FFMPEG_ASSET}\$" checksums.sha256 > ffmpeg.sha256 && \
+    sha256sum -c ffmpeg.sha256 && \
     echo "Extracting FFmpeg..." && \
     mkdir -p /deps/ffmpeg && \
-    tar -xf /tmp/ffmpeg.tar.xz -C /deps/ffmpeg --strip-components=1 && \
+    tar -xf "${FFMPEG_ASSET}" -C /deps/ffmpeg --strip-components=2 --wildcards "*/bin/ffmpeg" "*/bin/ffprobe" && \
     chmod +x /deps/ffmpeg/ffmpeg /deps/ffmpeg/ffprobe && \
-    rm -rf /tmp/ffmpeg.tar.xz /tmp/ffmpeg.tar.xz.md5 && \
+    rm -f "${FFMPEG_ASSET}" checksums.sha256 ffmpeg.sha256 && \
     echo "FFmpeg ready: $(/deps/ffmpeg/ffmpeg -version | head -n1)"
 
 # Download Tesseract language data (architecture-independent)
@@ -208,8 +212,9 @@ COPY --from=dependencies --chown=$PUID:$PGID /deps/eng.traineddata /tessdata/eng
 # Uses /lang-models (baked into image) - same pattern as /tessdata
 COPY --from=dependencies --chown=$PUID:$PGID /deps/lid.176.ftz /lang-models/lid.176.ftz
 
-# Copy FFmpeg static binaries from dependencies stage (ML-6: Video frame extraction)
-# Static builds = no library dependencies, works in Chiseled runtime
+# Copy FFmpeg binaries from dependencies stage (ML-6: Video frame extraction)
+# BtbN non-shared builds link every FFmpeg library statically and depend only on
+# glibc, which the chiseled-extra runtime ships (.NET needs it too)
 COPY --from=dependencies /deps/ffmpeg/ffmpeg /usr/local/bin/ffmpeg
 COPY --from=dependencies /deps/ffmpeg/ffprobe /usr/local/bin/ffprobe
 
@@ -297,5 +302,5 @@ ENTRYPOINT ["dotnet", "TelegramGroupsAdmin.dll"]
 # - Read-only filesystem (except /app/data volume)
 # - Diagnostics disabled in production
 # - Single HTTP port exposure (HTTPS via reverse proxy)
-# - FFmpeg uses rolling release channel with MD5 integrity validation
+# - FFmpeg pinned to a stable release branch (LGPL build) with SHA-256 integrity validation
 # =============================================================================

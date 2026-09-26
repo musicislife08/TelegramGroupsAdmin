@@ -16,7 +16,7 @@ namespace TelegramGroupsAdmin.Telegram.Services;
 /// </summary>
 public class ReportService(
     IReportsRepository reportsRepository,
-    INotificationService notificationService,
+    IAdminNotificationService notificationService,
     IAuditService auditService,
     IMessageHistoryRepository messageHistoryRepository,
     ReportMetrics reportMetrics,

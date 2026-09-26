@@ -550,7 +550,7 @@ public class ExamFlowService : IExamFlowService
 
             var passChat = await scope.ServiceProvider.GetRequiredService<IManagedChatsRepository>()
                 .GetByChatIdAsync(session.ChatId, cancellationToken);
-            var passNotificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
+            var passNotificationService = scope.ServiceProvider.GetRequiredService<IAdminNotificationService>();
 
             await passNotificationService.SendExamPassNotificationAsync(
                 chat: passChat?.Identity ?? ChatIdentity.FromId(session.ChatId),
@@ -573,7 +573,7 @@ public class ExamFlowService : IExamFlowService
         var failureChat = await managedChatsRepo.GetByChatIdAsync(session.ChatId, cancellationToken);
 
         // Notify admins of exam failure
-        var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
+        var notificationService = scope.ServiceProvider.GetRequiredService<IAdminNotificationService>();
         var mcTotal = examConfig.McQuestions.Count;
 
         await notificationService.SendExamFailureNotificationAsync(

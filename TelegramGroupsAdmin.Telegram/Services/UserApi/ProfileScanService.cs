@@ -627,7 +627,7 @@ public sealed class ProfileScanService(
         // Send admin notification only when we have a real chat (admins can't be looked up for sentinel chat_id=0)
         if (chat != null)
         {
-            var notificationService = sp.GetRequiredService<INotificationService>();
+            var notificationService = sp.GetRequiredService<IAdminNotificationService>();
             var signals = result.AiSignalsDetected is { Length: > 0 }
                 ? string.Join(", ", result.AiSignalsDetected)
                 : "rule-based detection";
