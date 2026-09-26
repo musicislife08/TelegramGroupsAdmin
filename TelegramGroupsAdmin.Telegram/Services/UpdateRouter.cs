@@ -49,11 +49,12 @@ public class UpdateRouter(
                 myChatMember.Chat.ToLogDebug());
             await chatService.HandleBotMembershipUpdateAsync(myChatMember, cancellationToken);
 
-            // Private-chat block/unblock of the bot (blocking drops DM celebration subscriptions)
-            await celebrationSubscriptions.HandleBotMembershipUpdateAsync(myChatMember, cancellationToken);
-
             // Trigger immediate health check when bot status changes
             await healthOrchestrator.RefreshHealthForChatAsync(ChatIdentity.From(myChatMember.Chat), cancellationToken);
+
+            // Private-chat block/unblock of the bot (blocking drops DM celebration subscriptions).
+            // Runs last so a subscription DB error cannot skip the health refresh.
+            await celebrationSubscriptions.HandleBotMembershipUpdateAsync(myChatMember, cancellationToken);
             return;
         }
 
