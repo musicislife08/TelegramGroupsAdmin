@@ -173,9 +173,14 @@ Rules that keep a union migration code-only:
    structural union classifier can tell them apart.
 4. Readers `switch` over case types; they never use base members.
 
-The records live in Core. Data can't reference Core, so `MessageRecordDto.MediaFeatures` is a raw
-`jsonb` string and the owning repository (de)serializes the Core `MediaFeatures` with
-System.Text.Json, as part of its Data↔Core mapping.
+The records above are the **persistence shape** and live in Data as `MediaFeaturesDto` /
+`PhotoFeaturesDto` / `VideoFeaturesDto`, with the JSON contract (`type` discriminator,
+`[JsonRequired]`) and an EF value converter to `jsonb`. Core has the domain `MediaFeatures`
+(`PhotoFeatures` / `VideoFeatures`), and the owning repository maps with `ToModel()` / `ToDto()`.
+
+This split makes the union migration easier: the JSON contract is pinned by the Data DTOs, so the
+**Core** model can become a C# 15 `union` without touching System.Text.Json's union serialization
+at all. Only the mapping `switch` changes.
 
 ## Write side: one decider
 
@@ -241,8 +246,8 @@ Project chain: `Data ← Core ← Configuration ← AI ← ContentDetection ← 
 | Piece | Project | Notes |
 |---|---|---|
 | `VerdictSource`, `VerdictClassification` **domain enums**, `VerdictClassifications` sets (`Spam`, `TrainingSpam`, `TrainingHam`), `IsSpam()`, `MessageVerdict` model, `MediaFeatures` records | Core | What services, the classifier and components use. |
-| Mirror enums (`VerdictSourceDto`, `VerdictClassificationDto`), `DetectionResultRecordDto` columns, `MessageVerdictView` keyless entity, `media_features` column (raw `jsonb` string on `MessageRecordDto`), generated `is_spam`, CHECK constraints | Data | Schema only. SQL uses the mirror's literal values. |
-| Core ↔ Data mapping | `Repositories/Mappings/` in each repository's project | Explicit `switch` both ways, never a cast. A unit test round-trips every value and fails if either enum gains a member the other lacks. |
+| Mirror enums (`VerdictSourceDto`, `VerdictClassificationDto`), `DetectionResultRecordDto` columns, `MessageVerdictView` keyless entity, `MediaFeaturesDto` hierarchy (`PhotoFeaturesDto`, `VideoFeaturesDto`) mapped to `media_features` jsonb with an EF value converter, generated `is_spam`, CHECK constraints | Data | Schema only. SQL uses the mirror's literal values. |
+| Core ↔ Data mapping | `Repositories/Mappings/` (`ToModel()` / `ToDto()` extensions) | Explicit `switch` both ways, never a cast. A unit test round-trips every value and fails if either side gains a member the other lacks. |
 | `VerdictClassifier` | ContentDetection | Pure static rule over Core types; needs `ContentDetectionResult`. |
 | Writes (`Record*Async`) | `DetectionResultsRepository` (ContentDetection) | The only verdict writer; takes Core types, maps to Data. |
 | Reads | Repositories, composing `MessageVerdicts` inside their own queries | Joins stay in SQL; results returned as Core models. |
