@@ -24,6 +24,23 @@ This design makes **one place decide** and **one place answer**:
 `training_labels` and the two media sample tables are removed. `detection_results` becomes the
 single verdict-event log.
 
+## Background: why `training_labels` existed
+
+- `4ee62441` (2025-11-21): reclassifying a message appended a new `detection_results` row without
+  cancelling the old one, so Bayes trained on messages as both spam and ham. The fix,
+  `InvalidateTrainingDataForMessageAsync`, relied on every writer invalidating first, and added the
+  Training Data page's "remove from training" soft delete.
+- `ba9ab30a` (2025-12-13, PR #161): `training_labels` was added to "separate detection history from ML
+  training intent". One row per message plus an upsert made the conflict structurally impossible,
+  **but only for the ML trainers**. Every other reader kept reading `detection_results`, and the
+  invalidate method later lost its callers (#549).
+- `4e4ea063` (2026-03-12): label provenance (auto vs. manual) was encoded in the reason string.
+
+Each requirement is kept: one answer per message (the view, now for **every** reader), history vs.
+intent (events vs. the view), race-free writes (append-only, ordered by `detected_at, id`),
+provenance (`source`), the audit link (`audit_log_id`), and "remove from training"
+(`TrainingExclude`).
+
 ## Goals and success criteria
 
 - Exactly one rule decides spam vs. ham for a scan, and it is shared by the verdict and the action.
@@ -48,6 +65,7 @@ single verdict-event log.
 | Auto-bans | Write an `AutoBan` decision (`ExplicitSpam`). Intended; auto-ban requires score ≥ 4.0 **and** OpenAI ≥ 4.0. |
 | Review "Dismiss" | Writes a `ReviewDismiss` decision classified `ImplicitHam` (ham, but not admin-grade). Mark as Ham remains the only source of explicit ham. |
 | Auto-trust | Counts any current verdict that is ham, `UntrainedHam` included. |
+| "Remove from training" | A `TrainingExclude` decision: keeps the message's current spam/ham, classifies it `Untrained*`. Replaces the `used_for_training = false` soft delete. |
 | Media features | `messages.media_features` jsonb, captured at scan time. Layer 1 = view ⋈ features. |
 | Where the rule lives | Static `VerdictClassifier` + typed repository writes. No new service (nothing to coordinate). |
 | Old backups | `3.0` backups migrate on restore via a backup-only C# step, removed one year after release. |
@@ -72,7 +90,7 @@ single verdict-event log.
 | Group | Values |
 |---|---|
 | Scans | `ContentScan`, `FileScan` |
-| Decisions | `AutoBan` (includes hard block; reason says which), `WebMarkSpam`, `WebMarkHam`, `SpamCommand`, `ReviewSpam`, `ReviewDismiss`, `TrainingDataPage`, `Import` |
+| Decisions | `AutoBan` (includes hard block; reason says which), `WebMarkSpam`, `WebMarkHam`, `SpamCommand`, `ReviewSpam`, `ReviewDismiss`, `TrainingDataPage`, `TrainingExclude`, `Import` |
 | Migration only | `LegacyManual` |
 
 `VerdictSourceExtensions.IsDecision()` / `IsScan()` is the fixed mapping. There is no separate
@@ -93,7 +111,7 @@ single verdict-event log.
 
 - `classification` ∈ the six stored values.
 - Decision sources pin their classification: `AutoBan`, `WebMarkSpam`, `SpamCommand`, `ReviewSpam` → `ExplicitSpam`; `WebMarkHam` → `ExplicitHam`; `ReviewDismiss` → `ImplicitHam`; `TrainingDataPage`, `Import`, `LegacyManual` → `ExplicitSpam` or `ExplicitHam`.
-- `FileScan` → `UntrainedSpam` or `UntrainedHam`.
+- `FileScan`, `TrainingExclude` → `UntrainedSpam` or `UntrainedHam`.
 - `ContentScan` → any non-explicit value.
 
 **Indexes:** `(chat_id, message_id, detected_at DESC, id DESC)` for the view; `classification`;
@@ -159,6 +177,7 @@ not support inheritance.
   - Otherwise (pipeline ham, AI veto) → `ImplicitHam`.
 - **`FileScan`**: infected → `UntrainedSpam`, else `UntrainedHam`.
 - **Decisions**: fixed by source; `TrainingDataPage` / `Import` / `LegacyManual` take the explicit `isSpam` argument.
+- **`TrainingExclude`**: `isSpam` is the message's **current** spam/ham (read from the view by the caller) → `UntrainedSpam` / `UntrainedHam`. The verdict is preserved; only training membership changes.
 
 ### Engine and action alignment
 
@@ -189,6 +208,8 @@ that is the point to introduce a service.
 | `SpamCommand` / `ContentReportHandler` spam | via `TrainingHandler` | `SpamCommand` / `ReviewSpam` source |
 | `ContentReportHandler.DismissAsync` | writes nothing | `RecordDecisionAsync(ReviewDismiss)` |
 | Training Data page (`AddManualTrainingSampleAsync`) | ±5 row, `used_for_training = true` | `RecordDecisionAsync(TrainingDataPage, isSpam)` |
+| Training Data page delete, Duplicates page removals (`ExcludeFromTrainingAsync`, 5 call sites) | sets `used_for_training = false` on a row | `RecordDecisionAsync(TrainingExclude, isSpam: current)`; `ExcludeFromTrainingAsync` removed |
+| Edit Training Sample | exclude old row + add new chat-0 sample | `TrainingExclude` on the old message + `TrainingDataPage` on the new one |
 
 `TrainingLabelsRepository`, `ImageTrainingSamplesRepository`, `VideoTrainingSamplesRepository`,
 `InvalidateTrainingDataForMessageAsync`, `GetSpamSamplesForSimilarityAsync` and the insert-time
@@ -231,6 +252,7 @@ every chat uses 2.5 / 4.0, so the threshold backfill is exact.
    - `FileScan`: sign of `net_score`.
    - `Import`: **trust the reason text** (`Manual label - spam|ham`), not the score sign. 11 prod rows contradict; the migration logs the count.
    - Other decisions: sign of `net_score` → `ExplicitSpam` / `ExplicitHam`.
+   - **Past exclusions:** `TrainingDataPage` and `Import` rows (chat 0) with `used_for_training = false` were removed from training by an admin (4 in prod). Each gets a following `TrainingExclude` row (`detected_at` + 1 µs) so the exclusion survives. Other `manual` rows defaulted to `used_for_training = false` as "history only", so for them the flag carries no exclusion meaning and is ignored.
 4. **Fold `training_labels`** into decision rows at `labeled_at` with actor and `audit_log_id`:
    - A label with a matching manual row (same message, same verdict) is **not** inserted again (198 in prod).
    - A spam label with no user and only `ContentScan` rows is an auto-ban → `AutoBan` (416 in prod).
@@ -264,7 +286,7 @@ with the resolved path. The job is idempotent (skips rows with `media_features`)
 
 ### Unit (no database)
 
-- `VerdictClassifier`: every grid cell; AI path below / at / above `ReviewQueueThreshold`; hard block; veto; abstained AI; each decision source → its pinned classification; `isSpam` required for `TrainingDataPage` / `Import` / `LegacyManual`.
+- `VerdictClassifier`: every grid cell; AI path below / at / above `ReviewQueueThreshold`; hard block; veto; abstained AI; each decision source → its pinned classification; `isSpam` required for `TrainingDataPage` / `Import` / `LegacyManual` / `TrainingExclude`; `TrainingExclude` yields `Untrained*` with the given spam/ham.
 - Engine: AI-confirmed below threshold now returns `IsSpam = false`.
 - `DetectionActionService`: a score exactly at `ReviewQueueThreshold` queues for review.
 - `MediaFeatures` JSON round-trip: `type` discriminator, `[JsonRequired]` enforcement, unknown `type` rejected.
@@ -275,7 +297,8 @@ with the resolved path. The job is idempotent (skips rows with `media_features`)
 Migrate to N−1, insert one legacy row per backfill branch, migrate to N, and assert `source` and
 `classification` per row: pipeline-low, AI "Review" below threshold, AI-confirmed, AI vetoed, hard
 block, file scan, each `manual` reason prefix, consistent and contradicting `tg-spam-import`,
-auto-ban label, label with and without a matching manual row. Also assert that the CHECK constraint
+auto-ban label, label with and without a matching manual row, excluded chat-0 page/import row
+(gains a `TrainingExclude` row). Also assert that the CHECK constraint
 rejects a `WebMarkHam` row classified as spam, and that the view returns `Unscanned` for a message
 with no rows.
 
@@ -320,6 +343,7 @@ Part 2 recipe, and guarded by a read-back assertion in its test):
 | Mark as Ham (#549) | msg 8646, Land Owners (sender 9550752264926), an auto-banned message | `WebMarkHam` decision written (the subject); view `ExplicitSpam` → `ExplicitHam`; message leaves every spam reader |
 | Retention: unlabeled expired deleted | existing `Retention` anchors in `GoldenDatasetConstants` | unchanged behaviour for untrained messages |
 | Layer 1 read | msg 222818 (flag-edited) | returned as a spam photo sample |
+| Remove from training | msg 220384, @AndrewLong6 | `TrainingExclude` written (the subject); view `ExplicitSpam` → `UntrainedSpam`; absent from ML spam samples; still `IsSpam()` for auto-trust / AI history |
 | `Record*Async` writes | any anchor above | the write is the assertion subject |
 
 ## Out of scope
