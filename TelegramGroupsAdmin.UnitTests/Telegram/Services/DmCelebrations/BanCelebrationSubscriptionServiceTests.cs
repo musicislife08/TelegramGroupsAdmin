@@ -12,6 +12,7 @@ using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Metrics;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.DmCelebrations;
 
@@ -31,6 +32,7 @@ public class BanCelebrationSubscriptionServiceTests
     private IBotMessageService _messages = null!;
     private IBotUserService _botUser = null!;
     private IJobScheduler _jobs = null!;
+    private IBotDmService _dm = null!;
     private BanCelebrationSubscriptionService _sut = null!;
 
     [SetUp]
@@ -42,6 +44,7 @@ public class BanCelebrationSubscriptionServiceTests
         _messages = Substitute.For<IBotMessageService>();
         _botUser = Substitute.For<IBotUserService>();
         _jobs = Substitute.For<IJobScheduler>();
+        _dm = Substitute.For<IBotDmService>();
 
         _botUser.GetMeAsync(Arg.Any<CancellationToken>()).Returns(new User { Id = 1, IsBot = true, FirstName = "Bot", Username = "tga_bot" });
         _messages.SendAndSaveMessageAsync(Arg.Any<long>(), Arg.Any<TelegramMessage>(), Arg.Any<ReplyParameters?>(),
@@ -50,9 +53,11 @@ public class BanCelebrationSubscriptionServiceTests
         _jobs.ScheduleJobAsync(Arg.Any<string>(), Arg.Any<DeleteMessagePayload>(), Arg.Any<int>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns("job-777");
         _jobs.CancelJobAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(true);
+        _dm.SendDmAsync(Arg.Any<UserIdentity>(), Arg.Any<TelegramMessage>(), Arg.Any<long?>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
+            .Returns(new DmDeliveryResult { DmSent = true, MessageId = 1 });
 
         _sut = new BanCelebrationSubscriptionService(
-            _repository, _telegramUsers, _managedChats, _messages, _botUser, _jobs,
+            _repository, _telegramUsers, _managedChats, _messages, _botUser, _jobs, _dm,
             new PipelineMetrics(), NullLogger<BanCelebrationSubscriptionService>.Instance);
     }
 
@@ -74,7 +79,7 @@ public class BanCelebrationSubscriptionServiceTests
         new(UserId, ChatId, DateTimeOffset.UtcNow, promptId, jobId);
 
     [Test]
-    public async Task SubscribeAsync_DmEnabled_UpsertsAndReturnsSubscribedWithoutPrompt()
+    public async Task SubscribeAsync_DmEnabled_ConfirmsByDmWithoutPrompt()
     {
         DmEnabled(true);
 
@@ -82,7 +87,38 @@ public class BanCelebrationSubscriptionServiceTests
 
         Assert.That(result, Is.EqualTo(DmCelebrationSubscribeResult.Subscribed));
         await _repository.Received(1).UpsertAsync(UserId, ChatId, Arg.Any<CancellationToken>());
+        // No group fallback: when the DM fails, the start prompt is the group post instead.
+        await _dm.Received(1).SendDmAsync(
+            Arg.Is<UserIdentity>(u => u!.Id == UserId),
+            Arg.Is<TelegramMessage>(m => m!.Text.Contains("Workshop Alumni")),
+            null, null, Arg.Any<CancellationToken>());
         await _messages.DidNotReceiveWithAnyArgs().SendAndSaveMessageAsync(default, default(TelegramMessage)!);
+    }
+
+    [Test]
+    public async Task SubscribeAsync_DmEnabledButDmFails_PostsStartPromptInstead()
+    {
+        // bot_dm_enabled can be stale (the user blocked the bot since); the failed send is the live check.
+        DmEnabled(true);
+        _dm.SendDmAsync(Arg.Any<UserIdentity>(), Arg.Any<TelegramMessage>(), Arg.Any<long?>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
+            .Returns(new DmDeliveryResult { Failed = true, ErrorMessage = "403" });
+
+        var result = await _sut.SubscribeAsync(Chat, User);
+
+        Assert.That(result, Is.EqualTo(DmCelebrationSubscribeResult.AwaitingStart));
+        await _messages.Received(1).SendAndSaveMessageAsync(ChatId, Arg.Any<TelegramMessage>(), Arg.Any<ReplyParameters?>(),
+            Arg.Any<InlineKeyboardMarkup?>(), Arg.Any<CancellationToken>());
+        await _repository.Received(1).SetPromptAsync(UserId, ChatId, 777, "job-777", Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task SubscribeAsync_DmDisabled_DoesNotTryToDm()
+    {
+        DmEnabled(false);
+
+        await _sut.SubscribeAsync(Chat, User);
+
+        await _dm.DidNotReceiveWithAnyArgs().SendDmAsync(default!, default(TelegramMessage)!);
     }
 
     [Test]
@@ -96,6 +132,7 @@ public class BanCelebrationSubscriptionServiceTests
         await _repository.DidNotReceiveWithAnyArgs().UpsertAsync(default, default);
         await _messages.DidNotReceiveWithAnyArgs().SendAndSaveMessageAsync(default, default(TelegramMessage)!);
         await _jobs.DidNotReceiveWithAnyArgs().ScheduleJobAsync(default!, default(DeleteMessagePayload)!, default);
+        await _dm.DidNotReceiveWithAnyArgs().SendDmAsync(default!, default(TelegramMessage)!);
     }
 
     [Test]

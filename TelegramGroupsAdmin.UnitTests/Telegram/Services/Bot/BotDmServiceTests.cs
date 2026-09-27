@@ -132,6 +132,59 @@ public class BotDmServiceTests
 
     #endregion
 
+    #region SendDmAsync — 403 fallback to chat
+
+    [Test]
+    public async Task SendDmAsync_DmBlockedWithFallbackChat_PostsFallbackThatMentionsRecipient()
+    {
+        // Arrange — the DM is refused (403), the fallback post in the group succeeds
+        const long fallbackChatId = -100555L;
+        var message = new TelegramMessageBuilder().Text("You're ").Bold("in").Build();
+        string? fallbackText = null;
+        IReadOnlyList<MessageEntity>? fallbackEntities = null;
+
+        _messageHandler
+            .SendAsync(
+                chatId: TestUser.Id,
+                text: Arg.Any<string>(),
+                parseMode: Arg.Any<ParseMode?>(),
+                replyParameters: Arg.Any<ReplyParameters?>(),
+                replyMarkup: Arg.Any<InlineKeyboardMarkup?>(),
+                entities: Arg.Any<IReadOnlyList<MessageEntity>?>(),
+                ct: Arg.Any<CancellationToken>())
+            .Returns<Message>(_ => throw new ApiRequestException("Forbidden: bot was blocked by the user", 403));
+        _messageHandler
+            .SendAsync(
+                chatId: fallbackChatId,
+                text: Arg.Do<string>(t => fallbackText = t),
+                parseMode: Arg.Any<ParseMode?>(),
+                replyParameters: Arg.Any<ReplyParameters?>(),
+                replyMarkup: Arg.Any<InlineKeyboardMarkup?>(),
+                entities: Arg.Do<IReadOnlyList<MessageEntity>?>(e => fallbackEntities = e),
+                ct: Arg.Any<CancellationToken>())
+            .Returns(new Message { Id = 7, Chat = new Chat { Id = fallbackChatId } });
+
+        // Act
+        var result = await _service.SendDmAsync(TestUser, message, fallbackChatId);
+
+        // Assert — a group post is for one user, so it opens with a clickable mention of them,
+        // and the original entities are shifted past the mention
+        var mention = TelegramDisplayName.Format(TestUser.FirstName, TestUser.LastName, TestUser.Username, TestUser.Id);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.FallbackUsed, Is.True);
+            Assert.That(fallbackText, Is.EqualTo($"{mention} You're in"));
+            Assert.That(fallbackEntities, Has.Count.EqualTo(2));
+            Assert.That(fallbackEntities![0].Type, Is.EqualTo(MessageEntityType.TextMention));
+            Assert.That(fallbackEntities[0].User!.Id, Is.EqualTo(TestUser.Id));
+            Assert.That(fallbackEntities[0].Offset, Is.Zero);
+            Assert.That(fallbackEntities[1].Type, Is.EqualTo(MessageEntityType.Bold));
+            Assert.That(fallbackEntities[1].Offset, Is.EqualTo(mention.Length + " You're ".Length));
+        }
+    }
+
+    #endregion
+
     #region SendDmWithKeyboardAsync — TelegramMessage overload
 
     [Test]

@@ -23,6 +23,7 @@ public sealed class BanCelebrationSubscriptionService(
     IBotMessageService messageService,
     IBotUserService userService,
     IJobScheduler jobScheduler,
+    IBotDmService dmService,
     PipelineMetrics pipelineMetrics,
     ILogger<BanCelebrationSubscriptionService> logger) : IBanCelebrationSubscriptionService
 {
@@ -48,9 +49,16 @@ public sealed class BanCelebrationSubscriptionService(
             logger.LogInformation("{User} subscribed to DM ban celebrations from {Chat}", user.ToLogInfo(), chat.ToLogInfo());
         }
 
+        // bot_dm_enabled can be stale (the user may have blocked the bot since), so the confirmation
+        // DM doubles as the live check. No group fallback: if it fails, the start prompt is the post.
         if (telegramUser.BotDmEnabled)
         {
-            return DmCelebrationSubscribeResult.Subscribed;
+            var confirmation = TelegramMessage.Plain($"✅ You'll get {chat.ChatName ?? "this chat"}'s ban celebrations in your DMs.");
+            var delivery = await dmService.SendDmAsync(user, confirmation, cancellationToken: ct);
+            if (delivery.DmSent)
+            {
+                return DmCelebrationSubscribeResult.Subscribed;
+            }
         }
 
         await PostStartPromptAsync(chat, user, ct);

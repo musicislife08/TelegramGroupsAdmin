@@ -2,6 +2,9 @@ using NSubstitute;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Utilities;
+using TelegramGroupsAdmin.Telegram.Services;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
 using TelegramGroupsAdmin.Telegram.Services.DmCelebrations;
 
@@ -14,14 +17,23 @@ public class DmCelebrationsCommandTests
     private const long UserId = 42L;
 
     private IBanCelebrationSubscriptionService _subscriptions = null!;
+    private IBotDmService _dm = null!;
     private DmCelebrationsCommand _sut = null!;
 
     [SetUp]
     public void SetUp()
     {
         _subscriptions = Substitute.For<IBanCelebrationSubscriptionService>();
-        _sut = new DmCelebrationsCommand(_subscriptions);
+        _dm = Substitute.For<IBotDmService>();
+        _sut = new DmCelebrationsCommand(_subscriptions, _dm);
     }
+
+    /// <summary>Asserts the reply went to the user's DMs, falling back to a 30s group post only if the DM fails.</summary>
+    private Task DmReceivedContaining(string text) =>
+        _dm.Received(1).SendDmAsync(
+            Arg.Is<UserIdentity>(u => u!.Id == UserId),
+            Arg.Is<TelegramMessage>(m => m!.Text.Contains(text)),
+            ChatId, 30, Arg.Any<CancellationToken>());
 
     private static Message GroupMessage() => new()
     {
@@ -31,14 +43,14 @@ public class DmCelebrationsCommandTests
     };
 
     [Test]
-    public async Task Execute_OnWithDmsEnabled_ConfirmsSubscription()
+    public async Task Execute_OnSubscribed_RepliesWithNothingBecauseTheConfirmationIsADm()
     {
         _subscriptions.SubscribeAsync(Arg.Any<ChatIdentity>(), Arg.Any<UserIdentity>(), Arg.Any<CancellationToken>())
             .Returns(DmCelebrationSubscribeResult.Subscribed);
 
         var result = await _sut.ExecuteAsync(GroupMessage(), ["on"], PermissionLevel.Member);
 
-        Assert.That(result.Message.Text, Does.Contain("Workshop Alumni"));
+        Assert.That(result.Message.Text, Is.Empty);
         await _subscriptions.Received(1).SubscribeAsync(
             Arg.Is<ChatIdentity>(c => c!.Id == ChatId), Arg.Is<UserIdentity>(u => u!.Id == UserId), Arg.Any<CancellationToken>());
     }
@@ -81,24 +93,26 @@ public class DmCelebrationsCommandTests
     }
 
     [Test]
-    public async Task Execute_Off_Unsubscribes()
+    public async Task Execute_Off_UnsubscribesAndConfirmsByDm()
     {
         var result = await _sut.ExecuteAsync(GroupMessage(), ["off"], PermissionLevel.Member);
 
-        Assert.That(result.Message.Text, Does.Contain("Workshop Alumni"));
+        Assert.That(result.Message.Text, Is.Empty);
+        await DmReceivedContaining("won't get Workshop Alumni's ban celebrations");
         await _subscriptions.Received(1).UnsubscribeAsync(
             Arg.Is<ChatIdentity>(c => c!.Id == ChatId), Arg.Is<UserIdentity>(u => u!.Id == UserId), Arg.Any<CancellationToken>());
     }
 
     [TestCase(true, "/dmcelebrations off")]
     [TestCase(false, "/dmcelebrations on")]
-    public async Task Execute_NoArgument_ReportsStateWithUsageHint(bool subscribed, string hint)
+    public async Task Execute_NoArgument_ReportsStateByDmWithUsageHint(bool subscribed, string hint)
     {
         _subscriptions.IsSubscribedAsync(ChatId, UserId, Arg.Any<CancellationToken>()).Returns(subscribed);
 
         var result = await _sut.ExecuteAsync(GroupMessage(), [], PermissionLevel.Member);
 
-        Assert.That(result.Message.Text, Does.Contain(hint));
+        Assert.That(result.Message.Text, Is.Empty);
+        await DmReceivedContaining(hint);
     }
 
     [Test]

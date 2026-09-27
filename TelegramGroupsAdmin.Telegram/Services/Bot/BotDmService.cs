@@ -80,6 +80,7 @@ public class BotDmService(
             {
                 return await SendFallbackToChatAsync(
                     fallbackChatId.Value,
+                    user,
                     message,
                     autoDeleteSeconds,
                     cancellationToken);
@@ -108,14 +109,18 @@ public class BotDmService(
     }
 
     /// <summary>
-    /// Send fallback message in chat with optional auto-delete
+    /// Send fallback message in chat with optional auto-delete. The message was meant for one
+    /// user's DMs, so the group copy opens with a clickable mention telling them it's theirs.
     /// </summary>
     private async Task<DmDeliveryResult> SendFallbackToChatAsync(
         long chatId,
+        UserIdentity recipient,
         TelegramMessage message,
         int? autoDeleteSeconds,
         CancellationToken cancellationToken)
     {
+        message = new TelegramMessageBuilder().Mention(recipient).Text(" ").Append(message).Build();
+
         // Fetch chat once for logging (reuse for all logs in this method)
         var chat = await managedChatsRepository.GetByChatIdAsync(chatId, cancellationToken);
 

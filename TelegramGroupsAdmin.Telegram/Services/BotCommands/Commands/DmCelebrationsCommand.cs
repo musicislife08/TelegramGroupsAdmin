@@ -3,15 +3,19 @@ using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Extensions;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.DmCelebrations;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
 
 /// <summary>
 /// /dmcelebrations on|off — opt in or out of receiving this chat's ban celebrations by DM.
-/// Group-only: posting in the group is what proves membership.
+/// Group-only: posting in the group is what proves membership. Replies go to the user's DMs;
+/// the group only sees a post (mentioning them) when they can't be DMed.
 /// </summary>
-public sealed class DmCelebrationsCommand(IBanCelebrationSubscriptionService subscriptionService) : IBotCommand
+public sealed class DmCelebrationsCommand(
+    IBanCelebrationSubscriptionService subscriptionService,
+    IBotDmService dmService) : IBotCommand
 {
     public string Name => CommandNames.DmCelebrations;
     public string Description => "Get this chat's ban celebrations in your DMs (on/off)";
@@ -50,28 +54,30 @@ public sealed class DmCelebrationsCommand(IBanCelebrationSubscriptionService sub
         switch (args.FirstOrDefault()?.ToLowerInvariant())
         {
             case "on":
-                var result = await subscriptionService.SubscribeAsync(chat, user, cancellationToken);
-                return Reply(result switch
-                {
-                    DmCelebrationSubscribeResult.Subscribed =>
-                        TelegramMessage.Plain($"✅ You'll get {chatName}'s ban celebrations in your DMs."),
-                    // The start prompt (with its button) is already posted and self-cleans.
-                    DmCelebrationSubscribeResult.AwaitingStart => TelegramMessage.Empty,
-                    // Silent refusal for banned users; the command message is still deleted.
-                    DmCelebrationSubscribeResult.NotAllowed => TelegramMessage.Empty,
-                    _ => throw new ArgumentOutOfRangeException(nameof(result), result, null)
-                });
+                // The service DMs the confirmation, or posts the start prompt when it can't;
+                // a banned user gets nothing. Either way the group sees no reply from here.
+                await subscriptionService.SubscribeAsync(chat, user, cancellationToken);
+                return Reply(TelegramMessage.Empty);
 
             case "off":
                 await subscriptionService.UnsubscribeAsync(chat, user, cancellationToken);
-                return Reply(TelegramMessage.Plain($"🔕 You won't get {chatName}'s ban celebrations in your DMs anymore."));
+                return await ReplyByDmAsync(user, chat,
+                    $"🔕 You won't get {chatName}'s ban celebrations in your DMs anymore.", cancellationToken);
 
             default:
                 var subscribed = await subscriptionService.IsSubscribedAsync(chat.Id, user.Id, cancellationToken);
-                return Reply(TelegramMessage.Plain(subscribed
+                return await ReplyByDmAsync(user, chat, subscribed
                     ? $"✅ You're getting {chatName}'s ban celebrations in your DMs. Use /dmcelebrations off to stop."
-                    : $"You're not getting {chatName}'s ban celebrations in your DMs. Use /dmcelebrations on to start."));
+                    : $"You're not getting {chatName}'s ban celebrations in your DMs. Use /dmcelebrations on to start.",
+                    cancellationToken);
         }
+    }
+
+    /// <summary>DMs the reply; only if the DM fails does it post in the group, self-deleting like a normal reply.</summary>
+    private async Task<CommandResult> ReplyByDmAsync(UserIdentity user, ChatIdentity chat, string text, CancellationToken ct)
+    {
+        await dmService.SendDmAsync(user, TelegramMessage.Plain(text), chat.Id, DeleteResponseAfterSeconds, ct);
+        return Reply(TelegramMessage.Empty);
     }
 
     private CommandResult Reply(TelegramMessage message) =>
