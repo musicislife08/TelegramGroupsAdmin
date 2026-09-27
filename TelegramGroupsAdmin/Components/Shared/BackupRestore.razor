@@ -14,6 +14,7 @@
 @inject ISnackbar Snackbar
 @inject IJSRuntime JsRuntime
 @inject NavigationManager Navigation
+@inject ILogger<BackupRestore> Logger
 @inject IDialogService DialogService
 
 @if (!_encryptionConfigured)
@@ -657,7 +658,11 @@ else
         if (_uploadTempFilePath != null && File.Exists(_uploadTempFilePath))
         {
             try { File.Delete(_uploadTempFilePath); }
-            catch { /* best effort */ }
+            catch (Exception ex)
+            {
+                // Best effort, but a leftover upload is a full database backup sitting in the temp dir.
+                Logger.LogWarning(ex, "Failed to delete uploaded backup temp file {Path}", _uploadTempFilePath);
+            }
         }
         _uploadTempFilePath = null;
     }

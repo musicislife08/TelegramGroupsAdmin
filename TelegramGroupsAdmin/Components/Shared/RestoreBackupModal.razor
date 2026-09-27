@@ -4,6 +4,7 @@
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
 @inject NavigationManager Navigation
+@inject ILogger<RestoreBackupModal> Logger
 
 <MudDialog>
     <DialogContent>
@@ -194,7 +195,11 @@
         if (_uploadTempFilePath != null && File.Exists(_uploadTempFilePath))
         {
             try { File.Delete(_uploadTempFilePath); }
-            catch { /* best effort */ }
+            catch (Exception ex)
+            {
+                // Best effort, but a leftover upload is a full database backup sitting in the temp dir.
+                Logger.LogWarning(ex, "Failed to delete uploaded backup temp file {Path}", _uploadTempFilePath);
+            }
         }
         _uploadTempFilePath = null;
     }

@@ -13,29 +13,23 @@ internal sealed class BanCelebrationFanoutWorker(
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        try
+        // Cancellation on shutdown propagates to the host, which treats it as a normal stop.
+        await foreach (var item in queue.Reader.ReadAllAsync(stoppingToken))
         {
-            await foreach (var item in queue.Reader.ReadAllAsync(stoppingToken))
+            try
             {
-                try
-                {
-                    await using var scope = scopeFactory.CreateAsyncScope();
-                    var processor = scope.ServiceProvider.GetRequiredService<BanCelebrationFanoutProcessor>();
-                    await processor.ProcessAsync(item, stoppingToken);
-                }
-                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-                {
-                    throw;
-                }
-                catch (Exception ex)
-                {
-                    logger.LogError(ex, "Ban celebration fan-out failed for {Chat}", item.Chat.ToLogDebug());
-                }
+                await using var scope = scopeFactory.CreateAsyncScope();
+                var processor = scope.ServiceProvider.GetRequiredService<BanCelebrationFanoutProcessor>();
+                await processor.ProcessAsync(item, stoppingToken);
             }
-        }
-        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-        {
-            // Host shutdown
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Ban celebration fan-out failed for {Chat}", item.Chat.ToLogDebug());
+            }
         }
     }
 }
