@@ -23,20 +23,14 @@ internal sealed class BanCelebrationFanoutQueue : IBanCelebrationFanoutQueue
                 FullMode = BoundedChannelFullMode.DropOldest,
                 SingleReader = true
             },
+            // Runs inside the enqueuing caller's write; if logging throws, BanCelebrationService
+            // catches and logs it there, so the ban itself is never affected.
             dropped =>
             {
-                try
-                {
-                    pipelineMetrics.RecordBanCelebrationDm("dropped");
-                    logger.LogWarning(
-                        "Ban celebration fan-out queue full; dropped the oldest celebration for {Chat}",
-                        dropped.Chat.ToLogDebug());
-                }
-                catch
-                {
-                    // Runs synchronously inside another caller's enqueue; it must never throw into
-                    // that unrelated write, so a failed metric or log is deliberately swallowed.
-                }
+                pipelineMetrics.RecordBanCelebrationDm("dropped");
+                logger.LogWarning(
+                    "Ban celebration fan-out queue full; dropped the oldest celebration for {Chat}",
+                    dropped.Chat.ToLogDebug());
             });
     }
 
