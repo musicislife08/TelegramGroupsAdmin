@@ -57,7 +57,7 @@ provenance (`source`), the audit link (`audit_log_id`), and "remove from trainin
 | Topic | Decision |
 |---|---|
 | Data model | One verdict-event table (`detection_results`). `training_labels`, `image_training_samples` and `video_training_samples` are dropped. |
-| What a row records | `source` (fine-grained enum, what caused it) + `classification` (2×3 grid). Replaces `detection_source`, `is_spam`, `used_for_training`, `net_score`. |
+| What a row records | `source` (fine-grained enum, what caused it) + `classification` (2×3 grid). Replaces `detection_source`, `used_for_training`, `net_score`. `is_spam` stays, but is generated from `classification` only. |
 | Current status | `message_verdicts` view: latest non-FileScan row per message by `detected_at DESC, id DESC`, or `Unscanned`. |
 | Edit rescan vs. earlier admin decision | The edit's rescan is newer and wins. An edit is a new content event. |
 | Scan spam rule | `score >= ReviewQueueThreshold` on **every** path, AI-confirmed included. Hard block → spam. AI veto → ham. |
@@ -83,7 +83,8 @@ provenance (`source`), the audit link (`audit_log_id`), and "remove from trainin
 | `audit_log_id` | **moved in** from `training_labels` | nullable |
 | `score` | kept | engine total / AI score / ±5 manual |
 | `reason`, `detection_method`, `check_results_json`, actor arc | kept | |
-| `is_spam` (computed), `used_for_training`, `net_score`, `detection_source` | **dropped** | |
+| `is_spam` | computed from `net_score` → **generated from `classification`** | `GENERATED ALWAYS AS (classification IN (ExplicitSpam, ImplicitSpam, UntrainedSpam)) STORED`. The coarse spam/ham split, defined once in SQL. Never written by code. |
+| `used_for_training`, `net_score`, `detection_source` | **dropped** | |
 
 **`VerdictSource`**
 
@@ -103,9 +104,18 @@ provenance (`source`), the audit link (`audit_log_id`), and "remove from trainin
 | **Spam** | `ExplicitSpam` | `ImplicitSpam` | `UntrainedSpam` |
 | **Ham** | `ExplicitHam` | `ImplicitHam` | `UntrainedHam` |
 
-`Unscanned` exists only in the view (message with no verdict row). Fixed helpers:
-`IsSpam()`, `IsExplicit()`, `IsTrainingSpam()` (`ExplicitSpam`, `ImplicitSpam`),
-`IsTrainingHam()` (`ExplicitHam`, `ImplicitHam`, `Unscanned`).
+`Unscanned` exists only in the view (message with no verdict row).
+
+Two resolutions of the same decision:
+
+- **Fine (`classification`)**: for readers that care about explicit/implicit/untrained (training,
+  retention, Layer 1). C# sets `VerdictClassifications.TrainingSpam` (`ExplicitSpam`, `ImplicitSpam`)
+  and `.TrainingHam` (`ExplicitHam`, `ImplicitHam`, `Unscanned`), usable in LINQ via `.Contains(...)`.
+- **Coarse (`is_spam`)**: for readers that only need spam vs. ham (auto-trust, AI history, badges,
+  stop words, detector analytics). Read from the generated column / view, never re-derived.
+
+An in-memory `IsSpam()` extension exists only for values not yet stored (e.g. the classifier's
+result). A parity test pins it to the generated column for every enum value.
 
 **CHECK constraints**
 
@@ -115,17 +125,18 @@ provenance (`source`), the audit link (`audit_log_id`), and "remove from trainin
 - `ContentScan` → any non-explicit value.
 
 **Indexes:** `(chat_id, message_id, detected_at DESC, id DESC)` for the view; `classification`;
-`source`. The old `is_spam` indexes are dropped.
+`source`. The existing `is_spam` / `(is_spam, detected_at)` indexes are recreated on the new generated column.
 
 ### `message_verdicts` view
 
 ```sql
 SELECT m.chat_id, m.message_id,
        COALESCE(v.classification, <Unscanned>) AS classification,
+       COALESCE(v.is_spam, false) AS is_spam,
        v.source, v.detected_at, v.id AS verdict_id
 FROM messages m
 LEFT JOIN LATERAL (
-    SELECT d.classification, d.source, d.detected_at, d.id
+    SELECT d.classification, d.is_spam, d.source, d.detected_at, d.id
     FROM detection_results d
     WHERE d.chat_id = m.chat_id AND d.message_id = m.message_id
       AND d.source <> <FileScan>
@@ -134,7 +145,7 @@ LEFT JOIN LATERAL (
 ```
 
 Mapped as a keyless EF entity (the codebase already maps views such as `enriched_detections`).
-The view **selects**; it applies no spam rules.
+The view **selects** and passes `is_spam` through; it applies no spam rules.
 
 ### `messages.media_features` (jsonb, nullable)
 
@@ -225,10 +236,10 @@ Readers split by the question they ask.
 | Reader | Rule |
 |---|---|
 | `MLTrainingDataRepository` (SDCA + Bayes) | Explicit spam/ham: `ExplicitSpam` / `ExplicitHam`. Implicit spam: `ImplicitSpam`. Implicit ham: `ImplicitHam` or `Unscanned` (trusted users' unscanned messages stay the main ham source). Existing length, dedup, cap and translation logic unchanged. |
-| Auto-trust (#546) | User's last N **scanned** messages from the view (`Unscanned` excluded; latest version each, current text length). Trust only if there are N and all are `!IsSpam()`. Method renamed from `GetRecentNonSpamResultsForUserAsync`. |
-| AI history `WasSpam` (#521B) | `IsSpam()` on the view row. |
+| Auto-trust (#546) | User's last N **scanned** messages from the view (`Unscanned` excluded; latest version each, current text length). Trust only if there are N and none has `is_spam`. Method renamed from `GetRecentNonSpamResultsForUserAsync`. |
+| AI history `WasSpam` (#521B) | View `is_spam`. |
 | Prompt examples, stop-word recommendations, Training Data page list/stats | View, filtered to training classifications. |
-| Layer 1 image/video | View rows with `IsTrainingSpam()` or `IsTrainingHam()`, joined to `messages.media_features` of the right case type, most recent N. Ham matches finally exist (`ImageContentCheckV2` already abstains on them). |
+| Layer 1 image/video | View rows whose `classification` is in `TrainingSpam` or `TrainingHam`, joined to `messages.media_features` of the right case type, most recent N. Ham matches finally exist (`ImageContentCheckV2` already abstains on them). |
 | Retention (#548) | Keep an expired message if its current classification is `ExplicitSpam`, `ExplicitHam` or `ImplicitSpam`. |
 | Message UI badges, history dialog, user detail | Current status from the view; timeline from all rows with `source` labels. |
 
@@ -236,7 +247,7 @@ Readers split by the question they ask.
 
 | Reader | Rule |
 |---|---|
-| Detection analytics (daily counts, response times, hourly stats view) | Scan rows' `classification.IsSpam()`. Corrections must not rewrite detector history. |
+| Detection analytics (daily counts, response times, hourly stats view) | `ContentScan` rows' `is_spam` (table, not the view). Corrections must not rewrite detector history. The SQL views `hourly_detection_stats`, `enriched_detections`, `detection_accuracy` keep reading `is_spam` with minimal edits. |
 | False positive/negative, `detection_accuracy` view | A scan row followed by a contradicting decision on the same `(chat_id, message_id)`. Fixes today's `message_id`-only joins. |
 | Veto analytics | Keyed on the OpenAI entry in `check_results_json`, not `!is_spam`. |
 
@@ -257,7 +268,7 @@ every chat uses 2.5 / 4.0, so the threshold backfill is exact.
    - A label with a matching manual row (same message, same verdict) is **not** inserted again (198 in prod).
    - A spam label with no user and only `ContentScan` rows is an auto-ban → `AutoBan` (416 in prod).
    - Any other label → `LegacyManual`.
-5. Drop `is_spam`, `used_for_training`, `net_score`, `detection_source`, their indexes, `training_labels`, `image_training_samples`, `video_training_samples` (0 rows in prod).
+5. Replace `is_spam` (drop the `net_score` expression, re-add as generated from `classification`). Drop `used_for_training`, `net_score`, `detection_source`, their indexes, `training_labels`, `image_training_samples`, `video_training_samples` (0 rows in prod).
 6. Create indexes, CHECK constraints, and the `message_verdicts` view.
 
 Behaviour change on existing data: a label applied before a later edit no longer survives the edit.
@@ -298,7 +309,8 @@ Migrate to N−1, insert one legacy row per backfill branch, migrate to N, and a
 `classification` per row: pipeline-low, AI "Review" below threshold, AI-confirmed, AI vetoed, hard
 block, file scan, each `manual` reason prefix, consistent and contradicting `tg-spam-import`,
 auto-ban label, label with and without a matching manual row, excluded chat-0 page/import row
-(gains a `TrainingExclude` row). Also assert that the CHECK constraint
+(gains a `TrainingExclude` row). **Parity:** for every stored `VerdictClassification` value, the
+generated `is_spam` equals the in-memory `IsSpam()`. Also assert that the CHECK constraint
 rejects a `WebMarkHam` row classified as spam, and that the view returns `Unscanned` for a message
 with no rows.
 
@@ -343,7 +355,7 @@ Part 2 recipe, and guarded by a read-back assertion in its test):
 | Mark as Ham (#549) | msg 8646, Land Owners (sender 9550752264926), an auto-banned message | `WebMarkHam` decision written (the subject); view `ExplicitSpam` → `ExplicitHam`; message leaves every spam reader |
 | Retention: unlabeled expired deleted | existing `Retention` anchors in `GoldenDatasetConstants` | unchanged behaviour for untrained messages |
 | Layer 1 read | msg 222818 (flag-edited) | returned as a spam photo sample |
-| Remove from training | msg 220384, @AndrewLong6 | `TrainingExclude` written (the subject); view `ExplicitSpam` → `UntrainedSpam`; absent from ML spam samples; still `IsSpam()` for auto-trust / AI history |
+| Remove from training | msg 220384, @AndrewLong6 | `TrainingExclude` written (the subject); view `ExplicitSpam` → `UntrainedSpam`; absent from ML spam samples; still `is_spam` for auto-trust / AI history |
 | `Record*Async` writes | any anchor above | the write is the assertion subject |
 
 ## Out of scope
