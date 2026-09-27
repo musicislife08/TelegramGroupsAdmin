@@ -173,8 +173,9 @@ Rules that keep a union migration code-only:
    structural union classifier can tell them apart.
 4. Readers `switch` over case types; they never use base members.
 
-Mapped with an EF value converter (System.Text.Json) to `jsonb`. EF complex-type JSON mapping does
-not support inheritance.
+The records live in Core. Data can't reference Core, so `MessageRecordDto.MediaFeatures` is a raw
+`jsonb` string and the owning repository (de)serializes the Core `MediaFeatures` with
+System.Text.Json, as part of its Data↔Core mapping.
 
 ## Write side: one decider
 
@@ -229,21 +230,23 @@ SimHash dedup (`MessageHistoryRepository.HasSimilarTrainingHashAsync`) are remov
 
 ## Project placement and layering
 
-Layering rule: **Data is pure schema** (entities, `DbContext`, Fluent configuration; no logic).
-**Only repositories touch the `DbContext`.** Repositories do query work; services do the rest.
-Services and components never query the `DbContext`.
+Layering rule: **UI → service → repository → Data.** Data is pure schema (entities, `DbContext`,
+Fluent configuration; no logic). **Only repositories touch the `DbContext` or reference
+`TelegramGroupsAdmin.Data.Models`**; they accept and return Core models and do every Data↔Core
+conversion (the #397 lesson: a service casting a Data enum let two enums diverge). Repositories do
+query work; services do the rest. Components call services, never repositories or the `DbContext`.
 
 Project chain: `Data ← Core ← Configuration ← AI ← ContentDetection ← Telegram ← BackgroundJobs ← App`.
 
 | Piece | Project | Notes |
 |---|---|---|
-| `VerdictSource`, `VerdictClassification` enums | Data (`Data/Models`) | Pure types used by DTOs, like `InviteStatus`. |
-| `DetectionResultRecordDto` columns, `MessageVerdictView` keyless entity, generated `is_spam`, CHECK constraints | Data (`AppDbContext` Fluent config) | Schema only. The SQL uses literal enum values; a parity test pins them to the Core sets. |
-| `MediaFeatures` records + EF value converter | Data (records are pure data; converter is schema mapping) | |
-| `VerdictClassifications` sets (`Spam`, `TrainingSpam`, `TrainingHam`) and `IsSpam()` | Core | Reachable by every repository; keeps logic out of Data. |
-| `VerdictClassifier` | ContentDetection | Pure static rule; needs `ContentDetectionResult`. |
-| Writes (`Record*Async`) | `DetectionResultsRepository` (ContentDetection) | The only verdict writer. |
-| Reads | Repositories, composing `MessageVerdicts` inside their own queries | Joins stay in SQL. See the read-side table for which repository owns each read. |
+| `VerdictSource`, `VerdictClassification` **domain enums**, `VerdictClassifications` sets (`Spam`, `TrainingSpam`, `TrainingHam`), `IsSpam()`, `MessageVerdict` model, `MediaFeatures` records | Core | What services, the classifier and components use. |
+| Mirror enums (`VerdictSourceDto`, `VerdictClassificationDto`), `DetectionResultRecordDto` columns, `MessageVerdictView` keyless entity, `media_features` column (raw `jsonb` string on `MessageRecordDto`), generated `is_spam`, CHECK constraints | Data | Schema only. SQL uses the mirror's literal values. |
+| Core ↔ Data mapping | `Repositories/Mappings/` in each repository's project | Explicit `switch` both ways, never a cast. A unit test round-trips every value and fails if either enum gains a member the other lacks. |
+| `VerdictClassifier` | ContentDetection | Pure static rule over Core types; needs `ContentDetectionResult`. |
+| Writes (`Record*Async`) | `DetectionResultsRepository` (ContentDetection) | The only verdict writer; takes Core types, maps to Data. |
+| Reads | Repositories, composing `MessageVerdicts` inside their own queries | Joins stay in SQL; results returned as Core models. |
+| UI entry points (Mark as Spam/Ham, Training Data add/edit/exclude, Duplicates, analytics) | Services | Mark as Spam/Ham → the moderation/training handler (#386); Training Data and Duplicates pages → a `TrainingDataService`; analytics component → an analytics service. Components never call `DetectionResultsRepository` directly. |
 
 **Readers moved behind repositories** (they query the `DbContext` from a non-repository today, and
 this change rewrites their verdict queries anyway). Partial overlap with #215, #484, #490, noted in
@@ -254,7 +257,7 @@ the PR:
 | `MessageQueryService` (Telegram service) — AI history | Query moves to `MessageHistoryRepository`; the service calls it. |
 | `StopWordRecommendationService` (ContentDetection) | Corpus queries move to a repository method (`DetectionResultsRepository` or a new `StopWordCorpusRepository` if it grows). |
 | `MessageStatsService` (App, a service) | Queries move to `AnalyticsRepository`. |
-| `ContentDetectionAnalytics.razor` | Queries move to `AnalyticsRepository`; the component calls the repository/service. |
+| `ContentDetectionAnalytics.razor` | Queries move to `AnalyticsRepository`; the component calls an analytics service. |
 
 `TelegramUserRepository` also reads `is_spam` and switches to the view in place.
 
@@ -331,6 +334,7 @@ with the resolved path. The job is idempotent (skips rows with `media_features`)
 - `VerdictClassifier`: every grid cell; AI path below / at / above `ReviewQueueThreshold`; hard block; veto; abstained AI; each decision source → its pinned classification; `isSpam` required for `TrainingDataPage` / `Import` / `LegacyManual` / `TrainingExclude`; `TrainingExclude` yields `Untrained*` with the given spam/ham.
 - Engine: AI-confirmed below threshold now returns `IsSpam = false`.
 - `DetectionActionService`: a score exactly at `ReviewQueueThreshold` queues for review.
+- Core ↔ Data verdict enum mapping: every value round-trips; a member missing on either side fails.
 - `MediaFeatures` JSON round-trip: `type` discriminator, `[JsonRequired]` enforcement, unknown `type` rejected.
 - Backup `3.0 → 3.1` step over an in-memory legacy backup.
 
