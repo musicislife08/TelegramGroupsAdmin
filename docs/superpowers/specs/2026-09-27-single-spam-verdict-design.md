@@ -77,8 +77,8 @@ provenance (`source`), the audit link (`audit_log_id`), and "remove from trainin
 | Column | Change | Notes |
 |---|---|---|
 | `id`, `message_id`, `chat_id`, `detected_at`, `edit_version` | kept | |
-| `source` | **new** smallint | `VerdictSource` enum, replaces `detection_source` text |
-| `classification` | **new** smallint | `VerdictClassification` enum (6 stored values) |
+| `source` | **new** int | Core `VerdictSource` value, replaces `detection_source` text |
+| `classification` | **new** int | Core `VerdictClassification` value (6 stored values) |
 | `properties` | **new** jsonb, nullable | Explanation only, never an input to any rule (e.g. `review_threshold`, AI label, `backfilled: true`) |
 | `audit_log_id` | **moved in** from `training_labels` | nullable |
 | `score` | kept | engine total / AI score / ±5 manual |
@@ -246,8 +246,8 @@ Project chain: `Data ← Core ← Configuration ← AI ← ContentDetection ← 
 | Piece | Project | Notes |
 |---|---|---|
 | `VerdictSource`, `VerdictClassification` **domain enums**, `VerdictClassifications` sets (`Spam`, `TrainingSpam`, `TrainingHam`), `IsSpam()`, `MessageVerdict` model, `MediaFeatures` records | Core | What services, the classifier and components use. |
-| Mirror enums (`VerdictSourceDto`, `VerdictClassificationDto`), `DetectionResultRecordDto` columns, `MessageVerdictView` keyless entity, `MediaFeaturesDto` hierarchy (`PhotoFeaturesDto`, `VideoFeaturesDto`) mapped to `media_features` jsonb with an EF value converter, generated `is_spam`, CHECK constraints | Data | Schema only. SQL uses the mirror's literal values. |
-| Core ↔ Data mapping | `Repositories/Mappings/` (`ToModel()` / `ToDto()` extensions) | Explicit `switch` both ways, never a cast. A unit test round-trips every value and fails if either side gains a member the other lacks. |
+| `DetectionResultRecordDto` columns (`Source`, `Classification` as plain `int`; Data has no verdict enums), `MessageVerdictView` keyless entity, `MediaFeaturesDto` hierarchy (`PhotoFeaturesDto`, `VideoFeaturesDto`) mapped to `media_features` jsonb with an EF value converter, generated `is_spam`, CHECK constraints | Data | Schema only. The generated column and CHECK constraints use literal ints. |
+| Core ↔ Data mapping | `Repositories/Mappings/` (`ToModel()` / `ToDto()` extensions) | Casts enum ↔ int, so adding an enum member needs no mapper change. Core enums carry **explicit, stable numeric values** that are never renumbered. |
 | `VerdictClassifier` | ContentDetection | Pure static rule over Core types; needs `ContentDetectionResult`. |
 | Writes (`Record*Async`) | `DetectionResultsRepository` (ContentDetection) | The only verdict writer; takes Core types, maps to Data. |
 | Reads | Repositories, composing `MessageVerdicts` inside their own queries | Joins stay in SQL; results returned as Core models. |
@@ -339,7 +339,7 @@ with the resolved path. The job is idempotent (skips rows with `media_features`)
 - `VerdictClassifier`: every grid cell; AI path below / at / above `ReviewQueueThreshold`; hard block; veto; abstained AI; each decision source → its pinned classification; `isSpam` required for `TrainingDataPage` / `Import` / `LegacyManual` / `TrainingExclude`; `TrainingExclude` yields `Untrained*` with the given spam/ham.
 - Engine: AI-confirmed below threshold now returns `IsSpam = false`.
 - `DetectionActionService`: a score exactly at `ReviewQueueThreshold` queues for review.
-- Core ↔ Data verdict enum mapping: every value round-trips; a member missing on either side fails.
+- Core verdict enums: every member has an explicit value, and the values match a pinned table (guards against accidental renumbering, since stored ints depend on them).
 - `MediaFeatures` JSON round-trip: `type` discriminator, `[JsonRequired]` enforcement, unknown `type` rejected.
 - Backup `3.0 → 3.1` step over an in-memory legacy backup.
 
