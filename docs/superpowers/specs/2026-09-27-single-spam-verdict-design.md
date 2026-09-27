@@ -227,6 +227,37 @@ that is the point to introduce a service.
 SimHash dedup (`MessageHistoryRepository.HasSimilarTrainingHashAsync`) are removed. Training-time
 `DeduplicateSamples` already covers dedup.
 
+## Project placement and layering
+
+Layering rule: **Data is pure schema** (entities, `DbContext`, Fluent configuration; no logic).
+**Only repositories touch the `DbContext`.** Repositories do query work; services do the rest.
+Services and components never query the `DbContext`.
+
+Project chain: `Data ← Core ← Configuration ← AI ← ContentDetection ← Telegram ← BackgroundJobs ← App`.
+
+| Piece | Project | Notes |
+|---|---|---|
+| `VerdictSource`, `VerdictClassification` enums | Data (`Data/Models`) | Pure types used by DTOs, like `InviteStatus`. |
+| `DetectionResultRecordDto` columns, `MessageVerdictView` keyless entity, generated `is_spam`, CHECK constraints | Data (`AppDbContext` Fluent config) | Schema only. The SQL uses literal enum values; a parity test pins them to the Core sets. |
+| `MediaFeatures` records + EF value converter | Data (records are pure data; converter is schema mapping) | |
+| `VerdictClassifications` sets (`Spam`, `TrainingSpam`, `TrainingHam`) and `IsSpam()` | Core | Reachable by every repository; keeps logic out of Data. |
+| `VerdictClassifier` | ContentDetection | Pure static rule; needs `ContentDetectionResult`. |
+| Writes (`Record*Async`) | `DetectionResultsRepository` (ContentDetection) | The only verdict writer. |
+| Reads | Repositories, composing `MessageVerdicts` inside their own queries | Joins stay in SQL. See the read-side table for which repository owns each read. |
+
+**Readers moved behind repositories** (they query the `DbContext` from a non-repository today, and
+this change rewrites their verdict queries anyway). Partial overlap with #215, #484, #490, noted in
+the PR:
+
+| Today | After |
+|---|---|
+| `MessageQueryService` (Telegram service) — AI history | Query moves to `MessageHistoryRepository`; the service calls it. |
+| `StopWordRecommendationService` (ContentDetection) | Corpus queries move to a repository method (`DetectionResultsRepository` or a new `StopWordCorpusRepository` if it grows). |
+| `MessageStatsService` (App, a service) | Queries move to `AnalyticsRepository`. |
+| `ContentDetectionAnalytics.razor` | Queries move to `AnalyticsRepository`; the component calls the repository/service. |
+
+`TelegramUserRepository` also reads `is_spam` and switches to the view in place.
+
 ## Read side
 
 Readers split by the question they ask.
@@ -236,18 +267,18 @@ Readers split by the question they ask.
 | Reader | Rule |
 |---|---|
 | `MLTrainingDataRepository` (SDCA + Bayes) | Explicit spam/ham: `ExplicitSpam` / `ExplicitHam`. Implicit spam: `ImplicitSpam`. Implicit ham: `ImplicitHam` or `Unscanned` (trusted users' unscanned messages stay the main ham source). Existing length, dedup, cap and translation logic unchanged. |
-| Auto-trust (#546) | User's last N **scanned** messages from the view (`Unscanned` excluded; latest version each, current text length). Trust only if there are N and none has `is_spam`. Method renamed from `GetRecentNonSpamResultsForUserAsync`. |
-| AI history `WasSpam` (#521B) | View `is_spam`. |
+| Auto-trust (#546) — `DetectionResultsRepository` | User's last N **scanned** messages from the view (`Unscanned` excluded; latest version each, current text length). Trust only if there are N and none has `is_spam`. Method renamed from `GetRecentNonSpamResultsForUserAsync`. |
+| AI history `WasSpam` (#521B) — `MessageHistoryRepository` | View `is_spam`. |
 | Prompt examples, stop-word recommendations, Training Data page list/stats | View, filtered to training classifications. |
 | Layer 1 image/video | View rows whose `classification` is in `TrainingSpam` or `TrainingHam`, joined to `messages.media_features` of the right case type, most recent N. Ham matches finally exist (`ImageContentCheckV2` already abstains on them). |
-| Retention (#548) | Keep an expired message if its current classification is `ExplicitSpam`, `ExplicitHam` or `ImplicitSpam`. |
-| Message UI badges, history dialog, user detail | Current status from the view; timeline from all rows with `source` labels. |
+| Retention (#548) — `MessageHistoryRepository` | Keep an expired message if its current classification is `ExplicitSpam`, `ExplicitHam` or `ImplicitSpam`. |
+| Message UI badges, history dialog, user detail (`TelegramUserRepository`, `DetectionResultsRepository`) | Current status from the view; timeline from all rows with `source` labels. |
 
 ### "What did the detector say?" → `ContentScan` rows directly
 
 | Reader | Rule |
 |---|---|
-| Detection analytics (daily counts, response times, hourly stats view) | `ContentScan` rows' `is_spam` (table, not the view). Corrections must not rewrite detector history. The SQL views `hourly_detection_stats`, `enriched_detections`, `detection_accuracy` keep reading `is_spam` with minimal edits. |
+| Detection analytics (daily counts, response times, hourly stats view) — `AnalyticsRepository` | `ContentScan` rows' `is_spam` (table, not the view). Corrections must not rewrite detector history. The SQL views `hourly_detection_stats`, `enriched_detections`, `detection_accuracy` keep reading `is_spam` with minimal edits. |
 | False positive/negative, `detection_accuracy` view | A scan row followed by a contradicting decision on the same `(chat_id, message_id)`. Fixes today's `message_id`-only joins. |
 | Veto analytics | Keyed on the OpenAI entry in `check_results_json`, not `!is_spam`. |
 
