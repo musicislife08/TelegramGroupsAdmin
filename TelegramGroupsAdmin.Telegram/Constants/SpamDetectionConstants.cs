@@ -10,24 +10,6 @@ namespace TelegramGroupsAdmin.Telegram.Constants;
 public static class SpamDetectionConstants
 {
     // ============================================================
-    // TRAINING DATA QUALITY THRESHOLDS
-    // These ensure only high-quality samples enter the training dataset.
-    // Not admin-configurable - changing these affects ML model quality.
-    // ============================================================
-
-    /// <summary>
-    /// Minimum OpenAI score required for training data (V2 scale: 4.25)
-    /// Used in DetermineIfTrainingWorthy to filter high-quality samples
-    /// </summary>
-    public const double OpenAIConfidentThreshold = 4.25;
-
-    /// <summary>
-    /// Minimum total score required for training data (V2 scale: 4.0)
-    /// Prevents low-quality auto-detections from polluting training dataset
-    /// </summary>
-    public const double TrainingConfidenceThreshold = 4.0;
-
-    // ============================================================
     // JOB SCHEDULING CONSTANTS
     // Timing parameters for background cleanup jobs.
     // Not admin-configurable - these are race condition mitigations.

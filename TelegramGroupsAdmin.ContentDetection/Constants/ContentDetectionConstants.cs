@@ -21,4 +21,10 @@ public static class ContentDetectionConstants
     /// Default AI score when the AI response doesn't include a score value
     /// </summary>
     public const double DefaultAIScore = 2.5;
+
+    /// <summary>OpenAI score at or above which an auto scan is trustworthy enough to train on.</summary>
+    public const double OpenAIConfidentThreshold = 4.25;
+
+    /// <summary>Total score above which a scan with no OpenAI check is trustworthy enough to train on.</summary>
+    public const double TrainingConfidenceThreshold = 4.0;
 }

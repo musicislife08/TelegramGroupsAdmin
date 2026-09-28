@@ -187,7 +187,7 @@ public class ContentDetectionOrchestrator
         var messageHistoryRepo = scope.ServiceProvider.GetRequiredService<IMessageHistoryRepository>();
 
         var reasonPrefix = editVersion > 0 ? $"[Edit #{editVersion}] " : "";
-        var isTrainingWorthy = DetermineIfTrainingWorthy(spamResult);
+        var isTrainingWorthy = VerdictClassifier.IsTrainingWorthy(spamResult);
 
         // Phase 4.23 (#168): Auto-deduplicate training samples at insert time using SimHash
         // Only check for auto-detected samples that would be used for training
@@ -243,29 +243,5 @@ public class ContentDetectionOrchestrator
             detectionResult.UsedForTraining);
 
         return detectionResult;
-    }
-
-    /// <summary>
-    /// Determine if detection result should be used for training.
-    /// High-quality samples only: Confident OpenAI results (score >= 4.25) or manual admin decisions.
-    /// Low-confidence auto-detections are NOT training-worthy.
-    /// </summary>
-    private static bool DetermineIfTrainingWorthy(ContentDetectionResult result)
-    {
-        // Manual admin decisions are always training-worthy (will be set when admin uses Mark as Spam/Ham)
-        // For auto-detections, only confident results are training-worthy
-
-        // Check if OpenAI was involved and was confident (score >= 4.25)
-        var openAIResult = result.CheckResults.FirstOrDefault(c => c.CheckName == CheckName.OpenAI);
-        if (openAIResult != null)
-        {
-            // OpenAI confident (score >= 4.25) = training-worthy
-            return openAIResult.Score >= SpamDetectionConstants.OpenAIConfidentThreshold;
-        }
-
-        // No OpenAI veto = borderline/uncertain detection
-        // Only use for training if total score is very high (> 4.0)
-        // This prevents low-quality auto-detections from polluting training data
-        return result.TotalScore > SpamDetectionConstants.TrainingConfidenceThreshold;
     }
 }
