@@ -188,9 +188,8 @@ public partial class ContentDetectionEngineV2 : IContentDetectionEngine
 
                 // AI verdict: the AI score replaces the pipeline aggregate and follows the same
                 // threshold rule as the pipeline, so the verdict always agrees with the action.
-                LogAIConfirmedSpam(_logger, request.User.ToLogDebug(), vetoResultV2.Score);
-
                 var aiIsSpam = vetoResultV2.Score >= config.ReviewQueueThreshold;
+                LogAIVerdict(_logger, request.User.ToLogDebug(), vetoResultV2.Score, aiIsSpam);
                 var confirmedResult = pipelineResult with
                 {
                     CheckResults = updatedCheckResults,

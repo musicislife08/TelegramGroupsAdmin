@@ -10,6 +10,6 @@ public partial class ContentDetectionEngineV2
     [LoggerMessage(Level = LogLevel.Information, Message = "AI vetoed spam detection for {User} (clean result with 0.0 score)")]
     private static partial void LogAIVetoedSpamDetection(ILogger logger, string user);
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "AI confirmed spam for {User} with score {Score}")]
-    private static partial void LogAIConfirmedSpam(ILogger logger, string user, double score);
+    [LoggerMessage(Level = LogLevel.Debug, Message = "AI verdict for {User}: score {Score}, spam={IsSpam}")]
+    private static partial void LogAIVerdict(ILogger logger, string user, double score, bool isSpam);
 }
