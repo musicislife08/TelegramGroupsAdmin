@@ -805,64 +805,35 @@
     {
         var messageIds = messages.Select(m => m.Message.MessageId).ToList();
 
-        if (WebUser!.PermissionLevel >= PermissionLevel.GlobalAdmin)
+        // Content checks (message badges) always come from the current verdict (message_verdicts view),
+        // for every permission level - see GetContentCheck.
+        var editCountsTask = MessageEditService.GetEditCountsForMessagesAsync(_selectedChatId!.Value, messageIds);
+        var contentChecksTask = MessageQueryService.GetContentChecksForMessagesAsync(_selectedChatId!.Value, messageIds);
+        await Task.WhenAll(editCountsTask, contentChecksTask);
+
+        var editCounts = await editCountsTask;
+        var contentChecks = await contentChecksTask;
+
+        if (replace)
         {
-            var editCounts = await MessageEditService.GetEditCountsForMessagesAsync(_selectedChatId!.Value, messageIds);
-            if (replace)
-            {
-                _editCounts = editCounts;
-            }
-            else
-            {
-                foreach (var kvp in editCounts)
-                    _editCounts[kvp.Key] = kvp.Value;
-            }
+            _editCounts = editCounts;
+            _contentChecks = contentChecks;
         }
         else
         {
-            var editCountsTask = MessageEditService.GetEditCountsForMessagesAsync(_selectedChatId!.Value, messageIds);
-            var contentChecksTask = MessageQueryService.GetContentChecksForMessagesAsync(_selectedChatId!.Value, messageIds);
-            await Task.WhenAll(editCountsTask, contentChecksTask);
-
-            var editCounts = await editCountsTask;
-            var contentChecks = await contentChecksTask;
-
-            if (replace)
-            {
-                _editCounts = editCounts;
-                _contentChecks = contentChecks;
-            }
-            else
-            {
-                foreach (var kvp in editCounts)
-                    _editCounts[kvp.Key] = kvp.Value;
-                foreach (var kvp in contentChecks)
-                    _contentChecks[kvp.Key] = kvp.Value;
-            }
+            foreach (var kvp in editCounts)
+                _editCounts[kvp.Key] = kvp.Value;
+            foreach (var kvp in contentChecks)
+                _contentChecks[kvp.Key] = kvp.Value;
         }
     }
 
     private ContentCheckRecord? GetContentCheck(int messageId)
     {
-        // PERF-APP-1: Use detection results already loaded via Include() instead of separate dictionary
-        var wrapper = _allMessages.FirstOrDefault(mw => mw.Message.MessageId == messageId);
-        if (wrapper?.DetectionResults.Any() != true)
-        {
-            // Fallback to dictionary for backward compatibility (messages loaded without detection history)
-            _contentChecks.TryGetValue(messageId, out var fallback);
-            return fallback;
-        }
-
-        // Use latest detection result (already ordered DESC by DetectedAt in repository)
-        var latest = wrapper.DetectionResults.First();
-        return new ContentCheckRecord(
-            CheckTimestamp: latest.DetectedAt,
-            UserId: latest.UserId,
-            IsSpam: latest.IsSpam,
-            Score: Math.Abs(latest.NetScore),
-            Reason: latest.Reason,
-            MatchedMessageId: messageId
-        );
+        // Badge always reflects the message's current verdict (message_verdicts view), never the raw
+        // latest detection_results row - see #521 Defect B. No entry (Unscanned) means no badge.
+        _contentChecks.TryGetValue(messageId, out var check);
+        return check;
     }
 
     private int GetEditCount(int messageId)
@@ -932,7 +903,7 @@
 
             if (result.Success)
             {
-                await RefreshDetectionHistoryDisplayAsync(message.MessageId, message.User.Id);
+                await RefreshDetectionHistoryDisplayAsync(message.MessageId);
 
                 Logger.LogInformation(
                     "Message {MessageId} marked as spam: user banned from {ChatsAffected} chats, message deleted: {MessageDeleted}",
@@ -995,7 +966,7 @@
                 Logger.LogInformation("Message {MessageId} marked as ham", message.MessageId);
             }
 
-            await RefreshDetectionHistoryDisplayAsync(message.MessageId, message.User.Id);
+            await RefreshDetectionHistoryDisplayAsync(message.MessageId);
         }
         catch (Exception ex)
         {
@@ -1005,11 +976,13 @@
 
     /// <summary>
     /// Refreshes detection history display for a message after spam/ham labeling.
-    /// Updates both the message wrapper's cached history and the content checks dictionary.
+    /// Updates both the message wrapper's cached history (detection-history dialog) and the
+    /// content checks dictionary (badge), the latter from the current verdict, never the raw
+    /// latest detection_results row - see #521 Defect B.
     /// </summary>
-    private async Task RefreshDetectionHistoryDisplayAsync(int messageId, long userId)
+    private async Task RefreshDetectionHistoryDisplayAsync(int messageId)
     {
-        // Refresh detection history for this message in the wrapper
+        // Refresh detection history for this message in the wrapper (feeds the detection-history dialog)
         var history = await DetectionResultsRepository.GetByMessageIdAsync(messageId, _selectedChatId!.Value);
         var messageWrapper = _allMessages.FirstOrDefault(m => m.Message.MessageId == messageId);
         if (messageWrapper != null)
@@ -1018,18 +991,11 @@
             messageWrapper.DetectionResults.AddRange(history);
         }
 
-        // Refresh spam check display
-        if (history.Any())
+        // Refresh the badge from the current verdict (message_verdicts view)
+        var contentChecks = await MessageQueryService.GetContentChecksForMessagesAsync(_selectedChatId!.Value, [messageId]);
+        if (contentChecks.TryGetValue(messageId, out var current))
         {
-            var latest = history.OrderByDescending(h => h.DetectedAt).First();
-            _contentChecks[messageId] = new ContentCheckRecord(
-                CheckTimestamp: latest.DetectedAt,
-                UserId: userId,
-                IsSpam: latest.IsSpam,
-                Score: Math.Abs(latest.NetScore),
-                Reason: latest.Reason,
-                MatchedMessageId: null
-            );
+            _contentChecks[messageId] = current;
         }
 
         StateHasChanged();

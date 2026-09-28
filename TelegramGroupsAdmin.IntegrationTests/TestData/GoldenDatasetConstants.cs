@@ -495,6 +495,9 @@ internal static class GoldenDatasetConstants
         /// <summary>Chat of <see cref="FileScanBesideScanMsgId"/> (MainChat).</summary>
         public const long FileScanBesideScanChatId = -100026957614982L;
 
+        /// <summary>The ContentScan row (dr2534, UntrainedSpam) that is <see cref="FileScanBesideScanMsgId"/>'s current verdict; the view must resolve to this row, not the newer <see cref="FileScanRowId"/> FileScan.</summary>
+        public const long FileScanBesideScanVerdictRowId = 2534;
+
         /// <summary>Edited: UntrainedHam (AI review 2.0 below threshold, dr 1933). Crypto Group; message kept, sender not banned.</summary>
         public const int UntrainedHamMsgId = 22160;
 

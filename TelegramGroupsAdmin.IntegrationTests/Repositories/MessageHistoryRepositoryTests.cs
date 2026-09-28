@@ -1493,7 +1493,18 @@ public class MessageHistoryRepositoryTests
         var checks = await _repository!.GetCurrentContentChecksAsync(
             GoldenDatasetConstants.Verdicts.FileScanBesideScanChatId, [GoldenDatasetConstants.Verdicts.FileScanBesideScanMsgId]);
 
+        // Read the current-verdict row's (dr2534, the ContentScan) reason at runtime rather than
+        // hard-coding it, so the assertion stays honest if canonical ever changes.
+        var contextFactory = _serviceProvider!.GetRequiredService<IDbContextFactory<AppDbContext>>();
+        await using var context = await contextFactory.CreateDbContextAsync();
+        var expectedReason = await context.DetectionResults
+            .AsNoTracking()
+            .Where(dr => dr.Id == GoldenDatasetConstants.Verdicts.FileScanBesideScanVerdictRowId)
+            .Select(dr => dr.Reason)
+            .SingleAsync();
+
         Assert.That(checks[GoldenDatasetConstants.Verdicts.FileScanBesideScanMsgId].Reason, Is.Not.EqualTo("No threats detected"));
+        Assert.That(checks[GoldenDatasetConstants.Verdicts.FileScanBesideScanMsgId].Reason, Is.EqualTo(expectedReason));
     }
 
     #endregion
