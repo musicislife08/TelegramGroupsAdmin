@@ -48,14 +48,15 @@ public interface IDetectionResultsRepository
     // Source of truth is telegram_users.is_trusted column
 
     /// <summary>
-    /// Get recent non-spam detection results for a user (global, not per-chat)
-    /// Used for auto-whitelisting after N consecutive non-spam messages
+    /// The user's latest <paramref name="limit"/> scanned messages (Unscanned excluded), global across
+    /// all chats, one row per message (latest version each), ordered by the message's post time,
+    /// newest first. Each row carries its current verdict and current text length. Used for
+    /// auto-whitelisting: UserAutoTrustService judges spam/short-message eligibility from this window.
     /// </summary>
     /// <param name="userId">Telegram user ID</param>
     /// <param name="limit">Max results to return (from config.FirstMessagesCount)</param>
-    /// <param name="minMessageLength">Only count messages with at least this many characters (prevents trust gaming)</param>
     /// <param name="cancellationToken">Cancellation token</param>
-    Task<List<DetectionResultRecord>> GetRecentNonSpamResultsForUserAsync(long userId, int limit, int minMessageLength, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<UserMessageVerdict>> GetRecentMessageVerdictsForUserAsync(long userId, int limit, CancellationToken cancellationToken = default);
 
     // ====================================================================================
     // Training Data Management Methods (for TrainingData.razor UI)

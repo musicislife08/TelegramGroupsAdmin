@@ -252,36 +252,27 @@ public class DetectionResultsRepository : IDetectionResultsRepository
     // REFACTOR-5: Removed IsUserTrustedAsync - use ITelegramUserRepository.IsTrustedAsync instead
     // Source of truth is telegram_users.is_trusted column
 
-    public async Task<List<DetectionResultRecord>> GetRecentNonSpamResultsForUserAsync(long userId, int limit, int minMessageLength, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<UserMessageVerdict>> GetRecentMessageVerdictsForUserAsync(
+        long userId, int limit, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        // Get last N non-spam detection results for this user (global, not per-chat)
-        // Used for auto-whitelisting: if user has N consecutive non-spam messages, trust them
-        // Optionally filter by minimum message length to prevent trust gaming with short replies
-        var query = WithActorJoins(
-                context.DetectionResults.AsNoTracking()
-                    .Where(dr => dr.Classification != null && !VerdictClassifications.SpamValues.Contains(dr.Classification.Value)),
-                context)
-            .Where(x => x.UserId == userId);
+        // One row per message (the view), latest version each; edits never add units.
+        var rows = await (
+            from m in context.Messages.AsNoTracking()
+            where m.UserId == userId
+            join v in context.MessageVerdicts.AsNoTracking() on new { m.MessageId, m.ChatId } equals new { v.MessageId, v.ChatId }
+            where v.Classification != (int)VerdictClassification.Unscanned
+            orderby m.Timestamp descending
+            select new { m.MessageId, m.ChatId, v.Classification, v.IsSpam, TextLength = m.MessageText == null ? 0 : m.MessageText.Length }
+        ).Take(limit).ToListAsync(cancellationToken);
 
-        // Filter by minimum message length if specified (prevents trust gaming)
-        if (minMessageLength > 0)
-        {
-            query = query.Where(x => x.MessageText != null &&
-                                     x.MessageText.Length >= minMessageLength);
-        }
-
-        var results = await query
-            .OrderByDescending(x => x.DetectedAt)
-            .Take(limit)
-            .ToListAsync(cancellationToken);
+        var results = rows.Select(r => new UserMessageVerdict(r.MessageId, r.ChatId, (VerdictClassification)r.Classification, r.IsSpam, r.TextLength)).ToList();
 
         _logger.LogDebug(
-            "Retrieved {Count} recent non-spam results for user {UserId} (limit: {Limit}, minLength: {MinLength})",
+            "Retrieved {Count} recent message verdicts for user {UserId} (limit: {Limit})",
             results.Count,
             userId,
-            limit,
-            minMessageLength);
+            limit);
 
         return results;
     }

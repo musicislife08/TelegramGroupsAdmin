@@ -293,4 +293,45 @@ public class DetectionResultsRepositoryTests
     }
 
     #endregion
+
+    #region GetRecentMessageVerdictsForUserAsync
+
+    [Test]
+    public async Task GetRecentMessageVerdictsForUserAsync_OneMessageEditedManyTimes_CountsOnce()
+    {
+        var rows = await _repository!.GetRecentMessageVerdictsForUserAsync(9468093502025L, limit: 10); // @financerope
+        Assert.That(rows.Count(r => r.MessageId == GoldenDatasetConstants.Verdicts.EditFlipMsgId), Is.EqualTo(1));
+    }
+
+    [Test]
+    public async Task GetRecentMessageVerdictsForUserAsync_EditFlippedToSpam_IsJudgedOnLatestVersion()
+    {
+        var rows = await _repository!.GetRecentMessageVerdictsForUserAsync(9468093502025L, limit: 10);
+        Assert.That(rows.Single(r => r.MessageId == GoldenDatasetConstants.Verdicts.EditFlipMsgId).IsSpam, Is.True);
+    }
+
+    [Test]
+    public async Task GetRecentMessageVerdictsForUserAsync_SpamInWindow_IsReturned()
+    {
+        var rows = await _repository!.GetRecentMessageVerdictsForUserAsync(GoldenDatasetConstants.Verdicts.SpamInTrustWindowUserId, limit: 3);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(rows, Has.Count.EqualTo(3));
+            Assert.That(rows.Count(r => r.IsSpam), Is.EqualTo(1));
+            Assert.That(rows.Single(r => r.IsSpam).MessageId, Is.EqualTo(GoldenDatasetConstants.Verdicts.SpamInTrustWindowMsgId));
+        }
+    }
+
+    [Test]
+    public async Task GetRecentMessageVerdictsForUserAsync_AllHamUser_ReturnsThreeHam()
+    {
+        var rows = await _repository!.GetRecentMessageVerdictsForUserAsync(GoldenDatasetConstants.Verdicts.AllHamUserId, limit: 3);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(rows, Has.Count.EqualTo(3));
+            Assert.That(rows.Any(r => r.IsSpam), Is.False);
+        }
+    }
+
+    #endregion
 }

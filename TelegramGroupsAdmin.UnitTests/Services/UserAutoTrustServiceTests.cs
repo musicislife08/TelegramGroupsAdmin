@@ -106,7 +106,7 @@ public class UserAutoTrustServiceTests
 
         // Assert - should not even check messages since account is too young
         await _detectionResultsRepo.DidNotReceive()
-            .GetRecentNonSpamResultsForUserAsync(Arg.Any<long>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>());
+            .GetRecentMessageVerdictsForUserAsync(Arg.Any<long>(), Arg.Any<int>(), Arg.Any<CancellationToken>());
         await _userActionsRepo.DidNotReceive().InsertAsync(Arg.Any<UserActionRecord>(), Arg.Any<CancellationToken>());
     }
 
@@ -129,8 +129,8 @@ public class UserAutoTrustServiceTests
             .Returns(user);
 
         // Only 2 messages returned (need 3)
-        _detectionResultsRepo.GetRecentNonSpamResultsForUserAsync(TestUserId, 3, 20, Arg.Any<CancellationToken>())
-            .Returns(CreateDetectionResults(2));
+        _detectionResultsRepo.GetRecentMessageVerdictsForUserAsync(TestUserId, 3, Arg.Any<CancellationToken>())
+            .Returns(CreateVerdicts(2));
 
         // Act
         await _service.CheckAndApplyAutoTrustAsync(CreateTgUser(), CreateTestChat());
@@ -158,8 +158,8 @@ public class UserAutoTrustServiceTests
             .Returns(user);
 
         // 3 messages returned (meets threshold)
-        _detectionResultsRepo.GetRecentNonSpamResultsForUserAsync(TestUserId, 3, 20, Arg.Any<CancellationToken>())
-            .Returns(CreateDetectionResults(3));
+        _detectionResultsRepo.GetRecentMessageVerdictsForUserAsync(TestUserId, 3, Arg.Any<CancellationToken>())
+            .Returns(CreateVerdicts(3));
 
         _userActionsRepo.InsertAsync(Arg.Any<UserActionRecord>(), Arg.Any<CancellationToken>())
             .Returns(1L);
@@ -192,8 +192,8 @@ public class UserAutoTrustServiceTests
         _userRepo.GetByIdAsync(TestUserId, Arg.Any<CancellationToken>())
             .Returns(user);
 
-        _detectionResultsRepo.GetRecentNonSpamResultsForUserAsync(TestUserId, 3, 20, Arg.Any<CancellationToken>())
-            .Returns(CreateDetectionResults(3));
+        _detectionResultsRepo.GetRecentMessageVerdictsForUserAsync(TestUserId, 3, Arg.Any<CancellationToken>())
+            .Returns(CreateVerdicts(3));
 
         _userActionsRepo.InsertAsync(Arg.Any<UserActionRecord>(), Arg.Any<CancellationToken>())
             .Returns(1L);
@@ -203,6 +203,93 @@ public class UserAutoTrustServiceTests
 
         // Assert - should trust despite 0 age because age check is disabled
         await _userActionsRepo.Received(1).InsertAsync(Arg.Any<UserActionRecord>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task CheckAndApplyAutoTrust_SpamAmongLastN_DoesNotTrust()
+    {
+        // Arrange with the same eligible-user setup as CheckAndApplyAutoTrust_BothConditionsMet_TrustsUser
+        var config = new ContentDetectionConfig
+        {
+            FirstMessageOnly = true,
+            AutoTrustMinAccountAgeHours = 24,
+            FirstMessagesCount = 3,
+            AutoTrustMinMessageLength = 20
+        };
+        _configService.GetEffectiveContentDetectionAsync(TestChatId)
+            .Returns(config);
+
+        var user = CreateTestUser(firstSeenHoursAgo: 48);
+        _userRepo.GetByIdAsync(TestUserId, Arg.Any<CancellationToken>())
+            .Returns(user);
+
+        _detectionResultsRepo.GetRecentMessageVerdictsForUserAsync(TestUserId, 3, Arg.Any<CancellationToken>())
+            .Returns([Verdict(1, VerdictClassification.ImplicitHam), Verdict(2, VerdictClassification.UntrainedSpam), Verdict(3, VerdictClassification.ImplicitHam)]);
+
+        // Act
+        await _service.CheckAndApplyAutoTrustAsync(CreateTgUser(), CreateTestChat());
+
+        // Assert
+        await _userRepo.DidNotReceive().TrustUserAsync(Arg.Any<long>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task CheckAndApplyAutoTrust_ShortMessageAmongLastN_DoesNotTrust()
+    {
+        // Arrange with the same eligible-user setup as CheckAndApplyAutoTrust_BothConditionsMet_TrustsUser
+        var config = new ContentDetectionConfig
+        {
+            FirstMessageOnly = true,
+            AutoTrustMinAccountAgeHours = 24,
+            FirstMessagesCount = 3,
+            AutoTrustMinMessageLength = 20
+        };
+        _configService.GetEffectiveContentDetectionAsync(TestChatId)
+            .Returns(config);
+
+        var user = CreateTestUser(firstSeenHoursAgo: 48);
+        _userRepo.GetByIdAsync(TestUserId, Arg.Any<CancellationToken>())
+            .Returns(user);
+
+        _detectionResultsRepo.GetRecentMessageVerdictsForUserAsync(TestUserId, 3, Arg.Any<CancellationToken>())
+            .Returns([Verdict(1, VerdictClassification.ImplicitHam), Verdict(2, VerdictClassification.ImplicitHam, length: 5), Verdict(3, VerdictClassification.ImplicitHam)]);
+
+        // Act
+        await _service.CheckAndApplyAutoTrustAsync(CreateTgUser(), CreateTestChat());
+
+        // Assert
+        await _userRepo.DidNotReceive().TrustUserAsync(Arg.Any<long>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task CheckAndApplyAutoTrust_UntrainedHamCounts_Trusts()
+    {
+        // Arrange with the same eligible-user setup as CheckAndApplyAutoTrust_BothConditionsMet_TrustsUser
+        var config = new ContentDetectionConfig
+        {
+            FirstMessageOnly = true,
+            AutoTrustMinAccountAgeHours = 24,
+            FirstMessagesCount = 3,
+            AutoTrustMinMessageLength = 20
+        };
+        _configService.GetEffectiveContentDetectionAsync(TestChatId)
+            .Returns(config);
+
+        var user = CreateTestUser(firstSeenHoursAgo: 48);
+        _userRepo.GetByIdAsync(TestUserId, Arg.Any<CancellationToken>())
+            .Returns(user);
+
+        _detectionResultsRepo.GetRecentMessageVerdictsForUserAsync(TestUserId, 3, Arg.Any<CancellationToken>())
+            .Returns([Verdict(1, VerdictClassification.UntrainedHam), Verdict(2, VerdictClassification.ImplicitHam), Verdict(3, VerdictClassification.ExplicitHam)]);
+
+        _userActionsRepo.InsertAsync(Arg.Any<UserActionRecord>(), Arg.Any<CancellationToken>())
+            .Returns(1L);
+
+        // Act
+        await _service.CheckAndApplyAutoTrustAsync(CreateTgUser(), CreateTestChat());
+
+        // Assert
+        await _userRepo.Received(1).TrustUserAsync(TestUserId, Arg.Any<CancellationToken>());
     }
 
     #region Helpers
@@ -251,26 +338,15 @@ public class UserAutoTrustServiceTests
         );
     }
 
-    private static List<DetectionResultRecord> CreateDetectionResults(int count)
+    private static UserMessageVerdict Verdict(int id, VerdictClassification c, int length = 40) =>
+        new(id, TestChatId, c, c.IsSpam(), length);
+
+    private static List<UserMessageVerdict> CreateVerdicts(int count)
     {
-        var results = new List<DetectionResultRecord>();
+        var results = new List<UserMessageVerdict>();
         for (var i = 0; i < count; i++)
         {
-            results.Add(new DetectionResultRecord
-            {
-                Id = i + 1,
-                MessageId = 1000 + i,
-                UserId = TestUserId,
-                Source = VerdictSource.ContentScan,
-                Classification = VerdictClassification.ImplicitHam,
-                Score = 0.0,
-                NetScore = 0.0,
-                DetectedAt = DateTimeOffset.UtcNow.AddMinutes(-i),
-                DetectionSource = "test",
-                DetectionMethod = "test",
-                MessageText = "This is a test message that is long enough",
-                AddedBy = Actor.AutoDetection
-            });
+            results.Add(Verdict(1000 + i, VerdictClassification.ImplicitHam));
         }
         return results;
     }
