@@ -142,8 +142,18 @@ public class ContentDetectionOrchestrator
                     .FirstOrDefault(f => f is not null);
                 if (mediaFeatures is not null)
                 {
-                    var messageHistory = scope.ServiceProvider.GetRequiredService<IMessageHistoryRepository>();
-                    await messageHistory.SetMediaFeaturesAsync(message.MessageId, message.Chat.Id, mediaFeatures, cancellationToken);
+                    // Non-critical: failing to store features must not skip auto-trust or moderation.
+                    try
+                    {
+                        var messageHistory = scope.ServiceProvider.GetRequiredService<IMessageHistoryRepository>();
+                        await messageHistory.SetMediaFeaturesAsync(message.MessageId, message.Chat.Id, mediaFeatures, cancellationToken);
+                    }
+                    catch (Exception ex) when (ex is not OperationCanceledException)
+                    {
+                        _logger.LogWarning(ex,
+                            "Failed to store media features for message {MessageId} in {Chat}, continuing with moderation",
+                            message.MessageId, message.Chat.ToLogDebug());
+                    }
                 }
 
                 // Check for auto-trust after storing non-spam detection result
