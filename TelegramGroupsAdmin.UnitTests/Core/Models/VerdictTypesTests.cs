@@ -101,6 +101,26 @@ public class VerdictTypesTests
         }
     }
 
+    [TestCase(VerdictClassification.ExplicitSpam, true)]
+    [TestCase(VerdictClassification.ExplicitHam, true)]
+    [TestCase(VerdictClassification.ImplicitSpam, true)]
+    [TestCase(VerdictClassification.ImplicitHam, true)]
+    [TestCase(VerdictClassification.UntrainedSpam, false)]
+    [TestCase(VerdictClassification.UntrainedHam, false)]
+    [TestCase(VerdictClassification.Unscanned, false)]
+    public void IsTrainingSample_OnlyTrainedClassifications(VerdictClassification c, bool expected)
+        => Assert.That(c.IsTrainingSample(), Is.EqualTo(expected));
+
+    [TestCase(VerdictClassification.ExplicitSpam, "Explicit spam")]
+    [TestCase(VerdictClassification.ExplicitHam, "Explicit ham")]
+    [TestCase(VerdictClassification.ImplicitSpam, "Implicit spam")]
+    [TestCase(VerdictClassification.ImplicitHam, "Implicit ham")]
+    [TestCase(VerdictClassification.UntrainedSpam, "Spam (not trained)")]
+    [TestCase(VerdictClassification.UntrainedHam, "Ham (not trained)")]
+    [TestCase(VerdictClassification.Unscanned, "Unscanned")]
+    public void ToDisplayText_MatchesEveryValue(VerdictClassification c, string expected)
+        => Assert.That(c.ToDisplayText(), Is.EqualTo(expected));
+
     [Test]
     public void IntValueSets_AreReadOnly()
     {

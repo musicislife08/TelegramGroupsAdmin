@@ -262,12 +262,10 @@ public class NotificationHandlerTests
             Id = 1,
             MessageId = 2002,
             DetectedAt = DateTimeOffset.UtcNow,
-            DetectionSource = "auto",
             DetectionMethod = "OpenAI",
             Source = VerdictSource.ContentScan,
             Classification = VerdictClassification.ImplicitSpam,
             Score = 4.75,
-            NetScore = 4.25,
             Reason = "High confidence spam detection",
             AddedBy = Actor.AutoDetection
         };
@@ -392,10 +390,8 @@ public class NotificationHandlerTests
             Id = 1,
             MessageId = 456,
             DetectedAt = DateTimeOffset.UtcNow,
-            DetectionSource = "auto",
             DetectionMethod = "Manual",
             Score = 5.0,
-            NetScore = 5.0,
             Reason = "Marked as spam",
             AddedBy = Actor.FromSystem("automated_pipeline"),
             UserId = 789L
@@ -433,10 +429,8 @@ public class NotificationHandlerTests
             Id = 1,
             MessageId = 456,
             DetectedAt = DateTimeOffset.UtcNow,
-            DetectionSource = "manual",
             DetectionMethod = "Manual",
             Score = 5.0,
-            NetScore = 5.0,
             Reason = "Marked as spam",
             AddedBy = Actor.FromTelegramUser(99999, "ModeratorJohn"),
             UserId = 789L

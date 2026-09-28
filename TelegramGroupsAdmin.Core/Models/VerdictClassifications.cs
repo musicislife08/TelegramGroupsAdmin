@@ -34,5 +34,20 @@ public static class VerdictClassifications
 
         public bool IsExplicit() =>
             classification is VerdictClassification.ExplicitSpam or VerdictClassification.ExplicitHam;
+
+        /// <summary>True when the verdict trains the classifiers (explicit or implicit, spam or ham).</summary>
+        public bool IsTrainingSample() => classification is VerdictClassification.ExplicitSpam or VerdictClassification.ExplicitHam
+            or VerdictClassification.ImplicitSpam or VerdictClassification.ImplicitHam;
+
+        public string ToDisplayText() => classification switch
+        {
+            VerdictClassification.ExplicitSpam => "Explicit spam",
+            VerdictClassification.ExplicitHam => "Explicit ham",
+            VerdictClassification.ImplicitSpam => "Implicit spam",
+            VerdictClassification.ImplicitHam => "Implicit ham",
+            VerdictClassification.UntrainedSpam => "Spam (not trained)",
+            VerdictClassification.UntrainedHam => "Ham (not trained)",
+            _ => "Unscanned"
+        };
     }
 }

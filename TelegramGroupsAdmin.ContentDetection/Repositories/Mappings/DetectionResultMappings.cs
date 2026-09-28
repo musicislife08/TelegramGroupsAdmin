@@ -24,7 +24,6 @@ public static class DetectionResultMappings
                 MessageId = data.MessageId,
                 ChatId = data.ChatId,
                 DetectedAt = data.DetectedAt,
-                DetectionSource = data.DetectionSource,
                 DetectionMethod = data.DetectionMethod,
                 Source = (VerdictSource)(data.Source ?? throw new InvalidOperationException($"detection_results {data.Id} has no source")),
                 Classification = (VerdictClassification)(data.Classification ?? throw new InvalidOperationException($"detection_results {data.Id} has no classification")),
@@ -33,8 +32,6 @@ public static class DetectionResultMappings
                 Score = data.Score,
                 Reason = data.Reason,
                 AddedBy = ActorMappings.ToActor(data.WebUserId, data.TelegramUserId, data.SystemIdentifier, webUserEmail, telegramUsername, telegramFirstName, telegramLastName),
-                UsedForTraining = data.UsedForTraining,
-                NetScore = data.NetScore,
                 CheckResultsJson = data.CheckResultsJson,  // Phase 2.6
                 EditVersion = data.EditVersion,             // Phase 2.6
                 UserId = 0, // Will be populated by repository join

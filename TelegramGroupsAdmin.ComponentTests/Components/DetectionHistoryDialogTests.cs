@@ -63,11 +63,9 @@ public class DetectionHistoryDialogTests : DialogTestContext
         long id = 1,
         bool isSpam = true,
         double score = 4.75,
-        string detectionSource = "automatic",
         string detectionMethod = "BayesClassifier",
         string? reason = null,
         DateTimeOffset? detectedAt = null,
-        bool usedForTraining = true,
         int editVersion = 0)
     {
         return new DetectionResultRecord
@@ -75,16 +73,13 @@ public class DetectionHistoryDialogTests : DialogTestContext
             Id = id,
             MessageId = 12345,
             DetectedAt = detectedAt ?? DateTimeOffset.UtcNow.AddHours(-1),
-            DetectionSource = detectionSource,
             DetectionMethod = detectionMethod,
             Source = VerdictSource.ContentScan,
             Classification = isSpam ? VerdictClassification.ImplicitSpam : VerdictClassification.ImplicitHam,
             Score = score,
-            NetScore = isSpam ? score : -score,
             AddedBy = Actor.FromSystem("DetectionService"),
             UserId = 67890,
             Reason = reason,
-            UsedForTraining = usedForTraining,
             EditVersion = editVersion
         };
     }
@@ -94,12 +89,14 @@ public class DetectionHistoryDialogTests : DialogTestContext
     /// </summary>
     private async Task<IDialogReference> OpenDialogAsync(
         MessageRecord message,
-        List<DetectionResultRecord>? detectionResults = null)
+        List<DetectionResultRecord>? detectionResults = null,
+        MessageVerdict? currentVerdict = null)
     {
         var parameters = new DialogParameters<DetectionHistoryDialog>
         {
             { x => x.Message, message },
-            { x => x.DetectionResults, detectionResults }
+            { x => x.DetectionResults, detectionResults },
+            { x => x.CurrentVerdict, currentVerdict }
         };
 
         return await DialogService.ShowAsync<DetectionHistoryDialog>("Detection History", parameters);
@@ -217,6 +214,46 @@ public class DetectionHistoryDialogTests : DialogTestContext
 
     #endregion
 
+    #region Current Verdict Banner Tests
+
+    [Test]
+    public void DisplaysCurrentVerdictBanner_WhenProvided()
+    {
+        // Arrange
+        var provider = RenderDialogProvider();
+        var message = CreateTestMessage();
+        var verdict = new MessageVerdict(-100, 1, VerdictClassification.ExplicitHam, false, VerdictSource.WebMarkHam, DateTimeOffset.UtcNow, 7);
+
+        // Act
+        _ = OpenDialogAsync(message, detectionResults: [], currentVerdict: verdict);
+
+        // Assert
+        provider.WaitForAssertion(() =>
+        {
+            Assert.That(provider.Markup, Does.Contain("Explicit ham"));
+            Assert.That(provider.Markup, Does.Contain("WebMarkHam"));
+        });
+    }
+
+    [Test]
+    public void HidesCurrentVerdictBanner_WhenNull()
+    {
+        // Arrange
+        var provider = RenderDialogProvider();
+        var message = CreateTestMessage();
+
+        // Act
+        _ = OpenDialogAsync(message, detectionResults: [], currentVerdict: null);
+
+        // Assert
+        provider.WaitForAssertion(() =>
+        {
+            Assert.That(provider.Markup, Does.Not.Contain("Current verdict:"));
+        });
+    }
+
+    #endregion
+
     #region Timeline Tests
 
     [Test]
@@ -313,7 +350,7 @@ public class DetectionHistoryDialogTests : DialogTestContext
     }
 
     [Test]
-    public void DisplaysNetScore()
+    public void DisplaysScore()
     {
         // Arrange
         var provider = RenderDialogProvider();
@@ -329,7 +366,7 @@ public class DetectionHistoryDialogTests : DialogTestContext
         // Assert
         provider.WaitForAssertion(() =>
         {
-            Assert.That(provider.Markup, Does.Contain("Net:"));
+            Assert.That(provider.Markup, Does.Contain("Score:"));
         });
     }
 
@@ -378,14 +415,14 @@ public class DetectionHistoryDialogTests : DialogTestContext
     }
 
     [Test]
-    public void DisplaysDetectionSource()
+    public void DisplaysVerdictSource()
     {
         // Arrange
         var provider = RenderDialogProvider();
         var message = CreateTestMessage();
         var results = new List<DetectionResultRecord>
         {
-            CreateTestResult(detectionSource: "automatic")
+            CreateTestResult()
         };
 
         // Act
@@ -394,7 +431,7 @@ public class DetectionHistoryDialogTests : DialogTestContext
         // Assert
         provider.WaitForAssertion(() =>
         {
-            Assert.That(provider.Markup, Does.Contain("automatic"));
+            Assert.That(provider.Markup, Does.Contain(nameof(VerdictSource.ContentScan)));
         });
     }
 
@@ -403,14 +440,14 @@ public class DetectionHistoryDialogTests : DialogTestContext
     #region Training Sample Indicator Tests
 
     [Test]
-    public void DisplaysTrainingSampleChip_WhenUsedForTraining()
+    public void DisplaysTrainingSampleChip_WhenClassificationIsTrainingSample()
     {
         // Arrange
         var provider = RenderDialogProvider();
         var message = CreateTestMessage();
         var results = new List<DetectionResultRecord>
         {
-            CreateTestResult(usedForTraining: true)
+            CreateTestResult(isSpam: true)
         };
 
         // Act

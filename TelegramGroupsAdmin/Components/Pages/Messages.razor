@@ -20,7 +20,6 @@
 @inject IDialogService DialogService
 @inject ITelegramBotService BotService
 @inject IDetectionResultsRepository DetectionResultsRepository
-@inject ITrainingLabelsRepository TrainingLabelsRepository
 @inject ITrainingHandler TrainingHandler
 @inject IBotModerationService ModerationService
 @inject ITelegramUserMappingRepository TelegramMappingRepository
@@ -1007,13 +1006,13 @@
         var messageWrapper = _allMessages.FirstOrDefault(mw => mw.Message.MessageId == message.MessageId);
         var history = messageWrapper?.DetectionResults ?? await DetectionResultsRepository.GetByMessageIdAsync(message.MessageId, message.Chat.Id);
 
-        var trainingLabel = await TrainingLabelsRepository.GetByMessageIdAsync(message.MessageId, message.Chat.Id);
+        var verdict = await DetectionResultsRepository.GetCurrentVerdictAsync(message.MessageId, message.Chat.Id);
 
         var parameters = new DialogParameters<DetectionHistoryDialog>
         {
             { x => x.Message, message },
             { x => x.DetectionResults, history },
-            { x => x.TrainingLabel, trainingLabel }
+            { x => x.CurrentVerdict, verdict }
         };
 
         var options = new DialogOptions

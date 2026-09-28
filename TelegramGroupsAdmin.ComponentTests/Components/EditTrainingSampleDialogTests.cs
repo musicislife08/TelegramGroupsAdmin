@@ -37,9 +37,7 @@ public class EditTrainingSampleDialogTests : DialogTestContext
             Score = score,
             AddedBy = Actor.FromWebUser("user-123", addedByEmail),
             UserId = 67890,
-            MessageText = messageText,
-            NetScore = isSpam ? score : -score,
-            UsedForTraining = true
+            MessageText = messageText
         };
     }
 

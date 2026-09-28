@@ -3,6 +3,7 @@
 @using TelegramGroupsAdmin.ContentDetection.Models
 @using TelegramGroupsAdmin.ContentDetection.Constants
 @using TelegramGroupsAdmin.Core
+@using TelegramGroupsAdmin.Core.Models
 @using TelegramGroupsAdmin.Core.Utilities
 @using TelegramGroupsAdmin.Telegram.Extensions
 @* Telegram-authentic message bubble design *@
@@ -558,7 +559,7 @@
             return false;
 
         var latest = DetectionHistory.OrderByDescending(d => d.DetectedAt).First();
-        return latest is { DetectionSource: "manual", IsSpam: false };
+        return latest is { Source: VerdictSource.WebMarkHam or VerdictSource.ReviewDismiss };
     }
 
     /// <summary>
@@ -730,9 +731,9 @@
         if (latest == null)
             return ContentCheck?.IsSpam == true ? "Marked as spam" : "Marked as ham";
 
-        var tooltip = $"{(latest.IsSpam ? "SPAM" : "HAM")} - {latest.NetScore:F2} score\n";
+        var tooltip = $"{(latest.IsSpam ? "SPAM" : "HAM")} - {latest.Score:F2} score\n";
         tooltip += $"Detection: {latest.DetectionMethod}\n";
-        tooltip += $"Source: {latest.DetectionSource}\n";
+        tooltip += $"Source: {latest.Source}\n";
 
         if (contributingFactors?.Any() == true)
         {
