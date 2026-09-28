@@ -33,16 +33,6 @@ public static class SpamDetectionConstants
     // ============================================================
 
     /// <summary>
-    /// Detection source identifier for manual moderator actions
-    /// </summary>
-    public const string ManualDetectionSource = "manual";
-
-    /// <summary>
-    /// Detection method identifier for manual moderator actions
-    /// </summary>
-    public const string ManualDetectionMethod = "Manual";
-
-    /// <summary>
     /// Reason text for manual spam classification by moderator
     /// </summary>
     public const string ManualSpamReason = "Marked as spam by moderator";

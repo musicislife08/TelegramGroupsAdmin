@@ -1,8 +1,13 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using TelegramGroupsAdmin.ContentDetection.Constants;
+using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
+using TelegramGroupsAdmin.ContentDetection.Services;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Data;
+using TelegramGroupsAdmin.IntegrationTests.TestData;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
 
 namespace TelegramGroupsAdmin.IntegrationTests.Repositories;
@@ -23,7 +28,8 @@ namespace TelegramGroupsAdmin.IntegrationTests.Repositories;
 /// - Batch retrieval: message_id=20465 and message_id=20466 in chat -100055570785509
 ///   (both have canonical detection_results rows; 20465 is the multi-DR anchor)
 /// - Invalidation insert target: message_id=212340 in MainChat -100026957614982
-///   (exists in canonical messages with no existing detection_result — clean insert target)
+///   (its only canonical detection_result is an old LegacyManual row with used_for_training = false)
+/// - Verdict writes: GoldenDatasetConstants.Verdicts anchors (see IntegrationTests/CLAUDE.md Part 2)
 /// </summary>
 [TestFixture]
 public class DetectionResultsRepositoryTests
@@ -278,6 +284,95 @@ public class DetectionResultsRepositoryTests
             .FirstOrDefaultAsync(dr => dr.MessageId == message!.MessageId && dr.ChatId == 0);
         Assert.That(detection, Is.Not.Null);
         Assert.That(detection!.NetScore, Is.EqualTo(-5.0), "Ham sample should have negative net_score");
+    }
+
+    #endregion
+
+    #region Verdict writes
+
+    // A canonical message with no detection rows. (212340 was the brief's choice, but canonical
+    // gives it a LegacyManual row, so the dedicated unscanned anchor is used instead.)
+    private const int EmptyTargetMessageId = GoldenDatasetConstants.Verdicts.UnscannedMsgId;
+
+    [Test]
+    public async Task RecordScanAsync_AIReviewBelowThreshold_StoresUntrainedHam_AndViewAgrees()
+    {
+        var before = await _repository!.GetCurrentVerdictAsync(EmptyTargetMessageId, MainChatId);
+        Assert.That(before!.Classification, Is.EqualTo(VerdictClassification.Unscanned), "canonical precondition");
+
+        var scan = new ContentDetectionResult
+        {
+            IsSpam = false,
+            TotalScore = 2.0,
+            PrimaryReason = "AI below review threshold",
+            CheckResults =
+            [
+                new ContentCheckResponseV2 { CheckName = CheckName.Similarity, Score = 3.5, Abstained = false, Details = "sim" },
+                new ContentCheckResponseV2 { CheckName = CheckName.OpenAI, Score = 2.0, Abstained = false, Details = "AI: Review" }
+            ]
+        };
+
+        var record = await _repository.RecordScanAsync(EmptyTargetMessageId, MainChatId, scan, editVersion: 0);
+        var verdict = await _repository.GetCurrentVerdictAsync(EmptyTargetMessageId, MainChatId);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(record.Source, Is.EqualTo(VerdictSource.ContentScan));
+            Assert.That(record.Classification, Is.EqualTo(VerdictClassification.UntrainedHam));
+            Assert.That(verdict!.Classification, Is.EqualTo(VerdictClassification.UntrainedHam));
+            Assert.That(verdict.IsSpam, Is.False);
+        }
+    }
+
+    [Test]
+    public async Task RecordDecisionAsync_WebMarkHamOnAutoBannedMessage_ViewBecomesExplicitHam()
+    {
+        var chatId = GoldenDatasetConstants.Chats.LandOwnersChatId;
+        var msgId = GoldenDatasetConstants.Verdicts.MarkAsHamSubjectMsgId;
+        var before = await _repository!.GetCurrentVerdictAsync(msgId, chatId);
+        Assert.That(before!.Classification, Is.EqualTo(VerdictClassification.ExplicitSpam), "canonical precondition");
+
+        await _repository.RecordDecisionAsync(msgId, chatId,
+            VerdictSource.WebMarkHam, Actor.FromWebUser(GoldenDatasetConstants.WebUsers.OwnerId), "false positive");
+
+        var after = await _repository.GetCurrentVerdictAsync(msgId, chatId);
+        Assert.That(after!.Classification, Is.EqualTo(VerdictClassification.ExplicitHam));
+    }
+
+    [Test]
+    public async Task RecordDecisionAsync_DismissAfterMarkAsHam_AppendsAndViewShowsLatest()
+    {
+        var chatId = GoldenDatasetConstants.Chats.MainChatId;
+        var msgId = GoldenDatasetConstants.Verdicts.CorrectedToHamMsgId;
+        Assert.That((await _repository!.GetCurrentVerdictAsync(msgId, chatId))!.Classification,
+            Is.EqualTo(VerdictClassification.ExplicitHam), "canonical precondition");
+
+        await _repository.RecordDecisionAsync(msgId, chatId, VerdictSource.ReviewDismiss,
+            Actor.FromWebUser(GoldenDatasetConstants.WebUsers.OwnerId), "Report dismissed");
+
+        var after = await _repository.GetCurrentVerdictAsync(msgId, chatId);
+        Assert.That(after!.Classification, Is.EqualTo(VerdictClassification.ImplicitHam));
+    }
+
+    [Test]
+    public async Task RecordFileScanAsync_DoesNotChangeTheMessageVerdict()
+    {
+        var chatId = GoldenDatasetConstants.Chats.MainChatId;
+        var msgId = GoldenDatasetConstants.Verdicts.AutoBanMsgId;
+        var before = await _repository!.GetCurrentVerdictAsync(msgId, chatId);
+
+        await _repository.RecordFileScanAsync(msgId, chatId, infected: true, score: 5.0, details: "Malware");
+
+        var after = await _repository.GetCurrentVerdictAsync(msgId, chatId);
+        Assert.That(after!.VerdictId, Is.EqualTo(before!.VerdictId));
+    }
+
+    [Test]
+    public async Task GetCurrentVerdictAsync_MessageWithoutRows_IsUnscanned()
+    {
+        var verdict = await _repository!.GetCurrentVerdictAsync(
+            GoldenDatasetConstants.Verdicts.UnscannedMsgId, GoldenDatasetConstants.Chats.MainChatId);
+        Assert.That(verdict!.Classification, Is.EqualTo(VerdictClassification.Unscanned));
     }
 
     #endregion

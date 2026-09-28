@@ -264,7 +264,8 @@ public class NotificationHandlerTests
             DetectedAt = DateTimeOffset.UtcNow,
             DetectionSource = "auto",
             DetectionMethod = "OpenAI",
-            IsSpam = true,
+            Source = VerdictSource.ContentScan,
+            Classification = VerdictClassification.ImplicitSpam,
             Score = 4.75,
             NetScore = 4.25,
             Reason = "High confidence spam detection",
@@ -285,9 +286,63 @@ public class NotificationHandlerTests
             Arg.Any<ChatIdentity>(),
             Arg.Any<UserIdentity>(),
             Arg.Any<Actor?>(),
-            4.25, // netScore = Math.Abs(4.25)
+            4.75, // netScore carries the scan's score (legacy NetScore is no longer read)
             4.75, // score
             Arg.Is<string?>(r => r != null && r.Contains("High confidence")),
+            Arg.Any<int>(),
+            Arg.Any<bool>(),
+            Arg.Any<int>(),
+            Arg.Any<string?>(),
+            Arg.Any<string?>(),
+            Arg.Any<string?>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task NotifyAdminsSpamBanAsync_DecisionNewerThanScan_UsesScanEvidenceAndDecisionActor()
+    {
+        // Arrange — /spam decision (newest) on top of the content scan that preceded it
+        var moderator = Actor.FromTelegramUser(99999, "ModeratorJohn");
+        var decision = new DetectionResultRecord
+        {
+            Id = 2,
+            MessageId = 2002,
+            DetectedAt = DateTimeOffset.UtcNow,
+            Source = VerdictSource.SpamCommand,
+            Classification = VerdictClassification.ExplicitSpam,
+            Score = 5.0,
+            Reason = "/spam by moderator",
+            AddedBy = moderator
+        };
+        var scan = new DetectionResultRecord
+        {
+            Id = 1,
+            MessageId = 2002,
+            DetectedAt = DateTimeOffset.UtcNow.AddMinutes(-1),
+            Source = VerdictSource.ContentScan,
+            Classification = VerdictClassification.UntrainedSpam,
+            Score = 3.2,
+            Reason = "Similarity match",
+            AddedBy = Actor.AutoDetection
+        };
+        var enrichedMessage = new MessageWithDetectionHistory
+        {
+            Message = CreateTestEnrichedMessage(chatId: 1001, messageId: 2002, userId: 3003).Message,
+            DetectionResults = [decision, scan]
+        };
+
+        // Act
+        var result = await _handler.NotifyAdminsSpamBanAsync(enrichedMessage, chatsAffected: 1, messageDeleted: true);
+
+        // Assert — evidence (score, reason) from the scan; bannedBy from the latest decision
+        Assert.That(result.Success, Is.True);
+        await _mockNotificationService.Received(1).SendSpamBanNotificationAsync(
+            Arg.Any<ChatIdentity>(),
+            Arg.Any<UserIdentity>(),
+            moderator,
+            3.2,
+            3.2,
+            "Similarity match",
             Arg.Any<int>(),
             Arg.Any<bool>(),
             Arg.Any<int>(),

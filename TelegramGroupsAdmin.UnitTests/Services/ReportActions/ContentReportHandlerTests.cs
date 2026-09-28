@@ -12,6 +12,7 @@ using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
+using TelegramGroupsAdmin.Telegram.Services.Moderation.Handlers;
 using TelegramGroupsAdmin.Telegram.Services.ReportActions;
 using Report = TelegramGroupsAdmin.Core.Models.Report;
 using ModerationResult = TelegramGroupsAdmin.Telegram.Services.Moderation.ModerationResult;
@@ -36,6 +37,7 @@ public class ContentReportHandlerTests
     private IAuditService _mockAuditService = null!;
     private IBotMessageService _mockBotMessageService = null!;
     private IReportCallbackContextRepository _mockCallbackContextRepo = null!;
+    private ITrainingHandler _trainingHandler = null!;
 
     private ContentReportHandler _handler = null!;
 
@@ -48,6 +50,7 @@ public class ContentReportHandlerTests
         _mockAuditService = Substitute.For<IAuditService>();
         _mockBotMessageService = Substitute.For<IBotMessageService>();
         _mockCallbackContextRepo = Substitute.For<IReportCallbackContextRepository>();
+        _trainingHandler = Substitute.For<ITrainingHandler>();
 
         // Default: TryUpdateStatusAsync succeeds
         _mockReportsRepo.TryUpdateStatusAsync(
@@ -61,6 +64,7 @@ public class ContentReportHandlerTests
             _mockModerationService,
             _mockAuditService,
             _mockBotMessageService,
+            _trainingHandler,
             NullLogger<ContentReportHandler>.Instance);
     }
 
@@ -397,6 +401,21 @@ public class ContentReportHandlerTests
     #endregion
 
     #region DismissAsync Tests
+
+    [Test]
+    public async Task DismissAsync_RecordsReviewDismissHamDecision()
+    {
+        var report = CreateTestReport();
+        _mockReportsRepo.GetContentReportAsync(TestReportId, Arg.Any<CancellationToken>())
+            .Returns(report);
+
+        var result = await _handler.DismissAsync(TestReportId, TestExecutor, "not actionable", CancellationToken.None);
+
+        Assert.That(result.Success, Is.True);
+        await _trainingHandler.Received(1).CreateHamSampleAsync(
+            report.MessageId, report.Chat, TestExecutor, VerdictSource.ReviewDismiss,
+            $"Report #{TestReportId} dismissed: not actionable", Arg.Any<CancellationToken>());
+    }
 
     [Test]
     public async Task DismissAsync_Success_DismissesReportWithoutModeration()

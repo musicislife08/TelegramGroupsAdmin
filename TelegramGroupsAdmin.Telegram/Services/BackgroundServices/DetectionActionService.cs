@@ -97,6 +97,7 @@ public class DetectionActionService(
                         Chat = ChatIdentity.From(message.Chat),
                         MessageId = message.MessageId,
                         Executor = Actor.AutoDetection,
+                        Source = VerdictSource.AutoBan,
                         Reason = $"Hard block policy violation: {hardBlockResult.Details}",
                         TelegramMessage = message
                     },
@@ -128,6 +129,7 @@ public class DetectionActionService(
                         Chat = ChatIdentity.From(message.Chat),
                         MessageId = message.MessageId,
                         Executor = Actor.AutoDetection,
+                        Source = VerdictSource.AutoBan,
                         Reason = $"Auto-ban: High confidence spam (Score: {spamResult.TotalScore:F2}, OpenAI: {openAIResult.Score:F2})",
                         TelegramMessage = message
                     },

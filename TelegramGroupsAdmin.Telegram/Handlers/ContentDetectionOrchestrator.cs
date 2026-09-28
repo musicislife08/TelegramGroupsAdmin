@@ -5,9 +5,7 @@ using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Services;
-using TelegramGroupsAdmin.ContentDetection.Utilities;
 using TelegramGroupsAdmin.Core.Models;
-using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Constants;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Models;
@@ -26,18 +24,15 @@ public class ContentDetectionOrchestrator
 {
     private readonly IServiceProvider _serviceProvider;
     private readonly DetectionActionService _spamActionService;
-    private readonly SimHashService _simHashService;
     private readonly ILogger<ContentDetectionOrchestrator> _logger;
 
     public ContentDetectionOrchestrator(
         IServiceProvider serviceProvider,
         DetectionActionService spamActionService,
-        SimHashService simHashService,
         ILogger<ContentDetectionOrchestrator> logger)
     {
         _serviceProvider = serviceProvider;
         _spamActionService = spamActionService;
-        _simHashService = simHashService;
         _logger = logger;
     }
 
@@ -136,7 +131,6 @@ public class ContentDetectionOrchestrator
                     detectionResultsRepo,
                     message,
                     result.SpamResult,
-                    text, // Pass analyzed text for deduplication check
                     editVersion,
                     cancellationToken);
 
@@ -172,75 +166,22 @@ public class ContentDetectionOrchestrator
     }
 
     /// <summary>
-    /// Store spam detection result to database for analytics and training.
-    /// Phase 4.23 (#168): Auto-deduplicates training samples at insert time using SimHash.
+    /// Store the scan as a verdict event. The classification is decided once, by VerdictClassifier,
+    /// inside the repository.
     /// </summary>
     private async Task<DetectionResultRecord> StoreDetectionResultAsync(
         IDetectionResultsRepository detectionResultsRepo,
         Message message,
         ContentDetectionResult spamResult,
-        string? analyzedText,
         int editVersion,
         CancellationToken cancellationToken)
     {
-        using var scope = _serviceProvider.CreateScope();
-        var messageHistoryRepo = scope.ServiceProvider.GetRequiredService<IMessageHistoryRepository>();
+        var detectionResult = await detectionResultsRepo.RecordScanAsync(
+            message.MessageId, message.Chat.Id, spamResult, editVersion, cancellationToken);
 
-        var reasonPrefix = editVersion > 0 ? $"[Edit #{editVersion}] " : "";
-        var isTrainingWorthy = VerdictClassifier.IsTrainingWorthy(spamResult);
-
-        // Phase 4.23 (#168): Auto-deduplicate training samples at insert time using SimHash
-        // Only check for auto-detected samples that would be used for training
-        // Manual samples (/spam command) bypass deduplication (admin intent)
-        if (isTrainingWorthy && !string.IsNullOrWhiteSpace(analyzedText))
-        {
-            var hash = _simHashService.ComputeHash(analyzedText);
-            var isDuplicate = await messageHistoryRepo.HasSimilarTrainingHashAsync(
-                hash,
-                spamResult.IsSpam,
-                SimHashService.DefaultMaxDistance,
-                cancellationToken);
-
-            if (isDuplicate)
-            {
-                isTrainingWorthy = false;
-                _logger.LogDebug(
-                    "Skipping training for message {MessageId}: SimHash within {MaxDistance} bits of existing {Class} sample",
-                    message.MessageId,
-                    SimHashService.DefaultMaxDistance,
-                    spamResult.IsSpam ? "spam" : "ham");
-            }
-        }
-
-        var detectionResult = new DetectionResultRecord
-        {
-            MessageId = message.MessageId,
-            ChatId = message.Chat.Id,
-            DetectedAt = DateTimeOffset.UtcNow,
-            DetectionSource = "auto",
-            DetectionMethod = spamResult.CheckResults.Count > 0
-                ? string.Join(", ", spamResult.CheckResults.Select(c => c.CheckName))
-                : "Unknown",
-            // IsSpam is computed from net_score (don't set it here)
-            Score = spamResult.TotalScore,
-            Reason = $"{reasonPrefix}{spamResult.PrimaryReason}",
-            AddedBy = Actor.AutoDetection, // Phase 4.19: Actor system
-            UsedForTraining = isTrainingWorthy,
-            NetScore = spamResult.TotalScore,
-            CheckResultsJson = CheckResultsSerializer.Serialize(spamResult.CheckResults),
-            EditVersion = editVersion
-        };
-
-        await detectionResultsRepo.InsertAsync(detectionResult, cancellationToken);
-
-        var editInfo = editVersion > 0 ? $" (edit #{editVersion})" : "";
         _logger.LogDebug(
-            "Stored detection result for message {MessageId}{EditInfo}: {IsSpam} (net: {NetScore}, training: {UsedForTraining})",
-            message.MessageId,
-            editInfo,
-            spamResult.IsSpam ? "spam" : "ham",
-            spamResult.TotalScore,
-            detectionResult.UsedForTraining);
+            "Stored {Classification} verdict for message {MessageId} (edit {EditVersion}, score {Score:F2})",
+            detectionResult.Classification, message.MessageId, editVersion, spamResult.TotalScore);
 
         return detectionResult;
     }

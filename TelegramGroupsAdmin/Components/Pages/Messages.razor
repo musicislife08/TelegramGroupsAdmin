@@ -4,11 +4,11 @@
 @using TelegramGroupsAdmin.Telegram.Services.Bot
 @using TelegramGroupsAdmin.ContentDetection.Models
 @using TelegramGroupsAdmin.ContentDetection.Repositories
-@using TelegramGroupsAdmin.Core.BackgroundJobs
 @using TelegramGroupsAdmin.Core.Extensions
 @using TelegramGroupsAdmin.Core.Models
 @using TelegramGroupsAdmin.Core.Services
 @using TelegramGroupsAdmin.Telegram.Services.Moderation
+@using TelegramGroupsAdmin.Telegram.Services.Moderation.Handlers
 @using TelegramGroupsAdmin.Core.Utilities
 @using TelegramGroupsAdmin.Telegram.Extensions
 @inject IMessageHistoryRepository MessageRepository
@@ -21,7 +21,7 @@
 @inject ITelegramBotService BotService
 @inject IDetectionResultsRepository DetectionResultsRepository
 @inject ITrainingLabelsRepository TrainingLabelsRepository
-@inject IJobTriggerService JobTriggerService
+@inject ITrainingHandler TrainingHandler
 @inject IBotModerationService ModerationService
 @inject ITelegramUserMappingRepository TelegramMappingRepository
 @inject ITelegramUserRepository TelegramUserRepository
@@ -926,6 +926,7 @@
                     MessageId = message.MessageId,
                     Chat = message.Chat,
                     Executor = executor,
+                    Source = VerdictSource.WebMarkSpam,
                     Reason = "Manually marked as spam by admin via UI"
                 });
 
@@ -959,48 +960,14 @@
             // Check if this was previously marked as spam (false positive correction scenario)
             var wasPreviouslySpam = GetContentCheck(message.MessageId)?.IsSpam == true;
 
-            // 1. Create detection result marked as ham (for training data)
-            // Uses atomic method to invalidate old training data + insert new result in single transaction
             var reason = wasPreviouslySpam
                 ? "Manually marked as ham (not spam) by admin - false positive correction"
                 : "Manually added as ham training sample by admin";
 
-            // 1. Create detection result for history (NOT for training)
-            var detectionResult = new DetectionResultRecord
-            {
-                MessageId = message.MessageId,
-                ChatId = message.Chat.Id,
-                DetectedAt = DateTimeOffset.UtcNow,
-                DetectionSource = "manual",
-                DetectionMethod = "Manual",
-                // IsSpam computed from net_score (negative = ham)
-                Score = 0.0, // No spam score (ham)
-                Reason = reason,
-                AddedBy = executor,
-                UserId = message.User.Id, // Detection result uses raw ID for DB FK
-                UsedForTraining = false, // History only - training handled by training_labels
-                NetScore = -5.0, // Strong ham signal (manual admin decision)
-                CheckResultsJson = null,
-                EditVersion = 0
-            };
+            await TrainingHandler.CreateHamSampleAsync(
+                message.MessageId, message.Chat, executor, VerdictSource.WebMarkHam, reason);
 
-            await DetectionResultsRepository.InsertAsync(detectionResult);
-
-            // 2. Create explicit training label for ML
-            await TrainingLabelsRepository.UpsertLabelAsync(
-                message.MessageId,
-                message.Chat.Id,
-                label: TrainingLabel.Ham,
-                actor: executor,
-                reason: reason,
-                auditLogId: null);
-
-            // 3. Trigger classifier retraining (SDCA + Bayes)
-            await JobTriggerService.TriggerNowAsync(
-                BackgroundJobNames.ClassifierRetraining,
-                payload: new { });
-
-            // 2. Only unban and restore trust if this was previously marked as spam (false positive correction)
+            // Only unban and restore trust if this was previously marked as spam (false positive correction)
             if (wasPreviouslySpam)
             {
                 var unbanResult = await ModerationService.UnbanUserAsync(
@@ -1025,9 +992,7 @@
             }
             else
             {
-                Logger.LogInformation(
-                    "Message {MessageId} marked as ham (training sample): detection result created with net_score = -5.0",
-                    message.MessageId);
+                Logger.LogInformation("Message {MessageId} marked as ham", message.MessageId);
             }
 
             await RefreshDetectionHistoryDisplayAsync(message.MessageId, message.User.Id);

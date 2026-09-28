@@ -1,4 +1,6 @@
 using TelegramGroupsAdmin.ContentDetection.Models;
+using TelegramGroupsAdmin.ContentDetection.Services;
+using TelegramGroupsAdmin.Core.Models;
 
 namespace TelegramGroupsAdmin.ContentDetection.Repositories;
 
@@ -7,10 +9,18 @@ namespace TelegramGroupsAdmin.ContentDetection.Repositories;
 /// </summary>
 public interface IDetectionResultsRepository
 {
-    /// <summary>
-    /// Insert a new detection result (spam or ham classification)
-    /// </summary>
-    Task InsertAsync(DetectionResultRecord result, CancellationToken cancellationToken = default);
+    /// <summary>Records a content-detection scan. The classification is decided by VerdictClassifier.</summary>
+    Task<DetectionResultRecord> RecordScanAsync(int messageId, long chatId, ContentDetectionResult scan, int editVersion, CancellationToken cancellationToken = default);
+
+    /// <summary>Records an attachment scan. Never becomes the message's verdict.</summary>
+    Task RecordFileScanAsync(int messageId, long chatId, bool infected, double score, string details, CancellationToken cancellationToken = default);
+
+    /// <summary>Records a decision (admin, auto-ban, dismiss, training page, exclusion). Latest event wins.</summary>
+    Task<long> RecordDecisionAsync(int messageId, long chatId, VerdictSource source, Actor actor, string reason,
+        bool? isSpam = null, long? auditLogId = null, CancellationToken cancellationToken = default);
+
+    /// <summary>The message's current verdict from message_verdicts; null only if the message does not exist.</summary>
+    Task<MessageVerdict?> GetCurrentVerdictAsync(int messageId, long chatId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Get detection result by ID

@@ -9,6 +9,7 @@ using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
+using TelegramGroupsAdmin.Telegram.Services.Moderation.Handlers;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Infrastructure;
 
 namespace TelegramGroupsAdmin.Telegram.Services.ReportActions;
@@ -23,6 +24,7 @@ internal sealed class ContentReportHandler(
     IBotModerationService moderationService,
     IAuditService auditService,
     IBotMessageService botMessageService,
+    ITrainingHandler trainingHandler,
     ILogger<ContentReportHandler> logger) : IContentReportHandler
 {
     private sealed record ContentFetchData(Report Report, MessageRecord Message);
@@ -43,6 +45,7 @@ internal sealed class ContentReportHandler(
                 Chat = message.Chat,
                 MessageId = report.MessageId,
                 Executor = executor,
+                Source = VerdictSource.ReviewSpam,
                 Reason = $"Report #{reportId} - spam/abuse"
             },
             cancellationToken);
@@ -213,6 +216,11 @@ internal sealed class ContentReportHandler(
             },
             cancellationToken);
         if (statusResult != null) return statusResult;
+
+        await trainingHandler.CreateHamSampleAsync(
+            report.MessageId, report.Chat, executor, VerdictSource.ReviewDismiss,
+            reason is null ? $"Report #{reportId} dismissed" : $"Report #{reportId} dismissed: {reason}",
+            cancellationToken);
 
         await auditService.LogEventAsync(
             AuditEventType.ReportReviewed, executor, null,

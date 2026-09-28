@@ -18,19 +18,20 @@ namespace TelegramGroupsAdmin.UnitTests.Telegram.Services.Moderation.Handlers;
 ///
 /// Architecture:
 /// - TrainingHandler creates training data when admins mark messages as spam
-/// - Dual recording pattern: detection_results (history) + training_labels (ML intent)
+/// - Every decision is a verdict event (RecordDecisionAsync); training_labels kept for legacy readers
 /// - Triggers immediate ML.NET text classifier retraining via JobTriggerService
 /// - Saves image AND video training samples for vision-based detection
 /// - Defensively downloads media if MediaLocalPath is null but a file ID exists
 ///
-/// Test Coverage (12 tests):
-/// - CreateSpamSampleAsync with text: Verifies label + retraining trigger + detection result fields
+/// Test Coverage (15 tests):
+/// - CreateSpamSampleAsync with text: Verifies label + retraining trigger + recorded decision
 /// - CreateSpamSampleAsync message not found: Logs warning, no action
 /// - CreateSpamSampleAsync without text: Skips training label/retraining
 /// - CreateSpamSampleAsync with photo: Saves image sample
 /// - Actor telegram user ID extraction: Verifies labeled_by_user_id
-/// - System actor (auto-detection): Skips detection_result insert, still creates training data
-/// - WebUser actor: Inserts detection_result (guards against broadening System skip)
+/// - System actor (auto-ban): Records an AutoBan decision, still creates training data
+/// - WebUser actor: Records a WebMarkSpam decision
+/// - CreateHamSampleAsync: WebMarkHam records decision + legacy label; ReviewDismiss records decision only; other sources throw
 /// - Download-when-missing for image: MediaLocalPath null + MediaFileId → downloads before saving
 /// - Download-when-missing for video: MediaLocalPath null + MediaFileId → downloads before saving
 /// - No-download-when-present: MediaLocalPath set → no download attempted
@@ -147,22 +148,11 @@ public class TrainingHandlerTests
             .Returns(false); // No photo
 
         // Act
-        await _handler.CreateSpamSampleAsync(messageId, ChatIdentity.FromId(-100), executor);
+        await _handler.CreateSpamSampleAsync(messageId, ChatIdentity.FromId(-100), executor, VerdictSource.WebMarkSpam, "Marked as spam by moderator");
 
-        // Assert - Verify detection result created with correct field values
-        await _mockDetectionRepo.Received(1).InsertAsync(
-            Arg.Is<DetectionResultRecord>(dr =>
-                dr!.MessageId == messageId &&
-                dr.DetectionSource == SpamDetectionConstants.ManualDetectionSource &&
-                dr.DetectionMethod == SpamDetectionConstants.ManualDetectionMethod &&
-                dr.Reason == SpamDetectionConstants.ManualSpamReason &&
-                dr.Score == 5.0 &&
-                dr.NetScore == 5.0 &&
-                dr.UserId == userId &&
-                dr.AddedBy == executor &&
-                dr.UsedForTraining == false // History only!
-            ),
-            Arg.Any<CancellationToken>());
+        // Assert - Verify the spam decision is recorded as a verdict event
+        await _mockDetectionRepo.Received(1).RecordDecisionAsync(
+            messageId, -100, VerdictSource.WebMarkSpam, executor, Arg.Any<string>(), null, null, Arg.Any<CancellationToken>());
 
         // Assert - Verify training label created (ML training)
         await _mockTrainingRepo.Received(1).UpsertLabelAsync(
@@ -192,10 +182,10 @@ public class TrainingHandlerTests
             .Returns((MessageRecord?)null);
 
         // Act
-        await _handler.CreateSpamSampleAsync(messageId, ChatIdentity.FromId(-100), executor);
+        await _handler.CreateSpamSampleAsync(messageId, ChatIdentity.FromId(-100), executor, VerdictSource.WebMarkSpam, "Marked as spam by moderator");
 
         // Assert - Should not create any records
-        await _mockDetectionRepo.DidNotReceiveWithAnyArgs().InsertAsync(default!, default);
+        await _mockDetectionRepo.DidNotReceiveWithAnyArgs().RecordDecisionAsync(default, default, default, default!, default!, default, default, default);
         await _mockTrainingRepo.DidNotReceiveWithAnyArgs().UpsertLabelAsync(
             default, default, default, default!, default, default, default);
         await _mockJobTrigger.DidNotReceiveWithAnyArgs().TriggerNowAsync(
@@ -224,10 +214,11 @@ public class TrainingHandlerTests
         var executor = Actor.FromTelegramUser(123);
 
         // Act
-        await _handler.CreateSpamSampleAsync(messageId, ChatIdentity.FromId(-100), executor);
+        await _handler.CreateSpamSampleAsync(messageId, ChatIdentity.FromId(-100), executor, VerdictSource.WebMarkSpam, "Marked as spam by moderator");
 
-        // Assert - Detection result still created
-        await _mockDetectionRepo.Received(1).InsertAsync(Arg.Any<DetectionResultRecord>(), Arg.Any<CancellationToken>());
+        // Assert - Decision still recorded
+        await _mockDetectionRepo.Received(1).RecordDecisionAsync(
+            messageId, -100, VerdictSource.WebMarkSpam, executor, Arg.Any<string>(), null, null, Arg.Any<CancellationToken>());
 
         // Assert - NO training label created (no text)
         await _mockTrainingRepo.DidNotReceiveWithAnyArgs().UpsertLabelAsync(
@@ -259,7 +250,7 @@ public class TrainingHandlerTests
         var executor = Actor.FromTelegramUser(123);
 
         // Act
-        await _handler.CreateSpamSampleAsync(messageId, ChatIdentity.FromId(-100), executor);
+        await _handler.CreateSpamSampleAsync(messageId, ChatIdentity.FromId(-100), executor, VerdictSource.WebMarkSpam, "Marked as spam by moderator");
 
         // Assert - Image sample saved
         await _mockImageRepo.Received(1).SaveTrainingSampleAsync(
@@ -283,7 +274,7 @@ public class TrainingHandlerTests
         var executor = Actor.FromTelegramUser(telegramUserId);
 
         // Act
-        await _handler.CreateSpamSampleAsync(12345, ChatIdentity.FromId(-100), executor);
+        await _handler.CreateSpamSampleAsync(12345, ChatIdentity.FromId(-100), executor, VerdictSource.WebMarkSpam, "Marked as spam by moderator");
 
         // Assert - Training label should have correct user ID
         await _mockTrainingRepo.Received(1).UpsertLabelAsync(
@@ -297,10 +288,9 @@ public class TrainingHandlerTests
     }
 
     [Test]
-    public async Task CreateSpamSampleAsync_SystemActor_SkipsDetectionResultInsert()
+    public async Task CreateSpamSampleAsync_SystemActor_RecordsAutoBanDecision()
     {
-        // Arrange — auto-detection already has a detection_result from the pipeline;
-        // TrainingHandler should NOT insert a second "manual" entry
+        // Arrange — auto-bans record an explicit AutoBan decision like every other executor
         const int messageId = 12345;
         var message = CreateTestMessage(messageId, userId: 123, chatId: 1, messageText: "spam text");
 
@@ -313,10 +303,11 @@ public class TrainingHandlerTests
         var executor = Actor.AutoDetection;
 
         // Act
-        await _handler.CreateSpamSampleAsync(messageId, ChatIdentity.FromId(-100), executor);
+        await _handler.CreateSpamSampleAsync(messageId, ChatIdentity.FromId(-100), executor, VerdictSource.AutoBan, "Auto-ban: high confidence spam");
 
-        // Assert - NO detection result inserted (auto-detection pipeline already created one)
-        await _mockDetectionRepo.DidNotReceiveWithAnyArgs().InsertAsync(default!, default);
+        // Assert - AutoBan decision recorded
+        await _mockDetectionRepo.Received(1).RecordDecisionAsync(
+            messageId, -100, VerdictSource.AutoBan, executor, "Auto-ban: high confidence spam", null, null, Arg.Any<CancellationToken>());
 
         // Assert - Training label IS still created with auto-detected reason
         await _mockTrainingRepo.Received(1).UpsertLabelAsync(
@@ -344,9 +335,9 @@ public class TrainingHandlerTests
     }
 
     [Test]
-    public async Task CreateSpamSampleAsync_WebUserActor_InsertsDetectionResult()
+    public async Task CreateSpamSampleAsync_WebUserActor_RecordsWebMarkSpamDecision()
     {
-        // Arrange — web admin marking a message as spam should insert a manual detection result
+        // Arrange — web admin marking a message as spam records a WebMarkSpam decision
         const int messageId = 12345;
         var message = CreateTestMessage(messageId, userId: 123, chatId: 1, messageText: "spam text");
 
@@ -359,20 +350,11 @@ public class TrainingHandlerTests
         var executor = Actor.FromWebUser("admin-guid", "admin@example.com");
 
         // Act
-        await _handler.CreateSpamSampleAsync(messageId, ChatIdentity.FromId(-100), executor);
+        await _handler.CreateSpamSampleAsync(messageId, ChatIdentity.FromId(-100), executor, VerdictSource.WebMarkSpam, "Marked as spam by moderator");
 
-        // Assert - Detection result IS inserted (web admin override, not system)
-        await _mockDetectionRepo.Received(1).InsertAsync(
-            Arg.Is<DetectionResultRecord>(dr =>
-                dr!.MessageId == messageId &&
-                dr.DetectionSource == SpamDetectionConstants.ManualDetectionSource &&
-                dr.DetectionMethod == SpamDetectionConstants.ManualDetectionMethod &&
-                dr.Reason == SpamDetectionConstants.ManualSpamReason &&
-                dr.Score == 5.0 &&
-                dr.NetScore == 5.0 &&
-                dr.UserId == 123 && // message.User.Id
-                dr.AddedBy == executor),
-            Arg.Any<CancellationToken>());
+        // Assert - WebMarkSpam decision recorded
+        await _mockDetectionRepo.Received(1).RecordDecisionAsync(
+            messageId, -100, VerdictSource.WebMarkSpam, executor, Arg.Any<string>(), null, null, Arg.Any<CancellationToken>());
 
         // Assert - Training label uses manual reason (not auto-detected)
         await _mockTrainingRepo.Received(1).UpsertLabelAsync(
@@ -384,6 +366,40 @@ public class TrainingHandlerTests
             auditLogId: null,
             cancellationToken: Arg.Any<CancellationToken>());
     }
+
+    #endregion
+
+    #region CreateHamSampleAsync Tests
+
+    [Test]
+    public async Task CreateHamSampleAsync_WebMarkHam_RecordsDecisionAndLegacyLabel()
+    {
+        var executor = Actor.FromWebUser("admin-1");
+        await _handler.CreateHamSampleAsync(4242, ChatIdentity.FromId(-100), executor, VerdictSource.WebMarkHam, "false positive");
+
+        await _mockDetectionRepo.Received(1).RecordDecisionAsync(
+            4242, -100, VerdictSource.WebMarkHam, executor, "false positive", null, null, Arg.Any<CancellationToken>());
+        await _mockTrainingRepo.Received(1).UpsertLabelAsync(
+            4242, -100, TrainingLabel.Ham, executor, "false positive", auditLogId: null, cancellationToken: Arg.Any<CancellationToken>());
+        await _mockJobTrigger.Received(1).TriggerNowAsync(
+            BackgroundJobNames.ClassifierRetraining, Arg.Any<object>(), cancellationToken: Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task CreateHamSampleAsync_ReviewDismiss_RecordsImplicitHamDecisionWithoutLabel()
+    {
+        var executor = Actor.FromWebUser("admin-1");
+        await _handler.CreateHamSampleAsync(4242, ChatIdentity.FromId(-100), executor, VerdictSource.ReviewDismiss, "Report #1 dismissed");
+
+        await _mockDetectionRepo.Received(1).RecordDecisionAsync(
+            4242, -100, VerdictSource.ReviewDismiss, executor, "Report #1 dismissed", null, null, Arg.Any<CancellationToken>());
+        await _mockTrainingRepo.DidNotReceiveWithAnyArgs().UpsertLabelAsync(default, default, default, default!, default, default, default);
+    }
+
+    [Test]
+    public void CreateHamSampleAsync_NonHamSource_Throws()
+        => Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
+            _handler.CreateHamSampleAsync(1, ChatIdentity.FromId(-100), Actor.AutoDetection, VerdictSource.WebMarkSpam, "x"));
 
     #endregion
 
@@ -424,7 +440,7 @@ public class TrainingHandlerTests
         var executor = Actor.FromTelegramUser(123);
 
         // Act
-        await _handler.CreateSpamSampleAsync(messageId, ChatIdentity.FromId(-100), executor);
+        await _handler.CreateSpamSampleAsync(messageId, ChatIdentity.FromId(-100), executor, VerdictSource.WebMarkSpam, "Marked as spam by moderator");
 
         // Assert - Download was attempted
         await _mockMediaService.Received(1).DownloadAndSaveMediaAsync(
@@ -479,7 +495,7 @@ public class TrainingHandlerTests
         var executor = Actor.FromTelegramUser(123);
 
         // Act
-        await _handler.CreateSpamSampleAsync(messageId, ChatIdentity.FromId(-100), executor);
+        await _handler.CreateSpamSampleAsync(messageId, ChatIdentity.FromId(-100), executor, VerdictSource.WebMarkSpam, "Marked as spam by moderator");
 
         // Assert - Download was attempted using PhotoFileId
         await _mockMediaService.Received(1).DownloadAndSaveMediaAsync(
@@ -521,7 +537,7 @@ public class TrainingHandlerTests
         var executor = Actor.FromTelegramUser(123);
 
         // Act
-        await _handler.CreateSpamSampleAsync(messageId, ChatIdentity.FromId(-100), executor);
+        await _handler.CreateSpamSampleAsync(messageId, ChatIdentity.FromId(-100), executor, VerdictSource.WebMarkSpam, "Marked as spam by moderator");
 
         // Assert - No download attempted (file already cached)
         await _mockMediaService.DidNotReceiveWithAnyArgs().DownloadAndSaveMediaAsync(
@@ -559,7 +575,7 @@ public class TrainingHandlerTests
         var executor = Actor.FromTelegramUser(123);
 
         // Act — should NOT throw
-        await _handler.CreateSpamSampleAsync(messageId, ChatIdentity.FromId(-100), executor);
+        await _handler.CreateSpamSampleAsync(messageId, ChatIdentity.FromId(-100), executor, VerdictSource.WebMarkSpam, "Marked as spam by moderator");
 
         // Assert - Image sample save was still attempted despite download failure
         await _mockImageRepo.Received(1).SaveTrainingSampleAsync(
@@ -608,7 +624,7 @@ public class TrainingHandlerTests
         var executor = Actor.FromTelegramUser(123);
 
         // Act
-        await _handler.CreateSpamSampleAsync(messageId, ChatIdentity.FromId(-100), executor);
+        await _handler.CreateSpamSampleAsync(messageId, ChatIdentity.FromId(-100), executor, VerdictSource.WebMarkSpam, "Marked as spam by moderator");
 
         // Assert - Video training sample was saved
         await _mockVideoRepo.Received(1).SaveTrainingSampleAsync(

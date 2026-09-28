@@ -5,6 +5,8 @@ using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Constants;
+using TelegramGroupsAdmin.ContentDetection.Services;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.ContentDetection.Utilities;
 using DataModels = TelegramGroupsAdmin.Data.Models;
 
@@ -77,7 +79,10 @@ public class DetectionResultsRepository : IDetectionResultsRepository
                 DetectedAt = x.dr.DetectedAt,
                 DetectionSource = x.dr.DetectionSource,
                 DetectionMethod = x.dr.DetectionMethod,
-                IsSpam = x.dr.IsSpam,
+                Source = (VerdictSource)x.dr.Source!.Value,
+                Classification = (VerdictClassification)x.dr.Classification!.Value,
+                Properties = x.dr.Properties,
+                AuditLogId = x.dr.AuditLogId,
                 Score = x.dr.Score,
                 Reason = x.dr.Reason,
                 AddedBy = ActorMappings.ToActor(x.dr.WebUserId, x.dr.TelegramUserId, x.dr.SystemIdentifier, x.ActorWebEmail, x.ActorTelegramUsername, x.ActorTelegramFirstName, x.ActorTelegramLastName),
@@ -92,21 +97,89 @@ public class DetectionResultsRepository : IDetectionResultsRepository
             });
     }
 
-    public async Task InsertAsync(DetectionResultRecord result, CancellationToken cancellationToken = default)
+    public async Task<DetectionResultRecord> RecordScanAsync(int messageId, long chatId, ContentDetectionResult scan,
+        int editVersion, CancellationToken cancellationToken = default)
+    {
+        var classification = VerdictClassifier.ClassifyScan(scan);
+        var reasonPrefix = editVersion > 0 ? $"[Edit #{editVersion}] " : "";
+        var method = scan.CheckResults.Count > 0 ? string.Join(", ", scan.CheckResults.Select(c => c.CheckName)) : "Unknown";
+
+        var row = NewRow(messageId, chatId, VerdictSource.ContentScan, classification, Actor.AutoDetection,
+            scan.TotalScore, $"{reasonPrefix}{scan.PrimaryReason}", method);
+        row.CheckResultsJson = CheckResultsSerializer.Serialize(scan.CheckResults);
+        row.EditVersion = editVersion;
+
+        await SaveAsync(row, cancellationToken);
+        return row.ToModel();
+    }
+
+    public async Task RecordFileScanAsync(int messageId, long chatId, bool infected, double score, string details,
+        CancellationToken cancellationToken = default)
+    {
+        var row = NewRow(messageId, chatId, VerdictSource.FileScan, VerdictClassifier.ClassifyFileScan(infected),
+            Actor.FileScanner, score, details, "FileScanningCheck");
+        await SaveAsync(row, cancellationToken);
+    }
+
+    public async Task<long> RecordDecisionAsync(int messageId, long chatId, VerdictSource source, Actor actor, string reason,
+        bool? isSpam = null, long? auditLogId = null, CancellationToken cancellationToken = default)
+    {
+        var row = NewRow(messageId, chatId, source, VerdictClassifier.ClassifyDecision(source, isSpam), actor,
+            score: 5.0, reason, method: source.ToString());
+        row.AuditLogId = auditLogId;
+        await SaveAsync(row, cancellationToken);
+        return row.Id;
+    }
+
+    public async Task<MessageVerdict?> GetCurrentVerdictAsync(int messageId, long chatId, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var entity = result.ToDto();
-        context.DetectionResults.Add(entity);
+        var view = await context.MessageVerdicts.AsNoTracking()
+            .FirstOrDefaultAsync(v => v.MessageId == messageId && v.ChatId == chatId, cancellationToken);
+        return view?.ToModel();
+    }
+
+    private static DataModels.DetectionResultRecordDto NewRow(int messageId, long chatId, VerdictSource source,
+        VerdictClassification classification, Actor actor, double score, string reason, string method)
+    {
+        ActorMappings.SetActorColumns(actor, out var webUserId, out var telegramUserId, out var systemIdentifier);
+        var isSpam = classification.IsSpam();
+        return new DataModels.DetectionResultRecordDto
+        {
+            MessageId = messageId,
+            ChatId = chatId,
+            DetectedAt = DateTimeOffset.UtcNow,
+            Source = (int)source,
+            Classification = (int)classification,
+            DetectionMethod = method,
+            Score = score,
+            Reason = reason,
+            WebUserId = webUserId,
+            TelegramUserId = telegramUserId,
+            SystemIdentifier = systemIdentifier,
+            // Legacy columns, kept consistent until DropLegacyVerdictColumns removes them.
+            DetectionSource = source switch
+            {
+                VerdictSource.ContentScan => "auto",
+                VerdictSource.FileScan => "file_scan",
+                VerdictSource.Import => "tg-spam-import",
+                _ => "manual"
+            },
+            NetScore = isSpam ? Math.Abs(score) : -Math.Abs(score),
+            UsedForTraining = classification == VerdictClassification.ImplicitSpam
+                || (source is VerdictSource.TrainingDataPage or VerdictSource.Import && classification.IsExplicit())
+        };
+    }
+
+    private async Task SaveAsync(DataModels.DetectionResultRecordDto row, CancellationToken cancellationToken)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        context.DetectionResults.Add(row);
         await context.SaveChangesAsync(cancellationToken);
 
         _logger.LogDebug(
-            "Inserted detection result for message {MessageId}: {IsSpam} (score: {Score}, net: {NetScore}, training: {UsedForTraining}, edit_version: {EditVersion})",
-            result.MessageId,
-            result.IsSpam ? "spam" : "ham",
-            result.Score,
-            result.NetScore,
-            result.UsedForTraining,
-            result.EditVersion);
+            "Recorded {Source} verdict {Classification} for message {MessageId} in chat {ChatId} (score {Score:F2})",
+            (VerdictSource)row.Source!.Value, (VerdictClassification)row.Classification!.Value, row.MessageId, row.ChatId, row.Score);
     }
 
     public async Task<DetectionResultRecord?> GetByIdAsync(long id, CancellationToken cancellationToken = default)
@@ -220,9 +293,10 @@ public class DetectionResultsRepository : IDetectionResultsRepository
         // Used for auto-whitelisting: if user has N consecutive non-spam messages, trust them
         // Optionally filter by minimum message length to prevent trust gaming with short replies
         var query = WithActorJoins(
-                context.DetectionResults.AsNoTracking(),
+                context.DetectionResults.AsNoTracking()
+                    .Where(dr => dr.Classification != null && !VerdictClassifications.SpamValues.Contains(dr.Classification.Value)),
                 context)
-            .Where(x => x.UserId == userId && !x.IsSpam);
+            .Where(x => x.UserId == userId);
 
         // Filter by minimum message length if specified (prevents trust gaming)
         if (minMessageLength > 0)
@@ -417,6 +491,9 @@ public class DetectionResultsRepository : IDetectionResultsRepository
             SystemIdentifier = addedBy ?? "System",  // Phase 4.19: Actor system
             UsedForTraining = true,
             NetScore = isSpam ? 5.0 : -5.0,  // Manual: 5.0 = spam, -5.0 = ham
+            // Verdict-event columns: every row must carry them (DetectionResultMappings rejects NULL).
+            Source = (int)VerdictSource.TrainingDataPage,
+            Classification = (int)VerdictClassifier.ClassifyDecision(VerdictSource.TrainingDataPage, isSpam),
             CheckResultsJson = null,
             EditVersion = 0
         };

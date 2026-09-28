@@ -12,8 +12,7 @@ using TelegramGroupsAdmin.Telegram.Services;
 namespace TelegramGroupsAdmin.Telegram.Services.Moderation.Handlers;
 
 /// <summary>
-/// Creates ML training data from spam classifications.
-/// Called by orchestrator for spam cases only.
+/// Records spam and ham decisions as verdict events and creates ML training data.
 /// </summary>
 public class TrainingHandler : ITrainingHandler
 {
@@ -51,6 +50,8 @@ public class TrainingHandler : ITrainingHandler
         int messageId,
         ChatIdentity chat,
         Actor executor,
+        VerdictSource source,
+        string reason,
         CancellationToken cancellationToken = default)
     {
         // Try to get message from database
@@ -64,31 +65,10 @@ public class TrainingHandler : ITrainingHandler
             return;
         }
 
-        // Create detection result for history — only for manual moderator actions.
-        // Auto-detected spam already has a detection_result from the content detection pipeline;
-        // inserting a second "manual" entry would corrupt the notification reason and timeline.
+        // Every spam decision is a verdict event, auto-bans (System executor) included.
         var hasText = !string.IsNullOrWhiteSpace(message.MessageText);
-        if (executor.Type != ActorType.System)
-        {
-            var detectionResult = new DetectionResultRecord
-            {
-                MessageId = messageId,
-                ChatId = chat.Id,
-                DetectedAt = DateTimeOffset.UtcNow,
-                DetectionSource = SpamDetectionConstants.ManualDetectionSource,
-                DetectionMethod = SpamDetectionConstants.ManualDetectionMethod,
-                Score = 5.0,
-                Reason = SpamDetectionConstants.ManualSpamReason,
-                AddedBy = executor,
-                UserId = message.User.Id,
-                UsedForTraining = false, // History only - training handled by training_labels table
-                NetScore = 5.0,
-                CheckResultsJson = null,
-                EditVersion = 0
-            };
-
-            await _detectionResultsRepository.InsertAsync(detectionResult, cancellationToken);
-        }
+        await _detectionResultsRepository.RecordDecisionAsync(
+            messageId, chat.Id, source, executor, reason, cancellationToken: cancellationToken);
 
         // Create explicit training label for ML (spam)
         if (hasText)
@@ -199,5 +179,30 @@ public class TrainingHandler : ITrainingHandler
                 "Saved video training sample for message {MessageId}",
                 messageId);
         }
+    }
+
+    /// <inheritdoc />
+    public async Task CreateHamSampleAsync(int messageId, ChatIdentity chat, Actor executor, VerdictSource source,
+        string reason, CancellationToken cancellationToken = default)
+    {
+        if (source is not (VerdictSource.WebMarkHam or VerdictSource.ReviewDismiss))
+            throw new ArgumentOutOfRangeException(nameof(source), source, "Ham decisions are WebMarkHam or ReviewDismiss");
+
+        await _detectionResultsRepository.RecordDecisionAsync(
+            messageId, chat.Id, source, executor, reason, cancellationToken: cancellationToken);
+
+        // Legacy explicit label for readers not yet on message_verdicts (removed by DropLegacyVerdictColumns).
+        if (source == VerdictSource.WebMarkHam)
+        {
+            await _trainingLabelsRepository.UpsertLabelAsync(
+                messageId, chat.Id, label: TrainingLabel.Ham, actor: executor, reason: reason,
+                auditLogId: null, cancellationToken: cancellationToken);
+        }
+
+        await _jobTriggerService.TriggerNowAsync(
+            BackgroundJobNames.ClassifierRetraining, payload: new { }, cancellationToken: cancellationToken);
+
+        _logger.LogInformation("Recorded {Source} ham decision for message {MessageId} by {Executor}",
+            source, messageId, executor.GetDisplayText());
     }
 }
