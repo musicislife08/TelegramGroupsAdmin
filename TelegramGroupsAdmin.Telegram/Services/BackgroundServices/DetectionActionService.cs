@@ -67,7 +67,7 @@ public class DetectionActionService(
             var config = await GetConfigAsync(message.Chat, cancellationToken);
 
             // Only take action if spam was detected
-            if (!spamResult.IsSpam || spamResult.TotalScore <= config.ReviewQueueThreshold)
+            if (!spamResult.IsSpam || spamResult.TotalScore < config.ReviewQueueThreshold)
             {
                 return;
             }
@@ -134,7 +134,7 @@ public class DetectionActionService(
                     cancellationToken);
                 pipelineMetrics.RecordModerationAction("ban", "auto");
             }
-            else if (spamResult.TotalScore > config.ReviewQueueThreshold)
+            else if (spamResult.TotalScore >= config.ReviewQueueThreshold)
             {
                 // Borderline detection OR OpenAI uncertain → Admin review
                 var reason = spamResult.TotalScore >= config.AutoBanThreshold

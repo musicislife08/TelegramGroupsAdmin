@@ -186,16 +186,19 @@ public partial class ContentDetectionEngineV2 : IContentDetectionEngine
                     return vetoedResult;
                 }
 
-                // AI confirmed spam - AI score is the sole authority for action determination
-                // Pipeline scores served as a gate to trigger the veto; AI verdict drives the action
+                // AI verdict: the AI score replaces the pipeline aggregate and follows the same
+                // threshold rule as the pipeline, so the verdict always agrees with the action.
                 LogAIConfirmedSpam(_logger, request.User.ToLogDebug(), vetoResultV2.Score);
 
+                var aiIsSpam = vetoResultV2.Score >= config.ReviewQueueThreshold;
                 var confirmedResult = pipelineResult with
                 {
                     CheckResults = updatedCheckResults,
-                    IsSpam = true,
+                    IsSpam = aiIsSpam,
                     TotalScore = vetoResultV2.Score,
-                    PrimaryReason = $"AI confirmed spam: {vetoResultV2.Details} (score: {vetoResultV2.Score:F1})",
+                    PrimaryReason = aiIsSpam
+                        ? $"AI confirmed spam: {vetoResultV2.Details} (score: {vetoResultV2.Score:F1})"
+                        : $"AI below review threshold: {vetoResultV2.Details} (score: {vetoResultV2.Score:F1})",
                     RecommendedAction = DetermineActionFromScore(vetoResultV2.Score, config.AutoBanThreshold, config.ReviewQueueThreshold),
                     RequiresAIConfirmation = false
                 };
