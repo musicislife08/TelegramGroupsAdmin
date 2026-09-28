@@ -1,10 +1,8 @@
 using Microsoft.Extensions.Logging;
-using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
-using TelegramGroupsAdmin.Telegram.Constants;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
@@ -20,7 +18,6 @@ public class TrainingHandler : ITrainingHandler
 {
     private readonly IMessageHistoryRepository _messageHistoryRepository;
     private readonly IDetectionResultsRepository _detectionResultsRepository;
-    private readonly ITrainingLabelsRepository _trainingLabelsRepository;
     private readonly ITelegramMediaService _telegramMediaService;
     private readonly IJobTriggerService _jobTriggerService;
     private readonly ILogger<TrainingHandler> _logger;
@@ -28,14 +25,12 @@ public class TrainingHandler : ITrainingHandler
     public TrainingHandler(
         IMessageHistoryRepository messageHistoryRepository,
         IDetectionResultsRepository detectionResultsRepository,
-        ITrainingLabelsRepository trainingLabelsRepository,
         ITelegramMediaService telegramMediaService,
         IJobTriggerService jobTriggerService,
         ILogger<TrainingHandler> logger)
     {
         _messageHistoryRepository = messageHistoryRepository;
         _detectionResultsRepository = detectionResultsRepository;
-        _trainingLabelsRepository = trainingLabelsRepository;
         _telegramMediaService = telegramMediaService;
         _jobTriggerService = jobTriggerService;
         _logger = logger;
@@ -66,22 +61,9 @@ public class TrainingHandler : ITrainingHandler
         await _detectionResultsRepository.RecordDecisionAsync(
             messageId, chat.Id, source, executor, reason, cancellationToken: cancellationToken);
 
-        // Create explicit training label for ML (spam)
+        // The text classifiers train on message_verdicts; retrain when the message has text to learn from.
         if (hasText)
         {
-            var labelReason = executor.Type == ActorType.System
-                ? SpamDetectionConstants.AutoDetectedSpamReason
-                : SpamDetectionConstants.ManualSpamReason;
-
-            await _trainingLabelsRepository.UpsertLabelAsync(
-                messageId,
-                chat.Id,
-                label: TrainingLabel.Spam,
-                actor: executor,
-                reason: labelReason,
-                auditLogId: null,
-                cancellationToken: cancellationToken);
-
             // Trigger combined classifier retraining (SDCA + Bayes, immediate, no payload)
             await _jobTriggerService.TriggerNowAsync(
                 BackgroundJobNames.ClassifierRetraining,
@@ -89,13 +71,13 @@ public class TrainingHandler : ITrainingHandler
                 cancellationToken: cancellationToken);
 
             _logger.LogInformation(
-                "Created training label and triggered retraining for message {MessageId} marked as spam by {Executor}",
+                "Triggered retraining for message {MessageId} marked as spam by {Executor}",
                 messageId, executor.GetDisplayText());
         }
         else
         {
             _logger.LogInformation(
-                "Message {MessageId} has no text; skipped training label for {Executor}",
+                "Message {MessageId} has no text; skipped retraining for {Executor}",
                 messageId, executor.GetDisplayText());
         }
 
@@ -168,14 +150,6 @@ public class TrainingHandler : ITrainingHandler
 
         await _detectionResultsRepository.RecordDecisionAsync(
             messageId, chat.Id, source, executor, reason, cancellationToken: cancellationToken);
-
-        // Legacy explicit label for readers not yet on message_verdicts (removed by DropLegacyVerdictColumns).
-        if (source == VerdictSource.WebMarkHam)
-        {
-            await _trainingLabelsRepository.UpsertLabelAsync(
-                messageId, chat.Id, label: TrainingLabel.Ham, actor: executor, reason: reason,
-                auditLogId: null, cancellationToken: cancellationToken);
-        }
 
         await _jobTriggerService.TriggerNowAsync(
             BackgroundJobNames.ClassifierRetraining, payload: new { }, cancellationToken: cancellationToken);

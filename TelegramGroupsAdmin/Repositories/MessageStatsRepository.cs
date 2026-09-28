@@ -53,7 +53,7 @@ public class MessageStatsRepository : IMessageStatsRepository
         var allDetections = await context.DetectionResults
             .AsNoTracking()
             .Where(dr => dr.Source == (int)VerdictSource.ContentScan)
-            .Select(dr => new { IsSpam = VerdictClassifications.SpamValues.Contains(dr.Classification!.Value), dr.Score })
+            .Select(dr => new { IsSpam = VerdictClassifications.SpamValues.Contains(dr.Classification), dr.Score })
             .ToListAsync(cancellationToken);
 
         var total = allDetections.Count;
@@ -68,7 +68,7 @@ public class MessageStatsRepository : IMessageStatsRepository
             .AsNoTracking()
             .Where(dr => dr.DetectedAt >= since24h)
             .Where(dr => dr.Source == (int)VerdictSource.ContentScan)
-            .Select(dr => VerdictClassifications.SpamValues.Contains(dr.Classification!.Value))
+            .Select(dr => VerdictClassifications.SpamValues.Contains(dr.Classification))
             .ToListAsync(cancellationToken);
 
         var recentTotal = recentDetections.Count;

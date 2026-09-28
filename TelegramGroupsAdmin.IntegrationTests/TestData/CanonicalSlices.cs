@@ -4,7 +4,7 @@ namespace TelegramGroupsAdmin.IntegrationTests.TestData;
 
 /// <summary>
 /// Frozen oracle: each canonical message's training slice under the OLD model
-/// (training_labels + is_spam/used_for_training), computed before canonical was converted to
+/// (the since-dropped explicit label table + the legacy spam/training-membership flags), computed before canonical was converted to
 /// verdict events (canonical edit 2026-09-27). Independent of the new classifier/migration, so
 /// CanonicalVerdictOracleTests catches a wrong conversion. Flag-edited verdict anchors are excluded.
 /// Implicit ham is expected as ImplicitHam or Unscanned (both are training ham).
@@ -80,7 +80,7 @@ internal static class CanonicalSlices
         (-100059667856554L, 104755, VerdictClassification.ExplicitHam),
         // Spec-mandated change: dr1695 is a WebMarkSpam decision (reason 'Manually marked as spam by admin via UI'),
         // explicit under the new model (spec: decision sources pin their classification); the old model saw it
-        // as implicit because canonical has no training_labels row for it. Frozen query result: ImplicitSpam.
+        // as implicit because canonical had no explicit label row for it. Frozen query result: ImplicitSpam.
         (-100059667856554L, 104948, VerdictClassification.ExplicitSpam),
         (-100059667856554L, 104979, VerdictClassification.ExplicitSpam),
         (-100059667856554L, 105058, VerdictClassification.ExplicitHam),

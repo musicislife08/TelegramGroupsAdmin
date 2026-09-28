@@ -4,13 +4,13 @@ namespace TelegramGroupsAdmin.ContentDetection.Repositories;
 
 /// <summary>
 /// Repository for retrieving ML training data from multiple sources.
-/// Encapsulates complex queries across training_labels, detection_results, messages, and translations.
+/// Encapsulates complex queries across message_verdicts, detection_results, messages, and translations.
 /// </summary>
 public interface IMLTrainingDataRepository
 {
     /// <summary>
     /// Gets all spam training samples (explicit labels + high-confidence auto-detected).
-    /// Explicit labels from training_labels override auto-detection.
+    /// Explicit decisions override auto-detection (the latest verdict in message_verdicts wins).
     /// Uses NOT EXISTS correlated subqueries with composite (MessageId, ChatId) to prevent cross-chat data leakage.
     /// </summary>
     /// <param name="cancellationToken">Cancellation token</param>

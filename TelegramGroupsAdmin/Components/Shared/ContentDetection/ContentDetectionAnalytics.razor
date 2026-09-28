@@ -96,12 +96,12 @@
             </MudStack>
         </MudPaper>
 
-        <!-- Training Data Quality (from training_labels table) -->
+        <!-- Training Data Quality (from message_verdicts) -->
         <MudPaper Class="pa-4" Elevation="2">
             <MudStack Spacing="3">
                 <MudText Typo="Typo.h6" Color="Color.Primary">Training Data Overview</MudText>
                 <MudAlert Severity="Severity.Info">
-                    Training data is managed via explicit admin labels (training_labels table).
+                    Training data is managed via explicit admin spam/ham decisions.
                     Mark messages as spam/ham from the <strong>Messages</strong> page to improve ML accuracy.
                 </MudAlert>
                 <MudGrid>

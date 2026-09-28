@@ -82,8 +82,9 @@ public class CanonicalVerdictOracleTests
     [Test]
     public async Task EveryStoredRow_HasAClassification()
     {
-        await using var ctx = _helper.GetDbContext();
-        Assert.That(await ctx.DetectionResults.CountAsync(d => d.Classification == null || d.Source == null), Is.Zero);
+        // Raw SQL: the columns are NOT NULL now, so an EF null check would compile to a constant.
+        Assert.That(await _helper.ExecuteScalarAsync<long>(
+            "SELECT count(*) FROM detection_results WHERE classification IS NULL OR source IS NULL"), Is.Zero);
     }
 
     private static bool Matches(VerdictClassification slice, VerdictClassification actual) => slice switch

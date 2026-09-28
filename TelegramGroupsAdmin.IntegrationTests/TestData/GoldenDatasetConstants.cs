@@ -108,13 +108,6 @@ internal static class GoldenDatasetConstants
         /// scenarios. Per CLAUDE.md Part 2 recipe.
         /// </summary>
         public const long SecondMainChatHamAuthorId = 9960171136314L;
-
-        /// <summary>
-        /// Canonical user that appears as <c>labeled_by_user_id</c> on training_labels rows.
-        /// Stable anchor for tests that need an Actor recognized as a prior labeler in the
-        /// canonical training set.
-        /// </summary>
-        public const long TrainingLabelActorId = 9084745993769L;
     }
 
     /// <summary>
@@ -180,43 +173,6 @@ internal static class GoldenDatasetConstants
     }
 
     /// <summary>
-    /// Canonical anchors used by <c>TrainingLabelsRepositoryTests</c> to pin existing
-    /// spam/ham label rows and FK-valid-but-unlabeled message rows. The chat side of
-    /// each anchor is in <see cref="Chats.TrainingFixturesChatId"/> for the labeled set
-    /// and <see cref="Chats.LandOwnersChatId"/> for most of the unlabeled set
-    /// (see per-constant notes).
-    /// </summary>
-    public static class TrainingLabels
-    {
-        /// <summary>Canonical spam label (label=0) — message_id in <see cref="Chats.TrainingFixturesChatId"/>.</summary>
-        public const int ExistingSpamMsgId = 4575;
-
-        /// <summary>Canonical ham label (label=1) — message_id in <see cref="Chats.TrainingFixturesChatId"/>.</summary>
-        public const int ExistingHamMsgId = 4602;
-
-        /// <summary>Second canonical spam label — used for PK-uniqueness enforcement tests. Chat: <see cref="Chats.TrainingFixturesChatId"/>.</summary>
-        public const int ExistingSpam2MsgId = 4655;
-
-        /// <summary>Unlabeled FK-valid message in <see cref="Chats.TrainingFixturesChatId"/>.</summary>
-        public const int UnlabeledMsg1Id = 4620;
-
-        /// <summary>Unlabeled FK-valid message in <see cref="Chats.LandOwnersChatId"/>.</summary>
-        public const int UnlabeledMsg2Id = 7789;
-
-        /// <summary>Unlabeled FK-valid message in <see cref="Chats.LandOwnersChatId"/>.</summary>
-        public const int UnlabeledMsg3Id = 7834;
-
-        /// <summary>Unlabeled FK-valid message in <see cref="Chats.LandOwnersChatId"/>.</summary>
-        public const int UnlabeledMsg4Id = 7836;
-
-        /// <summary>Unlabeled FK-valid message in <see cref="Chats.LandOwnersChatId"/>.</summary>
-        public const int UnlabeledMsg5Id = 7853;
-
-        /// <summary>Unlabeled FK-valid message in <see cref="Chats.LandOwnersChatId"/>.</summary>
-        public const int UnlabeledMsg6Id = 8095;
-    }
-
-    /// <summary>
     /// Canonical IDs and target NOW()-relative offsets used by
     /// <c>MessageHistoryRepositoryTests.CleanupExpiredAsync_WithOldMessages_*</c>
     /// to shape the substrate for retention-cleanup testing. All anchors are in
@@ -240,8 +196,8 @@ internal static class GoldenDatasetConstants
         public const int MsgId_BareOrphan60d = 212694;
 
         // ── Anchor 3: training-flagged message (preserved despite age) ──
-        // 2 detection_results: dr2842 (used_for_training=true, ImplicitSpam) and the later
-        // dr3286 (AutoBan, used_for_training=false). dr3286 is newer (detected_at DESC) so it
+        // 2 detection_results: dr2842 (ContentScan, ImplicitSpam) and the later
+        // dr3286 (AutoBan, ExplicitSpam). dr3286 is newer (detected_at DESC) so it
         // is the current verdict → ExplicitSpam, a curated classification. Shifted to
         // -90d → PRESERVED.
         public const int MsgId_TrainingPreserved = 218579;
@@ -255,9 +211,8 @@ internal static class GoldenDatasetConstants
         public const int MsgId_BareOrphan29d = 213117;
 
         // ── Anchor 6: non-training detection, curated classification ──
-        // 1 detection_result (id 3033) with used_for_training=false, classification=ExplicitSpam
-        // (a curated value). Shifted to -50d → PRESERVED despite age and despite
-        // used_for_training=false, since its verdict is curated.
+        // 1 detection_result (id 3033, LegacyManual) with classification=ExplicitSpam
+        // (a curated value). Shifted to -50d → PRESERVED despite age, since its verdict is curated.
         public const int MsgId_NonTrainingDeleted = 220885;
 
         /// <summary>
@@ -275,7 +230,7 @@ internal static class GoldenDatasetConstants
         /// <summary>
         /// All 6 (chat_id, message_id) tuples passed to <c>Reduce.KeepMessages(...)</c>.
         /// FK CASCADE drops every other canonical message's detection_results,
-        /// training_labels, edits, and translations.
+        /// edits, and translations.
         /// </summary>
         public static readonly IReadOnlyList<(long ChatId, long MessageId)> AllMessageRefs =
         [
@@ -330,13 +285,13 @@ internal static class GoldenDatasetConstants
         // All 7 picks have real ProcessingTimeMs > 0 in check_results_json so the
         // algorithm-performance test sees honest timing data.
 
-        public const long DrId_TodaySpam1 = 2952;        // msg 220017, net_score=5.0
-        public const long DrId_TodaySpam2 = 2955;        // msg 220093, net_score=4.6
-        public const long DrId_TodaySpam3 = 2959;        // msg 220224, net_score=4.8
-        public const long DrId_YesterdaySpam1 = 2998;    // msg 220364, net_score=4.9
-        public const long DrId_YesterdaySpam2 = 3055;    // msg 221125, net_score=4.6
-        public const long DrId_LastWeekSpam1 = 3119;     // msg 221604, net_score=4.3
-        public const long DrId_LastWeekSpam2 = 3221;     // msg 222793, net_score=4.8
+        public const long DrId_TodaySpam1 = 2952;        // msg 220017, score=5.0, ImplicitSpam
+        public const long DrId_TodaySpam2 = 2955;        // msg 220093, score=4.6, UntrainedSpam
+        public const long DrId_TodaySpam3 = 2959;        // msg 220224, score=4.8, ImplicitSpam
+        public const long DrId_YesterdaySpam1 = 2998;    // msg 220364, score=4.9, ImplicitSpam
+        public const long DrId_YesterdaySpam2 = 3055;    // msg 221125, score=4.6, UntrainedSpam
+        public const long DrId_LastWeekSpam1 = 3119;     // msg 221604, score=4.3, UntrainedSpam
+        public const long DrId_LastWeekSpam2 = 3221;     // msg 222793, score=4.8, ImplicitSpam
 
         public const long MsgId_TodaySpam1 = 220017;
         public const long MsgId_TodaySpam2 = 220093;
@@ -348,13 +303,13 @@ internal static class GoldenDatasetConstants
 
         // ── FP pair on msg 213325 (organic auto-spam + manual-ham correction) ──
         public const long MsgId_FalsePositive = 213325;
-        public const long DrId_FpAuto = 2012;            // net_score=10.15, auto-spam
-        public const long DrId_FpManual = 2013;          // net_score=-5, manual-ham (later timestamp)
+        public const long DrId_FpAuto = 2012;            // score=5.5, auto-spam (ImplicitSpam)
+        public const long DrId_FpManual = 2013;          // manual-ham ExplicitHam (later timestamp)
 
         // ── FN pair on msg 211184 (organic auto-ham + manual-spam correction) ──
         public const long MsgId_FalseNegative = 211184;
-        public const long DrId_FnAuto = 1492;            // net_score=-1.45, auto-ham
-        public const long DrId_FnManual = 1494;          // net_score=5, manual-spam (later timestamp)
+        public const long DrId_FnAuto = 1492;            // score=0, auto-ham (ImplicitHam)
+        public const long DrId_FnManual = 1494;          // score=5, manual-spam ExplicitSpam (later timestamp)
 
         // ── Welcome response anchors in MainChat (3 Accepted + 1 Denied + 1 Timeout + 1 Left) ──
         public const long WrId_TodayAccepted1 = 73;       // Accepted, prod-derived
@@ -367,7 +322,7 @@ internal static class GoldenDatasetConstants
         /// <summary>
         /// All 9 (chat_id, message_id) tuples passed to <c>Reduce.KeepMessages(...)</c>.
         /// FK CASCADE drops every other canonical message's detection_results,
-        /// training_labels, edits, and translations.
+        /// edits, and translations.
         /// </summary>
         public static readonly IReadOnlyList<(long ChatId, long MessageId)> AllMessageRefs =
         [
@@ -434,7 +389,7 @@ internal static class GoldenDatasetConstants
 
         /// <summary>
         /// Automated ham detections in the 7-day window — the FN pair's auto row
-        /// (DrId 1492, net_score=-1.45) which the manual correction later flags as a
+        /// (DrId 1492, ImplicitHam) which the manual correction later flags as a
         /// false negative. Counts toward DetectionAccuracyStats.TotalDetections.
         /// </summary>
         public const int InWindowHamAutoCount = 1;
@@ -535,7 +490,7 @@ internal static class GoldenDatasetConstants
         /// <summary>User whose three latest messages are all training ham (msgs 71028/71030/71041).</summary>
         public const long AllHamUserId = 9184102838760L;
 
-        /// <summary>Only a training label keeps this old message (all its rows used_for_training = false). @arisepacifism.</summary>
+        /// <summary>Only its curated verdict keeps this old message (latest row dr2009, an explicit ham decision). @arisepacifism.</summary>
         public const int LabeledOnlyRetentionMsgId = 7974;
     }
 }

@@ -1,11 +1,9 @@
 using Microsoft.Extensions.Logging;
 using NSubstitute;
-using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
-using TelegramGroupsAdmin.Telegram.Constants;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
@@ -18,19 +16,18 @@ namespace TelegramGroupsAdmin.UnitTests.Telegram.Services.Moderation.Handlers;
 ///
 /// Architecture:
 /// - TrainingHandler creates training data when admins mark messages as spam
-/// - Every decision is a verdict event (RecordDecisionAsync); training_labels kept for legacy readers
+/// - Every decision is a verdict event (RecordDecisionAsync); classifiers train on message_verdicts
 /// - Triggers immediate ML.NET text classifier retraining via JobTriggerService
-/// - Saves image AND video training samples for vision-based detection
 /// - Defensively downloads media if MediaLocalPath is null but a file ID exists
 ///
-/// Test Coverage (16 tests):
-/// - CreateSpamSampleAsync with text: Verifies label + retraining trigger + recorded decision
+/// Test Coverage (14 tests):
+/// - CreateSpamSampleAsync with text: Verifies recorded decision + retraining trigger
 /// - CreateSpamSampleAsync message not found: Logs warning, no action
-/// - CreateSpamSampleAsync without text: Skips training label/retraining
-/// - Actor telegram user ID extraction: Verifies labeled_by_user_id
-/// - System actor (auto-ban): Records an AutoBan decision, still creates training data
+/// - CreateSpamSampleAsync without text: Records the decision, skips retraining
+/// - Actor telegram user ID extraction: The decision carries the Telegram user actor
+/// - System actor (auto-ban): Records an AutoBan decision, still triggers retraining
 /// - WebUser actor: Records a WebMarkSpam decision
-/// - CreateHamSampleAsync: WebMarkHam records decision + legacy label; ReviewDismiss records decision only; missing message skips everything; other sources throw
+/// - CreateHamSampleAsync: WebMarkHam records decision + retraining; ReviewDismiss records decision; missing message skips everything; other sources throw
 /// - Download-when-missing for animation: MediaLocalPath null + MediaFileId → downloads (startup backfill hashes it)
 /// - Download-when-missing for photo: MediaLocalPath null + PhotoFileId → downloads (startup backfill hashes it)
 /// - No-download-when-present: MediaLocalPath set → no download attempted
@@ -46,7 +43,6 @@ public class TrainingHandlerTests
 {
     private IMessageHistoryRepository _mockMessageRepo = null!;
     private IDetectionResultsRepository _mockDetectionRepo = null!;
-    private ITrainingLabelsRepository _mockTrainingRepo = null!;
     private ITelegramMediaService _mockMediaService = null!;
     private IJobTriggerService _mockJobTrigger = null!;
     private ILogger<TrainingHandler> _mockLogger = null!;
@@ -57,7 +53,6 @@ public class TrainingHandlerTests
     {
         _mockMessageRepo = Substitute.For<IMessageHistoryRepository>();
         _mockDetectionRepo = Substitute.For<IDetectionResultsRepository>();
-        _mockTrainingRepo = Substitute.For<ITrainingLabelsRepository>();
         _mockMediaService = Substitute.For<ITelegramMediaService>();
         _mockJobTrigger = Substitute.For<IJobTriggerService>();
         _mockLogger = Substitute.For<ILogger<TrainingHandler>>();
@@ -65,7 +60,6 @@ public class TrainingHandlerTests
         _handler = new TrainingHandler(
             _mockMessageRepo,
             _mockDetectionRepo,
-            _mockTrainingRepo,
             _mockMediaService,
             _mockJobTrigger,
             _mockLogger);
@@ -120,7 +114,7 @@ public class TrainingHandlerTests
     #region CreateSpamSampleAsync Tests
 
     [Test]
-    public async Task CreateSpamSampleAsync_MessageWithText_CreatesLabelAndTriggersRetraining()
+    public async Task CreateSpamSampleAsync_MessageWithText_RecordsDecisionAndTriggersRetraining()
     {
         // Arrange
         const int messageId = 12345;
@@ -138,16 +132,6 @@ public class TrainingHandlerTests
         // Assert - Verify the spam decision is recorded as a verdict event
         await _mockDetectionRepo.Received(1).RecordDecisionAsync(
             messageId, -100, VerdictSource.WebMarkSpam, executor, Arg.Any<string>(), null, null, Arg.Any<CancellationToken>());
-
-        // Assert - Verify training label created (ML training)
-        await _mockTrainingRepo.Received(1).UpsertLabelAsync(
-            messageId,
-            Arg.Any<long>(),
-            TrainingLabel.Spam,
-            executor,
-            Arg.Any<string>(),
-            auditLogId: null,
-            cancellationToken: Arg.Any<CancellationToken>());
 
         // Assert - Verify combined classifier retraining job triggered once
         await _mockJobTrigger.Received(1).TriggerNowAsync(
@@ -171,14 +155,12 @@ public class TrainingHandlerTests
 
         // Assert - Should not create any records
         await _mockDetectionRepo.DidNotReceiveWithAnyArgs().RecordDecisionAsync(default, default, default, default!, default!, default, default, default);
-        await _mockTrainingRepo.DidNotReceiveWithAnyArgs().UpsertLabelAsync(
-            default, default, default, default!, default, default, default);
         await _mockJobTrigger.DidNotReceiveWithAnyArgs().TriggerNowAsync(
             string.Empty, new object(), default);
     }
 
     [Test]
-    public async Task CreateSpamSampleAsync_MessageWithoutText_SkipsTrainingLabelAndRetraining()
+    public async Task CreateSpamSampleAsync_MessageWithoutText_SkipsRetraining()
     {
         // Arrange
         const int messageId = 12345;
@@ -202,10 +184,6 @@ public class TrainingHandlerTests
         await _mockDetectionRepo.Received(1).RecordDecisionAsync(
             messageId, -100, VerdictSource.WebMarkSpam, executor, Arg.Any<string>(), null, null, Arg.Any<CancellationToken>());
 
-        // Assert - NO training label created (no text)
-        await _mockTrainingRepo.DidNotReceiveWithAnyArgs().UpsertLabelAsync(
-            default, default, default, default!, default, default, default);
-
         // Assert - NO retraining triggered (no text training data)
         await _mockJobTrigger.DidNotReceiveWithAnyArgs().TriggerNowAsync(
             string.Empty, new object(), default);
@@ -226,15 +204,11 @@ public class TrainingHandlerTests
         // Act
         await _handler.CreateSpamSampleAsync(12345, ChatIdentity.FromId(-100), executor, VerdictSource.WebMarkSpam, "Marked as spam by moderator");
 
-        // Assert - Training label should have correct user ID
-        await _mockTrainingRepo.Received(1).UpsertLabelAsync(
-            Arg.Any<int>(),
-            Arg.Any<long>(),
-            Arg.Any<TrainingLabel>(),
-            Arg.Is<Actor>(a => a!.GetTelegramUserId() == telegramUserId), // Should extract from Actor
-            Arg.Any<string>(),
-            Arg.Any<long?>(),
-            Arg.Any<CancellationToken>());
+        // Assert - The decision carries the Telegram user as its actor
+        await _mockDetectionRepo.Received(1).RecordDecisionAsync(
+            12345, -100, VerdictSource.WebMarkSpam,
+            Arg.Is<Actor>(a => a!.GetTelegramUserId() == telegramUserId),
+            Arg.Any<string>(), null, null, Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -255,16 +229,6 @@ public class TrainingHandlerTests
         // Assert - AutoBan decision recorded
         await _mockDetectionRepo.Received(1).RecordDecisionAsync(
             messageId, -100, VerdictSource.AutoBan, executor, "Auto-ban: high confidence spam", null, null, Arg.Any<CancellationToken>());
-
-        // Assert - Training label IS still created with auto-detected reason
-        await _mockTrainingRepo.Received(1).UpsertLabelAsync(
-            messageId,
-            Arg.Any<long>(),
-            TrainingLabel.Spam,
-            Arg.Is<Actor>(a => a == executor), // System actor has no telegram user ID
-            SpamDetectionConstants.AutoDetectedSpamReason,
-            auditLogId: null,
-            cancellationToken: Arg.Any<CancellationToken>());
 
         // Assert - Combined classifier retraining job IS still triggered
         await _mockJobTrigger.Received(1).TriggerNowAsync(
@@ -291,16 +255,6 @@ public class TrainingHandlerTests
         // Assert - WebMarkSpam decision recorded
         await _mockDetectionRepo.Received(1).RecordDecisionAsync(
             messageId, -100, VerdictSource.WebMarkSpam, executor, Arg.Any<string>(), null, null, Arg.Any<CancellationToken>());
-
-        // Assert - Training label uses manual reason (not auto-detected)
-        await _mockTrainingRepo.Received(1).UpsertLabelAsync(
-            messageId,
-            Arg.Any<long>(),
-            TrainingLabel.Spam,
-            Arg.Is<Actor>(a => a == executor), // WebUser has no telegram user ID
-            SpamDetectionConstants.ManualSpamReason,
-            auditLogId: null,
-            cancellationToken: Arg.Any<CancellationToken>());
     }
 
     #endregion
@@ -308,7 +262,7 @@ public class TrainingHandlerTests
     #region CreateHamSampleAsync Tests
 
     [Test]
-    public async Task CreateHamSampleAsync_WebMarkHam_RecordsDecisionAndLegacyLabel()
+    public async Task CreateHamSampleAsync_WebMarkHam_RecordsDecisionAndTriggersRetraining()
     {
         var executor = Actor.FromWebUser("admin-1");
         _mockMessageRepo.GetMessageAsync(4242, -100, Arg.Any<CancellationToken>())
@@ -318,14 +272,12 @@ public class TrainingHandlerTests
 
         await _mockDetectionRepo.Received(1).RecordDecisionAsync(
             4242, -100, VerdictSource.WebMarkHam, executor, "false positive", null, null, Arg.Any<CancellationToken>());
-        await _mockTrainingRepo.Received(1).UpsertLabelAsync(
-            4242, -100, TrainingLabel.Ham, executor, "false positive", auditLogId: null, cancellationToken: Arg.Any<CancellationToken>());
         await _mockJobTrigger.Received(1).TriggerNowAsync(
             BackgroundJobNames.ClassifierRetraining, Arg.Any<object>(), cancellationToken: Arg.Any<CancellationToken>());
     }
 
     [Test]
-    public async Task CreateHamSampleAsync_ReviewDismiss_RecordsImplicitHamDecisionWithoutLabel()
+    public async Task CreateHamSampleAsync_ReviewDismiss_RecordsImplicitHamDecision()
     {
         var executor = Actor.FromWebUser("admin-1");
         _mockMessageRepo.GetMessageAsync(4242, -100, Arg.Any<CancellationToken>())
@@ -335,7 +287,6 @@ public class TrainingHandlerTests
 
         await _mockDetectionRepo.Received(1).RecordDecisionAsync(
             4242, -100, VerdictSource.ReviewDismiss, executor, "Report #1 dismissed", null, null, Arg.Any<CancellationToken>());
-        await _mockTrainingRepo.DidNotReceiveWithAnyArgs().UpsertLabelAsync(default, default, default, default!, default, default, default);
     }
 
     [Test]
@@ -348,7 +299,6 @@ public class TrainingHandlerTests
             VerdictSource.ReviewDismiss, "Report #1 dismissed");
 
         await _mockDetectionRepo.DidNotReceiveWithAnyArgs().RecordDecisionAsync(default, default, default, default!, default!, default, default, default);
-        await _mockTrainingRepo.DidNotReceiveWithAnyArgs().UpsertLabelAsync(default, default, default, default!, default, default, default);
         await _mockJobTrigger.DidNotReceiveWithAnyArgs().TriggerNowAsync(string.Empty, new object(), default);
     }
 

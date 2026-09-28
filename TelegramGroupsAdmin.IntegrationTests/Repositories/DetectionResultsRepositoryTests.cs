@@ -147,9 +147,9 @@ public class DetectionResultsRepositoryTests
         var detection = await context.DetectionResults
             .FirstOrDefaultAsync(dr => dr.MessageId == message.MessageId && dr.ChatId == 0);
         Assert.That(detection, Is.Not.Null);
-        Assert.That(detection!.UsedForTraining, Is.True);
-        Assert.That(detection.NetScore, Is.EqualTo(5.0)); // Spam → positive
-
+        Assert.That(detection!.Source, Is.EqualTo((int)VerdictSource.TrainingDataPage));
+        Assert.That(detection.Classification, Is.EqualTo((int)VerdictClassification.ExplicitSpam));
+        Assert.That(detection.IsSpam, Is.True, "is_spam is generated from classification");
     }
 
     [Test]
@@ -182,7 +182,7 @@ public class DetectionResultsRepositoryTests
     }
 
     [Test]
-    public async Task AddManualTrainingSampleAsync_HamSample_UsesNegativeNetScore()
+    public async Task AddManualTrainingSampleAsync_HamSample_IsExplicitHam()
     {
         // Act — add a ham sample
         await _repository!.AddManualTrainingSampleAsync(
@@ -200,7 +200,8 @@ public class DetectionResultsRepositoryTests
         var detection = await context.DetectionResults
             .FirstOrDefaultAsync(dr => dr.MessageId == message!.MessageId && dr.ChatId == 0);
         Assert.That(detection, Is.Not.Null);
-        Assert.That(detection!.NetScore, Is.EqualTo(-5.0), "Ham sample should have negative net_score");
+        Assert.That(detection!.Classification, Is.EqualTo((int)VerdictClassification.ExplicitHam));
+        Assert.That(detection.IsSpam, Is.False, "is_spam is generated from classification");
     }
 
     #endregion

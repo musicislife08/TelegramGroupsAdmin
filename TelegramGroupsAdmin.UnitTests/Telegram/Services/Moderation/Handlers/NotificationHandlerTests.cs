@@ -284,7 +284,7 @@ public class NotificationHandlerTests
             Arg.Any<ChatIdentity>(),
             Arg.Any<UserIdentity>(),
             Arg.Any<Actor?>(),
-            4.75, // netScore carries the scan's score (legacy NetScore is no longer read)
+            4.75, // netScore carries the scan's score
             4.75, // score
             Arg.Is<string?>(r => r != null && r.Contains("High confidence")),
             Arg.Any<int>(),

@@ -68,7 +68,8 @@ public class BackupServiceTests
     // file_scan_quota, ticker.*). Updated 2026-04-09: +file_scan_results (FileScanResultDto rename).
     // Updated 2026-05-27: +username_blacklist (UsernameBlacklistEntryDto now discovered via [Table] attribute).
     // Updated 2026-09-25: +ban_celebration_subscribers (DM ban celebrations).
-    private const int ExpectedBackupTableCount = 44;
+    // Updated 2026-09-27: -3 legacy label/media-sample tables (DropLegacyVerdictColumns).
+    private const int ExpectedBackupTableCount = 41;
 
     // Synthetic outside-canonical-range ID used by RestoreAsync_ShouldWipeAllTablesFirst
     private const long SyntheticExtraUserId = 7777777777777L;

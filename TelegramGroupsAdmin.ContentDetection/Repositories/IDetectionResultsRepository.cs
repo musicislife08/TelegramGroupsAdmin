@@ -99,7 +99,7 @@ public interface IDetectionResultsRepository
 
     /// <summary>
     /// Get file scan results for UI display (paginated)
-    /// Filters by detection_source='file_scan' only
+    /// Filters by source = FileScan only
     /// </summary>
     /// <param name="limit">Maximum number of results to return</param>
     /// <param name="offset">Number of results to skip (for pagination)</param>
@@ -120,7 +120,7 @@ public interface IDetectionResultsRepository
 
     /// <summary>
     /// Get total count of file scan results (for pagination)
-    /// Filters by detection_source='file_scan' only
+    /// Filters by source = FileScan only
     /// </summary>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Total count of file scan results</returns>

@@ -18,7 +18,7 @@ namespace TelegramGroupsAdmin.IntegrationTests.ML;
 ///
 /// Test Strategy:
 /// - Uses real PostgreSQL database (Testcontainers) cloned from the canonical
-///   golden_template (100 spam + 100 ham training_labels, well above threshold).
+///   golden_template (explicit spam + ham decisions, well above threshold).
 /// - Tests full ML.NET training pipeline (TF-IDF + SDCA).
 /// - Validates model persistence, SHA256 verification, and thread safety.
 /// - All substrate mutation goes through `GoldenDataset.Reduce(...)` — no raw SQL,
@@ -96,7 +96,7 @@ public class MLTextClassifierServiceTests
     [Test]
     public async Task TrainModelAsync_SufficientData_TrainsAndSavesModel()
     {
-        // Arrange — canonical template clone provides 100 spam + 100 ham training_labels
+        // Arrange — canonical template clone provides explicit spam + ham decisions
 
         // Act
         await _mlService!.TrainModelAsync();
@@ -267,7 +267,7 @@ public class MLTextClassifierServiceTests
     [Test]
     public async Task TrainModelAsync_OverlappingCalls_OnlyOneExecutes()
     {
-        // Arrange — canonical template clone provides 100 spam + 100 ham training_labels
+        // Arrange — canonical template clone provides explicit spam + ham decisions
 
         // Act - Start two training tasks concurrently
         var task1 = _mlService!.TrainModelAsync();
@@ -627,9 +627,8 @@ public class MLTextClassifierServiceTests
         // store the SUT reads), chat_id=0 decisions included on equal footing: ham's pool
         // (99) is fully under the 100 cap (a no-op, all of it survives); spam's pool (121,
         // 23 of them chat_id=0) is capped down to exactly 100, cutting off whichever
-        // messages sort last by (chat_id, message_id) — training_labels is then pruned to
-        // match. KeepDetectionResults(0) still drains the ContentScan-sourced implicit spam
-        // pool so it doesn't further unbalance the set. Result: 100 raw / 82 post-dedup
+        // messages sort last by (chat_id, message_id). KeepDetectionResults(0) still drains
+        // the ContentScan-sourced implicit spam pool so it doesn't further unbalance the set. Result: 100 raw / 82 post-dedup
         // explicit spam, 99 raw / 44 post-dedup (16 explicit + 28 implicit) ham — 65.1%
         // spam ratio, inside [0.2, 0.8].
         await using var context = _testHelper!.GetDbContext();

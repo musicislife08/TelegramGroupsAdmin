@@ -18,7 +18,7 @@ public class MigrationTestHelperTemplateTests
         await using var ctx = helper.GetDbContext();
         Assert.That(await ctx.Messages.CountAsync(), Is.EqualTo(0));
         Assert.That(await ctx.Users.CountAsync(), Is.EqualTo(0));
-        Assert.That(await ctx.TrainingLabels.CountAsync(), Is.EqualTo(0));
+        Assert.That(await ctx.DetectionResults.CountAsync(), Is.EqualTo(0));
 
         // Schema is at HEAD — confirm a recent migration's table exists.
         var migrationsHistoryCount = await helper.ExecuteScalarAsync<long>(
@@ -34,7 +34,7 @@ public class MigrationTestHelperTemplateTests
 
         await using var ctx = helper.GetDbContext();
         Assert.That(await ctx.Messages.CountAsync(), Is.EqualTo(407));
-        Assert.That(await ctx.TrainingLabels.CountAsync(), Is.EqualTo(198)); // 200 minus msgs 7796 and 216684 (canonical edit 2026-09-27)
+        Assert.That(await ctx.DetectionResults.CountAsync(), Is.EqualTo(459));
         Assert.That(await ctx.WelcomeResponses.CountAsync(), Is.EqualTo(11));
     }
 

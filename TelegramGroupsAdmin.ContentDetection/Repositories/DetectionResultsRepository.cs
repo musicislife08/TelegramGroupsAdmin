@@ -78,8 +78,8 @@ public class DetectionResultsRepository : IDetectionResultsRepository
                 ChatId = x.dr.ChatId,
                 DetectedAt = x.dr.DetectedAt,
                 DetectionMethod = x.dr.DetectionMethod,
-                Source = (VerdictSource)x.dr.Source!.Value,
-                Classification = (VerdictClassification)x.dr.Classification!.Value,
+                Source = (VerdictSource)x.dr.Source,
+                Classification = (VerdictClassification)x.dr.Classification,
                 Properties = x.dr.Properties,
                 AuditLogId = x.dr.AuditLogId,
                 Score = x.dr.Score,
@@ -140,7 +140,6 @@ public class DetectionResultsRepository : IDetectionResultsRepository
         VerdictClassification classification, Actor actor, double score, string reason, string method)
     {
         ActorMappings.SetActorColumns(actor, out var webUserId, out var telegramUserId, out var systemIdentifier);
-        var isSpam = classification.IsSpam();
         return new DataModels.DetectionResultRecordDto
         {
             MessageId = messageId,
@@ -153,18 +152,7 @@ public class DetectionResultsRepository : IDetectionResultsRepository
             Reason = reason,
             WebUserId = webUserId,
             TelegramUserId = telegramUserId,
-            SystemIdentifier = systemIdentifier,
-            // Legacy columns, kept consistent until DropLegacyVerdictColumns removes them.
-            DetectionSource = source switch
-            {
-                VerdictSource.ContentScan => "auto",
-                VerdictSource.FileScan => "file_scan",
-                VerdictSource.Import => "tg-spam-import",
-                _ => "manual"
-            },
-            NetScore = isSpam ? Math.Abs(score) : -Math.Abs(score),
-            UsedForTraining = classification == VerdictClassification.ImplicitSpam
-                || (source is VerdictSource.TrainingDataPage or VerdictSource.Import && classification.IsExplicit())
+            SystemIdentifier = systemIdentifier
         };
     }
 
@@ -176,7 +164,7 @@ public class DetectionResultsRepository : IDetectionResultsRepository
 
         _logger.LogDebug(
             "Recorded {Source} verdict {Classification} for message {MessageId} in chat {ChatId} (score {Score:F2})",
-            (VerdictSource)row.Source!.Value, (VerdictClassification)row.Classification!.Value, row.MessageId, row.ChatId, row.Score);
+            (VerdictSource)row.Source, (VerdictClassification)row.Classification, row.MessageId, row.ChatId, row.Score);
     }
 
     public async Task<DetectionResultRecord?> GetByIdAsync(long id, CancellationToken cancellationToken = default)
@@ -462,7 +450,7 @@ public class DetectionResultsRepository : IDetectionResultsRepository
         var vetoedDetections = await context.DetectionResults
             .Where(dr => dr.DetectedAt >= since
                 && dr.Source == (int)VerdictSource.ContentScan
-                && !VerdictClassifications.SpamValues.Contains(dr.Classification!.Value)
+                && !VerdictClassifications.SpamValues.Contains(dr.Classification)
                 && dr.CheckResultsJson != null)
             .Select(dr => new { dr.Id, dr.CheckResultsJson })
             .ToListAsync(cancellationToken);
@@ -560,7 +548,7 @@ public class DetectionResultsRepository : IDetectionResultsRepository
         // Get recent non-spam detections with their message text
         var detections = await context.DetectionResults
             .Where(dr => dr.Source == (int)VerdictSource.ContentScan
-                && !VerdictClassifications.SpamValues.Contains(dr.Classification!.Value)
+                && !VerdictClassifications.SpamValues.Contains(dr.Classification)
                 && dr.CheckResultsJson != null)
             .OrderByDescending(dr => dr.DetectedAt)
             .Take(limit * 2) // Get extra to filter after JSON parsing

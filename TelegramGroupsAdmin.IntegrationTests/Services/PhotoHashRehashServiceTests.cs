@@ -160,8 +160,7 @@ public class PhotoHashRehashServiceTests
         {
             MessageId = messageId, ChatId = chatId, DetectedAt = DateTimeOffset.UtcNow,
             Source = (int)VerdictSource.WebMarkSpam, Classification = (int)VerdictClassification.ExplicitSpam,
-            DetectionMethod = "WebMarkSpam", Score = 5, Reason = "test", SystemIdentifier = "integration-test",
-            DetectionSource = "manual", NetScore = 5, UsedForTraining = false
+            DetectionMethod = "WebMarkSpam", Score = 5, Reason = "test", SystemIdentifier = "integration-test"
         });
         await ctx.SaveChangesAsync();
         return (messageId, chatId);

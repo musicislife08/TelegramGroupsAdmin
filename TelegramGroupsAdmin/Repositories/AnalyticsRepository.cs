@@ -103,7 +103,7 @@ public class AnalyticsRepository : IAnalyticsRepository
             from dr in context.DetectionResults
             where dr.DetectedAt >= startDate && dr.DetectedAt <= endDate
             where dr.Source == (int)VerdictSource.ContentScan
-            where VerdictClassifications.SpamValues.Contains(dr.Classification!.Value)
+            where VerdictClassifications.SpamValues.Contains(dr.Classification)
             join ua in context.UserActions
                 on new { MessageId = (int?)dr.MessageId, ChatId = (long?)dr.ChatId }
                 equals new { ua.MessageId, ua.ChatId }
@@ -183,7 +183,7 @@ public class AnalyticsRepository : IAnalyticsRepository
                 dr.ChatId,
                 dr.MessageId,
                 dr.CheckResultsJson,
-                IsSpam = VerdictClassifications.SpamValues.Contains(dr.Classification!.Value)
+                IsSpam = VerdictClassifications.SpamValues.Contains(dr.Classification)
             })
             .AsNoTracking()
             .ToListAsync(cancellationToken);
@@ -296,7 +296,7 @@ public class AnalyticsRepository : IAnalyticsRepository
         var detections = await context.DetectionResults
             .Where(dr => dr.DetectedAt >= startDate && dr.DetectedAt <= endDate)
             .Where(dr => dr.Source == (int)VerdictSource.ContentScan)
-            .Select(dr => new { dr.DetectedAt, IsSpam = VerdictClassifications.SpamValues.Contains(dr.Classification!.Value) })
+            .Select(dr => new { dr.DetectedAt, IsSpam = VerdictClassifications.SpamValues.Contains(dr.Classification) })
             .AsNoTracking()
             .ToListAsync(cancellationToken);
 
@@ -685,7 +685,7 @@ public class AnalyticsRepository : IAnalyticsRepository
         var detections = await context.DetectionResults
             .Where(dr => dr.DetectedAt >= minDateUtc && dr.DetectedAt < maxDateUtc)
             .Where(dr => dr.Source == (int)VerdictSource.ContentScan)
-            .Where(dr => VerdictClassifications.SpamValues.Contains(dr.Classification!.Value))
+            .Where(dr => VerdictClassifications.SpamValues.Contains(dr.Classification))
             .Select(dr => dr.DetectedAt)
             .ToListAsync(cancellationToken);
 

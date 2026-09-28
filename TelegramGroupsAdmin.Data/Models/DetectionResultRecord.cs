@@ -19,15 +19,11 @@ public class DetectionResultRecordDto
     [Column("detected_at")]
     public DateTimeOffset DetectedAt { get; set; }
 
-    [Column("detection_source")]
-    [Required]
-    [MaxLength(50)]
-    public string DetectionSource { get; set; } = string.Empty;
-
     [Column("detection_method")]
     [Required]
     public string DetectionMethod { get; set; } = string.Empty;
 
+    /// <summary>Generated from classification (VerdictClassifications.Spam); never written.</summary>
     [Column("is_spam")]
     [DatabaseGenerated(DatabaseGeneratedOption.Computed)]
     public bool IsSpam { get; set; }
@@ -50,13 +46,6 @@ public class DetectionResultRecordDto
     [MaxLength(50)]
     public string? SystemIdentifier { get; set; }
 
-    [Column("used_for_training")]
-    public bool UsedForTraining { get; set; } = true;
-
-    [Column("net_score")]
-    [Required]
-    public double NetScore { get; set; }
-
     [Column("check_results_json", TypeName = "jsonb")]
     public string? CheckResultsJson { get; set; }
 
@@ -66,13 +55,13 @@ public class DetectionResultRecordDto
     [Column("chat_id")]
     public long ChatId { get; set; }
 
-    /// <summary>Core VerdictSource value. Nullable until DropLegacyVerdictColumns.</summary>
+    /// <summary>Core VerdictSource value.</summary>
     [Column("source")]
-    public int? Source { get; set; }
+    public int Source { get; set; }
 
-    /// <summary>Core VerdictClassification value. Nullable until DropLegacyVerdictColumns.</summary>
+    /// <summary>Core VerdictClassification value (never Unscanned).</summary>
     [Column("classification")]
-    public int? Classification { get; set; }
+    public int Classification { get; set; }
 
     /// <summary>Explanation only (e.g. backfill provenance). Never an input to any rule.</summary>
     [Column("properties", TypeName = "jsonb")]

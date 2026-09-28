@@ -10,11 +10,6 @@ namespace TelegramGroupsAdmin.IntegrationTests.TestData.Tests;
 [TestFixture]
 public class GoldenReducePlanTests
 {
-    // training_labels.label is smallint (0=Spam, 1=Ham). The DTO exposes it as `short Label`,
-    // so test predicates compare against the cast enum value rather than a string literal.
-    private const short SpamLabel = (short)TrainingLabel.Spam; // 0
-    private const short HamLabel = (short)TrainingLabel.Ham;   // 1
-
     // Task 8 fix round (R17): KeepDetectionResults now scopes to scan rows only
     // (ContentScan/FileScan) — decision rows are the label store, pruned by KeepSpam/KeepHam.
     private const int SourceContentScan = (int)VerdictSource.ContentScan; // 0
@@ -24,9 +19,7 @@ public class GoldenReducePlanTests
     // rows in detection_results — source NOT IN (ContentScan/FileScan/TrainingExclude),
     // classification ExplicitSpam/ExplicitHam — the label store the SUT's message_verdicts
     // view reads. "N kept" is measured by counting distinct messages with a surviving
-    // decision row of that polarity, not by counting training_labels rows: a handful of
-    // canonical decisions (an AutoBan fold, chat_id=0 Training-Data-page/Import samples)
-    // have no training_labels mirror at all, so the two counts can legitimately diverge.
+    // decision row of that polarity.
     private const int SourceTrainingExclude = (int)VerdictSource.TrainingExclude; // 17
     private const int ClassificationExplicitSpam = (int)VerdictClassification.ExplicitSpam; // 0
     private const int ClassificationExplicitHam = (int)VerdictClassification.ExplicitHam;   // 1
@@ -153,7 +146,6 @@ public class GoldenReducePlanTests
 
         Assert.That(await ctx.Messages.CountAsync(), Is.EqualTo(0));
         Assert.That(await ctx.MessageEdits.CountAsync(), Is.EqualTo(0), "Cascade FK should clear message_edits");
-        Assert.That(await ctx.TrainingLabels.CountAsync(), Is.EqualTo(0), "Cascade FK should clear training_labels");
         Assert.That(await ctx.DetectionResults.CountAsync(), Is.EqualTo(0), "Cascade FK should clear detection_results");
         Assert.That(await ctx.MessageTranslations.CountAsync(), Is.EqualTo(0), "Cascade FK should clear message_translations");
 
@@ -171,13 +163,13 @@ public class GoldenReducePlanTests
 
         Assert.That(await ctx.Messages.CountAsync(), Is.EqualTo(5));
         // Children of the surviving 5 messages remain — exact count is bootstrap-defined,
-        // but every surviving training_labels row must reference one of the surviving 5
+        // but every surviving detection_results row must reference one of the surviving 5
         // messages. Phrased as a NOT EXISTS subquery so EF Core translates server-side
         // (an in-memory anonymous-type List<> in the predicate isn't translatable).
-        var hangingTl = await ctx.TrainingLabels
-            .Where(tl => !ctx.Messages.Any(m => m.ChatId == tl.ChatId && m.MessageId == tl.MessageId))
+        var hangingDr = await ctx.DetectionResults
+            .Where(dr => !ctx.Messages.Any(m => m.ChatId == dr.ChatId && m.MessageId == dr.MessageId))
             .CountAsync();
-        Assert.That(hangingTl, Is.EqualTo(0), "training_labels rows must all reference surviving messages");
+        Assert.That(hangingDr, Is.EqualTo(0), "detection_results rows must all reference surviving messages");
     }
 
     // ── KeepLabeledMessagesOnly: drop unlabeled survivors after Keep{Spam,Ham} ─
@@ -191,8 +183,8 @@ public class GoldenReducePlanTests
         await GoldenDataset.Reduce(ctx).KeepSpam(3).KeepHam(2).KeepLabeledMessagesOnly().ApplyAsync();
 
         // Every surviving message must have a surviving explicit decision row (R20: the
-        // label store; training_labels no longer mirrors every decision, e.g. an AutoBan
-        // fold or a chat_id=0 Training-Data-page/Import sample).
+        // label store, e.g. an admin mark, an AutoBan fold or a chat_id=0
+        // Training-Data-page/Import sample).
         var unlabeledSurvivors = await ctx.Messages
             .Where(m => !ctx.DetectionResults.Any(dr =>
                 dr.MessageId == m.MessageId && dr.ChatId == m.ChatId
@@ -307,10 +299,7 @@ public class GoldenReducePlanTests
     public async Task KeepSpam_CountGreaterThanCanonical_KeepsAllAvailable()
     {
         // R20: "available" is the explicit-decision pool (the label store KeepSpam selects
-        // from), not the training_labels count — canonical carries a handful of explicit
-        // spam decisions (an AutoBan fold, chat_id=0 Training-Data-page/Import samples)
-        // with no training_labels mirror at all, so the decision pool is the larger of the
-        // two. KeepSpam(n >= available) is the no-op case: every explicit spam decision
+        // from). KeepSpam(n >= available) is the no-op case: every explicit spam decision
         // survives.
         await using var ctx = _helper!.GetDbContext();
         var spamBefore = await CountExplicitDecisionMessagesAsync(ctx, ClassificationExplicitSpam);

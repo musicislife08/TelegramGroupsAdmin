@@ -1044,15 +1044,15 @@ public class MessageHistoryRepositoryTests
     [Test]
     public async Task CleanupExpiredAsync_PreservesMessagesWithDetectionResults()
     {
-        // This test validates that old messages WITH used_for_training=true detection_results
+        // This test validates that old messages whose current verdict is curated training data
         // are preserved by cleanup (training data retention logic).
         //
-        // The retention logic: Delete messages where Timestamp < retention AND no training detection results.
-        // Messages with detection_results WHERE used_for_training=true are kept regardless of age.
+        // The retention logic: Delete messages where Timestamp < retention AND the message_verdicts
+        // classification is not curated. Messages with a curated verdict are kept regardless of age.
         //
-        // Canonical anchors (both in MainChat, ~180 days old, used_for_training=true):
-        // - message_id=210708: detection_result id=1409, used_for_training=true (UrlBlocklist)
-        // - message_id=210772: detection_result id=1438, used_for_training=true (auto detection)
+        // Canonical anchors (both in MainChat, ~180 days old, curated verdict):
+        // - message_id=210708: detection_result id=1409 (UrlBlocklist)
+        // - message_id=210772: detection_result id=1438 (auto detection)
 
         const int trainingMsg1 = 210708;
         const int trainingMsg2 = 210772;
@@ -1064,23 +1064,23 @@ public class MessageHistoryRepositoryTests
         Assert.That(msgBeforeCleanup2, Is.Not.Null, "Canonical training message 210772 should exist");
 
         // Act - Run cleanup with 30-day retention (these messages are ~180 days old, eligible for cleanup
-        // based on age alone — but used_for_training=true should prevent deletion)
+        // based on age alone — but their curated verdicts should prevent deletion)
         var result = await _repository.CleanupExpiredAsync(TimeSpan.FromDays(30));
 
-        // Assert - Messages with used_for_training=true detection results should NOT be deleted
+        // Assert - Messages with curated verdicts should NOT be deleted
         var msg1AfterCleanup = await _repository.GetMessageAsync(trainingMsg1, MainChatId);
         var msg2AfterCleanup = await _repository.GetMessageAsync(trainingMsg2, MainChatId);
         Assert.That(msg1AfterCleanup, Is.Not.Null,
-            "message_id=210708 (used_for_training=true) should be preserved by cleanup");
+            "message_id=210708 (curated verdict) should be preserved by cleanup");
         Assert.That(msg2AfterCleanup, Is.Not.Null,
-            "message_id=210772 (used_for_training=true) should be preserved by cleanup");
+            "message_id=210772 (curated verdict) should be preserved by cleanup");
     }
 
     [Test]
     public async Task CleanupExpiredAsync_WithOldMessages_DeletesExpiredAndPreservesTrainingData()
     {
         // Arrange - Reduce canonical to the 6 retention anchors (FK CASCADE drops all other
-        // messages' detection_results, edits, training_labels, translations) and shift their
+        // messages' detection_results, edits, translations) and shift their
         // timestamps to retention-test ages via midnight-anchored mutator.
         var contextFactory = _serviceProvider!.GetRequiredService<IDbContextFactory<AppDbContext>>();
         await using (var context = await contextFactory.CreateDbContextAsync())
@@ -1145,7 +1145,7 @@ public class MessageHistoryRepositoryTests
             Assert.That(bareWithEditAfter, Is.Not.Null,
                 "45-day anchor should be preserved (folded training label → ExplicitHam, a curated classification)");
             Assert.That(nonTrainingAfter, Is.Not.Null,
-                "50-day message should be preserved (detection classification ExplicitSpam is curated, despite used_for_training=false)");
+                "50-day message should be preserved (detection classification ExplicitSpam is curated)");
             Assert.That(trainingPreservedAfter, Is.Not.Null,
                 "90-day anchor with a curated (ExplicitSpam) verdict should be preserved");
             Assert.That(bareOrphan29After, Is.Not.Null,
@@ -1173,9 +1173,7 @@ public class MessageHistoryRepositoryTests
         var msgId = GoldenDatasetConstants.Verdicts.LabeledOnlyRetentionMsgId;
         await using (var ctx = _testHelper!.GetDbContext())
         {
-            // Guard the canonical precondition: every row for this message has used_for_training = false,
-            // so the old keep-condition would delete it; its current verdict is an explicit label.
-            Assert.That(await ctx.DetectionResults.AnyAsync(d => d.MessageId == msgId && d.ChatId == GoldenDatasetConstants.Chats.LandOwnersChatId && d.UsedForTraining), Is.False);
+            // Guard the canonical precondition: its current verdict is an explicit label.
             Assert.That((await ctx.MessageVerdicts.SingleAsync(v => v.MessageId == msgId && v.ChatId == GoldenDatasetConstants.Chats.LandOwnersChatId)).Classification,
                 Is.EqualTo((int)VerdictClassification.ExplicitHam));
         }
@@ -1319,7 +1317,7 @@ public class MessageHistoryRepositoryTests
         await using var ctx = _testHelper!.GetDbContext();
         var scans = ctx.DetectionResults.AsNoTracking().Where(d => d.Source == (int)VerdictSource.ContentScan);
         var expectedTotal = await scans.CountAsync();
-        var expectedSpam = await scans.CountAsync(d => VerdictClassifications.SpamValues.Contains(d.Classification!.Value));
+        var expectedSpam = await scans.CountAsync(d => VerdictClassifications.SpamValues.Contains(d.Classification));
         var decisionRows = await ctx.DetectionResults.AsNoTracking().CountAsync(d => d.Source != (int)VerdictSource.ContentScan);
         Assert.That(decisionRows, Is.GreaterThan(0), "canonical must carry non-scan rows or this test is vacuous");
 

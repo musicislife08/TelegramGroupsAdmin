@@ -60,6 +60,6 @@ public class StopWordCorpusRepository(IDbContextFactory<AppDbContext> contextFac
             .Where(d => d.Source == (int)VerdictSource.ContentScan && d.DetectedAt >= since && d.CheckResultsJson != null)
             .Select(d => new { d.Id, d.Classification, d.CheckResultsJson, d.DetectedAt })
             .ToListAsync(cancellationToken);
-        return rows.Select(r => new ScanCheckResults(r.Id, ((VerdictClassification)r.Classification!.Value).IsSpam(), r.CheckResultsJson!, r.DetectedAt)).ToList();
+        return rows.Select(r => new ScanCheckResults(r.Id, ((VerdictClassification)r.Classification).IsSpam(), r.CheckResultsJson!, r.DetectedAt)).ToList();
     }
 }

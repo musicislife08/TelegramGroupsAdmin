@@ -93,9 +93,6 @@ public static class ServiceCollectionExtensions
             // Register stop words repository
             services.AddScoped<IStopWordsRepository, StopWordsRepository>();
 
-            // Register training labels repository (Phase 1: ML.NET training labels)
-            services.AddScoped<ITrainingLabelsRepository, TrainingLabelsRepository>();
-
             // Register ML training data repository (aggregates training data from multiple tables)
             // Scoped: Matches standard pattern used by all other repositories
             services.AddScoped<IMLTrainingDataRepository, MLTrainingDataRepository>();
