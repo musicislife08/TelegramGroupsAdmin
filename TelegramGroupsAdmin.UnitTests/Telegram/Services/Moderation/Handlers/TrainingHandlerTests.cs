@@ -23,7 +23,7 @@ namespace TelegramGroupsAdmin.UnitTests.Telegram.Services.Moderation.Handlers;
 /// - Saves image AND video training samples for vision-based detection
 /// - Defensively downloads media if MediaLocalPath is null but a file ID exists
 ///
-/// Test Coverage (15 tests):
+/// Test Coverage (16 tests):
 /// - CreateSpamSampleAsync with text: Verifies label + retraining trigger + recorded decision
 /// - CreateSpamSampleAsync message not found: Logs warning, no action
 /// - CreateSpamSampleAsync without text: Skips training label/retraining
@@ -31,7 +31,7 @@ namespace TelegramGroupsAdmin.UnitTests.Telegram.Services.Moderation.Handlers;
 /// - Actor telegram user ID extraction: Verifies labeled_by_user_id
 /// - System actor (auto-ban): Records an AutoBan decision, still creates training data
 /// - WebUser actor: Records a WebMarkSpam decision
-/// - CreateHamSampleAsync: WebMarkHam records decision + legacy label; ReviewDismiss records decision only; other sources throw
+/// - CreateHamSampleAsync: WebMarkHam records decision + legacy label; ReviewDismiss records decision only; missing message skips everything; other sources throw
 /// - Download-when-missing for image: MediaLocalPath null + MediaFileId → downloads before saving
 /// - Download-when-missing for video: MediaLocalPath null + MediaFileId → downloads before saving
 /// - No-download-when-present: MediaLocalPath set → no download attempted
@@ -375,6 +375,9 @@ public class TrainingHandlerTests
     public async Task CreateHamSampleAsync_WebMarkHam_RecordsDecisionAndLegacyLabel()
     {
         var executor = Actor.FromWebUser("admin-1");
+        _mockMessageRepo.GetMessageAsync(4242, -100, Arg.Any<CancellationToken>())
+            .Returns(CreateTestMessage(4242, userId: 123, chatId: -100, messageText: "hello"));
+
         await _handler.CreateHamSampleAsync(4242, ChatIdentity.FromId(-100), executor, VerdictSource.WebMarkHam, "false positive");
 
         await _mockDetectionRepo.Received(1).RecordDecisionAsync(
@@ -389,11 +392,28 @@ public class TrainingHandlerTests
     public async Task CreateHamSampleAsync_ReviewDismiss_RecordsImplicitHamDecisionWithoutLabel()
     {
         var executor = Actor.FromWebUser("admin-1");
+        _mockMessageRepo.GetMessageAsync(4242, -100, Arg.Any<CancellationToken>())
+            .Returns(CreateTestMessage(4242, userId: 123, chatId: -100, messageText: "hello"));
+
         await _handler.CreateHamSampleAsync(4242, ChatIdentity.FromId(-100), executor, VerdictSource.ReviewDismiss, "Report #1 dismissed");
 
         await _mockDetectionRepo.Received(1).RecordDecisionAsync(
             4242, -100, VerdictSource.ReviewDismiss, executor, "Report #1 dismissed", null, null, Arg.Any<CancellationToken>());
         await _mockTrainingRepo.DidNotReceiveWithAnyArgs().UpsertLabelAsync(default, default, default, default!, default, default, default);
+    }
+
+    [Test]
+    public async Task CreateHamSampleAsync_MessageNotFound_SkipsDecisionAndRetraining()
+    {
+        _mockMessageRepo.GetMessageAsync(4242, -100, Arg.Any<CancellationToken>())
+            .Returns((MessageRecord?)null);
+
+        await _handler.CreateHamSampleAsync(4242, ChatIdentity.FromId(-100), Actor.FromWebUser("admin-1"),
+            VerdictSource.ReviewDismiss, "Report #1 dismissed");
+
+        await _mockDetectionRepo.DidNotReceiveWithAnyArgs().RecordDecisionAsync(default, default, default, default!, default!, default, default, default);
+        await _mockTrainingRepo.DidNotReceiveWithAnyArgs().UpsertLabelAsync(default, default, default, default!, default, default, default);
+        await _mockJobTrigger.DidNotReceiveWithAnyArgs().TriggerNowAsync(string.Empty, new object(), default);
     }
 
     [Test]

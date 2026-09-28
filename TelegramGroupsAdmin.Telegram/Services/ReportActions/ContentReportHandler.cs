@@ -217,10 +217,19 @@ internal sealed class ContentReportHandler(
             cancellationToken);
         if (statusResult != null) return statusResult;
 
-        await trainingHandler.CreateHamSampleAsync(
-            report.MessageId, report.Chat, executor, VerdictSource.ReviewDismiss,
-            reason is null ? $"Report #{reportId} dismissed" : $"Report #{reportId} dismissed: {reason}",
-            cancellationToken);
+        // Non-critical: the dismissal is committed; a failed ham decision must not skip audit and cleanup.
+        try
+        {
+            await trainingHandler.CreateHamSampleAsync(
+                report.MessageId, report.Chat, executor, VerdictSource.ReviewDismiss,
+                reason is null ? $"Report #{reportId} dismissed" : $"Report #{reportId} dismissed: {reason}",
+                cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Recording the dismiss decision for report {ReportId} (message {MessageId}) failed, continuing",
+                reportId, report.MessageId);
+        }
 
         await auditService.LogEventAsync(
             AuditEventType.ReportReviewed, executor, null,

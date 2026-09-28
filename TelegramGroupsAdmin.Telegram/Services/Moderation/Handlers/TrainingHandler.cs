@@ -188,6 +188,16 @@ public class TrainingHandler : ITrainingHandler
         if (source is not (VerdictSource.WebMarkHam or VerdictSource.ReviewDismiss))
             throw new ArgumentOutOfRangeException(nameof(source), source, "Ham decisions are WebMarkHam or ReviewDismiss");
 
+        // detection_results has an FK to messages: an unstored or retention-deleted message cannot carry a verdict.
+        var message = await _messageHistoryRepository.GetMessageAsync(messageId, chat.Id, cancellationToken);
+        if (message == null)
+        {
+            _logger.LogWarning(
+                "Message {MessageId} not in database. Skipping {Source} ham decision.",
+                messageId, source);
+            return;
+        }
+
         await _detectionResultsRepository.RecordDecisionAsync(
             messageId, chat.Id, source, executor, reason, cancellationToken: cancellationToken);
 
