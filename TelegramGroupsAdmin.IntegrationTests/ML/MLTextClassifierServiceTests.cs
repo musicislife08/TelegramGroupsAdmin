@@ -614,11 +614,25 @@ public class MLTextClassifierServiceTests
     [Test]
     public async Task TrainModelAsync_BalancedDataset_IsBalancedTrue()
     {
-        // Arrange — drain detection_results to remove implicit spam (the unbalancing
-        // pool by default). Leave the unlabeled-message pool intact so the repository's
-        // implicit-ham draw balances the 81-post-dedup explicit spam.
+        // Arrange (R19, Task 8 fix round 2) — KeepDetectionResults(0) alone is no longer
+        // enough to express "balanced": under the verdict model, the 24 chat_id=0
+        // Training-Data-page/import samples (TrainingDataPage/Import sources) are explicit
+        // decisions, not implicit ones, so they survive KeepDetectionResults(0) (which now
+        // only drains ContentScan/FileScan rows) and skew the raw explicit set to 121 spam
+        // vs 99 ham (81.7% spam — confirmed via message_verdicts: 98 spam/98 ham excluding
+        // chat_id=0, vs 23 spam/1 ham for chat_id=0 alone).
+        // KeepSpam(100)/KeepHam(100) express "the full, naturally-balanced canonical label
+        // set" (training_labels has 99 spam + 99 ham — comfortably under 100, so this is a
+        // no-op cap, not a number reverse-engineered to hit the ratio window) and — per R17
+        // — now also prune detection_results decision rows (including chat_id=0 ones) down
+        // to whichever survive with a matching training_labels row, which drops all but 3
+        // of the 24 chat-0 page/import decisions (21 have no training_labels backing at
+        // all). KeepDetectionResults(0) still drains the ContentScan-sourced implicit spam
+        // pool so it doesn't further unbalance the set.
         await using var context = _testHelper!.GetDbContext();
         await GoldenDataset.Reduce(context)
+            .KeepSpam(100)
+            .KeepHam(100)
             .KeepDetectionResults(0)
             .ApplyAsync();
 
