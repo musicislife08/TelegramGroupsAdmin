@@ -248,10 +248,16 @@
 
         if (confirmed == true)
         {
+            if (WebUser is null)
+            {
+                Snackbar.Add("Your session could not be verified. Please sign in again.", Severity.Error);
+                return;
+            }
+
             _processing = true;
             try
             {
-                await TrainingDataService.ExcludeAsync(sample.MessageId, sample.ChatId, WebUser!.ToActor());
+                await TrainingDataService.ExcludeAsync(sample.MessageId, sample.ChatId, WebUser.ToActor());
 
                 Snackbar.Add("Sample removed from training data", Severity.Success);
 
@@ -279,13 +285,19 @@
 
         if (confirmed == true)
         {
+            if (WebUser is null)
+            {
+                Snackbar.Add("Your session could not be verified. Please sign in again.", Severity.Error);
+                return;
+            }
+
             _processing = true;
             try
             {
                 var toRemove = group.Samples.Where(s => s.Id != group.RecommendedKeep?.Id)
                     .Select(s => (s.MessageId, s.ChatId))
                     .ToList();
-                await TrainingDataService.ExcludeManyAsync(toRemove, WebUser!.ToActor());
+                await TrainingDataService.ExcludeManyAsync(toRemove, WebUser.ToActor());
 
                 Snackbar.Add($"Removed {toRemove.Count} duplicate sample(s) from training data", Severity.Success);
 
@@ -315,6 +327,12 @@
 
         if (confirmed == true)
         {
+            if (WebUser is null)
+            {
+                Snackbar.Add("Your session could not be verified. Please sign in again.", Severity.Error);
+                return;
+            }
+
             _processing = true;
             try
             {
@@ -322,7 +340,7 @@
                     .SelectMany(g => g.Samples.Where(s => s.Id != g.RecommendedKeep?.Id))
                     .Select(s => (s.MessageId, s.ChatId))
                     .ToList();
-                await TrainingDataService.ExcludeManyAsync(toRemove, WebUser!.ToActor());
+                await TrainingDataService.ExcludeManyAsync(toRemove, WebUser.ToActor());
 
                 Snackbar.Add($"Removed {toRemove.Count} duplicate sample(s) from training data", Severity.Success);
 
