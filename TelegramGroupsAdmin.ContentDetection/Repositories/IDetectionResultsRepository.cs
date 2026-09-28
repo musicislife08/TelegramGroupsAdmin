@@ -62,8 +62,9 @@ public interface IDetectionResultsRepository
     // ====================================================================================
 
     /// <summary>
-    /// Get all training data records (detection_results WHERE used_for_training = true)
-    /// with JOIN to messages for full details
+    /// Get the curated training set: messages whose current verdict (from message_verdicts) is
+    /// in the curated classification set (ExplicitSpam, ExplicitHam, ImplicitSpam), with JOIN to
+    /// messages for full details.
     /// </summary>
     Task<List<DetectionResultRecord>> GetAllTrainingDataAsync(CancellationToken cancellationToken = default);
 

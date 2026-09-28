@@ -13,4 +13,12 @@ public interface ITrainingDataService
     Task ReplaceSampleAsync(int oldMessageId, long oldChatId, string messageText, bool isSpam, Actor actor,
         CancellationToken cancellationToken = default);
     Task ExcludeAsync(int messageId, long chatId, Actor actor, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Excludes multiple messages from training in one action (e.g. bulk duplicate removal).
+    /// Records a TrainingExclude decision for each message, then retrains exactly once — never
+    /// once per message. Retrains not at all when <paramref name="messages"/> is empty.
+    /// </summary>
+    Task ExcludeManyAsync(IReadOnlyCollection<(int MessageId, long ChatId)> messages, Actor actor,
+        CancellationToken cancellationToken = default);
 }

@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
+using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Data;
@@ -18,6 +19,7 @@ public class TrainingDataServiceTests
     private ServiceProvider _provider = null!;
     private ITrainingDataService _service = null!;
     private IDetectionResultsRepository _repository = null!;
+    private IJobTriggerService _jobTriggerService = null!;
     private static readonly Actor Owner = Actor.FromWebUser(GoldenDatasetConstants.WebUsers.OwnerId);
 
     [SetUp]
@@ -34,6 +36,7 @@ public class TrainingDataServiceTests
         _provider = services.BuildServiceProvider();
         _service = _provider.GetRequiredService<ITrainingDataService>();
         _repository = _provider.GetRequiredService<IDetectionResultsRepository>();
+        _jobTriggerService = _provider.GetRequiredService<IJobTriggerService>();
     }
 
     [TearDown]
@@ -87,5 +90,47 @@ public class TrainingDataServiceTests
             Assert.That(added.Classification, Is.EqualTo(VerdictClassification.ExplicitSpam));
             Assert.That(added.AddedBy.Type, Is.EqualTo(ActorType.WebUser));
         }
+    }
+
+    [Test]
+    public async Task ExcludeManyAsync_TwoCuratedSamples_BothLeaveTheListAndRetrainOnce()
+    {
+        var chatId = GoldenDatasetConstants.Chats.MainChatId;
+        var spamMsgId = GoldenDatasetConstants.Verdicts.AutoBanMsgId;
+        var hamMsgId = GoldenDatasetConstants.Verdicts.CorrectedToHamMsgId;
+
+        var samplesBefore = await _service.GetSamplesAsync();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(samplesBefore.Any(s => s.MessageId == spamMsgId && s.ChatId == chatId), Is.True,
+                "canonical precondition: auto-banned message is a curated sample");
+            Assert.That(samplesBefore.Any(s => s.MessageId == hamMsgId && s.ChatId == chatId), Is.True,
+                "canonical precondition: corrected-to-ham message is a curated sample");
+        }
+
+        await _service.ExcludeManyAsync([(spamMsgId, chatId), (hamMsgId, chatId)], Owner);
+
+        var spamVerdict = await _repository.GetCurrentVerdictAsync(spamMsgId, chatId);
+        var hamVerdict = await _repository.GetCurrentVerdictAsync(hamMsgId, chatId);
+        var samplesAfter = await _service.GetSamplesAsync();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(spamVerdict!.Classification, Is.EqualTo(VerdictClassification.UntrainedSpam));
+            Assert.That(hamVerdict!.Classification, Is.EqualTo(VerdictClassification.UntrainedHam));
+            Assert.That(samplesAfter.Any(s => s.MessageId == spamMsgId && s.ChatId == chatId), Is.False);
+            Assert.That(samplesAfter.Any(s => s.MessageId == hamMsgId && s.ChatId == chatId), Is.False);
+        }
+
+        await _jobTriggerService.Received(1).TriggerNowAsync(
+            BackgroundJobNames.ClassifierRetraining, Arg.Any<object>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task ExcludeManyAsync_EmptyCollection_TriggersNoRetrain()
+    {
+        await _service.ExcludeManyAsync([], Owner);
+
+        await _jobTriggerService.DidNotReceive().TriggerNowAsync(
+            Arg.Any<string>(), Arg.Any<object>(), Arg.Any<CancellationToken>());
     }
 }

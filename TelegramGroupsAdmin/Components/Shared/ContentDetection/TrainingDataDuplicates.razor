@@ -282,14 +282,12 @@
             _processing = true;
             try
             {
-                var removed = 0;
-                foreach (var sample in group.Samples.Where(s => s.Id != group.RecommendedKeep?.Id))
-                {
-                    await TrainingDataService.ExcludeAsync(sample.MessageId, sample.ChatId, WebUser!.ToActor());
-                    removed++;
-                }
+                var toRemove = group.Samples.Where(s => s.Id != group.RecommendedKeep?.Id)
+                    .Select(s => (s.MessageId, s.ChatId))
+                    .ToList();
+                await TrainingDataService.ExcludeManyAsync(toRemove, WebUser!.ToActor());
 
-                Snackbar.Add($"Removed {removed} duplicate sample(s) from training data", Severity.Success);
+                Snackbar.Add($"Removed {toRemove.Count} duplicate sample(s) from training data", Severity.Success);
 
                 // Re-analyze to update the UI
                 await AnalyzeTrainingData();
@@ -320,17 +318,13 @@
             _processing = true;
             try
             {
-                var removed = 0;
-                foreach (var group in groups)
-                {
-                    foreach (var sample in group.Samples.Where(s => s.Id != group.RecommendedKeep?.Id))
-                    {
-                        await TrainingDataService.ExcludeAsync(sample.MessageId, sample.ChatId, WebUser!.ToActor());
-                        removed++;
-                    }
-                }
+                var toRemove = groups
+                    .SelectMany(g => g.Samples.Where(s => s.Id != g.RecommendedKeep?.Id))
+                    .Select(s => (s.MessageId, s.ChatId))
+                    .ToList();
+                await TrainingDataService.ExcludeManyAsync(toRemove, WebUser!.ToActor());
 
-                Snackbar.Add($"Removed {removed} duplicate sample(s) from training data", Severity.Success);
+                Snackbar.Add($"Removed {toRemove.Count} duplicate sample(s) from training data", Severity.Success);
 
                 // Re-analyze to update the UI
                 await AnalyzeTrainingData();

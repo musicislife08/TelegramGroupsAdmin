@@ -40,6 +40,22 @@ public sealed class TrainingDataService(
         await RetrainAsync(cancellationToken);
     }
 
+    public async Task ExcludeManyAsync(IReadOnlyCollection<(int MessageId, long ChatId)> messages, Actor actor,
+        CancellationToken cancellationToken = default)
+    {
+        if (messages.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var (messageId, chatId) in messages)
+        {
+            await RecordExclusionAsync(messageId, chatId, actor, cancellationToken);
+        }
+
+        await RetrainAsync(cancellationToken);
+    }
+
     private async Task RecordExclusionAsync(int messageId, long chatId, Actor actor, CancellationToken cancellationToken)
     {
         var current = await detectionResultsRepository.GetCurrentVerdictAsync(messageId, chatId, cancellationToken)
