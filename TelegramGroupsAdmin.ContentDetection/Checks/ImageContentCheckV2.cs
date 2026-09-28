@@ -104,7 +104,7 @@ public class ImageContentCheckV2(
         var imageConfig = config.ImageSpam;
 
         // Extract OCR text early so it's available for all return paths (for AI veto passthrough)
-        // Trade-off: OCR runs even if hash similarity (Layer 1) returns early, but this ensures
+        // Trade-off: OCR runs even if a spam hash match (Layer 1) returns early, but this ensures
         // AI veto can analyze image text for false positive detection. OCR is CPU-bound (Tesseract)
         // but typically completes in <100ms for typical image sizes.
         string? extractedOcrText = null;
@@ -141,29 +141,12 @@ public class ImageContentCheckV2(
                     }
                 }
 
-                // Check if similarity meets threshold
-                if (bestSimilarity >= imageConfig.HashSimilarityThreshold)
+                // A spam match is decisive. A ham match is not: a spammer can reuse a benign image, so
+                // it falls through to OCR and Vision like an unmatched image.
+                if (bestSimilarity >= imageConfig.HashSimilarityThreshold && matchedSpamLabel == true)
                 {
                     // Use configured score directly, clamped to safety boundaries
                     var score = Math.Clamp(imageConfig.HashMatchConfidence, ContentDetectionConstants.MinScore, ContentDetectionConstants.MaxScore);
-
-                    // If matched HAM (not spam), abstain (don't give negative signal in V2)
-                    if (matchedSpamLabel == false)
-                    {
-                        logger.LogInformation(
-                            "ImageSpam V2 Layer 1: Hash match found ({Similarity:F2}% >= {Threshold:F2}%) but matched HAM sample, abstaining",
-                            bestSimilarity * 100, imageConfig.HashSimilarityThreshold * 100);
-
-                        return new ContentCheckResponseV2
-                        {
-                            CheckName = CheckName,
-                            Score = 0.0,
-                            Abstained = true,
-                            Details = $"Image hash {bestSimilarity:P0} similar to known ham sample (abstaining)",
-                            ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds,
-                            OcrExtractedText = extractedOcrText
-                        };
-                    }
 
                     logger.LogInformation(
                         "ImageSpam V2 Layer 1: Hash match found ({Similarity:F2}% >= {Threshold:F2}%). Returning {Score:F2} points",
@@ -180,9 +163,18 @@ public class ImageContentCheckV2(
                     };
                 }
 
-                logger.LogDebug(
-                    "ImageSpam V2 Layer 1: Best hash similarity {Similarity:F2}% below threshold {Threshold:F2}%, proceeding to OCR",
-                    bestSimilarity * 100, imageConfig.HashSimilarityThreshold * 100);
+                if (bestSimilarity >= imageConfig.HashSimilarityThreshold)
+                {
+                    logger.LogInformation(
+                        "ImageSpam V2 Layer 1: Hash match found ({Similarity:F2}% >= {Threshold:F2}%) but matched HAM sample, proceeding to OCR/Vision",
+                        bestSimilarity * 100, imageConfig.HashSimilarityThreshold * 100);
+                }
+                else
+                {
+                    logger.LogDebug(
+                        "ImageSpam V2 Layer 1: Best hash similarity {Similarity:F2}% below threshold {Threshold:F2}%, proceeding to OCR",
+                        bestSimilarity * 100, imageConfig.HashSimilarityThreshold * 100);
+                }
             }
             else
             {
