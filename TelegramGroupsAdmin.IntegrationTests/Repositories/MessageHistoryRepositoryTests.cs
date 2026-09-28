@@ -1186,6 +1186,33 @@ public class MessageHistoryRepositoryTests
         Assert.That(await after.Messages.AnyAsync(m => m.MessageId == msgId && m.ChatId == GoldenDatasetConstants.Chats.LandOwnersChatId), Is.True);
     }
 
+    [Test]
+    public async Task CleanupExpiredAsync_ExpiredNonCuratedMessageWithEdits_DeletesMessageAndEdits()
+    {
+        var msgId = GoldenDatasetConstants.Retention.MsgId_ExpiredWithEdits;
+        var editId = GoldenDatasetConstants.Retention.EditId_ForExpiredWithEdits;
+        await using (var ctx = _testHelper!.GetDbContext())
+        {
+            // Guard the canonical precondition: the message has its expected edit, and its current
+            // verdict (via message_verdicts) is non-curated, so the keep condition does not apply.
+            Assert.That(await ctx.MessageEdits.FindAsync(editId), Is.Not.Null, "Edit row should exist before cleanup");
+            Assert.That(await ctx.MessageVerdicts.AnyAsync(v => v.MessageId == msgId && v.ChatId == MainChatId
+                && VerdictClassifications.CuratedValues.Contains(v.Classification)), Is.False);
+        }
+
+        // message 221932 is dated 2026-04-09, well past a 30-day retention window
+        await _repository!.CleanupExpiredAsync(TimeSpan.FromDays(30));
+
+        await using var after = _testHelper.GetDbContext();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(await after.Messages.AnyAsync(m => m.MessageId == msgId && m.ChatId == MainChatId), Is.False,
+                "Expired non-curated message should be deleted");
+            Assert.That(await after.MessageEdits.FindAsync(editId), Is.Null,
+                "Its message_edits row should cascade-delete with it");
+        }
+    }
+
     #endregion
 
     #region Analytics/Stats Tests

@@ -306,6 +306,7 @@ Workshop Alumni (`-100059667856554`) has no `ban_celebration_config`, so its eff
 | `UnscannedMsgId` | msg 219219, @unhelpfulgrab, MainChat | no rows → `Unscanned` | unscanned messages |
 | `AllHamUserId` | user 9184102838760, msgs 71028/71030/71041 | all `ExplicitHam` | auto-trust with N ham messages |
 | `LabeledOnlyRetentionMsgId` | msg 7974, @arisepacifism (9702019239117) | manual ham dr2009 (`used_for_training=false`) → `ExplicitHam` | retention keeps decision-only messages |
+| `Retention.MsgId_ExpiredWithEdits` (no canonical edit — pinned an unreferenced row) | msg 221932, MainChat, 1 edit (message_edits row 3014) | no `detection_results` rows → `Unscanned` (non-curated) | retention deletes an expired non-curated message together with its `message_edits` rows (edit-cascade coverage; task #548 review finding, 2026-09-27) |
 
 Flag-edits (all rows were unreferenced by tests and docs beforehand):
 - **4a** msg 82837: dr1343 (admin ham) and its `training_labels` row re-timed to `2025-10-29 21:59:00+00` (after scan dr1333, before the first edit at 22:00); dr1334 → score/net 4.5, `used_for_training=true`, `ImplicitSpam`, reason `[Edit #1] AI confirmed spam: …`.

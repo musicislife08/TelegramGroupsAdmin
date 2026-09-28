@@ -240,7 +240,10 @@ internal static class GoldenDatasetConstants
         public const int MsgId_BareOrphan60d = 212694;
 
         // ── Anchor 3: training-flagged message (preserved despite age) ──
-        // 1 detection_result with used_for_training=true. Shifted to -90d → PRESERVED.
+        // 2 detection_results: dr2842 (used_for_training=true, ImplicitSpam) and the later
+        // dr3286 (AutoBan, used_for_training=false). dr3286 is newer (detected_at DESC) so it
+        // is the current verdict → ExplicitSpam, a curated classification. Shifted to
+        // -90d → PRESERVED.
         public const int MsgId_TrainingPreserved = 218579;
 
         // ── Anchor 4: bare orphan just past retention threshold ──
@@ -256,6 +259,18 @@ internal static class GoldenDatasetConstants
         // (a curated value). Shifted to -50d → PRESERVED despite age and despite
         // used_for_training=false, since its verdict is curated.
         public const int MsgId_NonTrainingDeleted = 220885;
+
+        /// <summary>
+        /// Standalone anchor (not part of <see cref="AllMessageRefs"/>/<see cref="MessageShifts"/> —
+        /// used against the unreduced canonical dataset, like <c>Verdicts.LabeledOnlyRetentionMsgId</c>)
+        /// covering the message_edits cascade-delete path (task #548 review finding): a message whose
+        /// current verdict is non-curated (Unscanned — no detection_results rows at all) and which
+        /// carries an edit, so deleting it must also delete the edit. In <see cref="Chats.MainChatId"/>;
+        /// message_edits row id 3014. Timestamped 2026-04-09, already well past a 30-day window
+        /// relative to "now" — no shift needed. DELETED along with its edit.
+        /// </summary>
+        public const int MsgId_ExpiredWithEdits = 221932;
+        public const long EditId_ForExpiredWithEdits = 3014L;
 
         /// <summary>
         /// All 6 (chat_id, message_id) tuples passed to <c>Reduce.KeepMessages(...)</c>.
