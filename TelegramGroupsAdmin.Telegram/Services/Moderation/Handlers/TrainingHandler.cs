@@ -45,6 +45,10 @@ public class TrainingHandler : ITrainingHandler
         string reason,
         CancellationToken cancellationToken = default)
     {
+        if (source is not (VerdictSource.AutoBan or VerdictSource.WebMarkSpam or VerdictSource.SpamCommand or VerdictSource.ReviewSpam))
+            throw new ArgumentOutOfRangeException(nameof(source), source,
+                "Spam decisions are AutoBan, WebMarkSpam, SpamCommand or ReviewSpam");
+
         // Try to get message from database
         var message = await _messageHistoryRepository.GetMessageAsync(messageId, chat.Id, cancellationToken);
 
@@ -146,6 +150,20 @@ public class TrainingHandler : ITrainingHandler
                 "Message {MessageId} not in database. Skipping {Source} ham decision.",
                 messageId, source);
             return;
+        }
+
+        // A dismissed review is only an implicit judgement: it must not overturn an explicit label
+        // (e.g. a stale report dismissed after the message was already banned as spam).
+        if (source == VerdictSource.ReviewDismiss)
+        {
+            var current = await _detectionResultsRepository.GetCurrentVerdictAsync(messageId, chat.Id, cancellationToken);
+            if (current != null && current.Classification.IsExplicit())
+            {
+                _logger.LogInformation(
+                    "Skipped {Source} ham decision for message {MessageId} by {Executor}: current verdict {Classification} is explicit and a dismissal does not override it",
+                    source, messageId, executor.GetDisplayText(), current.Classification);
+                return;
+            }
         }
 
         await _detectionResultsRepository.RecordDecisionAsync(

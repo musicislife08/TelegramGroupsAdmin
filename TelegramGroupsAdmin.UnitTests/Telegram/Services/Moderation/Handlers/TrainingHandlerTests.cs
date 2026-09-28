@@ -20,14 +20,15 @@ namespace TelegramGroupsAdmin.UnitTests.Telegram.Services.Moderation.Handlers;
 /// - Triggers immediate ML.NET text classifier retraining via JobTriggerService
 /// - Defensively downloads media if MediaLocalPath is null but a file ID exists
 ///
-/// Test Coverage (14 tests):
+/// Test Coverage:
 /// - CreateSpamSampleAsync with text: Verifies recorded decision + retraining trigger
 /// - CreateSpamSampleAsync message not found: Logs warning, no action
 /// - CreateSpamSampleAsync without text: Records the decision, skips retraining
 /// - Actor telegram user ID extraction: The decision carries the Telegram user actor
 /// - System actor (auto-ban): Records an AutoBan decision, still triggers retraining
 /// - WebUser actor: Records a WebMarkSpam decision
-/// - CreateHamSampleAsync: WebMarkHam records decision + retraining; ReviewDismiss records decision; missing message skips everything; other sources throw
+/// - CreateSpamSampleAsync source guard: only AutoBan, WebMarkSpam, SpamCommand, ReviewSpam are accepted
+/// - CreateHamSampleAsync: WebMarkHam records decision + retraining (even over explicit spam); ReviewDismiss records decision unless the current verdict is explicit; missing message skips everything; other sources throw
 /// - Download-when-missing for animation: MediaLocalPath null + MediaFileId → downloads (startup backfill hashes it)
 /// - Download-when-missing for photo: MediaLocalPath null + PhotoFileId → downloads (startup backfill hashes it)
 /// - No-download-when-present: MediaLocalPath set → no download attempted
@@ -257,6 +258,30 @@ public class TrainingHandlerTests
             messageId, -100, VerdictSource.WebMarkSpam, executor, Arg.Any<string>(), null, null, Arg.Any<CancellationToken>());
     }
 
+    [TestCase(VerdictSource.ContentScan)]
+    [TestCase(VerdictSource.FileScan)]
+    [TestCase(VerdictSource.WebMarkHam)]
+    [TestCase(VerdictSource.ReviewDismiss)]
+    [TestCase(VerdictSource.TrainingDataPage)]
+    public void CreateSpamSampleAsync_NonSpamDecisionSource_Throws(VerdictSource source)
+        => Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
+            _handler.CreateSpamSampleAsync(1, ChatIdentity.FromId(-100), Actor.AutoDetection, source, "x"));
+
+    [TestCase(VerdictSource.AutoBan)]
+    [TestCase(VerdictSource.WebMarkSpam)]
+    [TestCase(VerdictSource.SpamCommand)]
+    [TestCase(VerdictSource.ReviewSpam)]
+    public async Task CreateSpamSampleAsync_SpamDecisionSource_RecordsDecision(VerdictSource source)
+    {
+        _mockMessageRepo.GetMessageAsync(4242, -100, Arg.Any<CancellationToken>())
+            .Returns(CreateTestMessage(4242, userId: 123, chatId: -100, messageText: "spam"));
+
+        await _handler.CreateSpamSampleAsync(4242, ChatIdentity.FromId(-100), Actor.AutoDetection, source, "x");
+
+        await _mockDetectionRepo.Received(1).RecordDecisionAsync(
+            4242, -100, source, Actor.AutoDetection, "x", null, null, Arg.Any<CancellationToken>());
+    }
+
     #endregion
 
     #region CreateHamSampleAsync Tests
@@ -301,6 +326,58 @@ public class TrainingHandlerTests
         await _mockDetectionRepo.DidNotReceiveWithAnyArgs().RecordDecisionAsync(default, default, default, default!, default!, default, default, default);
         await _mockJobTrigger.DidNotReceiveWithAnyArgs().TriggerNowAsync(string.Empty, new object(), default);
     }
+
+    [TestCase(VerdictClassification.ExplicitSpam)]
+    [TestCase(VerdictClassification.ExplicitHam)]
+    public async Task CreateHamSampleAsync_ReviewDismiss_OnExplicitVerdict_SkipsDecisionAndRetraining(VerdictClassification current)
+    {
+        _mockMessageRepo.GetMessageAsync(4242, -100, Arg.Any<CancellationToken>())
+            .Returns(CreateTestMessage(4242, userId: 123, chatId: -100, messageText: "hello"));
+        _mockDetectionRepo.GetCurrentVerdictAsync(4242, -100, Arg.Any<CancellationToken>())
+            .Returns(Verdict(current, VerdictSource.AutoBan));
+
+        await _handler.CreateHamSampleAsync(4242, ChatIdentity.FromId(-100), Actor.FromWebUser("admin-1"),
+            VerdictSource.ReviewDismiss, "Report #1 dismissed");
+
+        await _mockDetectionRepo.DidNotReceiveWithAnyArgs().RecordDecisionAsync(default, default, default, default!, default!, default, default, default);
+        await _mockJobTrigger.DidNotReceiveWithAnyArgs().TriggerNowAsync(string.Empty, new object(), default);
+    }
+
+    [TestCase(VerdictClassification.ImplicitSpam)]
+    [TestCase(VerdictClassification.UntrainedSpam)]
+    public async Task CreateHamSampleAsync_ReviewDismiss_OnNonExplicitVerdict_RecordsDecision(VerdictClassification current)
+    {
+        var executor = Actor.FromWebUser("admin-1");
+        _mockMessageRepo.GetMessageAsync(4242, -100, Arg.Any<CancellationToken>())
+            .Returns(CreateTestMessage(4242, userId: 123, chatId: -100, messageText: "hello"));
+        _mockDetectionRepo.GetCurrentVerdictAsync(4242, -100, Arg.Any<CancellationToken>())
+            .Returns(Verdict(current, VerdictSource.ContentScan));
+
+        await _handler.CreateHamSampleAsync(4242, ChatIdentity.FromId(-100), executor, VerdictSource.ReviewDismiss, "Report #1 dismissed");
+
+        await _mockDetectionRepo.Received(1).RecordDecisionAsync(
+            4242, -100, VerdictSource.ReviewDismiss, executor, "Report #1 dismissed", null, null, Arg.Any<CancellationToken>());
+        await _mockJobTrigger.Received(1).TriggerNowAsync(
+            BackgroundJobNames.ClassifierRetraining, Arg.Any<object>(), cancellationToken: Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task CreateHamSampleAsync_WebMarkHam_OnExplicitSpam_StillRecordsDecision()
+    {
+        var executor = Actor.FromWebUser("admin-1");
+        _mockMessageRepo.GetMessageAsync(4242, -100, Arg.Any<CancellationToken>())
+            .Returns(CreateTestMessage(4242, userId: 123, chatId: -100, messageText: "hello"));
+        _mockDetectionRepo.GetCurrentVerdictAsync(4242, -100, Arg.Any<CancellationToken>())
+            .Returns(Verdict(VerdictClassification.ExplicitSpam, VerdictSource.AutoBan));
+
+        await _handler.CreateHamSampleAsync(4242, ChatIdentity.FromId(-100), executor, VerdictSource.WebMarkHam, "false positive");
+
+        await _mockDetectionRepo.Received(1).RecordDecisionAsync(
+            4242, -100, VerdictSource.WebMarkHam, executor, "false positive", null, null, Arg.Any<CancellationToken>());
+    }
+
+    private static MessageVerdict Verdict(VerdictClassification classification, VerdictSource source) =>
+        new(-100, 4242, classification, classification.IsSpam(), source, DateTimeOffset.UtcNow, 1);
 
     [Test]
     public void CreateHamSampleAsync_NonHamSource_Throws()
