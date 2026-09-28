@@ -493,7 +493,10 @@ internal static class GoldenDatasetConstants
         /// <summary>Sender of <see cref="UntrainedHamMsgId"/> (@wrongedjersey, not banned).</summary>
         public const long UntrainedHamUserId = 9621984255379L;
 
-        /// <summary>Unscanned message (no verdict rows). @unhelpfulgrab, MainChat.</summary>
+        /// <summary>
+        /// Unscanned message (no verdict rows, trusted sender). @unhelpfulgrab, MainChat. Edited: distinctive
+        /// text (not scrubbed lorem ipsum, with its similarity_hash recomputed) so training-sample dedup keeps it.
+        /// </summary>
         public const int UnscannedMsgId = 219219;
 
         /// <summary>

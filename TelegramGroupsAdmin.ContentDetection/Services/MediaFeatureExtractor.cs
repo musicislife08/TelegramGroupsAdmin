@@ -29,8 +29,7 @@ public sealed class MediaFeatureExtractor(
         }
         finally
         {
-            foreach (var frame in frames)
-                File.Delete(frame.FramePath);
+            frames.DeleteFiles(logger);
         }
     }
 

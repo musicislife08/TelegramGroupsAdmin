@@ -103,6 +103,7 @@ public class ContentReportHandlerTests
                 i!.User.Id == TestUserId &&
                 i.MessageId == TestMessageId &&
                 i.Chat.Id == TestChatId &&
+                i.Source == VerdictSource.ReviewSpam &&
                 i.Reason.Contains($"Report #{TestReportId}")),
             Arg.Any<CancellationToken>());
     }

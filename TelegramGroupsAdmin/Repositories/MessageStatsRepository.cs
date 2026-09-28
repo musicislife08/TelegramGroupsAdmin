@@ -101,16 +101,16 @@ public class MessageStatsRepository : IMessageStatsRepository
         return results.Select(v => v.ToModel()).ToList();
     }
 
-    public async Task<(int Total, int Spam)> GetCuratedTrainingCountsAsync(CancellationToken ct = default)
+    public async Task<(int Total, int Spam)> GetCuratedTrainingCountsAsync(CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(ct);
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         var curated = context.MessageVerdicts
             .AsNoTracking()
             .Where(v => VerdictClassifications.CuratedValues.Contains(v.Classification));
 
-        var total = await curated.CountAsync(ct);
-        var spam = await curated.CountAsync(v => v.IsSpam, ct);
+        var total = await curated.CountAsync(cancellationToken);
+        var spam = await curated.CountAsync(v => v.IsSpam, cancellationToken);
 
         return (total, spam);
     }

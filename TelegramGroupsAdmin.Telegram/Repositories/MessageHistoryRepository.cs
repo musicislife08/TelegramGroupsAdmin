@@ -399,12 +399,13 @@ public class MessageHistoryRepository : IMessageHistoryRepository
 
     public async Task SetMediaFeaturesAsync(int messageId, long chatId, MediaFeatures features, CancellationToken cancellationToken = default)
     {
+        // A single UPDATE (no read-modify-write): the startup backfill and a live scan can race on the
+        // same message, and whichever runs last simply wins with equally valid features.
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var message = await context.Messages.FirstOrDefaultAsync(m => m.MessageId == messageId && m.ChatId == chatId, cancellationToken);
-        if (message is null)
-            return;
-        message.MediaFeatures = features.ToDto();
-        await context.SaveChangesAsync(cancellationToken);
+        var dto = features.ToDto();
+        await context.Messages
+            .Where(m => m.MessageId == messageId && m.ChatId == chatId)
+            .ExecuteUpdateAsync(set => set.SetProperty(m => m.MediaFeatures, dto), cancellationToken);
     }
 
     public async Task<IReadOnlyList<UiModels.MediaBackfillCandidate>> GetMediaFeatureBackfillCandidatesAsync(int limit, int offset, CancellationToken cancellationToken = default)

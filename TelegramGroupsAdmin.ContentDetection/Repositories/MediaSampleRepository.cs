@@ -2,7 +2,6 @@ using Microsoft.EntityFrameworkCore;
 using TelegramGroupsAdmin.ContentDetection.Repositories.Mappings;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Data;
-using DataModels = TelegramGroupsAdmin.Data.Models;
 
 namespace TelegramGroupsAdmin.ContentDetection.Repositories;
 
@@ -12,25 +11,19 @@ public class MediaSampleRepository(IDbContextFactory<AppDbContext> contextFactor
     private static readonly int[] TrainingSampleValues =
         [.. VerdictClassifications.TrainingSpamValues, (int)VerdictClassification.ExplicitHam, (int)VerdictClassification.ImplicitHam];
 
-    public async Task<IReadOnlyList<(PhotoFeatures Features, VerdictClassification Classification)>> GetRecentPhotoSamplesAsync(int limit, CancellationToken cancellationToken = default)
-    {
-        var rows = await LoadAsync(photo: true, limit, cancellationToken);
-        return [.. rows
-            .Select(r => (Features: r.Features.ToModel(), r.Classification))
-            .Where(r => r.Features is PhotoFeatures)
-            .Select(r => ((PhotoFeatures)r.Features, r.Classification))];
-    }
+    public Task<IReadOnlyList<(PhotoFeatures Features, VerdictClassification Classification)>> GetRecentPhotoSamplesAsync(int limit, CancellationToken cancellationToken = default)
+        => LoadAsync<PhotoFeatures>(photo: true, limit, cancellationToken);
 
-    public async Task<IReadOnlyList<(VideoFeatures Features, VerdictClassification Classification)>> GetRecentVideoSamplesAsync(int limit, CancellationToken cancellationToken = default)
-    {
-        var rows = await LoadAsync(photo: false, limit, cancellationToken);
-        return [.. rows
-            .Select(r => (Features: r.Features.ToModel(), r.Classification))
-            .Where(r => r.Features is VideoFeatures)
-            .Select(r => ((VideoFeatures)r.Features, r.Classification))];
-    }
+    public Task<IReadOnlyList<(VideoFeatures Features, VerdictClassification Classification)>> GetRecentVideoSamplesAsync(int limit, CancellationToken cancellationToken = default)
+        => LoadAsync<VideoFeatures>(photo: false, limit, cancellationToken);
 
-    private async Task<List<(DataModels.MediaFeaturesDto Features, VerdictClassification Classification)>> LoadAsync(bool photo, int limit, CancellationToken cancellationToken)
+    /// <summary>
+    /// media_features is stored through a value converter, so SQL cannot read its "type": PhotoFileId
+    /// pre-selects photos vs videos in the query, and the type check on the deserialized features is
+    /// the authority (a row whose stored features are the other kind is skipped).
+    /// </summary>
+    private async Task<IReadOnlyList<(T Features, VerdictClassification Classification)>> LoadAsync<T>(bool photo, int limit, CancellationToken cancellationToken)
+        where T : MediaFeatures
     {
         await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
         var messages = context.Messages.AsNoTracking().Where(m => m.MediaFeatures != null);
@@ -45,6 +38,10 @@ public class MediaSampleRepository(IDbContextFactory<AppDbContext> contextFactor
             orderby v.DetectedAt descending
             select new { m.MediaFeatures, v.Classification }
         ).Take(limit).ToListAsync(cancellationToken);
-        return [.. rows.Select(r => (r.MediaFeatures!, (VerdictClassification)r.Classification))];
+
+        return [.. rows
+            .Select(r => (Features: r.MediaFeatures!.ToModel(), Classification: (VerdictClassification)r.Classification))
+            .Where(r => r.Features is T)
+            .Select(r => ((T)r.Features, r.Classification))];
     }
 }

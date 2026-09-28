@@ -668,6 +668,27 @@ public class MessageHistoryRepositoryTests
     #region CRUD Tests
 
     [Test]
+    public async Task SetMediaFeaturesAsync_OverwritesStoredFeatures()
+    {
+        // Anchor: canonical photo message with stored photo features (hash 8J8PDw8PH/8=).
+        var newHash = new byte[] { 1, 2, 3, 4, 5, 6, 7, 8 };
+
+        await _repository!.SetMediaFeaturesAsync(
+            GoldenDatasetConstants.Verdicts.PhotoFeaturesMsgId, MainChatId, new PhotoFeatures(newHash));
+
+        await using var ctx = _testHelper!.GetDbContext();
+        var stored = await ctx.Messages.AsNoTracking()
+            .SingleAsync(m => m.MessageId == GoldenDatasetConstants.Verdicts.PhotoFeaturesMsgId && m.ChatId == MainChatId);
+        Assert.That(stored.MediaFeatures, Is.TypeOf<TelegramGroupsAdmin.Data.Models.PhotoFeaturesDto>()
+            .With.Property(nameof(TelegramGroupsAdmin.Data.Models.PhotoFeaturesDto.Hash)).EqualTo(newHash));
+    }
+
+    [Test]
+    public void SetMediaFeaturesAsync_UnknownMessage_IsANoOp()
+        => Assert.DoesNotThrowAsync(() => _repository!.SetMediaFeaturesAsync(
+            int.MaxValue, MainChatId, new PhotoFeatures([1, 2, 3, 4, 5, 6, 7, 8])));
+
+    [Test]
     public async Task InsertMessageAsync_ShouldInsert()
     {
         // Arrange

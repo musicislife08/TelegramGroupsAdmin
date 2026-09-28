@@ -137,7 +137,7 @@ public class VideoContentCheckV2(
             }
             finally
             {
-                CleanupFrames(frames);
+                frames.DeleteFiles(logger);
             }
         }
         catch (Exception ex)
@@ -621,27 +621,6 @@ public class VideoContentCheckV2(
                 Error = ex,
                 ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
             };
-        }
-    }
-
-    /// <summary>
-    /// Clean up extracted frame files
-    /// </summary>
-    private void CleanupFrames(List<ExtractedFrame> frames)
-    {
-        foreach (var frame in frames)
-        {
-            try
-            {
-                if (File.Exists(frame.FramePath))
-                {
-                    File.Delete(frame.FramePath);
-                }
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "Failed to clean up extracted frame at {FramePath}", frame.FramePath);
-            }
         }
     }
 }

@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Configuration.Models;
+using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
 using TelegramGroupsAdmin.ContentDetection.Abstractions;
 using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Models;
@@ -120,85 +121,9 @@ public class ImageContentCheckV2(
         // ML-5 Layer 1: Hash similarity against messages whose current verdict trains
         if (imageConfig.UseHashSimilarity && photoFeatures is not null)
         {
-            // Query samples (limited by config for performance)
-            var trainingSamples = await mediaSamples.GetRecentPhotoSamplesAsync(
-                imageConfig.MaxTrainingSamplesToCompare,
-                req.CancellationToken);
-
-            if (trainingSamples.Count > 0)
-            {
-                // Find best match by comparing hash similarity
-                double bestSimilarity = 0.0;
-                VerdictClassification? matchedClassification = null;
-
-                foreach (var (sampleFeatures, classification) in trainingSamples)
-                {
-                    var similarity = photoHashService.CompareHashes(photoFeatures.Hash, sampleFeatures.Hash);
-                    if (similarity > bestSimilarity)
-                    {
-                        bestSimilarity = similarity;
-                        matchedClassification = classification;
-                    }
-                }
-
-                // Check if similarity meets threshold
-                if (bestSimilarity >= imageConfig.HashSimilarityThreshold && matchedClassification is { } matched)
-                {
-                    if (matched.IsSpam())
-                    {
-                        // Use configured score directly, clamped to safety boundaries
-                        var score = Math.Clamp(imageConfig.HashMatchConfidence, ContentDetectionConstants.MinScore, ContentDetectionConstants.MaxScore);
-
-                        logger.LogInformation(
-                            "ImageSpam V2 Layer 1: Hash match found ({Similarity:F2}% >= {Threshold:F2}%). Returning {Score:F2} points",
-                            bestSimilarity * 100, imageConfig.HashSimilarityThreshold * 100, score);
-
-                        return new ContentCheckResponseV2
-                        {
-                            CheckName = CheckName,
-                            Score = score,
-                            Abstained = false,
-                            Details = $"Image hash {bestSimilarity:P0} similar to known spam sample",
-                            ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds,
-                            OcrExtractedText = extractedOcrText
-                        };
-                    }
-
-                    // Only an admin-verified ham anchor, matched closely enough, skips OCR/Vision (abstain:
-                    // no negative signal in V2). Any other ham match can be a spammer reusing a benign
-                    // image, so it falls through to OCR and Vision.
-                    if (matched == VerdictClassification.ExplicitHam && bestSimilarity >= imageConfig.HamSkipThreshold)
-                    {
-                        logger.LogInformation(
-                            "ImageSpam V2 Layer 1: Hash match found ({Similarity:F2}% >= {Threshold:F2}%) with admin-verified HAM sample, abstaining",
-                            bestSimilarity * 100, imageConfig.HamSkipThreshold * 100);
-
-                        return new ContentCheckResponseV2
-                        {
-                            CheckName = CheckName,
-                            Score = 0.0,
-                            Abstained = true,
-                            Details = $"Image hash {bestSimilarity:P0} similar to known ham sample (abstaining)",
-                            ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds,
-                            OcrExtractedText = extractedOcrText
-                        };
-                    }
-
-                    logger.LogInformation(
-                        "ImageSpam V2 Layer 1: Hash match ({Similarity:F2}%) with {Classification} sample does not skip (needs ExplicitHam >= {HamSkipThreshold:F2}%), proceeding to OCR/Vision",
-                        bestSimilarity * 100, matched, imageConfig.HamSkipThreshold * 100);
-                }
-                else
-                {
-                    logger.LogDebug(
-                        "ImageSpam V2 Layer 1: Best hash similarity {Similarity:F2}% below threshold {Threshold:F2}%, proceeding to OCR",
-                        bestSimilarity * 100, imageConfig.HashSimilarityThreshold * 100);
-                }
-            }
-            else
-            {
-                logger.LogDebug("ImageSpam V2 Layer 1: No training samples available for hash comparison");
-            }
+            var hashResult = await CheckHashSimilarityAsync(photoFeatures, imageConfig, extractedOcrText, startTimestamp, req.CancellationToken);
+            if (hashResult is not null)
+                return hashResult;
         }
         else if (imageConfig.UseHashSimilarity &&
                  !string.IsNullOrEmpty(req.PhotoLocalPath) &&
@@ -293,6 +218,100 @@ public class ImageContentCheckV2(
 
         // ML-5 Layer 3: AI Vision fallback (provider-agnostic via IChatService)
         return await CheckWithVisionAsync(req, startTimestamp, extractedOcrText);
+    }
+
+    /// <summary>
+    /// ML-5 Layer 1: compare the photo hash against recent training samples. Returns a response when a
+    /// spam match scores or an admin-verified clean match lets OCR/Vision be skipped; null to continue.
+    /// </summary>
+    private async Task<ContentCheckResponseV2?> CheckHashSimilarityAsync(
+        PhotoFeatures photoFeatures,
+        ImageContentConfig imageConfig,
+        string? ocrText,
+        long startTimestamp,
+        CancellationToken cancellationToken)
+    {
+        // Query samples (limited by config for performance)
+        var trainingSamples = await mediaSamples.GetRecentPhotoSamplesAsync(
+            imageConfig.MaxTrainingSamplesToCompare,
+            cancellationToken);
+
+        if (trainingSamples.Count > 0)
+        {
+            // Find best match by comparing hash similarity
+            double bestSimilarity = 0.0;
+            VerdictClassification? matchedClassification = null;
+
+            foreach (var (sampleFeatures, classification) in trainingSamples)
+            {
+                var similarity = photoHashService.CompareHashes(photoFeatures.Hash, sampleFeatures.Hash);
+                if (similarity > bestSimilarity)
+                {
+                    bestSimilarity = similarity;
+                    matchedClassification = classification;
+                }
+            }
+
+            // Check if similarity meets threshold
+            if (bestSimilarity >= imageConfig.HashSimilarityThreshold && matchedClassification is { } matched)
+            {
+                if (matched.IsSpam())
+                {
+                    // Use configured score directly, clamped to safety boundaries
+                    var score = Math.Clamp(imageConfig.HashMatchConfidence, ContentDetectionConstants.MinScore, ContentDetectionConstants.MaxScore);
+
+                    logger.LogInformation(
+                        "ImageSpam V2 Layer 1: Hash match found ({Similarity:F2}% >= {Threshold:F2}%). Returning {Score:F2} points",
+                        bestSimilarity * 100, imageConfig.HashSimilarityThreshold * 100, score);
+
+                    return new ContentCheckResponseV2
+                    {
+                        CheckName = CheckName,
+                        Score = score,
+                        Abstained = false,
+                        Details = $"Image hash {bestSimilarity:P0} similar to known spam sample",
+                        ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds,
+                        OcrExtractedText = ocrText
+                    };
+                }
+
+                // Only an admin-verified ham anchor, matched closely enough, skips OCR/Vision (abstain:
+                // no negative signal in V2). Any other ham match can be a spammer reusing a benign
+                // image, so it falls through to OCR and Vision.
+                if (matched == VerdictClassification.ExplicitHam && bestSimilarity >= imageConfig.HamSkipThreshold)
+                {
+                    logger.LogInformation(
+                        "ImageSpam V2 Layer 1: Hash match found ({Similarity:F2}% >= {Threshold:F2}%) with admin-verified HAM sample, abstaining",
+                        bestSimilarity * 100, imageConfig.HamSkipThreshold * 100);
+
+                    return new ContentCheckResponseV2
+                    {
+                        CheckName = CheckName,
+                        Score = 0.0,
+                        Abstained = true,
+                        Details = $"Image hash {bestSimilarity:P0} similar to known ham sample (abstaining)",
+                        ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds,
+                        OcrExtractedText = ocrText
+                    };
+                }
+
+                logger.LogInformation(
+                    "ImageSpam V2 Layer 1: Hash match ({Similarity:F2}%) with {Classification} sample does not skip (needs ExplicitHam >= {HamSkipThreshold:F2}%), proceeding to OCR/Vision",
+                    bestSimilarity * 100, matched, imageConfig.HamSkipThreshold * 100);
+            }
+            else
+            {
+                logger.LogDebug(
+                    "ImageSpam V2 Layer 1: Best hash similarity {Similarity:F2}% below threshold {Threshold:F2}%, proceeding to OCR",
+                    bestSimilarity * 100, imageConfig.HashSimilarityThreshold * 100);
+            }
+        }
+        else
+        {
+            logger.LogDebug("ImageSpam V2 Layer 1: No training samples available for hash comparison");
+        }
+
+        return null;
     }
 
     /// <summary>

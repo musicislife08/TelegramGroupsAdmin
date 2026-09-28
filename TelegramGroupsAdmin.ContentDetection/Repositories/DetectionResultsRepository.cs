@@ -26,29 +26,6 @@ public class DetectionResultsRepository : IDetectionResultsRepository
     }
 
     /// <summary>
-    /// Strongly-typed record for detection result + message JOIN
-    /// Used to avoid duplicate JOIN patterns in training sample queries (H10)
-    /// </summary>
-    private record DetectionResultWithMessage(
-        DataModels.DetectionResultRecordDto DetectionResult,
-        DataModels.MessageRecordDto Message);
-
-    /// <summary>
-    /// Helper to JOIN detection_results with messages table (H10)
-    /// Returns queryable with strongly-typed DetectionResultWithMessage records
-    /// </summary>
-    private static IQueryable<DetectionResultWithMessage> WithMessageJoin(
-        IQueryable<DataModels.DetectionResultRecordDto> detectionResults,
-        AppDbContext context)
-    {
-        return detectionResults
-            .Join(context.Messages,
-                dr => new { dr.MessageId, dr.ChatId },
-                m => new { m.MessageId, m.ChatId },
-                (dr, m) => new DetectionResultWithMessage(dr, m));
-    }
-
-    /// <summary>
     /// Helper to add actor JOINs to detection results query (Phase 4.19)
     /// Phase 4.20+: Also includes translation LEFT JOIN for UI display
     /// Returns queryable with full actor information and translation data
@@ -299,6 +276,7 @@ public class DetectionResultsRepository : IDetectionResultsRepository
             SpamSamples = spam,
             HamSamples = total - spam,
             SpamPercentage = total > 0 ? (double)spam / total * 100 : 0,
+            // Source is non-null here: the VerdictId filter above keeps only messages with a verdict event.
             SamplesBySource = rows.GroupBy(r => ((VerdictSource)r.Source!.Value).ToString()).ToDictionary(g => g.Key, g => g.Count())
         };
     }

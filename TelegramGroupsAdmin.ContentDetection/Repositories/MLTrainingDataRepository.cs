@@ -37,15 +37,19 @@ public class MLTrainingDataRepository(
             select new { Text = text, m.MessageId, m.ChatId, v.Classification, dr.TelegramUserId, dr.DetectedAt }
         ).ToListAsync(cancellationToken);
 
-        List<TrainingSample> samples = [.. spamRows.Select(x => new TrainingSample
+        List<TrainingSample> samples = [.. spamRows.Select(x =>
         {
-            Text = x.Text!,
-            Label = TrainingLabel.Spam,
-            Source = x.Classification == (int)VerdictClassification.ExplicitSpam ? TrainingSampleSource.Explicit : TrainingSampleSource.Implicit,
-            MessageId = x.MessageId,
-            ChatId = x.ChatId,
-            LabeledByUserId = x.Classification == (int)VerdictClassification.ExplicitSpam ? x.TelegramUserId : null,
-            LabeledAt = x.Classification == (int)VerdictClassification.ExplicitSpam ? x.DetectedAt : null
+            var isExplicit = x.Classification == (int)VerdictClassification.ExplicitSpam;
+            return new TrainingSample
+            {
+                Text = x.Text!,
+                Label = TrainingLabel.Spam,
+                Source = isExplicit ? TrainingSampleSource.Explicit : TrainingSampleSource.Implicit,
+                MessageId = x.MessageId,
+                ChatId = x.ChatId,
+                LabeledByUserId = isExplicit ? x.TelegramUserId : null,
+                LabeledAt = isExplicit ? x.DetectedAt : null
+            };
         })];
 
         logger.LogInformation(

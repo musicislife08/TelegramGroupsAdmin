@@ -137,7 +137,7 @@ public sealed class PhotoHashRehashService(
     }
 
     /// <summary>
-    /// Most messages whose features the backfill computes per start. Internal so tests can shrink it.
+    /// Maximum number of messages whose features the backfill computes per start. Internal so tests can shrink it.
     /// </summary>
     internal int MediaBackfillLimit { get; init; } = 500;
 

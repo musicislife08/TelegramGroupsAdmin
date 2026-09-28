@@ -41,9 +41,9 @@ public class ProfilePage
         await _page.GotoAsync(BasePath);
         await Expect(_page.Locator(PageTitle)).ToBeVisibleAsync();
         // The page is prerendered with its sections loaded, then the interactive circuit re-runs
-        // OnInitializedAsync and re-renders them; wait for the circuit so the load checks below see
-        // the interactive render rather than the prerendered HTML it is about to replace.
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        // OnInitializedAsync and re-renders them: wait for the interactive render so the load checks
+        // below never pass against prerendered HTML that is about to be replaced.
+        await _page.WaitForInteractiveAsync();
         await WaitForLoadAsync();
     }
 
@@ -53,6 +53,7 @@ public class ProfilePage
     public async Task WaitForLoadAsync(int timeoutMs = 15000)
     {
         await Expect(_page.Locator(AccountInfoSection)).ToBeVisibleAsync(new() { Timeout = timeoutMs });
+        await Expect(_page.Locator(ChangePasswordSection)).ToBeVisibleAsync(new() { Timeout = timeoutMs });
         await Expect(_page.Locator(TotpSection)).ToBeVisibleAsync(new() { Timeout = timeoutMs });
         await Expect(_page.Locator(TelegramLinkingSection)).ToBeVisibleAsync(new() { Timeout = timeoutMs });
         // Wait for the Telegram section's content (table or empty state) to have rendered, not just the paper frame.

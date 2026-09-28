@@ -36,5 +36,5 @@ public interface IMessageStatsRepository
     /// Count messages whose current verdict is curated training data (explicit labels plus implicit spam),
     /// and how many of those are spam
     /// </summary>
-    Task<(int Total, int Spam)> GetCuratedTrainingCountsAsync(CancellationToken ct = default);
+    Task<(int Total, int Spam)> GetCuratedTrainingCountsAsync(CancellationToken cancellationToken = default);
 }

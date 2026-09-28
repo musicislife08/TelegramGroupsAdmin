@@ -95,5 +95,19 @@ public class MLTrainingDataRepositoryVerdictTests
         var (spam, ham) = await LoadAsync();
         Assert.That(spam.Concat(ham).Any(s => s.MessageId == messageId), Is.False);
     }
-}
 
+    [Test]
+    public async Task Unscanned_TrainsAsImplicitHam()
+    {
+        // A message nobody ever scanned or marked (trusted users, admins) is still ordinary chat: it is
+        // implicit ham, like an ImplicitHam scan. Assert by text: SimHash dedup may keep a twin's id.
+        var text = await GetMessageTextAsync(GoldenDatasetConstants.Chats.MainChatId, GoldenDatasetConstants.Verdicts.UnscannedMsgId);
+
+        var (spam, ham) = await LoadAsync();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(spam.Any(s => s.Text == text), Is.False);
+            Assert.That(ham.Where(s => s.Text == text).Select(s => s.Source), Has.Some.EqualTo(TrainingSampleSource.Implicit));
+        }
+    }
+}
