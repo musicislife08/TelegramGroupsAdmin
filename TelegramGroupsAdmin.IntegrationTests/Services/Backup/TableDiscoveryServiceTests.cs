@@ -25,10 +25,15 @@ public class TableDiscoveryServiceTests
         // DTOs that are intentionally not backed by a regular table:
         //  - InviteWithCreatorDto: join projection
         //  - RawAlgorithmPerformanceStatsDto: keyless, configured for SqlQuery
+        //  - MediaFeaturesDto and its cases: the messages.media_features jsonb contract
         var expectedNonTableBacked = new HashSet<string>
         {
             "InviteWithCreatorDto",
             "RawAlgorithmPerformanceStatsDto",
+            "MediaFeaturesDto",
+            "PhotoFeaturesDto",
+            "VideoFeaturesDto",
+            "KeyframeFeatureDto",
         };
 
         var missingTableAttr = GetDtoTypes()

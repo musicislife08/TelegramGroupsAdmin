@@ -929,6 +929,41 @@ public class BackupServiceTests
         }
     }
 
+    /// <summary>
+    /// messages.media_features is a polymorphic jsonb contract: jsonb moves "type" after "hash" on read,
+    /// and the restore insert must keep the "type" discriminator, or the restored row cannot be read.
+    /// Anchor: <see cref="GoldenDatasetConstants.Verdicts.PhotoFeaturesMsgId"/> (canonical edit 2026-09-27).
+    /// </summary>
+    [Test]
+    public async Task ExportAndRestore_ShouldPreserveMediaFeatures()
+    {
+        byte[] originalHash;
+        await using (var context = _testHelper!.GetDbContext())
+        {
+            // guard the canonical edit
+            var original = await context.Messages.SingleAsync(m => m.MessageId == GoldenDatasetConstants.Verdicts.PhotoFeaturesMsgId
+                && m.ChatId == GoldenDatasetConstants.Chats.MainChatId);
+            Assert.That(original.MediaFeatures, Is.TypeOf<Data.Models.PhotoFeaturesDto>());
+            originalHash = ((Data.Models.PhotoFeaturesDto)original.MediaFeatures!).Hash;
+        }
+
+        var backupPath = await ExportBackupToTempFileAsync();
+        try
+        {
+            await _backupService!.RestoreAsync(backupPath);
+
+            await using var context = _testHelper.GetDbContext();
+            var restored = await context.Messages.SingleAsync(m => m.MessageId == GoldenDatasetConstants.Verdicts.PhotoFeaturesMsgId
+                && m.ChatId == GoldenDatasetConstants.Chats.MainChatId);
+            Assert.That(restored.MediaFeatures, Is.TypeOf<Data.Models.PhotoFeaturesDto>()
+                .With.Property(nameof(Data.Models.PhotoFeaturesDto.Hash)).EqualTo(originalHash));
+        }
+        finally
+        {
+            File.Delete(backupPath);
+        }
+    }
+
     #endregion
 
     #region Passphrase Management Tests

@@ -13,14 +13,14 @@ namespace TelegramGroupsAdmin.Telegram.Services.Moderation.Handlers;
 
 /// <summary>
 /// Records spam and ham decisions as verdict events and creates ML training data.
+/// Media similarity samples need no write here: Layer 1 reads messages' media features joined to
+/// their current verdict.
 /// </summary>
 public class TrainingHandler : ITrainingHandler
 {
     private readonly IMessageHistoryRepository _messageHistoryRepository;
     private readonly IDetectionResultsRepository _detectionResultsRepository;
     private readonly ITrainingLabelsRepository _trainingLabelsRepository;
-    private readonly IImageTrainingSamplesRepository _imageTrainingSamplesRepository;
-    private readonly IVideoTrainingSamplesRepository _videoTrainingSamplesRepository;
     private readonly ITelegramMediaService _telegramMediaService;
     private readonly IJobTriggerService _jobTriggerService;
     private readonly ILogger<TrainingHandler> _logger;
@@ -29,8 +29,6 @@ public class TrainingHandler : ITrainingHandler
         IMessageHistoryRepository messageHistoryRepository,
         IDetectionResultsRepository detectionResultsRepository,
         ITrainingLabelsRepository trainingLabelsRepository,
-        IImageTrainingSamplesRepository imageTrainingSamplesRepository,
-        IVideoTrainingSamplesRepository videoTrainingSamplesRepository,
         ITelegramMediaService telegramMediaService,
         IJobTriggerService jobTriggerService,
         ILogger<TrainingHandler> logger)
@@ -38,8 +36,6 @@ public class TrainingHandler : ITrainingHandler
         _messageHistoryRepository = messageHistoryRepository;
         _detectionResultsRepository = detectionResultsRepository;
         _trainingLabelsRepository = trainingLabelsRepository;
-        _imageTrainingSamplesRepository = imageTrainingSamplesRepository;
-        _videoTrainingSamplesRepository = videoTrainingSamplesRepository;
         _telegramMediaService = telegramMediaService;
         _jobTriggerService = jobTriggerService;
         _logger = logger;
@@ -105,6 +101,8 @@ public class TrainingHandler : ITrainingHandler
 
         // Defensive download: if message has a file ID but no local path, download now.
         // This handles edge cases where the original download failed, file was cleaned, or expired.
+        // The message now carries a curated verdict, so the startup media-feature backfill
+        // (PhotoHashRehashService) hashes the downloaded media on the next start.
         if (message.MediaLocalPath == null)
         {
             var fileId = message.PhotoFileId ?? message.MediaFileId;
@@ -125,7 +123,7 @@ public class TrainingHandler : ITrainingHandler
                     if (localPath != null)
                     {
                         _logger.LogInformation(
-                            "Downloaded missing media for message {MessageId} before training sample creation",
+                            "Downloaded missing media for message {MessageId} for media-feature backfill",
                             messageId);
                         await _messageHistoryRepository.UpdateMediaLocalPathAsync(
                             messageId,
@@ -142,42 +140,12 @@ public class TrainingHandler : ITrainingHandler
                 }
                 catch (Exception ex)
                 {
-                    // Non-fatal: log at Debug and continue. Training sample save will gracefully return false.
+                    // Non-fatal: log at Debug and continue; the decision is already recorded.
                     _logger.LogDebug(ex,
                         "Failed to download media for message {MessageId}, continuing without media",
                         messageId);
                 }
             }
-        }
-
-        // Save image training sample if message has a photo
-        var imageSaved = await _imageTrainingSamplesRepository.SaveTrainingSampleAsync(
-            messageId,
-            chat.Id,
-            isSpam: true,
-            executor,
-            cancellationToken);
-
-        if (imageSaved)
-        {
-            _logger.LogInformation(
-                "Saved image training sample for message {MessageId}",
-                messageId);
-        }
-
-        // Save video training sample if message has a video
-        var videoSaved = await _videoTrainingSamplesRepository.SaveTrainingSampleAsync(
-            messageId,
-            chat.Id,
-            isSpam: true,
-            executor,
-            cancellationToken);
-
-        if (videoSaved)
-        {
-            _logger.LogInformation(
-                "Saved video training sample for message {MessageId}",
-                messageId);
         }
     }
 

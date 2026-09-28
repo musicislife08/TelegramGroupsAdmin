@@ -525,6 +525,13 @@ internal static class GoldenDatasetConstants
         /// <summary>Unscanned message (no verdict rows). @unhelpfulgrab, MainChat.</summary>
         public const int UnscannedMsgId = 219219;
 
+        /// <summary>
+        /// Edited: photo message (sender 9777802619662, MainChat) whose current verdict is an AutoBan
+        /// decision (dr 3322, ExplicitSpam); media_features set to a photo hash (base64 <c>8J8PDw8PH/8=</c>).
+        /// Layer 1 photo similarity reads it as a spam sample.
+        /// </summary>
+        public const int PhotoFeaturesMsgId = 222818;
+
         /// <summary>User whose three latest messages are all training ham (msgs 71028/71030/71041).</summary>
         public const long AllHamUserId = 9184102838760L;
 

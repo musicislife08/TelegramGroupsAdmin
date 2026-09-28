@@ -27,16 +27,14 @@ namespace TelegramGroupsAdmin.UnitTests.Telegram.Services.Moderation.Handlers;
 /// - CreateSpamSampleAsync with text: Verifies label + retraining trigger + recorded decision
 /// - CreateSpamSampleAsync message not found: Logs warning, no action
 /// - CreateSpamSampleAsync without text: Skips training label/retraining
-/// - CreateSpamSampleAsync with photo: Saves image sample
 /// - Actor telegram user ID extraction: Verifies labeled_by_user_id
 /// - System actor (auto-ban): Records an AutoBan decision, still creates training data
 /// - WebUser actor: Records a WebMarkSpam decision
 /// - CreateHamSampleAsync: WebMarkHam records decision + legacy label; ReviewDismiss records decision only; missing message skips everything; other sources throw
-/// - Download-when-missing for image: MediaLocalPath null + MediaFileId → downloads before saving
-/// - Download-when-missing for video: MediaLocalPath null + MediaFileId → downloads before saving
+/// - Download-when-missing for animation: MediaLocalPath null + MediaFileId → downloads (startup backfill hashes it)
+/// - Download-when-missing for photo: MediaLocalPath null + PhotoFileId → downloads (startup backfill hashes it)
 /// - No-download-when-present: MediaLocalPath set → no download attempted
-/// - Download-failure-graceful: download returns null → still attempts training sample save
-/// - Video sample saved: verifies IVideoTrainingSamplesRepository.SaveTrainingSampleAsync called
+/// - Download-failure-graceful: download returns null → decision still recorded, path untouched
 ///
 /// Mocking Strategy:
 /// - NSubstitute for all dependencies (including ITelegramMediaService)
@@ -49,8 +47,6 @@ public class TrainingHandlerTests
     private IMessageHistoryRepository _mockMessageRepo = null!;
     private IDetectionResultsRepository _mockDetectionRepo = null!;
     private ITrainingLabelsRepository _mockTrainingRepo = null!;
-    private IImageTrainingSamplesRepository _mockImageRepo = null!;
-    private IVideoTrainingSamplesRepository _mockVideoRepo = null!;
     private ITelegramMediaService _mockMediaService = null!;
     private IJobTriggerService _mockJobTrigger = null!;
     private ILogger<TrainingHandler> _mockLogger = null!;
@@ -62,22 +58,14 @@ public class TrainingHandlerTests
         _mockMessageRepo = Substitute.For<IMessageHistoryRepository>();
         _mockDetectionRepo = Substitute.For<IDetectionResultsRepository>();
         _mockTrainingRepo = Substitute.For<ITrainingLabelsRepository>();
-        _mockImageRepo = Substitute.For<IImageTrainingSamplesRepository>();
-        _mockVideoRepo = Substitute.For<IVideoTrainingSamplesRepository>();
         _mockMediaService = Substitute.For<ITelegramMediaService>();
         _mockJobTrigger = Substitute.For<IJobTriggerService>();
         _mockLogger = Substitute.For<ILogger<TrainingHandler>>();
-
-        // Default: video repo returns false (no video)
-        _mockVideoRepo.SaveTrainingSampleAsync(Arg.Any<int>(), Arg.Any<long>(), Arg.Any<bool>(), Arg.Any<Actor>(), Arg.Any<CancellationToken>())
-            .Returns(false);
 
         _handler = new TrainingHandler(
             _mockMessageRepo,
             _mockDetectionRepo,
             _mockTrainingRepo,
-            _mockImageRepo,
-            _mockVideoRepo,
             _mockMediaService,
             _mockJobTrigger,
             _mockLogger);
@@ -144,9 +132,6 @@ public class TrainingHandlerTests
         _mockMessageRepo.GetMessageAsync(messageId, Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(message);
 
-        _mockImageRepo.SaveTrainingSampleAsync(Arg.Any<int>(), Arg.Any<long>(), Arg.Any<bool>(), Arg.Any<Actor>(), Arg.Any<CancellationToken>())
-            .Returns(false); // No photo
-
         // Act
         await _handler.CreateSpamSampleAsync(messageId, ChatIdentity.FromId(-100), executor, VerdictSource.WebMarkSpam, "Marked as spam by moderator");
 
@@ -208,9 +193,6 @@ public class TrainingHandlerTests
         _mockMessageRepo.GetMessageAsync(messageId, Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(message);
 
-        _mockImageRepo.SaveTrainingSampleAsync(Arg.Any<int>(), Arg.Any<long>(), Arg.Any<bool>(), Arg.Any<Actor>(), Arg.Any<CancellationToken>())
-            .Returns(false); // No photo
-
         var executor = Actor.FromTelegramUser(123);
 
         // Act
@@ -227,38 +209,6 @@ public class TrainingHandlerTests
         // Assert - NO retraining triggered (no text training data)
         await _mockJobTrigger.DidNotReceiveWithAnyArgs().TriggerNowAsync(
             string.Empty, new object(), default);
-    }
-
-    [Test]
-    public async Task CreateSpamSampleAsync_MessageWithPhoto_SavesImageSample()
-    {
-        // Arrange
-        const int messageId = 12345;
-        var message = CreateTestMessage(
-            messageId,
-            userId: 123,
-            chatId: 1,
-            messageText: "spam with image");
-        // Note: Photos use PhotoFileId/PhotoLocalPath fields in MessageRecord, not MediaType
-
-        _mockMessageRepo.GetMessageAsync(messageId, Arg.Any<long>(), Arg.Any<CancellationToken>())
-            .Returns(message);
-
-        _mockImageRepo.SaveTrainingSampleAsync(messageId, Arg.Any<long>(), true, Arg.Any<Actor>(), Arg.Any<CancellationToken>())
-            .Returns(true);
-
-        var executor = Actor.FromTelegramUser(123);
-
-        // Act
-        await _handler.CreateSpamSampleAsync(messageId, ChatIdentity.FromId(-100), executor, VerdictSource.WebMarkSpam, "Marked as spam by moderator");
-
-        // Assert - Image sample saved
-        await _mockImageRepo.Received(1).SaveTrainingSampleAsync(
-            messageId,
-            Arg.Any<long>(),
-            isSpam: true,
-            Arg.Any<Actor>(),
-            cancellationToken: Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -297,9 +247,6 @@ public class TrainingHandlerTests
         _mockMessageRepo.GetMessageAsync(messageId, Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(message);
 
-        _mockImageRepo.SaveTrainingSampleAsync(Arg.Any<int>(), Arg.Any<long>(), Arg.Any<bool>(), Arg.Any<Actor>(), Arg.Any<CancellationToken>())
-            .Returns(false);
-
         var executor = Actor.AutoDetection;
 
         // Act
@@ -324,14 +271,6 @@ public class TrainingHandlerTests
             BackgroundJobNames.ClassifierRetraining,
             Arg.Any<object>(),
             cancellationToken: Arg.Any<CancellationToken>());
-
-        // Assert - Image sample IS still attempted
-        await _mockImageRepo.Received(1).SaveTrainingSampleAsync(
-            messageId,
-            Arg.Any<long>(),
-            isSpam: true,
-            Arg.Any<Actor>(),
-            cancellationToken: Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -343,9 +282,6 @@ public class TrainingHandlerTests
 
         _mockMessageRepo.GetMessageAsync(messageId, Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(message);
-
-        _mockImageRepo.SaveTrainingSampleAsync(Arg.Any<int>(), Arg.Any<long>(), Arg.Any<bool>(), Arg.Any<Actor>(), Arg.Any<CancellationToken>())
-            .Returns(false);
 
         var executor = Actor.FromWebUser("admin-guid", "admin@example.com");
 
@@ -426,7 +362,7 @@ public class TrainingHandlerTests
     #region Defensive Download Tests (BACK-03)
 
     [Test]
-    public async Task CreateSpamSampleAsync_MissingMediaLocalPath_WithMediaFileId_DownloadsBeforeImageSample()
+    public async Task CreateSpamSampleAsync_MissingMediaLocalPath_WithMediaFileId_DownloadsMedia()
     {
         // Arrange — message has a MediaFileId but MediaLocalPath is null (e.g., download failed at receive time)
         const int messageId = 12345;
@@ -454,9 +390,6 @@ public class TrainingHandlerTests
                 Arg.Any<CancellationToken>())
             .Returns(downloadedPath);
 
-        _mockImageRepo.SaveTrainingSampleAsync(Arg.Any<int>(), Arg.Any<long>(), Arg.Any<bool>(), Arg.Any<Actor>(), Arg.Any<CancellationToken>())
-            .Returns(false);
-
         var executor = Actor.FromTelegramUser(123);
 
         // Act
@@ -480,7 +413,7 @@ public class TrainingHandlerTests
     }
 
     [Test]
-    public async Task CreateSpamSampleAsync_MissingMediaLocalPath_WithPhotoFileId_DownloadsBeforeImageSample()
+    public async Task CreateSpamSampleAsync_MissingMediaLocalPath_WithPhotoFileId_DownloadsMedia()
     {
         // Arrange — message has a PhotoFileId but no local path (photo not cached)
         const int messageId = 22222;
@@ -508,9 +441,6 @@ public class TrainingHandlerTests
                 messageId,
                 Arg.Any<CancellationToken>())
             .Returns(downloadedPath);
-
-        _mockImageRepo.SaveTrainingSampleAsync(Arg.Any<int>(), Arg.Any<long>(), Arg.Any<bool>(), Arg.Any<Actor>(), Arg.Any<CancellationToken>())
-            .Returns(false);
 
         var executor = Actor.FromTelegramUser(123);
 
@@ -551,9 +481,6 @@ public class TrainingHandlerTests
         _mockMessageRepo.GetMessageAsync(messageId, Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(message);
 
-        _mockImageRepo.SaveTrainingSampleAsync(Arg.Any<int>(), Arg.Any<long>(), Arg.Any<bool>(), Arg.Any<Actor>(), Arg.Any<CancellationToken>())
-            .Returns(false);
-
         var executor = Actor.FromTelegramUser(123);
 
         // Act
@@ -565,10 +492,10 @@ public class TrainingHandlerTests
     }
 
     [Test]
-    public async Task CreateSpamSampleAsync_DownloadFails_StillAttemptsTrainingSampleSave()
+    public async Task CreateSpamSampleAsync_DownloadFails_StillRecordsDecision()
     {
         // Arrange — download returns null (e.g., file expired on Telegram servers)
-        // Training samples should still be attempted (they will return false gracefully)
+        // The decision is recorded regardless; the message simply stays without media
         const int messageId = 44444;
         const string fileId = "EXPIRED_FILE_ID";
 
@@ -589,70 +516,18 @@ public class TrainingHandlerTests
                 messageId, Arg.Any<CancellationToken>())
             .Returns((string?)null); // Download failed
 
-        _mockImageRepo.SaveTrainingSampleAsync(Arg.Any<int>(), Arg.Any<long>(), Arg.Any<bool>(), Arg.Any<Actor>(), Arg.Any<CancellationToken>())
-            .Returns(false);
-
         var executor = Actor.FromTelegramUser(123);
 
         // Act — should NOT throw
         await _handler.CreateSpamSampleAsync(messageId, ChatIdentity.FromId(-100), executor, VerdictSource.WebMarkSpam, "Marked as spam by moderator");
 
-        // Assert - Image sample save was still attempted despite download failure
-        await _mockImageRepo.Received(1).SaveTrainingSampleAsync(
-            messageId,
-            Arg.Any<long>(),
-            isSpam: true,
-            Arg.Any<Actor>(),
-            cancellationToken: Arg.Any<CancellationToken>());
-
-        // Assert - Video sample save was also attempted
-        await _mockVideoRepo.Received(1).SaveTrainingSampleAsync(
-            messageId,
-            Arg.Any<long>(),
-            isSpam: true,
-            Arg.Any<Actor>(),
-            cancellationToken: Arg.Any<CancellationToken>());
+        // Assert - Decision recorded despite download failure
+        await _mockDetectionRepo.Received(1).RecordDecisionAsync(
+            messageId, -100, VerdictSource.WebMarkSpam, executor, Arg.Any<string>(), null, null, Arg.Any<CancellationToken>());
 
         // Assert - DB path NOT updated (download returned null)
         await _mockMessageRepo.DidNotReceiveWithAnyArgs().UpdateMediaLocalPathAsync(
             default, default, default!, default);
-    }
-
-    [Test]
-    public async Task CreateSpamSampleAsync_VideoMessage_SavesVideoTrainingSample()
-    {
-        // Arrange — message with a video (already cached)
-        const int messageId = 55555;
-        var message = CreateTestMessage(
-            messageId,
-            userId: 123,
-            chatId: -100,
-            messageText: null,
-            mediaType: MediaType.Video,
-            mediaLocalPath: "video/video_55555.mp4",
-            mediaFileId: "VIDEO_FILE_ID");
-
-        _mockMessageRepo.GetMessageAsync(messageId, Arg.Any<long>(), Arg.Any<CancellationToken>())
-            .Returns(message);
-
-        _mockImageRepo.SaveTrainingSampleAsync(Arg.Any<int>(), Arg.Any<long>(), Arg.Any<bool>(), Arg.Any<Actor>(), Arg.Any<CancellationToken>())
-            .Returns(false);
-
-        _mockVideoRepo.SaveTrainingSampleAsync(messageId, Arg.Any<long>(), true, Arg.Any<Actor>(), Arg.Any<CancellationToken>())
-            .Returns(true);
-
-        var executor = Actor.FromTelegramUser(123);
-
-        // Act
-        await _handler.CreateSpamSampleAsync(messageId, ChatIdentity.FromId(-100), executor, VerdictSource.WebMarkSpam, "Marked as spam by moderator");
-
-        // Assert - Video training sample was saved
-        await _mockVideoRepo.Received(1).SaveTrainingSampleAsync(
-            messageId,
-            Arg.Any<long>(),
-            isSpam: true,
-            Arg.Any<Actor>(),
-            cancellationToken: Arg.Any<CancellationToken>());
     }
 
     #endregion

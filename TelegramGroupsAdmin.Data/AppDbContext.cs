@@ -1,3 +1,4 @@
+using System.Text.Json;
 using AppAny.Quartz.EntityFrameworkCore.Migrations;
 using AppAny.Quartz.EntityFrameworkCore.Migrations.PostgreSQL;
 using Microsoft.EntityFrameworkCore;
@@ -945,6 +946,13 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.Entity<MessageRecordDto>()
             .Property(m => m.ContentCheckSkipReason)
             .HasDefaultValue(ContentCheckSkipReason.NotSkipped);
+
+        // Messages: media_features is the MediaFeaturesDto JSON contract (polymorphic on "type")
+        modelBuilder.Entity<MessageRecordDto>()
+            .Property(m => m.MediaFeatures)
+            .HasConversion(
+                v => v == null ? null : JsonSerializer.Serialize(v, MediaFeaturesJson.Options),
+                s => s == null ? null : JsonSerializer.Deserialize<MediaFeaturesDto>(s, MediaFeaturesJson.Options));
 
         // TelegramUsers: Set database defaults for boolean columns
         // Required for raw SQL inserts in tests and data migrations

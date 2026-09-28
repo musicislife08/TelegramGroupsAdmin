@@ -19,7 +19,10 @@ public class TableExportService
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
-        PropertyNameCaseInsensitive = true
+        PropertyNameCaseInsensitive = true,
+        // jsonb reorders keys (shortest first), so a polymorphic "type" discriminator
+        // (e.g. messages.media_features) can come after the other properties.
+        AllowOutOfOrderMetadataProperties = true
     };
 
     public TableExportService(

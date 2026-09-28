@@ -1,3 +1,4 @@
+using TelegramGroupsAdmin.Core.Models;
 using UiModels = TelegramGroupsAdmin.Telegram.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Repositories;
@@ -47,4 +48,17 @@ public interface IMessageHistoryRepository
         long chatId,
         IReadOnlyCollection<int> messageIds,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Stores the perceptual-hash features of a message's photo/video on the message. No-op when the
+    /// message is not stored.
+    /// </summary>
+    Task SetMediaFeaturesAsync(int messageId, long chatId, MediaFeatures features, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Gets messages whose current verdict is curated, that have no media features yet, and that
+    /// carry a photo path or a video/animation/video-note path (startup media-feature backfill),
+    /// newest decision first. A photo message reports <see cref="UiModels.MediaType.Photo"/>.
+    /// </summary>
+    Task<IReadOnlyList<UiModels.MediaBackfillCandidate>> GetMediaFeatureBackfillCandidatesAsync(int limit, CancellationToken cancellationToken = default);
 }

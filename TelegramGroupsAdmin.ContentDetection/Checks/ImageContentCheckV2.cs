@@ -32,7 +32,8 @@ public class ImageContentCheckV2(
     IServiceProvider serviceProvider,
     IConfigService configService,
     IPhotoHashService photoHashService,
-    IImageTrainingSamplesRepository imageTrainingSamplesRepository) : IContentCheckV2
+    IMediaFeatureExtractor extractor,
+    IMediaSampleRepository mediaSamples) : IContentCheckV2
 {
     private static readonly JsonSerializerOptions CaseInsensitiveJsonOptions = new() { PropertyNameCaseInsensitive = true };
 
@@ -66,196 +67,18 @@ public class ImageContentCheckV2(
     {
         var startTimestamp = Stopwatch.GetTimestamp();
         var req = (ImageCheckRequest)request;
+        PhotoFeatures? photoFeatures = null;
 
         try
         {
-            // Load config
-            var config = await configService.GetEffectiveContentDetectionAsync(req.Chat.Id, req.CancellationToken);
-            var imageConfig = config.ImageSpam;
+            // Compute media features once, before Layer 1. They ride on every response so the scan
+            // stores them on the message. A missing file yields no features (never an exception).
+            photoFeatures = !string.IsNullOrEmpty(req.PhotoLocalPath)
+                ? await extractor.ExtractPhotoAsync(req.PhotoLocalPath)
+                : null;
 
-            // Extract OCR text early so it's available for all return paths (for AI veto passthrough)
-            // Trade-off: OCR runs even if hash similarity (Layer 1) returns early, but this ensures
-            // AI veto can analyze image text for false positive detection. OCR is CPU-bound (Tesseract)
-            // but typically completes in <100ms for typical image sizes.
-            string? extractedOcrText = null;
-            if (imageConfig.UseOCR &&
-                !string.IsNullOrEmpty(req.PhotoLocalPath) &&
-                File.Exists(req.PhotoLocalPath))
-            {
-                extractedOcrText = await imageTextExtractionService.ExtractTextAsync(
-                    req.PhotoLocalPath,
-                    req.CancellationToken);
-            }
-
-            // ML-5 Layer 1: Hash similarity check (fastest - check if we've seen this spam before)
-            if (imageConfig.UseHashSimilarity &&
-                !string.IsNullOrEmpty(req.PhotoLocalPath) &&
-                File.Exists(req.PhotoLocalPath))
-            {
-                var photoHash = await photoHashService.ComputePhotoHashAsync(req.PhotoLocalPath);
-                if (photoHash != null)
-                {
-                    // Query training samples (limited by config for performance)
-                    var trainingSamples = await imageTrainingSamplesRepository.GetRecentSamplesAsync(
-                        imageConfig.MaxTrainingSamplesToCompare,
-                        req.CancellationToken);
-
-                    if (trainingSamples.Count > 0)
-                    {
-                        // Find best match by comparing hash similarity
-                        double bestSimilarity = 0.0;
-                        bool? matchedSpamLabel = null;
-
-                        foreach (var sample in trainingSamples)
-                        {
-                            var similarity = photoHashService.CompareHashes(photoHash, sample.PhotoHash);
-                            if (similarity > bestSimilarity)
-                            {
-                                bestSimilarity = similarity;
-                                matchedSpamLabel = sample.IsSpam;
-                            }
-                        }
-
-                        // Check if similarity meets threshold
-                        if (bestSimilarity >= imageConfig.HashSimilarityThreshold)
-                        {
-                            // Use configured score directly, clamped to safety boundaries
-                            var score = Math.Clamp(imageConfig.HashMatchConfidence, ContentDetectionConstants.MinScore, ContentDetectionConstants.MaxScore);
-
-                            // If matched HAM (not spam), abstain (don't give negative signal in V2)
-                            if (matchedSpamLabel == false)
-                            {
-                                logger.LogInformation(
-                                    "ImageSpam V2 Layer 1: Hash match found ({Similarity:F2}% >= {Threshold:F2}%) but matched HAM sample, abstaining",
-                                    bestSimilarity * 100, imageConfig.HashSimilarityThreshold * 100);
-
-                                return new ContentCheckResponseV2
-                                {
-                                    CheckName = CheckName,
-                                    Score = 0.0,
-                                    Abstained = true,
-                                    Details = $"Image hash {bestSimilarity:P0} similar to known ham sample (abstaining)",
-                                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds,
-                                    OcrExtractedText = extractedOcrText
-                                };
-                            }
-
-                            logger.LogInformation(
-                                "ImageSpam V2 Layer 1: Hash match found ({Similarity:F2}% >= {Threshold:F2}%). Returning {Score:F2} points",
-                                bestSimilarity * 100, imageConfig.HashSimilarityThreshold * 100, score);
-
-                            return new ContentCheckResponseV2
-                            {
-                                CheckName = CheckName,
-                                Score = score,
-                                Abstained = false,
-                                Details = $"Image hash {bestSimilarity:P0} similar to known spam sample",
-                                ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds,
-                                OcrExtractedText = extractedOcrText
-                            };
-                        }
-
-                        logger.LogDebug(
-                            "ImageSpam V2 Layer 1: Best hash similarity {Similarity:F2}% below threshold {Threshold:F2}%, proceeding to OCR",
-                            bestSimilarity * 100, imageConfig.HashSimilarityThreshold * 100);
-                    }
-                    else
-                    {
-                        logger.LogDebug("ImageSpam V2 Layer 1: No training samples available for hash comparison");
-                    }
-                }
-                else
-                {
-                    logger.LogWarning("Failed to compute photo hash for {PhotoPath}", req.PhotoLocalPath);
-                }
-            }
-
-            // ML-5 Layer 2: OCR + text-based spam detection (using pre-extracted text)
-            if (!string.IsNullOrWhiteSpace(extractedOcrText) &&
-                extractedOcrText.Length >= imageConfig.MinOcrTextLength)
-            {
-                logger.LogDebug(
-                    "ImageSpam V2 Layer 2: OCR extracted {CharCount} characters from {PhotoPath}, running text-based spam checks",
-                    extractedOcrText.Length, Path.GetFileName(req.PhotoLocalPath));
-
-                // Create text-only request (no ImageData = ImageSpamCheck won't re-execute)
-                var ocrRequest = new ContentCheckRequest
-                {
-                    Message = extractedOcrText,
-                    User = req.User,
-                    Chat = req.Chat,
-                    Metadata = new ContentCheckMetadata(),
-                    HasSpamFlags = false,
-                    IsUserTrusted = false,
-                    IsUserAdmin = false,
-                    ImageData = null,  // Key: No image = ImageSpamCheck won't run
-                    PhotoFileId = null,
-                    PhotoLocalPath = null,
-                    Urls = []
-                };
-
-                // Run all text-based spam checks on OCR text
-                // Lazy-resolve engine to break circular dependency
-                var contentDetectionEngine = serviceProvider.GetRequiredService<IContentDetectionEngine>();
-                var ocrResult = await contentDetectionEngine.CheckMessageAsync(ocrRequest, req.CancellationToken);
-
-                // Check if result is confident enough to skip expensive Vision API
-                if (ocrResult.TotalScore >= imageConfig.OcrConfidenceThreshold)
-                {
-                    // V2: Use total score directly
-                    var score = ocrResult.IsSpam ? ocrResult.TotalScore : 0.0;
-
-                    // V2: Only return score if spam detected, otherwise abstain
-                    if (!ocrResult.IsSpam)
-                    {
-                        logger.LogDebug(
-                            "ImageSpam V2 Layer 2: OCR text checks returned clean (score {Score:F2}), abstaining",
-                            ocrResult.TotalScore);
-
-                        return new ContentCheckResponseV2
-                        {
-                            CheckName = CheckName,
-                            Score = 0.0,
-                            Abstained = true,
-                            Details = "OCR detected text analyzed as clean, abstaining",
-                            ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds,
-                            OcrExtractedText = extractedOcrText
-                        };
-                    }
-
-                    var flaggedChecks = ocrResult.CheckResults
-                        .Where(c => !c.Abstained && c.Score > 0)
-                        .Select(c => c.CheckName)
-                        .ToList();
-
-                    logger.LogInformation(
-                        "ImageSpam V2 Layer 2: OCR text checks confident (score {Score:F2} >= {Threshold:F2}), returning {ReturnScore:F2} points",
-                        ocrResult.TotalScore, imageConfig.OcrConfidenceThreshold, score);
-
-                    return new ContentCheckResponseV2
-                    {
-                        CheckName = CheckName,
-                        Score = score,
-                        Abstained = false,
-                        Details = $"OCR detected spam text analyzed by {flaggedChecks.Count} checks: {string.Join(", ", flaggedChecks)}",
-                        ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds,
-                        OcrExtractedText = extractedOcrText
-                    };
-                }
-
-                // OCR checks uncertain - proceed to Vision (Layer 3)
-                logger.LogDebug(
-                    "ImageSpam V2 Layer 2: OCR text checks uncertain (score {Score:F2} < {Threshold:F2}), proceeding to Vision",
-                    ocrResult.TotalScore, imageConfig.OcrConfidenceThreshold);
-            }
-            else if (!string.IsNullOrWhiteSpace(extractedOcrText))
-            {
-                logger.LogDebug("ImageSpam V2 Layer 2: OCR extracted only {CharCount} characters (< {MinLength}), too short for text analysis",
-                    extractedOcrText.Length, imageConfig.MinOcrTextLength);
-            }
-
-            // ML-5 Layer 3: AI Vision fallback (provider-agnostic via IChatService)
-            return await CheckWithVisionAsync(req, startTimestamp, extractedOcrText);
+            var response = await CheckCoreAsync(req, startTimestamp, photoFeatures);
+            return response with { MediaFeatures = photoFeatures };
         }
         catch (Exception ex)
         {
@@ -268,9 +91,197 @@ public class ImageContentCheckV2(
                 Details = $"Error: {ex.Message}",
                 Error = ex,
                 ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds,
-                OcrExtractedText = null // OCR extraction may have failed
+                OcrExtractedText = null, // OCR extraction may have failed
+                MediaFeatures = photoFeatures
             };
         }
+    }
+
+    private async Task<ContentCheckResponseV2> CheckCoreAsync(ImageCheckRequest req, long startTimestamp, PhotoFeatures? photoFeatures)
+    {
+        // Load config
+        var config = await configService.GetEffectiveContentDetectionAsync(req.Chat.Id, req.CancellationToken);
+        var imageConfig = config.ImageSpam;
+
+        // Extract OCR text early so it's available for all return paths (for AI veto passthrough)
+        // Trade-off: OCR runs even if hash similarity (Layer 1) returns early, but this ensures
+        // AI veto can analyze image text for false positive detection. OCR is CPU-bound (Tesseract)
+        // but typically completes in <100ms for typical image sizes.
+        string? extractedOcrText = null;
+        if (imageConfig.UseOCR &&
+            !string.IsNullOrEmpty(req.PhotoLocalPath) &&
+            File.Exists(req.PhotoLocalPath))
+        {
+            extractedOcrText = await imageTextExtractionService.ExtractTextAsync(
+                req.PhotoLocalPath,
+                req.CancellationToken);
+        }
+
+        // ML-5 Layer 1: Hash similarity against messages whose current verdict trains
+        if (imageConfig.UseHashSimilarity && photoFeatures is not null)
+        {
+            // Query samples (limited by config for performance)
+            var trainingSamples = await mediaSamples.GetRecentPhotoSamplesAsync(
+                imageConfig.MaxTrainingSamplesToCompare,
+                req.CancellationToken);
+
+            if (trainingSamples.Count > 0)
+            {
+                // Find best match by comparing hash similarity
+                double bestSimilarity = 0.0;
+                bool? matchedSpamLabel = null;
+
+                foreach (var (sampleFeatures, isSpam) in trainingSamples)
+                {
+                    var similarity = photoHashService.CompareHashes(photoFeatures.Hash, sampleFeatures.Hash);
+                    if (similarity > bestSimilarity)
+                    {
+                        bestSimilarity = similarity;
+                        matchedSpamLabel = isSpam;
+                    }
+                }
+
+                // Check if similarity meets threshold
+                if (bestSimilarity >= imageConfig.HashSimilarityThreshold)
+                {
+                    // Use configured score directly, clamped to safety boundaries
+                    var score = Math.Clamp(imageConfig.HashMatchConfidence, ContentDetectionConstants.MinScore, ContentDetectionConstants.MaxScore);
+
+                    // If matched HAM (not spam), abstain (don't give negative signal in V2)
+                    if (matchedSpamLabel == false)
+                    {
+                        logger.LogInformation(
+                            "ImageSpam V2 Layer 1: Hash match found ({Similarity:F2}% >= {Threshold:F2}%) but matched HAM sample, abstaining",
+                            bestSimilarity * 100, imageConfig.HashSimilarityThreshold * 100);
+
+                        return new ContentCheckResponseV2
+                        {
+                            CheckName = CheckName,
+                            Score = 0.0,
+                            Abstained = true,
+                            Details = $"Image hash {bestSimilarity:P0} similar to known ham sample (abstaining)",
+                            ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds,
+                            OcrExtractedText = extractedOcrText
+                        };
+                    }
+
+                    logger.LogInformation(
+                        "ImageSpam V2 Layer 1: Hash match found ({Similarity:F2}% >= {Threshold:F2}%). Returning {Score:F2} points",
+                        bestSimilarity * 100, imageConfig.HashSimilarityThreshold * 100, score);
+
+                    return new ContentCheckResponseV2
+                    {
+                        CheckName = CheckName,
+                        Score = score,
+                        Abstained = false,
+                        Details = $"Image hash {bestSimilarity:P0} similar to known spam sample",
+                        ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds,
+                        OcrExtractedText = extractedOcrText
+                    };
+                }
+
+                logger.LogDebug(
+                    "ImageSpam V2 Layer 1: Best hash similarity {Similarity:F2}% below threshold {Threshold:F2}%, proceeding to OCR",
+                    bestSimilarity * 100, imageConfig.HashSimilarityThreshold * 100);
+            }
+            else
+            {
+                logger.LogDebug("ImageSpam V2 Layer 1: No training samples available for hash comparison");
+            }
+        }
+        else if (imageConfig.UseHashSimilarity &&
+                 !string.IsNullOrEmpty(req.PhotoLocalPath) &&
+                 File.Exists(req.PhotoLocalPath))
+        {
+            logger.LogWarning("Failed to compute photo hash for {PhotoPath}", req.PhotoLocalPath);
+        }
+
+        // ML-5 Layer 2: OCR + text-based spam detection (using pre-extracted text)
+        if (!string.IsNullOrWhiteSpace(extractedOcrText) &&
+            extractedOcrText.Length >= imageConfig.MinOcrTextLength)
+        {
+            logger.LogDebug(
+                "ImageSpam V2 Layer 2: OCR extracted {CharCount} characters from {PhotoPath}, running text-based spam checks",
+                extractedOcrText.Length, Path.GetFileName(req.PhotoLocalPath));
+
+            // Create text-only request (no ImageData = ImageSpamCheck won't re-execute)
+            var ocrRequest = new ContentCheckRequest
+            {
+                Message = extractedOcrText,
+                User = req.User,
+                Chat = req.Chat,
+                Metadata = new ContentCheckMetadata(),
+                HasSpamFlags = false,
+                IsUserTrusted = false,
+                IsUserAdmin = false,
+                ImageData = null,  // Key: No image = ImageSpamCheck won't run
+                PhotoFileId = null,
+                PhotoLocalPath = null,
+                Urls = []
+            };
+
+            // Run all text-based spam checks on OCR text
+            // Lazy-resolve engine to break circular dependency
+            var contentDetectionEngine = serviceProvider.GetRequiredService<IContentDetectionEngine>();
+            var ocrResult = await contentDetectionEngine.CheckMessageAsync(ocrRequest, req.CancellationToken);
+
+            // Check if result is confident enough to skip expensive Vision API
+            if (ocrResult.TotalScore >= imageConfig.OcrConfidenceThreshold)
+            {
+                // V2: Use total score directly
+                var score = ocrResult.IsSpam ? ocrResult.TotalScore : 0.0;
+
+                // V2: Only return score if spam detected, otherwise abstain
+                if (!ocrResult.IsSpam)
+                {
+                    logger.LogDebug(
+                        "ImageSpam V2 Layer 2: OCR text checks returned clean (score {Score:F2}), abstaining",
+                        ocrResult.TotalScore);
+
+                    return new ContentCheckResponseV2
+                    {
+                        CheckName = CheckName,
+                        Score = 0.0,
+                        Abstained = true,
+                        Details = "OCR detected text analyzed as clean, abstaining",
+                        ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds,
+                        OcrExtractedText = extractedOcrText
+                    };
+                }
+
+                var flaggedChecks = ocrResult.CheckResults
+                    .Where(c => !c.Abstained && c.Score > 0)
+                    .Select(c => c.CheckName)
+                    .ToList();
+
+                logger.LogInformation(
+                    "ImageSpam V2 Layer 2: OCR text checks confident (score {Score:F2} >= {Threshold:F2}), returning {ReturnScore:F2} points",
+                    ocrResult.TotalScore, imageConfig.OcrConfidenceThreshold, score);
+
+                return new ContentCheckResponseV2
+                {
+                    CheckName = CheckName,
+                    Score = score,
+                    Abstained = false,
+                    Details = $"OCR detected spam text analyzed by {flaggedChecks.Count} checks: {string.Join(", ", flaggedChecks)}",
+                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds,
+                    OcrExtractedText = extractedOcrText
+                };
+            }
+
+            // OCR checks uncertain - proceed to Vision (Layer 3)
+            logger.LogDebug(
+                "ImageSpam V2 Layer 2: OCR text checks uncertain (score {Score:F2} < {Threshold:F2}), proceeding to Vision",
+                ocrResult.TotalScore, imageConfig.OcrConfidenceThreshold);
+        }
+        else if (!string.IsNullOrWhiteSpace(extractedOcrText))
+        {
+            logger.LogDebug("ImageSpam V2 Layer 2: OCR extracted only {CharCount} characters (< {MinLength}), too short for text analysis",
+                extractedOcrText.Length, imageConfig.MinOcrTextLength);
+        }
+
+        // ML-5 Layer 3: AI Vision fallback (provider-agnostic via IChatService)
+        return await CheckWithVisionAsync(req, startTimestamp, extractedOcrText);
     }
 
     /// <summary>

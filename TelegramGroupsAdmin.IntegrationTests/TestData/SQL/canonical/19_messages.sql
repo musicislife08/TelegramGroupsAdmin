@@ -2601,3 +2601,5 @@ UPDATE messages SET content_hash = 'C15FDE3C007F2C4506534ABD7F8E46C4881F5F999CCD
 UPDATE messages SET content_hash = 'E53C9131666337BC83DD5570102416DB79F5F0F2319D0E88193A5C640EA18A62', similarity_hash = 7986295867581690769 WHERE message_id = 222863 AND chat_id = -100026957614982;
 UPDATE messages SET content_hash = '567E64505B6163BCBE3C1D435B3C68995A255B60598410D1AF65DC5DE2D43BB3', similarity_hash = -7499738394224271247 WHERE message_id = 222922 AND chat_id = -100026957614982;
 UPDATE messages SET content_hash = '7B3D4AF012A061E31D8F806273E1B79B24E6DC41E1CD885930A387267E6170E9', similarity_hash = -4113107816996298699 WHERE message_id = 223002 AND chat_id = -100026957614982;
+-- canonical edit 2026-09-27 (task #527): msg 222818 (ExplicitSpam photo, MainChat) carries photo media features for Layer 1 (GoldenDatasetConstants.Verdicts.PhotoFeaturesMsgId).
+UPDATE messages SET media_features = '{"type":"photo","hash":"8J8PDw8PH/8="}' WHERE message_id = 222818 AND chat_id = -100026957614982;

@@ -134,6 +134,18 @@ public class ContentDetectionOrchestrator
                     editVersion,
                     cancellationToken);
 
+                // Media features computed by the image/video checks live on the message, so Layer 1
+                // can compare later media against it once it carries a training verdict. A missing
+                // file means no check computed features, and nothing is stored.
+                var mediaFeatures = result.SpamResult.CheckResults
+                    .Select(c => c.MediaFeatures)
+                    .FirstOrDefault(f => f is not null);
+                if (mediaFeatures is not null)
+                {
+                    var messageHistory = scope.ServiceProvider.GetRequiredService<IMessageHistoryRepository>();
+                    await messageHistory.SetMediaFeaturesAsync(message.MessageId, message.Chat.Id, mediaFeatures, cancellationToken);
+                }
+
                 // Check for auto-trust after storing non-spam detection result
                 if (!result.SpamResult.IsSpam && message.From != null)
                 {

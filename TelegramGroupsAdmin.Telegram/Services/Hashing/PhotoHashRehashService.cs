@@ -2,9 +2,13 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.ContentDetection.Services;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Data;
+using TelegramGroupsAdmin.Telegram.Models;
+using TelegramGroupsAdmin.Telegram.Repositories;
 
 namespace TelegramGroupsAdmin.Telegram.Services.Hashing;
 
@@ -12,6 +16,8 @@ namespace TelegramGroupsAdmin.Telegram.Services.Hashing;
 public sealed class PhotoHashRehashService(
     IDbContextFactory<AppDbContext> contextFactory,
     IPhotoHashService photoHashService,
+    IMessageHistoryRepository messageHistoryRepository,
+    IMediaFeatureExtractor mediaFeatureExtractor,
     IOptions<AppOptions> appOptions,
     ILogger<PhotoHashRehashService> logger) : IPhotoHashRehashService
 {
@@ -21,7 +27,7 @@ public sealed class PhotoHashRehashService(
             .Add(await RehashUsersAsync(ct))
             .Add(await RehashLinkedChannelsAsync(ct))
             .Add(await RehashBanCelebrationGifsAsync(ct))
-            .Add(await RehashImageTrainingSamplesAsync(ct));
+            .Add(await BackfillMessageMediaFeaturesAsync(ct));
 
         if (total != PhotoHashRehashResult.Empty)
         {
@@ -130,34 +136,43 @@ public sealed class PhotoHashRehashService(
         return new PhotoHashRehashResult(recomputed, unrecoverable, 0);
     }
 
-    private async Task<PhotoHashRehashResult> RehashImageTrainingSamplesAsync(CancellationToken ct)
+    /// <summary>
+    /// Fills messages.media_features for curated media messages that have none (scanned before
+    /// features existed, or never scanned before an admin decision), so Layer 1 can match them.
+    /// </summary>
+    private async Task<PhotoHashRehashResult> BackfillMessageMediaFeaturesAsync(CancellationToken ct)
     {
-        await using var context = await contextFactory.CreateDbContextAsync(ct);
-
-        // PhotoPath on the sample row is never populated (it is [Required] but never
-        // assigned on insert), so the source image has to come from the joined message.
-        // Photos live in photo_local_path; media_local_path holds non-photo attachments
-        // and is not a usable source for a photo hash (see #527).
-        var candidates = await context.ImageTrainingSamples
-            .Where(its => its.PhotoHash == null)
-            .Join(context.Messages,
-                its => new { its.MessageId, its.ChatId },
-                m => new { m.MessageId, m.ChatId },
-                (its, m) => new { its.Id, m.PhotoLocalPath })
-            .Where(x => x.PhotoLocalPath != null)
-            .ToListAsync(ct);
-
-        var recomputed = 0;
-        var unrecoverable = 0;
-
+        var candidates = await messageHistoryRepository.GetMediaFeatureBackfillCandidatesAsync(limit: 500, ct);
+        int recomputed = 0, unrecoverable = 0;
         foreach (var candidate in candidates)
         {
-            var hash = await ComputeAsync(candidate.PhotoLocalPath!);
-            if (hash is null) { unrecoverable++; continue; }
+            MediaFeatures? features = null;
+            string? path = null;
+            if (candidate.PhotoLocalPath is not null)
+            {
+                path = MediaUtilities.ToAbsolutePath(candidate.PhotoLocalPath, appOptions.Value.DataPath);
+                features = await mediaFeatureExtractor.ExtractPhotoAsync(path);
+            }
+            else if (candidate is { MediaLocalPath: not null, MediaType: { } mediaType })
+            {
+                MediaUtilities.ValidateMediaPath(candidate.MediaLocalPath, (int)mediaType, appOptions.Value.DataPath, out path);
+                if (path is not null)
+                {
+                    features = mediaType == MediaType.Photo
+                        ? await mediaFeatureExtractor.ExtractPhotoAsync(path)
+                        : await mediaFeatureExtractor.ExtractVideoAsync(path, ct);
+                }
+            }
 
-            await context.ImageTrainingSamples
-                .Where(its => its.Id == candidate.Id)
-                .ExecuteUpdateAsync(s => s.SetProperty(its => its.PhotoHash, hash), ct);
+            if (features is null)
+            {
+                unrecoverable++;
+                logger.LogWarning("Cannot compute media features for message {MessageId} in chat {ChatId}: file missing or unreadable at {Path}",
+                    candidate.MessageId, candidate.ChatId, path);
+                continue;
+            }
+
+            await messageHistoryRepository.SetMediaFeaturesAsync(candidate.MessageId, candidate.ChatId, features, ct);
             recomputed++;
         }
 

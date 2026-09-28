@@ -305,6 +305,7 @@ Workshop Alumni (`-100059667856554`) has no `ban_celebration_config`, so its eff
 | `UntrainedHamMsgId` / `UntrainedHamChatId` / `UntrainedHamUserId` | msg 22160, Crypto Group (-100094881429433), @wrongedjersey (9621984255379, not banned) | **edited:** dr1933 → AI review 2.0 below threshold → `UntrainedHam` | allowed-but-untrained ham (auto-trust counts it, training does not) |
 | `UnscannedMsgId` | msg 219219, @unhelpfulgrab, MainChat | no rows → `Unscanned` | unscanned messages |
 | `AllHamUserId` | user 9184102838760, msgs 71028/71030/71041 | all `ExplicitHam` | auto-trust with N ham messages |
+| `PhotoFeaturesMsgId` | msg 222818 (sender 9777802619662), MainChat, photo | **edited:** `media_features` = `{"type":"photo","hash":"8J8PDw8PH/8="}`; AutoBan dr3322 → `ExplicitSpam` | Layer 1 photo similarity reads a spam sample (messages ⋈ `message_verdicts`) |
 | `LabeledOnlyRetentionMsgId` | msg 7974, @arisepacifism (9702019239117) | manual ham dr2009 (`used_for_training=false`) → `ExplicitHam` | retention keeps decision-only messages |
 | `Retention.MsgId_ExpiredWithEdits` (no canonical edit — pinned an unreferenced row) | msg 221932, MainChat, 1 edit (message_edits row 3014) | no `detection_results` rows → `Unscanned` (non-curated) | retention deletes an expired non-curated message together with its `message_edits` rows (edit-cascade coverage; task #548 review finding, 2026-09-27) |
 
@@ -313,6 +314,7 @@ Flag-edits (all rows were unreferenced by tests and docs beforehand):
 - **4b** msg 7796: dr1339 → score/net 3.0, `used_for_training=false`, `UntrainedSpam`; dr1349 deleted; label removed from `33_training_labels.sql`.
 - **4c** msg 216684: dr2535 → `file_scan` / `FileScanningCheck`, `FileScan` / `UntrainedHam`, score 0, re-timed 1 minute after the newest row; label removed from `33_training_labels.sql`.
 - **4d** msg 22160: dr1933 → score/net 2.0, `used_for_training=false`, `UntrainedHam`, reason `AI below review threshold: AI: Review …`, `check_results_json` with a Similarity 3.5 check and an OpenAI 2.0 review.
+- **4e** msg 222818: `media_features` set by an appended `UPDATE` in `19_messages.sql` (a scrubbed photo hash; no file on disk).
 
 ### Synthetic / reserved rows (do not regenerate)
 - `welcome_responses` IDs `999001..999005`: 5 status branches anchored on `(MainChat_Id=-100026957614982, user_id=9196379650113, username='canonical_user1')`. Mapping: `999001`=Pending, `999002`=Accepted, `999003`=Denied, `999004`=Timeout, `999005`=Left.
