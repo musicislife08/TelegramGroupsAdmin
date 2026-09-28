@@ -13,6 +13,34 @@ namespace TelegramGroupsAdmin.UnitTests.Configuration;
 [TestFixture]
 public class ContentDetectionConfigMappingsTests
 {
+    #region HamSkipThreshold Mappings
+
+    [Test]
+    public void ImageAndVideoConfigData_WithoutHamSkipThreshold_MapToDefault()
+    {
+        // Configs stored before the setting existed deserialize with a null HamSkipThreshold.
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(new ImageContentConfigData().ToModel().HamSkipThreshold, Is.EqualTo(0.95));
+            Assert.That(new VideoContentConfigData().ToModel().HamSkipThreshold, Is.EqualTo(0.95));
+        }
+    }
+
+    [Test]
+    public void ImageAndVideoConfig_HamSkipThreshold_RoundTrips()
+    {
+        var image = new ImageContentConfig { HamSkipThreshold = 0.97 }.ToData().ToModel();
+        var video = new VideoContentConfig { HamSkipThreshold = 0.9 }.ToData().ToModel();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(image.HamSkipThreshold, Is.EqualTo(0.97));
+            Assert.That(video.HamSkipThreshold, Is.EqualTo(0.9));
+        }
+    }
+
+    #endregion
+
     #region UrlBlocklistConfig Mappings
 
     [Test]

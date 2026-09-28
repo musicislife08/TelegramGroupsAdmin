@@ -221,9 +221,9 @@ public class VideoContentCheckV2(
 
             // Find best match by comparing each extracted keyframe hash to each sample keyframe hash
             double bestSimilarity = 0.0;
-            bool? matchedSpamLabel = null;
+            VerdictClassification? matchedClassification = null;
 
-            foreach (var (sampleFeatures, isSpam) in trainingSamples)
+            foreach (var (sampleFeatures, classification) in trainingSamples)
             {
                 foreach (var frame in videoFeatures.Keyframes)
                 {
@@ -234,44 +234,56 @@ public class VideoContentCheckV2(
                         if (similarity > bestSimilarity)
                         {
                             bestSimilarity = similarity;
-                            matchedSpamLabel = isSpam;
+                            matchedClassification = classification;
                         }
                     }
                 }
             }
 
             // Check if similarity meets threshold
-            if (bestSimilarity >= config.HashSimilarityThreshold)
+            if (bestSimilarity >= config.HashSimilarityThreshold && matchedClassification is { } matched)
             {
-                logger.LogInformation(
-                    "VideoSpam Layer 1: Keyframe hash match found ({Similarity:F2}% >= {Threshold:F2}%). Returning early with {Classification}",
-                    bestSimilarity * 100, config.HashSimilarityThreshold * 100,
-                    matchedSpamLabel == true ? "SPAM" : "CLEAN");
-
-                // Convert confidence to score: spam gets full score, clean abstains
-                double score;
-                bool abstained;
-                if (matchedSpamLabel == true)
+                if (matched.IsSpam())
                 {
                     // Use configured score directly, clamped to safety boundaries
-                    score = Math.Clamp(config.HashMatchConfidence, ContentDetectionConstants.MinScore, ContentDetectionConstants.MaxScore);
-                    abstained = false;
-                }
-                else
-                {
-                    // Clean: abstain
-                    score = 0.0;
-                    abstained = true;
+                    var score = Math.Clamp(config.HashMatchConfidence, ContentDetectionConstants.MinScore, ContentDetectionConstants.MaxScore);
+
+                    logger.LogInformation(
+                        "VideoSpam Layer 1: Keyframe hash match found ({Similarity:F2}% >= {Threshold:F2}%). Returning early with SPAM",
+                        bestSimilarity * 100, config.HashSimilarityThreshold * 100);
+
+                    return new ContentCheckResponseV2
+                    {
+                        CheckName = CheckName,
+                        Score = score,
+                        Abstained = false,
+                        Details = $"Video keyframe {bestSimilarity:P0} similar to known spam sample",
+                        ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
+                    };
                 }
 
-                return new ContentCheckResponseV2
+                // Only an admin-verified ham anchor, matched closely enough, skips OCR/Vision (abstain).
+                // Any other ham match can be a spammer reusing a benign video, so it falls through.
+                if (matched == VerdictClassification.ExplicitHam && bestSimilarity >= config.HamSkipThreshold)
                 {
-                    CheckName = CheckName,
-                    Score = score,
-                    Abstained = abstained,
-                    Details = $"Video keyframe {bestSimilarity:P0} similar to known {(matchedSpamLabel == true ? "spam" : "ham")} sample",
-                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
-                };
+                    logger.LogInformation(
+                        "VideoSpam Layer 1: Keyframe hash match found ({Similarity:F2}% >= {Threshold:F2}%) with admin-verified HAM sample. Returning early with CLEAN",
+                        bestSimilarity * 100, config.HamSkipThreshold * 100);
+
+                    return new ContentCheckResponseV2
+                    {
+                        CheckName = CheckName,
+                        Score = 0.0,
+                        Abstained = true,
+                        Details = $"Video keyframe {bestSimilarity:P0} similar to known ham sample",
+                        ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
+                    };
+                }
+
+                logger.LogInformation(
+                    "VideoSpam Layer 1: Keyframe hash match ({Similarity:F2}%) with {Classification} sample does not skip (needs ExplicitHam >= {HamSkipThreshold:F2}%), proceeding to OCR/Vision",
+                    bestSimilarity * 100, matched, config.HamSkipThreshold * 100);
+                return null;
             }
 
             logger.LogDebug(

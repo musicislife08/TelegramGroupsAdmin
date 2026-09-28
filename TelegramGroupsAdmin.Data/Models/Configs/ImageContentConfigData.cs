@@ -21,6 +21,11 @@ public class ImageContentConfigData
 
     public double HashSimilarityThreshold { get; set; } = 0.85;
 
+    /// <summary>
+    /// Null in configs stored before the setting existed; the Configuration mapping substitutes the default.
+    /// </summary>
+    public double? HamSkipThreshold { get; set; }
+
     public double HashMatchConfidence { get; set; } = 4.75;
 
     public int MaxTrainingSamplesToCompare { get; set; } = 1000;

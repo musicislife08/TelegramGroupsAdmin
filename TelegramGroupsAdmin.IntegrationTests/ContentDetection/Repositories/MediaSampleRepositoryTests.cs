@@ -51,7 +51,9 @@ public class MediaSampleRepositoryTests
 
         var samples = await _repository.GetRecentPhotoSamplesAsync(limit: 100);
 
-        Assert.That(samples, Has.Some.Matches<(PhotoFeatures Features, bool IsSpam)>(
-            s => s.IsSpam && s.Features.Hash.SequenceEqual(Convert.FromBase64String("8J8PDw8PH/8="))));
+        // The anchor is an AutoBan decision: spam, and not an admin-verified ham anchor.
+        Assert.That(samples, Has.Some.Matches<(PhotoFeatures Features, VerdictClassification Classification)>(
+            s => s.Classification == VerdictClassification.ExplicitSpam
+                 && s.Features.Hash.SequenceEqual(Convert.FromBase64String("8J8PDw8PH/8="))));
     }
 }

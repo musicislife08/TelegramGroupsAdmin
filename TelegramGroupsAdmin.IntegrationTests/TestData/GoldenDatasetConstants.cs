@@ -89,6 +89,22 @@ internal static class GoldenDatasetConstants
     }
 
     /// <summary>
+    /// Content detection config anchors from <c>canonical/05_content_detection_configs.sql</c>.
+    /// </summary>
+    public static class ContentDetectionConfigs
+    {
+        /// <summary>
+        /// The global config row (<c>chat_id = 0</c>). Its stored JSON predates the
+        /// <c>HamSkipThreshold</c> image/video settings (the key is absent) and carries a non-default
+        /// <c>ImageSpam.OcrConfidenceThreshold</c> of 75, which proves a read came from the row.
+        /// </summary>
+        public const long GlobalRowId = 2;
+
+        /// <summary>The stored (non-default) <c>ImageSpam.OcrConfidenceThreshold</c> of <see cref="GlobalRowId"/>.</summary>
+        public const double GlobalImageOcrConfidenceThreshold = 75;
+    }
+
+    /// <summary>
     /// Telegram user anchors from <c>canonical/02_telegram_users.sql</c>. Each constant
     /// pins a specific role the test suite relies on (top author, second author,
     /// labeling actor). Identity boundary: all IDs land in
