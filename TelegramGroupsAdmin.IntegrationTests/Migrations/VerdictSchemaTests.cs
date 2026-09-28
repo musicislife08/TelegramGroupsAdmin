@@ -52,11 +52,21 @@ public class VerdictSchemaTests
     [TestCase(VerdictSource.FileScan, VerdictClassification.ImplicitHam)]
     [TestCase(VerdictSource.ReviewDismiss, VerdictClassification.ExplicitHam)]
     public void CheckConstraint_RejectsInconsistentSourceAndClassification(VerdictSource source, VerdictClassification classification)
-        => Assert.ThrowsAsync<PostgresException>(() => InsertAsync((int)source, (int)classification));
+    {
+        var ex = Assert.ThrowsAsync<PostgresException>(() => InsertAsync((int)source, (int)classification));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(ex!.SqlState, Is.EqualTo(PostgresErrorCodes.CheckViolation));
+            Assert.That(ex.ConstraintName, Is.EqualTo("CK_detection_results_source_classification"));
+        }
+    }
 
     [Test]
     public void CheckConstraint_RejectsStoredUnscanned()
-        => Assert.ThrowsAsync<PostgresException>(() => InsertAsync((int)VerdictSource.ContentScan, (int)VerdictClassification.Unscanned));
+    {
+        var ex = Assert.ThrowsAsync<PostgresException>(() => InsertAsync((int)VerdictSource.ContentScan, (int)VerdictClassification.Unscanned));
+        Assert.That(ex!.SqlState, Is.EqualTo(PostgresErrorCodes.CheckViolation));
+    }
 
     [Test]
     public async Task View_PassesIsSpamThrough()

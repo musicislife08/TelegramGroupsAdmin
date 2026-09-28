@@ -209,6 +209,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                 ALTER TABLE detection_results ALTER COLUMN detection_source DROP DEFAULT;
                 ALTER TABLE detection_results ALTER COLUMN used_for_training DROP DEFAULT;
+                ALTER TABLE detection_results ALTER COLUMN net_score DROP DEFAULT;
 
                 ALTER TABLE detection_results ADD COLUMN is_spam boolean GENERATED ALWAYS AS (net_score > 0) STORED;
                 CREATE INDEX ix_detection_results_is_spam ON detection_results (is_spam);

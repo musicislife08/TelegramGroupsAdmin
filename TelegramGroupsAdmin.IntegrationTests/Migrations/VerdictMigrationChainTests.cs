@@ -88,4 +88,31 @@ public class VerdictMigrationChainTests
             Assert.That(reader.GetBoolean(1), Is.EqualTo(expectedIsSpam));
         }
     }
+
+    /// <summary>
+    /// Runs last: reverting DropLegacyVerdictColumns restores the legacy columns without leaving
+    /// the temporary backfill defaults behind (the columns had none before Up).
+    /// </summary>
+    [Test, Order(3)]
+    public async Task DropLegacyVerdictColumnsDown_LeavesNoLegacyColumnDefaults()
+    {
+        await _helper.ApplyNextMigrationAsync(MigrationId<UpdateDetectionAnalyticsViews>());
+
+        var defaults = await _helper.ExecuteScalarAsync<long>("""
+            SELECT count(*) FROM information_schema.columns
+            WHERE table_name = 'detection_results'
+              AND column_name IN ('detection_source', 'used_for_training', 'net_score')
+              AND column_default IS NOT NULL
+            """);
+        var columns = await _helper.ExecuteScalarAsync<long>("""
+            SELECT count(*) FROM information_schema.columns
+            WHERE table_name = 'detection_results'
+              AND column_name IN ('detection_source', 'used_for_training', 'net_score')
+            """);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(columns, Is.EqualTo(3), "Down must restore the legacy columns");
+            Assert.That(defaults, Is.Zero);
+        }
+    }
 }
