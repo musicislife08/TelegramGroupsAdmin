@@ -14,7 +14,7 @@ The binding rule set lives in `.claude/rules/integration-test-data.md` and is in
 ## Part 1 - Dataset orientation
 
 ### What this is
-The canonical dataset is a frozen superset of every entity type the integration suite needs to read from. Tests clone it per-method via Postgres template DBs (`MigrationTestHelper.CreateDatabaseFromGoldenTemplateAsync`) and either consume it as-is, reduce it down with `GoldenDataset.Reduce(ctx).KeepMessages(...).ApplyAsync()` (subtractive — FK CASCADE drops everything outside the allowlist), or mutate it in-place with `GoldenDataset.Mutate(ctx).ShiftDetectionResultTimestamps(...).ApplyAsync()` (NOW()-relative re-timing for windowed aggregations). Source: `TestData/SQL/canonical/*.sql` (36 files, 3,178 INSERT statements).
+The canonical dataset is a frozen superset of every entity type the integration suite needs to read from. Tests clone it per-method via Postgres template DBs (`MigrationTestHelper.CreateDatabaseFromGoldenTemplateAsync`) and either consume it as-is, reduce it down with `GoldenDataset.Reduce(ctx).KeepMessages(...).ApplyAsync()` (subtractive — FK CASCADE drops everything outside the allowlist), or mutate it in-place with `GoldenDataset.Mutate(ctx).ShiftDetectionResultTimestamps(...).ApplyAsync()` (NOW()-relative re-timing for windowed aggregations). Source: `TestData/SQL/canonical/*.sql` (36 files, 2,991 INSERT statements).
 
 True-empty tests use `MigrationTestHelper.CreateDatabaseFromEmptyTemplateAsync` instead (post-migrate, zero rows) — cheaper than a golden clone, and the right choice when the SUT writes its own state from scratch.
 
@@ -64,8 +64,8 @@ Origin: prod DB snapshot from 2026-04-30. Bootstrap pipeline (full detail in `do
 | 29 | invites | 19 | |
 | 30 | reports | 14 | `reviewed_by` mapped via deterministic hashtext to canonical fixture emails. Ids 186-188 are synthetic pending fixtures (one user, three report types) added for join-gate cleanup tests. All six pre-existing exam (`type=2`) contexts carry `"outcome": 0`. |
 | 31 | message_edits | 23 | Edit history for messages whose canonical row carries `edit_count > 0`. |
-| 32 | detection_results | 376 | URL hostnames in `check_results_json` scrubbed to `canonical-spam.test`. `is_spam` is a generated column. |
-| 33 | training_labels | 200 | 185 prod-derived + 15 synthetic explicit_ham promotions (`reason='canonical_synthetic_promotion'`). |
+| 32 | detection_results | 459 | Verdict events: `source`/`classification` set by `tools/convert-canonical-to-verdict-events.sql` (canonical edit 2026-09-27), which also folded the training labels in as decision rows (84 added). URL hostnames in `check_results_json` scrubbed to `canonical-spam.test`. `is_spam` is a generated column (legacy; the `message_verdicts` view is the verdict). |
+| 33 | training_labels | 198 | 183 prod-derived + 15 synthetic explicit_ham promotions (`reason='canonical_synthetic_promotion'`). Msgs 7796 and 216684 removed and 82837 re-timed (canonical edit 2026-09-27, see Part 2 "Verdict events"). Legacy: read until the table is dropped. |
 | 34 | user_actions | 993 | Bootstrap missed adding 7 synthetic ban-celebration anchor rows; see Part 2 ban-celebration note. |
 | 35 | message_translations | 14 | Non-noop translations only; URL hostnames scrubbed. |
 | 36 | ban_celebration_subscribers | 5 | Approved canonical addition 2026-09-25 (new table — no row to flag-edit). See Part 2 "DM ban celebration subscribers". |
@@ -104,6 +104,7 @@ Layout (`internal static class GoldenDatasetConstants` with nested static classe
 - `Retention` — message anchors, `MessageShifts`, `AllMessageRefs`, `ExpectedDeletionsWith30DayRetention` (consumed by `MessageHistoryRepositoryTests.CleanupExpiredAsync_*`)
 - `Analytics` — DR / WR anchors, `DetectionResultShifts`, `WelcomeResponseShifts`, `AllMessageRefs`, expected counts (consumed by `AnalyticsRepositoryTests`)
 - `Reports` — `PendingExamFailureId`, `ResolvedExamFailureId`, `AutoApprovedExamPassId`, `AutoApprovedExamPassUserId` (consumed by `ExamResultRepositoryTests`)
+- `Verdicts` — verdict-event anchors for the `message_verdicts` view, training levels, auto-trust and retention (see Part 2 "Verdict events")
 
 Promote a constant to its top-level domain class (`WebUsers`, `Chats`) once a second consumer wants it; until then, keep it under a test-domain nested class next to the tests that use it. The `GoldenDataset.cs` loader file holds the canonical *behavior* (`LoadCanonicalAsync`, `Reduce`, `Mutate`); the constants file holds canonical *data*.
 
@@ -288,6 +289,29 @@ Anchors are in code as `GoldenDatasetConstants.DmCelebrations`. None of these us
 | @ToniBaronePaul | `9782251136844` | true (and `is_banned=true`) | Workshop Alumni | a subscription row that outlived its owner's ban; "deliverable" must exclude banned users |
 
 Workshop Alumni (`-100059667856554`) has no `ban_celebration_config`, so its effective celebration config is disabled: a subscribers-only chat.
+
+### Verdict events (canonical edit 2026-09-27)
+
+`detection_results` is an append-only verdict-event log; `message_verdicts` resolves each message to its latest non-FileScan row (`detected_at DESC, id DESC`, `Unscanned` when none). The conversion is `TestData/SQL/tools/convert-canonical-to-verdict-events.sql` (provenance, not embedded; its header records how it was run). `TestData/CanonicalSlices.cs` freezes every non-chat-0 message's slice under the old model (training_labels + `is_spam`/`used_for_training`); `CanonicalVerdictOracleTests` checks the view against it (msg 104948 is a documented spec-mandated override to ExplicitSpam) and checks chat-0 samples separately. Anchors are in code as `GoldenDatasetConstants.Verdicts`.
+
+| Constant | Anchor | Verdict | Use when |
+|---|---|---|---|
+| `CorrectedToHamMsgId` | msg 213409, @dinnersnazzy (9257421184750), MainChat | scan dr2026, then manual ham correction dr2031 (`LegacyManual`) → `ExplicitHam` | a later decision supersedes a scan |
+| `AutoBanMsgId` | msg 220384, @AndrewLong6 (9127536472473), MainChat | `AutoBan` decision (folded label, no user) → `ExplicitSpam` | auto-ban decisions; Remove from training |
+| `MarkAsHamSubjectMsgId` | msg 8646, Land Owners (sender 9550752264926) | `AutoBan` → `ExplicitSpam` | the Mark as Ham write subject |
+| `EditFlipMsgId` / `EditFlipChatId` | msg 82837, chat -100065252085265, @financerope (9468093502025), 5 edits | **edited:** ham-labeled, then edited into spam; the v1 rescan dr1334 wins → `ContentScan` / `ImplicitSpam` | an edit rescan supersedes an earlier admin decision; edits count once |
+| `SpamInTrustWindowMsgId` / `SpamInTrustWindowUserId` | msg 7796, @mouthsafeguard (9917295586642), Land Owners | **edited:** dr1339 → `UntrainedSpam`; ham decision dr1349 and its label removed | spam among a user's last three messages (auto-trust denied) |
+| `FileScanBesideScanMsgId` / `FileScanRowId` | msg 216684 (sender 9778846455554), MainChat; FileScan dr2535 | **edited:** dr2535 → clean `FileScan` (newest row, ignored by the view); verdict from dr2534 → `UntrainedSpam`; spam label removed | the view must skip FileScan rows |
+| `UntrainedHamMsgId` / `UntrainedHamChatId` / `UntrainedHamUserId` | msg 22160, Crypto Group (-100094881429433), @wrongedjersey (9621984255379, not banned) | **edited:** dr1933 → AI review 2.0 below threshold → `UntrainedHam` | allowed-but-untrained ham (auto-trust counts it, training does not) |
+| `UnscannedMsgId` | msg 219219, @unhelpfulgrab, MainChat | no rows → `Unscanned` | unscanned messages |
+| `AllHamUserId` | user 9184102838760, msgs 71028/71030/71041 | all `ExplicitHam` | auto-trust with N ham messages |
+| `LabeledOnlyRetentionMsgId` | msg 7974, @arisepacifism (9702019239117) | manual ham dr2009 (`used_for_training=false`) → `ExplicitHam` | retention keeps decision-only messages |
+
+Flag-edits (all rows were unreferenced by tests and docs beforehand):
+- **4a** msg 82837: dr1343 (admin ham) and its `training_labels` row re-timed to `2025-10-29 21:59:00+00` (after scan dr1333, before the first edit at 22:00); dr1334 → score/net 4.5, `used_for_training=true`, `ImplicitSpam`, reason `[Edit #1] AI confirmed spam: …`.
+- **4b** msg 7796: dr1339 → score/net 3.0, `used_for_training=false`, `UntrainedSpam`; dr1349 deleted; label removed from `33_training_labels.sql`.
+- **4c** msg 216684: dr2535 → `file_scan` / `FileScanningCheck`, `FileScan` / `UntrainedHam`, score 0, re-timed 1 minute after the newest row; label removed from `33_training_labels.sql`.
+- **4d** msg 22160: dr1933 → score/net 2.0, `used_for_training=false`, `UntrainedHam`, reason `AI below review threshold: AI: Review …`, `check_results_json` with a Similarity 3.5 check and an OpenAI 2.0 review.
 
 ### Synthetic / reserved rows (do not regenerate)
 - `welcome_responses` IDs `999001..999005`: 5 status branches anchored on `(MainChat_Id=-100026957614982, user_id=9196379650113, username='canonical_user1')`. Mapping: `999001`=Pending, `999002`=Accepted, `999003`=Denied, `999004`=Timeout, `999005`=Left.

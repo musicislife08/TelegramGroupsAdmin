@@ -46,7 +46,7 @@
 
   <ItemGroup>
     <!-- Canonical SQL fixtures (auto-embedded; canonical/*.sql is FK-ordered by filename prefix). -->
-    <EmbeddedResource Include="TestData\SQL\**\*.sql" />
+    <EmbeddedResource Include="TestData\SQL\**\*.sql" Exclude="TestData\SQL\tools\**" />
   </ItemGroup>
 
   <ItemGroup>

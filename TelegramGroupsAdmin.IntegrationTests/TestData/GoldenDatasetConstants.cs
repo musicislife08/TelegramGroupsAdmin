@@ -12,6 +12,7 @@ namespace TelegramGroupsAdmin.IntegrationTests.TestData;
 ///   • <see cref="Retention"/>  — anchors for retention-cleanup tests
 ///   • <see cref="Analytics"/>  — anchors for analytics-aggregation tests
 ///   • <see cref="Reports"/>    — anchors for exam-result repository tests
+///   • <see cref="Verdicts"/>   — verdict-event anchors (message_verdicts view, training levels)
 ///
 /// Promote a constant up to a top-level domain class (e.g. <see cref="WebUsers"/>,
 /// <see cref="Chats"/>) once a second consumer wants it; until then, keep it next
@@ -443,5 +444,63 @@ internal static class GoldenDatasetConstants
 
         /// <summary>telegram_user_id behind <see cref="AutoApprovedExamPassId"/> (@sillywolf, ham).</summary>
         public const long AutoApprovedExamPassUserId = 9960171136314;
+    }
+
+    /// <summary>
+    /// Verdict-event anchors (canonical edit 2026-09-27). See IntegrationTests/CLAUDE.md Part 2
+    /// "Verdict events". Edited rows are guarded by read-back assertions in their tests.
+    /// </summary>
+    public static class Verdicts
+    {
+        /// <summary>Scan, then manual ham correction (LegacyManual) → ExplicitHam. @dinnersnazzy, MainChat.</summary>
+        public const int CorrectedToHamMsgId = 213409;
+
+        /// <summary>Auto-ban decision (migrated label, no user) → ExplicitSpam. @AndrewLong6, MainChat.</summary>
+        public const int AutoBanMsgId = 220384;
+
+        /// <summary>Auto-banned message on Land Owners used as the Mark as Ham subject (AutoBan → ExplicitSpam).</summary>
+        public const int MarkAsHamSubjectMsgId = 8646;
+
+        /// <summary>
+        /// Edited: ham-labeled, then edited into spam (dr 1334 re-scan wins; label re-timed before the edit)
+        /// → ImplicitSpam. @financerope (9468093502025), 5 edits.
+        /// </summary>
+        public const int EditFlipMsgId = 82837;
+
+        /// <summary>Chat of <see cref="EditFlipMsgId"/>.</summary>
+        public const long EditFlipChatId = -100065252085265L;
+
+        /// <summary>Edited: UntrainedSpam scan (dr 1339), ham label removed. @mouthsafeguard's latest of three messages (Land Owners).</summary>
+        public const int SpamInTrustWindowMsgId = 7796;
+
+        /// <summary>@mouthsafeguard.</summary>
+        public const long SpamInTrustWindowUserId = 9917295586642L;
+
+        /// <summary>
+        /// Edited: newest row is a clean FileScan (dr 2535) that the view must ignore; the verdict comes
+        /// from ContentScan dr 2534 (UntrainedSpam). Spam label removed. MainChat.
+        /// </summary>
+        public const int FileScanBesideScanMsgId = 216684;
+
+        /// <summary>The FileScan row of <see cref="FileScanBesideScanMsgId"/>.</summary>
+        public const long FileScanRowId = 2535;
+
+        /// <summary>Edited: UntrainedHam (AI review 2.0 below threshold, dr 1933). Crypto Group; message kept, sender not banned.</summary>
+        public const int UntrainedHamMsgId = 22160;
+
+        /// <summary>Chat of <see cref="UntrainedHamMsgId"/> (Crypto Group).</summary>
+        public const long UntrainedHamChatId = -100094881429433L;
+
+        /// <summary>Sender of <see cref="UntrainedHamMsgId"/> (@wrongedjersey, not banned).</summary>
+        public const long UntrainedHamUserId = 9621984255379L;
+
+        /// <summary>Unscanned message (no verdict rows). @unhelpfulgrab, MainChat.</summary>
+        public const int UnscannedMsgId = 219219;
+
+        /// <summary>User whose three latest messages are all training ham (msgs 71028/71030/71041).</summary>
+        public const long AllHamUserId = 9184102838760L;
+
+        /// <summary>Only a training label keeps this old message (all its rows used_for_training = false). @arisepacifism.</summary>
+        public const int LabeledOnlyRetentionMsgId = 7974;
     }
 }
