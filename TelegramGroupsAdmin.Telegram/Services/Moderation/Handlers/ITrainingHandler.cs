@@ -16,8 +16,9 @@ public interface ITrainingHandler
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Records a ham decision: WebMarkHam (ExplicitHam) or ReviewDismiss (ImplicitHam), and
-    /// triggers retraining. The newer event supersedes older spam events everywhere.
+    /// Records a clean decision (ExplicitHam) from Messages "Mark clean" (WebMarkHam) or the
+    /// review queue "Mark clean" (ReviewClean), and triggers retraining. The newer event
+    /// supersedes older spam events everywhere.
     /// </summary>
     Task CreateHamSampleAsync(int messageId, ChatIdentity chat, Actor executor, VerdictSource source, string reason,
         CancellationToken cancellationToken = default);

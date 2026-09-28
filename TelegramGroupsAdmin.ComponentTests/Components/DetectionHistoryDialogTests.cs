@@ -230,7 +230,7 @@ public class DetectionHistoryDialogTests : DialogTestContext
         // Assert
         provider.WaitForAssertion(() =>
         {
-            Assert.That(provider.Markup, Does.Contain("Explicit ham"));
+            Assert.That(provider.Markup, Does.Contain("Clean (confirmed)"));
             Assert.That(provider.Markup, Does.Contain("WebMarkHam"));
         });
     }

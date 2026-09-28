@@ -95,12 +95,12 @@
                     </FieldWithHelp>
                 </MudItem>
                 <MudItem xs="12" md="6">
-                    <FieldWithHelp HelpText="Minimum perceptual hash similarity (0.0-1.0) to an admin-verified ham video (marked ham by an admin) for Layer 1 to skip OCR and Vision. Matches to auto-scanned ham, or below this threshold, still run OCR and Vision.">
+                    <FieldWithHelp HelpText="Minimum perceptual hash similarity (0.0-1.0) to an admin-verified clean video (marked clean by an admin) for Layer 1 to skip OCR and Vision. Matches to auto-scanned clean videos, or below this threshold, still run OCR and Vision.">
                         <MudNumericField @bind-Value="activeConfig.HamSkipThreshold"
-                                        Label="Ham Skip Threshold"
+                                        Label="Clean Skip Threshold"
                                         Min="0.5" Max="1.0" Step="0.01"
                                         Disabled="@isReadOnly"
-                                        HelperText="@(isReadOnly ? $"Using global: {activeConfig.HamSkipThreshold:F2}" : "Similarity to an admin-verified ham video required to skip OCR/Vision")" />
+                                        HelperText="@(isReadOnly ? $"Using global: {activeConfig.HamSkipThreshold:F2}" : "Similarity to an admin-verified clean video required to skip OCR/Vision")" />
                     </FieldWithHelp>
                 </MudItem>
                 <MudItem xs="12" md="6">

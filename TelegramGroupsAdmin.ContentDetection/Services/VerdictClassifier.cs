@@ -1,4 +1,5 @@
 using TelegramGroupsAdmin.ContentDetection.Constants;
+using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.Core.Models;
 
 namespace TelegramGroupsAdmin.ContentDetection.Services;
@@ -15,7 +16,9 @@ public static class VerdictClassifier
 
         if (scan.IsSpam)
         {
-            return IsTrainingWorthy(scan)
+            // A review-queued flag was not confident enough to act on alone, so it is not
+            // confident enough to learn from: only an admin's Mark spam / Mark clean trains it.
+            return scan.RecommendedAction != DetectionAction.ReviewQueue && IsTrainingWorthy(scan)
                 ? VerdictClassification.ImplicitSpam
                 : VerdictClassification.UntrainedSpam;
         }
@@ -35,8 +38,7 @@ public static class VerdictClassifier
     {
         VerdictSource.AutoBan or VerdictSource.WebMarkSpam or VerdictSource.SpamCommand or VerdictSource.ReviewSpam
             => VerdictClassification.ExplicitSpam,
-        VerdictSource.WebMarkHam => VerdictClassification.ExplicitHam,
-        VerdictSource.ReviewDismiss => VerdictClassification.ImplicitHam,
+        VerdictSource.WebMarkHam or VerdictSource.ReviewClean => VerdictClassification.ExplicitHam,
         VerdictSource.TrainingDataPage or VerdictSource.Import or VerdictSource.LegacyManual
             => RequireIsSpam(source, isSpam) ? VerdictClassification.ExplicitSpam : VerdictClassification.ExplicitHam,
         VerdictSource.TrainingExclude

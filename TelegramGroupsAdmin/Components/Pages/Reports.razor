@@ -412,6 +412,7 @@
             ReportAction.Ban => await ReportActionsService.HandleContentBanAsync(args.Report.Id, executor, cancellationToken: _cancellationTokenSource.Token),
             ReportAction.Warn => await ReportActionsService.HandleContentWarnAsync(args.Report.Id, executor, cancellationToken: _cancellationTokenSource.Token),
             ReportAction.Dismiss => await ReportActionsService.HandleContentDismissAsync(args.Report.Id, executor, cancellationToken: _cancellationTokenSource.Token),
+            ReportAction.Clean => await ReportActionsService.HandleContentCleanAsync(args.Report.Id, executor, cancellationToken: _cancellationTokenSource.Token),
             _ => new ReviewActionResult(false, "Unknown action")
         };
         var severity = result.Success ? Severity.Success

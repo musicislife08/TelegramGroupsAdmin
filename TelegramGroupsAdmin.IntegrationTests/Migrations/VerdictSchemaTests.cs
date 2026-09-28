@@ -39,6 +39,7 @@ public class VerdictSchemaTests
     [TestCase(VerdictSource.ContentScan, VerdictClassification.UntrainedHam)]
     [TestCase(VerdictSource.AutoBan, VerdictClassification.ExplicitSpam)]
     [TestCase(VerdictSource.WebMarkHam, VerdictClassification.ExplicitHam)]
+    [TestCase(VerdictSource.ReviewClean, VerdictClassification.ExplicitHam)]
     public async Task GeneratedIsSpam_MatchesCoreIsSpam(VerdictSource source, VerdictClassification classification)
     {
         await InsertAsync((int)source, (int)classification);
@@ -50,7 +51,8 @@ public class VerdictSchemaTests
     [TestCase(VerdictSource.AutoBan, VerdictClassification.ImplicitSpam)]
     [TestCase(VerdictSource.ContentScan, VerdictClassification.ExplicitSpam)]
     [TestCase(VerdictSource.FileScan, VerdictClassification.ImplicitHam)]
-    [TestCase(VerdictSource.ReviewDismiss, VerdictClassification.ExplicitHam)]
+    [TestCase(VerdictSource.ReviewClean, VerdictClassification.ImplicitHam)]
+    [TestCase((VerdictSource)15, VerdictClassification.ImplicitHam)]
     public void CheckConstraint_RejectsInconsistentSourceAndClassification(VerdictSource source, VerdictClassification classification)
     {
         var ex = Assert.ThrowsAsync<PostgresException>(() => InsertAsync((int)source, (int)classification));

@@ -45,7 +45,7 @@ provenance (`source`), the audit link (`audit_log_id`), and "remove from trainin
 
 - Exactly one rule decides spam vs. ham for a scan, and it is shared by the verdict and the action.
 - Exactly one place resolves a message's current status, and "the latest event wins" across
-  edits, admin decisions, auto-bans and Dismiss.
+  edits, admin decisions and auto-bans. (Dismiss is not a verdict event; see Amendment below.)
 - The four training levels (explicit/implicit × spam/ham) are one stored value, not a join.
 - Admin corrections supersede earlier verdicts everywhere (training, AI history, auto-trust, stop
   words, prompt examples, Training Data page, Layer 1 media), with no per-writer cleanup.
@@ -63,7 +63,7 @@ provenance (`source`), the audit link (`audit_log_id`), and "remove from trainin
 | Scan spam rule | `score >= ReviewQueueThreshold` on **every** path, AI-confirmed included. Hard block → spam. AI veto → ham. |
 | AI "review" below threshold | `UntrainedHam`: allowed, "ok" in AI history, not a ham training sample. |
 | Auto-bans | Write an `AutoBan` decision (`ExplicitSpam`). Intended; auto-ban requires score ≥ 4.0 **and** OpenAI ≥ 4.0. |
-| Review "Dismiss" | Writes a `ReviewDismiss` decision classified `ImplicitHam` (ham, but not admin-grade). Mark as Ham remains the only source of explicit ham. |
+| Review "Dismiss" | Acknowledgement only: writes no verdict event, the previous verdict stands. Review "Mark clean" writes a `ReviewClean` decision (`ExplicitHam`). *(Amended; originally `ReviewDismiss` → `ImplicitHam`.)* |
 | Auto-trust | Counts any current verdict that is ham, `UntrainedHam` included. |
 | "Remove from training" | A `TrainingExclude` decision: keeps the message's current spam/ham, classifies it `Untrained*`. Replaces the `used_for_training = false` soft delete. |
 | Media features | `messages.media_features` jsonb, captured at scan time. Layer 1 = view ⋈ features. |
@@ -91,7 +91,7 @@ provenance (`source`), the audit link (`audit_log_id`), and "remove from trainin
 | Group | Values |
 |---|---|
 | Scans | `ContentScan`, `FileScan` |
-| Decisions | `AutoBan` (includes hard block; reason says which), `WebMarkSpam`, `WebMarkHam`, `SpamCommand`, `ReviewSpam`, `ReviewDismiss`, `TrainingDataPage`, `TrainingExclude`, `Import` |
+| Decisions | `AutoBan` (includes hard block; reason says which), `WebMarkSpam`, `WebMarkHam`, `SpamCommand`, `ReviewSpam`, `ReviewClean`, `TrainingDataPage`, `TrainingExclude`, `Import` |
 | Migration only | `LegacyManual` |
 
 `VerdictSourceExtensions.IsDecision()` / `IsScan()` is the fixed mapping. There is no separate
@@ -120,7 +120,7 @@ result). A parity test pins it to the generated column for every enum value.
 **CHECK constraints**
 
 - `classification` ∈ the six stored values.
-- Decision sources pin their classification: `AutoBan`, `WebMarkSpam`, `SpamCommand`, `ReviewSpam` → `ExplicitSpam`; `WebMarkHam` → `ExplicitHam`; `ReviewDismiss` → `ImplicitHam`; `TrainingDataPage`, `Import`, `LegacyManual` → `ExplicitSpam` or `ExplicitHam`.
+- Decision sources pin their classification: `AutoBan`, `WebMarkSpam`, `SpamCommand`, `ReviewSpam` → `ExplicitSpam`; `WebMarkHam`, `ReviewClean` → `ExplicitHam`; `TrainingDataPage`, `Import`, `LegacyManual` → `ExplicitSpam` or `ExplicitHam`.
 - `FileScan`, `TrainingExclude` → `UntrainedSpam` or `UntrainedHam`.
 - `ContentScan` → any non-explicit value.
 
@@ -223,7 +223,8 @@ that is the point to introduce a service.
 | `TrainingHandler.CreateSpamSampleAsync` | ±5 row (skipped for System) + label + image/video samples | `RecordDecisionAsync` with the caller's source (`AutoBan` for System); sample-saving block removed |
 | Messages.razor Mark as Spam / Mark as Ham | row + label written from the component | a handler method (#386); `WebMarkSpam` / `WebMarkHam` |
 | `SpamCommand` / `ContentReportHandler` spam | via `TrainingHandler` | `SpamCommand` / `ReviewSpam` source |
-| `ContentReportHandler.DismissAsync` | writes nothing | `RecordDecisionAsync(ReviewDismiss)` |
+| `ContentReportHandler.DismissAsync` | writes nothing | writes nothing (amended) |
+| `ContentReportHandler.CleanAsync` | — (new) | `RecordDecisionAsync(ReviewClean)` |
 | Training Data page (`AddManualTrainingSampleAsync`) | ±5 row, `used_for_training = true` | `RecordDecisionAsync(TrainingDataPage, isSpam)` |
 | Training Data page delete, Duplicates page removals (`ExcludeFromTrainingAsync`, 5 call sites) | sets `used_for_training = false` on a row | `RecordDecisionAsync(TrainingExclude, isSpam: current)`; `ExcludeFromTrainingAsync` removed |
 | Edit Training Sample | exclude old row + add new chat-0 sample | `TrainingExclude` on the old message + `TrainingDataPage` on the new one |
@@ -391,7 +392,8 @@ Part 2 recipe, and guarded by a read-back assertion in its test):
 | Auto-trust: `UntrainedHam` counts | msg 222716 (flag-edited) | treated as ham |
 | AI history `WasSpam` | chat MainChat, msg 210743 (sender 9566750116353) + msg 222716 | spam row → `spam`; `UntrainedHam` → `ok` |
 | Retention (#548) | msg 7974, @arisepacifism (9702019239117) | labeled-only message kept; an unlabeled expired message deleted |
-| Dismiss (#549) | report 186, msg 70989 (read-only use) | `ReviewDismiss` decision written (write is the subject); view → `ImplicitHam` |
+| Dismiss (#549) | unit level (`ContentReportHandlerTests`) | no verdict event written (amended) |
+| Mark clean | msg 7796 (`UntrainedSpam`, review-queue shape) | `ReviewClean` decision written (write is the subject); view → `ExplicitHam` |
 | Mark as Ham (#549) | msg 8646, Land Owners (sender 9550752264926), an auto-banned message | `WebMarkHam` decision written (the subject); view `ExplicitSpam` → `ExplicitHam`; message leaves every spam reader |
 | Retention: unlabeled expired deleted | existing `Retention` anchors in `GoldenDatasetConstants` | unchanged behaviour for untrained messages |
 | Layer 1 read | msg 222818 (flag-edited) | returned as a spam photo sample |
@@ -421,4 +423,14 @@ Execution notes:
 - (c) Msg 82837's admin ham decision (`dr1343`) was re-timed to before the first edit, so the edit's rescan (`dr1334`) wins under "latest event by time wins" (the edit-vs-admin rule).
 - (d) Migrations that touch the detector analytics views freeze their `CREATE VIEW` SQL as literal strings (`UpdateDetectionAnalyticsViews`, `DropLegacyVerdictColumns`); older migrations still point at the live `LegacyDetectionViewSql` constants, since those predate the freeze.
 - (e) `media_features` JSON accepts the `type` discriminator out of key order, because PostgreSQL `jsonb` reorders keys (shortest first) on storage; the same tolerance is applied to the backup export path (`TableExportService`).
-- (f) `ReviewDismiss` is recorded non-critically (a failed ham-decision write logs and continues rather than failing the dismissal) and only for messages that are actually stored (report dismissal itself always succeeds).
+- (f) Superseded by the amendment below: `ReviewDismiss` no longer exists.
+
+### Amendment (2026-09-28): Dismiss is an acknowledgement, review queue gains "Mark clean"
+
+Decided with the maintainer after local verification:
+
+- **Dismiss writes no verdict.** It means "an admin saw the notification and did not disagree", so the previous verdict stands. `VerdictSource.ReviewDismiss` (15) was removed before release; value 15 stays retired.
+- **Review queue "Mark clean"** (`ReportAction.Clean = 4`, `VerdictSource.ReviewClean = 19` → `ExplicitHam`) is the review-queue way to correct a false flag, identical on the web card and the DM keyboard (both route through `ReportActionsService` → `ContentReportHandler.CleanAsync`). The decision is recorded before the report is claimed, so a failed write leaves the report pending.
+- **Review-queued scans never train on their own.** `VerdictClassifier.ClassifyScan` returns `UntrainedSpam` for any spam scan whose `RecommendedAction` is `ReviewQueue`, regardless of score. Only Mark spam (`ReviewSpam` → `ExplicitSpam`) or Mark clean (`ReviewClean` → `ExplicitHam`) turns one into training data. Ban and Warn stay moderation-only and never touch the verdict. Historic rows are not re-classified (their review-vs-autoban action was never stored; 207 of the 210 local `ImplicitSpam` verdicts are pre-`AutoBan`-row auto-bans).
+- **"Ham" is gone from user-facing copy for these flows:** Messages "Mark as Ham" → "Mark Clean", bubble badge/tooltip "clean", verdict display names ("Spam/Clean (confirmed | auto | not trained)", "Not scanned"), and the image/video "Clean Skip Threshold" labels. Identifiers (`ExplicitHam`, `WebMarkHam`, `HamSkipThreshold`) are unchanged.
+- Migration `ReplaceReviewDismissWithReviewClean` swaps the source→classification CHECK (`15→3` out, `19→1` in); its `Down` maps any `ReviewClean` rows to `WebMarkHam`.

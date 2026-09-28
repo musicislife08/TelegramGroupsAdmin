@@ -929,8 +929,8 @@
             var wasPreviouslySpam = GetContentCheck(message.MessageId)?.IsSpam == true;
 
             var reason = wasPreviouslySpam
-                ? "Manually marked as ham (not spam) by admin - false positive correction"
-                : "Manually added as ham training sample by admin";
+                ? "Manually marked clean (not spam) by admin - false positive correction"
+                : "Manually marked clean by admin";
 
             await TrainingHandler.CreateHamSampleAsync(
                 message.MessageId, message.Chat, executor, VerdictSource.WebMarkHam, reason);
@@ -943,7 +943,7 @@
                     {
                         User = message.User,
                         Executor = executor,
-                        Reason = "False positive correction - message marked as ham by admin via UI",
+                        Reason = "False positive correction - message marked clean by admin via UI",
                         RestoreTrust = true // Restore trust to bypass future spam checks
                     });
 

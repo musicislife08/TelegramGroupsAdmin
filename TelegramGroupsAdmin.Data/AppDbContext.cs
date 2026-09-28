@@ -393,8 +393,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             t.HasCheckConstraint("CK_detection_results_classification", "classification IN (0, 1, 2, 3, 4, 5)");
             t.HasCheckConstraint("CK_detection_results_source_classification", """
                 (source IN (10, 11, 13, 14) AND classification = 0)
-                OR (source = 12 AND classification = 1)
-                OR (source = 15 AND classification = 3)
+                OR (source IN (12, 19) AND classification = 1)
                 OR (source IN (16, 18, 99) AND classification IN (0, 1))
                 OR (source IN (1, 17) AND classification IN (4, 5))
                 OR (source = 0 AND classification IN (2, 3, 4, 5))

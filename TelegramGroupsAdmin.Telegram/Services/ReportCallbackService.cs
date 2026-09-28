@@ -103,7 +103,7 @@ public sealed class ReportCallbackService(
     private async Task<ReviewActionResult> RouteContentReportAsync(
         long reviewId, int actionInt, Actor executor, CancellationToken cancellationToken)
     {
-        if (actionInt < 0 || actionInt > (int)ReportAction.Dismiss)
+        if (actionInt < 0 || actionInt > (int)ReportAction.Clean)
             return new ReviewActionResult(false, "Invalid action");
 
         return (ReportAction)actionInt switch
@@ -112,6 +112,7 @@ public sealed class ReportCallbackService(
             ReportAction.Ban => await reportActionsService.HandleContentBanAsync(reviewId, executor, cancellationToken: cancellationToken),
             ReportAction.Warn => await reportActionsService.HandleContentWarnAsync(reviewId, executor, cancellationToken: cancellationToken),
             ReportAction.Dismiss => await reportActionsService.HandleContentDismissAsync(reviewId, executor, cancellationToken: cancellationToken),
+            ReportAction.Clean => await reportActionsService.HandleContentCleanAsync(reviewId, executor, cancellationToken: cancellationToken),
             _ => new ReviewActionResult(false, "Unknown action")
         };
     }

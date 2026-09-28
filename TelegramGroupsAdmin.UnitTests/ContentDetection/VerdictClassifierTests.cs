@@ -11,8 +11,26 @@ public class VerdictClassifierTests
     private static ContentCheckResponseV2 Check(CheckName name, double score, bool abstained = false) =>
         new() { CheckName = name, Score = score, Abstained = abstained, Details = name.ToString() };
 
+    // Spam scans default to AutoBan (acted on alone); review-queued scans are built with ReviewQueueScan.
     private static ContentDetectionResult Scan(bool isSpam, double total, params ContentCheckResponseV2[] checks) =>
-        new() { IsSpam = isSpam, TotalScore = total, CheckResults = [.. checks] };
+        new()
+        {
+            IsSpam = isSpam, TotalScore = total, CheckResults = [.. checks],
+            RecommendedAction = isSpam ? DetectionAction.AutoBan : DetectionAction.Allow
+        };
+
+    private static ContentDetectionResult ReviewQueueScan(double total, params ContentCheckResponseV2[] checks) =>
+        Scan(true, total, checks) with { RecommendedAction = DetectionAction.ReviewQueue };
+
+    [Test]
+    public void ClassifyScan_ReviewQueuedWithConfidentAI_IsUntrainedSpam()
+        => Assert.That(VerdictClassifier.ClassifyScan(ReviewQueueScan(4.5, Check(CheckName.StopWords, 3), Check(CheckName.OpenAI, 4.5))),
+            Is.EqualTo(VerdictClassification.UntrainedSpam));
+
+    [Test]
+    public void ClassifyScan_ReviewQueuedPipelineAboveTrainingThreshold_IsUntrainedSpam()
+        => Assert.That(VerdictClassifier.ClassifyScan(ReviewQueueScan(4.5, Check(CheckName.Bayes, 4.5))),
+            Is.EqualTo(VerdictClassification.UntrainedSpam));
 
     [Test]
     public void ClassifyScan_SpamWithConfidentAI_IsImplicitSpam()
@@ -69,7 +87,7 @@ public class VerdictClassifierTests
     [TestCase(VerdictSource.SpamCommand, VerdictClassification.ExplicitSpam)]
     [TestCase(VerdictSource.ReviewSpam, VerdictClassification.ExplicitSpam)]
     [TestCase(VerdictSource.WebMarkHam, VerdictClassification.ExplicitHam)]
-    [TestCase(VerdictSource.ReviewDismiss, VerdictClassification.ImplicitHam)]
+    [TestCase(VerdictSource.ReviewClean, VerdictClassification.ExplicitHam)]
     public void ClassifyDecision_FixedSources(VerdictSource source, VerdictClassification expected)
         => Assert.That(VerdictClassifier.ClassifyDecision(source), Is.EqualTo(expected));
 

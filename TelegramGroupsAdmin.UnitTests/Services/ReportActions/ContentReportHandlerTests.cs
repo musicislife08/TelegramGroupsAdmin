@@ -403,7 +403,7 @@ public class ContentReportHandlerTests
     #region DismissAsync Tests
 
     [Test]
-    public async Task DismissAsync_RecordsReviewDismissHamDecision()
+    public async Task DismissAsync_Success_LeavesVerdictUnchanged()
     {
         var report = CreateTestReport();
         _mockReportsRepo.GetContentReportAsync(TestReportId, Arg.Any<CancellationToken>())
@@ -412,63 +412,9 @@ public class ContentReportHandlerTests
         var result = await _handler.DismissAsync(TestReportId, TestExecutor, "not actionable", CancellationToken.None);
 
         Assert.That(result.Success, Is.True);
-        await _trainingHandler.Received(1).CreateHamSampleAsync(
-            report.MessageId, report.Chat, TestExecutor, VerdictSource.ReviewDismiss,
-            $"Report #{TestReportId} dismissed: not actionable", Arg.Any<CancellationToken>());
-    }
-
-    [Test]
-    public async Task DismissAsync_HamDecisionFails_StillAuditsAndCleansUp()
-    {
-        var reportCommandMessageId = 999;
-        var report = CreateTestReport(reportCommandMessageId: reportCommandMessageId);
-        _mockReportsRepo.GetContentReportAsync(TestReportId, Arg.Any<CancellationToken>())
-            .Returns(report);
-        _trainingHandler.CreateHamSampleAsync(
-                Arg.Any<int>(), Arg.Any<ChatIdentity>(), Arg.Any<Actor>(), Arg.Any<VerdictSource>(),
-                Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .ThrowsAsync(new InvalidOperationException("FK violation"));
-
-        var result = await _handler.DismissAsync(TestReportId, TestExecutor, "not actionable", CancellationToken.None);
-
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(result.Success, Is.True);
-            Assert.That(result.ActionName, Is.EqualTo("Dismiss"));
-        }
-        await _mockAuditService.Received(1).LogEventAsync(
-            AuditEventType.ReportReviewed, TestExecutor, null, Arg.Any<string>(), Arg.Any<CancellationToken>());
-        await _mockBotMessageService.Received(1).DeleteAndMarkMessageAsync(
-            TestChatId, reportCommandMessageId,
-            deletionSource: "report_reviewed",
-            cancellationToken: Arg.Any<CancellationToken>());
-        await _mockBotMessageService.Received(1).SendAndSaveMessageAsync(
-            TestChatId,
-            Arg.Is<string>(s => s!.Contains("reviewed") && s.Contains("no action")),
-            parseMode: ParseMode.None,
-            replyParameters: Arg.Is<ReplyParameters>(r => r!.MessageId == TestMessageId),
-            cancellationToken: Arg.Any<CancellationToken>());
-    }
-
-    [Test]
-    public async Task DismissAsync_ReportAlreadyHandled_DoesNotRecordHamDecision()
-    {
-        var report = new Report(
-            Id: TestReportId, MessageId: TestMessageId,
-            Chat: new ChatIdentity(TestChatId, "TestChat"),
-            ReportCommandMessageId: null,
-            ReportedByUserId: 11111L, ReportedByUserName: "reporter",
-            ReportedAt: DateTimeOffset.UtcNow.AddMinutes(-10),
-            Status: ReportStatus.Reviewed, ReviewedBy: "OtherAdmin",
-            ReviewedAt: DateTimeOffset.UtcNow.AddMinutes(-5),
-            ActionTaken: "spam", AdminNotes: null);
-        _mockReportsRepo.GetContentReportAsync(TestReportId, Arg.Any<CancellationToken>())
-            .Returns(report);
-
-        var result = await _handler.DismissAsync(TestReportId, TestExecutor, null, CancellationToken.None);
-
-        Assert.That(result.IsAlreadyHandled, Is.True);
         await _trainingHandler.DidNotReceiveWithAnyArgs().CreateHamSampleAsync(
+            default, default!, default!, default, default!, default);
+        await _trainingHandler.DidNotReceiveWithAnyArgs().CreateSpamSampleAsync(
             default, default!, default!, default, default!, default);
     }
 
@@ -555,6 +501,84 @@ public class ContentReportHandlerTests
         var result = await _handler.DismissAsync(TestReportId, TestExecutor, null, CancellationToken.None);
 
         Assert.That(result.Success, Is.True);
+    }
+
+    #endregion
+
+    #region CleanAsync Tests
+
+    [Test]
+    public async Task CleanAsync_Success_RecordsReviewCleanDecisionAndMarksReviewed()
+    {
+        var report = CreateTestReport();
+        SetupReportAndMessage(report, CreateTestMessage());
+
+        var result = await _handler.CleanAsync(TestReportId, TestExecutor, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Success, Is.True);
+            Assert.That(result.ActionName, Is.EqualTo("Clean"));
+        }
+        await _trainingHandler.Received(1).CreateHamSampleAsync(
+            TestMessageId, report.Chat, TestExecutor, VerdictSource.ReviewClean,
+            $"Report #{TestReportId} - marked clean", Arg.Any<CancellationToken>());
+        await _mockReportsRepo.Received(1).TryUpdateStatusAsync(
+            TestReportId, ReportStatus.Reviewed, TestReviewerEmail,
+            "clean", "Message marked clean", Arg.Any<CancellationToken>());
+        await _mockModerationService.DidNotReceiveWithAnyArgs().BanUserAsync(default!, default);
+    }
+
+    [Test]
+    public async Task CleanAsync_Success_RepliesToReportedMessageAndDeletesReportCommand()
+    {
+        var reportCommandMessageId = 999;
+        SetupReportAndMessage(CreateTestReport(reportCommandMessageId: reportCommandMessageId), CreateTestMessage());
+
+        await _handler.CleanAsync(TestReportId, TestExecutor, CancellationToken.None);
+
+        await _mockBotMessageService.Received(1).SendAndSaveMessageAsync(
+            TestChatId,
+            Arg.Is<string>(s => s!.Contains("reviewed")),
+            parseMode: ParseMode.None,
+            replyParameters: Arg.Is<ReplyParameters>(r => r!.MessageId == TestMessageId),
+            cancellationToken: Arg.Any<CancellationToken>());
+        await _mockBotMessageService.Received(1).DeleteAndMarkMessageAsync(
+            TestChatId, reportCommandMessageId,
+            deletionSource: "report_reviewed",
+            cancellationToken: Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public void CleanAsync_DecisionFails_LeavesReportPending()
+    {
+        SetupReportAndMessage(CreateTestReport(), CreateTestMessage());
+        _trainingHandler.CreateHamSampleAsync(
+                Arg.Any<int>(), Arg.Any<ChatIdentity>(), Arg.Any<Actor>(), Arg.Any<VerdictSource>(),
+                Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException("db down"));
+
+        Assert.ThrowsAsync<InvalidOperationException>(() =>
+            _handler.CleanAsync(TestReportId, TestExecutor, CancellationToken.None));
+        _mockReportsRepo.DidNotReceiveWithAnyArgs().TryUpdateStatusAsync(default, default, default!, default!, default, default);
+    }
+
+    [Test]
+    public async Task CleanAsync_ReportAlreadyHandled_DoesNotRecordDecision()
+    {
+        var handled = CreateTestReport() with
+        {
+            Status = ReportStatus.Reviewed, ReviewedBy = "OtherAdmin",
+            ReviewedAt = DateTimeOffset.UtcNow.AddMinutes(-5), ActionTaken = "spam"
+        };
+        _mockReportsRepo.GetContentReportAsync(TestReportId, Arg.Any<CancellationToken>())
+            .Returns(handled);
+
+        var result = await _handler.CleanAsync(TestReportId, TestExecutor, CancellationToken.None);
+
+        Assert.That(result.IsAlreadyHandled, Is.True);
+        await _trainingHandler.DidNotReceiveWithAnyArgs().CreateHamSampleAsync(
+            default, default!, default!, default, default!, default);
     }
 
     #endregion
@@ -682,8 +706,6 @@ public class ContentReportHandlerTests
         Assert.That(result.Message, Does.Contain("Already handled by RacingAdmin"));
         Assert.That(result.Message, Does.Contain("(dismiss)"));
         Assert.That(result.IsAlreadyHandled, Is.True);
-        await _trainingHandler.DidNotReceiveWithAnyArgs().CreateHamSampleAsync(
-            default, default!, default!, default, default!, default);
     }
 
     [Test]

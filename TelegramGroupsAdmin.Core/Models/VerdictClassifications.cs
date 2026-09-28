@@ -41,13 +41,13 @@ public static class VerdictClassifications
 
         public string ToDisplayText() => classification switch
         {
-            VerdictClassification.ExplicitSpam => "Explicit spam",
-            VerdictClassification.ExplicitHam => "Explicit ham",
-            VerdictClassification.ImplicitSpam => "Implicit spam",
-            VerdictClassification.ImplicitHam => "Implicit ham",
+            VerdictClassification.ExplicitSpam => "Spam (confirmed)",
+            VerdictClassification.ExplicitHam => "Clean (confirmed)",
+            VerdictClassification.ImplicitSpam => "Spam (auto)",
+            VerdictClassification.ImplicitHam => "Clean (auto)",
             VerdictClassification.UntrainedSpam => "Spam (not trained)",
-            VerdictClassification.UntrainedHam => "Ham (not trained)",
-            _ => "Unscanned"
+            VerdictClassification.UntrainedHam => "Clean (not trained)",
+            _ => "Not scanned"
         };
     }
 }

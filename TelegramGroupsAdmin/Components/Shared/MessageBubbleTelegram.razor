@@ -73,7 +73,7 @@
                 @if (ContentCheck != null)
                 {
                     <span class="tg-badge tg-badge-@(ContentCheck.IsSpam ? "spam" : "ham")" title="@_cachedTooltip">
-                        @(ContentCheck.IsSpam ? "spam" : "ham") @ContentCheck.Score.ToString("F1")
+                        @(ContentCheck.IsSpam ? "spam" : "clean") @ContentCheck.Score.ToString("F1")
                         @if (!string.IsNullOrEmpty(_cachedContributingFactors))
                         {
                             <span style="font-weight: normal; opacity: 0.9;"> • @_cachedContributingFactors</span>
@@ -338,7 +338,7 @@
                                 <MudMenuItem OnClick="@(async () => { _popoverOpen = false; _actionInProgress = true; StateHasChanged(); try { await OnMarkAsHam.InvokeAsync(Message); } finally { _actionInProgress = false; } })" Disabled="@_actionInProgress">
                                     <div class="tg-menu-item tg-menu-item-success">
                                         <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" />
-                                        <span>Mark as Ham</span>
+                                        <span>Mark Clean</span>
                                     </div>
                                 </MudMenuItem>
                             }
@@ -554,7 +554,7 @@
     }
 
     private bool IsManuallyMarkedAsHam() =>
-        GetLatestDetection() is { Source: VerdictSource.WebMarkHam or VerdictSource.ReviewDismiss };
+        GetLatestDetection() is { Source: VerdictSource.WebMarkHam or VerdictSource.ReviewClean };
 
     /// <summary>
     /// Format duration in seconds to MM:SS format
@@ -677,7 +677,7 @@
         else
         {
             _cachedContributingFactors = null;
-            _cachedTooltip = ContentCheck?.IsSpam == true ? "Marked as spam" : "Marked as ham";
+            _cachedTooltip = ContentCheck?.IsSpam == true ? "Marked as spam" : "Marked clean";
         }
     }
 
@@ -727,7 +727,7 @@
     {
         var latest = GetLatestDetection();
         if (latest == null)
-            return ContentCheck?.IsSpam == true ? "Marked as spam" : "Marked as ham";
+            return ContentCheck?.IsSpam == true ? "Marked as spam" : "Marked clean";
 
         var tooltip = $"{(latest.IsSpam ? "SPAM" : "HAM")} - {latest.Score:F2} score\n";
         tooltip += $"Detection: {latest.DetectionMethod}\n";

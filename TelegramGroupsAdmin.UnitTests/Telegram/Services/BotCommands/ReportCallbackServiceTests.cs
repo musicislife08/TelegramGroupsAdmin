@@ -233,8 +233,21 @@ public class ReportCallbackServiceTests
             .HandleContentDismissAsync(TestReportId, Arg.Any<Actor>(), cancellationToken: Arg.Any<CancellationToken>());
     }
 
+    [Test]
+    public async Task HandleCallbackAsync_ContentClean_RoutesToHandleContentCleanAsync()
+    {
+        SetupContext(ReportType.ContentReport);
+        _mockReportActionsService.HandleContentCleanAsync(TestReportId, Arg.Any<Actor>(), Arg.Any<CancellationToken>())
+            .Returns(new ReviewActionResult(true, "Marked clean", "Clean"));
+
+        await _service.HandleCallbackAsync(CreateCallbackQuery(data: $"rev:{TestContextId}:4"));
+
+        await _mockReportActionsService.Received(1)
+            .HandleContentCleanAsync(TestReportId, Arg.Any<Actor>(), Arg.Any<CancellationToken>());
+    }
+
     [TestCase(-1)]
-    [TestCase(4)]
+    [TestCase(5)]
     [TestCase(99)]
     public async Task HandleCallbackAsync_ContentInvalidAction_ReturnsInvalidAction(int invalidAction)
     {

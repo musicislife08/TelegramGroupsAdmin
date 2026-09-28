@@ -16,10 +16,10 @@ public class VerdictTypesTests
     [TestCase(VerdictSource.WebMarkHam, 12)]
     [TestCase(VerdictSource.SpamCommand, 13)]
     [TestCase(VerdictSource.ReviewSpam, 14)]
-    [TestCase(VerdictSource.ReviewDismiss, 15)]
     [TestCase(VerdictSource.TrainingDataPage, 16)]
     [TestCase(VerdictSource.TrainingExclude, 17)]
     [TestCase(VerdictSource.Import, 18)]
+    [TestCase(VerdictSource.ReviewClean, 19)]
     [TestCase(VerdictSource.LegacyManual, 99)]
     public void VerdictSource_HasPinnedValue(VerdictSource source, int expected)
         => Assert.That((int)source, Is.EqualTo(expected));
@@ -111,13 +111,13 @@ public class VerdictTypesTests
     public void IsTrainingSample_OnlyTrainedClassifications(VerdictClassification c, bool expected)
         => Assert.That(c.IsTrainingSample(), Is.EqualTo(expected));
 
-    [TestCase(VerdictClassification.ExplicitSpam, "Explicit spam")]
-    [TestCase(VerdictClassification.ExplicitHam, "Explicit ham")]
-    [TestCase(VerdictClassification.ImplicitSpam, "Implicit spam")]
-    [TestCase(VerdictClassification.ImplicitHam, "Implicit ham")]
+    [TestCase(VerdictClassification.ExplicitSpam, "Spam (confirmed)")]
+    [TestCase(VerdictClassification.ExplicitHam, "Clean (confirmed)")]
+    [TestCase(VerdictClassification.ImplicitSpam, "Spam (auto)")]
+    [TestCase(VerdictClassification.ImplicitHam, "Clean (auto)")]
     [TestCase(VerdictClassification.UntrainedSpam, "Spam (not trained)")]
-    [TestCase(VerdictClassification.UntrainedHam, "Ham (not trained)")]
-    [TestCase(VerdictClassification.Unscanned, "Unscanned")]
+    [TestCase(VerdictClassification.UntrainedHam, "Clean (not trained)")]
+    [TestCase(VerdictClassification.Unscanned, "Not scanned")]
     public void ToDisplayText_MatchesEveryValue(VerdictClassification c, string expected)
         => Assert.That(c.ToDisplayText(), Is.EqualTo(expected));
 

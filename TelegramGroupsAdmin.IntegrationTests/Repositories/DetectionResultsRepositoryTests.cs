@@ -258,18 +258,23 @@ public class DetectionResultsRepositoryTests
     }
 
     [Test]
-    public async Task RecordDecisionAsync_DismissAfterMarkAsHam_AppendsAndViewShowsLatest()
+    public async Task RecordDecisionAsync_ReviewCleanOnUntrainedSpam_BecomesExplicitHam()
     {
-        var chatId = GoldenDatasetConstants.Chats.MainChatId;
-        var msgId = GoldenDatasetConstants.Verdicts.CorrectedToHamMsgId;
+        // A review-queued flag (UntrainedSpam, never trained) that an admin marks clean.
+        var chatId = GoldenDatasetConstants.Chats.LandOwnersChatId;
+        var msgId = GoldenDatasetConstants.Verdicts.SpamInTrustWindowMsgId;
         Assert.That((await _repository!.GetCurrentVerdictAsync(msgId, chatId))!.Classification,
-            Is.EqualTo(VerdictClassification.ExplicitHam), "canonical precondition");
+            Is.EqualTo(VerdictClassification.UntrainedSpam), "canonical precondition");
 
-        await _repository.RecordDecisionAsync(msgId, chatId, VerdictSource.ReviewDismiss,
-            Actor.FromWebUser(GoldenDatasetConstants.WebUsers.OwnerId), "Report dismissed");
+        await _repository.RecordDecisionAsync(msgId, chatId, VerdictSource.ReviewClean,
+            Actor.FromWebUser(GoldenDatasetConstants.WebUsers.OwnerId), "Report #1 - marked clean");
 
         var after = await _repository.GetCurrentVerdictAsync(msgId, chatId);
-        Assert.That(after!.Classification, Is.EqualTo(VerdictClassification.ImplicitHam));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(after!.Classification, Is.EqualTo(VerdictClassification.ExplicitHam));
+            Assert.That(after.Source, Is.EqualTo(VerdictSource.ReviewClean));
+        }
     }
 
     [Test]

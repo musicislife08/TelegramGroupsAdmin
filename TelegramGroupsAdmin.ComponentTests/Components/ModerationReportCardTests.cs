@@ -347,6 +347,7 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
             Assert.That(cut.Markup, Does.Contain("Delete as Spam"));
             Assert.That(cut.Markup, Does.Contain("Ban User"));
             Assert.That(cut.Markup, Does.Contain("Warn"));
+            Assert.That(cut.Markup, Does.Contain("Mark Clean"));
             Assert.That(cut.Markup, Does.Contain("Dismiss"));
         });
     }
@@ -624,6 +625,36 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
         // Assert
         Assert.That(receivedAction, Is.Not.Null);
         Assert.That(receivedAction!.Value.action, Is.EqualTo(ReportAction.Dismiss));
+    }
+
+    [Test]
+    public async Task InvokesOnAction_WhenMarkCleanButtonClicked()
+    {
+        // Arrange
+        (Report report, ReportAction action)? receivedAction = null;
+        var report = CreateReport(status: ReportStatus.Pending);
+        var message = CreateSpamMessage();
+
+        MessageRepository.GetMessageAsync(report.MessageId, Arg.Any<long>(), Arg.Any<CancellationToken>())
+            .Returns(message);
+        UserRepository.GetByTelegramIdAsync(message.User.Id, Arg.Any<CancellationToken>())
+            .Returns(CreateTelegramUser());
+
+        var cut = Render<ModerationReportCard>(p => p
+            .Add(x => x.Report, report)
+            .Add(x => x.OnAction, EventCallback.Factory.Create<(Report, ReportAction)>(
+                this, args => receivedAction = args)));
+
+        // Wait for component to load before finding button
+        cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("Mark Clean")));
+
+        // Act
+        var cleanButton = cut.FindAll("button").First(b => b.TextContent.Contains("Mark Clean"));
+        await cleanButton.ClickAsync(new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
+
+        // Assert
+        Assert.That(receivedAction, Is.Not.Null);
+        Assert.That(receivedAction!.Value.action, Is.EqualTo(ReportAction.Clean));
     }
 
     #endregion

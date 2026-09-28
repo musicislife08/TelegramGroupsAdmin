@@ -176,7 +176,7 @@ public class MessageBubbleTelegramTests : MudBlazorTestContext
     }
 
     [Test]
-    public void DisplaysHamBadge_WhenContentCheckIsHam()
+    public void DisplaysCleanBadge_WhenContentCheckIsHam()
     {
         // Arrange
         var message = CreateMessage();
@@ -189,7 +189,7 @@ public class MessageBubbleTelegramTests : MudBlazorTestContext
 
         // Assert
         var badge = cut.Find(".tg-badge-ham");
-        Assert.That(badge.TextContent, Does.Contain("ham"));
+        Assert.That(badge.TextContent, Does.Contain("clean"));
         Assert.That(badge.TextContent, Does.Contain("4.2"));
     }
 

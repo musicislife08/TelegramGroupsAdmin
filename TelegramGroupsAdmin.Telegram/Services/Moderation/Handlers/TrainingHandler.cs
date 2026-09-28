@@ -139,8 +139,8 @@ public class TrainingHandler : ITrainingHandler
     public async Task CreateHamSampleAsync(int messageId, ChatIdentity chat, Actor executor, VerdictSource source,
         string reason, CancellationToken cancellationToken = default)
     {
-        if (source is not (VerdictSource.WebMarkHam or VerdictSource.ReviewDismiss))
-            throw new ArgumentOutOfRangeException(nameof(source), source, "Ham decisions are WebMarkHam or ReviewDismiss");
+        if (source is not (VerdictSource.WebMarkHam or VerdictSource.ReviewClean))
+            throw new ArgumentOutOfRangeException(nameof(source), source, "Clean decisions are WebMarkHam or ReviewClean");
 
         // detection_results has an FK to messages: an unstored or retention-deleted message cannot carry a verdict.
         var message = await _messageHistoryRepository.GetMessageAsync(messageId, chat.Id, cancellationToken);
@@ -150,20 +150,6 @@ public class TrainingHandler : ITrainingHandler
                 "Message {MessageId} not in database. Skipping {Source} ham decision.",
                 messageId, source);
             return;
-        }
-
-        // A dismissed review is only an implicit judgement: it must not overturn an explicit label
-        // (e.g. a stale report dismissed after the message was already banned as spam).
-        if (source == VerdictSource.ReviewDismiss)
-        {
-            var current = await _detectionResultsRepository.GetCurrentVerdictAsync(messageId, chat.Id, cancellationToken);
-            if (current != null && current.Classification.IsExplicit())
-            {
-                _logger.LogInformation(
-                    "Skipped {Source} ham decision for message {MessageId} by {Executor}: current verdict {Classification} is explicit and a dismissal does not override it",
-                    source, messageId, executor.GetDisplayText(), current.Classification);
-                return;
-            }
         }
 
         await _detectionResultsRepository.RecordDecisionAsync(

@@ -8,4 +8,5 @@ internal interface IContentReportHandler
     Task<ReviewActionResult> BanAsync(long reportId, Actor executor, CancellationToken cancellationToken);
     Task<ReviewActionResult> WarnAsync(long reportId, Actor executor, CancellationToken cancellationToken);
     Task<ReviewActionResult> DismissAsync(long reportId, Actor executor, string? reason, CancellationToken cancellationToken);
+    Task<ReviewActionResult> CleanAsync(long reportId, Actor executor, CancellationToken cancellationToken);
 }

@@ -15,7 +15,9 @@ using TelegramGroupsAdmin.Telegram.Services.Moderation.Infrastructure;
 namespace TelegramGroupsAdmin.Telegram.Services.ReportActions;
 
 /// <summary>
-/// Handles content report actions (spam, ban, warn, dismiss).
+/// Handles content report actions (spam, ban, warn, dismiss, clean).
+/// Only Spam and Clean change the message's verdict; Ban and Warn are moderation-only and
+/// Dismiss is an acknowledgement that leaves the existing verdict in place.
 /// Fetches report + message, executes moderation, atomically updates status, audits, and cleans up.
 /// </summary>
 internal sealed class ContentReportHandler(
@@ -217,20 +219,6 @@ internal sealed class ContentReportHandler(
             cancellationToken);
         if (statusResult != null) return statusResult;
 
-        // Non-critical: the dismissal is committed; a failed ham decision must not skip audit and cleanup.
-        try
-        {
-            await trainingHandler.CreateHamSampleAsync(
-                report.MessageId, report.Chat, executor, VerdictSource.ReviewDismiss,
-                reason is null ? $"Report #{reportId} dismissed" : $"Report #{reportId} dismissed: {reason}",
-                cancellationToken);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            logger.LogWarning(ex, "Recording the dismiss decision for report {ReportId} (message {MessageId}) failed, continuing",
-                reportId, report.MessageId);
-        }
-
         await auditService.LogEventAsync(
             AuditEventType.ReportReviewed, executor, null,
             $"Dismissed report #{reportId} ({reason ?? "no action taken"})", cancellationToken);
@@ -240,6 +228,43 @@ internal sealed class ContentReportHandler(
         logger.LogInformation("Dismissed report {ReportId} (reason: {Reason})", reportId, reason ?? "none");
 
         return new ReviewActionResult(true, "Report dismissed", ActionName: "Dismiss");
+    }
+
+    public async Task<ReviewActionResult> CleanAsync(long reportId, Actor executor, CancellationToken cancellationToken)
+    {
+        var fetch = await FetchReportAndMessageAsync(reportId, cancellationToken);
+        if (!fetch.Success)
+            return new ReviewActionResult(false, fetch.ErrorMessage!, IsAlreadyHandled: fetch.Status == FetchStatus.AlreadyHandled);
+
+        var report = fetch.Value!.Report;
+        var message = fetch.Value.Message;
+
+        // The clean decision is the point of this action: record it before claiming the report,
+        // so a failure leaves the report pending for another try.
+        await trainingHandler.CreateHamSampleAsync(
+            report.MessageId, report.Chat, executor, VerdictSource.ReviewClean,
+            $"Report #{reportId} - marked clean", cancellationToken);
+
+        var statusResult = await ReportStatusHelper.TryUpdateStatusAsync(
+            reportsRepository, reportId, ReportStatus.Reviewed, executor, "clean",
+            "Message marked clean",
+            async () =>
+            {
+                var current = await reportsRepository.GetContentReportAsync(reportId, cancellationToken);
+                return current != null
+                    ? ReportStatusHelper.CheckAlreadyHandled(current.ReviewedBy, current.ActionTaken, current.ReviewedAt)
+                    : new ReviewActionResult(false, $"Report {reportId} could not be updated");
+            },
+            cancellationToken);
+        if (statusResult != null) return statusResult;
+
+        await auditService.LogEventAsync(
+            AuditEventType.ReportReviewed, executor, Actor.FromUserIdentity(message.User),
+            $"Marked clean (report #{reportId})", cancellationToken);
+
+        await CleanupContentReportAsync(report, ReportAction.Clean, cancellationToken);
+
+        return new ReviewActionResult(true, "Marked clean", ActionName: "Clean");
     }
 
     private async Task<FetchResult<ContentFetchData>> FetchReportAndMessageAsync(
@@ -280,8 +305,8 @@ internal sealed class ContentReportHandler(
             }
         }
 
-        // Dismiss only: reply to original reported message
-        if (action == ReportAction.Dismiss)
+        // Dismiss and Clean leave the message up: reply to it so the chat sees it was reviewed
+        if (action is ReportAction.Dismiss or ReportAction.Clean)
         {
             try
             {

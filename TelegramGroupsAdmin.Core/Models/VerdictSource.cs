@@ -16,13 +16,13 @@ public enum VerdictSource
     WebMarkHam = 12,
     SpamCommand = 13,
     ReviewSpam = 14,
-    /// <summary>Review queue "Dismiss": ham, but not an admin-grade label.</summary>
-    ReviewDismiss = 15,
     TrainingDataPage = 16,
     /// <summary>"Remove from training": keeps spam/ham, drops training membership.</summary>
     TrainingExclude = 17,
     /// <summary>Bulk import (tg-spam).</summary>
     Import = 18,
+    /// <summary>Review queue "Mark clean" (web card or DM keyboard): admin-confirmed not spam.</summary>
+    ReviewClean = 19,
     /// <summary>Migration only: a legacy manual row whose origin cannot be recovered.</summary>
     LegacyManual = 99
 }

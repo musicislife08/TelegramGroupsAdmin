@@ -112,6 +112,13 @@
                        Disabled="@_actionInProgress">
                 Warn
             </MudButton>
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Success"
+                       StartIcon="@Icons.Material.Filled.CheckCircle"
+                       OnClick="@OnMarkClean"
+                       Disabled="@_actionInProgress">
+                Mark Clean
+            </MudButton>
             <MudButton Variant="Variant.Outlined"
                        Color="Color.Default"
                        StartIcon="@Icons.Material.Filled.Close"
@@ -224,6 +231,13 @@
     {
         _actionInProgress = true;
         try { await OnAction.InvokeAsync((Report, ReportAction.Warn)); }
+        finally { _actionInProgress = false; }
+    }
+
+    private async Task OnMarkClean()
+    {
+        _actionInProgress = true;
+        try { await OnAction.InvokeAsync((Report, ReportAction.Clean)); }
         finally { _actionInProgress = false; }
     }
 
