@@ -57,6 +57,19 @@ namespace TelegramGroupsAdmin.Data.Migrations
                 descending: new[] { false, false, true, true });
 
             // ── 1. source: what caused each legacy row ────────────────────────────────
+            // Every detection_source the app ever wrote is known; anything else would be silently turned
+            // into an explicit training decision below, so stop instead.
+            migrationBuilder.Sql("""
+                DO $$
+                BEGIN
+                    IF EXISTS (SELECT 1 FROM detection_results
+                               WHERE detection_source IS NULL
+                                  OR detection_source NOT IN ('auto', 'auto_detection', 'file_scan', 'tg-spam-import', 'manual')) THEN
+                        RAISE EXCEPTION 'detection_results has an unknown detection_source; map it in AddVerdictEvents before migrating';
+                    END IF;
+                END $$;
+                """);
+
             migrationBuilder.Sql("""
                 UPDATE detection_results SET source = CASE
                     WHEN detection_source IN ('auto', 'auto_detection') THEN 0
@@ -94,13 +107,13 @@ namespace TelegramGroupsAdmin.Data.Migrations
                                  AND (ai.c->>'Score')::double precision > 0, false) AS ai_positive
                     FROM detection_results d
                     LEFT JOIN LATERAL (
-                        SELECT c FROM jsonb_array_elements(COALESCE(d.check_results_json->'Checks', '[]'::jsonb)) c
+                        SELECT c FROM jsonb_array_elements((CASE WHEN jsonb_typeof(d.check_results_json->'Checks') = 'array' THEN d.check_results_json->'Checks' ELSE '[]'::jsonb END)) c
                         WHERE (c->>'CheckName')::int = 6          -- CheckName.OpenAI
                         LIMIT 1) ai ON true
                     LEFT JOIN LATERAL (
-                        SELECT jsonb_array_length(COALESCE(d.check_results_json->'Checks', '[]'::jsonb)) = 1
+                        SELECT jsonb_array_length((CASE WHEN jsonb_typeof(d.check_results_json->'Checks') = 'array' THEN d.check_results_json->'Checks' ELSE '[]'::jsonb END)) = 1
                            AND EXISTS (
-                               SELECT 1 FROM jsonb_array_elements(COALESCE(d.check_results_json->'Checks', '[]'::jsonb)) c
+                               SELECT 1 FROM jsonb_array_elements((CASE WHEN jsonb_typeof(d.check_results_json->'Checks') = 'array' THEN d.check_results_json->'Checks' ELSE '[]'::jsonb END)) c
                                WHERE (c->>'CheckName')::int = 8   -- CheckName.UrlBlocklist (hard block)
                                  AND (c->>'Score')::double precision >= 5) AS is_hard_block) hb ON true
                     LEFT JOIN LATERAL (

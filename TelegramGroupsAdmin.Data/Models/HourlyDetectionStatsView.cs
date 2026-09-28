@@ -20,17 +20,16 @@ public class HourlyDetectionStatsView
     /// - Peak hour detection
     /// - Spam/ham trend analysis
     /// Totals, spam/ham and the average score count only detector output (source 0 = ContentScan);
-    /// manual_count counts human decisions (web/command/review/training-page sources and legacy manual rows).
-    /// Classification literals (0, 2, 4) are the Spam set (VerdictClassifications.SpamValues).
+    /// manual_count counts human decisions (<see cref="VerdictSql.ManualSources"/>).
     /// </summary>
-    public const string CreateViewSql = """
+    public const string CreateViewSql = $"""
         CREATE VIEW hourly_detection_stats AS
         SELECT date(detected_at) AS detection_date,
                EXTRACT(hour FROM detected_at)::integer AS detection_hour,
                count(*) FILTER (WHERE source = 0) AS total_count,
-               count(*) FILTER (WHERE source = 0 AND classification IN (0, 2, 4)) AS spam_count,
-               count(*) FILTER (WHERE source = 0 AND classification NOT IN (0, 2, 4)) AS ham_count,
-               count(*) FILTER (WHERE source IN (11, 12, 13, 14, 15, 16, 17, 99)) AS manual_count,
+               count(*) FILTER (WHERE source = 0 AND classification IN ({VerdictSql.SpamClassifications})) AS spam_count,
+               count(*) FILTER (WHERE source = 0 AND classification NOT IN ({VerdictSql.SpamClassifications})) AS ham_count,
+               count(*) FILTER (WHERE source IN ({VerdictSql.ManualSources})) AS manual_count,
                avg(score) FILTER (WHERE source = 0) AS avg_score
         FROM detection_results
         GROUP BY date(detected_at), EXTRACT(hour FROM detected_at);

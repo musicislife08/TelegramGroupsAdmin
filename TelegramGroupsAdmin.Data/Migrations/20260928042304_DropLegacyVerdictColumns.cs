@@ -171,8 +171,9 @@ namespace TelegramGroupsAdmin.Data.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            // NOTE: Up is one-way for data. training_labels, image_training_samples and
-            // video_training_samples are recreated empty; their rows are not restored. The legacy
+            // NOTE: training_labels is rebuilt from the explicit decision events (below);
+            // image_training_samples and video_training_samples are recreated empty (their hashes
+            // live on messages.media_features and are re-derived by the startup backfill). The legacy
             // detection_results columns are re-derived from source/classification/score the way the
             // verdict writer kept them in step before this migration.
 
@@ -205,7 +206,14 @@ namespace TelegramGroupsAdmin.Data.Migrations
                 UPDATE detection_results SET
                     detection_source = CASE source WHEN 0 THEN 'auto' WHEN 1 THEN 'file_scan' WHEN 18 THEN 'tg-spam-import' ELSE 'manual' END,
                     net_score = CASE WHEN classification IN (0, 2, 4) THEN abs(score) ELSE -abs(score) END,
-                    used_for_training = classification = 2 OR (source IN (16, 18) AND classification IN (0, 1));
+                    used_for_training = classification = 2
+                        OR (source IN (16, 18) AND classification IN (0, 1)
+                            -- a later "Remove from training" (TrainingExclude) event means it was excluded
+                            AND NOT EXISTS (
+                                SELECT 1 FROM detection_results x
+                                WHERE x.chat_id = detection_results.chat_id AND x.message_id = detection_results.message_id
+                                  AND x.source = 17
+                                  AND (x.detected_at, x.id) > (detection_results.detected_at, detection_results.id)));
 
                 ALTER TABLE detection_results ALTER COLUMN detection_source DROP DEFAULT;
                 ALTER TABLE detection_results ALTER COLUMN used_for_training DROP DEFAULT;
@@ -371,6 +379,23 @@ namespace TelegramGroupsAdmin.Data.Migrations
                 table: "video_training_samples",
                 columns: new[] { "message_id", "chat_id" },
                 unique: true);
+
+            // training_labels: one label per message from its latest admin decision (auto-ban, web mark
+            // spam/ham, /spam, review spam, or a label AddVerdictEvents folded in as LegacyManual), the
+            // rows the legacy code wrote there. Runs before
+            // AddVerdictEvents.Down deletes the folded label events, so no admin label is lost.
+            migrationBuilder.Sql("""
+                INSERT INTO training_labels (message_id, chat_id, label, labeled_by_user_id, labeled_at, reason, audit_log_id)
+                SELECT DISTINCT ON (d.chat_id, d.message_id)
+                       d.message_id, d.chat_id,
+                       CASE WHEN d.classification = 0 THEN 0 ELSE 1 END,
+                       tu.telegram_user_id, d.detected_at, d.reason, d.audit_log_id
+                FROM detection_results d
+                LEFT JOIN telegram_users tu ON tu.telegram_user_id = d.telegram_user_id
+                WHERE (d.source IN (10, 11, 12, 13, 14) OR d.properties->>'from' = 'training_labels')
+                  AND d.classification IN (0, 1)
+                ORDER BY d.chat_id, d.message_id, d.detected_at DESC, d.id DESC;
+                """);
 
             // Previous view definitions (frozen literals): the transitional message_verdicts from
             // AddVerdictEvents and the analytics views from UpdateDetectionAnalyticsViews.

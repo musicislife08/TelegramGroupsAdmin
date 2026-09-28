@@ -19,24 +19,22 @@ public class DetectionAccuracyView
     /// Uses a CTE to find the latest human decision per (chat_id, message_id), then flags:
     /// - False Positive: the scan said spam, the latest decision said not-spam
     /// - False Negative: the scan said not-spam, the latest decision said spam
-    /// Rows are detector output only (source 0 = ContentScan). Corrections are the human decision
-    /// sources (11-15 web/command/review, 99 legacy manual); an auto-ban (10) agrees with its scan
-    /// and training-data edits (16, 17) are not verdicts on the scan, so neither counts.
-    /// Classification literals (0, 2, 4) are the Spam set (VerdictClassifications.SpamValues).
+    /// Rows are detector output only (source 0 = ContentScan). Corrections are
+    /// <see cref="VerdictSql.CorrectionSources"/>.
     /// </summary>
-    public const string CreateViewSql = """
+    public const string CreateViewSql = $"""
         CREATE VIEW detection_accuracy AS
         WITH corrections AS (
             SELECT DISTINCT ON (chat_id, message_id)
-                chat_id, message_id, classification IN (0, 2, 4) AS corrected_to_spam
+                chat_id, message_id, classification IN ({VerdictSql.SpamClassifications}) AS corrected_to_spam
             FROM detection_results
-            WHERE source IN (11, 12, 13, 14, 15, 99)   -- human decisions that can contradict a scan
+            WHERE source IN ({VerdictSql.CorrectionSources})
             ORDER BY chat_id, message_id, detected_at DESC, id DESC
         )
         SELECT dr.id, dr.chat_id, dr.message_id, dr.detected_at, date(dr.detected_at) AS detection_date,
-               dr.classification IN (0, 2, 4) AS original_classification,
-               COALESCE(c.message_id IS NOT NULL AND dr.classification IN (0, 2, 4) AND NOT c.corrected_to_spam, false) AS is_false_positive,
-               COALESCE(c.message_id IS NOT NULL AND dr.classification NOT IN (0, 2, 4) AND c.corrected_to_spam, false) AS is_false_negative
+               dr.classification IN ({VerdictSql.SpamClassifications}) AS original_classification,
+               COALESCE(c.message_id IS NOT NULL AND dr.classification IN ({VerdictSql.SpamClassifications}) AND NOT c.corrected_to_spam, false) AS is_false_positive,
+               COALESCE(c.message_id IS NOT NULL AND dr.classification NOT IN ({VerdictSql.SpamClassifications}) AND c.corrected_to_spam, false) AS is_false_negative
         FROM detection_results dr
         LEFT JOIN corrections c ON c.chat_id = dr.chat_id AND c.message_id = dr.message_id
         WHERE dr.source = 0;

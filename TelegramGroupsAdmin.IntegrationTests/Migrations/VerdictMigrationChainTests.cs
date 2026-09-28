@@ -115,4 +115,25 @@ public class VerdictMigrationChainTests
             Assert.That(defaults, Is.Zero);
         }
     }
+
+    /// <summary>Runs after the Down above: the seeded legacy labels come back with their labels.</summary>
+    [TestCase(3, -1001L, 0)]
+    [TestCase(10, -1001L, 1)]
+    [TestCase(14, -1001L, 0)]
+    [Order(4)]
+    public async Task DropLegacyVerdictColumnsDown_RebuildsTrainingLabels(int messageId, long chatId, int expectedLabel)
+    {
+        var label = await _helper.ExecuteScalarAsync<short?>(
+            $"SELECT label FROM training_labels WHERE message_id = {messageId} AND chat_id = {chatId}");
+        Assert.That(label, Is.EqualTo((short)expectedLabel));
+    }
+
+    /// <summary>Runs after the Down above: a training-page row that was removed from training stays excluded.</summary>
+    [Test, Order(4)]
+    public async Task DropLegacyVerdictColumnsDown_KeepsTrainingExclusions()
+    {
+        var used = await _helper.ExecuteScalarAsync<bool>(
+            "SELECT used_for_training FROM detection_results WHERE id = 100016");
+        Assert.That(used, Is.False);
+    }
 }

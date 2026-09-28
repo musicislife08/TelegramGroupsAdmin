@@ -141,7 +141,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         // is_spam: the coarse spam/ham split, generated from classification only (VerdictClassifications.Spam).
         modelBuilder.Entity<DetectionResultRecordDto>()
             .Property(d => d.IsSpam)
-            .HasComputedColumnSql("(classification IN (0, 2, 4))", stored: true);
+            .HasComputedColumnSql($"(classification IN ({VerdictSql.SpamClassifications}))", stored: true);
 
         // Messages → MessageEdits (one-to-many)
         modelBuilder.Entity<MessageEditRecordDto>()

@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using TelegramGroupsAdmin.ContentDetection.Repositories;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.IntegrationTests.TestData;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
@@ -66,6 +68,7 @@ public class AnalyticsRepositoryTests
         services.AddDbContextFactory<AppDbContext>((_, options) => options.UseNpgsql(_testHelper.ConnectionString));
         services.AddLogging(builder => builder.AddConsole().SetMinimumLevel(LogLevel.Warning));
         services.AddScoped<IAnalyticsRepository, AnalyticsRepository>();
+        services.AddScoped<IDetectionResultsRepository, DetectionResultsRepository>();
 
         _serviceProvider = services.BuildServiceProvider();
         _scope = _serviceProvider.CreateScope();
@@ -420,6 +423,24 @@ public class AnalyticsRepositoryTests
         Assert.That(stats, Is.Not.Null);
         Assert.That(stats.TotalFalseNegatives, Is.GreaterThanOrEqualTo(1),
             "Should have at least 1 false negative from correction data");
+    }
+
+    [Test]
+    public async Task GetDetectionAccuracyStats_ReviewQueueMarkClean_CountsAsFalsePositive()
+    {
+        // A review-queue "Mark clean" is the main way a false flag gets corrected; the accuracy
+        // view must treat it as a correction like web Mark Clean.
+        var startDate = DateTimeOffset.UtcNow.AddDays(-7);
+        var endDate = DateTimeOffset.UtcNow.AddDays(1);
+        var before = await _analyticsRepository.GetDetectionAccuracyStatsAsync(startDate, endDate, DefaultTimeZoneId);
+        Assert.That(before.TotalFalsePositives, Is.EqualTo(1), "canonical precondition: only the 213325 correction");
+
+        await _scope.ServiceProvider.GetRequiredService<IDetectionResultsRepository>().RecordDecisionAsync(
+            (int)GoldenDatasetConstants.Analytics.MsgId_TodaySpam1, GoldenDatasetConstants.Chats.MainChatId,
+            VerdictSource.ReviewClean, Actor.FromWebUser(GoldenDatasetConstants.WebUsers.OwnerId), "Report #1 - marked clean");
+
+        var after = await _analyticsRepository.GetDetectionAccuracyStatsAsync(startDate, endDate, DefaultTimeZoneId);
+        Assert.That(after.TotalFalsePositives, Is.EqualTo(2));
     }
 
     [Test]

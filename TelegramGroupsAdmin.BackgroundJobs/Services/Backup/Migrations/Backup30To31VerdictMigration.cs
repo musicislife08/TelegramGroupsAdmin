@@ -189,6 +189,18 @@ public static class Backup30To31VerdictMigration
             "auto" or "auto_detection" => ContentScan,
             "file_scan" => FileScan,
             "tg-spam-import" => Import,
+            "manual" => ManualSourceOf(row, reason),
+            // Every value the app ever wrote is listed above; anything else would silently become an
+            // explicit training decision, so refuse the backup instead (matches the AddVerdictEvents guard).
+            _ => throw new InvalidOperationException(
+                $"Backup detection_results row {Long(row["id"])} has unknown detection_source '{detectionSource}'")
+        };
+    }
+
+    private static int ManualSourceOf(JsonObject row, string reason)
+    {
+        return reason switch
+        {
             _ when Long(row["chat_id"]) == 0 => TrainingDataPage,
             _ when reason.StartsWith("Manually marked as spam by admin via UI", StringComparison.Ordinal) => WebMarkSpam,
             _ when reason.StartsWith("Manually marked as ham", StringComparison.Ordinal)
@@ -215,11 +227,16 @@ public static class Backup30To31VerdictMigration
                 return ExplicitSpam;
             case WebMarkHam:
                 return ExplicitHam;
-            case not ContentScan:
+            case ContentScan:
+                return ContentScanClassificationOf(row, netScore, thresholds);
+            default:
                 return netScore > 0 ? ExplicitSpam : ExplicitHam;
         }
+    }
 
-        // Content scan: the one rule (score >= ReviewQueueThreshold), AI veto, single hard block.
+    /// <summary>Content scan: the one rule (score >= ReviewQueueThreshold), AI veto, single hard block.</summary>
+    private static int ContentScanClassificationOf(JsonObject row, double netScore, Dictionary<long, double> thresholds)
+    {
         var checks = ParseChecks(row["check_results_json"]);
         var ai = checks.FirstOrDefault(c => c.CheckName == OpenAiCheck);
         var aiVeto = ai is { Abstained: false, Score: 0 };

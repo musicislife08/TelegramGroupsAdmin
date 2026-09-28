@@ -21,7 +21,7 @@ public class EnrichedDetectionView
     /// - telegram_users (message author info)
     /// Actor columns exposed raw - app-layer ActorMappings.ToActor() handles computation.
     /// </summary>
-    public const string CreateViewSql = """
+    public const string CreateViewSql = $"""
         CREATE VIEW enriched_detections AS
         SELECT
             -- Detection columns
@@ -31,7 +31,7 @@ public class EnrichedDetectionView
             dr.source,
             dr.detection_method,
             dr.classification,
-            (dr.classification IN (0, 2, 4)) AS is_spam,
+            (dr.classification IN ({VerdictSql.SpamClassifications})) AS is_spam,
             dr.score,
             dr.reason,
             dr.check_results_json,
@@ -93,7 +93,7 @@ public class EnrichedDetectionView
     [Column("classification")]
     public int Classification { get; set; }
 
-    /// <summary>Computed in the view: classification is in the Spam set (0, 2, 4).</summary>
+    /// <summary>Computed in the view: classification is in <see cref="VerdictSql.SpamClassifications"/>.</summary>
     [Column("is_spam")]
     public bool IsSpam { get; set; }
 

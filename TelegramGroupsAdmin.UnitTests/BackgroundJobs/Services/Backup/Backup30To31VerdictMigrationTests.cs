@@ -264,4 +264,34 @@ public class Backup30To31VerdictMigrationTests
             Assert.That(backup.Metadata.TableCount, Is.EqualTo(2));
         }
     }
+
+    [Test]
+    public void Apply_UnknownDetectionSource_RefusesTheBackup()
+    {
+        var backup = Build();
+        backup.Data!["detection_results"].Add(Row(new
+        {
+            id = 99, message_id = 99, chat_id = ChatId, detected_at = "2026-01-01T00:00:00+00:00", detection_source = "automated",
+            detection_method = "x", is_spam = false, net_score = 0.0, score = 0.0, used_for_training = false,
+            reason = "x", system_identifier = "x", check_results_json = (string?)null, edit_version = 0
+        }));
+
+        var ex = Assert.Throws<InvalidOperationException>(() => Backup30To31VerdictMigration.Apply(backup, NullLogger.Instance));
+        Assert.That(ex!.Message, Does.Contain("automated"));
+    }
+
+    [Test]
+    public void Apply_NoData_OnlyDropsRetiredTablesFromMetadata()
+    {
+        var backup = Build();
+        backup.Data = null;
+
+        Backup30To31VerdictMigration.Apply(backup, NullLogger.Instance);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(backup.Data, Is.Null);
+            Assert.That(backup.Metadata.Tables, Is.EquivalentTo(new[] { "detection_results", "content_detection_configs" }));
+        }
+    }
 }
