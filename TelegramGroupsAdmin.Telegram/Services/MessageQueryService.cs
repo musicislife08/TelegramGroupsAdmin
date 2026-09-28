@@ -7,6 +7,7 @@ using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Core.Repositories.Mappings;
 using TelegramGroupsAdmin.Telegram.Extensions;
+using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Repositories.Mappings;
 using UiModels = TelegramGroupsAdmin.Telegram.Models;
 
@@ -21,15 +22,18 @@ public class MessageQueryService : IMessageQueryService
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
     private readonly ILogger<MessageQueryService> _logger;
     private readonly string _imageStoragePath;
+    private readonly IMessageHistoryRepository _messageHistoryRepository;
 
     public MessageQueryService(
         IDbContextFactory<AppDbContext> contextFactory,
         ILogger<MessageQueryService> logger,
-        IOptions<AppOptions> appOptions)
+        IOptions<AppOptions> appOptions,
+        IMessageHistoryRepository messageHistoryRepository)
     {
         _contextFactory = contextFactory;
         _logger = logger;
         _imageStoragePath = appOptions.Value.DataPath;
+        _messageHistoryRepository = messageHistoryRepository;
     }
 
     public async Task<List<UiModels.MessageRecord>> GetRecentMessagesAsync(int limit = 100, CancellationToken cancellationToken = default)
@@ -229,54 +233,8 @@ public class MessageQueryService : IMessageQueryService
         }).ToList();
     }
 
-    public async Task<Dictionary<int, UiModels.ContentCheckRecord>> GetContentChecksForMessagesAsync(long chatId, IEnumerable<int> messageIds, CancellationToken cancellationToken = default)
-    {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var messageIdArray = messageIds.ToArray();
-
-        // Query detection_results table
-        // Note: Returns only the LATEST detection result per message for quick display
-        // Full detection history is available via GetByMessageIdAsync in DetectionResultsRepository
-        var results = await context.DetectionResults
-            .AsNoTracking()
-            .Where(dr => dr.ChatId == chatId && messageIdArray.Contains(dr.MessageId))
-            .Join(context.Messages,
-                dr => new { dr.MessageId, dr.ChatId },
-                m => new { m.MessageId, m.ChatId },
-                (dr, m) => new
-                {
-                    dr.Id,
-                    dr.MessageId,
-                    CheckTimestamp = dr.DetectedAt,
-                    m.UserId,
-                    m.ContentHash,
-                    dr.IsSpam,
-                    dr.Score,
-                    dr.NetScore,
-                    Reason = dr.Reason ?? $"{dr.DetectionMethod}: Spam detected",
-                    CheckType = dr.DetectionMethod,
-                    MatchedMessageId = dr.MessageId
-                })
-            .ToListAsync(cancellationToken);
-
-        // Group by message ID and take the latest detection result per message (in-memory)
-        var latestResults = results
-            .GroupBy(r => r.MessageId)
-            .Select(g => g.OrderByDescending(r => r.CheckTimestamp).First())
-            .ToList();
-
-        // Build final result with absolute net_score as display score
-        return latestResults
-            .Select(r => new UiModels.ContentCheckRecord(
-                CheckTimestamp: r.CheckTimestamp,
-                UserId: r.UserId,
-                IsSpam: r.IsSpam,
-                Score: Math.Abs(r.NetScore),
-                Reason: r.Reason,
-                MatchedMessageId: r.MatchedMessageId))
-            .Where(c => c.MatchedMessageId.HasValue)
-            .ToDictionary(c => c.MatchedMessageId!.Value, c => c);
-    }
+    public Task<Dictionary<int, UiModels.ContentCheckRecord>> GetContentChecksForMessagesAsync(long chatId, IEnumerable<int> messageIds, CancellationToken cancellationToken = default)
+        => _messageHistoryRepository.GetCurrentContentChecksAsync(chatId, messageIds.ToArray(), cancellationToken);
 
     public async Task<UiModels.PhotoMessageRecord?> GetUserRecentPhotoAsync(long userId, long chatId, CancellationToken cancellationToken = default)
     {

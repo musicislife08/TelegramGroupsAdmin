@@ -350,4 +350,44 @@ public class MessageHistoryRepository : IMessageHistoryRepository
             })
             .ToListAsync(cancellationToken);
     }
+
+    public async Task<IReadOnlyList<UiModels.RecentMessageVerdict>> GetRecentMessagesWithVerdictAsync(
+        long chatId, int count, CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var rows = await (
+            from m in context.Messages.AsNoTracking()
+            where m.ChatId == chatId
+            join v in context.MessageVerdicts.AsNoTracking() on new { m.MessageId, m.ChatId } equals new { v.MessageId, v.ChatId }
+            join tu in context.TelegramUsers.AsNoTracking() on m.UserId equals tu.TelegramUserId into users
+            from tu in users.DefaultIfEmpty()
+            orderby m.Timestamp descending
+            select new { m.MessageId, m.UserId, Username = tu != null ? tu.Username : null, m.MessageText, m.Timestamp, v.IsSpam }
+        ).Take(count).ToListAsync(cancellationToken);
+
+        return rows.Select(r => new UiModels.RecentMessageVerdict(r.MessageId, r.UserId, r.Username, r.MessageText, r.Timestamp, r.IsSpam)).ToList();
+    }
+
+    public async Task<Dictionary<int, UiModels.ContentCheckRecord>> GetCurrentContentChecksAsync(
+        long chatId, IReadOnlyCollection<int> messageIds, CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var rows = await (
+            from v in context.MessageVerdicts.AsNoTracking()
+            where v.ChatId == chatId && messageIds.Contains(v.MessageId) && v.VerdictId != null
+            join dr in context.DetectionResults.AsNoTracking() on v.VerdictId equals (long?)dr.Id
+            join m in context.Messages.AsNoTracking() on new { v.MessageId, v.ChatId } equals new { m.MessageId, m.ChatId }
+            select new { dr.DetectedAt, m.UserId, v.IsSpam, dr.Score, dr.Reason, dr.DetectionMethod, v.MessageId }
+        ).ToListAsync(cancellationToken);
+
+        return rows.ToDictionary(
+            r => r.MessageId,
+            r => new UiModels.ContentCheckRecord(
+                CheckTimestamp: r.DetectedAt,
+                UserId: r.UserId,
+                IsSpam: r.IsSpam,
+                Score: r.Score,
+                Reason: r.Reason ?? $"{r.DetectionMethod}: {(r.IsSpam ? "spam" : "ham")}",
+                MatchedMessageId: r.MessageId));
+    }
 }

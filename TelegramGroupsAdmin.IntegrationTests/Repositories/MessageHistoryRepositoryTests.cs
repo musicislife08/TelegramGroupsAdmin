@@ -1446,4 +1446,32 @@ public class MessageHistoryRepositoryTests
     }
 
     #endregion
+
+    #region Current verdict reads
+
+    [Test]
+    public async Task GetRecentMessagesWithVerdictAsync_CorrectedToHam_IsNotShownAsSpam()
+    {
+        // Previously WasSpam = Any(row.IsSpam): an admin-corrected message stayed "spam" in the AI history.
+        var rows = await _repository!.GetRecentMessagesWithVerdictAsync(GoldenDatasetConstants.Chats.MainChatId, count: 1000);
+        Assert.That(rows.Single(r => r.MessageId == GoldenDatasetConstants.Verdicts.CorrectedToHamMsgId).IsSpam, Is.False);
+    }
+
+    [Test]
+    public async Task GetRecentMessagesWithVerdictAsync_AutoBanned_IsSpam()
+    {
+        var rows = await _repository!.GetRecentMessagesWithVerdictAsync(GoldenDatasetConstants.Chats.MainChatId, count: 1000);
+        Assert.That(rows.Single(r => r.MessageId == GoldenDatasetConstants.Verdicts.AutoBanMsgId).IsSpam, Is.True);
+    }
+
+    [Test]
+    public async Task GetCurrentContentChecksAsync_UsesCurrentVerdict_NotANewerFileScan()
+    {
+        var checks = await _repository!.GetCurrentContentChecksAsync(
+            GoldenDatasetConstants.Verdicts.FileScanBesideScanChatId, [GoldenDatasetConstants.Verdicts.FileScanBesideScanMsgId]);
+
+        Assert.That(checks[GoldenDatasetConstants.Verdicts.FileScanBesideScanMsgId].Reason, Is.Not.EqualTo("No threats detected"));
+    }
+
+    #endregion
 }

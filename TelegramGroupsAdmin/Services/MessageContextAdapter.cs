@@ -1,23 +1,23 @@
 using TelegramGroupsAdmin.Core.Extensions;
-using TelegramGroupsAdmin.Telegram.Services;
+using TelegramGroupsAdmin.Telegram.Repositories;
 using ContentDetectionServices = TelegramGroupsAdmin.ContentDetection.Services;
 
 namespace TelegramGroupsAdmin.Services;
 
 /// <summary>
-/// Adapter to convert from main app's MessageQueryService
+/// Adapter to convert from main app's MessageHistoryRepository
 /// to ContentDetection's IMessageContextProvider interface
 /// </summary>
 public class MessageContextAdapter : ContentDetectionServices.IMessageContextProvider
 {
-    private readonly IMessageQueryService _queryService;
+    private readonly IMessageHistoryRepository _messageHistoryRepository;
     private readonly ILogger<MessageContextAdapter> _logger;
 
     public MessageContextAdapter(
-        IMessageQueryService queryService,
+        IMessageHistoryRepository messageHistoryRepository,
         ILogger<MessageContextAdapter> logger)
     {
-        _queryService = queryService;
+        _messageHistoryRepository = messageHistoryRepository;
         _logger = logger;
     }
 
@@ -28,17 +28,16 @@ public class MessageContextAdapter : ContentDetectionServices.IMessageContextPro
     {
         try
         {
-            // Get recent messages with detection history to determine spam status
-            var messages = await _queryService.GetMessagesWithDetectionHistoryAsync(chat.Id, count, cancellationToken: cancellationToken);
+            // Get recent messages with their current verdict (message_verdicts view) to determine spam status
+            var messages = await _messageHistoryRepository.GetRecentMessagesWithVerdictAsync(chat.Id, count, cancellationToken);
 
-            // Convert to spam library's HistoryMessage format
             return messages.Select(m => new ContentDetectionServices.HistoryMessage
             {
-                UserId = m.Message.User.Id.ToString(),
-                UserName = m.Message.User.Username ?? "Unknown",
-                Message = m.Message.MessageText ?? string.Empty,
-                Timestamp = m.Message.Timestamp.UtcDateTime,
-                WasSpam = m.DetectionResults.Any(dr => dr.IsSpam)
+                UserId = m.UserId.ToString(),
+                UserName = m.Username ?? "Unknown",
+                Message = m.MessageText ?? string.Empty,
+                Timestamp = m.Timestamp.UtcDateTime,
+                WasSpam = m.IsSpam
             }).ToList();
         }
         catch (Exception ex)

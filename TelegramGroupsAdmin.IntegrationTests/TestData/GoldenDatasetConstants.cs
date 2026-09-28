@@ -485,6 +485,9 @@ internal static class GoldenDatasetConstants
         /// <summary>The FileScan row of <see cref="FileScanBesideScanMsgId"/>.</summary>
         public const long FileScanRowId = 2535;
 
+        /// <summary>Chat of <see cref="FileScanBesideScanMsgId"/> (MainChat).</summary>
+        public const long FileScanBesideScanChatId = -100026957614982L;
+
         /// <summary>Edited: UntrainedHam (AI review 2.0 below threshold, dr 1933). Crypto Group; message kept, sender not banned.</summary>
         public const int UntrainedHamMsgId = 22160;
 

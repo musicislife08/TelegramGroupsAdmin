@@ -28,4 +28,23 @@ public interface IMessageHistoryRepository
     Task<List<UiModels.UserMessageInfo>> GetUserMessagesAsync(
         long telegramUserId,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Gets the most recent messages in a chat along with each message's current verdict
+    /// (message_verdicts view), newest first. Used to build AI veto history context so
+    /// admin-corrected and sub-threshold-allowed messages are not shown as spam exemplars.
+    /// </summary>
+    Task<IReadOnlyList<UiModels.RecentMessageVerdict>> GetRecentMessagesWithVerdictAsync(
+        long chatId,
+        int count,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Gets the current verdict (never a FileScan) for each requested message, keyed by message ID,
+    /// for message-badge display. Messages with no verdict row are omitted.
+    /// </summary>
+    Task<Dictionary<int, UiModels.ContentCheckRecord>> GetCurrentContentChecksAsync(
+        long chatId,
+        IReadOnlyCollection<int> messageIds,
+        CancellationToken cancellationToken = default);
 }
