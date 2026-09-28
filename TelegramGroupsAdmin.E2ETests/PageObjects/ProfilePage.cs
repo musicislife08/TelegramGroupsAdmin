@@ -40,6 +40,10 @@ public class ProfilePage
     {
         await _page.GotoAsync(BasePath);
         await Expect(_page.Locator(PageTitle)).ToBeVisibleAsync();
+        // The page is prerendered with its sections loaded, then the interactive circuit re-runs
+        // OnInitializedAsync and re-renders them; wait for the circuit so the load checks below see
+        // the interactive render rather than the prerendered HTML it is about to replace.
+        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
         await WaitForLoadAsync();
     }
 
