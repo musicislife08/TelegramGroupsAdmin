@@ -614,21 +614,24 @@ public class MLTextClassifierServiceTests
     [Test]
     public async Task TrainModelAsync_BalancedDataset_IsBalancedTrue()
     {
-        // Arrange (R19, Task 8 fix round 2) — KeepDetectionResults(0) alone is no longer
-        // enough to express "balanced": under the verdict model, the 24 chat_id=0
+        // Arrange (R19/R20, Task 8 fix rounds 2-3) — KeepDetectionResults(0) alone is no
+        // longer enough to express "balanced": under the verdict model, the 24 chat_id=0
         // Training-Data-page/import samples (TrainingDataPage/Import sources) are explicit
-        // decisions, not implicit ones, so they survive KeepDetectionResults(0) (which now
-        // only drains ContentScan/FileScan rows) and skew the raw explicit set to 121 spam
-        // vs 99 ham (81.7% spam — confirmed via message_verdicts: 98 spam/98 ham excluding
-        // chat_id=0, vs 23 spam/1 ham for chat_id=0 alone).
+        // decisions, not implicit ones, so they survive KeepDetectionResults(0) (which only
+        // drains ContentScan/FileScan rows) and skew the raw explicit set to 121 spam vs 99
+        // ham (81.7% spam).
         // KeepSpam(100)/KeepHam(100) express "the full, naturally-balanced canonical label
-        // set" (training_labels has 99 spam + 99 ham — comfortably under 100, so this is a
-        // no-op cap, not a number reverse-engineered to hit the ratio window) and — per R17
-        // — now also prune detection_results decision rows (including chat_id=0 ones) down
-        // to whichever survive with a matching training_labels row, which drops all but 3
-        // of the 24 chat-0 page/import decisions (21 have no training_labels backing at
-        // all). KeepDetectionResults(0) still drains the ContentScan-sourced implicit spam
-        // pool so it doesn't further unbalance the set.
+        // set" — a round number comfortably above the true ham availability (99) and not
+        // reverse-engineered to hit the ratio window. Per R20, KeepSpam/KeepHam select and
+        // prune directly from the explicit *decision* pool in detection_results (the label
+        // store the SUT reads), chat_id=0 decisions included on equal footing: ham's pool
+        // (99) is fully under the 100 cap (a no-op, all of it survives); spam's pool (121,
+        // 23 of them chat_id=0) is capped down to exactly 100, cutting off whichever
+        // messages sort last by (chat_id, message_id) — training_labels is then pruned to
+        // match. KeepDetectionResults(0) still drains the ContentScan-sourced implicit spam
+        // pool so it doesn't further unbalance the set. Result: 100 raw / 82 post-dedup
+        // explicit spam, 99 raw / 44 post-dedup (16 explicit + 28 implicit) ham — 65.1%
+        // spam ratio, inside [0.2, 0.8].
         await using var context = _testHelper!.GetDbContext();
         await GoldenDataset.Reduce(context)
             .KeepSpam(100)
