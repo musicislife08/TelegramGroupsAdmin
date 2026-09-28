@@ -1,6 +1,7 @@
 using Bunit;
 using Microsoft.AspNetCore.Components;
 using TelegramGroupsAdmin.Components.Shared;
+using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Models;
 
@@ -627,6 +628,52 @@ public class MessageBubbleTelegramTests : MudBlazorTestContext
         var menuContainer = cut.FindAll(".tg-actions-menu");
         Assert.That(menuContainer.Count, Is.GreaterThan(0),
             "Actions menu container should be present when ShowSpamActions is true");
+    }
+
+    #endregion
+
+    #region Current Verdict Row (FileScan ignored)
+
+    private static DetectionResultRecord Row(long id, VerdictSource source, VerdictClassification classification, DateTimeOffset at) => new()
+    {
+        Id = id,
+        MessageId = 123,
+        ChatId = 789,
+        DetectedAt = at,
+        Source = source,
+        Classification = classification,
+        DetectionMethod = source.ToString(),
+        Score = 0,
+        AddedBy = Actor.AutoDetection
+    };
+
+    /// <summary>
+    /// The tooltip and the Mark-as-Ham visibility share one "current verdict row" helper; a newer
+    /// FileScan row must not become it. (Menu items render in a popover portal that bUnit does not
+    /// open here, so the shared helper is asserted through the badge tooltip.)
+    /// </summary>
+    [Test]
+    public void DetectionTooltip_IgnoresNewerFileScanRow()
+    {
+        var t = DateTimeOffset.UtcNow.AddHours(-1);
+        var history = new List<DetectionResultRecord>
+        {
+            Row(1, VerdictSource.ContentScan, VerdictClassification.ImplicitSpam, t),
+            Row(2, VerdictSource.FileScan, VerdictClassification.UntrainedHam, t.AddMinutes(1))
+        };
+
+        var cut = Render<MessageBubbleTelegram>(p => p
+            .Add(x => x.Message, CreateMessage())
+            .Add(x => x.ContentCheck, CreateContentCheck(isSpam: true, score: 4.5))
+            .Add(x => x.DetectionHistory, history));
+
+        var title = cut.Find(".tg-badge").GetAttribute("title");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(title, Does.StartWith("SPAM"));
+            Assert.That(title, Does.Contain($"Source: {VerdictSource.ContentScan}"));
+            Assert.That(title, Does.Not.Contain(nameof(VerdictSource.FileScan)));
+        }
     }
 
     #endregion

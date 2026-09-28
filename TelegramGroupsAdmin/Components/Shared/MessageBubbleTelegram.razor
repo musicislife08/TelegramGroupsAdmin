@@ -553,14 +553,8 @@
         return Core.Utilities.MediaUtilities.GetMediaWebPath(filename, (int)mediaType);
     }
 
-    private bool IsManuallyMarkedAsHam()
-    {
-        if (DetectionHistory == null || !DetectionHistory.Any())
-            return false;
-
-        var latest = DetectionHistory.OrderByDescending(d => d.DetectedAt).First();
-        return latest is { Source: VerdictSource.WebMarkHam or VerdictSource.ReviewDismiss };
-    }
+    private bool IsManuallyMarkedAsHam() =>
+        GetLatestDetection() is { Source: VerdictSource.WebMarkHam or VerdictSource.ReviewDismiss };
 
     /// <summary>
     /// Format duration in seconds to MM:SS format
@@ -688,11 +682,15 @@
     }
 
     /// <summary>
-    /// Get the latest detection result from history (cached to avoid repeated LINQ queries)
-    /// Phase UX-1: Performance optimization
+    /// The row that is the message's current verdict: the latest non-FileScan row, ordered like the
+    /// message_verdicts view (detected_at, then id). A file scan never becomes the verdict.
     /// </summary>
     private DetectionResultRecord? GetLatestDetection() =>
-        DetectionHistory?.OrderByDescending(d => d.DetectedAt).FirstOrDefault();
+        DetectionHistory?
+            .Where(d => d.Source != VerdictSource.FileScan)
+            .OrderByDescending(d => d.DetectedAt)
+            .ThenByDescending(d => d.Id)
+            .FirstOrDefault();
 
     /// <summary>
     /// Get top contributing factors from detection history for spam/ham badge
