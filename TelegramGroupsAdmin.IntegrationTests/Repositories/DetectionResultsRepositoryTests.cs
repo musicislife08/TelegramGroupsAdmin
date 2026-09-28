@@ -481,27 +481,33 @@ public class DetectionResultsRepositoryTests
 
     #region OpenAI veto analytics
 
-    // dr1492 (the FN-pair scan) carries an *abstained* OpenAI check ("API key not configured") over a
-    // Bayes spam flag, which the SUT currently also counts as a veto. These tests assert only on the real
-    // (non-abstained, Score 0) veto anchor and on algorithms dr1492 does not touch.
+    // Canonical vetoes: dr1934 (post-hotfix) plus dr22 and dr1639, prod scans from before the 2025-11-23 hotfix
+    // whose OpenAI check AddVerdictEvents repaired to the veto encoding. dr1492 (the FN-pair scan) carries an
+    // *abstained* OpenAI check ("API key not configured") over a Bayes spam flag, which is not a veto.
 
     private static readonly DateTimeOffset Always = DateTimeOffset.MinValue;
 
     [Test]
-    public async Task GetOpenAIVetoAnalyticsAsync_CountsTheCanonicalVetoPerOverriddenAlgorithm()
+    public async Task GetOpenAIVetoAnalyticsAsync_CountsTheCanonicalVetoesPerOverriddenAlgorithm()
     {
         await using var ctx = _testHelper!.GetDbContext();
-        var veto = await ctx.DetectionResults.SingleAsync(d => d.Id == GoldenDatasetConstants.Verdicts.OpenAIVetoScanRowId);
-        var vetoChecks = CheckResultsSerializer.Deserialize(veto.CheckResultsJson!);
+        var vetoIds = GoldenDatasetConstants.Verdicts.AllVetoScanRowIds;
+        var vetoes = await ctx.DetectionResults.Where(d => vetoIds.Contains(d.Id)).ToListAsync();
+        var vetoChecks = vetoes.Select(v => CheckResultsSerializer.Deserialize(v.CheckResultsJson!)).ToList();
         using (Assert.EnterMultipleScope())
         {
-            // guard the canonical edit
-            Assert.That(veto.Source, Is.EqualTo((int)VerdictSource.ContentScan));
-            Assert.That(veto.Classification, Is.EqualTo((int)VerdictClassification.ImplicitHam));
-            var openAi = vetoChecks.Single(c => c.CheckName == CheckName.OpenAI);
-            Assert.That(openAi.Abstained, Is.False);
-            Assert.That(openAi.Score, Is.Zero);
+            // guard the canonical edits
+            Assert.That(vetoes, Has.Count.EqualTo(vetoIds.Length));
+            foreach (var (veto, checks) in vetoes.Zip(vetoChecks))
+            {
+                Assert.That(veto.Source, Is.EqualTo((int)VerdictSource.ContentScan), $"dr{veto.Id}");
+                Assert.That(veto.Classification, Is.EqualTo((int)VerdictClassification.ImplicitHam), $"dr{veto.Id}");
+                var openAi = checks.Single(c => c.CheckName == CheckName.OpenAI);
+                Assert.That(openAi.Abstained, Is.False, $"dr{veto.Id}");
+                Assert.That(openAi.Score, Is.Zero, $"dr{veto.Id}");
+            }
         }
+        var stopWordsVetoes = vetoChecks.Count(checks => checks.Any(c => c.CheckName == CheckName.StopWords && c.IsSpam));
 
         // Detector runs only: admin decisions and file scans are not content scans.
         var jsonRows = await ctx.DetectionResults
@@ -515,12 +521,13 @@ public class DetectionResultsRepositoryTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(analytics.TotalDetections, Is.EqualTo(jsonRows.Count));
-            Assert.That(analytics.VetoedCount, Is.EqualTo(1), "only the canonical veto; an abstained OpenAI check is no veto");
-            // StopWords was overridden only by the canonical veto, so its stat is exact.
+            Assert.That(analytics.VetoedCount, Is.EqualTo(vetoIds.Length),
+                "the canonical vetoes, repaired pre-hotfix ones included; an abstained OpenAI check is no veto");
+            // StopWords was overridden only by canonical vetoes, so its stat is exact.
             var stopWords = analytics.AlgorithmStats.Single(s => s.AlgorithmName == nameof(CheckName.StopWords));
-            Assert.That(stopWords.VetoedCount, Is.EqualTo(1));
+            Assert.That(stopWords.VetoedCount, Is.EqualTo(stopWordsVetoes));
             Assert.That(stopWords.SpamFlagsCount, Is.EqualTo(stopWordsFlags));
-            Assert.That(stopWords.VetoRate, Is.EqualTo((decimal)1 / stopWordsFlags * 100));
+            Assert.That(stopWords.VetoRate, Is.EqualTo((decimal)stopWordsVetoes / stopWordsFlags * 100));
             Assert.That(analytics.AlgorithmStats.Select(s => s.AlgorithmName), Does.Contain(nameof(CheckName.Bayes)));
             Assert.That(analytics.AlgorithmStats.Select(s => s.AlgorithmName), Does.Not.Contain(nameof(CheckName.OpenAI)));
             Assert.That(analytics.AlgorithmStats.Select(s => s.VetoRate), Is.Ordered.Descending);
@@ -555,9 +562,25 @@ public class DetectionResultsRepositoryTests
     }
 
     [Test]
+    public async Task GetRecentVetoedMessagesAsync_IncludesRepairedPreHotfixVetoes()
+    {
+        await using var ctx = _testHelper!.GetDbContext();
+        var legacyIds = new[] { GoldenDatasetConstants.Verdicts.LegacyVetoEarlyScanRowId, GoldenDatasetConstants.Verdicts.LegacyVetoLateScanRowId };
+        var legacy = await ctx.DetectionResults.Where(d => legacyIds.Contains(d.Id)).ToListAsync();
+        Assert.That(legacy.Select(d => d.Properties), Has.All.Contains("repaired_legacy_veto"), "canonical precondition");
+
+        var vetoed = await _repository!.GetRecentVetoedMessagesAsync(limit: 1000);
+
+        Assert.That(vetoed.Select(v => v.MessageId), Is.SupersetOf(new[]
+        {
+            GoldenDatasetConstants.Verdicts.LegacyVetoEarlyMsgId, GoldenDatasetConstants.Verdicts.LegacyVetoLateMsgId
+        }));
+    }
+
+    [Test]
     public async Task GetRecentVetoedMessagesAsync_SmallLimit_StillFindsOlderVetoes()
     {
-        // The canonical veto is older than many non-spam scans; a limit of 1 must still reach it.
+        // The newest canonical veto is older than many non-spam scans; a limit of 1 must still reach it.
         var vetoed = await _repository!.GetRecentVetoedMessagesAsync(limit: 1);
 
         Assert.That(vetoed.Select(v => v.MessageId), Is.EqualTo(new[] { GoldenDatasetConstants.Verdicts.OpenAIVetoMsgId }));

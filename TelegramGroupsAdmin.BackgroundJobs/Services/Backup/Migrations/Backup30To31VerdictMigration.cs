@@ -75,11 +75,14 @@ public static class Backup30To31VerdictMigration
         foreach (var row in rows)
         {
             var source = SourceOf(row);
+            var repairedVeto = source == ContentScan && RepairLegacyVeto(row);
             var classification = ClassificationOf(row, source, thresholds);
             row["source"] = source;
             row["classification"] = classification;
             if (source == ContentScan)
-                row["properties"] = """{"backfilled": true}""";
+                row["properties"] = repairedVeto
+                    ? """{"backfilled": true, "repaired_legacy_veto": true}"""
+                    : """{"backfilled": true}""";
         }
 
         var nextId = rows.Count == 0 ? 1 : rows.Max(r => Long(r["id"]) ?? 0) + 1;
@@ -250,6 +253,44 @@ public static class Backup30To31VerdictMigration
         if (isSpam)
             return Bool(row["used_for_training"]) == true ? ImplicitSpam : UntrainedSpam;
         return aiPositive ? UntrainedHam : ImplicitHam;
+    }
+
+    /// <summary>
+    /// Before the 2025-11-23 hotfix a "clean" OpenAI answer was stored as Abstained=true with its
+    /// confidence in Score. Rewrites those checks to the veto encoding (Abstained=false, Score=0),
+    /// in the representation the row came in. Returns whether the row changed.
+    /// </summary>
+    private static bool RepairLegacyVeto(JsonObject row)
+    {
+        var node = row["check_results_json"];
+        var fromText = node is JsonValue v && v.TryGetValue<string>(out _);
+        var root = node switch
+        {
+            JsonValue value when value.TryGetValue<string>(out var text) && !string.IsNullOrWhiteSpace(text) => JsonNode.Parse(text),
+            JsonObject o => o,
+            _ => null
+        };
+
+        if (root?["Checks"] is not JsonArray checks)
+            return false;
+
+        var repaired = false;
+        foreach (var check in checks.OfType<JsonObject>())
+        {
+            if (Int(check["CheckName"]) == OpenAiCheck
+                && Bool(check["Abstained"]) == true
+                && Double(check["Score"]) > 0
+                && Str(check["Details"])?.StartsWith("OpenAI vetoed spam", StringComparison.Ordinal) == true)
+            {
+                check["Abstained"] = false;
+                check["Score"] = 0;
+                repaired = true;
+            }
+        }
+
+        if (repaired && fromText)
+            row["check_results_json"] = root.ToJsonString();
+        return repaired;
     }
 
     /// <summary>A check result. Abstained / Score are null when absent (the SQL treats those as neither veto nor positive).</summary>

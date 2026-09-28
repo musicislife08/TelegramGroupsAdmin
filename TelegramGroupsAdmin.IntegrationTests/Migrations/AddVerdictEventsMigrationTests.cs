@@ -49,6 +49,13 @@ public class AddVerdictEventsMigrationTests
             '{"Checks":[{"CheckName":8,"Score":5,"Abstained":false}]}'),
         (100007, 1, -1002, '2026-01-01T00:00:00Z', 'auto', 'Bayes', 2.8, 2.8, 'Additive score', 'auto_detection', NULL, NULL, false, 0,
             '{"Checks":[{"CheckName":3,"Score":2.8,"Abstained":false}]}'),
+        -- pre-hotfix (2025-11-23) OpenAI veto encoding: Abstained=true, confidence in Score
+        (100019, 15, -1001, '2025-11-11T18:17:12Z', 'auto', 'StopWords, Bayes, OpenAI', 4.5, 0, 'OpenAI vetoed spam: legitimate question', 'auto_detection', NULL, NULL, true, 0,
+            '{"Checks":[{"CheckName":0,"Score":0.5,"Abstained":false},{"CheckName":6,"Score":4.5,"Abstained":true,"Details":"OpenAI vetoed spam: legitimate question"}]}'),
+        (100020, 16, -1001, '2025-11-11T18:17:12Z', 'auto', 'Bayes, OpenAI', 4.5, 3.0, 'OpenAI vetoed spam: on topic', 'auto_detection', NULL, NULL, true, 0,
+            '{"Checks":[{"CheckName":3,"Score":3.0,"Abstained":false},{"CheckName":6,"Score":4.5,"Abstained":true,"Details":"OpenAI vetoed spam: on topic"}]}'),
+        (100021, 17, -1001, '2025-11-11T18:17:12Z', 'auto', 'Bayes, OpenAI', 0.5, 0.5, 'No spam detected', 'auto_detection', NULL, NULL, false, 0,
+            '{"Checks":[{"CheckName":3,"Score":0.5,"Abstained":false},{"CheckName":6,"Score":4.5,"Abstained":true,"Details":"OpenAI error: timeout"}]}'),
         -- file scans
         (100008, 7, -1001, '2026-01-01T00:00:00Z', 'file_scan', 'FileScanningCheck', 5, 5, 'Malware', 'file_scanner', NULL, NULL, false, 0, NULL),
         (100009, 8, -1001, '2026-01-01T00:00:00Z', 'file_scan', 'FileScanningCheck', 0, 0, 'Clean', 'file_scanner', NULL, NULL, false, 0, NULL),
@@ -106,6 +113,9 @@ public class AddVerdictEventsMigrationTests
     [TestCase(100005, 0, 3, TestName = "AI veto → ContentScan/ImplicitHam")]
     [TestCase(100006, 0, 2, TestName = "Hard block → ContentScan/ImplicitSpam")]
     [TestCase(100007, 0, 3, TestName = "Per-chat threshold 3.0 makes 2.8 ham")]
+    [TestCase(100019, 0, 3, TestName = "Pre-hotfix OpenAI veto → ContentScan/ImplicitHam")]
+    [TestCase(100020, 0, 3, TestName = "Pre-hotfix OpenAI veto beats a score over the threshold")]
+    [TestCase(100021, 0, 3, TestName = "Abstained OpenAI with a score but no veto text stays abstained")]
     [TestCase(100008, 1, 4, TestName = "Infected file → FileScan/UntrainedSpam")]
     [TestCase(100009, 1, 5, TestName = "Clean file → FileScan/UntrainedHam")]
     [TestCase(100010, 11, 0, TestName = "Web mark spam")]
@@ -124,6 +134,32 @@ public class AddVerdictEventsMigrationTests
         {
             Assert.That(source, Is.EqualTo(expectedSource));
             Assert.That(classification, Is.EqualTo(expectedClassification));
+        }
+    }
+
+    [TestCase(100019, true, TestName = "Pre-hotfix veto check rewritten to the veto encoding")]
+    [TestCase(100020, true, TestName = "Pre-hotfix veto check over threshold rewritten")]
+    [TestCase(100021, false, TestName = "Abstained OpenAI check without veto text left alone")]
+    public async Task Backfill_LegacyVetoRepair(long id, bool expectRepaired)
+    {
+        await using var conn = new NpgsqlConnection(_helper.ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = new NpgsqlCommand("""
+            SELECT (c->>'Abstained')::boolean, (c->>'Score')::double precision,
+                   COALESCE((d.properties->>'repaired_legacy_veto')::boolean, false),
+                   COALESCE((d.properties->>'backfilled')::boolean, false)
+            FROM detection_results d, jsonb_array_elements(d.check_results_json->'Checks') c
+            WHERE d.id = @id AND (c->>'CheckName')::int = 6
+            """, conn);
+        cmd.Parameters.AddWithValue("id", id);
+        await using var reader = await cmd.ExecuteReaderAsync();
+        Assert.That(await reader.ReadAsync(), Is.True, $"row {id} has no OpenAI check");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(reader.GetBoolean(0), Is.EqualTo(!expectRepaired), "Abstained");
+            Assert.That(reader.GetDouble(1), Is.EqualTo(expectRepaired ? 0 : 4.5), "Score");
+            Assert.That(reader.GetBoolean(2), Is.EqualTo(expectRepaired), "repaired_legacy_veto marker");
+            Assert.That(reader.GetBoolean(3), Is.True, "backfilled marker survives the repair marker");
         }
     }
 

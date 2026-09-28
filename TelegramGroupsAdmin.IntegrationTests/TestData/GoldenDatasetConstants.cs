@@ -518,7 +518,7 @@ internal static class GoldenDatasetConstants
         public static readonly string[] VideoFeaturesKeyframeHashes = ["PH7/58OBGDw=", "Dx8/f/78+PA=", "qlWqVQ/wD/A="];
 
         /// <summary>
-        /// Edited 2026-09-28: the only canonical OpenAI veto. ContentScan dr 1934 on msg 212950 (MainChat,
+        /// Edited 2026-09-28: the only post-hotfix canonical OpenAI veto. ContentScan dr 1934 on msg 212950 (MainChat,
         /// sender 9011155048805): StopWords 2 and Bayes 5 flagged spam, OpenAI returned a non-abstained clean
         /// (Score 0) → ImplicitHam, score 0. The message's verdict is the later /spam decision (dr 1935,
         /// ExplicitSpam), so the veto was a miss an admin corrected.
@@ -527,6 +527,38 @@ internal static class GoldenDatasetConstants
 
         /// <summary>Message of <see cref="OpenAIVetoScanRowId"/>.</summary>
         public const int OpenAIVetoMsgId = 212950;
+
+        /// <summary>
+        /// Added 2026-09-28 (approved addition): prod scan from before the 2025-11-23 OpenAI veto hotfix,
+        /// when a clean answer was stored as Abstained=true with its confidence (4.5) in Score. Stored as
+        /// AddVerdictEvents leaves it: OpenAI check repaired to the veto encoding (Abstained=false, Score 0),
+        /// properties <c>repaired_legacy_veto</c>, ContentScan/ImplicitHam. dr 22 on msg 94 in
+        /// <see cref="LegacyVetoEarlyChatId"/>, sender 9320215215920; Bayes 4.9 was the overridden flag.
+        /// Message text is lorem at the original length (111), like every non-banned author's message.
+        /// </summary>
+        public const long LegacyVetoEarlyScanRowId = 22;
+
+        /// <summary>Message of <see cref="LegacyVetoEarlyScanRowId"/>.</summary>
+        public const int LegacyVetoEarlyMsgId = 94;
+
+        /// <summary>Chat of <see cref="LegacyVetoEarlyScanRowId"/> (not MainChat).</summary>
+        public const long LegacyVetoEarlyChatId = -100082190806505;
+
+        /// <summary>
+        /// Added 2026-09-28 (approved addition): second pre-hotfix veto, same repair as
+        /// <see cref="LegacyVetoEarlyScanRowId"/>. dr 1639 on msg 22127 in <see cref="LegacyVetoLateChatId"/>,
+        /// sender 9887521719353, from the later engine (score 0); Bayes 0.5 was the overridden flag. Lorem text (34).
+        /// </summary>
+        public const long LegacyVetoLateScanRowId = 1639;
+
+        /// <summary>Message of <see cref="LegacyVetoLateScanRowId"/>.</summary>
+        public const int LegacyVetoLateMsgId = 22127;
+
+        /// <summary>Chat of <see cref="LegacyVetoLateScanRowId"/> (not MainChat).</summary>
+        public const long LegacyVetoLateChatId = -100094881429433;
+
+        /// <summary>Every canonical OpenAI veto scan: the post-hotfix anchor and the two repaired pre-hotfix ones.</summary>
+        public static readonly long[] AllVetoScanRowIds = [OpenAIVetoScanRowId, LegacyVetoEarlyScanRowId, LegacyVetoLateScanRowId];
 
         /// <summary>User whose three latest messages are all training ham (msgs 71028/71030/71041).</summary>
         public const long AllHamUserId = 9184102838760L;

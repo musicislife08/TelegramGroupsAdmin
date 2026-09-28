@@ -85,6 +85,32 @@ namespace TelegramGroupsAdmin.Data.Migrations
                 END;
                 """);
 
+            // ── 1b. repair pre-hotfix OpenAI vetoes ────────────────────────────────────
+            // Before the 2025-11-23 hotfix a "clean" OpenAI answer was stored as Abstained=true with its
+            // confidence in Score. Rewrite those checks to the veto encoding (Abstained=false, Score=0)
+            // so the classification below, the classifier and the veto analytics all read them as vetoes.
+            migrationBuilder.Sql("""
+                UPDATE detection_results d SET
+                    check_results_json = jsonb_set(d.check_results_json, '{Checks}', (
+                        SELECT jsonb_agg(CASE
+                            WHEN (e.c->>'CheckName')::int = 6
+                                 AND (e.c->>'Abstained')::boolean
+                                 AND (e.c->>'Score')::double precision > 0
+                                 AND e.c->>'Details' LIKE 'OpenAI vetoed spam%'
+                            THEN e.c || '{"Abstained": false, "Score": 0}'::jsonb
+                            ELSE e.c END ORDER BY e.ord)
+                        FROM jsonb_array_elements(d.check_results_json->'Checks') WITH ORDINALITY AS e(c, ord))),
+                    properties = jsonb_build_object('repaired_legacy_veto', true)
+                WHERE d.source = 0
+                  AND jsonb_typeof(d.check_results_json->'Checks') = 'array'
+                  AND EXISTS (
+                      SELECT 1 FROM jsonb_array_elements(d.check_results_json->'Checks') c
+                      WHERE (c->>'CheckName')::int = 6
+                        AND (c->>'Abstained')::boolean
+                        AND (c->>'Score')::double precision > 0
+                        AND c->>'Details' LIKE 'OpenAI vetoed spam%');
+                """);
+
             // ── 2a. classification: content scans (one rule: score >= ReviewQueueThreshold) ─
             migrationBuilder.Sql("""
                 UPDATE detection_results dr SET
@@ -94,7 +120,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
                         WHEN x.ai_positive THEN 5                        -- UntrainedHam (AI review below threshold)
                         ELSE 3                                           -- ImplicitHam
                     END,
-                    properties = jsonb_build_object('backfilled', true)
+                    properties = COALESCE(dr.properties, '{}'::jsonb) || jsonb_build_object('backfilled', true)
                 FROM (
                     SELECT d.id,
                         CASE

@@ -29,7 +29,7 @@ public class LoadCanonicalAsyncTests
         Assert.That(await ctx.Users.CountAsync(), Is.GreaterThan(0), "users");
         Assert.That(await ctx.TelegramUsers.CountAsync(), Is.GreaterThan(0), "telegram_users");
         Assert.That(await ctx.ManagedChats.CountAsync(), Is.GreaterThan(0), "managed_chats");
-        Assert.That(await ctx.Messages.CountAsync(), Is.EqualTo(407), "messages should be exactly 407");
+        Assert.That(await ctx.Messages.CountAsync(), Is.EqualTo(409), "messages should be exactly 409");
         Assert.That(await ctx.WelcomeResponses.CountAsync(), Is.EqualTo(11), "welcome_responses should be exactly 11 (deliberate trim)");
         Assert.That(await ctx.BanCelebrationSubscribers.CountAsync(), Is.EqualTo(5),
             "ban_celebration_subscribers should be exactly 5 (approved canonical addition 2026-09-25)");

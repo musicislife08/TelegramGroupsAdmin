@@ -68,6 +68,9 @@ public class Backup30To31VerdictMigrationTests
                 Scan(14, 6, 9.0, true, """{"Checks": [{"Score": 9.0, "CheckName": 2, "Abstained": false}, {"Score": 0.0, "CheckName": 6, "Abstained": false}]}"""),
                 Scan(15, 7, 1.0, false, """{"Checks": [{"Score": 5.0, "CheckName": 8, "Abstained": false}]}"""),
                 Scan(16, 8, 3.0, false, """{"Checks": []}""", QuietChatId),
+                // pre-hotfix (2025-11-23) OpenAI veto encoding: Abstained=true, confidence in Score
+                Scan(20, 13, 3.0, true, """{"Checks": [{"Score": 3.0, "CheckName": 3, "Abstained": false}, {"Score": 4.5, "Details": "OpenAI vetoed spam: on topic", "CheckName": 6, "Abstained": true}]}"""),
+                Scan(21, 14, 0.5, false, """{"Checks": [{"Score": 4.5, "Details": "OpenAI error: timeout", "CheckName": 6, "Abstained": true}]}"""),
                 Row(new
                 {
                     id = 17, message_id = 9, chat_id = ChatId, detected_at = "2026-01-03T00:00:00+00:00", detection_source = "file_scan",
@@ -130,6 +133,31 @@ public class Backup30To31VerdictMigrationTests
             Assert.That(Classification(Get(backup, 14)), Is.EqualTo(3), "AI veto beats the score → ImplicitHam");
             Assert.That(Classification(Get(backup, 15)), Is.EqualTo(4), "single hard block → UntrainedSpam");
             Assert.That(Classification(Get(backup, 16)), Is.EqualTo(3), "per-chat threshold 4.0 beats the global 2.5");
+        }
+    }
+
+    [Test]
+    public void Apply_RepairsPreHotfixOpenAIVeto_MatchingTheSqlMigration()
+    {
+        var backup = Migrated();
+        var repaired = Get(backup, 20);
+        var untouched = Get(backup, 21);
+
+        static JsonElement OpenAI(JsonElement row) =>
+            JsonDocument.Parse(row.GetProperty("check_results_json").GetString()!).RootElement
+                .GetProperty("Checks").EnumerateArray().Single(c => c.GetProperty("CheckName").GetInt32() == 6);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Classification(repaired), Is.EqualTo(3), "the veto beats a score over the threshold → ImplicitHam");
+            Assert.That(OpenAI(repaired).GetProperty("Abstained").GetBoolean(), Is.False);
+            Assert.That(OpenAI(repaired).GetProperty("Score").GetDouble(), Is.Zero);
+            Assert.That(repaired.GetProperty("properties").GetString(),
+                Is.EqualTo("""{"backfilled": true, "repaired_legacy_veto": true}"""));
+
+            Assert.That(OpenAI(untouched).GetProperty("Abstained").GetBoolean(), Is.True, "no veto text → left abstained");
+            Assert.That(OpenAI(untouched).GetProperty("Score").GetDouble(), Is.EqualTo(4.5));
+            Assert.That(untouched.GetProperty("properties").GetString(), Is.EqualTo("""{"backfilled": true}"""));
         }
     }
 
