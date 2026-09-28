@@ -23,6 +23,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<HourlyDetectionStatsView> HourlyDetectionStats => Set<HourlyDetectionStatsView>();
     public DbSet<WelcomeResponseSummaryView> WelcomeResponseSummary => Set<WelcomeResponseSummaryView>();
     public DbSet<DetectionAccuracyView> DetectionAccuracy => Set<DetectionAccuracyView>();
+    public DbSet<MessageVerdictView> MessageVerdicts => Set<MessageVerdictView>();
 
     // User and auth tables
     public DbSet<UserRecordDto> Users => Set<UserRecordDto>();
@@ -599,6 +600,18 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.Entity<DetectionResultRecordDto>()
             .HasIndex(dr => dr.UsedForTraining);
 
+        // message_verdicts picks the latest row per (chat_id, message_id)
+        modelBuilder.Entity<DetectionResultRecordDto>()
+            .HasIndex(dr => new { dr.ChatId, dr.MessageId, dr.DetectedAt, dr.Id })
+            .IsDescending(false, false, true, true)
+            .HasDatabaseName("ix_detection_results_verdict_latest");
+        modelBuilder.Entity<DetectionResultRecordDto>()
+            .HasIndex(dr => dr.Classification)
+            .HasDatabaseName("ix_detection_results_classification");
+        modelBuilder.Entity<DetectionResultRecordDto>()
+            .HasIndex(dr => dr.Source)
+            .HasDatabaseName("ix_detection_results_source");
+
         // Performance indexes for veto queries and analytics
         modelBuilder.Entity<DetectionResultRecordDto>()
             .HasIndex(dr => dr.IsSpam)
@@ -1066,6 +1079,11 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.Entity<DetectionAccuracyView>()
             .HasNoKey()
             .ToView("detection_accuracy");
+
+        // message_verdicts: one current verdict per message (latest event wins)
+        modelBuilder.Entity<MessageVerdictView>()
+            .HasNoKey()
+            .ToView("message_verdicts");
 
         // ============================================================================
         // Content Detection Config JSON Mapping (Issue #252)

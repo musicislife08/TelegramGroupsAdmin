@@ -66,6 +66,21 @@ public class DetectionResultRecordDto
     [Column("chat_id")]
     public long ChatId { get; set; }
 
+    /// <summary>Core VerdictSource value. Nullable until DropLegacyVerdictColumns.</summary>
+    [Column("source")]
+    public int? Source { get; set; }
+
+    /// <summary>Core VerdictClassification value. Nullable until DropLegacyVerdictColumns.</summary>
+    [Column("classification")]
+    public int? Classification { get; set; }
+
+    /// <summary>Explanation only (e.g. backfill provenance). Never an input to any rule.</summary>
+    [Column("properties", TypeName = "jsonb")]
+    public string? Properties { get; set; }
+
+    [Column("audit_log_id")]
+    public long? AuditLogId { get; set; }
+
     // Navigation property
     public virtual MessageRecordDto? Message { get; set; }
 }

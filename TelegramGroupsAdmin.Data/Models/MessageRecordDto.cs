@@ -98,6 +98,10 @@ public class MessageRecordDto
     [Column("similarity_hash")]
     public long? SimilarityHash { get; set; }
 
+    /// <summary>Perceptual-hash features of the message's photo/video (MediaFeaturesDto JSON).</summary>
+    [Column("media_features", TypeName = "jsonb")]
+    public string? MediaFeatures { get; set; }
+
     // Navigation properties
     public virtual ICollection<DetectionResultRecordDto> DetectionResults { get; set; } = [];
     public virtual ICollection<MessageEditRecordDto> MessageEdits { get; set; } = [];
