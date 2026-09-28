@@ -407,7 +407,7 @@ public class MessageHistoryRepository : IMessageHistoryRepository
         await context.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task<IReadOnlyList<UiModels.MediaBackfillCandidate>> GetMediaFeatureBackfillCandidatesAsync(int limit, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<UiModels.MediaBackfillCandidate>> GetMediaFeatureBackfillCandidatesAsync(int limit, int offset, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         DataModels.MediaType[] videoTypes = [DataModels.MediaType.Video, DataModels.MediaType.Animation, DataModels.MediaType.VideoNote];
@@ -420,11 +420,11 @@ public class MessageHistoryRepository : IMessageHistoryRepository
                    // TrainingHandler's defensive download stores a photo under media_local_path
                    || (m.PhotoFileId != null && m.MediaLocalPath != null)
                    || (m.MediaLocalPath != null && m.MediaType != null && videoTypes.Contains(m.MediaType.Value)))
-            // Newest decision first: files that stay missing are retried every start and must not
-            // starve fresh decisions out of the batch.
-            orderby v.DetectedAt descending
+            // Newest decision first, with a stable tie-break so the caller can page past candidates
+            // whose files stay missing.
+            orderby v.DetectedAt descending, m.ChatId, m.MessageId
             select new { m.MessageId, m.ChatId, m.PhotoFileId, m.PhotoLocalPath, m.MediaLocalPath, m.MediaType }
-        ).Take(limit).ToListAsync(cancellationToken);
+        ).Skip(offset).Take(limit).ToListAsync(cancellationToken);
         return [.. rows.Select(r => new UiModels.MediaBackfillCandidate(
             r.MessageId, r.ChatId, r.PhotoLocalPath, r.MediaLocalPath,
             r.PhotoFileId != null ? UiModels.MediaType.Photo : (UiModels.MediaType?)r.MediaType))];

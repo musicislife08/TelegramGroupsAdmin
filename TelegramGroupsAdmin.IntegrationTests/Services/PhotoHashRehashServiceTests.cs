@@ -355,6 +355,79 @@ public class PhotoHashRehashServiceTests
         });
     }
 
+    /// <summary>
+    /// A file that stays missing is retried every start and sorts ahead of older decisions. With a
+    /// batch of one, the backfill must page past it rather than spend the batch on it.
+    /// </summary>
+    [Test]
+    public async Task RehashAsync_MissingFileAheadOfValidCandidate_DoesNotBlockIt()
+    {
+        var relative = $"full/-100900000000001/{Interlocked.Increment(ref _nextMessageId)}.jpg";
+        WriteTestImage(Path.Combine(_dataPath, "media", relative));
+        var valid = await SeedCuratedPhotoMessageAsync(relative);
+        // Seeded second, so its decision is newer and it comes first.
+        var missing = await SeedCuratedPhotoMessageAsync("full/-100900000000001/gone.jpg");
+
+        var result = await CreateService(MediaFeatureExtractor(), mediaBackfillLimit: 1).RehashAsync();
+
+        Assert.Multiple(async () =>
+        {
+            Assert.That(await ReloadMediaFeaturesAsync(valid.MessageId, valid.ChatId), Is.TypeOf<PhotoFeaturesDto>());
+            Assert.That(await ReloadMediaFeaturesAsync(missing.MessageId, missing.ChatId), Is.Null);
+            Assert.That(result.Recomputed, Is.EqualTo(1));
+            Assert.That(result.Unrecoverable, Is.EqualTo(1));
+        });
+    }
+
+    /// <summary>
+    /// An exception for one candidate (extractor or write) is counted and must not abort the backfill.
+    /// </summary>
+    [Test]
+    public async Task RehashAsync_CandidateThrows_OtherCandidatesStillGetFeatures()
+    {
+        var goodRelative = $"full/-100900000000001/{Interlocked.Increment(ref _nextMessageId)}.jpg";
+        var badRelative = $"full/-100900000000001/{Interlocked.Increment(ref _nextMessageId)}.jpg";
+        WriteTestImage(Path.Combine(_dataPath, "media", goodRelative));
+        WriteTestImage(Path.Combine(_dataPath, "media", badRelative));
+        var good = await SeedCuratedPhotoMessageAsync(goodRelative);
+        var bad = await SeedCuratedPhotoMessageAsync(badRelative); // newer: processed first
+
+        var real = MediaFeatureExtractor();
+        var extractor = Substitute.For<IMediaFeatureExtractor>();
+        extractor.ExtractPhotoAsync(Arg.Any<string>())
+            .Returns(call => call.Arg<string>().EndsWith(badRelative, StringComparison.Ordinal)
+                ? throw new IOException("disk error")
+                : real.ExtractPhotoAsync(call.Arg<string>()));
+
+        var result = await CreateService(extractor).RehashAsync();
+
+        Assert.Multiple(async () =>
+        {
+            Assert.That(await ReloadMediaFeaturesAsync(good.MessageId, good.ChatId), Is.TypeOf<PhotoFeaturesDto>());
+            Assert.That(await ReloadMediaFeaturesAsync(bad.MessageId, bad.ChatId), Is.Null);
+            Assert.That(result.Recomputed, Is.EqualTo(1));
+            Assert.That(result.Unrecoverable, Is.EqualTo(1));
+        });
+    }
+
+    private IMediaFeatureExtractor MediaFeatureExtractor() =>
+        _scope!.ServiceProvider.GetRequiredService<IMediaFeatureExtractor>();
+
+    private PhotoHashRehashService CreateService(IMediaFeatureExtractor extractor, int mediaBackfillLimit = 500)
+    {
+        var sp = _scope!.ServiceProvider;
+        return new PhotoHashRehashService(
+            sp.GetRequiredService<IDbContextFactory<AppDbContext>>(),
+            sp.GetRequiredService<IPhotoHashService>(),
+            sp.GetRequiredService<IMessageHistoryRepository>(),
+            extractor,
+            sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<AppOptions>>(),
+            sp.GetRequiredService<ILogger<PhotoHashRehashService>>())
+        {
+            MediaBackfillLimit = mediaBackfillLimit
+        };
+    }
+
     [Test]
     public async Task RehashAsync_LinkedChannelIconOnDisk_RecomputesHash()
     {

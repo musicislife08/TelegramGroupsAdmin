@@ -58,7 +58,8 @@ public interface IMessageHistoryRepository
     /// <summary>
     /// Gets messages whose current verdict is curated, that have no media features yet, and that
     /// carry a photo path or a video/animation/video-note path (startup media-feature backfill),
-    /// newest decision first. A photo message reports <see cref="UiModels.MediaType.Photo"/>.
+    /// newest decision first (stable order, so <paramref name="offset"/> pages past candidates the
+    /// caller could not recover). A photo message reports <see cref="UiModels.MediaType.Photo"/>.
     /// </summary>
-    Task<IReadOnlyList<UiModels.MediaBackfillCandidate>> GetMediaFeatureBackfillCandidatesAsync(int limit, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<UiModels.MediaBackfillCandidate>> GetMediaFeatureBackfillCandidatesAsync(int limit, int offset, CancellationToken cancellationToken = default);
 }
