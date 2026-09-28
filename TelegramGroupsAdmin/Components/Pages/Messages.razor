@@ -3,7 +3,6 @@
 @using TelegramGroupsAdmin.Telegram.Services.Media
 @using TelegramGroupsAdmin.Telegram.Services.Bot
 @using TelegramGroupsAdmin.ContentDetection.Models
-@using TelegramGroupsAdmin.ContentDetection.Repositories
 @using TelegramGroupsAdmin.Core.Extensions
 @using TelegramGroupsAdmin.Core.Models
 @using TelegramGroupsAdmin.Core.Services
@@ -19,7 +18,6 @@
 @inject IJSRuntime Js
 @inject IDialogService DialogService
 @inject ITelegramBotService BotService
-@inject IDetectionResultsRepository DetectionResultsRepository
 @inject ITrainingHandler TrainingHandler
 @inject IBotModerationService ModerationService
 @inject ITelegramUserMappingRepository TelegramMappingRepository
@@ -416,7 +414,7 @@
                     // Load detection history for Admin+ users (now included in wrapper)
                     if (WebUser!.PermissionLevel >= PermissionLevel.GlobalAdmin)
                     {
-                        var history = await DetectionResultsRepository.GetByMessageIdAsync(targetMessageId, _selectedChatId!.Value);
+                        var history = await MessageQueryService.GetDetectionHistoryAsync(targetMessageId, _selectedChatId!.Value);
                         messageWrapper.DetectionResults.AddRange(history);
                     }
                 }
@@ -982,7 +980,7 @@
     private async Task RefreshDetectionHistoryDisplayAsync(int messageId)
     {
         // Refresh detection history for this message in the wrapper (feeds the detection-history dialog)
-        var history = await DetectionResultsRepository.GetByMessageIdAsync(messageId, _selectedChatId!.Value);
+        var history = await MessageQueryService.GetDetectionHistoryAsync(messageId, _selectedChatId!.Value);
         var messageWrapper = _allMessages.FirstOrDefault(m => m.Message.MessageId == messageId);
         if (messageWrapper != null)
         {
@@ -1004,9 +1002,9 @@
     {
         // Use detection history from wrapper if available (avoids duplicate database query)
         var messageWrapper = _allMessages.FirstOrDefault(mw => mw.Message.MessageId == message.MessageId);
-        var history = messageWrapper?.DetectionResults ?? await DetectionResultsRepository.GetByMessageIdAsync(message.MessageId, message.Chat.Id);
+        var history = messageWrapper?.DetectionResults ?? await MessageQueryService.GetDetectionHistoryAsync(message.MessageId, message.Chat.Id);
 
-        var verdict = await DetectionResultsRepository.GetCurrentVerdictAsync(message.MessageId, message.Chat.Id);
+        var verdict = await MessageQueryService.GetCurrentVerdictAsync(message.MessageId, message.Chat.Id);
 
         var parameters = new DialogParameters<DetectionHistoryDialog>
         {

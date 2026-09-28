@@ -2,7 +2,10 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.ContentDetection.Models;
+using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Repositories.Mappings;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Core.Repositories.Mappings;
@@ -23,18 +26,29 @@ public class MessageQueryService : IMessageQueryService
     private readonly ILogger<MessageQueryService> _logger;
     private readonly string _imageStoragePath;
     private readonly IMessageHistoryRepository _messageHistoryRepository;
+    private readonly IDetectionResultsRepository _detectionResultsRepository;
 
     public MessageQueryService(
         IDbContextFactory<AppDbContext> contextFactory,
         ILogger<MessageQueryService> logger,
         IOptions<AppOptions> appOptions,
-        IMessageHistoryRepository messageHistoryRepository)
+        IMessageHistoryRepository messageHistoryRepository,
+        IDetectionResultsRepository detectionResultsRepository)
     {
         _contextFactory = contextFactory;
         _logger = logger;
         _imageStoragePath = appOptions.Value.DataPath;
         _messageHistoryRepository = messageHistoryRepository;
+        _detectionResultsRepository = detectionResultsRepository;
     }
+
+    /// <inheritdoc />
+    public Task<List<DetectionResultRecord>> GetDetectionHistoryAsync(int messageId, long chatId, CancellationToken cancellationToken = default)
+        => _detectionResultsRepository.GetByMessageIdAsync(messageId, chatId, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<MessageVerdict?> GetCurrentVerdictAsync(int messageId, long chatId, CancellationToken cancellationToken = default)
+        => _detectionResultsRepository.GetCurrentVerdictAsync(messageId, chatId, cancellationToken);
 
     public async Task<List<UiModels.MessageRecord>> GetRecentMessagesAsync(int limit = 100, CancellationToken cancellationToken = default)
     {

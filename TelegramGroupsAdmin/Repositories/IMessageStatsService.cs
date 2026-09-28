@@ -1,3 +1,4 @@
+using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.Models.Analytics;
 
 namespace TelegramGroupsAdmin.Repositories;
@@ -38,4 +39,14 @@ public interface IMessageStatsService
     /// and how many of those are spam
     /// </summary>
     Task<(int Total, int Spam)> GetCuratedTrainingCountsAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Veto statistics for messages flagged by detection checks but overridden by the AI veto, since <paramref name="since"/>.
+    /// </summary>
+    Task<OpenAIVetoAnalytics> GetOpenAIVetoAnalyticsAsync(DateTimeOffset since, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Recent messages flagged as spam but vetoed by the AI, for manual inspection.
+    /// </summary>
+    Task<List<VetoedMessage>> GetRecentVetoedMessagesAsync(int limit = 50, CancellationToken cancellationToken = default);
 }

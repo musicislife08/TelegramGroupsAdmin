@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Data;
@@ -108,6 +109,7 @@ public class MessageHistoryRepositoryTests
 
         // Register MessageHistoryRepository and extracted services (REFACTOR-3)
         services.AddScoped<IMessageHistoryRepository, MessageHistoryRepository>();
+        services.AddScoped<IDetectionResultsRepository, DetectionResultsRepository>(); // Required by MessageQueryService and MessageStatsService
         services.AddScoped<IMessageQueryService, MessageQueryService>();
         services.AddScoped<ITelegramUserRepository, TelegramUserRepository>(); // Required by MessageStatsService (UX-2.1)
         services.AddScoped<IMessageStatsRepository, MessageStatsRepository>();

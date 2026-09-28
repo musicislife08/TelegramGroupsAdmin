@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using NSubstitute;
+using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Data.Models;
 using TelegramGroupsAdmin.Models.Analytics;
@@ -37,7 +38,7 @@ public class MessageStatsServiceTests
         _mockFactory.CreateDbContextAsync(Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(_context));
 
-        _sut = new MessageStatsService(new MessageStatsRepository(_mockFactory));
+        _sut = new MessageStatsService(new MessageStatsRepository(_mockFactory), Substitute.For<IDetectionResultsRepository>());
     }
 
     [TearDown]

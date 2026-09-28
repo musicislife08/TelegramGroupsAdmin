@@ -2,7 +2,6 @@
 @using TelegramGroupsAdmin.ContentDetection.Models
 @inject IStopWordsRepository StopWordsRepository
 @inject IMessageStatsService MessageStatsService
-@inject IDetectionResultsRepository DetectionResultsRepository
 @inject ISnackbar Snackbar
 
 
@@ -497,8 +496,8 @@
         {
             // Get veto analytics for last 30 days
             var since = DateTimeOffset.UtcNow.AddDays(-30);
-            _vetoAnalytics = await DetectionResultsRepository.GetOpenAIVetoAnalyticsAsync(since);
-            _vetoedMessages = await DetectionResultsRepository.GetRecentVetoedMessagesAsync();
+            _vetoAnalytics = await MessageStatsService.GetOpenAIVetoAnalyticsAsync(since);
+            _vetoedMessages = await MessageStatsService.GetRecentVetoedMessagesAsync();
         }
         catch (Exception ex)
         {
