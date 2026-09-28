@@ -327,56 +327,38 @@ public class DetectionResultsRepository : IDetectionResultsRepository
     public async Task<List<DetectionResultRecord>> GetAllTrainingDataAsync(CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var currentCuratedIds = context.MessageVerdicts
+            .Where(v => v.VerdictId != null && VerdictClassifications.CuratedValues.Contains(v.Classification))
+            .Select(v => v.VerdictId!.Value);
+
         var results = await WithActorJoins(
-                context.DetectionResults.AsNoTracking().Where(dr => dr.UsedForTraining == true),
+                context.DetectionResults.AsNoTracking().Where(dr => currentCuratedIds.Contains(dr.Id)),
                 context)
             .OrderByDescending(x => x.DetectedAt)
             .ToListAsync(cancellationToken);
 
-        _logger.LogDebug("Retrieved {Count} training data records (used_for_training = true)", results.Count);
+        _logger.LogDebug("Retrieved {Count} training data records (curated current verdicts)", results.Count);
         return results;
     }
 
     public async Task<TrainingDataStats> GetTrainingDataStatsAsync(CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var trainingData = await context.DetectionResults
-            .AsNoTracking()
-            .Where(dr => dr.UsedForTraining == true)
-            .Select(dr => new { dr.IsSpam, dr.DetectionSource })
+        var rows = await context.MessageVerdicts.AsNoTracking()
+            .Where(v => v.VerdictId != null && VerdictClassifications.CuratedValues.Contains(v.Classification))
+            .Select(v => new { v.IsSpam, v.Source })
             .ToListAsync(cancellationToken);
 
-        var total = trainingData.Count;
-        var spam = trainingData.Count(d => d.IsSpam);
-        var ham = total - spam;
-
-        var sourceGroups = trainingData
-            .GroupBy(d => d.DetectionSource)
-            .ToDictionary(g => g.Key, g => g.Count());
-
+        var total = rows.Count;
+        var spam = rows.Count(r => r.IsSpam);
         return new TrainingDataStats
         {
             TotalSamples = total,
             SpamSamples = spam,
-            HamSamples = ham,
+            HamSamples = total - spam,
             SpamPercentage = total > 0 ? (double)spam / total * 100 : 0,
-            SamplesBySource = sourceGroups
+            SamplesBySource = rows.GroupBy(r => ((VerdictSource)r.Source!.Value).ToString()).ToDictionary(g => g.Key, g => g.Count())
         };
-    }
-
-    public async Task ExcludeFromTrainingAsync(long id, CancellationToken cancellationToken = default)
-    {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var entity = await context.DetectionResults.FindAsync([id], cancellationToken);
-        if (entity == null)
-        {
-            throw new InvalidOperationException($"Detection result {id} not found");
-        }
-
-        entity.UsedForTraining = false;
-        await context.SaveChangesAsync(cancellationToken);
-
-        _logger.LogInformation("Excluded detection result {Id} from training data", id);
     }
 
     public async Task DeleteDetectionResultAsync(long id, CancellationToken cancellationToken = default)
@@ -394,34 +376,10 @@ public class DetectionResultsRepository : IDetectionResultsRepository
         _logger.LogWarning("Deleted detection result {Id}", id);
     }
 
-    /// <summary>
-    /// Invalidate all training data for a specific message (set used_for_training = false).
-    /// Used before manual reclassification to prevent cross-class conflicts in Bayes training.
-    /// </summary>
-    public async Task InvalidateTrainingDataForMessageAsync(int messageId, long chatId, CancellationToken cancellationToken = default)
-    {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-
-        var affectedRecords = await context.DetectionResults
-            .Where(dr => dr.MessageId == messageId && dr.ChatId == chatId && dr.UsedForTraining)
-            .ExecuteUpdateAsync(
-                setters => setters.SetProperty(dr => dr.UsedForTraining, false),
-                cancellationToken);
-
-        if (affectedRecords > 0)
-        {
-            _logger.LogInformation(
-                "Invalidated {Count} training data record(s) for message {MessageId}",
-                affectedRecords, messageId);
-        }
-    }
-
     public async Task<long> AddManualTrainingSampleAsync(
         string messageText,
         bool isSpam,
-        string source,
-        double? score,
-        string? addedBy,
+        Actor actor,
         string? translatedText = null,
         string? detectedLanguage = null,
         CancellationToken cancellationToken = default)
@@ -476,38 +434,19 @@ public class DetectionResultsRepository : IDetectionResultsRepository
                 detectedLanguage);
         }
 
-        // Create detection_result record linked to the message
-        // Phase 4.19: Actor system - manual samples use SystemIdentifier
-        var detectionResult = new DataModels.DetectionResultRecordDto
-        {
-            MessageId = message.MessageId,
-            ChatId = 0, // Manual sample: matches parent message ChatId = 0
-            DetectedAt = DateTimeOffset.UtcNow,
-            DetectionSource = source,
-            DetectionMethod = "Manual",
-            // IsSpam computed from net_score
-            Score = score ?? 5.0,
-            Reason = "Manually added training sample",
-            SystemIdentifier = addedBy ?? "System",  // Phase 4.19: Actor system
-            UsedForTraining = true,
-            NetScore = isSpam ? 5.0 : -5.0,  // Manual: 5.0 = spam, -5.0 = ham
-            // Verdict-event columns: every row must carry them (DetectionResultMappings rejects NULL).
-            Source = (int)VerdictSource.TrainingDataPage,
-            Classification = (int)VerdictClassifier.ClassifyDecision(VerdictSource.TrainingDataPage, isSpam),
-            CheckResultsJson = null,
-            EditVersion = 0
-        };
-
+        // Create detection_result record linked to the message, as a TrainingDataPage decision.
+        var detectionResult = NewRow(message.MessageId, 0, VerdictSource.TrainingDataPage,
+            VerdictClassifier.ClassifyDecision(VerdictSource.TrainingDataPage, isSpam), actor,
+            score: 5.0, reason: "Manually added training sample", method: nameof(VerdictSource.TrainingDataPage));
         context.DetectionResults.Add(detectionResult);
         await context.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation(
-            "Added manual training sample: message_id={MessageId}, detection_result_id={Id}, is_spam={IsSpam}, source={Source}, added_by={AddedBy}, has_translation={HasTranslation}",
+            "Added manual training sample: message_id={MessageId}, detection_result_id={Id}, is_spam={IsSpam}, added_by={AddedBy}, has_translation={HasTranslation}",
             message.MessageId,
             detectionResult.Id,
             isSpam,
-            source,
-            addedBy ?? "System",
+            actor.GetDisplayText(),
             translatedText != null);
 
         return detectionResult.Id;

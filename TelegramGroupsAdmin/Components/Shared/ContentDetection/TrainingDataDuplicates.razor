@@ -1,9 +1,9 @@
 @using TelegramGroupsAdmin.Telegram.Services
 @using TelegramGroupsAdmin.Telegram.Models
 @using TelegramGroupsAdmin.Telegram.Repositories
-@using TelegramGroupsAdmin.ContentDetection.Repositories
+@using TelegramGroupsAdmin.Services.TrainingData
 @inject TrainingDataDeduplicationService DeduplicationService
-@inject IDetectionResultsRepository DetectionResultsRepository
+@inject ITrainingDataService TrainingDataService
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
 
@@ -129,7 +129,7 @@
                                                         <MudChip T="string" Size="Size.Small" Color="Color.Primary">✓ Recommended Keep</MudChip>
                                                     }
                                                     <MudText Typo="Typo.body2">
-                                                        @sample.DetectionSource · @sample.Score.ToString("F2") · @sample.DetectedAt.ToString("yyyy-MM-dd HH:mm")
+                                                        @sample.Source · @sample.Score.ToString("F2") · @sample.DetectedAt.ToString("yyyy-MM-dd HH:mm")
                                                     </MudText>
                                                 </MudStack>
                                                 @if (sample.Id != group.RecommendedKeep?.Id)
@@ -160,7 +160,7 @@
                                                 <MudChip T="string" Size="Size.Small" Color="Color.Primary">✓ Recommended Keep</MudChip>
                                             }
                                             <MudText Typo="Typo.body2">
-                                                @sample.DetectionSource · @sample.Score.ToString("F2") · @sample.DetectedAt.ToString("yyyy-MM-dd HH:mm")
+                                                @sample.Source · @sample.Score.ToString("F2") · @sample.DetectedAt.ToString("yyyy-MM-dd HH:mm")
                                             </MudText>
                                         </MudStack>
                                         @if (sample.Id != group.RecommendedKeep?.Id)
@@ -190,6 +190,8 @@
 </MudContainer>
 
 @code {
+    [CascadingParameter] private WebUserIdentity? WebUser { get; set; }
+
     private DuplicateAnalysisResult? _result;
     private bool _loading;
     private bool _processing;
@@ -249,7 +251,7 @@
             _processing = true;
             try
             {
-                await DetectionResultsRepository.ExcludeFromTrainingAsync(sample.Id);
+                await TrainingDataService.ExcludeAsync(sample.MessageId, sample.ChatId, WebUser!.ToActor());
 
                 Snackbar.Add("Sample removed from training data", Severity.Success);
 
@@ -283,7 +285,7 @@
                 var removed = 0;
                 foreach (var sample in group.Samples.Where(s => s.Id != group.RecommendedKeep?.Id))
                 {
-                    await DetectionResultsRepository.ExcludeFromTrainingAsync(sample.Id);
+                    await TrainingDataService.ExcludeAsync(sample.MessageId, sample.ChatId, WebUser!.ToActor());
                     removed++;
                 }
 
@@ -323,7 +325,7 @@
                 {
                     foreach (var sample in group.Samples.Where(s => s.Id != group.RecommendedKeep?.Id))
                     {
-                        await DetectionResultsRepository.ExcludeFromTrainingAsync(sample.Id);
+                        await TrainingDataService.ExcludeAsync(sample.MessageId, sample.ChatId, WebUser!.ToActor());
                         removed++;
                     }
                 }

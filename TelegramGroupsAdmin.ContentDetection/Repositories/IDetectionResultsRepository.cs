@@ -79,34 +79,20 @@ public interface IDetectionResultsRepository
     Task<TrainingDataStats> GetTrainingDataStatsAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Exclude a detection result from ML training data (sets used_for_training = false).
-    /// Does not modify the detection's classification or score — preserves append-only history.
-    /// </summary>
-    Task ExcludeFromTrainingAsync(long id, CancellationToken cancellationToken = default);
-
-    /// <summary>
     /// Delete a detection result (hard delete)
     /// Used when removing bad training samples
     /// </summary>
     Task DeleteDetectionResultAsync(long id, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Invalidate all training data for a specific message (set used_for_training = false).
-    /// Used before manual reclassification to prevent cross-class conflicts in Bayes training.
-    /// </summary>
-    Task InvalidateTrainingDataForMessageAsync(int messageId, long chatId, CancellationToken cancellationToken = default);
-
-    /// <summary>
     /// Add a manual training sample (creates message with chat_id=0, user_id=0 + detection_result)
-    /// Phase 4.20+: Supports optional translation data for non-English samples
-    /// Returns the ID of the created detection_result
+    /// Records it as a TrainingDataPage decision. Supports optional translation data for
+    /// non-English samples. Returns the ID of the created detection_result.
     /// </summary>
     Task<long> AddManualTrainingSampleAsync(
         string messageText,
         bool isSpam,
-        string source,
-        double? score,
-        string? addedBy,
+        Actor actor,
         string? translatedText = null,
         string? detectedLanguage = null,
         CancellationToken cancellationToken = default);

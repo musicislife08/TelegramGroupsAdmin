@@ -17,7 +17,6 @@ namespace TelegramGroupsAdmin.IntegrationTests.Repositories;
 ///
 /// Covers methods that were updated during the composite PK migration:
 /// - GetDetectionHistoryBatchAsync: batch retrieval with chatId filter
-/// - InvalidateTrainingDataForMessageAsync: targeted training data invalidation
 /// - AddManualTrainingSampleAsync: synthetic ChatId=0 samples with composite FK
 ///
 /// Test Infrastructure:
@@ -27,8 +26,6 @@ namespace TelegramGroupsAdmin.IntegrationTests.Repositories;
 /// Canonical anchors used:
 /// - Batch retrieval: message_id=20465 and message_id=20466 in chat -100055570785509
 ///   (both have canonical detection_results rows; 20465 is the multi-DR anchor)
-/// - Invalidation insert target: message_id=212340 in MainChat -100026957614982
-///   (its only canonical detection_result is an old LegacyManual row with used_for_training = false)
 /// - Verdict writes: GoldenDatasetConstants.Verdicts anchors (see IntegrationTests/CLAUDE.md Part 2)
 /// </summary>
 [TestFixture]
@@ -43,9 +40,8 @@ public class DetectionResultsRepositoryTests
     private const int BatchMsg1Id = 20465;
     private const int BatchMsg2Id = 20466;
 
-    // MainChat — used for the InvalidateTrainingData tests (insert a fresh DR here)
+    // MainChat
     private const long MainChatId = -100026957614982L;
-    private const int InvalidateTargetMessageId = 212340;
 
     [SetUp]
     public async Task SetUp()
@@ -123,82 +119,9 @@ public class DetectionResultsRepositoryTests
 
     #endregion
 
-    #region InvalidateTrainingDataForMessageAsync
-
-    [Test]
-    public async Task InvalidateTrainingDataForMessageAsync_SetsUsedForTrainingFalse()
-    {
-        // Arrange — insert a detection result with used_for_training = true on a canonical
-        // message that has no existing detection_result (clean insert target)
-        await using (var context = _testHelper!.GetDbContext())
-        {
-            context.DetectionResults.Add(new Data.Models.DetectionResultRecordDto
-            {
-                MessageId = InvalidateTargetMessageId,
-                ChatId = MainChatId,
-                DetectedAt = DateTimeOffset.UtcNow,
-                DetectionSource = "System",
-                DetectionMethod = "TestMethod",
-                Score = 4.75,
-                NetScore = 4.75,
-                Reason = "Test detection",
-                SystemIdentifier = "test",
-                UsedForTraining = true,
-                EditVersion = 0
-            });
-            await context.SaveChangesAsync();
-        }
-
-        // Act
-        await _repository!.InvalidateTrainingDataForMessageAsync(InvalidateTargetMessageId, MainChatId);
-
-        // Assert — verify used_for_training is now false
-        await using (var context = _testHelper.GetDbContext())
-        {
-            var result = await context.DetectionResults
-                .FirstAsync(dr => dr.MessageId == InvalidateTargetMessageId && dr.ChatId == MainChatId);
-            Assert.That(result.UsedForTraining, Is.False);
-        }
-    }
-
-    [Test]
-    public async Task InvalidateTrainingDataForMessageAsync_WrongChatId_DoesNotAffectOtherChats()
-    {
-        // Arrange — insert a detection result with used_for_training = true
-        await using (var context = _testHelper!.GetDbContext())
-        {
-            context.DetectionResults.Add(new Data.Models.DetectionResultRecordDto
-            {
-                MessageId = InvalidateTargetMessageId,
-                ChatId = MainChatId,
-                DetectedAt = DateTimeOffset.UtcNow,
-                DetectionSource = "System",
-                DetectionMethod = "TestMethod",
-                Score = 4.75,
-                NetScore = 4.75,
-                Reason = "Test detection",
-                SystemIdentifier = "test",
-                UsedForTraining = true,
-                EditVersion = 0
-            });
-            await context.SaveChangesAsync();
-        }
-
-        // Act — invalidate with a DIFFERENT chat ID
-        await _repository!.InvalidateTrainingDataForMessageAsync(InvalidateTargetMessageId, 999999L);
-
-        // Assert — original record should still have used_for_training = true
-        await using (var context = _testHelper.GetDbContext())
-        {
-            var result = await context.DetectionResults
-                .FirstAsync(dr => dr.MessageId == InvalidateTargetMessageId && dr.ChatId == MainChatId);
-            Assert.That(result.UsedForTraining, Is.True);
-        }
-    }
-
-    #endregion
-
     #region AddManualTrainingSampleAsync
+
+    private static readonly Actor ManualSampleActor = Actor.FromSystem("test-admin");
 
     [Test]
     public async Task AddManualTrainingSampleAsync_CreatesMessageWithChatIdZero()
@@ -207,9 +130,7 @@ public class DetectionResultsRepositoryTests
         var resultId = await _repository!.AddManualTrainingSampleAsync(
             messageText: "Buy cheap watches now!!!",
             isSpam: true,
-            source: "ManualUI",
-            score: 5.0,
-            addedBy: "test-admin");
+            actor: ManualSampleActor);
 
         // Assert — verify the message, detection result, and training label all use ChatId=0
         Assert.That(resultId, Is.GreaterThan(0));
@@ -238,9 +159,7 @@ public class DetectionResultsRepositoryTests
         var resultId = await _repository!.AddManualTrainingSampleAsync(
             messageText: "Купи дешевые часы!!!",
             isSpam: true,
-            source: "ManualUI",
-            score: 5.0,
-            addedBy: "test-admin",
+            actor: ManualSampleActor,
             translatedText: "Buy cheap watches!!!",
             detectedLanguage: "ru");
 
@@ -269,9 +188,7 @@ public class DetectionResultsRepositoryTests
         await _repository!.AddManualTrainingSampleAsync(
             messageText: "Hello everyone, how's your day going?",
             isSpam: false,
-            source: "ManualUI",
-            score: 5.0,
-            addedBy: "test-admin");
+            actor: ManualSampleActor);
 
         // Assert
         await using var context = _testHelper!.GetDbContext();

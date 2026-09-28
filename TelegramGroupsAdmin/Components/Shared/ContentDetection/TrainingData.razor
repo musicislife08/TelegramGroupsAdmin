@@ -1,10 +1,8 @@
-@using TelegramGroupsAdmin.ContentDetection.Repositories
 @using TelegramGroupsAdmin.ContentDetection.Models
-@using TelegramGroupsAdmin.Core.BackgroundJobs
-@inject IDetectionResultsRepository DetectionResultsRepository
+@using TelegramGroupsAdmin.Services.TrainingData
+@inject ITrainingDataService TrainingDataService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
-@inject TelegramGroupsAdmin.Core.Services.IJobTriggerService JobTriggerService
 
 
 <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
@@ -118,7 +116,7 @@
                         </MudTd>
                         <MudTd DataLabel="Source">
                             <MudChip T="string" Size="Size.Small" Color="Color.Info">
-                                @context.DetectionSource
+                                @context.Source.ToString()
                             </MudChip>
                         </MudTd>
                         <MudTd DataLabel="Method">
@@ -211,8 +209,8 @@
         _loading = true;
         try
         {
-            var samplesTask = DetectionResultsRepository.GetAllTrainingDataAsync();
-            var statsTask = DetectionResultsRepository.GetTrainingDataStatsAsync();
+            var samplesTask = TrainingDataService.GetSamplesAsync();
+            var statsTask = TrainingDataService.GetStatsAsync();
 
             await Task.WhenAll(samplesTask, statsTask);
 
@@ -249,7 +247,7 @@
         {
             filtered = filtered.Where(s =>
                 (s.MessageText != null && s.MessageText.Contains(_searchText, StringComparison.OrdinalIgnoreCase)) ||
-                s.DetectionSource.Contains(_searchText, StringComparison.OrdinalIgnoreCase) ||
+                s.Source.ToString().Contains(_searchText, StringComparison.OrdinalIgnoreCase) ||
                 (s.AddedBy.DisplayName != null && s.AddedBy.DisplayName.Contains(_searchText, StringComparison.OrdinalIgnoreCase)));
         }
 
@@ -265,7 +263,7 @@
         // Filter by source
         if (_sourceFilter != "all")
         {
-            filtered = filtered.Where(s => s.DetectionSource == _sourceFilter);
+            filtered = filtered.Where(s => s.Source.ToString() == _sourceFilter);
         }
 
         _filteredSamples = filtered;
@@ -303,18 +301,10 @@
         {
             try
             {
-                await DetectionResultsRepository.AddManualTrainingSampleAsync(
-                    data.MessageText,
-                    data.IsSpam,
-                    data.Source,
-                    data.Score,
-                    WebUser.Id,
-                    data.TranslatedText,
-                    data.DetectedLanguage);
+                await TrainingDataService.AddSampleAsync(data.MessageText, data.IsSpam, WebUser.ToActor(), data.TranslatedText, data.DetectedLanguage);
 
                 var translationNote = data.TranslatedText != null ? $" (with {data.DetectedLanguage?.ToUpper()} translation)" : "";
                 Snackbar.Add($"Training sample added successfully{translationNote}", Severity.Success);
-                await TriggerRetrainingAsync();
                 await LoadData();
             }
             catch (Exception ex)
@@ -344,19 +334,9 @@
         {
             try
             {
-                // Exclude the old record from training (preserves detection history)
-                await DetectionResultsRepository.ExcludeFromTrainingAsync(data.Id);
-
-                // Create a corrected training sample as a new record (append-only)
-                await DetectionResultsRepository.AddManualTrainingSampleAsync(
-                    data.MessageText,
-                    data.IsSpam,
-                    data.Source,
-                    data.Score,
-                    WebUser.Id);
+                await TrainingDataService.ReplaceSampleAsync(sample.MessageId, sample.ChatId, data.MessageText, data.IsSpam, WebUser.ToActor());
 
                 Snackbar.Add("Training sample updated successfully", Severity.Success);
-                await TriggerRetrainingAsync();
                 await LoadData();
             }
             catch (Exception ex)
@@ -378,13 +358,17 @@
 
         if (confirmed == true)
         {
+            if (WebUser is null)
+            {
+                Snackbar.Add("Your session could not be verified. Please sign in again.", Severity.Error);
+                return;
+            }
+
             try
             {
-                // Soft delete: Mark as not used for training (preserves detection history)
-                await DetectionResultsRepository.ExcludeFromTrainingAsync(sample.Id);
+                await TrainingDataService.ExcludeAsync(sample.MessageId, sample.ChatId, WebUser.ToActor());
 
                 Snackbar.Add("Training sample removed (detection history preserved)", Severity.Success);
-                await TriggerRetrainingAsync();
                 await LoadData();
             }
             catch (Exception ex)
@@ -392,10 +376,5 @@
                 Snackbar.Add($"Error removing training sample: {ex.Message}", Severity.Error);
             }
         }
-    }
-
-    private async Task TriggerRetrainingAsync()
-    {
-        await JobTriggerService.TriggerNowAsync(BackgroundJobNames.ClassifierRetraining, payload: new { });
     }
 }

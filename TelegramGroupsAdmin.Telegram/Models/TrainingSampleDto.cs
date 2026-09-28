@@ -10,11 +10,12 @@ public class TrainingSampleDto
 {
     public long Id { get; set; }
     public int MessageId { get; set; }
+    public long ChatId { get; set; }
     public string MessageText { get; set; } = string.Empty;
     public string? ContentHash { get; set; }
     public bool IsSpam { get; set; }
     public double Score { get; set; }
-    public string DetectionSource { get; set; } = string.Empty;
+    public VerdictSource Source { get; set; }
     public DateTimeOffset DetectedAt { get; set; }
     public Actor AddedBy { get; set; } = Actor.Unknown;
 }

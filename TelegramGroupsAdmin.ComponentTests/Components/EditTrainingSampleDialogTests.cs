@@ -22,7 +22,6 @@ public class EditTrainingSampleDialogTests : DialogTestContext
         long id = 1,
         string messageText = "Test message",
         bool isSpam = true,
-        string detectionSource = "manual",
         double score = 4.75,
         DateTimeOffset? detectedAt = null,
         string addedByEmail = "admin@test.com")
@@ -32,7 +31,6 @@ public class EditTrainingSampleDialogTests : DialogTestContext
             Id = id,
             MessageId = 12345,
             DetectedAt = detectedAt ?? DateTimeOffset.UtcNow.AddDays(-1),
-            DetectionSource = detectionSource,
             DetectionMethod = "BayesClassifier",
             Source = VerdictSource.ContentScan,
             Classification = isSpam ? VerdictClassification.ImplicitSpam : VerdictClassification.ImplicitHam,
@@ -221,69 +219,6 @@ public class EditTrainingSampleDialogTests : DialogTestContext
         provider.WaitForAssertion(() =>
         {
             Assert.That(provider.Markup, Does.Contain("mud-radio-group"));
-        });
-    }
-
-    #endregion
-
-    #region Source Select Tests
-
-    [Test]
-    public void HasSourceSelect()
-    {
-        // Arrange
-        var provider = RenderDialogProvider();
-        var sample = CreateTestSample();
-
-        // Act
-        _ = OpenDialogAsync(sample);
-
-        // Assert
-        provider.WaitForAssertion(() =>
-        {
-            Assert.That(provider.Markup, Does.Contain("Source"));
-            Assert.That(provider.Markup, Does.Contain("mud-select"));
-        });
-    }
-
-    // Note: MudSelect items are rendered via popover which requires JS interop.
-    // Testing specific select options is better suited for Playwright E2E tests.
-
-    #endregion
-
-    #region Score Field Tests
-
-    [Test]
-    public void HasScoreField()
-    {
-        // Arrange
-        var provider = RenderDialogProvider();
-        var sample = CreateTestSample();
-
-        // Act
-        _ = OpenDialogAsync(sample);
-
-        // Assert
-        provider.WaitForAssertion(() =>
-        {
-            Assert.That(provider.Markup, Does.Contain("Score"));
-        });
-    }
-
-    [Test]
-    public void DisplaysScoreHelperText()
-    {
-        // Arrange
-        var provider = RenderDialogProvider();
-        var sample = CreateTestSample();
-
-        // Act
-        _ = OpenDialogAsync(sample);
-
-        // Assert
-        provider.WaitForAssertion(() =>
-        {
-            Assert.That(provider.Markup, Does.Contain("Detection score when this sample was added"));
         });
     }
 

@@ -22,21 +22,6 @@
                 </MudRadio>
             </MudRadioGroup>
 
-            <MudSelect T="string" @bind-Value="_source" Label="Source" Required="true" RequiredError="Source is required">
-                <MudSelectItem Value="@("manual")">Manual Entry</MudSelectItem>
-                <MudSelectItem Value="@("detected")">Auto-Detected</MudSelectItem>
-                <MudSelectItem Value="@("review")">Human Review</MudSelectItem>
-                <MudSelectItem Value="@("import")">Data Import</MudSelectItem>
-                <MudSelectItem Value="@("correction")">False Positive Correction</MudSelectItem>
-            </MudSelect>
-
-            <MudNumericField @bind-Value="_score"
-                            Label="Score (optional)"
-                            Min="0.0" Max="5.0"
-                            Step="0.1"
-                            Placeholder="0.0-5.0"
-                            HelperText="Detection score when this sample was added (0.0-5.0)" />
-
             <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
                 <MudText Typo="Typo.body2"><strong>Added:</strong> @Sample.DetectedAt.ToString("yyyy-MM-dd HH:mm")</MudText>
                 <MudText Typo="Typo.body2"><strong>By:</strong> @(Sample.AddedBy.DisplayName ?? "System")</MudText>
@@ -49,7 +34,7 @@
         <MudButton Color="Color.Primary"
                   Variant="Variant.Filled"
                   OnClick="@Submit"
-                  Disabled="@(_isSubmitting || string.IsNullOrWhiteSpace(_messageText) || string.IsNullOrWhiteSpace(_source))">
+                  Disabled="@(_isSubmitting || string.IsNullOrWhiteSpace(_messageText))">
             @if (_isSubmitting)
             {
                 <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true"/>
@@ -69,23 +54,19 @@
 
     private string _messageText = string.Empty;
     private bool _isSpam;
-    private string _source = string.Empty;
-    private double? _score;
     private bool _isSubmitting;
 
     protected override void OnInitialized()
     {
         _messageText = Sample.MessageText ?? string.Empty;
         _isSpam = Sample.IsSpam;
-        _source = Sample.DetectionSource;
-        _score = Sample.Score;
     }
 
     private void Cancel() => MudDialog.Cancel();
 
     private Task Submit()
     {
-        if (string.IsNullOrWhiteSpace(_messageText) || string.IsNullOrWhiteSpace(_source))
+        if (string.IsNullOrWhiteSpace(_messageText))
             return Task.CompletedTask;
 
         _isSubmitting = true;
@@ -95,9 +76,7 @@
             {
                 Id = Sample.Id,
                 MessageText = _messageText.Trim(),
-                IsSpam = _isSpam,
-                Source = _source,
-                Score = _score
+                IsSpam = _isSpam
             };
 
             MudDialog.Close(DialogResult.Ok(data));

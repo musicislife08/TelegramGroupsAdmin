@@ -57,14 +57,6 @@
                 </MudRadio>
             </MudRadioGroup>
 
-            <MudSelect T="string" @bind-Value="_source" Label="Source" Required="true" RequiredError="Source is required">
-                <MudSelectItem Value="@("manual")">Manual Entry</MudSelectItem>
-                <MudSelectItem Value="@("detected")">Auto-Detected</MudSelectItem>
-                <MudSelectItem Value="@("review")">Human Review</MudSelectItem>
-                <MudSelectItem Value="@("import")">Data Import</MudSelectItem>
-                <MudSelectItem Value="@("correction")">False Positive Correction</MudSelectItem>
-            </MudSelect>
-
             <MudText Typo="Typo.caption" Class="mud-text-secondary">
                 <strong>Training Tips:</strong>
                 <ul style="margin: 8px 0; padding-left: 20px;">
@@ -81,7 +73,7 @@
         <MudButton Color="Color.Primary"
                   Variant="Variant.Filled"
                   OnClick="@Submit"
-                  Disabled="@(_isSubmitting || string.IsNullOrWhiteSpace(_messageText) || string.IsNullOrWhiteSpace(_source))">
+                  Disabled="@(_isSubmitting || string.IsNullOrWhiteSpace(_messageText))">
             @if (_isSubmitting)
             {
                 <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true"/>
@@ -104,7 +96,6 @@
     private string _translatedText = string.Empty;
     private string _detectedLanguage = string.Empty;
     private bool _isSpam = true; // Default to spam for safety
-    private string _source = "manual";
     private bool _isSubmitting;
     private bool _isTranslating;
 
@@ -146,7 +137,7 @@
 
     private Task Submit()
     {
-        if (string.IsNullOrWhiteSpace(_messageText) || string.IsNullOrWhiteSpace(_source))
+        if (string.IsNullOrWhiteSpace(_messageText))
             return Task.CompletedTask;
 
         // Validate: if translation provided, language code is required
@@ -163,8 +154,6 @@
             {
                 MessageText = _messageText.Trim(),
                 IsSpam = _isSpam,
-                Source = _source,
-                Score = 5.0, // Always 5.0 for manual samples (will be converted to ±5.0 net_score)
                 TranslatedText = string.IsNullOrWhiteSpace(_translatedText) ? null : _translatedText.Trim(),
                 DetectedLanguage = string.IsNullOrWhiteSpace(_detectedLanguage) ? null : _detectedLanguage.Trim().ToLower()
             };

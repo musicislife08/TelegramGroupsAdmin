@@ -178,6 +178,9 @@ public static class ServiceCollectionExtensions
             // Message context adapter for spam detection library
             services.AddScoped<TelegramGroupsAdmin.ContentDetection.Services.IMessageContextProvider, MessageContextAdapter>();
 
+            // Training Data page — add/edit/remove all route through verdict-event decisions
+            services.AddScoped<TelegramGroupsAdmin.Services.TrainingData.ITrainingDataService, TelegramGroupsAdmin.Services.TrainingData.TrainingDataService>();
+
             // Media refetch services (Phase 4.X: Re-download missing media after restore)
             services.AddSingleton<TelegramGroupsAdmin.Telegram.Services.Media.IMediaRefetchQueueService, TelegramGroupsAdmin.Telegram.Services.Media.MediaRefetchQueueService>();
             services.AddHostedService<TelegramGroupsAdmin.Telegram.Services.Media.MediaRefetchWorkerService>();
