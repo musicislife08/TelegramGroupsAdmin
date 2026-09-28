@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Core.Extensions;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Telegram.Repositories.Mappings;
@@ -49,13 +50,16 @@ public class MessageHistoryRepository : IMessageHistoryRepository
     public async Task<UiModels.MessageCleanupResult> CleanupExpiredAsync(TimeSpan retention, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        // Retention: Keep messages within retention period OR messages with training data (used_for_training = true)
+        // Retention: keep messages within the retention period, and any older message whose current
+        // verdict is curated training data (explicit labels, confident implicit spam). Media features
+        // live on the message row, so they are kept with it.
         var retentionCutoff = DateTimeOffset.UtcNow - retention;
 
         // MH2: Single query optimization - get all expired message data in one query
         var expiredData = await context.Messages
             .Where(m => m.Timestamp < retentionCutoff
-                && !context.DetectionResults.Any(dr => dr.MessageId == m.MessageId && dr.ChatId == m.ChatId && dr.UsedForTraining))
+                && !context.MessageVerdicts.Any(v => v.MessageId == m.MessageId && v.ChatId == m.ChatId
+                    && VerdictClassifications.CuratedValues.Contains(v.Classification)))
             .GroupJoin(
                 context.MessageEdits,
                 m => new { m.MessageId, m.ChatId },

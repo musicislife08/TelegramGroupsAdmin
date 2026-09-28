@@ -228,9 +228,10 @@ internal static class GoldenDatasetConstants
     /// </summary>
     public static class Retention
     {
-        // ── Anchor 1: bare message with attached edit (cascade-tests edit deletion) ──
-        // 0 detection_results, 1 message_edits row (id 337). Shifted to -45d → DELETED;
-        // SUT's explicit MessageEdits.RemoveRange exercises the edit-cascade path.
+        // ── Anchor 1: bare message with attached edit ──
+        // 1 message_edits row (id 337). detection_results row 3267 (folded training label,
+        // canonical edit 2026-09-27) → ExplicitHam, a curated classification. Shifted to
+        // -45d → PRESERVED (with its edit) despite age, since its verdict is curated.
         public const int MsgId_BareWithEdit = 212340;
         public const long EditId_ForBareWithEdit = 337L;
 
@@ -250,8 +251,10 @@ internal static class GoldenDatasetConstants
         // 0 detection_results, no edits. Shifted to -29d → PRESERVED.
         public const int MsgId_BareOrphan29d = 213117;
 
-        // ── Anchor 6: non-training detection (DR cascades with message) ──
-        // 1 detection_result with used_for_training=false. Shifted to -50d → DELETED.
+        // ── Anchor 6: non-training detection, curated classification ──
+        // 1 detection_result (id 3033) with used_for_training=false, classification=ExplicitSpam
+        // (a curated value). Shifted to -50d → PRESERVED despite age and despite
+        // used_for_training=false, since its verdict is curated.
         public const int MsgId_NonTrainingDeleted = 220885;
 
         /// <summary>
@@ -286,10 +289,14 @@ internal static class GoldenDatasetConstants
 
         /// <summary>
         /// Expected DeletedCount when CleanupExpiredAsync is called with 30-day retention:
-        /// anchors 1, 2, 4, 6 (45d, 60d, 35d, 50d past midnight without training preservation).
-        /// Anchors 3 (training) and 5 (boundary) are preserved.
+        /// anchors 2 and 4 (60d and 35d bare orphans; Unscanned, not curated). Anchor 3
+        /// (training, curated) and 5 (boundary) are preserved as before. Anchors 1 and 6
+        /// were 4 before task #548's curated-verdict keep condition (folded/edited canonical
+        /// rows on 212340 and 220885 both resolve to a curated classification via
+        /// message_verdicts — ExplicitHam and ExplicitSpam respectively) — they are now
+        /// preserved instead of deleted, so the count dropped from 4 to 2.
         /// </summary>
-        public const int ExpectedDeletionsWith30DayRetention = 4;
+        public const int ExpectedDeletionsWith30DayRetention = 2;
     }
 
     /// <summary>

@@ -1121,38 +1121,41 @@ public class MessageHistoryRepositoryTests
 
         // Assert - Correct number deleted
         Assert.That(result.DeletedCount, Is.EqualTo(GoldenDatasetConstants.Retention.ExpectedDeletionsWith30DayRetention),
-            "Should delete exactly 4 anchors past 30d without training preservation");
+            "Should delete exactly 2 anchors past 30d whose current verdict is not curated");
 
-        // Assert - Anchors past retention without training preservation are DELETED
-        var bareWithEditAfter = await _repository.GetMessageAsync(GoldenDatasetConstants.Retention.MsgId_BareWithEdit, MainChatId);
+        // Assert - Anchors past retention with no verdict (Unscanned, not curated) are DELETED
         var bareOrphan60After = await _repository.GetMessageAsync(GoldenDatasetConstants.Retention.MsgId_BareOrphan60d, MainChatId);
         var bareOrphan35After = await _repository.GetMessageAsync(GoldenDatasetConstants.Retention.MsgId_BareOrphan35d, MainChatId);
-        var nonTrainingAfter = await _repository.GetMessageAsync(GoldenDatasetConstants.Retention.MsgId_NonTrainingDeleted, MainChatId);
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(bareWithEditAfter, Is.Null, "45-day anchor should be deleted");
             Assert.That(bareOrphan60After, Is.Null, "60-day bare orphan should be deleted");
             Assert.That(bareOrphan35After, Is.Null, "35-day bare orphan should be deleted");
-            Assert.That(nonTrainingAfter, Is.Null,
-                "50-day message with non-training detection should be deleted (detection cascades)");
         }
 
-        // Assert - Anchor with training-flagged DR is PRESERVED despite -90d age
+        // Assert - Anchors past retention whose current verdict is curated are PRESERVED
+        var bareWithEditAfter = await _repository.GetMessageAsync(GoldenDatasetConstants.Retention.MsgId_BareWithEdit, MainChatId);
+        var nonTrainingAfter = await _repository.GetMessageAsync(GoldenDatasetConstants.Retention.MsgId_NonTrainingDeleted, MainChatId);
         var trainingPreservedAfter = await _repository.GetMessageAsync(GoldenDatasetConstants.Retention.MsgId_TrainingPreserved, MainChatId);
-        Assert.That(trainingPreservedAfter, Is.Not.Null,
-            "90-day anchor with used_for_training=true detection should be preserved");
-
-        // Assert - Boundary anchor (29 days) is PRESERVED
         var bareOrphan29After = await _repository.GetMessageAsync(GoldenDatasetConstants.Retention.MsgId_BareOrphan29d, MainChatId);
-        Assert.That(bareOrphan29After, Is.Not.Null,
-            "29-day anchor should NOT be deleted (just inside retention window)");
 
-        // Assert - Edit cascade (SUT's explicit MessageEdits.RemoveRange path)
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(bareWithEditAfter, Is.Not.Null,
+                "45-day anchor should be preserved (folded training label → ExplicitHam, a curated classification)");
+            Assert.That(nonTrainingAfter, Is.Not.Null,
+                "50-day message should be preserved (detection classification ExplicitSpam is curated, despite used_for_training=false)");
+            Assert.That(trainingPreservedAfter, Is.Not.Null,
+                "90-day anchor with a curated (ExplicitSpam) verdict should be preserved");
+            Assert.That(bareOrphan29After, Is.Not.Null,
+                "29-day anchor should NOT be deleted (just inside retention window)");
+        }
+
+        // Assert - Edit row for the 45-day anchor is preserved along with its now-kept parent message
         await using (var context = await contextFactory.CreateDbContextAsync())
         {
             var editAfter = await context.MessageEdits.FindAsync(GoldenDatasetConstants.Retention.EditId_ForBareWithEdit);
-            Assert.That(editAfter, Is.Null, "Edit row should be deleted along with its parent message");
+            Assert.That(editAfter, Is.Not.Null, "Edit row should be preserved along with its curated-verdict parent message");
         }
 
         using (Assert.EnterMultipleScope())
@@ -1161,6 +1164,26 @@ public class MessageHistoryRepositoryTests
             Assert.That(result.ImagePaths, Is.Empty, "Anchor messages are text-only (no photos)");
             Assert.That(result.MediaPaths, Is.Empty, "Anchor messages are text-only (no media)");
         }
+    }
+
+    [Test]
+    public async Task CleanupExpiredAsync_LabeledOnlyMessage_IsPreserved()
+    {
+        var msgId = GoldenDatasetConstants.Verdicts.LabeledOnlyRetentionMsgId;
+        await using (var ctx = _testHelper!.GetDbContext())
+        {
+            // Guard the canonical precondition: every row for this message has used_for_training = false,
+            // so the old keep-condition would delete it; its current verdict is an explicit label.
+            Assert.That(await ctx.DetectionResults.AnyAsync(d => d.MessageId == msgId && d.ChatId == GoldenDatasetConstants.Chats.LandOwnersChatId && d.UsedForTraining), Is.False);
+            Assert.That((await ctx.MessageVerdicts.SingleAsync(v => v.MessageId == msgId && v.ChatId == GoldenDatasetConstants.Chats.LandOwnersChatId)).Classification,
+                Is.EqualTo((int)VerdictClassification.ExplicitHam));
+        }
+
+        // message 7974 is dated 2025-12-18, well past a 30-day retention window
+        await _repository!.CleanupExpiredAsync(TimeSpan.FromDays(30));
+
+        await using var after = _testHelper.GetDbContext();
+        Assert.That(await after.Messages.AnyAsync(m => m.MessageId == msgId && m.ChatId == GoldenDatasetConstants.Chats.LandOwnersChatId), Is.True);
     }
 
     #endregion
