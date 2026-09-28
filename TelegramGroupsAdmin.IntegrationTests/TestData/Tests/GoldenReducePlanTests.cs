@@ -14,6 +14,11 @@ public class GoldenReducePlanTests
     private const short SpamLabel = (short)TrainingLabel.Spam; // 0
     private const short HamLabel = (short)TrainingLabel.Ham;   // 1
 
+    // Task 8 fix round (R17): KeepDetectionResults now scopes to scan rows only
+    // (ContentScan/FileScan) — decision rows are the label store, pruned by KeepSpam/KeepHam.
+    private const int SourceContentScan = (int)VerdictSource.ContentScan; // 0
+    private const int SourceFileScan = (int)VerdictSource.FileScan;       // 1
+
     private MigrationTestHelper? _helper;
 
     [SetUp]
@@ -90,7 +95,11 @@ public class GoldenReducePlanTests
         await using var ctx = _helper!.GetDbContext();
         await GoldenDataset.Reduce(ctx).KeepDetectionResults(3).ApplyAsync();
 
-        var ids = await ctx.DetectionResults.OrderBy(dr => dr.Id).Select(dr => dr.Id).ToListAsync();
+        // Scoped to scan rows (R17): KeepDetectionResults no longer touches decision rows
+        // (the label store, pruned by KeepSpam/KeepHam instead), so they survive untouched.
+        var ids = await ctx.DetectionResults
+            .Where(dr => dr.Source == SourceContentScan || dr.Source == SourceFileScan)
+            .OrderBy(dr => dr.Id).Select(dr => dr.Id).ToListAsync();
         Assert.That(ids, Has.Count.EqualTo(3));
         // No assertion on specific id values — bootstrap renumbering is opaque to this test.
         // The "lowest by id" property is verified by the count + orderedness alone.
@@ -214,7 +223,11 @@ public class GoldenReducePlanTests
         await GoldenDataset.Reduce(ctx).KeepMessages(5).KeepDetectionResults(2).ApplyAsync();
 
         Assert.That(await ctx.Messages.CountAsync(), Is.EqualTo(5));
-        Assert.That(await ctx.DetectionResults.CountAsync(), Is.EqualTo(2));
+        // Scoped to scan rows (R17) — decision rows on the surviving 5 messages, if any,
+        // are untouched by KeepDetectionResults.
+        Assert.That(
+            await ctx.DetectionResults.CountAsync(dr => dr.Source == SourceContentScan || dr.Source == SourceFileScan),
+            Is.EqualTo(2));
     }
 
     [Test]
@@ -241,7 +254,10 @@ public class GoldenReducePlanTests
         // Topological execution puts KeepMessages first regardless of registration order.
         // Result must equal the canonical-ordered chain Reduce(ctx).KeepMessages(5).KeepDetectionResults(2).
         Assert.That(await ctx.Messages.CountAsync(), Is.EqualTo(5));
-        Assert.That(await ctx.DetectionResults.CountAsync(), Is.EqualTo(2));
+        // Scoped to scan rows (R17) — see KeepMessages_FollowedByKeepDetectionResults_NarrowsFurther.
+        Assert.That(
+            await ctx.DetectionResults.CountAsync(dr => dr.Source == SourceContentScan || dr.Source == SourceFileScan),
+            Is.EqualTo(2));
     }
 
     // ── Task 1.16: validation rules (LIMIT semantics, negative count, last-wins) ─

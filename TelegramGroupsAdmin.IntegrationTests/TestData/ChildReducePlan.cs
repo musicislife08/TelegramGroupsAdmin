@@ -29,6 +29,15 @@ public sealed class ChildReducePlan
         return this;
     }
 
+    /// <summary>
+    /// Keeps the lowest N <c>detection_results</c> <b>scan</b> rows by id — <c>source</c>
+    /// ContentScan(0) or FileScan(1) only. Since explicit labels now live as decision rows
+    /// in <c>detection_results</c> (source NOT IN ContentScan/FileScan/TrainingExclude,
+    /// classification ExplicitSpam/ExplicitHam), decision rows are the label store and are
+    /// pruned by <see cref="KeepSpam"/>/<see cref="KeepHam"/> instead — KeepDetectionResults
+    /// no longer touches them (a call with count 0 used to wipe every verdict event,
+    /// explicit decisions included; it now only drains the scan/implicit pool).
+    /// </summary>
     public ChildReducePlan KeepDetectionResults(int count)
     {
         if (count < 0) throw new ArgumentOutOfRangeException(nameof(count));
@@ -44,12 +53,17 @@ public sealed class ChildReducePlan
     }
 
     /// <summary>
-    /// Drops every <c>messages</c> row that has no surviving <c>training_labels</c> row
-    /// after KeepSpam / KeepHam have been applied. FK cascades clean up the message's
-    /// <c>detection_results</c>, <c>message_edits</c>, and <c>message_translations</c>
-    /// children. Use this when a test needs the "labels-only" substrate (no implicit ham
-    /// pool from unlabeled messages, no implicit spam pool unless KeepDetectionResults
-    /// is also constrained).
+    /// Drops every <c>messages</c> row that has no surviving explicit spam/ham decision
+    /// row in <c>detection_results</c> (source NOT IN ContentScan/FileScan/TrainingExclude,
+    /// classification ExplicitSpam/ExplicitHam) after KeepSpam / KeepHam have been applied
+    /// — decision rows are the label store now; by construction (KeepSpam/KeepHam prune
+    /// <c>training_labels</c> and decision rows to the same message set) this agrees with
+    /// checking <c>training_labels</c> too, but decision rows are what the SUT reads via
+    /// <c>message_verdicts</c>. FK cascades clean up the message's <c>detection_results</c>,
+    /// <c>training_labels</c>, <c>message_edits</c>, and <c>message_translations</c> children.
+    /// Use this when a test needs the "labels-only" substrate (no implicit ham pool from
+    /// unlabeled messages, no implicit spam pool unless KeepDetectionResults is also
+    /// constrained).
     /// </summary>
     public ChildReducePlan KeepLabeledMessagesOnly()
     {
@@ -114,8 +128,24 @@ internal sealed class GoldenReducePlanState
             // 2. KeepSpam — slice predicate appears on BOTH sides so KeepSpam(5)
             //    doesn't delete ham rows. training_labels.label is a smallint:
             //    0=Spam, 1=Ham (per TelegramGroupsAdmin.Core/Models/TrainingLabel.cs).
+            //    Task 8 fix round (R17): explicit labels now also live as *decision*
+            //    rows in detection_results — source NOT IN (ContentScan=0, FileScan=1,
+            //    TrainingExclude=17), classification ExplicitSpam=0/ExplicitHam=1 (the
+            //    values happen to equal TrainingLabel's). The message_verdicts view the
+            //    SUT reads is built from detection_results only, so KeepSpam/KeepHam must
+            //    prune decision rows too, or the training_labels-only prune is invisible
+            //    to the SUT. The KEEP SET is still driven by training_labels (unchanged
+            //    ordering/count, so exact-N assertions on training_labels keep holding);
+            //    decision rows are then pruned to whatever training_labels now says
+            //    survived, "so both stores agree" — a decision row with no surviving
+            //    training_labels row (e.g. an AutoBan fold with no admin label) is culled
+            //    too, which is intended: it was never part of the KeepSpam/KeepHam count.
             const short LabelSpam = (short)TrainingLabel.Spam; // 0
             const short LabelHam = (short)TrainingLabel.Ham;   // 1
+            const int ClassificationExplicitSpam = (int)VerdictClassification.ExplicitSpam; // 0
+            const int ClassificationExplicitHam = (int)VerdictClassification.ExplicitHam;   // 1
+            const string DecisionSourceExclusion =
+                "(0 /* ContentScan */, 1 /* FileScan */, 17 /* TrainingExclude */)";
 
             if (SpamCount is int spamN)
             {
@@ -127,6 +157,15 @@ internal sealed class GoldenReducePlanState
                     "    WHERE label = {1} " +
                     "    ORDER BY chat_id ASC, message_id ASC LIMIT {0})",
                     spamN, "KeepSpam", LabelSpam);
+
+                await ExecAsync(_context, ct,
+                    "DELETE FROM detection_results " +
+                    $"WHERE source NOT IN {DecisionSourceExclusion} AND classification = {{1}} " +
+                    "  AND NOT EXISTS (" +
+                    "    SELECT 1 FROM training_labels tl " +
+                    "    WHERE tl.chat_id = detection_results.chat_id AND tl.message_id = detection_results.message_id " +
+                    "      AND tl.label = {1})",
+                    spamN, "KeepSpam(decision rows)", ClassificationExplicitSpam);
             }
 
             // 3. KeepHam
@@ -140,30 +179,49 @@ internal sealed class GoldenReducePlanState
                     "    WHERE label = {1} " +
                     "    ORDER BY chat_id ASC, message_id ASC LIMIT {0})",
                     hamN, "KeepHam", LabelHam);
+
+                await ExecAsync(_context, ct,
+                    "DELETE FROM detection_results " +
+                    $"WHERE source NOT IN {DecisionSourceExclusion} AND classification = {{1}} " +
+                    "  AND NOT EXISTS (" +
+                    "    SELECT 1 FROM training_labels tl " +
+                    "    WHERE tl.chat_id = detection_results.chat_id AND tl.message_id = detection_results.message_id " +
+                    "      AND tl.label = {1})",
+                    hamN, "KeepHam(decision rows)", ClassificationExplicitHam);
             }
 
             // 4. KeepLabeledMessagesOnly — must run after KeepSpam/KeepHam so it sees
-            //    the post-filter label state. FK CASCADE fires on the dropped messages
-            //    (detection_results, training_labels (none left for these), message_edits,
-            //    message_translations). user_actions.MessageId/ChatId become NULL via SetNull.
+            //    the post-filter label state. Checks for a surviving explicit decision row
+            //    (detection_results is what the SUT's message_verdicts view reads; by
+            //    construction of steps 2/3 this agrees with training_labels membership).
+            //    FK CASCADE fires on the dropped messages (detection_results,
+            //    training_labels, message_edits, message_translations). user_actions.
+            //    MessageId/ChatId become NULL via SetNull.
             if (DropUnlabeledMessages)
             {
                 await ExecBareAsync(_context, ct,
                     "DELETE FROM messages " +
                     "WHERE NOT EXISTS (" +
-                    "  SELECT 1 FROM training_labels t " +
-                    "  WHERE t.message_id = messages.message_id AND t.chat_id = messages.chat_id)",
+                    "  SELECT 1 FROM detection_results dr " +
+                    $"  WHERE dr.message_id = messages.message_id AND dr.chat_id = messages.chat_id " +
+                    $"    AND dr.source NOT IN {DecisionSourceExclusion} AND dr.classification IN ({ClassificationExplicitSpam}, {ClassificationExplicitHam}))",
                     "KeepLabeledMessagesOnly");
             }
 
-            // 5. KeepDetectionResults — surrogate id PK
+            // 5. KeepDetectionResults — surrogate id PK. Task 8 fix round (R17): scoped to
+            //    scan rows only (source IN (ContentScan=0, FileScan=1)) — decision rows are
+            //    the label store now (see step 2/3) and are pruned by KeepSpam/KeepHam, not
+            //    here. A call with count 0 used to wipe every verdict event including
+            //    explicit decisions; it now only drains the scan/implicit pool.
             if (DetectionResultsCount is int drN)
             {
                 await ExecAsync(_context, ct,
                     "DELETE FROM detection_results " +
-                    "WHERE id NOT IN (" +
-                    "  SELECT id FROM detection_results " +
-                    "  ORDER BY id ASC LIMIT {0})",
+                    "WHERE source IN (0, 1) " +
+                    "  AND id NOT IN (" +
+                    "    SELECT id FROM detection_results " +
+                    "    WHERE source IN (0, 1) " +
+                    "    ORDER BY id ASC LIMIT {0})",
                     drN, "KeepDetectionResults");
             }
 
