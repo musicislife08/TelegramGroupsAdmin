@@ -693,7 +693,7 @@
             .FirstOrDefault();
 
     /// <summary>
-    /// Get top contributing factors from detection history for spam/ham badge
+    /// Get top contributing factors from detection history for the spam/clean badge
     /// Phase UX-1: Show which algorithms contributed to the decision
     /// Returns top 3 algorithms by confidence score
     /// </summary>
@@ -729,9 +729,9 @@
         if (latest == null)
             return ContentCheck?.IsSpam == true ? "Marked as spam" : "Marked clean";
 
-        var tooltip = $"{(latest.IsSpam ? "SPAM" : "HAM")} - {latest.Score:F2} score\n";
+        var tooltip = $"{latest.Classification.ToDisplayText()} - {latest.Score:F2} score\n";
         tooltip += $"Detection: {latest.DetectionMethod}\n";
-        tooltip += $"Source: {latest.Source}\n";
+        tooltip += $"Source: {latest.Source.ToDisplayText()}\n";
 
         if (contributingFactors?.Any() == true)
         {

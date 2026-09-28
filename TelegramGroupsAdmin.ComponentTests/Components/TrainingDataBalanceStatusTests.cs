@@ -150,7 +150,7 @@ public class TrainingDataBalanceStatusTests : TrainingDataBalanceStatusTestConte
         var cut = Render<TrainingDataBalanceStatus>();
 
         // Assert
-        Assert.That(cut.Markup, Does.Contain("Explicit Spam"));
+        Assert.That(cut.Markup, Does.Contain("Spam (confirmed)"));
         Assert.That(cut.Markup, Does.Contain("25"));
     }
 
@@ -165,7 +165,7 @@ public class TrainingDataBalanceStatusTests : TrainingDataBalanceStatusTestConte
         var cut = Render<TrainingDataBalanceStatus>();
 
         // Assert
-        Assert.That(cut.Markup, Does.Contain("Implicit Spam"));
+        Assert.That(cut.Markup, Does.Contain("Spam (auto)"));
         Assert.That(cut.Markup, Does.Contain("15"));
     }
 
@@ -180,7 +180,7 @@ public class TrainingDataBalanceStatusTests : TrainingDataBalanceStatusTestConte
         var cut = Render<TrainingDataBalanceStatus>();
 
         // Assert
-        Assert.That(cut.Markup, Does.Contain("Explicit Ham"));
+        Assert.That(cut.Markup, Does.Contain("Clean (confirmed)"));
         Assert.That(cut.Markup, Does.Contain("30"));
     }
 
@@ -195,7 +195,7 @@ public class TrainingDataBalanceStatusTests : TrainingDataBalanceStatusTestConte
         var cut = Render<TrainingDataBalanceStatus>();
 
         // Assert
-        Assert.That(cut.Markup, Does.Contain("Implicit Ham"));
+        Assert.That(cut.Markup, Does.Contain("Clean (auto)"));
         Assert.That(cut.Markup, Does.Contain("50"));
     }
 
@@ -239,7 +239,7 @@ public class TrainingDataBalanceStatusTests : TrainingDataBalanceStatusTestConte
     }
 
     [Test]
-    public void ShowsInsufficientDataWarning_WhenHamBelowMinimum()
+    public void ShowsInsufficientDataWarning_WhenCleanBelowMinimum()
     {
         // Arrange - Need 20 minimum per class
         MLTrainingDataRepository.GetTrainingBalanceStatsAsync(Arg.Any<CancellationToken>())
@@ -250,7 +250,7 @@ public class TrainingDataBalanceStatusTests : TrainingDataBalanceStatusTestConte
 
         // Assert
         Assert.That(cut.Markup, Does.Contain("Insufficient data"));
-        Assert.That(cut.Markup, Does.Contain("ham"));
+        Assert.That(cut.Markup, Does.Contain("clean"));
     }
 
     [Test]

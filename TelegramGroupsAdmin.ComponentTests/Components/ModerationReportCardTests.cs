@@ -39,9 +39,11 @@ public class ModerationReportCardTestContext : BunitContext
         });
 
         // Set up JSInterop
+        // The action row's MudTooltips are popovers: their JS calls must complete.
         JSInterop.Mode = JSRuntimeMode.Loose;
-        JSInterop.SetupVoid("mudPopover.initialize", _ => true);
-        JSInterop.SetupVoid("mudPopover.connect", _ => true);
+        JSInterop.SetupVoid("mudPopover.initialize", _ => true).SetVoidResult();
+        JSInterop.SetupVoid("mudPopover.connect", _ => true).SetVoidResult();
+        JSInterop.SetupVoid("mudPopover.disconnect", _ => true).SetVoidResult();
         JSInterop.Setup<int>("mudpopoverHelper.countProviders").SetResult(1);
     }
 }
@@ -210,7 +212,7 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
         cut.WaitForAssertion(() =>
         {
             Assert.That(cut.Markup, Does.Contain("Reviewed"));
-            Assert.That(cut.Markup, Does.Contain("Action taken: spam"));
+            Assert.That(cut.Markup, Does.Contain("Action taken: Deleted as spam"));
         });
     }
 
@@ -375,6 +377,23 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
             Assert.That(cut.Markup, Does.Not.Contain("Delete as Spam"));
             Assert.That(cut.Markup, Does.Not.Contain("Ban User"));
         });
+    }
+
+    [TestCase("clean", "Marked clean")]
+    [TestCase("dismiss", "Dismissed")]
+    [TestCase("spam", "Deleted as spam")]
+    public void ShowsReadableActionTaken_WhenHandled(string actionKey, string expected)
+    {
+        var report = CreateReport(status: ReportStatus.Reviewed, actionTaken: actionKey);
+        var message = CreateSpamMessage();
+        MessageRepository.GetMessageAsync(report.MessageId, Arg.Any<long>(), Arg.Any<CancellationToken>())
+            .Returns(message);
+        UserRepository.GetByTelegramIdAsync(message.User.Id, Arg.Any<CancellationToken>())
+            .Returns(CreateTelegramUser());
+
+        var cut = Render<ModerationReportCard>(p => p.Add(x => x.Report, report));
+
+        cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain($"Action taken: {expected}")));
     }
 
     #endregion

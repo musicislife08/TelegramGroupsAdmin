@@ -1,3 +1,4 @@
+@using System.Diagnostics.CodeAnalysis
 @using TelegramGroupsAdmin.Telegram.Services
 @using TelegramGroupsAdmin.Telegram.Models
 @using TelegramGroupsAdmin.Telegram.Repositories
@@ -122,14 +123,14 @@
                                             <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
                                                 <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
                                                     <MudChip T="string" Size="Size.Small" Color="@(sample.IsSpam ? Color.Error : Color.Success)">
-                                                        @(sample.IsSpam ? "SPAM" : "HAM")
+                                                        @(sample.IsSpam ? "SPAM" : "CLEAN")
                                                     </MudChip>
                                                     @if (sample.Id == group.RecommendedKeep?.Id)
                                                     {
                                                         <MudChip T="string" Size="Size.Small" Color="Color.Primary">✓ Recommended Keep</MudChip>
                                                     }
                                                     <MudText Typo="Typo.body2">
-                                                        @sample.Source · @sample.Score.ToString("F2") · @sample.DetectedAt.ToString("yyyy-MM-dd HH:mm")
+                                                        @sample.Source.ToDisplayText() · @sample.Score.ToString("F2") · @sample.DetectedAt.ToString("yyyy-MM-dd HH:mm")
                                                     </MudText>
                                                 </MudStack>
                                                 @if (sample.Id != group.RecommendedKeep?.Id)
@@ -153,14 +154,14 @@
                                     <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
                                         <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
                                             <MudChip T="string" Size="Size.Small" Color="@(sample.IsSpam ? Color.Error : Color.Success)">
-                                                @(sample.IsSpam ? "SPAM" : "HAM")
+                                                @(sample.IsSpam ? "SPAM" : "CLEAN")
                                             </MudChip>
                                             @if (sample.Id == group.RecommendedKeep?.Id)
                                             {
                                                 <MudChip T="string" Size="Size.Small" Color="Color.Primary">✓ Recommended Keep</MudChip>
                                             }
                                             <MudText Typo="Typo.body2">
-                                                @sample.Source · @sample.Score.ToString("F2") · @sample.DetectedAt.ToString("yyyy-MM-dd HH:mm")
+                                                @sample.Source.ToDisplayText() · @sample.Score.ToString("F2") · @sample.DetectedAt.ToString("yyyy-MM-dd HH:mm")
                                             </MudText>
                                         </MudStack>
                                         @if (sample.Id != group.RecommendedKeep?.Id)
@@ -196,6 +197,15 @@
     private bool _loading;
     private bool _processing;
     private string _selectedView = "exact";
+
+    /// <summary>The acting web user; false (with a snackbar) when the session cannot be verified.</summary>
+    private bool TryGetActor([NotNullWhen(true)] out Actor? actor)
+    {
+        actor = WebUser?.ToActor();
+        if (actor is null)
+            Snackbar.Add("Your session could not be verified. Please sign in again.", Severity.Error);
+        return actor is not null;
+    }
 
     private List<DuplicateGroup> GetCurrentGroups()
     {
@@ -243,21 +253,18 @@
     {
         var confirmed = await DialogService.ShowMessageBoxAsync(
             "Remove from Training",
-            $"Remove this {(sample.IsSpam ? "SPAM" : "HAM")} sample from training data?\n\nThis preserves detection history but excludes it from Bayes training.",
+            $"Remove this {(sample.IsSpam ? "SPAM" : "CLEAN")} sample from training data?\n\nThis preserves detection history but excludes it from Bayes training.",
             yesText: "Remove", cancelText: "Cancel");
 
         if (confirmed == true)
         {
-            if (WebUser is null)
-            {
-                Snackbar.Add("Your session could not be verified. Please sign in again.", Severity.Error);
+            if (!TryGetActor(out var actor))
                 return;
-            }
 
             _processing = true;
             try
             {
-                await TrainingDataService.ExcludeAsync(sample.MessageId, sample.ChatId, WebUser.ToActor());
+                await TrainingDataService.ExcludeAsync(sample.MessageId, sample.ChatId, actor);
 
                 Snackbar.Add("Sample removed from training data", Severity.Success);
 
@@ -285,11 +292,8 @@
 
         if (confirmed == true)
         {
-            if (WebUser is null)
-            {
-                Snackbar.Add("Your session could not be verified. Please sign in again.", Severity.Error);
+            if (!TryGetActor(out var actor))
                 return;
-            }
 
             _processing = true;
             try
@@ -297,7 +301,7 @@
                 var toRemove = group.Samples.Where(s => s.Id != group.RecommendedKeep?.Id)
                     .Select(s => (s.MessageId, s.ChatId))
                     .ToList();
-                await TrainingDataService.ExcludeManyAsync(toRemove, WebUser.ToActor());
+                await TrainingDataService.ExcludeManyAsync(toRemove, actor);
 
                 Snackbar.Add($"Removed {toRemove.Count} duplicate sample(s) from training data", Severity.Success);
 
@@ -327,11 +331,8 @@
 
         if (confirmed == true)
         {
-            if (WebUser is null)
-            {
-                Snackbar.Add("Your session could not be verified. Please sign in again.", Severity.Error);
+            if (!TryGetActor(out var actor))
                 return;
-            }
 
             _processing = true;
             try
@@ -340,7 +341,7 @@
                     .SelectMany(g => g.Samples.Where(s => s.Id != g.RecommendedKeep?.Id))
                     .Select(s => (s.MessageId, s.ChatId))
                     .ToList();
-                await TrainingDataService.ExcludeManyAsync(toRemove, WebUser.ToActor());
+                await TrainingDataService.ExcludeManyAsync(toRemove, actor);
 
                 Snackbar.Add($"Removed {toRemove.Count} duplicate sample(s) from training data", Severity.Success);
 

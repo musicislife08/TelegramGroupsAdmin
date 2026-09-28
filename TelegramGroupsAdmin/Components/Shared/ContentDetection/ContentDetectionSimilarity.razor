@@ -6,7 +6,7 @@
     <MudStack Spacing="3">
         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
             <MudText Typo="Typo.h6" Color="Color.Primary">ML Text Classifier (SDCA)</MudText>
-            <HelpTooltip Text="Uses ML.NET SDCA (Stochastic Dual Coordinate Ascent) logistic regression with TF-IDF features to classify spam vs ham. Trained automatically on your spam/ham samples. Retrains every 8 hours to adapt to new patterns." />
+            <HelpTooltip Text="Uses ML.NET SDCA (Stochastic Dual Coordinate Ascent) logistic regression with TF-IDF features to classify spam vs clean messages. Trained automatically on your spam/clean samples. Retrains every 8 hours to adapt to new patterns." />
         </MudStack>
 
         @if (!IsGlobalView)
@@ -40,7 +40,7 @@
             <MudStack Spacing="1">
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                     <MudText>Spam Probability Threshold: @activeConfig.Threshold.ToString("F2")</MudText>
-                    <HelpTooltip Text="Minimum spam probability (0.0-1.0) required to contribute points. ML model outputs probability from 0% (definitely ham) to 100% (definitely spam). Recommended: 0.5-0.7 for balanced detection. Lower = more sensitive (catches more spam but more false positives). Higher = stricter (only high-confidence spam)." />
+                    <HelpTooltip Text="Minimum spam probability (0.0-1.0) required to contribute points. ML model outputs probability from 0% (definitely clean) to 100% (definitely spam). Recommended: 0.5-0.7 for balanced detection. Lower = more sensitive (catches more spam but more false positives). Higher = stricter (only high-confidence spam)." />
                 </MudStack>
                 <MudSlider @bind-Value="activeConfig.Threshold"
                           Min="0.1" Max="1.0" Step="0.05"
@@ -58,7 +58,7 @@
                     <text>
                         <strong>How it works:</strong> ML.NET SDCA model analyzes message text and outputs spam probability (0.0-1.0).
                         Messages above threshold contribute points: ≥95% → 5pts, ≥85% → 3.5pts, ≥70% → 2pts, ≥60% → 1pt.
-                        Model retrains automatically every 8 hours with your latest spam/ham samples.
+                        Model retrains automatically every 8 hours with your latest spam/clean samples.
                         <MudLink Href="/settings/background-jobs" Color="Color.Info">Trigger manual retraining</MudLink>
                     </text>
                 }

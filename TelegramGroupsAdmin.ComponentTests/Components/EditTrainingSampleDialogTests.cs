@@ -199,7 +199,7 @@ public class EditTrainingSampleDialogTests : DialogTestContext
         // Assert
         provider.WaitForAssertion(() =>
         {
-            Assert.That(provider.Markup, Does.Contain("HAM - This message is legitimate/wanted"));
+            Assert.That(provider.Markup, Does.Contain("CLEAN - This message is legitimate/wanted"));
         });
     }
 
@@ -274,7 +274,7 @@ public class EditTrainingSampleDialogTests : DialogTestContext
         provider.WaitForAssertion(() =>
         {
             Assert.That(provider.Markup, Does.Contain("Original Type:"));
-            Assert.That(provider.Markup, Does.Contain("HAM"));
+            Assert.That(provider.Markup, Does.Contain("CLEAN"));
         });
     }
 

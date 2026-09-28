@@ -59,7 +59,6 @@ public class VerdictTypesTests
         {
             Assert.That(VerdictClassifications.SpamValues, Is.EquivalentTo(VerdictClassifications.Spam.Select(c => (int)c)));
             Assert.That(VerdictClassifications.TrainingSpamValues, Is.EquivalentTo(VerdictClassifications.TrainingSpam.Select(c => (int)c)));
-            Assert.That(VerdictClassifications.TrainingHamValues, Is.EquivalentTo(VerdictClassifications.TrainingHam.Select(c => (int)c)));
             Assert.That(VerdictClassifications.CuratedValues, Is.EquivalentTo(VerdictClassifications.Curated.Select(c => (int)c)));
         }
     }
@@ -70,24 +69,29 @@ public class VerdictTypesTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(VerdictClassifications.TrainingSpam, Is.EquivalentTo(new[] { VerdictClassification.ExplicitSpam, VerdictClassification.ImplicitSpam }));
-            Assert.That(VerdictClassifications.TrainingHam, Is.EquivalentTo(new[] { VerdictClassification.ExplicitHam, VerdictClassification.ImplicitHam, VerdictClassification.Unscanned }));
             Assert.That(VerdictClassifications.Curated, Is.EquivalentTo(new[] { VerdictClassification.ExplicitSpam, VerdictClassification.ExplicitHam, VerdictClassification.ImplicitSpam }));
         }
     }
 
-    [TestCase(VerdictSource.ContentScan, true)]
-    [TestCase(VerdictSource.FileScan, true)]
-    [TestCase(VerdictSource.AutoBan, false)]
-    [TestCase(VerdictSource.TrainingExclude, false)]
-    [TestCase(VerdictSource.LegacyManual, false)]
-    public void IsScan_OnlyForScanSources(VerdictSource source, bool expected)
+    [Test]
+    public void VerdictSourceToDisplayText_NamesEverySourceWithoutJargon()
     {
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(source.IsScan(), Is.EqualTo(expected));
-            Assert.That(source.IsDecision(), Is.EqualTo(!expected));
+            foreach (var source in Enum.GetValues<VerdictSource>())
+            {
+                var text = source.ToDisplayText();
+                Assert.That(text, Is.Not.EqualTo(source.ToString()), $"{source} has no display text");
+                Assert.That(text, Does.Not.Contain("ham").IgnoreCase, $"{source} display text uses 'ham'");
+            }
         }
     }
+
+    [TestCase(VerdictSource.WebMarkHam, "Marked clean (web)")]
+    [TestCase(VerdictSource.ReviewClean, "Review queue: clean")]
+    [TestCase(VerdictSource.ContentScan, "Automatic scan")]
+    public void VerdictSourceToDisplayText_Examples(VerdictSource source, string expected)
+        => Assert.That(source.ToDisplayText(), Is.EqualTo(expected));
 
     [Test]
     public void ClassificationSets_AreReadOnly()
@@ -96,7 +100,6 @@ public class VerdictTypesTests
         {
             Assert.That(VerdictClassifications.Spam, Is.InstanceOf<System.Collections.ObjectModel.ReadOnlyCollection<VerdictClassification>>());
             Assert.That(VerdictClassifications.TrainingSpam, Is.InstanceOf<System.Collections.ObjectModel.ReadOnlyCollection<VerdictClassification>>());
-            Assert.That(VerdictClassifications.TrainingHam, Is.InstanceOf<System.Collections.ObjectModel.ReadOnlyCollection<VerdictClassification>>());
             Assert.That(VerdictClassifications.Curated, Is.InstanceOf<System.Collections.ObjectModel.ReadOnlyCollection<VerdictClassification>>());
         }
     }
@@ -128,7 +131,6 @@ public class VerdictTypesTests
         {
             Assert.That(VerdictClassifications.SpamValues, Is.InstanceOf<System.Collections.ObjectModel.ReadOnlyCollection<int>>());
             Assert.That(VerdictClassifications.TrainingSpamValues, Is.InstanceOf<System.Collections.ObjectModel.ReadOnlyCollection<int>>());
-            Assert.That(VerdictClassifications.TrainingHamValues, Is.InstanceOf<System.Collections.ObjectModel.ReadOnlyCollection<int>>());
             Assert.That(VerdictClassifications.CuratedValues, Is.InstanceOf<System.Collections.ObjectModel.ReadOnlyCollection<int>>());
         }
     }

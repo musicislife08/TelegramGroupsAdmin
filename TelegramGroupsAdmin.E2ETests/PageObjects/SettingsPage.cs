@@ -265,7 +265,7 @@ public class SettingsPage
     /// <summary>
     /// Selects a type filter on the Training Samples page.
     /// </summary>
-    /// <param name="filterOption">The filter option text (e.g., "All", "Spam Only", "Ham Only")</param>
+    /// <param name="filterOption">The filter option text (e.g., "All", "Spam Only", "Clean Only")</param>
     public async Task SelectTypeFilterAsync(string filterOption)
     {
         // The Type Filter select is inside the MudStack with search field

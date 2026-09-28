@@ -39,7 +39,7 @@
                     <MudSelect T="string" Value="_typeFilter" ValueChanged="OnTypeFilterChanged" Label="Type Filter" Style="max-width: 150px;">
                         <MudSelectItem Value="@("all")">All</MudSelectItem>
                         <MudSelectItem Value="@("spam")">Spam Only</MudSelectItem>
-                        <MudSelectItem Value="@("ham")">Ham Only</MudSelectItem>
+                        <MudSelectItem Value="@("clean")">Clean Only</MudSelectItem>
                         <MudSelectItem Value="@("conflicts")">
                             <span style="color: var(--mud-palette-error);">⚠️ Conflicts Only</span>
                         </MudSelectItem>
@@ -49,7 +49,7 @@
                         <MudSelectItem Value="@("all")">All Sources</MudSelectItem>
                         @foreach (var source in _stats?.SamplesBySource.Keys ?? Enumerable.Empty<string>())
                         {
-                            <MudSelectItem Value="@source">@source</MudSelectItem>
+                            <MudSelectItem Value="@source">@SourceLabel(source)</MudSelectItem>
                         }
                     </MudSelect>
 
@@ -78,11 +78,11 @@
                         <MudTd DataLabel="Type">
                             <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
                                 <MudChip T="string" Size="Size.Small" Color="@(context.IsSpam ? Color.Error : Color.Success)">
-                                    @(context.IsSpam ? "SPAM" : "HAM")
+                                    @(context.IsSpam ? "SPAM" : "CLEAN")
                                 </MudChip>
                                 @if (context.MessageId > 0 && _conflictedMessageIds.Contains(context.MessageId))
                                 {
-                                    <MudChip T="string" Size="Size.Small" Color="Color.Warning" title="This message has both SPAM and HAM training samples">
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Warning" title="This message has both SPAM and CLEAN training samples">
                                         ⚠️ CONFLICT
                                     </MudChip>
                                 }
@@ -116,7 +116,7 @@
                         </MudTd>
                         <MudTd DataLabel="Source">
                             <MudChip T="string" Size="Size.Small" Color="Color.Info">
-                                @context.Source.ToString()
+                                @context.Source.ToDisplayText()
                             </MudChip>
                         </MudTd>
                         <MudTd DataLabel="Method">
@@ -238,6 +238,10 @@
         }
     }
 
+    /// <summary>Source filter keys are VerdictSource names; show their display text.</summary>
+    private static string SourceLabel(string key) =>
+        Enum.TryParse<VerdictSource>(key, out var source) ? source.ToDisplayText() : key;
+
     private void FilterSamples()
     {
         var filtered = _allSamples.AsEnumerable();
@@ -247,7 +251,7 @@
         {
             filtered = filtered.Where(s =>
                 (s.MessageText != null && s.MessageText.Contains(_searchText, StringComparison.OrdinalIgnoreCase)) ||
-                s.Source.ToString().Contains(_searchText, StringComparison.OrdinalIgnoreCase) ||
+                s.Source.ToDisplayText().Contains(_searchText, StringComparison.OrdinalIgnoreCase) ||
                 (s.AddedBy.DisplayName != null && s.AddedBy.DisplayName.Contains(_searchText, StringComparison.OrdinalIgnoreCase)));
         }
 
@@ -255,7 +259,7 @@
         filtered = _typeFilter switch
         {
             "spam" => filtered.Where(s => s.IsSpam),
-            "ham" => filtered.Where(s => !s.IsSpam),
+            "clean" => filtered.Where(s => !s.IsSpam),
             "conflicts" => filtered.Where(s => s.MessageId > 0 && _conflictedMessageIds.Contains(s.MessageId)),
             _ => filtered
         };
@@ -351,7 +355,7 @@
         var messagePreview = sample.MessageText ?? "";
         var confirmed = await DialogService.ShowMessageBoxAsync(
             "Remove from Training Data",
-            $"Remove this {(sample.IsSpam ? "SPAM" : "HAM")} sample from training data?\n\n" +
+            $"Remove this {(sample.IsSpam ? "SPAM" : "CLEAN")} sample from training data?\n\n" +
             $"\"{messagePreview[..Math.Min(messagePreview.Length, 100)]}{(messagePreview.Length > 100 ? "..." : "")}\"\n\n" +
             $"Note: This preserves detection history but excludes the sample from future Bayes training.",
             yesText: "Remove", cancelText: "Cancel");

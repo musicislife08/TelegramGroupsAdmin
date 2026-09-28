@@ -231,7 +231,7 @@ public class DetectionHistoryDialogTests : DialogTestContext
         provider.WaitForAssertion(() =>
         {
             Assert.That(provider.Markup, Does.Contain("Clean (confirmed)"));
-            Assert.That(provider.Markup, Does.Contain("WebMarkHam"));
+            Assert.That(provider.Markup, Does.Contain("Marked clean (web)"));
         });
     }
 
@@ -322,7 +322,7 @@ public class DetectionHistoryDialogTests : DialogTestContext
         // Assert
         provider.WaitForAssertion(() =>
         {
-            Assert.That(provider.Markup, Does.Contain("SPAM"));
+            Assert.That(provider.Markup, Does.Contain("Spam (auto)"));
             Assert.That(provider.Markup, Does.Contain("mud-chip-color-error"));
         });
     }
@@ -344,7 +344,7 @@ public class DetectionHistoryDialogTests : DialogTestContext
         // Assert
         provider.WaitForAssertion(() =>
         {
-            Assert.That(provider.Markup, Does.Contain("HAM"));
+            Assert.That(provider.Markup, Does.Contain("Clean (auto)"));
             Assert.That(provider.Markup, Does.Contain("mud-chip-color-success"));
         });
     }
@@ -431,7 +431,7 @@ public class DetectionHistoryDialogTests : DialogTestContext
         // Assert
         provider.WaitForAssertion(() =>
         {
-            Assert.That(provider.Markup, Does.Contain(nameof(VerdictSource.ContentScan)));
+            Assert.That(provider.Markup, Does.Contain(VerdictSource.ContentScan.ToDisplayText()));
         });
     }
 

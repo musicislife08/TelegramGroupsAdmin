@@ -18,14 +18,14 @@
                     SPAM - This message is spam/unwanted
                 </MudRadio>
                 <MudRadio T="bool" Value="false" Color="Color.Success">
-                    HAM - This message is legitimate/wanted
+                    CLEAN - This message is legitimate/wanted
                 </MudRadio>
             </MudRadioGroup>
 
             <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
                 <MudText Typo="Typo.body2"><strong>Added:</strong> @Sample.DetectedAt.ToString("yyyy-MM-dd HH:mm")</MudText>
                 <MudText Typo="Typo.body2"><strong>By:</strong> @(Sample.AddedBy.DisplayName ?? "System")</MudText>
-                <MudText Typo="Typo.body2"><strong>Original Type:</strong> @(Sample.IsSpam ? "SPAM" : "HAM")</MudText>
+                <MudText Typo="Typo.body2"><strong>Original Type:</strong> @(Sample.IsSpam ? "SPAM" : "CLEAN")</MudText>
             </MudStack>
         </MudStack>
     </DialogContent>

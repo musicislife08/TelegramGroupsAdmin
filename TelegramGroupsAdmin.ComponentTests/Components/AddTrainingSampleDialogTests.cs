@@ -267,7 +267,7 @@ public class AddTrainingSampleDialogTests : AddTrainingSampleDialogTestContext
         // Assert
         provider.WaitForAssertion(() =>
         {
-            Assert.That(provider.Markup, Does.Contain("HAM - This message is legitimate/wanted"));
+            Assert.That(provider.Markup, Does.Contain("CLEAN - This message is legitimate/wanted"));
         });
     }
 

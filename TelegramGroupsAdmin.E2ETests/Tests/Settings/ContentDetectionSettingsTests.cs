@@ -240,8 +240,8 @@ public class ContentDetectionSettingsTests : AuthenticatedTestBase
         // New TrainingDataBalanceStatus component should be visible
         await Expect(Page.GetByText("Training Data Balance")).ToBeVisibleAsync();
         await Expect(Page.Locator(".mud-chip:has-text('Spam:')").First).ToBeVisibleAsync();
-        await Expect(Page.Locator(".mud-chip:has-text('Explicit Ham:')").First).ToBeVisibleAsync();
-        await Expect(Page.Locator(".mud-chip:has-text('Implicit Ham:')").First).ToBeVisibleAsync();
+        await Expect(Page.Locator(".mud-chip:has-text('Clean (confirmed):')").First).ToBeVisibleAsync();
+        await Expect(Page.Locator(".mud-chip:has-text('Clean (auto):')").First).ToBeVisibleAsync();
     }
 
     [Test]

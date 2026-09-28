@@ -11,7 +11,7 @@
         {
             <MudAlert Severity="@(verdict.IsSpam ? Severity.Error : Severity.Success)" Class="mb-4" Icon="@Icons.Material.Filled.Gavel">
                 <MudText Typo="Typo.body2">
-                    <strong>Current verdict:</strong> @verdict.Classification.ToDisplayText() (@verdict.Source)
+                    <strong>Current verdict:</strong> @verdict.Classification.ToDisplayText() (@verdict.Source.Value.ToDisplayText())
                     @if (verdict.DetectedAt is { } at)
                     {
                         <text> · <LocalTimestamp Value="at" /></text>
@@ -38,13 +38,13 @@
                                         <MudChip T="string"
                                                  Size="Size.Small"
                                                  Color="@(result.IsSpam ? Color.Error : Color.Success)">
-                                            @(result.IsSpam ? "SPAM" : "HAM")
+                                            @result.Classification.ToDisplayText()
                                         </MudChip>
                                         <MudChip T="string" Size="Size.Small" Color="Color.Info">
                                             Score: @result.Score.ToString("F1")
                                         </MudChip>
                                         <MudChip T="string" Size="Size.Small" Color="Color.Default">
-                                            @result.Source
+                                            @result.Source.ToDisplayText()
                                         </MudChip>
                                     </MudStack>
 
@@ -60,9 +60,6 @@
                                     }
 
                                     <MudStack Row="true" Spacing="1">
-                                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">
-                                            Score: @result.Score.ToString("F1")
-                                        </MudChip>
                                         @if (result.Classification.IsTrainingSample())
                                         {
                                             <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.School">

@@ -670,9 +670,9 @@ public class MessageBubbleTelegramTests : MudBlazorTestContext
         var title = cut.Find(".tg-badge").GetAttribute("title");
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(title, Does.StartWith("SPAM"));
-            Assert.That(title, Does.Contain($"Source: {VerdictSource.ContentScan}"));
-            Assert.That(title, Does.Not.Contain(nameof(VerdictSource.FileScan)));
+            Assert.That(title, Does.StartWith("Spam ("));
+            Assert.That(title, Does.Contain($"Source: {VerdictSource.ContentScan.ToDisplayText()}"));
+            Assert.That(title, Does.Not.Contain(VerdictSource.FileScan.ToDisplayText()));
         }
     }
 

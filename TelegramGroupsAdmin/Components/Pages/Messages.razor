@@ -877,7 +877,7 @@
         await DialogService.ShowAsync<EditHistoryDialog>("Edit History", parameters, options);
     }
 
-    // Phase 2.7: Spam/Ham action handlers (uses ModerationActionService)
+    // Spam / clean action handlers (use the moderation and training services)
     private async Task HandleMarkAsSpam(MessageRecord message)
     {
         try
@@ -905,15 +905,18 @@
                 Logger.LogInformation(
                     "Message {MessageId} marked as spam: user banned from {ChatsAffected} chats, message deleted: {MessageDeleted}",
                     message.MessageId, result.ChatsAffected, result.MessageDeleted);
+                Snackbar.Add($"Marked as spam - user banned from {result.ChatsAffected} chat(s)", Severity.Success);
             }
             else
             {
                 Logger.LogError("Failed to mark message {MessageId} as spam: {Error}", message.MessageId, result.ErrorMessage);
+                Snackbar.Add($"Failed to mark as spam: {result.ErrorMessage}", Severity.Error);
             }
         }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Failed to mark message {MessageId} as spam", message.MessageId);
+            Snackbar.Add("Failed to mark as spam", Severity.Error);
         }
     }
 
@@ -950,24 +953,28 @@
                 if (unbanResult.Success)
                 {
                     Logger.LogInformation(
-                        "Message {MessageId} marked as ham (false positive correction): user unbanned from {ChatsAffected} chats, trust restored: {TrustRestored}",
+                        "Message {MessageId} marked clean (false positive correction): user unbanned from {ChatsAffected} chats, trust restored: {TrustRestored}",
                         message.MessageId, unbanResult.ChatsAffected, unbanResult.TrustRestored);
+                    Snackbar.Add($"Marked clean - user unbanned from {unbanResult.ChatsAffected} chat(s)", Severity.Success);
                 }
                 else
                 {
-                    Logger.LogWarning("Message {MessageId} marked as ham but unban failed: {Error}", message.MessageId, unbanResult.ErrorMessage);
+                    Logger.LogWarning("Message {MessageId} marked clean but unban failed: {Error}", message.MessageId, unbanResult.ErrorMessage);
+                    Snackbar.Add($"Marked clean, but unbanning the user failed: {unbanResult.ErrorMessage}", Severity.Warning);
                 }
             }
             else
             {
-                Logger.LogInformation("Message {MessageId} marked as ham", message.MessageId);
+                Logger.LogInformation("Message {MessageId} marked clean", message.MessageId);
+                Snackbar.Add("Marked clean", Severity.Success);
             }
 
             await RefreshDetectionHistoryDisplayAsync(message.MessageId);
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Failed to mark message {MessageId} as ham", message.MessageId);
+            Logger.LogError(ex, "Failed to mark message {MessageId} clean", message.MessageId);
+            Snackbar.Add("Failed to mark clean", Severity.Error);
         }
     }
 
