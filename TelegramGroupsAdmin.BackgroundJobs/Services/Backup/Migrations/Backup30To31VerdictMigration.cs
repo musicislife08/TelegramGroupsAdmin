@@ -113,6 +113,13 @@ public static class Backup30To31VerdictMigration
         var foldedLabels = 0;
         if (backup.Data.TryGetValue(TrainingLabels, out var labels))
         {
+            // Explicit decisions already in the log, keyed once (not scanned per label).
+            var explicitDecisions = rows
+                .Where(r => Int(r["source"]) is not (ContentScan or FileScan or TrainingExclude)
+                    && Int(r["classification"]) is ExplicitSpam or ExplicitHam)
+                .Select(r => (ChatId: Long(r["chat_id"]), MessageId: Long(r["message_id"]), IsSpam: Int(r["classification"]) == ExplicitSpam))
+                .ToHashSet();
+
             foreach (var label in labels.Select(ToObject))
             {
                 var messageId = Long(label["message_id"]);
@@ -120,11 +127,7 @@ public static class Backup30To31VerdictMigration
                 var isSpamLabel = Int(label["label"]) == 0;
                 var labeledBy = Long(label["labeled_by_user_id"]);
 
-                var matched = rows.Any(r => Long(r["message_id"]) == messageId && Long(r["chat_id"]) == chatId
-                    && Int(r["source"]) is not (ContentScan or FileScan or TrainingExclude)
-                    && Int(r["classification"]) is ExplicitSpam or ExplicitHam
-                    && (Int(r["classification"]) == ExplicitSpam) == isSpamLabel);
-                if (matched)
+                if (explicitDecisions.Contains((chatId, messageId, isSpamLabel)))
                     continue;
 
                 var autoBan = isSpamLabel && labeledBy is null;
