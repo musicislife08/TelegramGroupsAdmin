@@ -37,7 +37,7 @@ public class MessageStatsServiceTests
         _mockFactory.CreateDbContextAsync(Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(_context));
 
-        _sut = new MessageStatsService(_mockFactory);
+        _sut = new MessageStatsService(new MessageStatsRepository(_mockFactory));
     }
 
     [TearDown]

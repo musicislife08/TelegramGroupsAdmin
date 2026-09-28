@@ -3,10 +3,9 @@ using TelegramGroupsAdmin.Models.Analytics;
 namespace TelegramGroupsAdmin.Repositories;
 
 /// <summary>
-/// Service for message analytics and statistics
-/// Extracted from MessageHistoryRepository (REFACTOR-3)
+/// Repository for message analytics and statistics queries (backs <see cref="IMessageStatsService"/>)
 /// </summary>
-public interface IMessageStatsService
+public interface IMessageStatsRepository
 {
     /// <summary>
     /// Get overall message history statistics

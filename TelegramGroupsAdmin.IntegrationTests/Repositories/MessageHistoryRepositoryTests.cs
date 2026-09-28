@@ -110,6 +110,7 @@ public class MessageHistoryRepositoryTests
         services.AddScoped<IMessageHistoryRepository, MessageHistoryRepository>();
         services.AddScoped<IMessageQueryService, MessageQueryService>();
         services.AddScoped<ITelegramUserRepository, TelegramUserRepository>(); // Required by MessageStatsService (UX-2.1)
+        services.AddScoped<IMessageStatsRepository, MessageStatsRepository>();
         services.AddScoped<IMessageStatsService, MessageStatsService>();
         services.AddScoped<IMessageTranslationService, MessageTranslationService>();
         services.AddScoped<IMessageEditService, MessageEditService>();
@@ -1308,6 +1309,47 @@ public class MessageHistoryRepositoryTests
             Assert.That(stats.SpamPercentage, Is.GreaterThanOrEqualTo(0));
         }
         Assert.That(stats.SpamPercentage, Is.LessThanOrEqualTo(100));
+    }
+
+    [Test]
+    public async Task GetDetectionStatsAsync_CountsOnlyContentScanRows()
+    {
+        // Canonical has decision rows (auto-bans, web/review decisions, imports) alongside the scans;
+        // detector statistics must count only what the detector said.
+        await using var ctx = _testHelper!.GetDbContext();
+        var scans = ctx.DetectionResults.AsNoTracking().Where(d => d.Source == (int)VerdictSource.ContentScan);
+        var expectedTotal = await scans.CountAsync();
+        var expectedSpam = await scans.CountAsync(d => VerdictClassifications.SpamValues.Contains(d.Classification!.Value));
+        var decisionRows = await ctx.DetectionResults.AsNoTracking().CountAsync(d => d.Source != (int)VerdictSource.ContentScan);
+        Assert.That(decisionRows, Is.GreaterThan(0), "canonical must carry non-scan rows or this test is vacuous");
+
+        var stats = await _statsService!.GetDetectionStatsAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(stats.TotalDetections, Is.EqualTo(expectedTotal));
+            Assert.That(stats.SpamDetected, Is.EqualTo(expectedSpam));
+        }
+    }
+
+    [Test]
+    public async Task GetCuratedTrainingCountsAsync_CountsCuratedCurrentVerdicts()
+    {
+        await using var ctx = _testHelper!.GetDbContext();
+        var curated = ctx.MessageVerdicts.AsNoTracking()
+            .Where(v => VerdictClassifications.CuratedValues.Contains(v.Classification));
+        var expectedTotal = await curated.CountAsync();
+        var expectedSpam = await curated.CountAsync(v => v.IsSpam);
+        Assert.That(expectedSpam, Is.GreaterThan(0).And.LessThan(expectedTotal),
+            "canonical must carry both curated spam and curated ham");
+
+        var (total, spam) = await _statsService!.GetCuratedTrainingCountsAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(total, Is.EqualTo(expectedTotal));
+            Assert.That(spam, Is.EqualTo(expectedSpam));
+        }
     }
 
     [Test]

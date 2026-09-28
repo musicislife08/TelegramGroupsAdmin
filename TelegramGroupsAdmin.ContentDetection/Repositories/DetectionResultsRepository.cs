@@ -421,7 +421,7 @@ public class DetectionResultsRepository : IDetectionResultsRepository
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         var results = await WithActorJoins(
-                context.DetectionResults.AsNoTracking().Where(dr => dr.DetectionSource == "file_scan"),
+                context.DetectionResults.AsNoTracking().Where(dr => dr.Source == (int)VerdictSource.FileScan),
                 context)
             .OrderByDescending(dr => dr.DetectedAt)
             .Skip(offset)
@@ -437,8 +437,8 @@ public class DetectionResultsRepository : IDetectionResultsRepository
         var sevenDaysAgo = DateTimeOffset.UtcNow.AddDays(-7);
 
         var stats = await context.DetectionResults
-            .Where(dr => dr.DetectionSource == "file_scan" &&
-                        dr.IsSpam == true && // Only infected files
+            .Where(dr => dr.Source == (int)VerdictSource.FileScan &&
+                        dr.Classification == (int)VerdictClassification.UntrainedSpam && // Only infected files
                         dr.DetectedAt >= sevenDaysAgo)
             .GroupBy(dr => dr.DetectionMethod)
             .Select(g => new { Scanner = g.Key, Count = g.Count() })
@@ -452,7 +452,7 @@ public class DetectionResultsRepository : IDetectionResultsRepository
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         return await context.DetectionResults
-            .Where(dr => dr.DetectionSource == "file_scan")
+            .Where(dr => dr.Source == (int)VerdictSource.FileScan)
             .CountAsync(cancellationToken);
     }
 
@@ -463,7 +463,10 @@ public class DetectionResultsRepository : IDetectionResultsRepository
         // Get all detections where is_spam = false (OpenAI may have vetoed)
         // and check_results_json contains both OpenAI "clean" result and other "spam" results
         var vetoedDetections = await context.DetectionResults
-            .Where(dr => dr.DetectedAt >= since && !dr.IsSpam && dr.CheckResultsJson != null)
+            .Where(dr => dr.DetectedAt >= since
+                && dr.Source == (int)VerdictSource.ContentScan
+                && !VerdictClassifications.SpamValues.Contains(dr.Classification!.Value)
+                && dr.CheckResultsJson != null)
             .Select(dr => new { dr.Id, dr.CheckResultsJson })
             .ToListAsync(cancellationToken);
 
@@ -559,7 +562,9 @@ public class DetectionResultsRepository : IDetectionResultsRepository
 
         // Get recent non-spam detections with their message text
         var detections = await context.DetectionResults
-            .Where(dr => !dr.IsSpam && dr.CheckResultsJson != null)
+            .Where(dr => dr.Source == (int)VerdictSource.ContentScan
+                && !VerdictClassifications.SpamValues.Contains(dr.Classification!.Value)
+                && dr.CheckResultsJson != null)
             .OrderByDescending(dr => dr.DetectedAt)
             .Take(limit * 2) // Get extra to filter after JSON parsing
             .Join(context.Messages,

@@ -19,19 +19,21 @@ public class HourlyDetectionStatsView
     /// - Dashboard daily stats (roll up hourly to daily)
     /// - Peak hour detection
     /// - Spam/ham trend analysis
+    /// Totals, spam/ham and the average score count only detector output (source 0 = ContentScan);
+    /// manual_count counts human decisions (web/command/review/training-page sources and legacy manual rows).
+    /// Classification literals (0, 2, 4) are the Spam set (VerdictClassifications.SpamValues).
     /// </summary>
     public const string CreateViewSql = """
         CREATE VIEW hourly_detection_stats AS
-        SELECT
-            DATE(dr.detected_at) AS detection_date,
-            EXTRACT(HOUR FROM dr.detected_at)::int AS detection_hour,
-            COUNT(*) AS total_count,
-            COUNT(*) FILTER (WHERE dr.is_spam) AS spam_count,
-            COUNT(*) FILTER (WHERE NOT dr.is_spam) AS ham_count,
-            COUNT(*) FILTER (WHERE dr.detection_source = 'manual') AS manual_count,
-            AVG(dr.score) AS avg_score
-        FROM detection_results dr
-        GROUP BY DATE(dr.detected_at), EXTRACT(HOUR FROM dr.detected_at);
+        SELECT date(detected_at) AS detection_date,
+               EXTRACT(hour FROM detected_at)::integer AS detection_hour,
+               count(*) FILTER (WHERE source = 0) AS total_count,
+               count(*) FILTER (WHERE source = 0 AND classification IN (0, 2, 4)) AS spam_count,
+               count(*) FILTER (WHERE source = 0 AND classification NOT IN (0, 2, 4)) AS ham_count,
+               count(*) FILTER (WHERE source IN (11, 12, 13, 14, 15, 16, 17, 99)) AS manual_count,
+               avg(score) FILTER (WHERE source = 0) AS avg_score
+        FROM detection_results
+        GROUP BY date(detected_at), EXTRACT(hour FROM detected_at);
         """;
 
     /// <summary>
@@ -56,31 +58,31 @@ public class HourlyDetectionStatsView
     public int DetectionHour { get; set; }
 
     /// <summary>
-    /// Total detections in this hour
+    /// Total detector scans (ContentScan rows) in this hour
     /// </summary>
     [Column("total_count")]
     public long TotalCount { get; set; }
 
     /// <summary>
-    /// Number of spam detections
+    /// Number of detector scans classified as spam
     /// </summary>
     [Column("spam_count")]
     public long SpamCount { get; set; }
 
     /// <summary>
-    /// Number of ham (not spam) detections
+    /// Number of detector scans classified as not spam
     /// </summary>
     [Column("ham_count")]
     public long HamCount { get; set; }
 
     /// <summary>
-    /// Number of manual classifications (reviews)
+    /// Number of human decisions (reviews, web/command marks, training-data edits)
     /// </summary>
     [Column("manual_count")]
     public long ManualCount { get; set; }
 
     /// <summary>
-    /// Average confidence score for this hour
+    /// Average detector score for this hour (ContentScan rows only)
     /// </summary>
     [Column("avg_score")]
     public double? AvgScore { get; set; }

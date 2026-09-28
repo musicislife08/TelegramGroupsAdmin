@@ -102,8 +102,11 @@ public class AnalyticsRepository : IAnalyticsRepository
         var responseTimes = await (
             from dr in context.DetectionResults
             where dr.DetectedAt >= startDate && dr.DetectedAt <= endDate
-            where dr.IsSpam
-            join ua in context.UserActions on dr.MessageId equals ua.MessageId
+            where dr.Source == (int)VerdictSource.ContentScan
+            where VerdictClassifications.SpamValues.Contains(dr.Classification!.Value)
+            join ua in context.UserActions
+                on new { MessageId = (int?)dr.MessageId, ChatId = (long?)dr.ChatId }
+                equals new { ua.MessageId, ua.ChatId }
             where ua.ActionType == (int)UserActionType.Ban ||
                   ua.ActionType == (int)UserActionType.Warn
             where ua.IssuedAt >= dr.DetectedAt // Action after detection
@@ -172,14 +175,14 @@ public class AnalyticsRepository : IAnalyticsRepository
         // Fetch all detection results with JSON in date range
         var allDetections = await context.DetectionResults
             .Where(dr => dr.DetectedAt >= startDate && dr.DetectedAt <= endDate)
-            .Where(dr => dr.DetectionSource != "manual") // Exclude manual reviews
+            .Where(dr => dr.Source == (int)VerdictSource.ContentScan) // Detector output only
             .Where(dr => dr.CheckResultsJson != null) // Only rows with individual check data
             .Select(dr => new
             {
                 dr.Id,
                 dr.MessageId,
                 dr.CheckResultsJson,
-                dr.IsSpam
+                IsSpam = VerdictClassifications.SpamValues.Contains(dr.Classification!.Value)
             })
             .AsNoTracking()
             .ToListAsync(cancellationToken);
@@ -284,7 +287,8 @@ public class AnalyticsRepository : IAnalyticsRepository
         // Fetch detection results (database does filtering)
         var detections = await context.DetectionResults
             .Where(dr => dr.DetectedAt >= startDate && dr.DetectedAt <= endDate)
-            .Select(dr => new { dr.DetectedAt, dr.IsSpam })
+            .Where(dr => dr.Source == (int)VerdictSource.ContentScan)
+            .Select(dr => new { dr.DetectedAt, IsSpam = VerdictClassifications.SpamValues.Contains(dr.Classification!.Value) })
             .AsNoTracking()
             .ToListAsync(cancellationToken);
 
@@ -672,7 +676,8 @@ public class AnalyticsRepository : IAnalyticsRepository
         // Note: AsNoTracking not needed since we're projecting to value types (DateTimeOffset)
         var detections = await context.DetectionResults
             .Where(dr => dr.DetectedAt >= minDateUtc && dr.DetectedAt < maxDateUtc)
-            .Where(dr => dr.IsSpam)
+            .Where(dr => dr.Source == (int)VerdictSource.ContentScan)
+            .Where(dr => VerdictClassifications.SpamValues.Contains(dr.Classification!.Value))
             .Select(dr => dr.DetectedAt)
             .ToListAsync(cancellationToken);
 

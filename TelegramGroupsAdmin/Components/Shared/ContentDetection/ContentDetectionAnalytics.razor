@@ -1,11 +1,8 @@
-@using Microsoft.EntityFrameworkCore
-@using TelegramGroupsAdmin.Data
 @using TelegramGroupsAdmin.ContentDetection.Repositories
 @using TelegramGroupsAdmin.ContentDetection.Models
 @inject IStopWordsRepository StopWordsRepository
 @inject IMessageStatsService MessageStatsService
 @inject IDetectionResultsRepository DetectionResultsRepository
-@inject IDbContextFactory<AppDbContext> DbContextFactory
 @inject ISnackbar Snackbar
 
 
@@ -424,16 +421,7 @@
     {
         try
         {
-            // Query training_labels table (explicit admin labels)
-            await using var context = await DbContextFactory.CreateDbContextAsync();
-
-            _totalTrainingSamples = await context.TrainingLabels
-                .AsNoTracking()
-                .CountAsync();
-
-            _totalSpamSamples = await context.TrainingLabels
-                .AsNoTracking()
-                .CountAsync(tl => tl.Label == 0); // 0 = Spam
+            (_totalTrainingSamples, _totalSpamSamples) = await MessageStatsService.GetCuratedTrainingCountsAsync();
         }
         catch (Exception ex)
         {

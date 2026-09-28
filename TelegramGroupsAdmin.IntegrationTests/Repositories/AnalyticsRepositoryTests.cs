@@ -497,6 +497,25 @@ public class AnalyticsRepositoryTests
 
     #endregion
 
+    #region Detection accuracy
+
+    [Test]
+    public async Task DetectionAccuracy_FlagsFalsePositive_FromCorrectionDecision_AndIgnoresDecisionRows()
+    {
+        await using var ctx = _testHelper.GetDbContext();
+        var rows = await ctx.DetectionAccuracy.AsNoTracking().ToListAsync();
+        var rowIds = rows.Select(r => r.Id).ToList();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(rows.Single(r => r.Id == GoldenDatasetConstants.Analytics.DrId_FpAuto).IsFalsePositive, Is.True);
+            Assert.That(rows.Any(r => r.Id == GoldenDatasetConstants.Analytics.DrId_FpManual), Is.False, "decision rows are not detector output");
+            Assert.That(await ctx.DetectionResults.Where(d => rowIds.Contains(d.Id)).AllAsync(d => d.Source == 0), Is.True);
+        }
+    }
+
+    #endregion
+
     #region GetAlgorithmPerformanceStatsAsync Tests
 
     [Test]

@@ -291,6 +291,7 @@ public static class ServiceCollectionExtensions
 
             // Analytics repositories (consolidated in main app)
             services.AddScoped<TelegramGroupsAdmin.Repositories.IAnalyticsRepository, TelegramGroupsAdmin.Repositories.AnalyticsRepository>();
+            services.AddScoped<TelegramGroupsAdmin.Repositories.IMessageStatsRepository, TelegramGroupsAdmin.Repositories.MessageStatsRepository>();
             services.AddScoped<TelegramGroupsAdmin.Repositories.IMessageStatsService, TelegramGroupsAdmin.Repositories.MessageStatsService>();
 
             return services;
