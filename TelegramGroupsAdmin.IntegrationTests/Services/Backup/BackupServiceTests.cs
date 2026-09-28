@@ -1,3 +1,7 @@
+using System.Formats.Tar;
+using System.IO.Compression;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -210,7 +214,7 @@ public class BackupServiceTests
             Assert.That(metadata, Is.Not.Null);
             using (Assert.EnterMultipleScope())
             {
-                Assert.That(metadata.Version, Is.EqualTo("3.0"));
+                Assert.That(metadata.Version, Is.EqualTo("3.1"));
                 Assert.That(metadata.TableCount, Is.GreaterThan(0));
             }
         }
@@ -693,7 +697,7 @@ public class BackupServiceTests
             Assert.That(metadata, Is.Not.Null);
             using (Assert.EnterMultipleScope())
             {
-                Assert.That(metadata.Version, Is.EqualTo("3.0"));
+                Assert.That(metadata.Version, Is.EqualTo("3.1"));
                 Assert.That(metadata.TableCount, Is.EqualTo(ExpectedBackupTableCount));
                 Assert.That(metadata.CreatedAt, Is.LessThanOrEqualTo(DateTimeOffset.UtcNow));
             }
@@ -716,7 +720,7 @@ public class BackupServiceTests
 
             // Assert
             Assert.That(metadata, Is.Not.Null);
-            Assert.That(metadata.Version, Is.EqualTo("3.0"));
+            Assert.That(metadata.Version, Is.EqualTo("3.1"));
         }
         finally
         {
@@ -963,6 +967,165 @@ public class BackupServiceTests
         {
             File.Delete(backupPath);
         }
+    }
+
+    #endregion
+
+    #region Backup Format Migration Tests
+
+    /// <summary>
+    /// A 3.0 backup (legacy detection_results columns, training_labels, media sample tables) restores
+    /// into the 3.1 schema: rows get source/classification, is_spam is generated (never written),
+    /// labels fold into decisions and the identity sequence clears the new ids.
+    /// The 3.0 backup is built from the exported canonical backup: its detection_results are replaced by
+    /// synthetic 3.0-shaped rows on canonical messages (backup fixtures are infrastructure data).
+    /// </summary>
+    [Test]
+    public async Task RestoreAsync_Version30Backup_MigratesVerdictsIntoTheCurrentSchema()
+    {
+        var exportedPath = await ExportBackupToTempFileAsync();
+        var legacyPath = Path.Combine(Path.GetTempPath(), $"test_backup_v30_{Guid.NewGuid():N}.tar.gz");
+        try
+        {
+            var messages = await WriteVersion30BackupAsync(exportedPath, legacyPath);
+
+            await _backupService!.RestoreAsync(legacyPath);
+
+            await using var context = _testHelper!.GetDbContext();
+            var rows = await context.DetectionResults.AsNoTracking().OrderBy(d => d.Id).ToListAsync();
+            var sequenceValue = await _testHelper.ExecuteScalarAsync<long>(
+                "SELECT last_value FROM pg_sequences WHERE sequencename = pg_get_serial_sequence('detection_results', 'id')::regclass::text");
+
+            DetectionResultRow Only(int index) => rows.Where(r => r.MessageId == messages[index].MessageId && r.ChatId == messages[index].ChatId)
+                .Select(r => new DetectionResultRow(r.Source, r.Classification, r.IsSpam, r.SystemIdentifier, r.TelegramUserId)).Single();
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(rows, Has.Count.EqualTo(6), "3 legacy rows + 1 TrainingExclude + 2 folded labels (the matched ham label is not duplicated)");
+                Assert.That(Only(0), Is.EqualTo(new DetectionResultRow(0, 2, true, "auto_detection", null)), "trained content scan above threshold → ImplicitSpam");
+                Assert.That(Only(1), Is.EqualTo(new DetectionResultRow(12, 1, false, null, CanonicalTopHamAuthorId)),
+                    "WebMarkHam; the legacy is_spam = true is ignored, is_spam is generated from classification");
+                Assert.That(rows.Where(r => r.MessageId == messages[2].MessageId && r.ChatId == messages[2].ChatId)
+                        .Select(r => new DetectionResultRow(r.Source, r.Classification, r.IsSpam, r.SystemIdentifier, r.TelegramUserId)),
+                    Is.EquivalentTo(new[]
+                    {
+                        new DetectionResultRow(18, 0, true, "tg-spam-import", null),
+                        new DetectionResultRow(17, 4, true, "tg-spam-import", null)
+                    }), "unused import keeps its actor on the TrainingExclude backfill");
+                Assert.That(Only(3), Is.EqualTo(new DetectionResultRow(99, 1, false, "unknown", null)), "unattributed ham label satisfies the actor CHECK");
+                Assert.That(Only(4), Is.EqualTo(new DetectionResultRow(10, 0, true, "auto_detection", null)), "unattributed spam label → AutoBan");
+                Assert.That(sequenceValue, Is.GreaterThanOrEqualTo(rows.Max(r => r.Id)), "identity sequence reset past the migrated ids");
+            }
+        }
+        finally
+        {
+            File.Delete(exportedPath);
+            File.Delete(legacyPath);
+        }
+    }
+
+    private sealed record DetectionResultRow(int Source, int Classification, bool IsSpam, string? SystemIdentifier, long? TelegramUserId);
+
+    /// <summary>
+    /// Rewrites an exported (current-format, encrypted) backup as a 3.0 backup with an unencrypted database.json:
+    /// version 3.0, legacy detection_results rows on the first five canonical MainChat messages, training_labels
+    /// and the retired media sample tables. Returns the five messages used.
+    /// </summary>
+    private async Task<List<(int MessageId, long ChatId)>> WriteVersion30BackupAsync(string exportedPath, string legacyPath)
+    {
+        JsonObject? metadata = null;
+        JsonObject? data = null;
+        await using (var input = File.OpenRead(exportedPath))
+        await using (var gzip = new GZipStream(input, CompressionMode.Decompress))
+        {
+            using var tar = new TarReader(gzip);
+            while (await tar.GetNextEntryAsync() is { DataStream: not null } entry)
+            {
+                using var buffer = new MemoryStream();
+                await entry.DataStream.CopyToAsync(buffer);
+                if (entry.Name == "metadata.json")
+                    metadata = JsonNode.Parse(buffer.ToArray())!.AsObject();
+                else if (entry.Name == "database.json.enc")
+                    data = JsonNode.Parse(_encryptionService!.DecryptBackup(buffer.ToArray(), "test-passphrase-12345"))!.AsObject();
+            }
+        }
+
+        Assert.That(metadata, Is.Not.Null);
+        Assert.That(data, Is.Not.Null);
+
+        // MainChat messages: chat 0 would turn a manual row into a TrainingDataPage row.
+        var messages = data!["messages"]!.AsArray()
+            .Select(m => (MessageId: m!["message_id"]!.GetValue<int>(), ChatId: m["chat_id"]!.GetValue<long>()))
+            .Where(m => m.ChatId == CanonicalMainChatId)
+            .Take(5)
+            .ToList();
+        Assert.That(messages, Has.Count.EqualTo(5));
+
+        JsonObject Legacy(long id, int index, string detectionSource, bool isSpam, double netScore, bool usedForTraining,
+            string reason, long? telegramUserId, string? systemIdentifier, string? checks) => new()
+        {
+            ["id"] = id,
+            ["message_id"] = messages[index].MessageId,
+            ["chat_id"] = messages[index].ChatId,
+            ["detected_at"] = "2026-01-10T12:00:00.5+00:00",
+            ["detection_source"] = detectionSource,
+            ["detection_method"] = "Legacy",
+            ["is_spam"] = isSpam,
+            ["score"] = Math.Abs(netScore),
+            ["net_score"] = netScore,
+            ["used_for_training"] = usedForTraining,
+            ["reason"] = reason,
+            ["web_user_id"] = null,
+            ["telegram_user_id"] = telegramUserId,
+            ["system_identifier"] = systemIdentifier,
+            ["check_results_json"] = checks,
+            ["edit_version"] = 0
+        };
+
+        JsonObject Label(int index, int label, long? labeledBy) => new()
+        {
+            ["message_id"] = messages[index].MessageId,
+            ["chat_id"] = messages[index].ChatId,
+            ["label"] = label,
+            ["labeled_by_user_id"] = labeledBy,
+            ["labeled_at"] = "2026-01-11T00:00:00+00:00",
+            ["reason"] = null,
+            ["audit_log_id"] = null
+        };
+
+        data["detection_results"] = new JsonArray(
+            Legacy(1001, 0, "auto", true, 3.0, true, "Spam detected", null, "auto_detection",
+                """{"Checks": [{"Score": 3.0, "CheckName": 2, "Abstained": false}]}"""),
+            Legacy(1002, 1, "manual", true, -5.0, true, "Manually marked as ham (not spam) by admin", CanonicalTopHamAuthorId, null, null),
+            Legacy(1003, 2, "tg-spam-import", true, -1.0, false, "Imported (label - spam)", null, "tg-spam-import", null));
+        data["training_labels"] = new JsonArray(
+            Label(1, 1, CanonicalTopHamAuthorId),
+            Label(3, 1, null),
+            Label(4, 0, null));
+        data["image_training_samples"] = new JsonArray();
+        data["video_training_samples"] = new JsonArray();
+
+        var tables = metadata!["tables"]!.AsArray();
+        foreach (var legacyTable in new[] { "training_labels", "image_training_samples", "video_training_samples" })
+            tables.Add(legacyTable);
+        metadata["table_count"] = tables.Count;
+        metadata["version"] = "3.0";
+
+        await using (var output = File.Create(legacyPath))
+        await using (var gzip = new GZipStream(output, CompressionLevel.Fastest))
+        await using (var tar = new TarWriter(gzip, leaveOpen: true))
+        {
+            await tar.WriteEntryAsync(new PaxTarEntry(TarEntryType.RegularFile, "metadata.json")
+            {
+                DataStream = new MemoryStream(JsonSerializer.SerializeToUtf8Bytes(metadata))
+            });
+            await tar.WriteEntryAsync(new PaxTarEntry(TarEntryType.RegularFile, "database.json")
+            {
+                DataStream = new MemoryStream(JsonSerializer.SerializeToUtf8Bytes(data))
+            });
+        }
+
+        return messages;
     }
 
     #endregion

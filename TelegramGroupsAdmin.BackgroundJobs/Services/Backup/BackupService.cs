@@ -18,6 +18,7 @@ using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.BackgroundJobs.Constants;
 using TelegramGroupsAdmin.BackgroundJobs.Services.Backup.Handlers;
+using TelegramGroupsAdmin.BackgroundJobs.Services.Backup.Migrations;
 using TelegramGroupsAdmin.Telegram.Services;
 
 namespace TelegramGroupsAdmin.BackgroundJobs.Services.Backup;
@@ -40,7 +41,7 @@ public class BackupService : IBackupService
     private readonly IThumbnailService _thumbnailService;
     private readonly RecyclableMemoryStreamManager _streamManager;
     private readonly string _mediaBasePath;
-    private const string CurrentVersion = "3.0"; // Real tar.gz format with media files
+    private const string CurrentVersion = "3.1"; // 3.0: tar.gz with media files; 3.1: verdict events (no training_labels)
 
     public BackupService(
         NpgsqlDataSource dataSource,
@@ -1064,6 +1065,14 @@ public class BackupService : IBackupService
         {
             _logger.LogInformation("Applying SCHEMA-3 migration: configs.chat_id NULL → 0 (backup v{Version} < 2.1)", backupVersion);
             MigrateConfigsChatIdNullToZero(backup);
+        }
+
+        // Migration: v3.0 → v3.1 (single spam verdict). Backup-only and time-boxed: remove one year
+        // after the release that introduced backup format 3.1.
+        if (string.Compare(backupVersion, "3.1", StringComparison.Ordinal) < 0)
+        {
+            _logger.LogInformation("Applying verdict-events migration (backup v{Version} < 3.1)", backupVersion);
+            Backup30To31VerdictMigration.Apply(backup, _logger);
         }
     }
 
