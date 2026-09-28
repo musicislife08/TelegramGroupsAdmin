@@ -228,59 +228,25 @@ public class DetectionResultsRepository : IDetectionResultsRepository
     public async Task<List<(string MessageText, bool IsSpam)>> GetTrainingSamplesAsync(CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        // Phase 2.6: Only use high-quality training samples
-        // - Manual admin decisions (always training-worthy)
-        // - Confident OpenAI results (85%+, marked as used_for_training = true)
-        // This prevents low-quality auto-detections from polluting training data
-        //
-        // Phase 4.20+: Use translated text when available (matches spam detection behavior)
-        // - Spam detection runs on translated text for non-English messages
-        // - Training samples should match what was analyzed (COALESCE: translated > original)
-        var results = await context.DetectionResults
-            .AsNoTracking()
-            .Join(context.Messages,
-                dr => new { dr.MessageId, dr.ChatId },
-                m => new { m.MessageId, m.ChatId },
-                (dr, m) => new { dr, m })
-            .LeftJoin(context.MessageTranslations,
-                x => new { MessageId = (int?)x.m.MessageId, ChatId = (long?)x.m.ChatId },
-                mt => new { mt.MessageId, mt.ChatId },
-                (x, mt) => new { x.dr, x.m, mt })
-            .Where(x => x.dr.UsedForTraining == true
-                && x.m.MessageText != null
-                && x.m.MessageText != "")
-            .OrderByDescending(x => x.dr.IsSpam)
-            .Select(x => new { MessageText = x.mt != null ? x.mt.TranslatedText : x.m.MessageText, x.dr.IsSpam })
-            .ToListAsync(cancellationToken);
+        // Curated current verdicts (explicit labels + confident implicit spam); translated text when available.
+        var results = await (
+            from v in context.MessageVerdicts.AsNoTracking()
+            where VerdictClassifications.CuratedValues.Contains(v.Classification)
+            join m in context.Messages on new { v.MessageId, v.ChatId } equals new { m.MessageId, m.ChatId }
+            from mt in context.MessageTranslations
+                .Where(t => t.MessageId == m.MessageId && t.ChatId == m.ChatId && t.EditId == null)
+                .DefaultIfEmpty()
+            let text = mt != null ? mt.TranslatedText : m.MessageText
+            where text != null && text != ""
+            orderby v.IsSpam descending
+            select new { MessageText = text, v.IsSpam }
+        ).ToListAsync(cancellationToken);
 
         _logger.LogDebug(
-            "Retrieved {Count} training samples for Bayes classifier (used_for_training = true)",
+            "Retrieved {Count} training samples for Bayes classifier (curated current verdicts)",
             results.Count);
 
         return results.Select(r => (r.MessageText!, r.IsSpam)).ToList();
-    }
-
-    public async Task<List<string>> GetSpamSamplesForSimilarityAsync(int limit = 1000, CancellationToken cancellationToken = default)
-    {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        // Phase 2.6: Only use high-quality training samples for similarity matching
-        // Use query syntax for EF Core translation compatibility (H10 pattern from GetTrainingSamplesAsync)
-        var results = await (
-            from dr in context.DetectionResults.AsNoTracking()
-            join m in context.Messages on new { dr.MessageId, dr.ChatId } equals new { m.MessageId, m.ChatId }
-            where dr.IsSpam == true
-                && dr.UsedForTraining == true
-                && m.MessageText != null
-                && m.MessageText != ""
-            orderby dr.DetectedAt descending
-            select m.MessageText
-        ).Take(limit).ToListAsync(cancellationToken);
-
-        _logger.LogDebug(
-            "Retrieved {Count} spam samples for similarity check (used_for_training = true)",
-            results.Count);
-
-        return results!;
     }
 
     // REFACTOR-5: Removed IsUserTrustedAsync - use ITelegramUserRepository.IsTrustedAsync instead

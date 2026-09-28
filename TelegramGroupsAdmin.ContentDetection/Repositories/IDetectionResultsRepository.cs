@@ -44,12 +44,6 @@ public interface IDetectionResultsRepository
     /// </summary>
     Task<List<(string MessageText, bool IsSpam)>> GetTrainingSamplesAsync(CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Get spam samples for similarity check (TF-IDF)
-    /// Returns only spam messages (is_spam=true)
-    /// </summary>
-    Task<List<string>> GetSpamSamplesForSimilarityAsync(int limit = 1000, CancellationToken cancellationToken = default);
-
     // REFACTOR-5: Removed IsUserTrustedAsync - use ITelegramUserRepository.IsTrustedAsync instead
     // Source of truth is telegram_users.is_trusted column
 
