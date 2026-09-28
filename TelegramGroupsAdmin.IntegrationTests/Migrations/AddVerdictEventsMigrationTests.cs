@@ -13,11 +13,12 @@ namespace TelegramGroupsAdmin.IntegrationTests.Migrations;
 [TestFixture]
 public class AddVerdictEventsMigrationTests
 {
-    private const string PreviousMigration = "20260925190056_AddBanCelebrationSubscribers";
+    internal const string PreviousMigration = "20260925190056_AddBanCelebrationSubscribers";
     private MigrationTestHelper _helper = null!;
 
-    // ids >= 100000 so the identity sequence (used by the migration's INSERTs) never collides
-    private const string Seed = """
+    // ids >= 100000 so the identity sequence (used by the migration's INSERTs) never collides.
+    // Shared with VerdictMigrationChainTests, which runs the full prod chain over the same rows.
+    internal const string Seed = """
         INSERT INTO telegram_users (telegram_user_id, is_trusted, bot_dm_enabled, first_seen_at, last_seen_at, created_at, updated_at)
         VALUES (9000000000900, false, false, now(), now(), now(), now());
 
