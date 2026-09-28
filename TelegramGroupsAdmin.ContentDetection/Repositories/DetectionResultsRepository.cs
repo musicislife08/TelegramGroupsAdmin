@@ -303,21 +303,6 @@ public class DetectionResultsRepository : IDetectionResultsRepository
         };
     }
 
-    public async Task DeleteDetectionResultAsync(long id, CancellationToken cancellationToken = default)
-    {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var entity = await context.DetectionResults.FindAsync([id], cancellationToken);
-        if (entity == null)
-        {
-            throw new InvalidOperationException($"Detection result {id} not found");
-        }
-
-        context.DetectionResults.Remove(entity);
-        await context.SaveChangesAsync(cancellationToken);
-
-        _logger.LogWarning("Deleted detection result {Id}", id);
-    }
-
     public async Task<long> AddManualTrainingSampleAsync(
         string messageText,
         bool isSpam,

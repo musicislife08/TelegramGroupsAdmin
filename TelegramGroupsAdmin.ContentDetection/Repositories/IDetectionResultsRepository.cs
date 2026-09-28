@@ -75,12 +75,6 @@ public interface IDetectionResultsRepository
     Task<TrainingDataStats> GetTrainingDataStatsAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Delete a detection result (hard delete)
-    /// Used when removing bad training samples
-    /// </summary>
-    Task DeleteDetectionResultAsync(long id, CancellationToken cancellationToken = default);
-
-    /// <summary>
     /// Add a manual training sample (creates message with chat_id=0, user_id=0 + detection_result)
     /// Records it as a TrainingDataPage decision. Supports optional translation data for
     /// non-English samples. Returns the ID of the created detection_result.
