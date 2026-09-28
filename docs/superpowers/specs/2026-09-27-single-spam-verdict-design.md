@@ -404,3 +404,21 @@ Part 2 recipe, and guarded by a read-back assertion in its test):
 - **#551** (AI label/score contract: thresholds in the prompt, label-driven bands).
 - **Restore by replaying migrations** (store the migration id in backup metadata, restore into the old schema, migrate forward). Worth a follow-up issue; not needed here.
 - Renaming `detection_results`.
+
+## Delivered
+
+Deviations from this plan:
+
+- Two EF migrations instead of one: `UpdateDetectionAnalyticsViews` (detector analytics views read `source`/`classification`) landed separately from `DropLegacyVerdictColumns` (drops `used_for_training`, `net_score`, `detection_source` and the legacy training tables), after the original `AddVerdictEvents` migration.
+- `MediaFeatures` shipped hash-only: `PhotoFeatures`/`VideoFeatures` carry just their hash data, not the `Width`/`Height`/`SizeBytes`/`DurationSeconds`/`HasAudio` fields sketched in this design.
+- The media backfill shipped as a startup service (`PhotoHashRehashService`), not a one-time Quartz job.
+- The Training Data page's Add/Edit dialogs lost the Source dropdown; source is now fixed by the calling flow (`TrainingDataPage`) rather than admin-selectable.
+
+Execution notes:
+
+- (a) The `UntrainedHam` canonical anchor is msg 22160 (`dr1933`, Crypto Group, @wrongedjersey), not msg 222716.
+- (b) Msg 213409's correction resolves as `LegacyManual` (a NULL-reason manual row), not `WebMarkHam`.
+- (c) Msg 82837's admin ham decision (`dr1343`) was re-timed to before the first edit, so the edit's rescan (`dr1334`) wins under "latest event by time wins" (the edit-vs-admin rule).
+- (d) Migrations that touch the detector analytics views freeze their `CREATE VIEW` SQL as literal strings (`UpdateDetectionAnalyticsViews`, `DropLegacyVerdictColumns`); older migrations still point at the live `LegacyDetectionViewSql` constants, since those predate the freeze.
+- (e) `media_features` JSON accepts the `type` discriminator out of key order, because PostgreSQL `jsonb` reorders keys (shortest first) on storage; the same tolerance is applied to the backup export path (`TableExportService`).
+- (f) `ReviewDismiss` is recorded non-critically (a failed ham-decision write logs and continues rather than failing the dismissal) and only for messages that are actually stored (report dismissal itself always succeeds).
