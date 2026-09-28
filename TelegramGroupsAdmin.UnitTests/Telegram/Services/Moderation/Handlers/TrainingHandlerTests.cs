@@ -330,22 +330,20 @@ public class TrainingHandlerTests
     }
 
     [Test]
-    public async Task CreateHamSampleAsync_WebMarkHam_OnExplicitSpam_StillRecordsDecision()
+    public async Task CreateHamSampleAsync_WebMarkHam_AppendsDecisionWithoutConsultingCurrentVerdict()
     {
+        // The verdict log is append-only: marking ham records a new decision whatever the message's
+        // current verdict is, so the handler never reads it first.
         var executor = Actor.FromWebUser("admin-1");
         _mockMessageRepo.GetMessageAsync(4242, -100, Arg.Any<CancellationToken>())
             .Returns(CreateTestMessage(4242, userId: 123, chatId: -100, messageText: "hello"));
-        _mockDetectionRepo.GetCurrentVerdictAsync(4242, -100, Arg.Any<CancellationToken>())
-            .Returns(Verdict(VerdictClassification.ExplicitSpam, VerdictSource.AutoBan));
 
         await _handler.CreateHamSampleAsync(4242, ChatIdentity.FromId(-100), executor, VerdictSource.WebMarkHam, "false positive");
 
         await _mockDetectionRepo.Received(1).RecordDecisionAsync(
             4242, -100, VerdictSource.WebMarkHam, executor, "false positive", null, null, Arg.Any<CancellationToken>());
+        await _mockDetectionRepo.DidNotReceiveWithAnyArgs().GetCurrentVerdictAsync(default, default, default);
     }
-
-    private static MessageVerdict Verdict(VerdictClassification classification, VerdictSource source) =>
-        new(-100, 4242, classification, classification.IsSpam(), source, DateTimeOffset.UtcNow, 1);
 
     [Test]
     public void CreateHamSampleAsync_NonHamSource_Throws()

@@ -133,4 +133,55 @@ public class TrainingDataServiceTests
         await _jobTriggerService.DidNotReceive().TriggerNowAsync(
             Arg.Any<string>(), Arg.Any<object>(), Arg.Any<CancellationToken>());
     }
+
+    [Test]
+    public async Task ReplaceSampleAsync_ExcludesTheOldSampleAndAddsTheEditedOneOnChatZero()
+    {
+        // The edit dialog replaces a sample: the original keeps its spam verdict but leaves training,
+        // and the edited text (here relabelled ham) becomes a new manual sample.
+        var chatId = GoldenDatasetConstants.Chats.MainChatId;
+        var msgId = GoldenDatasetConstants.Verdicts.AutoBanMsgId;
+        const string editedText = "Weekly meetup moved to Thursday at the canonical community hall";
+        Assert.That((await _service.GetSamplesAsync()).Any(s => s.MessageId == msgId && s.ChatId == chatId), Is.True,
+            "canonical precondition: auto-banned message is a curated sample");
+
+        await _service.ReplaceSampleAsync(msgId, chatId, editedText, isSpam: false, Owner);
+
+        var oldVerdict = await _repository.GetCurrentVerdictAsync(msgId, chatId);
+        var samples = await _service.GetSamplesAsync();
+        var replacement = samples.Single(s => s.ChatId == 0 && s.MessageText == editedText);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(oldVerdict!.Classification, Is.EqualTo(VerdictClassification.UntrainedSpam));
+            Assert.That(oldVerdict.Source, Is.EqualTo(VerdictSource.TrainingExclude));
+            Assert.That(samples.Any(s => s.MessageId == msgId && s.ChatId == chatId), Is.False);
+            Assert.That(replacement.MessageId, Is.Negative, "manual samples use negative message ids");
+            Assert.That(replacement.Source, Is.EqualTo(VerdictSource.TrainingDataPage));
+            Assert.That(replacement.Classification, Is.EqualTo(VerdictClassification.ExplicitHam));
+            Assert.That(replacement.AddedBy.Type, Is.EqualTo(ActorType.WebUser));
+        }
+
+        await _jobTriggerService.Received(1).TriggerNowAsync(
+            BackgroundJobNames.ClassifierRetraining, Arg.Any<object>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task ReplaceSampleAsync_UnknownMessage_ThrowsAndAddsNothing()
+    {
+        const string editedText = "This replacement must never be stored";
+        await using var ctx = _helper.GetDbContext();
+        var chatZeroMessagesBefore = await ctx.Messages.CountAsync(m => m.ChatId == 0);
+
+        Assert.ThrowsAsync<InvalidOperationException>(() =>
+            _service.ReplaceSampleAsync(int.MaxValue, GoldenDatasetConstants.Chats.MainChatId, editedText, isSpam: true, Owner));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(await ctx.Messages.CountAsync(m => m.ChatId == 0), Is.EqualTo(chatZeroMessagesBefore));
+            Assert.That(await ctx.Messages.AnyAsync(m => m.MessageText == editedText), Is.False);
+        }
+
+        await _jobTriggerService.DidNotReceiveWithAnyArgs().TriggerNowAsync(
+            Arg.Any<string>(), Arg.Any<object>(), Arg.Any<CancellationToken>());
+    }
 }

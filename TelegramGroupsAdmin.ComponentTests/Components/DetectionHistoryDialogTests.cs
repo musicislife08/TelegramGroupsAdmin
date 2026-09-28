@@ -57,7 +57,8 @@ public class DetectionHistoryDialogTests : DialogTestContext
     }
 
     /// <summary>
-    /// Creates a test DetectionResultRecord with the specified properties.
+    /// Creates a test DetectionResultRecord with the specified properties. <paramref name="classification"/>
+    /// overrides the implicit spam/ham classification derived from <paramref name="isSpam"/>.
     /// </summary>
     private static DetectionResultRecord CreateTestResult(
         long id = 1,
@@ -66,7 +67,8 @@ public class DetectionHistoryDialogTests : DialogTestContext
         string detectionMethod = "BayesClassifier",
         string? reason = null,
         DateTimeOffset? detectedAt = null,
-        int editVersion = 0)
+        int editVersion = 0,
+        VerdictClassification? classification = null)
     {
         return new DetectionResultRecord
         {
@@ -75,7 +77,7 @@ public class DetectionHistoryDialogTests : DialogTestContext
             DetectedAt = detectedAt ?? DateTimeOffset.UtcNow.AddHours(-1),
             DetectionMethod = detectionMethod,
             Source = VerdictSource.ContentScan,
-            Classification = isSpam ? VerdictClassification.ImplicitSpam : VerdictClassification.ImplicitHam,
+            Classification = classification ?? (isSpam ? VerdictClassification.ImplicitSpam : VerdictClassification.ImplicitHam),
             Score = score,
             AddedBy = Actor.FromSystem("DetectionService"),
             UserId = 67890,
@@ -457,6 +459,29 @@ public class DetectionHistoryDialogTests : DialogTestContext
         provider.WaitForAssertion(() =>
         {
             Assert.That(provider.Markup, Does.Contain("Training Sample"));
+        });
+    }
+
+    [TestCase(VerdictClassification.UntrainedSpam)]
+    [TestCase(VerdictClassification.UntrainedHam)]
+    public void HidesTrainingSampleChip_WhenClassificationIsUntrained(VerdictClassification classification)
+    {
+        // Arrange
+        var provider = RenderDialogProvider();
+        var message = CreateTestMessage();
+        var results = new List<DetectionResultRecord>
+        {
+            CreateTestResult(classification: classification)
+        };
+
+        // Act
+        _ = OpenDialogAsync(message, detectionResults: results);
+
+        // Assert — wait for the row itself to render, then check the chip is absent
+        provider.WaitForAssertion(() =>
+        {
+            Assert.That(provider.Markup, Does.Contain(classification.ToDisplayText()));
+            Assert.That(provider.Markup, Does.Not.Contain("Training Sample"));
         });
     }
 

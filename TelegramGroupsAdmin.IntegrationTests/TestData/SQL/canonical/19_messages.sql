@@ -2603,3 +2603,5 @@ UPDATE messages SET content_hash = '567E64505B6163BCBE3C1D435B3C68995A255B605984
 UPDATE messages SET content_hash = '7B3D4AF012A061E31D8F806273E1B79B24E6DC41E1CD885930A387267E6170E9', similarity_hash = -4113107816996298699 WHERE message_id = 223002 AND chat_id = -100026957614982;
 -- canonical edit 2026-09-27 (task #527): msg 222818 (ExplicitSpam photo, MainChat) carries photo media features for Layer 1 (GoldenDatasetConstants.Verdicts.PhotoFeaturesMsgId).
 UPDATE messages SET media_features = '{"type":"photo","hash":"8J8PDw8PH/8="}' WHERE message_id = 222818 AND chat_id = -100026957614982;
+-- canonical edit 2026-09-28: msg 214424 (ExplicitSpam video, MainChat) carries video keyframe media features for Layer 1 (GoldenDatasetConstants.Verdicts.VideoFeaturesMsgId).
+UPDATE messages SET media_features = '{"type":"video","keyframes":[{"position":0.1,"hash":"PH7/58OBGDw="},{"position":0.5,"hash":"Dx8/f/78+PA="},{"position":0.9,"hash":"qlWqVQ/wD/A="}]}' WHERE message_id = 214424 AND chat_id = -100026957614982;

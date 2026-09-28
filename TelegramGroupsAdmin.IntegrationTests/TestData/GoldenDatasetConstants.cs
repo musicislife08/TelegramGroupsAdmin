@@ -506,6 +506,28 @@ internal static class GoldenDatasetConstants
         /// </summary>
         public const int PhotoFeaturesMsgId = 222818;
 
+        /// <summary>
+        /// Edited 2026-09-28: video message (sender 9607332364262, MainChat, no photo_file_id) whose current
+        /// verdict is a LegacyManual spam decision (dr 2168, ExplicitSpam); media_features set to three
+        /// keyframe hashes at positions 0.1/0.5/0.9 (<see cref="VideoFeaturesKeyframeHashes"/>).
+        /// Layer 1 video similarity reads it as a spam sample.
+        /// </summary>
+        public const int VideoFeaturesMsgId = 214424;
+
+        /// <summary>The base64 keyframe hashes stored on <see cref="VideoFeaturesMsgId"/>, in position order.</summary>
+        public static readonly string[] VideoFeaturesKeyframeHashes = ["PH7/58OBGDw=", "Dx8/f/78+PA=", "qlWqVQ/wD/A="];
+
+        /// <summary>
+        /// Edited 2026-09-28: the only canonical OpenAI veto. ContentScan dr 1934 on msg 212950 (MainChat,
+        /// sender 9011155048805): StopWords 2 and Bayes 5 flagged spam, OpenAI returned a non-abstained clean
+        /// (Score 0) → ImplicitHam, score 0. The message's verdict is the later /spam decision (dr 1935,
+        /// ExplicitSpam), so the veto was a miss an admin corrected.
+        /// </summary>
+        public const long OpenAIVetoScanRowId = 1934;
+
+        /// <summary>Message of <see cref="OpenAIVetoScanRowId"/>.</summary>
+        public const int OpenAIVetoMsgId = 212950;
+
         /// <summary>User whose three latest messages are all training ham (msgs 71028/71030/71041).</summary>
         public const long AllHamUserId = 9184102838760L;
 

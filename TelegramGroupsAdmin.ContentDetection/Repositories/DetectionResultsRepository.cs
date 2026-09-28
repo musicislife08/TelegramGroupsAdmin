@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.EntityFrameworkCore;
 using TelegramGroupsAdmin.ContentDetection.Repositories.Mappings;
 using TelegramGroupsAdmin.Core.Repositories.Mappings;
@@ -426,11 +427,7 @@ public class DetectionResultsRepository : IDetectionResultsRepository
                 {
                     var checks = CheckResultsSerializer.Deserialize(d.CheckResultsJson!);
 
-                    // Check if OpenAI returned "clean" and at least one other check returned "spam"
-                    var hasOpenAIClean = checks.Any(c => c.CheckName == CheckName.OpenAI && !c.IsSpam);
-                    var hasOtherSpam = checks.Any(c => c.CheckName != CheckName.OpenAI && c.IsSpam);
-
-                    if (hasOpenAIClean && hasOtherSpam)
+                    if (IsOpenAIVeto(checks, out _))
                     {
                         return new { d.Id, Checks = checks };
                     }
@@ -459,9 +456,12 @@ public class DetectionResultsRepository : IDetectionResultsRepository
             })
             .ToList();
 
-        // Get total spam flags per algorithm for accurate veto rate
+        // Get total spam flags per algorithm for accurate veto rate (content scans only: decisions and
+        // file scans are not detector runs)
         var allDetections = await context.DetectionResults
-            .Where(dr => dr.DetectedAt >= since && dr.CheckResultsJson != null)
+            .Where(dr => dr.DetectedAt >= since
+                && dr.Source == (int)VerdictSource.ContentScan
+                && dr.CheckResultsJson != null)
             .Select(dr => dr.CheckResultsJson)
             .ToListAsync(cancellationToken);
 
@@ -508,39 +508,38 @@ public class DetectionResultsRepository : IDetectionResultsRepository
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
-        // Get recent non-spam detections with their message text
-        var detections = await context.DetectionResults
-            .Where(dr => dr.Source == (int)VerdictSource.ContentScan
-                && !VerdictClassifications.SpamValues.Contains(dr.Classification)
-                && dr.CheckResultsJson != null)
-            .OrderByDescending(dr => dr.DetectedAt)
-            .Take(limit * 2) // Get extra to filter after JSON parsing
-            .Join(context.Messages,
-                dr => new { dr.MessageId, dr.ChatId },
-                m => new { m.MessageId, m.ChatId },
-                (dr, m) => new { dr.Id, dr.MessageId, dr.DetectedAt, dr.CheckResultsJson, m.MessageText })
-            .ToListAsync(cancellationToken);
-
+        // Vetoes are identified from the check JSON, so page through recent non-spam scans until
+        // enough are found (a fixed over-fetch could stop short while older vetoes exist).
+        var batchSize = Math.Max(limit * 2, 50);
         var vetoedMessages = new List<VetoedMessage>();
 
-        foreach (var detection in detections)
+        for (var skip = 0; vetoedMessages.Count < limit; skip += batchSize)
         {
-            try
+            var detections = await context.DetectionResults
+                .Where(dr => dr.Source == (int)VerdictSource.ContentScan
+                    && !VerdictClassifications.SpamValues.Contains(dr.Classification)
+                    && dr.CheckResultsJson != null)
+                .OrderByDescending(dr => dr.DetectedAt)
+                .ThenByDescending(dr => dr.Id)
+                .Skip(skip)
+                .Take(batchSize)
+                .Join(context.Messages,
+                    dr => new { dr.MessageId, dr.ChatId },
+                    m => new { m.MessageId, m.ChatId },
+                    (dr, m) => new { dr.Id, dr.MessageId, dr.DetectedAt, dr.CheckResultsJson, m.MessageText })
+                .ToListAsync(cancellationToken);
+
+            if (detections.Count == 0)
+                break;
+
+            foreach (var detection in detections)
             {
-                var checks = CheckResultsSerializer.Deserialize(detection.CheckResultsJson!);
-
-                var openAICheck = checks.FirstOrDefault(c => c.CheckName == CheckName.OpenAI);
-
-                var contentChecks = checks
-                    .Where(c => c.CheckName != CheckName.OpenAI && c.IsSpam)
-                    .Select(c => c.CheckName.ToString())
-                    .ToList();
-
-                // Only include if OpenAI vetoed (clean) and other checks flagged spam
-                if (openAICheck != null &&
-                    !openAICheck.IsSpam &&
-                    contentChecks.Any())
+                try
                 {
+                    var checks = CheckResultsSerializer.Deserialize(detection.CheckResultsJson!);
+                    if (!IsOpenAIVeto(checks, out var openAICheck))
+                        continue;
+
                     vetoedMessages.Add(new VetoedMessage
                     {
                         MessageId = detection.MessageId,
@@ -548,23 +547,36 @@ public class DetectionResultsRepository : IDetectionResultsRepository
                         MessagePreview = detection.MessageText?.Length > 100
                             ? detection.MessageText.Substring(0, 100) + "..."
                             : detection.MessageText,
-                        ContentCheckNames = contentChecks,
+                        ContentCheckNames = [.. checks.Where(c => c.CheckName != CheckName.OpenAI && c.IsSpam).Select(c => c.CheckName.ToString())],
                         OpenAIScore = openAICheck.Score,
                         OpenAIReason = openAICheck.Details
                     });
-                }
 
-                if (vetoedMessages.Count >= limit)
-                    break;
+                    if (vetoedMessages.Count >= limit)
+                        break;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to parse veto checks JSON for detection result in recent vetoed messages");
+                    // Skip malformed JSON - fail open
+                }
             }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Failed to parse veto checks JSON for detection result in recent vetoed messages");
-                // Skip malformed JSON - fail open
-            }
+
+            if (detections.Count < batchSize)
+                break;
         }
 
         return vetoedMessages;
     }
 
+    /// <summary>
+    /// An OpenAI veto as the detection engine applies it: OpenAI answered (not abstained) with score 0
+    /// while at least one other check flagged spam. An abstained OpenAI check (e.g. no API key) is no veto.
+    /// </summary>
+    private static bool IsOpenAIVeto(IReadOnlyList<CheckResult> checks, [NotNullWhen(true)] out CheckResult? openAICheck)
+    {
+        openAICheck = checks.FirstOrDefault(c => c.CheckName == CheckName.OpenAI);
+        return openAICheck is { Abstained: false, Score: 0 }
+            && checks.Any(c => c.CheckName != CheckName.OpenAI && c.IsSpam);
+    }
 }

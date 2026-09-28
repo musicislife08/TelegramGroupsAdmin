@@ -23,7 +23,8 @@ using TelegramGroupsAdmin.Telegram.Services.Bot;
 namespace TelegramGroupsAdmin.UnitTests.Telegram.Handlers;
 
 /// <summary>
-/// ContentDetectionOrchestrator: storing media features is non-critical and must never skip moderation.
+/// ContentDetectionOrchestrator: media features computed by a check are stored on the message, and
+/// storing them is non-critical: it must never skip moderation.
 /// </summary>
 [TestFixture]
 public class ContentDetectionOrchestratorTests
@@ -98,5 +99,71 @@ public class ContentDetectionOrchestratorTests
         await _messageHistory.Received(1).SetMediaFeaturesAsync(42, -1001, Arg.Any<MediaFeatures>(), Arg.Any<CancellationToken>());
         await _reportService.Received(1).CreateReportAsync(
             Arg.Any<Report>(), message, Actor.AutoDetection, Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task RunDetectionAsync_CheckProducesMediaFeatures_StoresTheFirstOnTheMessage()
+    {
+        var message = CreateMessage();
+        var videoFeatures = new VideoFeatures([new KeyframeFeature(0.5, [9, 8, 7, 6, 5, 4, 3, 2])]);
+        var spamResult = BorderlineSpamResult(
+            new ContentCheckResponseV2 { CheckName = CheckName.StopWords, Score = 0.5, Abstained = false, Details = "no media" },
+            new ContentCheckResponseV2
+            {
+                CheckName = CheckName.VideoSpam, Score = 2.0, Abstained = false, Details = "x",
+                MediaFeatures = videoFeatures
+            },
+            new ContentCheckResponseV2
+            {
+                CheckName = CheckName.ImageSpam, Score = 0, Abstained = true, Details = "later features are ignored",
+                MediaFeatures = new PhotoFeatures([1, 2, 3])
+            });
+        ArrangeScan(spamResult);
+
+        await _orchestrator.RunDetectionAsync(message, text: "hello", photoLocalPath: null, editVersion: 0);
+
+        await _messageHistory.Received(1).SetMediaFeaturesAsync(42, -1001, Arg.Any<MediaFeatures>(), Arg.Any<CancellationToken>());
+        await _messageHistory.Received(1).SetMediaFeaturesAsync(42, -1001, videoFeatures, Arg.Any<CancellationToken>());
+        await _reportService.Received(1).CreateReportAsync(
+            Arg.Any<Report>(), message, Actor.AutoDetection, Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task RunDetectionAsync_NoCheckProducesMediaFeatures_DoesNotStoreFeatures()
+    {
+        var message = CreateMessage();
+        var spamResult = BorderlineSpamResult(
+            new ContentCheckResponseV2 { CheckName = CheckName.StopWords, Score = 2.5, Abstained = false, Details = "text only" });
+        ArrangeScan(spamResult);
+
+        await _orchestrator.RunDetectionAsync(message, text: "hello", photoLocalPath: null, editVersion: 0);
+
+        await _messageHistory.DidNotReceiveWithAnyArgs().SetMediaFeaturesAsync(default, default, default!, default);
+        // Moderation ran, so the flow reached (and passed) the media-features step rather than bailing out early.
+        await _reportService.Received(1).CreateReportAsync(
+            Arg.Any<Report>(), message, Actor.AutoDetection, Arg.Any<CancellationToken>());
+    }
+
+    private static Message CreateMessage() => new()
+    {
+        Id = 42,
+        Chat = new Chat { Id = -1001, Type = ChatType.Supergroup, Title = "Test" },
+        From = new User { Id = 7, FirstName = "Tester" }
+    };
+
+    /// <summary>Score 2.5 with the default config routes to the review queue (a report, no ban).</summary>
+    private static ContentDetectionResult BorderlineSpamResult(params ContentCheckResponseV2[] checks) => new()
+    {
+        IsSpam = true,
+        TotalScore = 2.5,
+        CheckResults = [.. checks]
+    };
+
+    private void ArrangeScan(ContentDetectionResult spamResult)
+    {
+        _coordinator.CheckAsync(Arg.Any<ContentCheckRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new ContentCheckCoordinatorResult { SpamResult = spamResult });
+        _detectionResults.RecordScanAsync(42, -1001, spamResult, 0, Arg.Any<CancellationToken>())
+            .Returns(new DetectionResultRecord { AddedBy = Actor.AutoDetection, Reason = "Borderline" });
     }
 }
