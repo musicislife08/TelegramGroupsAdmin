@@ -1057,6 +1057,10 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.DetectionAccuracyView", b =>
                 {
+                    b.Property<long>("ChatId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("chat_id");
+
                     b.Property<DateTimeOffset>("DetectedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("detected_at");

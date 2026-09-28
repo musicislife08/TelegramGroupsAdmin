@@ -1353,6 +1353,52 @@ public class MessageHistoryRepositoryTests
     }
 
     [Test]
+    public async Task GetMessageTrendsAsync_SpamOutput_MatchesCurrentVerdictsPerChatAndMessage()
+    {
+        // Window = the whole canonical message span, all chats. Expectations come from
+        // messages joined to message_verdicts on (chat, message), read at runtime. The totals are
+        // per (chat, message) pair, so two chats sharing a message_id would both be counted.
+        await using var ctx = _testHelper!.GetDbContext();
+        var startDate = await ctx.Messages.MinAsync(m => m.Timestamp);
+        var endDate = await ctx.Messages.MaxAsync(m => m.Timestamp);
+
+        var verdicts =
+            from m in ctx.Messages.AsNoTracking()
+            join v in ctx.MessageVerdicts.AsNoTracking()
+                on new { m.MessageId, m.ChatId } equals new { v.MessageId, v.ChatId }
+            select new { m.Timestamp, v.IsSpam };
+
+        var expectedTotal = await verdicts.CountAsync(x => x.Timestamp >= startDate && x.Timestamp <= endDate);
+        var expectedSpam = await verdicts.CountAsync(x => x.Timestamp >= startDate && x.Timestamp <= endDate && x.IsSpam);
+        Assert.That(expectedSpam, Is.GreaterThan(0).And.LessThan(expectedTotal),
+            "window must hold both spam and non-spam current verdicts");
+
+        // Week-over-week windows are relative to endDate (current: [end-7d, end], previous: [end-14d, end-7d)).
+        var currentWeekStart = endDate.AddDays(-7);
+        var previousWeekStart = endDate.AddDays(-14);
+        var currentTotal = await verdicts.CountAsync(x => x.Timestamp >= currentWeekStart && x.Timestamp <= endDate);
+        var currentSpam = await verdicts.CountAsync(x => x.Timestamp >= currentWeekStart && x.Timestamp <= endDate && x.IsSpam);
+        var previousTotal = await verdicts.CountAsync(x => x.Timestamp >= previousWeekStart && x.Timestamp < currentWeekStart);
+        var previousSpam = await verdicts.CountAsync(x => x.Timestamp >= previousWeekStart && x.Timestamp < currentWeekStart && x.IsSpam);
+        Assert.That(previousSpam, Is.GreaterThan(0), "previous week must hold spam so the growth percentage is defined");
+        var currentPct = currentSpam / (double)currentTotal * 100.0;
+        var previousPct = previousSpam / (double)previousTotal * 100.0;
+        var expectedGrowth = (currentPct - previousPct) / previousPct * 100.0;
+
+        var trends = await _statsService!.GetMessageTrendsAsync([], startDate, endDate, "UTC");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(trends.TotalMessages, Is.EqualTo(expectedTotal));
+            Assert.That(trends.SpamPercentage, Is.EqualTo(expectedSpam / (double)expectedTotal * 100.0).Within(1e-9));
+            Assert.That(trends.DailySpam.Sum(d => d.Count), Is.EqualTo(expectedSpam));
+            Assert.That(trends.DailyHam.Sum(d => d.Count), Is.EqualTo(expectedTotal - expectedSpam));
+            Assert.That(trends.WeekOverWeekGrowth, Is.Not.Null);
+            Assert.That(trends.WeekOverWeekGrowth!.SpamGrowthPercent, Is.EqualTo(expectedGrowth).Within(1e-9));
+        }
+    }
+
+    [Test]
     public async Task GetRecentDetectionsAsync_ShouldReturnDetections()
     {
         // Act

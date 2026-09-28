@@ -33,7 +33,7 @@ public class DetectionAccuracyView
             WHERE source IN (11, 12, 13, 14, 15, 99)   -- human decisions that can contradict a scan
             ORDER BY chat_id, message_id, detected_at DESC, id DESC
         )
-        SELECT dr.id, dr.message_id, dr.detected_at, date(dr.detected_at) AS detection_date,
+        SELECT dr.id, dr.chat_id, dr.message_id, dr.detected_at, date(dr.detected_at) AS detection_date,
                dr.classification IN (0, 2, 4) AS original_classification,
                COALESCE(c.message_id IS NOT NULL AND dr.classification IN (0, 2, 4) AND NOT c.corrected_to_spam, false) AS is_false_positive,
                COALESCE(c.message_id IS NOT NULL AND dr.classification NOT IN (0, 2, 4) AND c.corrected_to_spam, false) AS is_false_negative
@@ -56,6 +56,12 @@ public class DetectionAccuracyView
     /// </summary>
     [Column("id")]
     public long Id { get; set; }
+
+    /// <summary>
+    /// Chat the message belongs to (message ids are only unique per chat)
+    /// </summary>
+    [Column("chat_id")]
+    public long ChatId { get; set; }
 
     /// <summary>
     /// Message ID this detection relates to

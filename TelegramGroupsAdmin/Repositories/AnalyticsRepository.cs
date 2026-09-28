@@ -180,6 +180,7 @@ public class AnalyticsRepository : IAnalyticsRepository
             .Select(dr => new
             {
                 dr.Id,
+                dr.ChatId,
                 dr.MessageId,
                 dr.CheckResultsJson,
                 IsSpam = VerdictClassifications.SpamValues.Contains(dr.Classification!.Value)
@@ -187,13 +188,20 @@ public class AnalyticsRepository : IAnalyticsRepository
             .AsNoTracking()
             .ToListAsync(cancellationToken);
 
-        // Use DetectionAccuracyView for FP/FN lookups (eliminates expensive correlated sub-queries)
-        var accuracyLookup = await context.DetectionAccuracy
+        // Use DetectionAccuracyView for FP/FN lookups (eliminates expensive correlated sub-queries).
+        // Keyed on (chat, message): message ids are only unique per chat, and a message can have
+        // several flagged scans (edit re-scans) - a message counts as FP/FN if any of its scans was.
+        var flaggedScans = await context.DetectionAccuracy
             .AsNoTracking()
             .Where(v => v.DetectedAt >= startDate && v.DetectedAt <= endDate)
             .Where(v => v.IsFalsePositive || v.IsFalseNegative) // Only need records with corrections
-            .Select(v => new { v.MessageId, v.IsFalsePositive, v.IsFalseNegative })
-            .ToDictionaryAsync(v => v.MessageId, cancellationToken);
+            .Select(v => new { v.ChatId, v.MessageId, v.IsFalsePositive, v.IsFalseNegative })
+            .ToListAsync(cancellationToken);
+        var accuracyLookup = flaggedScans
+            .GroupBy(v => (v.ChatId, v.MessageId))
+            .ToDictionary(
+                g => g.Key,
+                g => (IsFalsePositive: g.Any(v => v.IsFalsePositive), IsFalseNegative: g.Any(v => v.IsFalseNegative)));
 
         // Parse JSON and aggregate per-algorithm stats
         var algorithmStats = new Dictionary<string, AlgorithmStatsAccumulator>();
@@ -201,9 +209,9 @@ public class AnalyticsRepository : IAnalyticsRepository
         foreach (var detection in allDetections)
         {
             var checks = ParseCheckResults(detection.CheckResultsJson, detection.Id);
-            accuracyLookup.TryGetValue(detection.MessageId, out var accuracy);
-            var isFalsePositive = accuracy?.IsFalsePositive ?? false;
-            var isFalseNegative = accuracy?.IsFalseNegative ?? false;
+            accuracyLookup.TryGetValue((detection.ChatId, detection.MessageId), out var accuracy);
+            var isFalsePositive = accuracy.IsFalsePositive;
+            var isFalseNegative = accuracy.IsFalseNegative;
 
             foreach (var check in checks)
             {

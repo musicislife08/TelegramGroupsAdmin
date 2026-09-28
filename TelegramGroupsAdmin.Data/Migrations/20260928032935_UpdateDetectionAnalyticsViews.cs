@@ -21,9 +21,80 @@ namespace TelegramGroupsAdmin.Data.Migrations
             migrationBuilder.Sql(HourlyDetectionStatsView.DropViewSql);
             migrationBuilder.Sql(DetectionAccuracyView.DropViewSql);
 
-            migrationBuilder.Sql(EnrichedDetectionView.CreateViewSql);
-            migrationBuilder.Sql(HourlyDetectionStatsView.CreateViewSql);
-            migrationBuilder.Sql(DetectionAccuracyView.CreateViewSql);
+            // Frozen literals (not the view-class constants) so later edits to those constants cannot rewrite this migration.
+            migrationBuilder.Sql("""
+                CREATE VIEW enriched_detections AS
+                SELECT
+                    -- Detection columns
+                    dr.id,
+                    dr.message_id,
+                    dr.detected_at,
+                    dr.source,
+                    dr.detection_method,
+                    dr.classification,
+                    (dr.classification IN (0, 2, 4)) AS is_spam,
+                    dr.score,
+                    dr.reason,
+                    dr.check_results_json,
+                    dr.edit_version,
+                    dr.chat_id,
+
+                    -- Actor columns (raw - app computes Actor via ActorMappings)
+                    dr.web_user_id,
+                    dr.telegram_user_id,
+                    dr.system_identifier,
+
+                    -- Actor enrichment (pre-joined for display)
+                    wu.email AS actor_web_email,
+                    actor_tu.username AS actor_telegram_username,
+                    actor_tu.first_name AS actor_telegram_first_name,
+                    actor_tu.last_name AS actor_telegram_last_name,
+
+                    -- Message enrichment
+                    m.user_id AS message_user_id,
+                    m.message_text,
+                    m.content_hash,
+                    msg_tu.username AS message_author_username,
+                    msg_tu.first_name AS message_author_first_name,
+                    msg_tu.last_name AS message_author_last_name
+
+                FROM detection_results dr
+                INNER JOIN messages m ON dr.message_id = m.message_id AND dr.chat_id = m.chat_id
+                LEFT JOIN users wu ON dr.web_user_id = wu.id
+                LEFT JOIN telegram_users actor_tu ON dr.telegram_user_id = actor_tu.telegram_user_id
+                LEFT JOIN telegram_users msg_tu ON m.user_id = msg_tu.telegram_user_id;
+                """);
+
+            migrationBuilder.Sql("""
+                CREATE VIEW hourly_detection_stats AS
+                SELECT date(detected_at) AS detection_date,
+                       EXTRACT(hour FROM detected_at)::integer AS detection_hour,
+                       count(*) FILTER (WHERE source = 0) AS total_count,
+                       count(*) FILTER (WHERE source = 0 AND classification IN (0, 2, 4)) AS spam_count,
+                       count(*) FILTER (WHERE source = 0 AND classification NOT IN (0, 2, 4)) AS ham_count,
+                       count(*) FILTER (WHERE source IN (11, 12, 13, 14, 15, 16, 17, 99)) AS manual_count,
+                       avg(score) FILTER (WHERE source = 0) AS avg_score
+                FROM detection_results
+                GROUP BY date(detected_at), EXTRACT(hour FROM detected_at);
+                """);
+
+            migrationBuilder.Sql("""
+                CREATE VIEW detection_accuracy AS
+                WITH corrections AS (
+                    SELECT DISTINCT ON (chat_id, message_id)
+                        chat_id, message_id, classification IN (0, 2, 4) AS corrected_to_spam
+                    FROM detection_results
+                    WHERE source IN (11, 12, 13, 14, 15, 99)   -- human decisions that can contradict a scan
+                    ORDER BY chat_id, message_id, detected_at DESC, id DESC
+                )
+                SELECT dr.id, dr.chat_id, dr.message_id, dr.detected_at, date(dr.detected_at) AS detection_date,
+                       dr.classification IN (0, 2, 4) AS original_classification,
+                       COALESCE(c.message_id IS NOT NULL AND dr.classification IN (0, 2, 4) AND NOT c.corrected_to_spam, false) AS is_false_positive,
+                       COALESCE(c.message_id IS NOT NULL AND dr.classification NOT IN (0, 2, 4) AND c.corrected_to_spam, false) AS is_false_negative
+                FROM detection_results dr
+                LEFT JOIN corrections c ON c.chat_id = dr.chat_id AND c.message_id = dr.message_id
+                WHERE dr.source = 0;
+                """);
         }
 
         /// <inheritdoc />

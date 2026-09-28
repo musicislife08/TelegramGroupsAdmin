@@ -126,8 +126,10 @@ public class MessageStatsRepository : IMessageStatsRepository
 
         // === CONSOLIDATED QUERY 1: Fetch all message data with spam flag in single query ===
         // LEFT JOIN to message_verdicts on (message, chat): spam means "this message's current verdict is spam".
+        // message_verdicts has exactly one row per message, so the join yields one row per (chat, message)
+        // and needs no de-duplication (messages from different chats may share a message_id).
         // message_verdicts is keyless, so the missing-row case is tested through the nullable column, not the entity.
-        var allMessageData = await context.Messages
+        var messages = await context.Messages
             .Where(m => m.Timestamp >= startDate && m.Timestamp <= endDate)
             .Where(m => chatIds.Count == 0 || chatIds.Contains(m.ChatId))
             .LeftJoin(context.MessageVerdicts,
@@ -144,14 +146,6 @@ public class MessageStatsRepository : IMessageStatsRepository
                 })
             .AsNoTracking()
             .ToListAsync(cancellationToken);
-
-        // === DE-DUPLICATE MESSAGES ===
-        // LEFT JOIN can produce duplicate rows if a message has multiple detection results
-        // De-duplicate by MessageId to ensure accurate counts
-        var distinctMessages = allMessageData
-            .GroupBy(m => m.MessageId)
-            .Select(g => g.First()) // Take first occurrence of each message
-            .ToList();
 
         // === CONSOLIDATED QUERY 2: Per-chat breakdown with managed chat names ===
         var perChatVolume = await (
@@ -173,18 +167,18 @@ public class MessageStatsRepository : IMessageStatsRepository
         var timeZone = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
         var daysDiff = (endDate - startDate).TotalDays;
 
-        // Basic metrics (use distinctMessages to avoid duplication)
-        var totalMessages = distinctMessages.Count;
-        var uniqueUsers = distinctMessages.Select(m => m.UserId).Distinct().Count();
+        // Basic metrics
+        var totalMessages = messages.Count;
+        var uniqueUsers = messages.Select(m => m.UserId).Distinct().Count();
         var dailyAverage = daysDiff > 0 ? totalMessages / daysDiff : 0;
 
         // Spam metrics
-        var spamMessages = distinctMessages.Where(m => m.IsSpam).ToList();
-        var spamCount = spamMessages.Count; // Already distinct after de-duplication
+        var spamMessages = messages.Where(m => m.IsSpam).ToList();
+        var spamCount = spamMessages.Count;
         var spamPercentage = totalMessages > 0 ? (spamCount / (double)totalMessages * 100.0) : 0;
 
         // Daily volume - all messages grouped by local date
-        var dailyVolume = distinctMessages
+        var dailyVolume = messages
             .GroupBy(m =>
             {
                 var localTime = TimeZoneInfo.ConvertTimeFromUtc(m.Timestamp.UtcDateTime, timeZone);
@@ -208,13 +202,13 @@ public class MessageStatsRepository : IMessageStatsRepository
             .Select(g => new DailyVolumeData
             {
                 Date = g.Key,
-                Count = g.Count() // Already distinct after de-duplication
+                Count = g.Count()
             })
             .OrderBy(d => d.Date)
             .ToList();
 
         // Daily ham - non-spam messages grouped by local date
-        var hamMessages = distinctMessages.Where(m => !m.IsSpam).ToList();
+        var hamMessages = messages.Where(m => !m.IsSpam).ToList();
         var dailyHam = hamMessages
             .GroupBy(m =>
             {
@@ -236,7 +230,7 @@ public class MessageStatsRepository : IMessageStatsRepository
         if (totalMessages > 0)
         {
             // Hourly activity (always available)
-            var hourlyActivity = distinctMessages
+            var hourlyActivity = messages
                 .GroupBy(m =>
                 {
                     var localTime = TimeZoneInfo.ConvertTimeFromUtc(m.Timestamp.UtcDateTime, timeZone);
@@ -252,7 +246,7 @@ public class MessageStatsRepository : IMessageStatsRepository
             var hasEnoughDataForWeekly = daysDiff >= AnalyticsConstants.MinDaysForWeeklyPattern;
             if (hasEnoughDataForWeekly)
             {
-                var dailyActivity = distinctMessages
+                var dailyActivity = messages
                     .GroupBy(m =>
                     {
                         var localTime = TimeZoneInfo.ConvertTimeFromUtc(m.Timestamp.UtcDateTime, timeZone);
@@ -342,8 +336,9 @@ public class MessageStatsRepository : IMessageStatsRepository
         var previousWeekStart = endDate.AddDays(AnalyticsConstants.PreviousWeekLookbackDays);
         var previousWeekEnd = currentWeekStart;
 
-        // Check if any messages exist in the previous week window (separate from startDate filter)
-        var previousWeekMessageData = await context.Messages
+        // Check if any messages exist in the previous week window (separate from startDate filter).
+        // One row per (chat, message), as in query 1.
+        var previousWeekRows = await context.Messages
             .Where(m => m.Timestamp >= previousWeekStart && m.Timestamp < previousWeekEnd)
             .Where(m => chatIds.Count == 0 || chatIds.Contains(m.ChatId))
             .LeftJoin(context.MessageVerdicts,
@@ -358,19 +353,13 @@ public class MessageStatsRepository : IMessageStatsRepository
             .AsNoTracking()
             .ToListAsync(cancellationToken);
 
-        // De-duplicate previous week messages (same LEFT JOIN de-dup pattern)
-        var distinctPreviousWeek = previousWeekMessageData
-            .GroupBy(m => m.MessageId)
-            .Select(g => g.First())
-            .ToList();
-
-        var hasPreviousPeriod = distinctPreviousWeek.Count > 0;
+        var hasPreviousPeriod = previousWeekRows.Count > 0;
         if (hasPreviousPeriod)
         {
             // Current week metrics — query independently from endDate-7d to endDate
-            // (may already be in distinctMessages for 7d/30d views, but re-querying ensures
+            // (may already be in messages for 7d/30d views, but re-querying ensures
             // correctness regardless of the startDate filter chosen by the user)
-            var currentWeekMessageData = await context.Messages
+            var currentWeekRows = await context.Messages
                 .Where(m => m.Timestamp >= currentWeekStart && m.Timestamp <= endDate)
                 .Where(m => chatIds.Count == 0 || chatIds.Contains(m.ChatId))
                 .LeftJoin(context.MessageVerdicts,
@@ -385,21 +374,16 @@ public class MessageStatsRepository : IMessageStatsRepository
                 .AsNoTracking()
                 .ToListAsync(cancellationToken);
 
-            var distinctCurrentWeek = currentWeekMessageData
-                .GroupBy(m => m.MessageId)
-                .Select(g => g.First())
-                .ToList();
-
-            var currentWeekMessages = distinctCurrentWeek.Count;
-            var currentWeekUsers = distinctCurrentWeek.Select(m => m.UserId).Distinct().Count();
-            var currentWeekSpam = distinctCurrentWeek.Count(m => m.IsSpam);
+            var currentWeekMessages = currentWeekRows.Count;
+            var currentWeekUsers = currentWeekRows.Select(m => m.UserId).Distinct().Count();
+            var currentWeekSpam = currentWeekRows.Count(m => m.IsSpam);
             var currentWeekSpamPct = currentWeekMessages > 0
                 ? (currentWeekSpam / (double)currentWeekMessages * 100.0)
                 : 0;
 
-            var previousWeekMessages = distinctPreviousWeek.Count;
-            var previousWeekUsers = distinctPreviousWeek.Select(m => m.UserId).Distinct().Count();
-            var previousWeekSpam = distinctPreviousWeek.Count(m => m.IsSpam);
+            var previousWeekMessages = previousWeekRows.Count;
+            var previousWeekUsers = previousWeekRows.Select(m => m.UserId).Distinct().Count();
+            var previousWeekSpam = previousWeekRows.Count(m => m.IsSpam);
             var previousWeekSpamPct = previousWeekMessages > 0
                 ? (previousWeekSpam / (double)previousWeekMessages * 100.0)
                 : 0;
@@ -440,7 +424,7 @@ public class MessageStatsRepository : IMessageStatsRepository
         TrustedUserBreakdown? trustedBreakdown = null;
         if (totalMessages > 0)
         {
-            var breakdownData = distinctMessages
+            var breakdownData = messages
                 .GroupBy(m => m.ContentCheckSkipReason)
                 .Select(g => new { Reason = g.Key, Count = g.Count() })
                 .ToList();
@@ -467,7 +451,7 @@ public class MessageStatsRepository : IMessageStatsRepository
         }
 
         // 6. Daily Active Users (unique users per day) - in-memory grouping
-        var dailyActiveUsers = distinctMessages
+        var dailyActiveUsers = messages
             .GroupBy(m =>
             {
                 var localTime = TimeZoneInfo.ConvertTimeFromUtc(m.Timestamp.UtcDateTime, timeZone);
