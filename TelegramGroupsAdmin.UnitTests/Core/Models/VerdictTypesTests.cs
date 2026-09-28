@@ -88,4 +88,28 @@ public class VerdictTypesTests
             Assert.That(source.IsDecision(), Is.EqualTo(!expected));
         }
     }
+
+    [Test]
+    public void ClassificationSets_AreReadOnly()
+    {
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(VerdictClassifications.Spam, Is.InstanceOf<System.Collections.ObjectModel.ReadOnlyCollection<VerdictClassification>>());
+            Assert.That(VerdictClassifications.TrainingSpam, Is.InstanceOf<System.Collections.ObjectModel.ReadOnlyCollection<VerdictClassification>>());
+            Assert.That(VerdictClassifications.TrainingHam, Is.InstanceOf<System.Collections.ObjectModel.ReadOnlyCollection<VerdictClassification>>());
+            Assert.That(VerdictClassifications.Curated, Is.InstanceOf<System.Collections.ObjectModel.ReadOnlyCollection<VerdictClassification>>());
+        }
+    }
+
+    [Test]
+    public void IntValueSets_AreReadOnly()
+    {
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(VerdictClassifications.SpamValues, Is.InstanceOf<System.Collections.ObjectModel.ReadOnlyCollection<int>>());
+            Assert.That(VerdictClassifications.TrainingSpamValues, Is.InstanceOf<System.Collections.ObjectModel.ReadOnlyCollection<int>>());
+            Assert.That(VerdictClassifications.TrainingHamValues, Is.InstanceOf<System.Collections.ObjectModel.ReadOnlyCollection<int>>());
+            Assert.That(VerdictClassifications.CuratedValues, Is.InstanceOf<System.Collections.ObjectModel.ReadOnlyCollection<int>>());
+        }
+    }
 }
