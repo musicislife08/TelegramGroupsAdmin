@@ -6,7 +6,6 @@ using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Metrics;
-using TelegramGroupsAdmin.Telegram.Repositories;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BotCommands;
 
@@ -86,7 +85,8 @@ public partial class CommandRouter
             var command = scope.ServiceProvider.GetRequiredKeyedService<IBotCommand>(commandName);
 
             // Resolve the user's effective tier in this chat (web tier ⊕ chat-admin status).
-            var permissionLevel = await GetPermissionLevelAsync(message.Chat.Id, message.From.Id, cancellationToken);
+            var permissionLevel = await scope.ServiceProvider.GetRequiredService<ITelegramPermissionService>()
+                .GetEffectiveLevelAsync(message.Chat.Id, message.From.Id, cancellationToken);
 
             // Gate: public commands are PermissionLevel.Member (the floor) so they never fail this.
             if (permissionLevel < command.MinPermissionLevel)
@@ -146,27 +146,5 @@ public partial class CommandRouter
         }
 
         return commands.OrderBy(c => c.Name);
-    }
-
-    /// <summary>
-    /// Resolves a Telegram user's effective permission tier in a specific chat via
-    /// <see cref="PermissionResolver"/>: their stored web tier (global) combined with their
-    /// Telegram admin/creator status in this chat (chat-scoped Admin).
-    /// </summary>
-    private async Task<PermissionLevel> GetPermissionLevelAsync(long chatId, long telegramId, CancellationToken cancellationToken = default)
-    {
-        using var scope = _serviceProvider.CreateScope();
-
-        var mappingRepository = scope.ServiceProvider.GetRequiredService<ITelegramUserMappingRepository>();
-        var webTier = await mappingRepository.GetPermissionLevelByTelegramIdAsync(telegramId, cancellationToken);
-
-        var chatAdminsRepository = scope.ServiceProvider.GetRequiredService<IChatAdminsRepository>();
-        var isChatAdmin = await chatAdminsRepository.IsAdminAsync(chatId, telegramId, cancellationToken);
-
-        var effective = PermissionResolver.Resolve(webTier, isChatAdmin);
-        _logger.LogDebug(
-            "Resolved permission for {TelegramId} in chat {ChatId}: {Tier} (web={WebTier}, chatAdmin={IsChatAdmin})",
-            telegramId, chatId, effective, webTier, isChatAdmin);
-        return effective;
     }
 }

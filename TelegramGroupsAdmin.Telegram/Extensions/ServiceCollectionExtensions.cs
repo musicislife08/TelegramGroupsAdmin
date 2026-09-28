@@ -42,6 +42,7 @@ public static class ServiceCollectionExtensions
             services.AddScoped<ITelegramUserMappingRepository, TelegramUserMappingRepository>();
             services.AddScoped<ITelegramLinkTokenRepository, TelegramLinkTokenRepository>();
             services.AddScoped<IChatAdminsRepository, ChatAdminsRepository>();
+            services.AddScoped<ITelegramPermissionService, TelegramPermissionService>();
             services.AddScoped<IWelcomeResponsesRepository, WelcomeResponsesRepository>();
             services.AddScoped<IAdminNotesRepository, AdminNotesRepository>(); // Phase 4.12
             services.AddScoped<IUserTagsRepository, UserTagsRepository>(); // Phase 4.12

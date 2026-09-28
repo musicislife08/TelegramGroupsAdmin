@@ -65,6 +65,18 @@ public sealed class ReportCallbackService(
         var reportType = context.ReportType;
         var executorUser = callbackQuery.From;
 
+        // The DM was sent to whoever was an admin then; act only if the clicker is still one now.
+        var permissionService = scope.ServiceProvider.GetRequiredService<ITelegramPermissionService>();
+        var level = await permissionService.GetEffectiveLevelAsync(context.ChatId, executorUser.Id, cancellationToken);
+        if (level < PermissionLevel.Admin)
+        {
+            logger.LogWarning(
+                "Review callback {ContextId} rejected: {Executor} is {Level} in chat {ChatId}, not an admin",
+                contextId, executorUser.ToLogInfo(), level, context.ChatId);
+            await UpdateMessageWithResultAsync(callbackQuery, "You no longer have permission to act on this report", dmService, cancellationToken);
+            return;
+        }
+
         logger.LogInformation(
             "Review callback: Type={ReportType}, Action={ActionInt}, ReviewId={ReviewId}, ChatId={ChatId}, UserId={UserId}, Executor={Executor}",
             reportType, actionInt, reviewId, context.ChatId, context.UserId, executorUser.ToLogInfo());
