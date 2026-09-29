@@ -165,6 +165,27 @@ public class Backup30To31VerdictMigrationTests
         }
     }
 
+    [TestCase("not json at all", TestName = "Apply_MalformedCheckResults_ReadAsNoChecks(text)")]
+    [TestCase("[1, 2]", TestName = "Apply_MalformedCheckResults_ReadAsNoChecks(array)")]
+    [TestCase("42", TestName = "Apply_MalformedCheckResults_ReadAsNoChecks(scalar)")]
+    [TestCase("""{"Checks": {"not": "an array"}}""", TestName = "Apply_MalformedCheckResults_ReadAsNoChecks(non-array Checks)")]
+    public void Apply_MalformedCheckResults_ReadAsNoChecks(string checks)
+    {
+        // Matches the SQL migration: a row whose checks can't be read is classified on its score alone,
+        // and one bad row never fails the restore.
+        var backup = Build();
+        backup.Data!["detection_results"].Add(Scan(98, 98, 3.0, true, checks));
+        backup.Data!["detection_results"].Add(Scan(99, 99, 0.5, false, checks));
+
+        Assert.DoesNotThrow(() => Backup30To31VerdictMigration.Apply(backup, NullLogger.Instance));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Classification(Get(backup, 98)), Is.EqualTo(2), "over the threshold and trained → ImplicitSpam");
+            Assert.That(Classification(Get(backup, 99)), Is.EqualTo(3), "below the threshold → ImplicitHam");
+            Assert.That(Get(backup, 98).GetProperty("check_results_json").GetString(), Is.EqualTo(checks), "left as it was");
+        }
+    }
+
     [Test]
     public void Apply_RecoversDecisionSources()
     {

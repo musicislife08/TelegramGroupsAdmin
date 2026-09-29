@@ -111,4 +111,30 @@ public class VerdictClassifierTests
     [TestCase(VerdictSource.FileScan)]
     public void ClassifyDecision_ScanSource_Throws(VerdictSource source)
         => Assert.Throws<ArgumentOutOfRangeException>(() => VerdictClassifier.ClassifyDecision(source, true));
+
+    /// <summary>
+    /// Every VerdictSource is either a scan (classified by ClassifyScan / ClassifyFileScan) or a decision
+    /// ClassifyDecision handles; a new source that is neither fails here instead of at runtime.
+    /// </summary>
+    [TestCaseSource(nameof(AllSources))]
+    public void ClassifyDecision_EverySource_IsAScanOrClassified(VerdictSource source)
+    {
+        if (source is VerdictSource.ContentScan or VerdictSource.FileScan)
+        {
+            Assert.Throws<ArgumentOutOfRangeException>(() => VerdictClassifier.ClassifyDecision(source, true));
+            return;
+        }
+
+        using (Assert.EnterMultipleScope())
+        {
+            foreach (var isSpam in new[] { true, false })
+            {
+                var classification = VerdictClassifier.ClassifyDecision(source, isSpam);
+                Assert.That(Enum.IsDefined(classification), Is.True, $"{source} isSpam={isSpam}");
+                Assert.That(classification, Is.Not.EqualTo(VerdictClassification.Unscanned), $"{source} isSpam={isSpam}");
+            }
+        }
+    }
+
+    private static IEnumerable<VerdictSource> AllSources() => Enum.GetValues<VerdictSource>();
 }

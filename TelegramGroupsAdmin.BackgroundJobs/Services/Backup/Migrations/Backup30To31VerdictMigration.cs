@@ -266,15 +266,7 @@ public static class Backup30To31VerdictMigration
     /// </summary>
     private static bool RepairLegacyVeto(JsonObject row)
     {
-        var node = row["check_results_json"];
-        var fromText = node is JsonValue v && v.TryGetValue<string>(out _);
-        var root = node switch
-        {
-            JsonValue value when value.TryGetValue<string>(out var text) && !string.IsNullOrWhiteSpace(text) => JsonNode.Parse(text),
-            JsonObject o => o,
-            _ => null
-        };
-
+        var root = ParseCheckResults(row["check_results_json"], out var fromText);
         if (root?["Checks"] is not JsonArray checks)
             return false;
 
@@ -304,18 +296,38 @@ public static class Backup30To31VerdictMigration
 
     private static List<Check> ParseChecks(JsonNode? node)
     {
-        // check_results_json is a string DTO property, so the export writes the raw jsonb text.
-        var root = node switch
-        {
-            JsonValue v when v.TryGetValue<string>(out var text) && !string.IsNullOrWhiteSpace(text) => JsonNode.Parse(text),
-            JsonObject o => o,
-            _ => null
-        };
-
-        if (root?["Checks"] is not JsonArray checks)
+        if (ParseCheckResults(node, out _)?["Checks"] is not JsonArray checks)
             return [];
 
         return [.. checks.OfType<JsonObject>().Select(c => new Check(Int(c["CheckName"]), Double(c["Score"]), Bool(c["Abstained"])))];
+    }
+
+    /// <summary>
+    /// The check_results_json object, or null when there is none or it is not a JSON object (malformed
+    /// text included): such a row is read as having no checks, as the SQL migration reads a non-array
+    /// "Checks", instead of failing the whole restore. check_results_json is a string DTO property, so
+    /// the export writes the raw jsonb text; <paramref name="fromText"/> reports that shape.
+    /// </summary>
+    private static JsonObject? ParseCheckResults(JsonNode? node, out bool fromText)
+    {
+        fromText = false;
+        switch (node)
+        {
+            case JsonObject o:
+                return o;
+            case JsonValue v when v.TryGetValue<string>(out var text) && !string.IsNullOrWhiteSpace(text):
+                fromText = true;
+                try
+                {
+                    return JsonNode.Parse(text) as JsonObject;
+                }
+                catch (JsonException)
+                {
+                    return null;
+                }
+            default:
+                return null;
+        }
     }
 
     /// <summary>

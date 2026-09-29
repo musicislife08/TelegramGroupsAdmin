@@ -4,7 +4,18 @@
 
 namespace TelegramGroupsAdmin.Data.Migrations
 {
-    /// <inheritdoc />
+    /// <summary>
+    /// Turns the legacy detection_results columns into verdict events (source + classification) and
+    /// creates the message_verdicts view. The SQL below is frozen, so it uses the numeric codes:
+    /// <list type="bullet">
+    /// <item>source (VerdictSource): 0 ContentScan, 1 FileScan, 10 AutoBan, 11 WebMarkSpam, 12 WebMarkHam,
+    /// 13 SpamCommand, 14 ReviewSpam, 15 ReviewDismiss (retired by ReplaceReviewDismissWithReviewClean),
+    /// 16 TrainingDataPage, 17 TrainingExclude, 18 Import, 99 LegacyManual; 19 ReviewClean arrives later.</item>
+    /// <item>classification (VerdictClassification): 0 ExplicitSpam, 1 ExplicitHam, 2 ImplicitSpam,
+    /// 3 ImplicitHam, 4 UntrainedSpam, 5 UntrainedHam; 6 Unscanned exists only in message_verdicts.</item>
+    /// <item>CheckName inside check_results_json: 6 OpenAI, 8 UrlBlocklist.</item>
+    /// </list>
+    /// </summary>
     public partial class AddVerdictEvents : Migration
     {
         /// <inheritdoc />
@@ -91,27 +102,33 @@ namespace TelegramGroupsAdmin.Data.Migrations
             // answer (the veto), not "no evidence", so every clean answer before that migration now reads
             // as abstained. Restore the veto encoding (Abstained=false, Score=0), recognised by the answer
             // text, so the classification below, the classifier and the veto analytics read them as vetoes.
-            // Real abstentions (too short, API errors, no key) have other text and stay abstained.
+            // Real abstentions (too short, API errors, no key) have other text and stay abstained. Checks
+            // go through the same array guard as step 2a, so a non-array value is read as no checks.
             // Other checks' converted "clean" results also read as abstained with a leftover score; no
             // reader counts an abstained non-OpenAI check, so they are left as they are.
             migrationBuilder.Sql("""
+                WITH repaired AS (
+                    SELECT d.id,
+                           jsonb_agg(CASE
+                               WHEN (e.c->>'CheckName')::int = 6
+                                    AND (e.c->>'Abstained')::boolean
+                                    AND e.c->>'Details' ~ '^(OpenAI vetoed spam|OpenAI: Clean -|AI: Clean -)'
+                               THEN e.c || '{"Abstained": false, "Score": 0}'::jsonb
+                               ELSE e.c END ORDER BY e.ord) AS checks,
+                           bool_or((e.c->>'CheckName')::int = 6
+                                   AND (e.c->>'Abstained')::boolean
+                                   AND e.c->>'Details' ~ '^(OpenAI vetoed spam|OpenAI: Clean -|AI: Clean -)') AS changed
+                    FROM detection_results d
+                    CROSS JOIN LATERAL jsonb_array_elements(
+                        CASE WHEN jsonb_typeof(d.check_results_json->'Checks') = 'array'
+                             THEN d.check_results_json->'Checks' ELSE '[]'::jsonb END) WITH ORDINALITY AS e(c, ord)
+                    WHERE d.source = 0
+                    GROUP BY d.id)
                 UPDATE detection_results d SET
-                    check_results_json = jsonb_set(d.check_results_json, '{Checks}', (
-                        SELECT jsonb_agg(CASE
-                            WHEN (e.c->>'CheckName')::int = 6
-                                 AND (e.c->>'Abstained')::boolean
-                                 AND e.c->>'Details' ~ '^(OpenAI vetoed spam|OpenAI: Clean -|AI: Clean -)'
-                            THEN e.c || '{"Abstained": false, "Score": 0}'::jsonb
-                            ELSE e.c END ORDER BY e.ord)
-                        FROM jsonb_array_elements(d.check_results_json->'Checks') WITH ORDINALITY AS e(c, ord))),
-                    properties = jsonb_build_object('repaired_legacy_veto', true)
-                WHERE d.source = 0
-                  AND jsonb_typeof(d.check_results_json->'Checks') = 'array'
-                  AND EXISTS (
-                      SELECT 1 FROM jsonb_array_elements(d.check_results_json->'Checks') c
-                      WHERE (c->>'CheckName')::int = 6
-                        AND (c->>'Abstained')::boolean
-                        AND c->>'Details' ~ '^(OpenAI vetoed spam|OpenAI: Clean -|AI: Clean -)');
+                    check_results_json = jsonb_set(d.check_results_json, '{Checks}', r.checks),
+                    properties = COALESCE(d.properties, '{}'::jsonb) || jsonb_build_object('repaired_legacy_veto', true)
+                FROM repaired r
+                WHERE d.id = r.id AND r.changed;
                 """);
 
             // ── 2a. classification: content scans (one rule: score >= ReviewQueueThreshold) ─
