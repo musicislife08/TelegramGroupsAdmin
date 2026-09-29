@@ -68,9 +68,10 @@ public class Backup30To31VerdictMigrationTests
                 Scan(14, 6, 9.0, true, """{"Checks": [{"Score": 9.0, "CheckName": 2, "Abstained": false}, {"Score": 0.0, "CheckName": 6, "Abstained": false}]}"""),
                 Scan(15, 7, 1.0, false, """{"Checks": [{"Score": 5.0, "CheckName": 8, "Abstained": false}]}"""),
                 Scan(16, 8, 3.0, false, """{"Checks": []}""", QuietChatId),
-                // pre-hotfix (2025-11-23) OpenAI veto encoding: Abstained=true, confidence in Score
+                // OpenAI clean answers as RemoveV1ContentDetectionBridge left them (Abstained=true, Score=Confidence/20)
                 Scan(20, 13, 3.0, true, """{"Checks": [{"Score": 3.0, "CheckName": 3, "Abstained": false}, {"Score": 4.5, "Details": "OpenAI vetoed spam: on topic", "CheckName": 6, "Abstained": true}]}"""),
-                Scan(21, 14, 0.5, false, """{"Checks": [{"Score": 4.5, "Details": "OpenAI error: timeout", "CheckName": 6, "Abstained": true}]}"""),
+                Scan(21, 14, 0.5, false, """{"Checks": [{"Score": 0, "Details": "OpenAI API error: BadGateway", "CheckName": 6, "Abstained": true}]}"""),
+                Scan(22, 15, 3.5, false, """{"Checks": [{"Score": 3.5, "CheckName": 3, "Abstained": false}, {"Score": 0, "Details": "AI: Clean - on topic", "CheckName": 6, "Abstained": true}]}"""),
                 Row(new
                 {
                     id = 17, message_id = 9, chat_id = ChatId, detected_at = "2026-01-03T00:00:00+00:00", detection_source = "file_scan",
@@ -137,11 +138,12 @@ public class Backup30To31VerdictMigrationTests
     }
 
     [Test]
-    public void Apply_RepairsPreHotfixOpenAIVeto_MatchingTheSqlMigration()
+    public void Apply_RepairsConvertedOpenAICleanAnswers_MatchingTheSqlMigration()
     {
         var backup = Migrated();
         var repaired = Get(backup, 20);
         var untouched = Get(backup, 21);
+        var cleanWording = Get(backup, 22);
 
         static JsonElement OpenAI(JsonElement row) =>
             JsonDocument.Parse(row.GetProperty("check_results_json").GetString()!).RootElement
@@ -155,8 +157,10 @@ public class Backup30To31VerdictMigrationTests
             Assert.That(repaired.GetProperty("properties").GetString(),
                 Is.EqualTo("""{"backfilled": true, "repaired_legacy_veto": true}"""));
 
-            Assert.That(OpenAI(untouched).GetProperty("Abstained").GetBoolean(), Is.True, "no veto text → left abstained");
-            Assert.That(OpenAI(untouched).GetProperty("Score").GetDouble(), Is.EqualTo(4.5));
+            Assert.That(Classification(cleanWording), Is.EqualTo(3), "\"AI: Clean\" wording is the same answer");
+            Assert.That(OpenAI(cleanWording).GetProperty("Abstained").GetBoolean(), Is.False);
+
+            Assert.That(OpenAI(untouched).GetProperty("Abstained").GetBoolean(), Is.True, "a real abstention stays abstained");
             Assert.That(untouched.GetProperty("properties").GetString(), Is.EqualTo("""{"backfilled": true}"""));
         }
     }

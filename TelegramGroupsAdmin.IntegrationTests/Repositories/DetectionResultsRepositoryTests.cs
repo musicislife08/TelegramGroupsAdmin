@@ -481,8 +481,8 @@ public class DetectionResultsRepositoryTests
 
     #region OpenAI veto analytics
 
-    // Canonical vetoes: dr1934 (post-hotfix) plus dr22 and dr1639, prod scans from before the 2025-11-23 hotfix
-    // whose OpenAI check AddVerdictEvents repaired to the veto encoding. dr1492 (the FN-pair scan) carries an
+    // Canonical vetoes: dr1934 plus dr22 and dr1639, prod scans whose OpenAI clean answer
+    // RemoveV1ContentDetectionBridge stored as abstained and AddVerdictEvents repaired to the veto encoding. dr1492 (the FN-pair scan) carries an
     // *abstained* OpenAI check ("API key not configured") over a Bayes spam flag, which is not a veto.
 
     private static readonly DateTimeOffset Always = DateTimeOffset.MinValue;
@@ -522,7 +522,7 @@ public class DetectionResultsRepositoryTests
         {
             Assert.That(analytics.TotalDetections, Is.EqualTo(jsonRows.Count));
             Assert.That(analytics.VetoedCount, Is.EqualTo(vetoIds.Length),
-                "the canonical vetoes, repaired pre-hotfix ones included; an abstained OpenAI check is no veto");
+                "the canonical vetoes, repaired converted ones included; an abstained OpenAI check is no veto");
             // StopWords was overridden only by canonical vetoes, so its stat is exact.
             var stopWords = analytics.AlgorithmStats.Single(s => s.AlgorithmName == nameof(CheckName.StopWords));
             Assert.That(stopWords.VetoedCount, Is.EqualTo(stopWordsVetoes));

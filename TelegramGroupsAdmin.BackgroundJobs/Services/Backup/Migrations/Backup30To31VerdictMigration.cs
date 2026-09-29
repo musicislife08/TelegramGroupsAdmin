@@ -58,6 +58,9 @@ public static class Backup30To31VerdictMigration
     private const int OpenAiCheck = 6;
     private const int UrlBlocklistCheck = 8;
 
+    // Detail prefixes of an OpenAI clean answer (the veto), across its wording history.
+    private static readonly string[] OpenAICleanAnswerPrefixes = ["OpenAI vetoed spam", "OpenAI: Clean -", "AI: Clean -"];
+
     public static void Apply(SystemBackup backup, ILogger logger)
     {
         if (backup.Data is null)
@@ -256,9 +259,10 @@ public static class Backup30To31VerdictMigration
     }
 
     /// <summary>
-    /// Before the 2025-11-23 hotfix a "clean" OpenAI answer was stored as Abstained=true with its
-    /// confidence in Score. Rewrites those checks to the veto encoding (Abstained=false, Score=0),
-    /// in the representation the row came in. Returns whether the row changed.
+    /// RemoveV1ContentDetectionBridge (2026-03-06) converted V1 "clean" check results to Abstained=true with
+    /// Score = Confidence / 20; for OpenAI that "clean" was an answer (the veto). Rewrites those checks,
+    /// recognised by the answer text, to the veto encoding (Abstained=false, Score=0), in the representation
+    /// the row came in. Mirrors the AddVerdictEvents repair. Returns whether the row changed.
     /// </summary>
     private static bool RepairLegacyVeto(JsonObject row)
     {
@@ -279,8 +283,7 @@ public static class Backup30To31VerdictMigration
         {
             if (Int(check["CheckName"]) == OpenAiCheck
                 && Bool(check["Abstained"]) == true
-                && Double(check["Score"]) > 0
-                && Str(check["Details"])?.StartsWith("OpenAI vetoed spam", StringComparison.Ordinal) == true)
+                && IsOpenAICleanAnswer(Str(check["Details"])))
             {
                 check["Abstained"] = false;
                 check["Score"] = 0;
@@ -292,6 +295,9 @@ public static class Backup30To31VerdictMigration
             row["check_results_json"] = root.ToJsonString();
         return repaired;
     }
+
+    private static bool IsOpenAICleanAnswer(string? details) =>
+        details is not null && OpenAICleanAnswerPrefixes.Any(p => details.StartsWith(p, StringComparison.Ordinal));
 
     /// <summary>A check result. Abstained / Score are null when absent (the SQL treats those as neither veto nor positive).</summary>
     private sealed record Check(int? CheckName, double? Score, bool? Abstained);

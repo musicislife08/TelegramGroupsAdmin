@@ -85,18 +85,22 @@ namespace TelegramGroupsAdmin.Data.Migrations
                 END;
                 """);
 
-            // ── 1b. repair pre-hotfix OpenAI vetoes ────────────────────────────────────
-            // Before the 2025-11-23 hotfix a "clean" OpenAI answer was stored as Abstained=true with its
-            // confidence in Score. Rewrite those checks to the veto encoding (Abstained=false, Score=0)
-            // so the classification below, the classifier and the veto analytics all read them as vetoes.
+            // ── 1b. repair converted OpenAI clean answers ──────────────────────────────
+            // RemoveV1ContentDetectionBridge (2026-03-06) converted V1 check results with
+            // Abstained = (Result == Clean) and Score = Confidence / 20. For OpenAI a V1 "clean" was an
+            // answer (the veto), not "no evidence", so every clean answer before that migration now reads
+            // as abstained. Restore the veto encoding (Abstained=false, Score=0), recognised by the answer
+            // text, so the classification below, the classifier and the veto analytics read them as vetoes.
+            // Real abstentions (too short, API errors, no key) have other text and stay abstained.
+            // Other checks' converted "clean" results also read as abstained with a leftover score; no
+            // reader counts an abstained non-OpenAI check, so they are left as they are.
             migrationBuilder.Sql("""
                 UPDATE detection_results d SET
                     check_results_json = jsonb_set(d.check_results_json, '{Checks}', (
                         SELECT jsonb_agg(CASE
                             WHEN (e.c->>'CheckName')::int = 6
                                  AND (e.c->>'Abstained')::boolean
-                                 AND (e.c->>'Score')::double precision > 0
-                                 AND e.c->>'Details' LIKE 'OpenAI vetoed spam%'
+                                 AND e.c->>'Details' ~ '^(OpenAI vetoed spam|OpenAI: Clean -|AI: Clean -)'
                             THEN e.c || '{"Abstained": false, "Score": 0}'::jsonb
                             ELSE e.c END ORDER BY e.ord)
                         FROM jsonb_array_elements(d.check_results_json->'Checks') WITH ORDINALITY AS e(c, ord))),
@@ -107,8 +111,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
                       SELECT 1 FROM jsonb_array_elements(d.check_results_json->'Checks') c
                       WHERE (c->>'CheckName')::int = 6
                         AND (c->>'Abstained')::boolean
-                        AND (c->>'Score')::double precision > 0
-                        AND c->>'Details' LIKE 'OpenAI vetoed spam%');
+                        AND c->>'Details' ~ '^(OpenAI vetoed spam|OpenAI: Clean -|AI: Clean -)');
                 """);
 
             // ── 2a. classification: content scans (one rule: score >= ReviewQueueThreshold) ─
