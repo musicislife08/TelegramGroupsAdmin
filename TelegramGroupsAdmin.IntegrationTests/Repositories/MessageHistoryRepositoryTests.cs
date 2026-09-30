@@ -1641,6 +1641,24 @@ public class MessageHistoryRepositoryTests
     }
 
     [Test]
+    public async Task GetRecentMessagesWithVerdictAsync_ExcludedIdFromAnotherChat_LeavesWindowUnchanged()
+    {
+        // Telegram message ids are only unique per chat: excluding MainChat's newest id must not
+        // touch Crypto Group's window.
+        const int count = 3;
+        var mainChatNewest = (await _repository!.GetRecentMessagesWithVerdictAsync(
+            GoldenDatasetConstants.Chats.MainChatId, 1, excludeMessageId: null))[0].MessageId;
+        var otherChatId = GoldenDatasetConstants.Verdicts.UntrainedHamChatId;
+        var otherChatAll = await _repository.GetRecentMessagesWithVerdictAsync(otherChatId, 1000, excludeMessageId: null);
+        Assert.That(otherChatAll.Select(r => r.MessageId), Does.Not.Contain(mainChatNewest),
+            "Precondition: the excluded id must not also exist in the other chat");
+
+        var rows = await _repository.GetRecentMessagesWithVerdictAsync(otherChatId, count, excludeMessageId: mainChatNewest);
+
+        Assert.That(rows.Select(r => r.MessageId), Is.EqualTo(otherChatAll.Take(count).Select(r => r.MessageId)));
+    }
+
+    [Test]
     public async Task GetCurrentContentChecksAsync_UsesCurrentVerdict_NotANewerFileScan()
     {
         var checks = await _repository!.GetCurrentContentChecksAsync(

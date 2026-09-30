@@ -798,8 +798,9 @@ public class AIContentCheckTests
 
     #region History Context Tests
 
-    [Test]
-    public async Task CheckAsync_ExcludesMessageUnderEvaluationFromHistory()
+    [TestCase(77310)]
+    [TestCase(null, TestName = "CheckAsync_NoMessageId_ExcludesNothingFromHistory")]
+    public async Task CheckAsync_ExcludesMessageUnderEvaluationFromHistory(int? messageId)
     {
         // #521: on an edit re-scan the message's own earlier verdict was fed back as history,
         // inflating the score past the auto-ban threshold.
@@ -809,7 +810,7 @@ public class AIContentCheckTests
             Message = "I am new here and looking for a good friend",
             User = UserIdentity.FromId(123),
             Chat = ChatIdentity.FromId(456),
-            MessageId = 77310,
+            MessageId = messageId,
             SystemPrompt = null,
             HasSpamFlags = true,
             MinMessageLength = 10,
@@ -823,7 +824,7 @@ public class AIContentCheckTests
         await _check.CheckAsync(request);
 
         await _mockMessageContextProvider.Received(1).GetRecentMessagesAsync(
-            Arg.Is<ChatIdentity>(c => c!.Id == 456), 3, 77310, Arg.Any<CancellationToken>());
+            Arg.Is<ChatIdentity>(c => c!.Id == 456), 3, messageId, Arg.Any<CancellationToken>());
     }
 
     #endregion

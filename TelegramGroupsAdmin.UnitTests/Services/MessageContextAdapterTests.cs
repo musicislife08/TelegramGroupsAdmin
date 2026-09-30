@@ -23,11 +23,12 @@ public class MessageContextAdapterTests
         _adapter = new MessageContextAdapter(_repository, Substitute.For<ILogger<MessageContextAdapter>>());
     }
 
-    [Test]
-    public async Task GetRecentMessagesAsync_ForwardsExcludedMessageIdToRepository()
+    [TestCase(77310)]
+    [TestCase(null)]
+    public async Task GetRecentMessagesAsync_ForwardsExcludedMessageIdToRepository(int? excludeMessageId)
     {
-        await _adapter.GetRecentMessagesAsync(ChatIdentity.FromId(-100123), count: 3, excludeMessageId: 77310);
+        await _adapter.GetRecentMessagesAsync(ChatIdentity.FromId(-100123), count: 3, excludeMessageId);
 
-        await _repository.Received(1).GetRecentMessagesWithVerdictAsync(-100123, 3, 77310, Arg.Any<CancellationToken>());
+        await _repository.Received(1).GetRecentMessagesWithVerdictAsync(-100123, 3, excludeMessageId, Arg.Any<CancellationToken>());
     }
 }
