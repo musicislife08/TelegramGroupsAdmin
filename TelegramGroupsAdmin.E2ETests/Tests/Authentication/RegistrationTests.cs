@@ -1,7 +1,8 @@
-using Microsoft.Playwright;
+using System.Text.RegularExpressions;
 using TelegramGroupsAdmin.E2ETests.Infrastructure;
 using TelegramGroupsAdmin.E2ETests.PageObjects;
 using TelegramGroupsAdmin.Services.Email;
+using static Microsoft.Playwright.Assertions;
 
 namespace TelegramGroupsAdmin.E2ETests.Tests.Authentication;
 
@@ -41,16 +42,12 @@ public class RegistrationTests : E2ETestBase
         // Act - Register the first (owner) account
         await _registerPage.NavigateAsync();
 
-        using (Assert.EnterMultipleScope())
-        {
-            // Verify we're in first-run mode
-            Assert.That(await _registerPage.IsFirstRunModeAsync(), Is.True,
-                "Should show 'Setup Owner Account' for first user");
+        // Verify we're in first-run mode. This positive check also syncs on the first-run
+        // re-render, so the invite-code absence check below cannot pass against the initial render.
+        await Expect(_registerPage.FirstRunTitle).ToBeVisibleAsync();
 
-            // First-run should NOT show invite code field
-            Assert.That(await _registerPage.IsInviteCodeVisibleAsync(), Is.False,
-                "First-run registration should not require invite code");
-        }
+        // First-run should NOT show invite code field
+        await Expect(_registerPage.InviteCodeField).Not.ToBeVisibleAsync();
 
         await _registerPage.RegisterAsync(email, password);
 
@@ -66,13 +63,11 @@ public class RegistrationTests : E2ETestBase
         await Page.WaitForURLAsync("**/login/setup-2fa**", new() { Timeout = 10000 });
 
         // Assert - should be on TOTP setup page (not logged in yet)
-        Assert.That(Page.Url, Does.Contain("/login/setup-2fa"),
-            "New owner should be redirected to TOTP setup after login");
+        await Expect(Page).ToHaveURLAsync(new Regex("/login/setup-2fa"));
 
         // Verify TOTP setup page elements are present
         var setupTitle = Page.Locator("h1:has-text('Two-Factor Authentication')");
-        Assert.That(await setupTitle.IsVisibleAsync(), Is.True,
-            "Should show TOTP setup page title");
+        await Expect(setupTitle).ToBeVisibleAsync();
 
         // Verify no verification emails were sent (owner is auto-verified)
         var verificationEmails = EmailService.GetEmailsByTemplate(EmailTemplate.EmailVerification).ToList();
@@ -86,14 +81,9 @@ public class RegistrationTests : E2ETestBase
         // Arrange & Act - Navigate to registration
         await _registerPage.NavigateAsync();
 
-        using (Assert.EnterMultipleScope())
-        {
-            // Assert - First-run mode should offer backup restore option
-            Assert.That(await _registerPage.IsFirstRunModeAsync(), Is.True,
-                "Should be in first-run mode");
-            Assert.That(await _registerPage.IsRestoreBackupAvailableAsync(), Is.True,
-                "First-run should show 'Restore from Backup' option");
-        }
+        // Assert - First-run mode should offer backup restore option
+        await Expect(_registerPage.FirstRunTitle).ToBeVisibleAsync();
+        await Expect(_registerPage.RestoreBackupButton).ToBeVisibleAsync();
     }
 
     [Test]
@@ -111,10 +101,7 @@ public class RegistrationTests : E2ETestBase
         // Assert - MudBlazor validation shows errors inline without form submission
         // Validation runs on blur/immediate mode, error appears in helper text
         var passwordError = Page.Locator(".mud-input-helper-text:has-text('Password must be at least 8 characters')");
-        await passwordError.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 5000 });
-
-        Assert.That(await passwordError.IsVisibleAsync(), Is.True,
-            "Should show validation error for weak password");
+        await Expect(passwordError).ToBeVisibleAsync(new() { Timeout = 5000 });
     }
 
     [Test]
@@ -133,10 +120,7 @@ public class RegistrationTests : E2ETestBase
         // Assert - MudBlazor validation shows errors inline without form submission
         // Validation runs on blur/immediate mode, error appears in helper text
         var mismatchError = Page.Locator(".mud-input-helper-text:has-text('Passwords do not match')");
-        await mismatchError.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 5000 });
-
-        Assert.That(await mismatchError.IsVisibleAsync(), Is.True,
-            "Should show validation error for mismatched passwords");
+        await Expect(mismatchError).ToBeVisibleAsync(new() { Timeout = 5000 });
     }
 
     // TODO: Add test for invited user registration with email verification

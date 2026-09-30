@@ -1,4 +1,5 @@
 using Microsoft.Playwright;
+using static Microsoft.Playwright.Assertions;
 
 namespace TelegramGroupsAdmin.E2ETests.PageObjects;
 
@@ -12,20 +13,18 @@ public class TotpSetupPage
     private readonly IPage _page;
 
     // Selectors - Setup2FA.razor uses plain HTML with CSS classes
-    private const string PageTitle = ".setup-title";
-    private const string QrCodeImage = ".qr-code";
-    private const string ManualEntryKey = ".secret-code";
+    private const string PageTitleSelector = ".setup-title";
+    private const string QrCodeImageSelector = ".qr-code";
+    private const string ManualEntryKeySelector = ".secret-code";
     private const string CodeInput = "input#code";
     private const string SubmitButton = "button[type='submit']";
-    private const string ErrorAlert = ".alert-error";
-    private const string LoadingSpinner = ".spinner";
-    private const string SetupSteps = ".setup-steps";
+    private const string ErrorAlertSelector = ".alert-error";
+    private const string SetupStepsSelector = ".setup-steps";
 
     // Recovery Codes selectors (shown after TOTP verification)
-    private const string RecoveryCodesSection = ".recovery-codes-section";
-    private const string RecoveryCodesList = ".recovery-codes";
-    private const string RecoveryCodeItem = ".recovery-code";
-    private const string ConfirmCheckbox = ".confirm-checkbox input[type='checkbox']";
+    private const string RecoveryCodesSectionSelector = ".recovery-codes-section";
+    private const string RecoveryCodeItemSelector = ".recovery-code";
+    private const string ConfirmCheckboxSelector = ".confirm-checkbox input[type='checkbox']";
     private const string CompleteSetupButton = ".recovery-codes-section button[type='submit']";
 
     public TotpSetupPage(IPage page)
@@ -48,12 +47,9 @@ public class TotpSetupPage
         });
 
         // Wait for either the setup steps to load or an error message
-        var setupLocator = _page.Locator(SetupSteps);
-        var errorLocator = _page.Locator(ErrorAlert);
-
         try
         {
-            await setupLocator.Or(errorLocator).WaitForAsync(new LocatorWaitForOptions
+            await SetupSteps.Or(ErrorAlert).WaitForAsync(new LocatorWaitForOptions
             {
                 State = WaitForSelectorState.Visible,
                 Timeout = timeoutMs
@@ -65,44 +61,32 @@ public class TotpSetupPage
         }
     }
 
-    /// <summary>
-    /// Checks if the QR code is visible on the page.
-    /// </summary>
-    public async Task<bool> IsQrCodeVisibleAsync()
-    {
-        return await _page.Locator(QrCodeImage).IsVisibleAsync();
-    }
+    /// <summary>The page title.</summary>
+    public ILocator PageTitle => _page.Locator(PageTitleSelector);
+
+    /// <summary>The QR code image; its src is a base64 data URL.</summary>
+    public ILocator QrCode => _page.Locator(QrCodeImageSelector);
+
+    /// <summary>The manual entry key (Base32 secret) for users who can't scan the QR code.</summary>
+    public ILocator ManualKey => _page.Locator(ManualEntryKeySelector);
+
+    /// <summary>The error alert.</summary>
+    public ILocator ErrorAlert => _page.Locator(ErrorAlertSelector);
+
+    /// <summary>The setup steps (their presence indicates the page loaded successfully).</summary>
+    public ILocator SetupSteps => _page.Locator(SetupStepsSelector);
 
     /// <summary>
-    /// Gets the QR code image source (data URL).
+    /// Reads the manual entry key text so a test can generate a TOTP code from it.
+    /// Waits (auto-retrying) for the key to render before reading it.
     /// </summary>
-    public async Task<string?> GetQrCodeSrcAsync()
+    public async Task<string> GetManualKeyAsync()
     {
-        var qrCode = _page.Locator(QrCodeImage);
-        if (!await qrCode.IsVisibleAsync())
-            return null;
-
-        return await qrCode.GetAttributeAsync("src");
-    }
-
-    /// <summary>
-    /// Checks if the manual entry key is visible.
-    /// </summary>
-    public async Task<bool> IsManualKeyVisibleAsync()
-    {
-        return await _page.Locator(ManualEntryKey).IsVisibleAsync();
-    }
-
-    /// <summary>
-    /// Gets the manual entry key text (for users who can't scan QR code).
-    /// </summary>
-    public async Task<string?> GetManualKeyAsync()
-    {
-        var keyElement = _page.Locator(ManualEntryKey);
-        if (!await keyElement.IsVisibleAsync())
-            return null;
-
-        return await keyElement.TextContentAsync();
+        await Expect(ManualKey).Not.ToBeEmptyAsync();
+#pragma warning disable RS0030 // The secret is read to generate a TOTP code, not asserted; the Expect above synced on it
+        var key = await ManualKey.TextContentAsync();
+#pragma warning restore RS0030
+        return key ?? string.Empty;
     }
 
     /// <summary>
@@ -131,37 +115,6 @@ public class TotpSetupPage
     }
 
     /// <summary>
-    /// Waits for and returns the error message text.
-    /// Returns null if no error message appears within the timeout.
-    /// </summary>
-    public async Task<string?> GetErrorMessageAsync(int timeoutMs = 5000)
-    {
-        var errorLocator = _page.Locator(ErrorAlert);
-
-        try
-        {
-            await errorLocator.WaitForAsync(new LocatorWaitForOptions
-            {
-                State = WaitForSelectorState.Visible,
-                Timeout = timeoutMs
-            });
-            return await errorLocator.TextContentAsync();
-        }
-        catch (PlaywrightException)
-        {
-            return null;
-        }
-    }
-
-    /// <summary>
-    /// Checks if an error message is displayed.
-    /// </summary>
-    public async Task<bool> HasErrorMessageAsync()
-    {
-        return await _page.Locator(ErrorAlert).IsVisibleAsync();
-    }
-
-    /// <summary>
     /// Waits for redirect away from setup page (successful setup).
     /// </summary>
     public async Task WaitForRedirectAsync(int timeoutMs = 10000)
@@ -173,40 +126,18 @@ public class TotpSetupPage
         });
     }
 
-    /// <summary>
-    /// Checks if the page is showing the loading state.
-    /// </summary>
-    public async Task<bool> IsLoadingAsync()
-    {
-        return await _page.Locator(LoadingSpinner).IsVisibleAsync();
-    }
-
-    /// <summary>
-    /// Gets the page title text.
-    /// </summary>
-    public async Task<string?> GetPageTitleAsync()
-    {
-        return await _page.Locator(PageTitle).TextContentAsync();
-    }
-
-    /// <summary>
-    /// Checks if the setup steps are visible (indicates page loaded successfully).
-    /// </summary>
-    public async Task<bool> AreSetupStepsVisibleAsync()
-    {
-        return await _page.Locator(SetupSteps).IsVisibleAsync();
-    }
-
     #region Recovery Codes
 
     /// <summary>
-    /// Checks if the recovery codes section is visible.
-    /// This appears after successful TOTP verification.
+    /// The recovery codes section. This appears after successful TOTP verification.
     /// </summary>
-    public async Task<bool> IsRecoveryCodesSectionVisibleAsync()
-    {
-        return await _page.Locator(RecoveryCodesSection).IsVisibleAsync();
-    }
+    public ILocator RecoveryCodesSection => _page.Locator(RecoveryCodesSectionSelector);
+
+    /// <summary>The individual recovery codes displayed on the page.</summary>
+    public ILocator RecoveryCodes => _page.Locator(RecoveryCodeItemSelector);
+
+    /// <summary>The checkbox confirming the recovery codes have been saved.</summary>
+    public ILocator ConfirmCheckbox => _page.Locator(ConfirmCheckboxSelector);
 
     /// <summary>
     /// Waits for the recovery codes section to appear.
@@ -223,8 +154,7 @@ public class TotpSetupPage
         });
 
         // Wait for the recovery section to be visible
-        var recoverySection = _page.Locator(RecoveryCodesSection);
-        await recoverySection.WaitForAsync(new LocatorWaitForOptions
+        await RecoveryCodesSection.WaitForAsync(new LocatorWaitForOptions
         {
             State = WaitForSelectorState.Visible,
             Timeout = timeoutMs
@@ -232,39 +162,19 @@ public class TotpSetupPage
     }
 
     /// <summary>
-    /// Gets all the recovery codes displayed on the page.
+    /// Reads all the recovery codes displayed on the page so a test can later log in with one.
+    /// Waits (auto-retrying) for the codes to render before reading them.
     /// </summary>
     public async Task<List<string>> GetRecoveryCodesAsync()
     {
-        var codes = new List<string>();
-        var codeElements = await _page.Locator(RecoveryCodeItem).AllAsync();
-
-        foreach (var element in codeElements)
-        {
-            var text = await element.TextContentAsync();
-            if (!string.IsNullOrWhiteSpace(text))
-            {
-                codes.Add(text.Trim());
-            }
-        }
-
-        return codes;
-    }
-
-    /// <summary>
-    /// Gets the count of recovery codes displayed.
-    /// </summary>
-    public async Task<int> GetRecoveryCodesCountAsync()
-    {
-        return await _page.Locator(RecoveryCodeItem).CountAsync();
-    }
-
-    /// <summary>
-    /// Checks if the confirmation checkbox is visible.
-    /// </summary>
-    public async Task<bool> IsConfirmCheckboxVisibleAsync()
-    {
-        return await _page.Locator(ConfirmCheckbox).IsVisibleAsync();
+        await Expect(RecoveryCodes.First).Not.ToBeEmptyAsync();
+#pragma warning disable RS0030 // Codes are read to be typed back in on a later login, not asserted; the Expect above synced on them (static SSR renders them all at once)
+        var texts = await RecoveryCodes.AllTextContentsAsync();
+#pragma warning restore RS0030
+        return texts
+            .Where(text => !string.IsNullOrWhiteSpace(text))
+            .Select(text => text.Trim())
+            .ToList();
     }
 
     /// <summary>
@@ -272,11 +182,8 @@ public class TotpSetupPage
     /// </summary>
     public async Task CheckConfirmationAsync()
     {
-        var checkbox = _page.Locator(ConfirmCheckbox);
-        if (!await checkbox.IsCheckedAsync())
-        {
-            await checkbox.CheckAsync();
-        }
+        // CheckAsync is a no-op when the box is already checked.
+        await ConfirmCheckbox.CheckAsync();
     }
 
     /// <summary>
@@ -284,19 +191,8 @@ public class TotpSetupPage
     /// </summary>
     public async Task UncheckConfirmationAsync()
     {
-        var checkbox = _page.Locator(ConfirmCheckbox);
-        if (await checkbox.IsCheckedAsync())
-        {
-            await checkbox.UncheckAsync();
-        }
-    }
-
-    /// <summary>
-    /// Checks if the confirmation checkbox is checked.
-    /// </summary>
-    public async Task<bool> IsConfirmationCheckedAsync()
-    {
-        return await _page.Locator(ConfirmCheckbox).IsCheckedAsync();
+        // UncheckAsync is a no-op when the box is already unchecked.
+        await ConfirmCheckbox.UncheckAsync();
     }
 
     /// <summary>

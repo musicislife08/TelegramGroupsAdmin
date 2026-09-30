@@ -66,8 +66,7 @@ public class AuthSecurityTests : E2ETestBase
         await AssertOnAuthPageAsync("Should be redirected to auth page");
 
         // Verify we're NOT on /login/setup-2fa (the redirect happened)
-        Assert.That(Page.Url, Does.Not.Contain("/setup-2fa"),
-            "TOTP setup page should redirect without valid intermediate token");
+        await Expect(Page).Not.ToHaveURLAsync(new Regex("/setup-2fa"));
     }
 
     [Test]
@@ -82,8 +81,7 @@ public class AuthSecurityTests : E2ETestBase
         await AssertOnAuthPageAsync("Should be redirected to auth page");
 
         // Verify we're NOT on setup-2fa (the redirect happened)
-        Assert.That(Page.Url, Does.Not.Contain("/setup-2fa"),
-            "TOTP setup page should reject invalid userId and token");
+        await Expect(Page).Not.ToHaveURLAsync(new Regex("/setup-2fa"));
     }
 
     [Test]
@@ -98,10 +96,7 @@ public class AuthSecurityTests : E2ETestBase
         await AssertOnAuthPageAsync("Should be redirected to auth page");
 
         // Verify we're NOT on /login/verify (could be on /login or /register, but not /login/verify)
-        var url = Page.Url;
-        var isOnVerifyPage = url.EndsWith("/login/verify") || url.Contains("/login/verify?");
-        Assert.That(isOnVerifyPage, Is.False,
-            $"TOTP verify page should redirect without valid intermediate token, but URL is: {url}");
+        await Expect(Page).Not.ToHaveURLAsync(new Regex(@"/login/verify(\?|$)"));
     }
 
     [Test]
@@ -120,10 +115,8 @@ public class AuthSecurityTests : E2ETestBase
         await _loginPage.LoginAsync(email, password);
         await Page.WaitForURLAsync("**/login/setup-2fa**", new() { Timeout = 10000 });
 
-        // Capture current URL to verify we're in TOTP setup
-        var totpSetupUrl = Page.Url;
-        Assert.That(totpSetupUrl, Does.Contain("/login/setup-2fa"),
-            "Should be on TOTP setup page after password login");
+        // Verify we're in TOTP setup
+        await Expect(Page).ToHaveURLAsync(new Regex("/login/setup-2fa"));
 
         // Act - try to navigate to home page directly (bypassing TOTP)
         await Page.GotoAsync($"{BaseUrl}/");
@@ -158,7 +151,6 @@ public class AuthSecurityTests : E2ETestBase
             new Regex(@".*/login.*"),
             new() { Timeout = 10000 });
 
-        Assert.That(Page.Url, Does.Not.Contain("/settings"),
-            "Settings page should not be accessible with only intermediate token");
+        await Expect(Page).Not.ToHaveURLAsync(new Regex("/settings"));
     }
 }

@@ -15,16 +15,15 @@ public class ProfilePage
     private const string BasePath = "/profile";
 
     // Page elements
-    private const string PageTitle = ".mud-typography-h4";
-    private const string LoadingIndicator = ".mud-progress-linear";
+    private const string PageTitleSelector = ".mud-typography-h4";
 
     // Section selectors
-    private const string AccountInfoSection = ".mud-paper:has(.mud-typography-h6:has-text('Account Information'))";
-    private const string ChangePasswordSection = ".mud-paper:has(.mud-typography-h6:has-text('Change Password'))";
-    private const string TotpSection = ".mud-paper:has(.mud-typography-h6:has-text('Two-Factor Authentication'))";
-    private const string TotpEnabledAlert = ".mud-alert:has-text('2FA is currently enabled')";
-    private const string TotpDisabledAlert = ".mud-alert:has-text('2FA is not enabled')";
-    private const string TelegramLinkingSection = ".mud-paper:has(.mud-typography-h6:has-text('Linked Telegram Accounts'))";
+    private const string AccountInfoSectionSelector = ".mud-paper:has(.mud-typography-h6:has-text('Account Information'))";
+    private const string ChangePasswordSectionSelector = ".mud-paper:has(.mud-typography-h6:has-text('Change Password'))";
+    private const string TotpSectionSelector = ".mud-paper:has(.mud-typography-h6:has-text('Two-Factor Authentication'))";
+    private const string TotpEnabledAlertSelector = ".mud-alert:has-text('2FA is currently enabled')";
+    private const string TotpDisabledAlertSelector = ".mud-alert:has-text('2FA is not enabled')";
+    private const string TelegramLinkingSectionSelector = ".mud-paper:has(.mud-typography-h6:has-text('Linked Telegram Accounts'))";
 
     public ProfilePage(IPage page)
     {
@@ -39,7 +38,7 @@ public class ProfilePage
     public async Task NavigateAsync()
     {
         await _page.GotoAsync(BasePath);
-        await Expect(_page.Locator(PageTitle)).ToBeVisibleAsync();
+        await Expect(PageTitle).ToBeVisibleAsync();
         // The page is prerendered with its sections loaded, then the interactive circuit re-runs
         // OnInitializedAsync and re-renders them: wait for the interactive render so the load checks
         // below never pass against prerendered HTML that is about to be replaced.
@@ -52,14 +51,13 @@ public class ProfilePage
     /// </summary>
     public async Task WaitForLoadAsync(int timeoutMs = 15000)
     {
-        await Expect(_page.Locator(AccountInfoSection)).ToBeVisibleAsync(new() { Timeout = timeoutMs });
-        await Expect(_page.Locator(ChangePasswordSection)).ToBeVisibleAsync(new() { Timeout = timeoutMs });
-        await Expect(_page.Locator(TotpSection)).ToBeVisibleAsync(new() { Timeout = timeoutMs });
-        await Expect(_page.Locator(TelegramLinkingSection)).ToBeVisibleAsync(new() { Timeout = timeoutMs });
+        await Expect(AccountInfoSection).ToBeVisibleAsync(new() { Timeout = timeoutMs });
+        await Expect(ChangePasswordSection).ToBeVisibleAsync(new() { Timeout = timeoutMs });
+        await Expect(TotpSection).ToBeVisibleAsync(new() { Timeout = timeoutMs });
+        await Expect(TelegramLinkingSection).ToBeVisibleAsync(new() { Timeout = timeoutMs });
         // Wait for the Telegram section's content (table or empty state) to have rendered, not just the paper frame.
-        var telegramTable = _page.Locator($"{TelegramLinkingSection} .mud-table");
-        var telegramNoAccounts = _page.Locator($"{TelegramLinkingSection} .mud-alert");
-        await telegramTable.Or(telegramNoAccounts).WaitForAsync(new LocatorWaitForOptions
+        var telegramNoAccounts = TelegramLinkingSection.Locator(".mud-alert");
+        await LinkedAccountsTable.Or(telegramNoAccounts).WaitForAsync(new LocatorWaitForOptions
         {
             State = WaitForSelectorState.Visible,
             Timeout = timeoutMs
@@ -70,87 +68,45 @@ public class ProfilePage
 
     #region Page Title
 
-    /// <summary>
-    /// Checks if the page title is visible.
-    /// </summary>
-    public async Task<bool> IsPageTitleVisibleAsync()
-    {
-        return await _page.Locator(PageTitle).IsVisibleAsync();
-    }
-
-    /// <summary>
-    /// Gets the page title text.
-    /// </summary>
-    public async Task<string?> GetPageTitleAsync()
-    {
-        return await _page.Locator(PageTitle).TextContentAsync();
-    }
+    /// <summary>The page title ("Profile Settings").</summary>
+    public ILocator PageTitle => _page.Locator(PageTitleSelector);
 
     #endregion
 
     #region Account Information Section
 
-    /// <summary>
-    /// Checks if the Account Information section is visible.
-    /// </summary>
-    public async Task<bool> IsAccountInfoSectionVisibleAsync()
-    {
-        return await _page.Locator(AccountInfoSection).IsVisibleAsync();
-    }
+    /// <summary>The Account Information section.</summary>
+    public ILocator AccountInfoSection => _page.Locator(AccountInfoSectionSelector);
 
     /// <summary>
-    /// Gets the email displayed in the Account Information section.
+    /// Asserts (auto-retrying) that every account info field (Email, Permission Level,
+    /// Account Created, Last Login) is visible in the Account Information section.
     /// </summary>
-    public async Task<string?> GetDisplayedEmailAsync()
+    public async Task AssertAccountInfoFieldsVisibleAsync()
     {
-        var input = _page.Locator($"{AccountInfoSection} .mud-input-root:has-text('Email') input");
-        return await input.InputValueAsync();
-    }
-
-    /// <summary>
-    /// Gets the permission level displayed in the Account Information section.
-    /// </summary>
-    public async Task<string?> GetDisplayedPermissionLevelAsync()
-    {
-        var input = _page.Locator($"{AccountInfoSection} .mud-input-root:has-text('Permission Level') input");
-        return await input.InputValueAsync();
-    }
-
-    /// <summary>
-    /// Checks if all account info fields are visible.
-    /// </summary>
-    public async Task<bool> HasAccountInfoFieldsAsync()
-    {
-        var emailField = _page.Locator($"{AccountInfoSection}").GetByLabel("Email");
-        var permissionField = _page.Locator($"{AccountInfoSection}").GetByLabel("Permission Level");
-        var createdField = _page.Locator($"{AccountInfoSection}").GetByLabel("Account Created");
-        var lastLoginField = _page.Locator($"{AccountInfoSection}").GetByLabel("Last Login");
-
-        return await emailField.IsVisibleAsync() &&
-               await permissionField.IsVisibleAsync() &&
-               await createdField.IsVisibleAsync() &&
-               await lastLoginField.IsVisibleAsync();
+        await Expect(AccountInfoSection.GetByLabel("Email")).ToBeVisibleAsync();
+        await Expect(AccountInfoSection.GetByLabel("Permission Level")).ToBeVisibleAsync();
+        await Expect(AccountInfoSection.GetByLabel("Account Created")).ToBeVisibleAsync();
+        await Expect(AccountInfoSection.GetByLabel("Last Login")).ToBeVisibleAsync();
     }
 
     #endregion
 
     #region Change Password Section
 
-    /// <summary>
-    /// Checks if the Change Password section is visible.
-    /// </summary>
-    public async Task<bool> IsChangePasswordSectionVisibleAsync()
-    {
-        return await _page.Locator(ChangePasswordSection).IsVisibleAsync();
-    }
+    /// <summary>The Change Password section.</summary>
+    public ILocator ChangePasswordSection => _page.Locator(ChangePasswordSectionSelector);
+
+    /// <summary>The Current Password input in the Change Password section.</summary>
+    public ILocator CurrentPasswordInput =>
+        _page.Locator($"{ChangePasswordSectionSelector} .mud-input-control:has(label:text('Current Password')) input").First;
 
     /// <summary>
     /// Fills the current password field.
     /// </summary>
     public async Task FillCurrentPasswordAsync(string password)
     {
-        var input = _page.Locator($"{ChangePasswordSection} .mud-input-control:has(label:text('Current Password')) input").First;
-        await input.FillAsync(password);
+        await CurrentPasswordInput.FillAsync(password);
     }
 
     /// <summary>
@@ -160,7 +116,7 @@ public class ProfilePage
     public async Task FillNewPasswordAsync(string password)
     {
         // MudBlazor labels may have extra content - use a more specific locator
-        var input = _page.Locator($"{ChangePasswordSection} .mud-input-control:has(label:text('New Password')) input").First;
+        var input = _page.Locator($"{ChangePasswordSectionSelector} .mud-input-control:has(label:text('New Password')) input").First;
         await input.FillAsync(password);
     }
 
@@ -169,7 +125,7 @@ public class ProfilePage
     /// </summary>
     public async Task FillConfirmPasswordAsync(string password)
     {
-        var input = _page.Locator($"{ChangePasswordSection} .mud-input-control:has(label:text('Confirm New Password')) input").First;
+        var input = _page.Locator($"{ChangePasswordSectionSelector} .mud-input-control:has(label:text('Confirm New Password')) input").First;
         await input.FillAsync(password);
     }
 
@@ -178,10 +134,10 @@ public class ProfilePage
     /// </summary>
     public async Task ClickChangePasswordButtonAsync()
     {
-        var button = _page.Locator(ChangePasswordSection).GetByRole(AriaRole.Button, new() { Name = "Change Password" });
+        var button = ChangePasswordSection.GetByRole(AriaRole.Button, new() { Name = "Change Password" });
         await button.ClickAsync();
         // Wait for snackbar to appear (indicates operation completed)
-        await Expect(_page.Locator(".mud-snackbar").First).ToBeVisibleAsync();
+        await Expect(Snackbar).ToBeVisibleAsync();
     }
 
     /// <summary>
@@ -195,133 +151,66 @@ public class ProfilePage
         await ClickChangePasswordButtonAsync();
     }
 
-    /// <summary>
-    /// Gets the current password field value (for testing empty state).
-    /// </summary>
-    public async Task<string> GetCurrentPasswordValueAsync()
-    {
-        var input = _page.Locator($"{ChangePasswordSection} .mud-input-control:has(label:text('Current Password')) input").First;
-        return await input.InputValueAsync();
-    }
-
-    /// <summary>
-    /// Gets the new password field value.
-    /// </summary>
-    public async Task<string> GetNewPasswordValueAsync()
-    {
-        var input = _page.Locator($"{ChangePasswordSection} .mud-input-control:has(label:text('New Password')) input").First;
-        return await input.InputValueAsync();
-    }
-
     #endregion
 
     #region TOTP Section
 
     // Recovery Codes dialog selectors
-    private const string PasswordConfirmDialog = ".mud-dialog:has-text('Confirm Your Password')";
-    private const string RecoveryCodesDialog = ".mud-dialog:has-text('Save Your Recovery Codes')";
-    private const string RecoveryCodeItems = ".mud-dialog .mud-grid-item"; // MudItem renders as mud-grid-item
+    private const string PasswordConfirmDialogSelector = ".mud-dialog:has-text('Confirm Your Password')";
+    private const string RecoveryCodesDialogSelector = ".mud-dialog:has-text('Save Your Recovery Codes')";
+    private const string RecoveryCodeItemsSelector = ".mud-dialog .mud-grid-item"; // MudItem renders as mud-grid-item
+
+    /// <summary>The Two-Factor Authentication section.</summary>
+    public ILocator TotpSection => _page.Locator(TotpSectionSelector);
 
     /// <summary>
-    /// Checks if the TOTP section is visible.
-    /// </summary>
-    public async Task<bool> IsTotpSectionVisibleAsync()
-    {
-        return await _page.Locator(TotpSection).IsVisibleAsync();
-    }
-
-    /// <summary>
-    /// Checks if TOTP is currently enabled (shows "2FA is currently enabled" alert).
+    /// The "2FA is currently enabled" alert in the TOTP section.
     /// MudBlazor alerts default to Variant.Text, generating .mud-alert-text-* classes.
     /// </summary>
-    public async Task<bool> IsTotpEnabledAsync()
-    {
-        return await _page.Locator(TotpSection).Locator(TotpEnabledAlert).IsVisibleAsync();
-    }
+    public ILocator TotpEnabledAlert => TotpSection.Locator(TotpEnabledAlertSelector);
+
+    /// <summary>The "2FA is not enabled" warning in the TOTP section.</summary>
+    public ILocator TotpDisabledAlert => TotpSection.Locator(TotpDisabledAlertSelector);
 
     /// <summary>
-    /// Checks if TOTP is currently disabled (shows "2FA is not enabled" warning).
-    /// </summary>
-    public async Task<bool> IsTotpDisabledAsync()
-    {
-        return await _page.Locator(TotpSection).Locator(TotpDisabledAlert).IsVisibleAsync();
-    }
-
-    /// <summary>
-    /// Asserts (auto-retrying) that the TOTP section shows the "enabled" alert. Prefer this
-    /// over IsTotpEnabledAsync() in test assertions: IsVisibleAsync() is a point-in-time
-    /// snapshot and races the alert's async (Blazor) render under load.
+    /// Asserts (auto-retrying) that the TOTP section shows the "enabled" alert.
+    /// The alert renders asynchronously (Blazor), so a retrying assertion is required.
     /// </summary>
     public async Task AssertTotpEnabledAsync(int? timeoutMs = null)
     {
-        var locator = _page.Locator(TotpSection).Locator(TotpEnabledAlert);
-        await Expect(locator).ToBeVisibleAsync(timeoutMs is { } t ? new() { Timeout = t } : null);
+        await Expect(TotpEnabledAlert).ToBeVisibleAsync(timeoutMs is { } t ? new() { Timeout = t } : null);
     }
 
     /// <summary>
     /// Asserts (auto-retrying) that the TOTP section shows the "not enabled" warning.
-    /// Prefer this over IsTotpDisabledAsync() in test assertions (see AssertTotpEnabledAsync).
     /// </summary>
     public async Task AssertTotpDisabledAsync(int? timeoutMs = null)
     {
-        var locator = _page.Locator(TotpSection).Locator(TotpDisabledAlert);
-        await Expect(locator).ToBeVisibleAsync(timeoutMs is { } t ? new() { Timeout = t } : null);
+        await Expect(TotpDisabledAlert).ToBeVisibleAsync(timeoutMs is { } t ? new() { Timeout = t } : null);
     }
 
-    /// <summary>
-    /// Checks if the Enable 2FA button is visible (TOTP disabled state).
-    /// </summary>
-    public async Task<bool> IsEnable2FAButtonVisibleAsync()
-    {
-        var button = _page.Locator(TotpSection).GetByRole(AriaRole.Button, new() { Name = "Enable 2FA" });
-        return await button.IsVisibleAsync();
-    }
+    /// <summary>The Enable 2FA button (TOTP disabled state).</summary>
+    public ILocator Enable2FAButton => TotpSection.GetByRole(AriaRole.Button, new() { Name = "Enable 2FA" });
 
-    /// <summary>
-    /// Checks if the Reset 2FA button is visible (TOTP enabled state).
-    /// </summary>
-    public async Task<bool> IsReset2FAButtonVisibleAsync()
-    {
-        var button = _page.Locator(TotpSection).GetByRole(AriaRole.Button, new() { Name = "Reset 2FA" });
-        return await button.IsVisibleAsync();
-    }
+    /// <summary>The Reset 2FA button (TOTP enabled state).</summary>
+    public ILocator Reset2FAButton => TotpSection.GetByRole(AriaRole.Button, new() { Name = "Reset 2FA" });
 
     /// <summary>
     /// Clicks the Enable 2FA button to open the setup dialog.
     /// </summary>
     public async Task ClickEnable2FAButtonAsync()
     {
-        var button = _page.Locator(TotpSection).GetByRole(AriaRole.Button, new() { Name = "Enable 2FA" });
-        await button.ClickAsync();
+        await Enable2FAButton.ClickAsync();
     }
 
-    /// <summary>
-    /// Checks if the TOTP setup dialog is visible.
-    /// </summary>
-    public async Task<bool> IsTotpSetupDialogVisibleAsync()
-    {
-        var dialog = _page.Locator(".mud-dialog:has-text('Enable Two-Factor Authentication')");
-        return await dialog.IsVisibleAsync();
-    }
+    /// <summary>The TOTP setup dialog.</summary>
+    public ILocator TotpSetupDialog => _page.Locator(".mud-dialog:has-text('Enable Two-Factor Authentication')");
 
-    /// <summary>
-    /// Checks if the QR code is visible in the TOTP setup dialog.
-    /// </summary>
-    public async Task<bool> IsTotpQRCodeVisibleAsync()
-    {
-        var qrCode = _page.Locator(".mud-dialog img[alt='QR Code']");
-        return await qrCode.IsVisibleAsync();
-    }
+    /// <summary>The QR code in the TOTP setup dialog.</summary>
+    public ILocator TotpQrCode => _page.Locator(".mud-dialog img[alt='QR Code']");
 
-    /// <summary>
-    /// Checks if the manual entry key field is visible in the TOTP setup dialog.
-    /// </summary>
-    public async Task<bool> IsTotpManualKeyVisibleAsync()
-    {
-        var dialog = _page.Locator(".mud-dialog");
-        var manualKeyText = dialog.GetByText("Or enter this code manually:");
-        return await manualKeyText.IsVisibleAsync();
-    }
+    /// <summary>The manual entry key prompt in the TOTP setup dialog.</summary>
+    public ILocator TotpManualKeyText => _page.Locator(".mud-dialog").GetByText("Or enter this code manually:");
 
     /// <summary>
     /// Gets the verification code input field locator.
@@ -343,38 +232,28 @@ public class ProfilePage
     #region Recovery Codes
 
     /// <summary>
-    /// Checks if the "Regenerate Recovery Codes" button is visible.
-    /// Only visible when 2FA is enabled.
+    /// The "Regenerate Recovery Codes" button. Only visible when 2FA is enabled.
     /// </summary>
-    public async Task<bool> IsRegenerateRecoveryCodesButtonVisibleAsync()
-    {
-        var button = _page.Locator(TotpSection).GetByRole(AriaRole.Button, new() { Name = "Regenerate Recovery Codes" });
-        return await button.IsVisibleAsync();
-    }
+    public ILocator RegenerateRecoveryCodesButton =>
+        TotpSection.GetByRole(AriaRole.Button, new() { Name = "Regenerate Recovery Codes" });
 
     /// <summary>
     /// Clicks the "Regenerate Recovery Codes" button.
     /// </summary>
     public async Task ClickRegenerateRecoveryCodesAsync()
     {
-        var button = _page.Locator(TotpSection).GetByRole(AriaRole.Button, new() { Name = "Regenerate Recovery Codes" });
-        await button.ClickAsync();
+        await RegenerateRecoveryCodesButton.ClickAsync();
     }
 
-    /// <summary>
-    /// Checks if the password confirmation dialog is visible.
-    /// </summary>
-    public async Task<bool> IsPasswordConfirmDialogVisibleAsync()
-    {
-        return await _page.Locator(PasswordConfirmDialog).IsVisibleAsync();
-    }
+    /// <summary>The password confirmation dialog shown before regenerating recovery codes.</summary>
+    public ILocator PasswordConfirmDialog => _page.Locator(PasswordConfirmDialogSelector);
 
     /// <summary>
     /// Waits for the password confirmation dialog to appear.
     /// </summary>
     public async Task WaitForPasswordConfirmDialogAsync(int timeoutMs = 5000)
     {
-        await _page.Locator(PasswordConfirmDialog).WaitForAsync(new LocatorWaitForOptions
+        await PasswordConfirmDialog.WaitForAsync(new LocatorWaitForOptions
         {
             State = WaitForSelectorState.Visible,
             Timeout = timeoutMs
@@ -387,7 +266,7 @@ public class ProfilePage
     /// </summary>
     public async Task WaitForPasswordConfirmDialogClosedAsync(int timeoutMs = 5000)
     {
-        await Expect(_page.Locator(PasswordConfirmDialog)).Not.ToBeVisibleAsync(
+        await Expect(PasswordConfirmDialog).Not.ToBeVisibleAsync(
             new() { Timeout = timeoutMs });
     }
 
@@ -396,7 +275,7 @@ public class ProfilePage
     /// </summary>
     public async Task FillPasswordConfirmDialogAsync(string password)
     {
-        var input = _page.Locator(PasswordConfirmDialog).GetByLabel("Password");
+        var input = PasswordConfirmDialog.GetByLabel("Password");
         await input.FillAsync(password);
     }
 
@@ -406,13 +285,13 @@ public class ProfilePage
     /// <param name="expectSuccess">If true, waits for recovery codes dialog. If false, caller handles the expected outcome.</param>
     public async Task ClickGenerateNewCodesAsync(bool expectSuccess = true)
     {
-        var button = _page.Locator(PasswordConfirmDialog).GetByRole(AriaRole.Button, new() { Name = "Generate New Codes" });
+        var button = PasswordConfirmDialog.GetByRole(AriaRole.Button, new() { Name = "Generate New Codes" });
         await button.ClickAsync();
 
         if (expectSuccess)
         {
             // Wait for the recovery codes dialog to appear
-            await Expect(_page.Locator(RecoveryCodesDialog)).ToBeVisibleAsync();
+            await Expect(RecoveryCodesDialog).ToBeVisibleAsync();
         }
     }
 
@@ -421,24 +300,22 @@ public class ProfilePage
     /// </summary>
     public async Task CancelPasswordConfirmDialogAsync()
     {
-        var button = _page.Locator(PasswordConfirmDialog).GetByRole(AriaRole.Button, new() { Name = "Cancel" });
+        var button = PasswordConfirmDialog.GetByRole(AriaRole.Button, new() { Name = "Cancel" });
         await button.ClickAsync();
     }
 
-    /// <summary>
-    /// Checks if the recovery codes display dialog is visible.
-    /// </summary>
-    public async Task<bool> IsRecoveryCodesDialogVisibleAsync()
-    {
-        return await _page.Locator(RecoveryCodesDialog).IsVisibleAsync();
-    }
+    /// <summary>The recovery codes display dialog.</summary>
+    public ILocator RecoveryCodesDialog => _page.Locator(RecoveryCodesDialogSelector);
+
+    /// <summary>The individual recovery codes displayed in the dialog.</summary>
+    public ILocator RecoveryCodeItems => _page.Locator(RecoveryCodeItemsSelector);
 
     /// <summary>
     /// Waits for the recovery codes dialog to appear.
     /// </summary>
     public async Task WaitForRecoveryCodesDialogAsync(int timeoutMs = 10000)
     {
-        await _page.Locator(RecoveryCodesDialog).WaitForAsync(new LocatorWaitForOptions
+        await RecoveryCodesDialog.WaitForAsync(new LocatorWaitForOptions
         {
             State = WaitForSelectorState.Visible,
             Timeout = timeoutMs
@@ -446,39 +323,11 @@ public class ProfilePage
     }
 
     /// <summary>
-    /// Gets all recovery codes displayed in the dialog.
-    /// </summary>
-    public async Task<List<string>> GetRecoveryCodesFromDialogAsync()
-    {
-        var codes = new List<string>();
-        var codeElements = await _page.Locator(RecoveryCodeItems).AllAsync();
-
-        foreach (var element in codeElements)
-        {
-            var text = await element.TextContentAsync();
-            if (!string.IsNullOrWhiteSpace(text))
-            {
-                codes.Add(text.Trim());
-            }
-        }
-
-        return codes;
-    }
-
-    /// <summary>
-    /// Gets the count of recovery codes displayed in the dialog.
-    /// </summary>
-    public async Task<int> GetRecoveryCodesCountAsync()
-    {
-        return await _page.Locator(RecoveryCodeItems).CountAsync();
-    }
-
-    /// <summary>
     /// Clicks "Copy All Codes" button in the recovery codes dialog.
     /// </summary>
     public async Task ClickCopyAllCodesAsync()
     {
-        var button = _page.Locator(RecoveryCodesDialog).GetByRole(AriaRole.Button, new() { Name = "Copy All Codes" });
+        var button = RecoveryCodesDialog.GetByRole(AriaRole.Button, new() { Name = "Copy All Codes" });
         await button.ClickAsync();
     }
 
@@ -487,28 +336,8 @@ public class ProfilePage
     /// </summary>
     public async Task ClickSavedCodesAsync()
     {
-        var button = _page.Locator(RecoveryCodesDialog).GetByRole(AriaRole.Button, new() { Name = "I Have Saved My Codes" });
+        var button = RecoveryCodesDialog.GetByRole(AriaRole.Button, new() { Name = "I Have Saved My Codes" });
         await button.ClickAsync();
-    }
-
-    /// <summary>
-    /// Performs the complete regenerate recovery codes flow:
-    /// clicks button, enters password, gets codes, closes dialog.
-    /// Returns the list of new recovery codes.
-    /// </summary>
-    public async Task<List<string>> RegenerateRecoveryCodesAsync(string password)
-    {
-        await ClickRegenerateRecoveryCodesAsync();
-        await WaitForPasswordConfirmDialogAsync();
-        await FillPasswordConfirmDialogAsync(password);
-        await ClickGenerateNewCodesAsync();
-        await WaitForRecoveryCodesDialogAsync();
-
-        var codes = await GetRecoveryCodesFromDialogAsync();
-
-        await ClickSavedCodesAsync();
-
-        return codes;
     }
 
     #endregion
@@ -517,97 +346,38 @@ public class ProfilePage
 
     #region Telegram Linking Section
 
-    /// <summary>
-    /// Checks if the Telegram Linking section is visible.
-    /// </summary>
-    public async Task<bool> IsTelegramLinkingSectionVisibleAsync()
-    {
-        return await _page.Locator(TelegramLinkingSection).IsVisibleAsync();
-    }
+    /// <summary>The Linked Telegram Accounts section.</summary>
+    public ILocator TelegramLinkingSection => _page.Locator(TelegramLinkingSectionSelector);
 
-    /// <summary>
-    /// Checks if the "No Telegram accounts linked" message is visible.
-    /// </summary>
-    public async Task<bool> IsNoLinkedAccountsMessageVisibleAsync()
-    {
-        var alert = _page.Locator(TelegramLinkingSection).Locator(".mud-alert:has-text('No Telegram accounts linked')");
-        return await alert.IsVisibleAsync();
-    }
+    /// <summary>The "No Telegram accounts linked" message.</summary>
+    public ILocator NoLinkedAccountsMessage =>
+        TelegramLinkingSection.Locator(".mud-alert:has-text('No Telegram accounts linked')");
 
-    /// <summary>
-    /// Checks if linked accounts table is visible (has linked accounts).
-    /// </summary>
-    public async Task<bool> IsLinkedAccountsTableVisibleAsync()
-    {
-        var table = _page.Locator(TelegramLinkingSection).Locator(".mud-table");
-        return await table.IsVisibleAsync();
-    }
+    /// <summary>The linked accounts table (rendered only when accounts are linked).</summary>
+    public ILocator LinkedAccountsTable => TelegramLinkingSection.Locator(".mud-table");
 
-    /// <summary>
-    /// Gets the count of linked Telegram accounts.
-    /// </summary>
-    public async Task<int> GetLinkedAccountsCountAsync()
-    {
-        var rows = _page.Locator(TelegramLinkingSection).Locator(".mud-table-body tr");
-        return await rows.CountAsync();
-    }
+    /// <summary>The rows of the linked accounts table, one per linked Telegram account.</summary>
+    public ILocator LinkedAccountRows => TelegramLinkingSection.Locator(".mud-table-body tr");
 
-    /// <summary>
-    /// Gets linked account usernames from the table.
-    /// </summary>
-    public async Task<List<string>> GetLinkedAccountUsernamesAsync()
-    {
-        var usernames = new List<string>();
-        var cells = await _page.Locator($"{TelegramLinkingSection} .mud-table-body td[data-label='Username']").AllAsync();
+    /// <summary>The Username cell of the linked account whose username contains <paramref name="username"/>.</summary>
+    public ILocator LinkedAccountUsernameCell(string username) =>
+        _page.Locator($"{TelegramLinkingSectionSelector} td[data-label='Username']").Filter(new() { HasText = username });
 
-        foreach (var cell in cells)
-        {
-            var text = await cell.TextContentAsync();
-            if (!string.IsNullOrEmpty(text))
-            {
-                usernames.Add(text.Trim());
-            }
-        }
+    /// <summary>The "Your Link Token" alert shown after generating a link token.</summary>
+    public ILocator LinkTokenAlert => TelegramLinkingSection.Locator(".mud-alert:has-text('Your Link Token')");
 
-        return usernames;
-    }
-
-    /// <summary>
-    /// Checks if a linked account with the given username is visible.
-    /// </summary>
-    public async Task<bool> HasLinkedAccountWithUsernameAsync(string username)
-    {
-        var cell = _page.Locator($"{TelegramLinkingSection} td[data-label='Username']").Filter(new() { HasText = username });
-        return await cell.IsVisibleAsync();
-    }
+    /// <summary>The input holding the generated link token value.</summary>
+    public ILocator LinkTokenInput => _page.Locator($"{TelegramLinkingSectionSelector} .mud-alert:has-text('Your Link Token') input");
 
     /// <summary>
     /// Clicks the "Link New Telegram Account" button.
     /// </summary>
     public async Task ClickLinkNewAccountButtonAsync()
     {
-        var button = _page.Locator(TelegramLinkingSection).GetByRole(AriaRole.Button, new() { Name = "Link New Telegram Account" });
+        var button = TelegramLinkingSection.GetByRole(AriaRole.Button, new() { Name = "Link New Telegram Account" });
         await button.ClickAsync();
         // Wait for the link token alert to appear
-        await Expect(_page.Locator(TelegramLinkingSection).Locator(".mud-alert:has-text('Your Link Token')")).ToBeVisibleAsync();
-    }
-
-    /// <summary>
-    /// Checks if the link token display is visible.
-    /// </summary>
-    public async Task<bool> IsLinkTokenVisibleAsync()
-    {
-        var tokenAlert = _page.Locator(TelegramLinkingSection).Locator(".mud-alert:has-text('Your Link Token')");
-        return await tokenAlert.IsVisibleAsync();
-    }
-
-    /// <summary>
-    /// Gets the generated link token value.
-    /// </summary>
-    public async Task<string?> GetLinkTokenValueAsync()
-    {
-        var input = _page.Locator($"{TelegramLinkingSection} .mud-alert:has-text('Your Link Token') input");
-        return await input.InputValueAsync();
+        await Expect(LinkTokenAlert).ToBeVisibleAsync();
     }
 
     /// <summary>
@@ -615,7 +385,7 @@ public class ProfilePage
     /// </summary>
     public async Task ClickUnlinkButtonAsync(int rowIndex = 0)
     {
-        var unlinkButton = _page.Locator($"{TelegramLinkingSection} .mud-table-body tr").Nth(rowIndex)
+        var unlinkButton = LinkedAccountRows.Nth(rowIndex)
             .GetByRole(AriaRole.Button, new() { Name = "Unlink" });
         // Confirm the button is enabled before clicking — ensures the Blazor circuit is live and
         // the row is fully interactive, not just painted.
@@ -623,19 +393,21 @@ public class ProfilePage
         await unlinkButton.ClickAsync();
         // Wait for snackbar to appear (indicates operation completed).
         // If the circuit briefly dropped and swallowed the click, the button remains and we retry once.
-        var snackbarLocator = _page.Locator(".mud-snackbar").First;
         try
         {
-            await Expect(snackbarLocator).ToBeVisibleAsync(new() { Timeout = 10000 });
+            await Expect(Snackbar).ToBeVisibleAsync(new() { Timeout = 10000 });
         }
         catch (PlaywrightException)
         {
             // Circuit may have reconnected without processing the click — retry if the row is still there.
-            if (await unlinkButton.IsVisibleAsync())
+#pragma warning disable RS0030 // Optional recovery: only re-click if the swallowed click left the row in place; the snackbar Expect above already timed out
+            var rowStillPresent = await unlinkButton.IsVisibleAsync();
+#pragma warning restore RS0030
+            if (rowStillPresent)
             {
                 await Expect(unlinkButton).ToBeEnabledAsync(new() { Timeout = 10000 });
                 await unlinkButton.ClickAsync();
-                await Expect(snackbarLocator).ToBeVisibleAsync(new() { Timeout = 15000 });
+                await Expect(Snackbar).ToBeVisibleAsync(new() { Timeout = 15000 });
             }
             else
             {
@@ -650,23 +422,9 @@ public class ProfilePage
     #region Snackbar Helpers
 
     /// <summary>
-    /// Waits for and returns snackbar message text.
+    /// The first (oldest) snackbar. Assert on it with Expect, e.g. ToContainTextAsync.
     /// </summary>
-    public async Task<string?> WaitForSnackbarAsync(int timeoutMs = 5000)
-    {
-        var snackbar = _page.Locator(".mud-snackbar");
-        await Expect(snackbar.First).ToBeVisibleAsync(new() { Timeout = timeoutMs });
-        return await snackbar.First.TextContentAsync();
-    }
-
-    /// <summary>
-    /// Checks if a snackbar with specific text is visible.
-    /// </summary>
-    public async Task<bool> HasSnackbarWithTextAsync(string text)
-    {
-        var snackbar = _page.Locator(".mud-snackbar").Filter(new() { HasText = text });
-        return await snackbar.IsVisibleAsync();
-    }
+    public ILocator Snackbar => _page.Locator(".mud-snackbar").First;
 
     #endregion
 

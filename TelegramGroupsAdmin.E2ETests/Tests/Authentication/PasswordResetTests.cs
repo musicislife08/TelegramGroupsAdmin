@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using TelegramGroupsAdmin.E2ETests.Infrastructure;
 using TelegramGroupsAdmin.E2ETests.PageObjects;
 using TelegramGroupsAdmin.Services.Email;
@@ -42,8 +43,7 @@ public class PasswordResetTests : SharedE2ETestBase
 
         // Assert - success message shown
         await _forgotPage.WaitForSuccessAsync();
-        Assert.That(await _forgotPage.HasSuccessMessageAsync(), Is.True,
-            "Should show success message after requesting reset");
+        await Expect(_forgotPage.SuccessAlert).ToBeVisibleAsync();
     }
 
     [Test]
@@ -57,8 +57,7 @@ public class PasswordResetTests : SharedE2ETestBase
 
         // Assert - still shows success (security: don't reveal if email exists)
         await _forgotPage.WaitForSuccessAsync();
-        Assert.That(await _forgotPage.HasSuccessMessageAsync(), Is.True,
-            "Should show success even for nonexistent emails (security)");
+        await Expect(_forgotPage.SuccessAlert).ToBeVisibleAsync();
     }
 
     [Test]
@@ -69,7 +68,7 @@ public class PasswordResetTests : SharedE2ETestBase
         await _forgotPage.SubmitAsync();
 
         // Assert - should show error (Expect auto-waits for element)
-        await Expect(_forgotPage.ErrorAlertLocator).ToBeVisibleAsync();
+        await Expect(_forgotPage.ErrorAlert).ToBeVisibleAsync();
     }
 
     [Test]
@@ -128,8 +127,7 @@ public class PasswordResetTests : SharedE2ETestBase
 
         // Assert - success message shown
         await _resetPage.WaitForSuccessAsync();
-        Assert.That(await _resetPage.HasSuccessMessageAsync(), Is.True,
-            "Should show success after password reset");
+        await Expect(_resetPage.SuccessAlert).ToBeVisibleAsync();
 
         // Wait for redirect to login
         await _resetPage.WaitForRedirectToLoginAsync();
@@ -139,7 +137,7 @@ public class PasswordResetTests : SharedE2ETestBase
         await _loginPage.WaitForRedirectAsync();
 
         // Should no longer be on login page
-        await Expect(Page).Not.ToHaveURLAsync(new System.Text.RegularExpressions.Regex("/login"));
+        await Expect(Page).Not.ToHaveURLAsync(new Regex("/login"));
     }
 
     [Test]
@@ -166,9 +164,7 @@ public class PasswordResetTests : SharedE2ETestBase
         await _resetPage.ResetPasswordAsync("NewPassword123!", "DifferentPassword456!");
 
         // Assert - should show error
-        var errorMessage = await _resetPage.GetErrorMessageAsync();
-        Assert.That(errorMessage, Does.Contain("match").IgnoreCase,
-            "Should show password mismatch error");
+        await Expect(_resetPage.ErrorAlert).ToContainTextAsync(new Regex("match"), new() { IgnoreCase = true });
     }
 
     [Test]
@@ -195,9 +191,7 @@ public class PasswordResetTests : SharedE2ETestBase
         await _resetPage.ResetPasswordAsync("short"); // Less than 8 chars
 
         // Assert - should show error
-        var errorMessage = await _resetPage.GetErrorMessageAsync();
-        Assert.That(errorMessage, Does.Contain("8").Or.Contain("characters").IgnoreCase,
-            "Should show minimum length error");
+        await Expect(_resetPage.ErrorAlert).ToContainTextAsync(new Regex("8|characters"), new() { IgnoreCase = true });
     }
 
     [Test]
@@ -211,10 +205,7 @@ public class PasswordResetTests : SharedE2ETestBase
         await _resetPage.ResetPasswordAsync("ValidPassword123!");
 
         // Assert - should show error after submission
-        var errorMessage = await _resetPage.GetErrorMessageAsync();
-        Assert.That(errorMessage, Is.Not.Null, "Should show error for invalid token");
-        Assert.That(errorMessage, Does.Contain("expired").Or.Contain("invalid").Or.Contain("failed").IgnoreCase,
-            "Error message should indicate token issue");
+        await Expect(_resetPage.ErrorAlert).ToContainTextAsync(new Regex("expired|invalid|failed"), new() { IgnoreCase = true });
     }
 
     [Test]
@@ -224,14 +215,9 @@ public class PasswordResetTests : SharedE2ETestBase
         await Page.GotoAsync("/reset-password");
         await _resetPage.WaitForPageAsync();
 
-        using (Assert.EnterMultipleScope())
-        {
-            // Assert - should show error
-            Assert.That(await _resetPage.HasErrorMessageAsync(), Is.True,
-                "Should show error when no token provided");
-            Assert.That(await _resetPage.IsRequestNewLinkVisibleAsync(), Is.True,
-                "Should show 'Request New Link' button when no token");
-        }
+        // Assert - should show error and the 'Request New Link' button
+        await Expect(_resetPage.ErrorAlert).ToBeVisibleAsync();
+        await Expect(_resetPage.RequestNewLinkButton).ToBeVisibleAsync();
     }
 
     [Test]
@@ -242,9 +228,7 @@ public class PasswordResetTests : SharedE2ETestBase
         await _forgotPage.WaitForPageAsync();
 
         // Assert
-        var title = await _forgotPage.GetPageTitleAsync();
-        Assert.That(title, Does.Contain("Reset").Or.Contain("Password").IgnoreCase,
-            "Page title should indicate password reset");
+        await Expect(_forgotPage.PageTitle).ToContainTextAsync(new Regex("Reset|Password"), new() { IgnoreCase = true });
     }
 
     [Test]
@@ -275,8 +259,7 @@ public class PasswordResetTests : SharedE2ETestBase
         await _loginPage.LoginAsync(user.Email, originalPassword);
 
         // Assert - should fail
-        Assert.That(await _loginPage.HasErrorMessageAsync(), Is.True,
-            "Old password should no longer work after reset");
+        await Expect(_loginPage.ErrorAlert).ToBeVisibleAsync();
     }
 
     /// <summary>

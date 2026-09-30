@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using TelegramGroupsAdmin.E2ETests.Infrastructure;
 using TelegramGroupsAdmin.E2ETests.PageObjects;
 using static Microsoft.Playwright.Assertions;
@@ -39,7 +40,7 @@ public class LoginTests : SharedE2ETestBase
         await _loginPage.WaitForRedirectAsync();
 
         // Verify we're on the home page (not login or error) using Playwright's auto-retry assertion
-        await Expect(Page).Not.ToHaveURLAsync(new System.Text.RegularExpressions.Regex("/login"));
+        await Expect(Page).Not.ToHaveURLAsync(new Regex("/login"));
     }
 
     [Test]
@@ -57,8 +58,7 @@ public class LoginTests : SharedE2ETestBase
         await _loginPage.LoginAsync(user.Email, "WrongPassword123!");
 
         // Assert - should show error message and stay on login page
-        Assert.That(await _loginPage.HasErrorMessageAsync(), Is.True,
-            "Should display error message for invalid credentials");
+        await Expect(_loginPage.ErrorAlert).ToBeVisibleAsync();
         await AssertUrlAsync("/login");
     }
 
@@ -77,10 +77,7 @@ public class LoginTests : SharedE2ETestBase
         await _loginPage.LoginAsync(user.Email, user.Password);
 
         // Assert - should show verification required message
-        var errorMessage = await _loginPage.GetErrorMessageAsync();
-        Assert.That(errorMessage, Is.Not.Null, "Should display error message");
-        Assert.That(errorMessage, Does.Contain("verify").IgnoreCase,
-            "Error message should mention email verification");
+        await Expect(_loginPage.ErrorAlert).ToContainTextAsync(new Regex("verify"), new() { IgnoreCase = true });
         await AssertUrlAsync("/login");
     }
 
@@ -100,10 +97,7 @@ public class LoginTests : SharedE2ETestBase
         await _loginPage.LoginAsync(user.Email, user.Password);
 
         // Assert - should show locked account message
-        var errorMessage = await _loginPage.GetErrorMessageAsync();
-        Assert.That(errorMessage, Is.Not.Null, "Should display error message");
-        Assert.That(errorMessage, Does.Contain("locked").IgnoreCase,
-            "Error message should mention account being locked");
+        await Expect(_loginPage.ErrorAlert).ToContainTextAsync(new Regex("locked"), new() { IgnoreCase = true });
         await AssertUrlAsync("/login");
     }
 
@@ -123,10 +117,7 @@ public class LoginTests : SharedE2ETestBase
         await _loginPage.LoginAsync(user.Email, user.Password);
 
         // Assert - should show disabled account message
-        var errorMessage = await _loginPage.GetErrorMessageAsync();
-        Assert.That(errorMessage, Is.Not.Null, "Should display error message");
-        Assert.That(errorMessage, Does.Contain("disabled").IgnoreCase,
-            "Error message should mention account being disabled");
+        await Expect(_loginPage.ErrorAlert).ToContainTextAsync(new Regex("disabled"), new() { IgnoreCase = true });
         await AssertUrlAsync("/login");
     }
 }

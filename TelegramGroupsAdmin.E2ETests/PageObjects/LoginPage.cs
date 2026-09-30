@@ -14,8 +14,8 @@ public class LoginPage
     private const string EmailInput = "input#email";
     private const string PasswordInput = "input#password";
     private const string SubmitButton = "button[type='submit']";
-    private const string ErrorAlert = ".alert-error";
-    private const string SuccessAlert = ".alert-success";
+    private const string ErrorAlertSelector = ".alert-error";
+    private const string SuccessAlertSelector = ".alert-success";
     private const string ForgotPasswordLink = "a[href='/forgot-password']";
     private const string ResendVerificationLink = "a[href='/resend-verification']";
 
@@ -59,79 +59,11 @@ public class LoginPage
         await SubmitAsync();
     }
 
-    /// <summary>
-    /// Waits for and returns the error message text.
-    /// Returns null if no error message appears within the timeout.
-    /// </summary>
-    public async Task<string?> GetErrorMessageAsync(int timeoutMs = 5000)
-    {
-        var errorLocator = _page.Locator(ErrorAlert);
+    /// <summary>The error alert (e.g. invalid credentials, unverified email, locked or disabled account).</summary>
+    public ILocator ErrorAlert => _page.Locator(ErrorAlertSelector);
 
-        // Use WaitForAsync with visible state for proper waiting
-        // Timeout throws PlaywrightException which we catch and return null
-        try
-        {
-            await errorLocator.WaitForAsync(new LocatorWaitForOptions
-            {
-                State = WaitForSelectorState.Visible,
-                Timeout = timeoutMs
-            });
-            return await errorLocator.TextContentAsync();
-        }
-        catch (PlaywrightException)
-        {
-            return null;
-        }
-    }
-
-    /// <summary>
-    /// Waits for and returns the success message text.
-    /// Returns null if no success message appears within the timeout.
-    /// </summary>
-    public async Task<string?> GetSuccessMessageAsync(int timeoutMs = 5000)
-    {
-        var successLocator = _page.Locator(SuccessAlert);
-
-        // Use WaitForAsync with visible state for proper waiting
-        // Timeout throws PlaywrightException which we catch and return null
-        try
-        {
-            await successLocator.WaitForAsync(new LocatorWaitForOptions
-            {
-                State = WaitForSelectorState.Visible,
-                Timeout = timeoutMs
-            });
-            return await successLocator.TextContentAsync();
-        }
-        catch (PlaywrightException)
-        {
-            return null;
-        }
-    }
-
-    /// <summary>
-    /// Checks if an error message is displayed.
-    /// </summary>
-    public async Task<bool> HasErrorMessageAsync()
-    {
-        return await _page.Locator(ErrorAlert).IsVisibleAsync();
-    }
-
-    /// <summary>
-    /// Checks if a success message is displayed.
-    /// </summary>
-    public async Task<bool> HasSuccessMessageAsync()
-    {
-        return await _page.Locator(SuccessAlert).IsVisibleAsync();
-    }
-
-    /// <summary>
-    /// Checks if the forgot password link is visible (indicates email is configured).
-    /// </summary>
-    public async Task<bool> IsForgotPasswordAvailableAsync()
-    {
-        return await _page.Locator(ForgotPasswordLink).IsVisibleAsync();
-    }
+    /// <summary>The success alert.</summary>
+    public ILocator SuccessAlert => _page.Locator(SuccessAlertSelector);
 
     /// <summary>
     /// Clicks the forgot password link.

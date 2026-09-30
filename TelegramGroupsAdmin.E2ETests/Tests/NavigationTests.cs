@@ -61,8 +61,7 @@ public class NavigationTests : E2ETestBase
         });
 
         // Verify first-run mode is active (no invite code required)
-        Assert.That(await _registerPage.IsFirstRunModeAsync(), Is.True,
-            "Register page should show 'Setup Owner Account' in first-run mode");
+        await Expect(_registerPage.FirstRunTitle).ToBeVisibleAsync();
     }
 
     [Test]
@@ -85,7 +84,6 @@ public class NavigationTests : E2ETestBase
         });
 
         // Verify first-run mode shows restore option
-        Assert.That(await _registerPage.IsRestoreBackupAvailableAsync(), Is.True,
-            "First-run mode should offer restore from backup option");
+        await Expect(_registerPage.RestoreBackupButton).ToBeVisibleAsync();
     }
 }

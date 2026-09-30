@@ -13,11 +13,10 @@ public class ForgotPasswordPage
 
     // Selectors - MudBlazor components
     // MudAlert generates classes like .mud-alert-text-error, .mud-alert-text-success
-    private const string PageTitle = ".mud-typography-h4";
-    private const string ErrorAlert = ".mud-alert-text-error";
-    private const string SuccessAlert = ".mud-alert-text-success";
+    private const string PageTitleSelector = ".mud-typography-h4";
+    private const string ErrorAlertSelector = ".mud-alert-text-error";
+    private const string SuccessAlertSelector = ".mud-alert-text-success";
     private const string SignInLink = "a[href='/login']";
-    private const string LoadingIndicator = ".mud-progress-circular";
 
     public ForgotPasswordPage(IPage page)
     {
@@ -30,7 +29,7 @@ public class ForgotPasswordPage
     public async Task NavigateAsync()
     {
         await _page.GotoAsync("/forgot-password", new PageGotoOptions { WaitUntil = WaitUntilState.NetworkIdle });
-        await Expect(_page.Locator(PageTitle)).ToBeVisibleAsync();
+        await Expect(PageTitle).ToBeVisibleAsync();
     }
 
     /// <summary>
@@ -81,71 +80,19 @@ public class ForgotPasswordPage
     /// </summary>
     public async Task WaitForSuccessAsync(int timeoutMs = 10000)
     {
-        await _page.WaitForSelectorAsync(SuccessAlert, new PageWaitForSelectorOptions
+        await _page.WaitForSelectorAsync(SuccessAlertSelector, new PageWaitForSelectorOptions
         {
             State = WaitForSelectorState.Visible,
             Timeout = timeoutMs
         });
     }
 
-    /// <summary>
-    /// Checks if a success message is displayed.
-    /// </summary>
-    public async Task<bool> HasSuccessMessageAsync()
-    {
-        return await _page.Locator(SuccessAlert).IsVisibleAsync();
-    }
+    /// <summary>The page title.</summary>
+    public ILocator PageTitle => _page.Locator(PageTitleSelector);
 
-    /// <summary>
-    /// Gets the success message text.
-    /// </summary>
-    public async Task<string?> GetSuccessMessageAsync()
-    {
-        var successLocator = _page.Locator(SuccessAlert);
-        if (!await successLocator.IsVisibleAsync())
-            return null;
+    /// <summary>The success alert shown after a reset is requested.</summary>
+    public ILocator SuccessAlert => _page.Locator(SuccessAlertSelector);
 
-        return await successLocator.TextContentAsync();
-    }
-
-    /// <summary>
-    /// Checks if an error message is displayed.
-    /// </summary>
-    public async Task<bool> HasErrorMessageAsync()
-    {
-        return await _page.Locator(ErrorAlert).IsVisibleAsync();
-    }
-
-    /// <summary>
-    /// Gets the error alert locator for Expect assertions.
-    /// </summary>
-    public ILocator ErrorAlertLocator => _page.Locator(ErrorAlert);
-
-    /// <summary>
-    /// Gets the error message text.
-    /// </summary>
-    public async Task<string?> GetErrorMessageAsync()
-    {
-        var errorLocator = _page.Locator(ErrorAlert);
-        if (!await errorLocator.IsVisibleAsync())
-            return null;
-
-        return await errorLocator.TextContentAsync();
-    }
-
-    /// <summary>
-    /// Gets the page title text.
-    /// </summary>
-    public async Task<string?> GetPageTitleAsync()
-    {
-        return await _page.Locator(PageTitle).TextContentAsync();
-    }
-
-    /// <summary>
-    /// Checks if the form is in loading state.
-    /// </summary>
-    public async Task<bool> IsLoadingAsync()
-    {
-        return await _page.Locator(LoadingIndicator).IsVisibleAsync();
-    }
+    /// <summary>The error alert.</summary>
+    public ILocator ErrorAlert => _page.Locator(ErrorAlertSelector);
 }

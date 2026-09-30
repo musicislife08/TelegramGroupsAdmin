@@ -13,11 +13,11 @@ public class ResendVerificationPage
     private readonly IPage _page;
 
     // Selectors - static SSR page with plain HTML (inside MudBlazor layout)
-    private const string PageTitle = ".title";
+    private const string PageTitleSelector = ".title";
     private const string EmailInput = "input#email";
     private const string SubmitButton = "button[type='submit']";
-    private const string ErrorAlert = ".alert-error";
-    private const string SuccessAlert = ".alert-success";
+    private const string ErrorAlertSelector = ".alert-error";
+    private const string SuccessAlertSelector = ".alert-success";
     private const string BackToLoginLink = "a[href='/login']";
 
     public ResendVerificationPage(IPage page)
@@ -76,70 +76,21 @@ public class ResendVerificationPage
     /// </summary>
     public async Task WaitForSuccessAsync(int timeoutMs = 10000)
     {
-        await _page.WaitForSelectorAsync(SuccessAlert, new PageWaitForSelectorOptions
+        await _page.WaitForSelectorAsync(SuccessAlertSelector, new PageWaitForSelectorOptions
         {
             State = WaitForSelectorState.Visible,
             Timeout = timeoutMs
         });
     }
 
-    /// <summary>
-    /// Checks if a success message is displayed.
-    /// </summary>
-    public async Task<bool> HasSuccessMessageAsync()
-    {
-        return await _page.Locator(SuccessAlert).IsVisibleAsync();
-    }
+    /// <summary>The page title.</summary>
+    public ILocator PageTitle => _page.Locator(PageTitleSelector);
 
-    /// <summary>
-    /// Gets the success message text.
-    /// </summary>
-    public async Task<string?> GetSuccessMessageAsync()
-    {
-        var successLocator = _page.Locator(SuccessAlert);
-        if (!await successLocator.IsVisibleAsync())
-            return null;
+    /// <summary>The success alert shown after a resend is requested.</summary>
+    public ILocator SuccessAlert => _page.Locator(SuccessAlertSelector);
 
-        return await successLocator.TextContentAsync();
-    }
-
-    /// <summary>
-    /// Checks if an error message is displayed.
-    /// </summary>
-    public async Task<bool> HasErrorMessageAsync()
-    {
-        return await _page.Locator(ErrorAlert).IsVisibleAsync();
-    }
-
-    /// <summary>
-    /// Gets the error message text.
-    /// </summary>
-    public async Task<string?> GetErrorMessageAsync(int timeoutMs = 5000)
-    {
-        var errorLocator = _page.Locator(ErrorAlert);
-
-        try
-        {
-            await errorLocator.WaitForAsync(new LocatorWaitForOptions
-            {
-                State = WaitForSelectorState.Visible,
-                Timeout = timeoutMs
-            });
-            return await errorLocator.TextContentAsync();
-        }
-        catch (PlaywrightException)
-        {
-            return null;
-        }
-    }
-
-    /// <summary>
-    /// Gets the page title text.
-    /// </summary>
-    public async Task<string?> GetPageTitleAsync()
-    {
-        return await _page.Locator(PageTitle).TextContentAsync();
-    }
+    /// <summary>The error alert (a generic response that does not reveal whether the email exists).</summary>
+    public ILocator ErrorAlert => _page.Locator(ErrorAlertSelector);
 
     /// <summary>
     /// Clicks the back to login link.

@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.DependencyInjection;
 using TelegramGroupsAdmin.E2ETests.Infrastructure;
 using TelegramGroupsAdmin.E2ETests.PageObjects;
@@ -48,9 +49,7 @@ public class EmailVerificationTests : E2ETestBase
 
         // Verify the success banner is shown on login page
         var successBanner = Page.Locator(".alert-success, .mud-alert-text-success");
-        await successBanner.WaitForAsync(new() { State = Microsoft.Playwright.WaitForSelectorState.Visible, Timeout = 5000 });
-        Assert.That(await successBanner.IsVisibleAsync(), Is.True,
-            "Should show success message on login page after verification");
+        await Expect(successBanner).ToBeVisibleAsync(new() { Timeout = 5000 });
     }
 
     [Test]
@@ -186,9 +185,7 @@ public class EmailVerificationTests : E2ETestBase
         await _resendPage.WaitForPageAsync();
 
         // Assert
-        var title = await _resendPage.GetPageTitleAsync();
-        Assert.That(title, Does.Contain("Verification").Or.Contain("Resend").IgnoreCase,
-            "Page title should indicate verification resend");
+        await Expect(_resendPage.PageTitle).ToContainTextAsync(new Regex("Verification|Resend"), new() { IgnoreCase = true });
     }
 
     [Test]
@@ -212,8 +209,7 @@ public class EmailVerificationTests : E2ETestBase
 
         // Assert - should show success message
         await _resendPage.WaitForSuccessAsync();
-        Assert.That(await _resendPage.HasSuccessMessageAsync(), Is.True,
-            "Should show success message after requesting resend");
+        await Expect(_resendPage.SuccessAlert).ToBeVisibleAsync();
 
         // Verify email was actually sent
         var verificationEmails = EmailService.GetEmailsByTemplate(EmailTemplate.EmailVerification).ToList();
@@ -236,15 +232,13 @@ public class EmailVerificationTests : E2ETestBase
         // because the HTML5 'required' attribute blocks form submission
         var emailInput = Page.Locator("input#email");
         var isInvalid = await emailInput.EvaluateAsync<bool>("el => !el.validity.valid");
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(isInvalid, Is.True,
-                      "Browser should mark empty required field as invalid");
+        Assert.That(isInvalid, Is.True,
+            "Browser should mark empty required field as invalid");
 
-            // Form should not have been submitted (no success or server error)
-            Assert.That(await _resendPage.HasSuccessMessageAsync(), Is.False,
-                "Should not show success (form not submitted)");
-        }
+        // Form should not have been submitted (no success or server error).
+        // Native validation blocks submission client-side, so there is no later render to sync on;
+        // the invalid-field check above is the positive check this absence check follows.
+        await Expect(_resendPage.SuccessAlert).Not.ToBeVisibleAsync();
     }
 
     [Test]
@@ -260,9 +254,7 @@ public class EmailVerificationTests : E2ETestBase
 
         // Assert - should show error (security: don't reveal if email exists)
         // The endpoint returns "Unable to send verification email" for security
-        var errorMessage = await _resendPage.GetErrorMessageAsync();
-        Assert.That(errorMessage, Is.Not.Null,
-            "Should show error message for security (don't reveal if email exists)");
+        await Expect(_resendPage.ErrorAlert).ToBeVisibleAsync();
     }
 
     [Test]
@@ -285,9 +277,7 @@ public class EmailVerificationTests : E2ETestBase
         await _resendPage.RequestResendAsync(user.Email);
 
         // Assert - should show error (don't reveal verification status)
-        var errorMessage = await _resendPage.GetErrorMessageAsync();
-        Assert.That(errorMessage, Is.Not.Null,
-            "Should show error message (can't resend for verified email)");
+        await Expect(_resendPage.ErrorAlert).ToBeVisibleAsync();
     }
 
     [Test]
@@ -353,12 +343,8 @@ public class EmailVerificationTests : E2ETestBase
         await _loginPage.LoginAsync(user.Email, user.Password);
 
         // Assert - should show error about email verification
-        Assert.That(await _loginPage.HasErrorMessageAsync(), Is.True,
-            "Unverified user should not be able to login");
-
-        var errorMessage = await _loginPage.GetErrorMessageAsync();
-        Assert.That(errorMessage, Does.Contain("verify").Or.Contain("email").IgnoreCase,
-            "Error should indicate email verification is needed");
+        await Expect(_loginPage.ErrorAlert).ToBeVisibleAsync();
+        await Expect(_loginPage.ErrorAlert).ToContainTextAsync(new Regex("verify|email"), new() { IgnoreCase = true });
     }
 
     /// <summary>
