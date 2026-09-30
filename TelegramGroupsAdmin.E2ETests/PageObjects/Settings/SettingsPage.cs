@@ -14,15 +14,16 @@ public class SettingsPage
     // Selectors
     private const string PageTitle = ".mud-typography-h4";
     private const string LoadingIndicator = ".mud-progress-linear";
-    private const string SettingsSidebarHeading = ".mud-typography-h6:has-text('Settings')";
-    private const string AccessDeniedAlert = ".mud-alert-error";
+    private const string SettingsSidebarHeadingSelector = ".mud-typography-h6:has-text('Settings')";
+    private const string AccessDeniedAlertSelector = ".mud-alert-error";
 
     // Settings navigation links (in sidebar)
-    private const string GeneralSettingsLink = "a[href='/settings/system/general']";
+    private const string GeneralSettingsLinkSelector = "a[href='/settings/system/general']";
     private const string SecuritySettingsLink = "a[href='/settings/system/security']";
-    private const string AdminAccountsLink = "a[href='/settings/system/accounts']";
+    private const string AdminAccountsLinkSelector = "a[href='/settings/system/accounts']";
+    private const string LoggingSettingsLinkSelector = "a[href='/settings/system/logging']";
     private const string BackgroundJobsLink = "a[href='/settings/system/jobs']";
-    private const string ContentDetectionLink = "a[href='/settings/content-detection']";
+    private const string ContentDetectionLinkSelector = "a[href='/settings/content-detection']";
 
     public SettingsPage(IPage page)
     {
@@ -44,7 +45,7 @@ public class SettingsPage
     {
         // Wait for either the page content or access denied message
         var pageContent = _page.Locator(PageTitle);
-        var accessDenied = _page.Locator(AccessDeniedAlert);
+        var accessDenied = _page.Locator(AccessDeniedAlertSelector);
 
         await pageContent.Or(accessDenied).WaitForAsync(new LocatorWaitForOptions
         {
@@ -67,70 +68,39 @@ public class SettingsPage
             // Loading indicator may have already disappeared
         }
 
-        // Wait for the settings sidebar heading to confirm the page body has rendered past the auth gate.
-        // The sidebar "Settings" h6 is always present for any authorised user (it lives outside the
-        // permission-gated nav links), so it is safe to wait on regardless of role.
-        var isAccessDenied = await _page.Locator(AccessDeniedAlert).IsVisibleAsync();
-        if (!isAccessDenied)
-        {
-            await Expect(_page.Locator(SettingsSidebarHeading).First).ToBeVisibleAsync(new() { Timeout = 15000 });
-        }
+        // Wait for the settings sidebar heading to confirm the page body has rendered past the auth gate,
+        // or for the access denied alert. The sidebar "Settings" h6 is always present for any authorised
+        // user (it lives outside the permission-gated nav links), so it is safe to wait on regardless of role.
+        await Expect(SettingsSidebarHeading.Or(AccessDeniedAlert).First).ToBeVisibleAsync(new() { Timeout = 15000 });
     }
 
     /// <summary>
-    /// Returns true if the settings page loaded successfully (not access denied).
+    /// The settings sidebar "Settings" heading. Present for any authorised user, outside the
+    /// permission-gated nav links, so it is a safe render sync point regardless of role.
     /// </summary>
-    public async Task<bool> IsAccessAllowedAsync()
-    {
-        var accessDenied = _page.Locator(AccessDeniedAlert);
-        var isAccessDenied = await accessDenied.IsVisibleAsync();
-        return !isAccessDenied;
-    }
+    public ILocator SettingsSidebarHeading => _page.Locator(SettingsSidebarHeadingSelector).First;
 
     /// <summary>
-    /// Returns true if access denied message is shown.
+    /// The access denied / error alert. Its absence means the settings page loaded successfully.
     /// </summary>
-    public async Task<bool> IsAccessDeniedAsync()
-    {
-        var accessDenied = _page.Locator(AccessDeniedAlert);
-        return await accessDenied.IsVisibleAsync();
-    }
+    public ILocator AccessDeniedAlert => _page.Locator(AccessDeniedAlertSelector);
 
     /// <summary>
-    /// Returns true if infrastructure settings links are visible (Owner only).
-    /// Uses auto-retrying assertion to avoid races after the render gate.
+    /// The General settings nav link, representative of the infrastructure settings links (Owner only).
     /// </summary>
-    public async Task<bool> AreInfrastructureSettingsVisibleAsync()
-    {
-        var generalSettings = _page.Locator(GeneralSettingsLink);
-        try
-        {
-            await Expect(generalSettings).ToBeVisibleAsync(new() { Timeout = 5000 });
-            return true;
-        }
-        catch (PlaywrightException)
-        {
-            return false;
-        }
-    }
+    public ILocator GeneralSettingsLink => _page.Locator(GeneralSettingsLinkSelector);
 
     /// <summary>
-    /// Returns true if content detection settings link is visible.
+    /// The Logging settings nav link. Rendered for every role in the (default-expanded) System group,
+    /// so it is a positive render sync for absence checks on the permission-gated System links.
     /// </summary>
-    public async Task<bool> IsContentDetectionVisibleAsync()
-    {
-        var contentDetection = _page.Locator(ContentDetectionLink);
-        return await contentDetection.IsVisibleAsync();
-    }
+    public ILocator LoggingSettingsLink => _page.Locator(LoggingSettingsLinkSelector);
 
-    /// <summary>
-    /// Returns true if admin accounts link is visible.
-    /// </summary>
-    public async Task<bool> IsAdminAccountsVisibleAsync()
-    {
-        var adminAccounts = _page.Locator(AdminAccountsLink);
-        return await adminAccounts.IsVisibleAsync();
-    }
+    /// <summary>The content detection settings nav link.</summary>
+    public ILocator ContentDetectionLink => _page.Locator(ContentDetectionLinkSelector);
+
+    /// <summary>The admin accounts nav link.</summary>
+    public ILocator AdminAccountsLink => _page.Locator(AdminAccountsLinkSelector);
 
     /// <summary>
     /// Gets the current URL path.

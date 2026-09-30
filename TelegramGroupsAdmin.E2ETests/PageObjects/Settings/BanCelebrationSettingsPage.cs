@@ -21,17 +21,17 @@ public class BanCelebrationSettingsPage
     private const string AddGifButton = "button:has-text('Add GIF')";
     private const string GifTable = ".mud-paper:has-text('GIF Library') .mud-table";
     // Exclude NoRecordsContent row by requiring td with DataLabel attribute (actual data rows)
-    private const string GifTableRow = ".mud-paper:has-text('GIF Library') .mud-table-body tr:has(td[data-label])";
+    private const string GifTableRowSelector = ".mud-paper:has-text('GIF Library') .mud-table-body tr:has(td[data-label])";
 
     // Selectors - Caption Section
     private const string AddCaptionButton = "button:has-text('Add Caption')";
     private const string CaptionTable = ".mud-paper:has-text('Caption Library') .mud-table";
     // Exclude NoRecordsContent row by requiring td with DataLabel attribute (actual data rows)
-    private const string CaptionTableRow = ".mud-paper:has-text('Caption Library') .mud-table-body tr:has(td[data-label])";
+    private const string CaptionTableRowSelector = ".mud-paper:has-text('Caption Library') .mud-table-body tr:has(td[data-label])";
 
     // Selectors - Dialog (shared)
-    private const string Dialog = "[role='dialog']";
-    private const string DialogTitle = ".mud-dialog-title";
+    private const string DialogSelector = "[role='dialog']";
+    private const string DialogTitleSelector = ".mud-dialog-title";
     private const string DialogContent = ".mud-dialog-content";
     private const string DialogActions = ".mud-dialog-actions";
     private const string Backdrop = ".mud-overlay";
@@ -47,12 +47,12 @@ public class BanCelebrationSettingsPage
     private const string CancelButton = ".mud-dialog-actions button:has-text('Cancel')";
 
     // Selectors - Duplicate Warning
-    private const string DuplicateWarning = ".mud-alert:has-text('Similar GIF')";
+    private const string DuplicateWarningSelector = ".mud-alert:has-text('Similar GIF')";
     private const string KeepBothButton = "button:has-text('Keep Both')";
     private const string CancelUploadButton = "button:has-text('Cancel Upload')";
 
     // Selectors - Snackbar
-    private const string Snackbar = ".mud-snackbar";
+    private const string SnackbarSelector = ".mud-snackbar";
 
     public BanCelebrationSettingsPage(IPage page)
     {
@@ -110,36 +110,26 @@ public class BanCelebrationSettingsPage
         await _page.Locator(AddGifButton).ClickAsync();
 
         // Wait for dialog to appear
-        await _page.Locator(Dialog).WaitForAsync(new LocatorWaitForOptions
+        await _page.Locator(DialogSelector).WaitForAsync(new LocatorWaitForOptions
         {
             State = WaitForSelectorState.Visible,
             Timeout = 5000
         });
     }
 
-    /// <summary>
-    /// Checks if a dialog is currently visible.
-    /// </summary>
-    public async Task<bool> IsDialogVisibleAsync()
-    {
-        return await _page.Locator(Dialog).IsVisibleAsync();
-    }
+    /// <summary>The dialog (shared by the Add GIF and Add Caption dialogs).</summary>
+    public ILocator Dialog => _page.Locator(DialogSelector);
 
     /// <summary>
     /// Asserts that the dialog is visible using Playwright's auto-retrying Expect API.
     /// </summary>
     public async Task ExpectDialogVisibleAsync()
     {
-        await Expect(_page.Locator(Dialog)).ToBeVisibleAsync();
+        await Expect(Dialog).ToBeVisibleAsync();
     }
 
-    /// <summary>
-    /// Gets the dialog title text.
-    /// </summary>
-    public async Task<string?> GetDialogTitleAsync()
-    {
-        return await _page.Locator(DialogTitle).TextContentAsync();
-    }
+    /// <summary>The dialog title.</summary>
+    public ILocator DialogTitle => _page.Locator(DialogTitleSelector);
 
     /// <summary>
     /// Closes the dialog by pressing Escape key.
@@ -148,11 +138,11 @@ public class BanCelebrationSettingsPage
     public async Task CloseDialogByEscapeAsync()
     {
         // MudBlazor handles Escape on the dialog element — ensure it has focus
-        await _page.Locator(Dialog).ClickAsync();
+        await _page.Locator(DialogSelector).ClickAsync();
         await _page.Keyboard.PressAsync("Escape");
 
         // Wait for dialog to close
-        await _page.Locator(Dialog).WaitForAsync(new LocatorWaitForOptions
+        await _page.Locator(DialogSelector).WaitForAsync(new LocatorWaitForOptions
         {
             State = WaitForSelectorState.Hidden,
             Timeout = 5000
@@ -180,7 +170,7 @@ public class BanCelebrationSettingsPage
         await _page.Locator(CancelButton).ClickAsync();
 
         // Wait for dialog to close
-        await _page.Locator(Dialog).WaitForAsync(new LocatorWaitForOptions
+        await _page.Locator(DialogSelector).WaitForAsync(new LocatorWaitForOptions
         {
             State = WaitForSelectorState.Hidden,
             Timeout = 5000
@@ -261,14 +251,9 @@ public class BanCelebrationSettingsPage
     }
 
     /// <summary>
-    /// Checks if the submit button is enabled.
+    /// The Add GIF submit button in the dialog actions. Disabled until a file or URL is provided.
     /// </summary>
-    public async Task<bool> IsSubmitEnabledAsync()
-    {
-        var button = _page.Locator(SubmitGifButton);
-        var isDisabled = await button.IsDisabledAsync();
-        return !isDisabled;
-    }
+    public ILocator SubmitButton => _page.Locator(SubmitGifButton);
 
     /// <summary>
     /// Submits and waits for dialog to close (for successful uploads).
@@ -278,7 +263,7 @@ public class BanCelebrationSettingsPage
         await SubmitAsync();
 
         // Wait for dialog to close
-        await _page.Locator(Dialog).WaitForAsync(new LocatorWaitForOptions
+        await _page.Locator(DialogSelector).WaitForAsync(new LocatorWaitForOptions
         {
             State = WaitForSelectorState.Hidden,
             Timeout = 10000  // Allow time for upload processing
@@ -289,20 +274,15 @@ public class BanCelebrationSettingsPage
 
     #region Duplicate Warning
 
-    /// <summary>
-    /// Checks if the duplicate warning is visible.
-    /// </summary>
-    public async Task<bool> IsDuplicateWarningVisibleAsync()
-    {
-        return await _page.Locator(DuplicateWarning).IsVisibleAsync();
-    }
+    /// <summary>The "Similar GIF" duplicate warning alert.</summary>
+    public ILocator DuplicateWarning => _page.Locator(DuplicateWarningSelector);
 
     /// <summary>
     /// Waits for the duplicate warning to appear.
     /// </summary>
     public async Task WaitForDuplicateWarningAsync(int timeoutMs = 10000)
     {
-        await _page.Locator(DuplicateWarning).WaitForAsync(new LocatorWaitForOptions
+        await DuplicateWarning.WaitForAsync(new LocatorWaitForOptions
         {
             State = WaitForSelectorState.Visible,
             Timeout = timeoutMs
@@ -317,7 +297,7 @@ public class BanCelebrationSettingsPage
         await _page.Locator(KeepBothButton).ClickAsync();
 
         // Wait for dialog to close
-        await _page.Locator(Dialog).WaitForAsync(new LocatorWaitForOptions
+        await _page.Locator(DialogSelector).WaitForAsync(new LocatorWaitForOptions
         {
             State = WaitForSelectorState.Hidden,
             Timeout = 5000
@@ -332,7 +312,7 @@ public class BanCelebrationSettingsPage
         await _page.Locator(CancelUploadButton).ClickAsync();
 
         // Wait for dialog to close
-        await _page.Locator(Dialog).WaitForAsync(new LocatorWaitForOptions
+        await _page.Locator(DialogSelector).WaitForAsync(new LocatorWaitForOptions
         {
             State = WaitForSelectorState.Hidden,
             Timeout = 5000
@@ -343,22 +323,11 @@ public class BanCelebrationSettingsPage
 
     #region GIF List
 
-    /// <summary>
-    /// Gets the count of GIFs in the library.
-    /// </summary>
-    public async Task<int> GetGifCountAsync()
-    {
-        return await _page.Locator(GifTableRow).CountAsync();
-    }
+    /// <summary>The GIF library data rows (excludes the no-records row).</summary>
+    public ILocator GifRows => _page.Locator(GifTableRowSelector);
 
-    /// <summary>
-    /// Checks if a GIF with the given name exists in the table.
-    /// </summary>
-    public async Task<bool> GifExistsAsync(string name)
-    {
-        var row = _page.Locator(GifTableRow).Filter(new() { HasText = name });
-        return await row.CountAsync() > 0;
-    }
+    /// <summary>The GIF library row containing <paramref name="name"/>.</summary>
+    public ILocator GifRow(string name) => GifRows.Filter(new() { HasText = name });
 
     #endregion
 
@@ -372,47 +341,25 @@ public class BanCelebrationSettingsPage
         await _page.Locator(AddCaptionButton).ClickAsync();
 
         // Wait for dialog to appear
-        await _page.Locator(Dialog).WaitForAsync(new LocatorWaitForOptions
+        await _page.Locator(DialogSelector).WaitForAsync(new LocatorWaitForOptions
         {
             State = WaitForSelectorState.Visible,
             Timeout = 5000
         });
     }
 
-    /// <summary>
-    /// Gets the count of captions in the library.
-    /// </summary>
-    public async Task<int> GetCaptionCountAsync()
-    {
-        return await _page.Locator(CaptionTableRow).CountAsync();
-    }
+    /// <summary>The caption library data rows (excludes the no-records row).</summary>
+    public ILocator CaptionRows => _page.Locator(CaptionTableRowSelector);
 
     #endregion
 
     #region Snackbar
 
-    /// <summary>
-    /// Waits for a snackbar message to appear and returns its text.
-    /// </summary>
-    public async Task<string?> WaitForSnackbarAsync(int timeoutMs = 5000)
-    {
-        var snackbar = _page.Locator(Snackbar);
-        await snackbar.WaitForAsync(new LocatorWaitForOptions
-        {
-            State = WaitForSelectorState.Visible,
-            Timeout = timeoutMs
-        });
-        return await snackbar.TextContentAsync();
-    }
+    /// <summary>The snackbar.</summary>
+    public ILocator Snackbar => _page.Locator(SnackbarSelector);
 
-    /// <summary>
-    /// Checks if a snackbar with specific text is visible.
-    /// </summary>
-    public async Task<bool> IsSnackbarVisibleWithTextAsync(string text)
-    {
-        var snackbar = _page.Locator(Snackbar).Filter(new() { HasText = text });
-        return await snackbar.IsVisibleAsync();
-    }
+    /// <summary>The snackbar containing <paramref name="text"/>.</summary>
+    public ILocator SnackbarWithText(string text) => Snackbar.Filter(new() { HasText = text });
 
     #endregion
 }

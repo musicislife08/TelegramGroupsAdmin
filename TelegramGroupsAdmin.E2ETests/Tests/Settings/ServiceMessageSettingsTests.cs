@@ -32,12 +32,10 @@ public class ServiceMessageSettingsTests : AuthenticatedTestBase
         await _settingsPage.NavigateToServiceMessagesAsync();
 
         // Assert - all 6 toggles should be visible
-        Assert.That(await _settingsPage.AreAllServiceMessageTogglesVisibleAsync(), Is.True,
-            "All 6 service message deletion toggles should be visible");
+        await _settingsPage.ExpectAllServiceMessageTogglesVisibleAsync();
 
-        var toggleCount = await _settingsPage.GetServiceMessageToggleCountAsync();
-        Assert.That(toggleCount, Is.EqualTo(6),
-            "Should show exactly 6 toggle switches for service message types");
+        // Assert - exactly 6 toggle switches for service message types
+        await Expect(_settingsPage.ServiceMessageToggles).ToHaveCountAsync(6);
     }
 
     [Test]
@@ -94,8 +92,12 @@ public class ServiceMessageSettingsTests : AuthenticatedTestBase
         await LoginAsOwnerAsync();
         await _settingsPage.NavigateToServiceMessagesAsync();
 
-        // Get initial state of Photo Changes
-        var initialState = await _settingsPage.IsServiceMessageDeletionEnabledAsync("Delete Photo Changes");
+        // Get initial state of Photo Changes (wait for the switch to render first)
+        var photoToggleInput = _settingsPage.ServiceMessageToggleInput("Delete Photo Changes");
+        await Expect(_settingsPage.ServiceMessageToggle("Delete Photo Changes")).ToBeVisibleAsync();
+#pragma warning disable RS0030 // Initial state is needed to assert the persisted value is the opposite
+        var initialState = await photoToggleInput.IsCheckedAsync();
+#pragma warning restore RS0030
 
         // Act - toggle and save
         await _settingsPage.ToggleServiceMessageDeletionAsync("Delete Photo Changes");
@@ -107,10 +109,8 @@ public class ServiceMessageSettingsTests : AuthenticatedTestBase
         // Reload page to verify persistence
         await _settingsPage.NavigateToServiceMessagesAsync();
 
-        // Assert - state should be persisted
-        var persistedState = await _settingsPage.IsServiceMessageDeletionEnabledAsync("Delete Photo Changes");
-        Assert.That(persistedState, Is.Not.EqualTo(initialState),
-            "Toggled state should persist after page reload");
+        // Assert - toggled state should persist after page reload
+        await Expect(photoToggleInput).ToBeCheckedAsync(new() { Checked = !initialState });
 
         // Cleanup - toggle back and save
         await _settingsPage.ToggleServiceMessageDeletionAsync("Delete Photo Changes");
@@ -147,22 +147,13 @@ public class ServiceMessageSettingsTests : AuthenticatedTestBase
         // Act - reset to defaults
         await Page.GetByRole(AriaRole.Button, new() { Name = "Reset to Defaults" }).ClickAsync();
 
-        using (Assert.EnterMultipleScope())
-        {
-            // Assert - all toggles should be enabled (default is true for all)
-            Assert.That(await _settingsPage.IsServiceMessageDeletionEnabledAsync("Delete Join Messages"), Is.True,
-                "Delete Join Messages should be enabled by default");
-            Assert.That(await _settingsPage.IsServiceMessageDeletionEnabledAsync("Delete Leave Messages"), Is.True,
-                "Delete Leave Messages should be enabled by default");
-            Assert.That(await _settingsPage.IsServiceMessageDeletionEnabledAsync("Delete Photo Changes"), Is.True,
-                "Delete Photo Changes should be enabled by default");
-            Assert.That(await _settingsPage.IsServiceMessageDeletionEnabledAsync("Delete Title Changes"), Is.True,
-                "Delete Title Changes should be enabled by default");
-            Assert.That(await _settingsPage.IsServiceMessageDeletionEnabledAsync("Delete Pin Notifications"), Is.True,
-                "Delete Pin Notifications should be enabled by default");
-            Assert.That(await _settingsPage.IsServiceMessageDeletionEnabledAsync("Delete Chat Creation Messages"), Is.True,
-                "Delete Chat Creation Messages should be enabled by default");
-        }
+        // Assert - all toggles should be enabled (default is true for all)
+        await Expect(_settingsPage.ServiceMessageToggleInput("Delete Join Messages")).ToBeCheckedAsync();
+        await Expect(_settingsPage.ServiceMessageToggleInput("Delete Leave Messages")).ToBeCheckedAsync();
+        await Expect(_settingsPage.ServiceMessageToggleInput("Delete Photo Changes")).ToBeCheckedAsync();
+        await Expect(_settingsPage.ServiceMessageToggleInput("Delete Title Changes")).ToBeCheckedAsync();
+        await Expect(_settingsPage.ServiceMessageToggleInput("Delete Pin Notifications")).ToBeCheckedAsync();
+        await Expect(_settingsPage.ServiceMessageToggleInput("Delete Chat Creation Messages")).ToBeCheckedAsync();
     }
 
     #endregion

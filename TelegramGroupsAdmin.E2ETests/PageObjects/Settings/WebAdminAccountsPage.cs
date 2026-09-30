@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Microsoft.Playwright;
 
 namespace TelegramGroupsAdmin.E2ETests.PageObjects.Settings;
@@ -11,22 +12,22 @@ public class WebAdminAccountsPage
     private readonly IPage _page;
 
     // Selectors - Layout
-    private const string PageTitle = ".mud-typography-h4";
+    private const string PageTitleSelector = ".mud-typography-h4";
     private const string LoadingIndicator = ".mud-progress-linear";
-    private const string UserTable = ".mud-table";
+    private const string UserTableSelector = ".mud-table";
     private const string UserTableBody = ".mud-table-body";
     private const string UserTableRow = ".mud-table-body tr";
 
     // Selectors - Action buttons (top)
-    private const string CreateUserButton = "button:has-text('Create User')";
-    private const string ManageInvitesButton = "button:has-text('Manage Invites')";
+    private const string CreateUserButtonSelector = "button:has-text('Create User')";
+    private const string ManageInvitesButtonSelector = "button:has-text('Manage Invites')";
 
     // Selectors - Status filter (the MudSelect has Label="Status Filter")
     private const string StatusFilterContainer = ".mud-paper:has-text('Filter by Status')";
     private const string StatusFilterSelect = ".mud-paper:has-text('Filter by Status') .mud-select";
 
     // Selectors - Table headers
-    private const string TableHeader = ".mud-table-head th";
+    private const string TableHeaderSelector = ".mud-table-head th";
 
     // Selectors - Table cells
     private const string EmailCell = "td[data-label='Email']";
@@ -40,8 +41,8 @@ public class WebAdminAccountsPage
     private const string ActionMenuItem = ".mud-menu-item, .mud-list-item";
 
     // Selectors - Dialogs
-    private const string Dialog = ".mud-dialog";
-    private const string DialogTitle = ".mud-dialog-title";
+    private const string DialogSelector = ".mud-dialog";
+    private const string DialogTitleSelector = ".mud-dialog-title";
     private const string DialogContent = ".mud-dialog-content";
     private const string DialogActions = ".mud-dialog-actions";
     private const string ConfirmButton = ".mud-dialog button:has-text('Disable'), .mud-dialog button:has-text('Delete'), .mud-dialog button:has-text('Reset'), .mud-dialog button:has-text('Unlock'), .mud-dialog button:has-text('Restore')";
@@ -75,7 +76,7 @@ public class WebAdminAccountsPage
     public async Task WaitForLoadAsync(int timeoutMs = 15000)
     {
         // Wait for table to be visible
-        await _page.Locator(UserTable).WaitForAsync(new LocatorWaitForOptions
+        await UserTable.WaitForAsync(new LocatorWaitForOptions
         {
             State = WaitForSelectorState.Visible,
             Timeout = timeoutMs
@@ -97,86 +98,29 @@ public class WebAdminAccountsPage
         }
     }
 
-    /// <summary>
-    /// Checks if the page title is visible.
-    /// </summary>
-    public async Task<bool> IsPageTitleVisibleAsync()
-    {
-        return await _page.Locator(PageTitle).IsVisibleAsync();
-    }
+    /// <summary>The page title.</summary>
+    public ILocator PageTitle => _page.Locator(PageTitleSelector);
+
+    /// <summary>The user table.</summary>
+    public ILocator UserTable => _page.Locator(UserTableSelector);
 
     /// <summary>
-    /// Gets the page title text.
+    /// The user table header whose text is exactly <paramref name="name"/> (e.g. "Email", "Status").
     /// </summary>
-    public async Task<string?> GetPageTitleAsync()
-    {
-        return await _page.Locator(PageTitle).TextContentAsync();
-    }
+    public ILocator TableHeader(string name) =>
+        _page.Locator(TableHeaderSelector).Filter(new() { HasTextRegex = new Regex($@"^\s*{Regex.Escape(name)}\s*$") });
 
-    /// <summary>
-    /// Checks if the user table is visible.
-    /// </summary>
-    public async Task<bool> IsUserTableVisibleAsync()
-    {
-        return await _page.Locator(UserTable).IsVisibleAsync();
-    }
+    /// <summary>The user rows displayed in the table.</summary>
+    public ILocator UserRows => _page.Locator(UserTableRow);
 
-    /// <summary>
-    /// Gets the table headers.
-    /// </summary>
-    public async Task<List<string>> GetTableHeadersAsync()
-    {
-        var headers = new List<string>();
-        var headerElements = await _page.Locator(TableHeader).AllAsync();
-        foreach (var header in headerElements)
-        {
-            var text = await header.TextContentAsync();
-            if (!string.IsNullOrWhiteSpace(text))
-                headers.Add(text.Trim());
-        }
-        return headers;
-    }
+    /// <summary>The Email cells of the user rows.</summary>
+    public ILocator UserEmailCells => UserRows.Locator(EmailCell);
 
-    /// <summary>
-    /// Gets the count of users displayed in the table.
-    /// </summary>
-    public async Task<int> GetUserCountAsync()
-    {
-        return await _page.Locator(UserTableRow).CountAsync();
-    }
+    /// <summary>The Create User button.</summary>
+    public ILocator CreateUserButton => _page.Locator(CreateUserButtonSelector);
 
-    /// <summary>
-    /// Gets all user emails displayed in the table.
-    /// </summary>
-    public async Task<List<string>> GetUserEmailsAsync()
-    {
-        var emails = new List<string>();
-        var rows = await _page.Locator(UserTableRow).AllAsync();
-        foreach (var row in rows)
-        {
-            var emailCell = row.Locator(EmailCell);
-            var text = await emailCell.TextContentAsync();
-            if (!string.IsNullOrWhiteSpace(text))
-                emails.Add(text.Trim());
-        }
-        return emails;
-    }
-
-    /// <summary>
-    /// Checks if the Create User button is visible.
-    /// </summary>
-    public async Task<bool> IsCreateUserButtonVisibleAsync()
-    {
-        return await _page.Locator(CreateUserButton).IsVisibleAsync();
-    }
-
-    /// <summary>
-    /// Checks if the Manage Invites button is visible.
-    /// </summary>
-    public async Task<bool> IsManageInvitesButtonVisibleAsync()
-    {
-        return await _page.Locator(ManageInvitesButton).IsVisibleAsync();
-    }
+    /// <summary>The Manage Invites button.</summary>
+    public ILocator ManageInvitesButton => _page.Locator(ManageInvitesButtonSelector);
 
     /// <summary>
     /// Clicks the Create User button to open the invite dialog.
@@ -184,10 +128,10 @@ public class WebAdminAccountsPage
     /// </summary>
     public async Task ClickCreateUserAsync()
     {
-        await _page.Locator(CreateUserButton).ClickAsync();
+        await CreateUserButton.ClickAsync();
 
         // Wait for dialog to appear using Playwright's auto-waiting
-        await _page.Locator(Dialog).WaitForAsync(new LocatorWaitForOptions
+        await Dialog.WaitForAsync(new LocatorWaitForOptions
         {
             State = WaitForSelectorState.Visible,
             Timeout = 5000
@@ -200,74 +144,62 @@ public class WebAdminAccountsPage
     /// </summary>
     public async Task ClickManageInvitesAsync()
     {
-        await _page.Locator(ManageInvitesButton).ClickAsync();
+        await ManageInvitesButton.ClickAsync();
 
         // Wait for dialog to appear using Playwright's auto-waiting
-        await _page.Locator(Dialog).WaitForAsync(new LocatorWaitForOptions
+        await Dialog.WaitForAsync(new LocatorWaitForOptions
         {
             State = WaitForSelectorState.Visible,
             Timeout = 5000
         });
     }
 
-    /// <summary>
-    /// Checks if a dialog is currently open.
-    /// </summary>
-    public async Task<bool> IsDialogOpenAsync()
-    {
-        return await _page.Locator(Dialog).IsVisibleAsync();
-    }
+    /// <summary>The currently open dialog.</summary>
+    public ILocator Dialog => _page.Locator(DialogSelector);
+
+    /// <summary>The title of the currently open dialog.</summary>
+    public ILocator DialogTitle => _page.Locator(DialogTitleSelector);
+
+    /// <summary>The open MudSelect dropdown popover.</summary>
+    private ILocator OpenPopover => _page.Locator(".mud-popover-open");
 
     /// <summary>
-    /// Gets the title of the currently open dialog.
+    /// The permission options in the open permission dropdown of the create invite dialog.
+    /// Call <see cref="OpenPermissionOptionsAsync"/> first.
     /// </summary>
-    public async Task<string?> GetDialogTitleAsync()
-    {
-        return await _page.Locator(DialogTitle).TextContentAsync();
-    }
+    public ILocator PermissionOptions => OpenPopover.Locator(".mud-list-item");
 
     /// <summary>
-    /// Gets the permission options available in the create invite dialog.
+    /// Opens the permission dropdown in the create invite dialog and waits for it to show.
     /// Scopes the search to within the dialog to avoid matching other selects on the page.
     /// </summary>
-    public async Task<List<string>> GetPermissionOptionsAsync()
+    public async Task OpenPermissionOptionsAsync()
     {
-        // Scope to the dialog to avoid matching the status filter select outside the dialog
-        var dialog = _page.Locator(Dialog);
-
-        // Find the Permission Level select within the dialog using the label
-        // MudSelect creates an input with the label, we need to click on the select container
-        var selectContainer = dialog.Locator(".mud-select").First;
+        // Find the Permission Level select within the dialog (scoped to avoid the status filter
+        // select outside the dialog). MudSelect creates an input with the label, we need to click
+        // on the select container
+        var selectContainer = Dialog.Locator(".mud-select").First;
         await selectContainer.ClickAsync();
 
         // Wait for the popover to open - Playwright's auto-waiting handles this
-        var popover = _page.Locator(".mud-popover-open");
-        await popover.WaitForAsync(new LocatorWaitForOptions
+        await OpenPopover.WaitForAsync(new LocatorWaitForOptions
         {
             State = WaitForSelectorState.Visible,
             Timeout = 5000
         });
+    }
 
-        // Get all options from the dropdown popover
-        var options = new List<string>();
-        var optionElements = await popover.Locator(".mud-list-item").AllAsync();
-
-        foreach (var option in optionElements)
-        {
-            var text = await option.TextContentAsync();
-            if (!string.IsNullOrWhiteSpace(text))
-                options.Add(text.Trim());
-        }
-
-        // Close dropdown by pressing escape and wait for popover to close
+    /// <summary>
+    /// Closes the permission dropdown by pressing Escape and waits for the popover to close.
+    /// </summary>
+    public async Task ClosePermissionOptionsAsync()
+    {
         await _page.Keyboard.PressAsync("Escape");
-        await popover.WaitForAsync(new LocatorWaitForOptions
+        await OpenPopover.WaitForAsync(new LocatorWaitForOptions
         {
             State = WaitForSelectorState.Hidden,
             Timeout = 2000
         });
-
-        return options;
     }
 
     /// <summary>
@@ -275,11 +207,14 @@ public class WebAdminAccountsPage
     /// </summary>
     public async Task CloseDialogAsync()
     {
-        var dialog = _page.Locator(Dialog);
+        var dialog = Dialog;
 
         // Try clicking cancel, if not available press escape
         var cancelButton = _page.Locator(CancelButton);
-        if (await cancelButton.IsVisibleAsync())
+#pragma warning disable RS0030 // Not every dialog renders a Cancel button; branch picks how to close the already-open dialog
+        var hasCancelButton = await cancelButton.IsVisibleAsync();
+#pragma warning restore RS0030
+        if (hasCancelButton)
         {
             await cancelButton.ClickAsync();
         }
@@ -301,8 +236,7 @@ public class WebAdminAccountsPage
     /// </summary>
     public async Task OpenActionMenuForUserAsync(string email)
     {
-        var row = _page.Locator(UserTableRow).Filter(new() { HasText = email });
-        var menuButton = row.Locator(ActionMenuButton);
+        var menuButton = UserRow(email).Locator(ActionMenuButton);
         await menuButton.ClickAsync();
 
         // Wait for menu popover to appear
@@ -314,21 +248,8 @@ public class WebAdminAccountsPage
         });
     }
 
-    /// <summary>
-    /// Gets the available action menu items.
-    /// </summary>
-    public async Task<List<string>> GetActionMenuItemsAsync()
-    {
-        var items = new List<string>();
-        var menuItems = await _page.Locator(".mud-popover .mud-list-item, .mud-menu .mud-menu-item").AllAsync();
-        foreach (var item in menuItems)
-        {
-            var text = await item.TextContentAsync();
-            if (!string.IsNullOrWhiteSpace(text))
-                items.Add(text.Trim());
-        }
-        return items;
-    }
+    /// <summary>The available action menu items.</summary>
+    public ILocator ActionMenuItems => _page.Locator(".mud-popover .mud-list-item, .mud-menu .mud-menu-item");
 
     /// <summary>
     /// Clicks an action menu item by text and waits for menu to close.
@@ -336,7 +257,7 @@ public class WebAdminAccountsPage
     public async Task ClickActionMenuItemAsync(string itemText)
     {
         var menuPopover = _page.Locator(".mud-popover-open");
-        var menuItem = _page.Locator(".mud-popover .mud-list-item, .mud-menu .mud-menu-item").Filter(new() { HasText = itemText });
+        var menuItem = ActionMenuItems.Filter(new() { HasText = itemText });
         await menuItem.ClickAsync();
 
         // Wait for menu to close
@@ -352,7 +273,7 @@ public class WebAdminAccountsPage
     /// </summary>
     public async Task ConfirmDialogAsync()
     {
-        var dialog = _page.Locator(Dialog);
+        var dialog = Dialog;
         await _page.Locator(ConfirmButton).ClickAsync();
 
         // Wait for dialog to close
@@ -368,7 +289,7 @@ public class WebAdminAccountsPage
     /// </summary>
     public async Task CancelDialogAsync()
     {
-        var dialog = _page.Locator(Dialog);
+        var dialog = Dialog;
         await _page.Locator(CancelButton).ClickAsync();
 
         // Wait for dialog to close
@@ -379,71 +300,31 @@ public class WebAdminAccountsPage
         });
     }
 
-    /// <summary>
-    /// Checks if a user has a specific status chip.
-    /// </summary>
-    public async Task<bool> UserHasStatusAsync(string email, string status)
-    {
-        var row = _page.Locator(UserTableRow).Filter(new() { HasText = email });
-        var statusChip = row.Locator(".mud-chip").Filter(new() { HasText = status });
-        return await statusChip.IsVisibleAsync();
-    }
+    /// <summary>The table row for the user with <paramref name="email"/>.</summary>
+    private ILocator UserRow(string email) => UserRows.Filter(new() { HasText = email });
+
+    /// <summary>The status chip reading <paramref name="status"/> in the user's row.</summary>
+    public ILocator UserStatusChip(string email, string status) =>
+        UserRow(email).Locator(".mud-chip").Filter(new() { HasText = status });
 
     /// <summary>
-    /// Checks if the status filter is visible.
-    /// Uses GetByLabel to find the MudSelect with Label="Status Filter".
+    /// The status filter: the MudSelect with Label="Status Filter", found via GetByLabel.
     /// </summary>
-    public async Task<bool> IsStatusFilterVisibleAsync()
-    {
-        // The MudSelect has Label="Status Filter", so use GetByLabel which matches the label text
-        var statusFilter = _page.GetByLabel("Status Filter");
-        return await statusFilter.IsVisibleAsync();
-    }
+    public ILocator StatusFilter => _page.GetByLabel("Status Filter");
+
+    /// <summary>The permission level chip for a user.</summary>
+    public ILocator UserPermissionChip(string email) => UserRow(email).Locator($"{PermissionCell} .mud-chip");
 
     /// <summary>
-    /// Gets the permission level chip text for a user.
+    /// The TOTP security icon for a user. TOTP is enabled when its class contains "Success" (green).
     /// </summary>
-    public async Task<string?> GetUserPermissionLevelAsync(string email)
-    {
-        var row = _page.Locator(UserTableRow).Filter(new() { HasText = email });
-        var permissionChip = row.Locator($"{PermissionCell} .mud-chip");
-        return await permissionChip.TextContentAsync();
-    }
+    public ILocator UserTotpIcon(string email) => UserRow(email).Locator($"{TotpCell} .mud-icon-root");
 
-    /// <summary>
-    /// Checks if a user has TOTP enabled (security icon is green).
-    /// </summary>
-    public async Task<bool> UserHasTotpEnabledAsync(string email)
-    {
-        var row = _page.Locator(UserTableRow).Filter(new() { HasText = email });
-        var securityIcon = row.Locator($"{TotpCell} .mud-icon-root");
-        var colorClass = await securityIcon.GetAttributeAsync("class");
-        return colorClass?.Contains("Success") ?? false;
-    }
+    /// <summary>The locked indicator chip in a user's row.</summary>
+    public ILocator UserLockedChip(string email) => UserRow(email).Locator(".mud-chip:has-text('Locked')");
 
-    /// <summary>
-    /// Checks if a user row shows the locked indicator.
-    /// </summary>
-    public async Task<bool> UserIsLockedAsync(string email)
-    {
-        var row = _page.Locator(UserTableRow).Filter(new() { HasText = email });
-        var lockedChip = row.Locator(".mud-chip:has-text('Locked')");
-        return await lockedChip.IsVisibleAsync();
-    }
-
-    /// <summary>
-    /// Waits for a snackbar message to appear.
-    /// </summary>
-    public async Task<string?> WaitForSnackbarAsync(int timeoutMs = 5000)
-    {
-        var snackbar = _page.Locator(".mud-snackbar");
-        await snackbar.WaitForAsync(new LocatorWaitForOptions
-        {
-            State = WaitForSelectorState.Visible,
-            Timeout = timeoutMs
-        });
-        return await snackbar.TextContentAsync();
-    }
+    /// <summary>The snackbar.</summary>
+    public ILocator Snackbar => _page.Locator(".mud-snackbar");
 
     /// <summary>
     /// Gets the current URL.

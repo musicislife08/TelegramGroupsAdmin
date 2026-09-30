@@ -42,9 +42,7 @@ public class BackgroundJobsSettingsTests : AuthenticatedTestBase
         await Expect(Page.GetByRole(AriaRole.Columnheader, new() { Name = "Actions" })).ToBeVisibleAsync();
 
         // Assert - at least one job is displayed
-        var jobCount = await _settingsPage.GetBackgroundJobCountAsync();
-        Assert.That(jobCount, Is.GreaterThanOrEqualTo(1),
-            "Should display at least one background job");
+        await Expect(_settingsPage.BackgroundJobRows.First).ToBeVisibleAsync();
 
         // Assert - Media Refetch Queue status is visible
         await Expect(Page.GetByText("Media Refetch Queue:", new() { Exact = false })).ToBeVisibleAsync();
@@ -63,10 +61,9 @@ public class BackgroundJobsSettingsTests : AuthenticatedTestBase
         // Use "Database Maintenance" which is disabled by default per BackgroundJobConfigService
         var jobName = "Database Maintenance";
 
-        // Verify the job starts as disabled (expected default state)
-        var initialEnabled = await _settingsPage.IsJobEnabledAsync(jobName);
-        Assert.That(initialEnabled, Is.False,
-            "Database Maintenance should be disabled by default - if this fails, the default config may have changed");
+        // Verify the job starts as disabled (expected default state).
+        // If this fails, the default config may have changed.
+        await Expect(_settingsPage.JobToggleInput(jobName)).Not.ToBeCheckedAsync();
 
         // Assert - status chip shows Disabled initially
         await Expect(Page.Locator($".mud-table tbody tr:has-text('{jobName}') .mud-chip:has-text('Disabled')")).ToBeVisibleAsync();
@@ -81,8 +78,7 @@ public class BackgroundJobsSettingsTests : AuthenticatedTestBase
         await Expect(Page.Locator($".mud-table tbody tr:has-text('{jobName}') .mud-chip:has-text('Enabled')")).ToBeVisibleAsync();
 
         // Assert - toggle switch is now checked
-        var isEnabled = await _settingsPage.IsJobEnabledAsync(jobName);
-        Assert.That(isEnabled, Is.True, "Job should be enabled after toggling");
+        await Expect(_settingsPage.JobToggleInput(jobName)).ToBeCheckedAsync();
 
         // Cleanup - disable the job again to restore original state
         // Wait for the previous snackbar to disappear first
@@ -105,10 +101,9 @@ public class BackgroundJobsSettingsTests : AuthenticatedTestBase
         // Use "Chat Health Monitoring" which is enabled by default per BackgroundJobConfigService
         var jobName = "Chat Health Monitoring";
 
-        // Verify the job starts as enabled (expected default state)
-        var initialEnabled = await _settingsPage.IsJobEnabledAsync(jobName);
-        Assert.That(initialEnabled, Is.True,
-            "Chat Health Monitoring should be enabled by default - if this fails, the default config may have changed");
+        // Verify the job starts as enabled (expected default state).
+        // If this fails, the default config may have changed.
+        await Expect(_settingsPage.JobToggleInput(jobName)).ToBeCheckedAsync();
 
         // Assert - status chip shows Enabled initially
         await Expect(Page.Locator($".mud-table tbody tr:has-text('{jobName}') .mud-chip:has-text('Enabled')")).ToBeVisibleAsync();
@@ -123,8 +118,7 @@ public class BackgroundJobsSettingsTests : AuthenticatedTestBase
         await Expect(Page.Locator($".mud-table tbody tr:has-text('{jobName}') .mud-chip:has-text('Disabled')")).ToBeVisibleAsync();
 
         // Assert - toggle switch is now unchecked
-        var isEnabled = await _settingsPage.IsJobEnabledAsync(jobName);
-        Assert.That(isEnabled, Is.False, "Job should be disabled after toggling");
+        await Expect(_settingsPage.JobToggleInput(jobName)).Not.ToBeCheckedAsync();
 
         // Cleanup - enable the job again to restore original state
         // Wait for the previous snackbar to disappear first
@@ -147,8 +141,12 @@ public class BackgroundJobsSettingsTests : AuthenticatedTestBase
         // Use "Scheduled Backups" (display name per BackgroundJobConfigService)
         var jobName = "Scheduled Backups";
 
-        // Get initial schedule
-        var initialSchedule = await _settingsPage.GetJobScheduleAsync(jobName);
+        // Get initial schedule (read, not asserted: it is restored in cleanup)
+        var scheduleCell = _settingsPage.JobScheduleCell(jobName);
+        await Expect(scheduleCell).ToBeVisibleAsync();
+#pragma warning disable RS0030 // Value is needed to restore the original schedule in cleanup, not asserted
+        var initialSchedule = await scheduleCell.TextContentAsync();
+#pragma warning restore RS0030
 
         // Act - open config dialog
         await _settingsPage.OpenJobConfigDialogAsync(jobName);
@@ -169,9 +167,7 @@ public class BackgroundJobsSettingsTests : AuthenticatedTestBase
         await Expect(Page.Locator(".mud-snackbar").First).ToContainTextAsync("saved", new() { IgnoreCase = true });
 
         // Assert - schedule in table is updated
-        var updatedSchedule = await _settingsPage.GetJobScheduleAsync(jobName);
-        Assert.That(updatedSchedule.Trim(), Is.EqualTo(newSchedule),
-            "Schedule should be updated to the new value");
+        await Expect(scheduleCell).ToHaveTextAsync(newSchedule);
 
         // Cleanup - restore original schedule if different
         if (!string.IsNullOrEmpty(initialSchedule) && initialSchedule.Trim() != newSchedule)

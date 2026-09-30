@@ -31,10 +31,9 @@ public class ContentDetectionSettingsTests : AuthenticatedTestBase
         // Act - navigate to detection algorithms page
         await _settingsPage.NavigateToDetectionAlgorithmsAsync();
 
-        // Assert - page loads with algorithm toggles
-        var toggleCount = await _settingsPage.GetAlgorithmToggleCountAsync();
-        Assert.That(toggleCount, Is.GreaterThanOrEqualTo(4),
-            "Should show at least 4 algorithm toggle switches (Stop Words, Similarity, Bayes, Spacing, etc.)");
+        // Assert - page loads with at least 4 algorithm toggle switches (Stop Words, Similarity, Bayes, Spacing, etc.).
+        // Expecting the 4th toggle to exist is the retrying form of "count >= 4".
+        await Expect(_settingsPage.AlgorithmToggles.Nth(3)).ToBeAttachedAsync();
 
         // Verify specific algorithms are visible by checking the h6 headings inside card headers
         // These are unique to the algorithm cards and won't match nav items
@@ -51,16 +50,18 @@ public class ContentDetectionSettingsTests : AuthenticatedTestBase
         await LoginAsOwnerAsync();
         await _settingsPage.NavigateToDetectionAlgorithmsAsync();
 
-        // Get initial state of Stop Words algorithm
-        var initialState = await _settingsPage.IsAlgorithmEnabledAsync("Stop Words Detection");
+        // Get initial state of Stop Words algorithm (wait for the card to render first)
+        var toggleInput = _settingsPage.AlgorithmToggleInput("Stop Words Detection");
+        await Expect(Page.Locator(".mud-card-header:has-text('Stop Words Detection')")).ToBeVisibleAsync();
+#pragma warning disable RS0030 // Initial state is needed to assert the toggle flips to the opposite value
+        var initialState = await toggleInput.IsCheckedAsync();
+#pragma warning restore RS0030
 
         // Act - toggle the algorithm
         await _settingsPage.ToggleAlgorithmAsync("Stop Words Detection");
 
         // Assert - state should be toggled
-        var newState = await _settingsPage.IsAlgorithmEnabledAsync("Stop Words Detection");
-        Assert.That(newState, Is.Not.EqualTo(initialState),
-            "Stop Words algorithm state should toggle");
+        await Expect(toggleInput).ToBeCheckedAsync(new() { Checked = !initialState });
 
         // Toggle back to original state
         await _settingsPage.ToggleAlgorithmAsync("Stop Words Detection");
@@ -129,9 +130,10 @@ public class ContentDetectionSettingsTests : AuthenticatedTestBase
 
         var testWord = $"testspamword{DateTime.UtcNow.Ticks}";
 
-        // Verify word doesn't exist before adding
-        Assert.That(await _settingsPage.IsStopWordVisibleAsync(testWord), Is.False,
-            "Test word should not exist before adding");
+        // Verify word doesn't exist before adding (sync on the table rendering first so the
+        // absence check cannot pass before the render lands)
+        await Expect(_settingsPage.StopWordsTable).ToBeVisibleAsync();
+        await Expect(_settingsPage.StopWordChip(testWord)).Not.ToBeVisibleAsync();
 
         // Act - add a new stop word
         await _settingsPage.ClickAddStopWordAsync();
@@ -145,8 +147,7 @@ public class ContentDetectionSettingsTests : AuthenticatedTestBase
         await _settingsPage.WaitForStopWordVisibleAsync(testWord);
 
         // Verify word is now visible
-        Assert.That(await _settingsPage.IsStopWordVisibleAsync(testWord), Is.True,
-            "Newly added stop word should be visible in the table");
+        await Expect(_settingsPage.StopWordChip(testWord)).ToBeVisibleAsync();
 
         // Cleanup - delete the test word
         await _settingsPage.ClickDeleteStopWordAsync(testWord);
@@ -177,8 +178,7 @@ public class ContentDetectionSettingsTests : AuthenticatedTestBase
         await _settingsPage.WaitForStopWordHiddenAsync(testWord);
 
         // Verify word is gone
-        Assert.That(await _settingsPage.IsStopWordVisibleAsync(testWord), Is.False,
-            "Deleted stop word should not be visible in the table");
+        await Expect(_settingsPage.StopWordChip(testWord)).Not.ToBeVisibleAsync();
     }
 
     [Test]
@@ -204,8 +204,7 @@ public class ContentDetectionSettingsTests : AuthenticatedTestBase
         await _settingsPage.SearchStopWordsAsync("searchtest");
 
         // Assert - word1 should be visible
-        Assert.That(await _settingsPage.IsStopWordVisibleAsync(word1), Is.True,
-            "Matching word should be visible");
+        await Expect(_settingsPage.StopWordChip(word1)).ToBeVisibleAsync();
 
         // Cleanup - clear search and delete words
         await _settingsPage.SearchStopWordsAsync("");
@@ -277,7 +276,9 @@ public class ContentDetectionSettingsTests : AuthenticatedTestBase
 
         // Assert - should be redirected or show access denied
         // Check that we're not on the expected settings page with algorithm content visible
+#pragma warning disable RS0030 // Test deliberately reports Pass/Warn instead of asserting; the read only picks the message
         var hasAlgorithmCards = await Page.Locator(".mud-card-header:has-text('Stop Words Detection')").IsVisibleAsync();
+#pragma warning restore RS0030
 
         // If Admin CAN see Detection Algorithms, they have access (which may be intended)
         // If they can't, they'll see an error or be redirected
