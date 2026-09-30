@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Microsoft.Playwright;
 using static Microsoft.Playwright.Assertions;
 
@@ -12,7 +13,7 @@ public class UsersPage
     private readonly IPage _page;
 
     // Selectors - Layout
-    private const string PageTitle = ".mud-typography-h4";
+    private const string PageTitleSelector = ".mud-typography-h4";
     private const string SearchInput = ".mud-input input[placeholder*='Search']";
 
     // Selectors - Tabs
@@ -26,6 +27,7 @@ public class UsersPage
     private const string TableBody = ".mud-table-body";
     private const string TableRow = ".mud-table-body tr";
     private const string TablePager = ".mud-table-pagination";
+    private const string PagerInformationSelector = ".mud-table-page-number-information";
 
     // Selectors - Row content
     private const string UserCell = "td[data-label='User']";
@@ -38,6 +40,9 @@ public class UsersPage
     private const string ViewDetailsButton = "button[aria-label*='View'], button:has(.mud-icon-root)";
     private const string TrustButton = "button:has([data-testid='VerifiedUserIcon']), button:has([data-testid='PersonOffIcon'])";
 
+    // Dialog
+    private const string DialogSelector = ".mud-dialog";
+
     public UsersPage(IPage page)
     {
         _page = page;
@@ -49,7 +54,7 @@ public class UsersPage
     public async Task NavigateAsync()
     {
         await _page.GotoAsync("/users", new PageGotoOptions { WaitUntil = WaitUntilState.NetworkIdle });
-        await Expect(_page.Locator(PageTitle)).ToBeVisibleAsync();
+        await Expect(PageTitle).ToBeVisibleAsync();
     }
 
     /// <summary>
@@ -61,50 +66,66 @@ public class UsersPage
         await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
 
         // Wait for tabs to be visible
-        await Expect(_page.Locator(TabContainer)).ToBeVisibleAsync(new() { Timeout = timeoutMs });
+        await Expect(Tabs).ToBeVisibleAsync(new() { Timeout = timeoutMs });
 
         // Wait for the first table to render (ServerData loads lazily)
-        await Expect(_page.Locator(UserTable).First).ToBeVisibleAsync(new() { Timeout = timeoutMs });
+        await Expect(UserTables.First).ToBeVisibleAsync(new() { Timeout = timeoutMs });
     }
+
+    /// <summary>The page title ("Telegram Users").</summary>
+    public ILocator PageTitle => _page.Locator(PageTitleSelector);
+
+    /// <summary>The tabs container.</summary>
+    public ILocator Tabs => _page.Locator(TabContainer);
+
+    /// <summary>All tab headers, in display order.</summary>
+    public ILocator TabHeaders => _page.Locator(TabPanel);
 
     /// <summary>
-    /// Checks if the page title is visible.
+    /// The tab header whose text contains <paramref name="tabName"/> (case-insensitive;
+    /// MudBlazor renders tab names uppercase, followed by any badge number).
     /// </summary>
-    public async Task<bool> IsPageTitleVisibleAsync()
-    {
-        return await _page.Locator(PageTitle).IsVisibleAsync();
-    }
+    public ILocator TabHeader(string tabName) => TabHeaders.Filter(new() { HasText = tabName });
+
+    /// <summary>The currently active tab header.</summary>
+    public ILocator ActiveTabHeader => _page.Locator(ActiveTab);
 
     /// <summary>
-    /// Gets the page title text.
+    /// The user tables. Only the active tab's panel is rendered, so this is normally a single table.
     /// </summary>
-    public async Task<string?> GetPageTitleAsync()
-    {
-        return await _page.Locator(PageTitle).TextContentAsync();
-    }
+    public ILocator UserTables => _page.Locator(UserTable);
 
-    /// <summary>
-    /// Checks if the tabs container is visible.
-    /// </summary>
-    public async Task<bool> IsTabsVisibleAsync()
-    {
-        return await _page.Locator(TabContainer).IsVisibleAsync();
-    }
+    /// <summary>The rows of the current user table.</summary>
+    public ILocator UserRows => _page.Locator(TableRow);
 
-    /// <summary>
-    /// Gets the names of all visible tabs.
-    /// </summary>
-    public async Task<List<string>> GetTabNamesAsync()
-    {
-        var tabs = await _page.Locator(TabPanel).AllAsync();
-        var textTasks = tabs.Select(tab => tab.TextContentAsync());
-        var texts = await Task.WhenAll(textTasks);
+    /// <summary>The display-name text of every row in the current user table.</summary>
+    public ILocator UserDisplayNames => _page.Locator($"{TableRow} {UserCell} .mud-typography-body2");
 
-        return texts
-            .Where(text => !string.IsNullOrEmpty(text))
-            .Select(text => text!.Trim().Split('\n')[0].Trim()) // Extract just the tab name (before any badge number)
-            .ToList();
-    }
+    /// <summary>The table row for the user whose row text contains <paramref name="displayName"/>.</summary>
+    public ILocator UserRow(string displayName) => UserRows.Filter(new() { HasText = displayName });
+
+    /// <summary>The status chip of the user row containing <paramref name="displayName"/>.</summary>
+    public ILocator UserStatusChip(string displayName) => UserRow(displayName).Locator($"{StatusCell} .mud-chip");
+
+    /// <summary>The Chats cell of the user row containing <paramref name="displayName"/>.</summary>
+    public ILocator UserChatsCell(string displayName) => UserRow(displayName).Locator(ChatsCell);
+
+    /// <summary>The trusted indicator icon in the user row containing <paramref name="displayName"/>.</summary>
+    public ILocator TrustedIndicator(string displayName) =>
+        UserRow(displayName).Locator(".mud-icon-root[data-testid='VerifiedUserIcon']");
+
+    /// <summary>The admin indicator icon in the user row containing <paramref name="displayName"/>.</summary>
+    public ILocator AdminIndicator(string displayName) =>
+        UserRow(displayName).Locator(".mud-icon-root[data-testid='ShieldIcon']");
+
+    /// <summary>The table pager.</summary>
+    public ILocator Pager => _page.Locator(TablePager);
+
+    /// <summary>The pager information text of the current table, e.g. "1-25 of 42".</summary>
+    public ILocator PagerInformation => _page.Locator(PagerInformationSelector);
+
+    /// <summary>The open dialog, if any.</summary>
+    public ILocator Dialog => _page.Locator(DialogSelector);
 
     /// <summary>
     /// Clicks a tab by its name and waits for it to become active.
@@ -116,15 +137,6 @@ public class UsersPage
 
         // Wait for the tab to actually become active (aria-selected="true")
         await Expect(tab).ToHaveAttributeAsync("aria-selected", "true", new() { Timeout = 10000 });
-    }
-
-    /// <summary>
-    /// Gets the currently active tab name.
-    /// </summary>
-    public async Task<string?> GetActiveTabNameAsync()
-    {
-        var activeTab = _page.Locator(ActiveTab);
-        return await activeTab.TextContentAsync();
     }
 
     /// <summary>
@@ -155,102 +167,41 @@ public class UsersPage
     }
 
     /// <summary>
-    /// Gets the total user count from the Active tab's badge or table row count.
-    /// With server-side pagination, uses the table pager info if available,
-    /// otherwise counts visible rows.
+    /// Asserts the current table's pager reports exactly <paramref name="expectedTotal"/> users
+    /// (the "of N" part of "1-25 of N"). Retries until the server-side data lands.
+    /// </summary>
+    public async Task ExpectTotalUserCountAsync(int expectedTotal, int timeoutMs = 5000)
+    {
+        await Expect(PagerInformation).ToHaveTextAsync(
+            new Regex($@"of\s+{expectedTotal}\s*$"),
+            new() { Timeout = timeoutMs });
+    }
+
+    /// <summary>
+    /// Asserts the current table holds at least <paramref name="minimum"/> users by waiting for the
+    /// <paramref name="minimum"/>-th row. Valid while <paramref name="minimum"/> is within the first
+    /// page (smallest page size is 25), where rows shown equal min(total, page size).
+    /// </summary>
+    public async Task ExpectTotalUserCountAtLeastAsync(int minimum, int timeoutMs = 5000)
+    {
+        await Expect(UserRows.Nth(minimum - 1)).ToBeVisibleAsync(new() { Timeout = timeoutMs });
+    }
+
+    /// <summary>
+    /// Reads the total user count from the current table's pager ("1-25 of 42" → 42), for tests
+    /// that need the value to compare against later. The caller must first sync on the table's data
+    /// having loaded (e.g. a row being visible); this only waits for the pager text to be well-formed.
     /// </summary>
     public async Task<int> GetTotalUserCountAsync()
     {
-        // MudTable pager shows "1-25 of 42" — extract the total from pager text
-        var pagerInfo = _page.Locator(".mud-table-pagination-information");
-        if (await pagerInfo.IsVisibleAsync())
-        {
-            var text = await pagerInfo.TextContentAsync();
-            if (!string.IsNullOrEmpty(text))
-            {
-                // Parse "1-25 of 42" format
-                var ofIndex = text.IndexOf("of", StringComparison.OrdinalIgnoreCase);
-                if (ofIndex >= 0 && int.TryParse(text[(ofIndex + 2)..].Trim(), out var total))
-                    return total;
-            }
-        }
+        await Expect(PagerInformation).ToHaveTextAsync(new Regex(@"of\s+\d+\s*$"));
 
-        // Fallback: count visible rows
-        return await _page.Locator(TableRow).CountAsync();
-    }
+#pragma warning disable RS0030 // Value is read to compare against a later count, not asserted directly
+        var text = await PagerInformation.TextContentAsync();
+#pragma warning restore RS0030
 
-    /// <summary>
-    /// Gets the count of users displayed in the current table.
-    /// </summary>
-    public async Task<int> GetDisplayedUserCountAsync()
-    {
-        return await _page.Locator(TableRow).CountAsync();
-    }
-
-    /// <summary>
-    /// Gets the display names of all visible users in the current table.
-    /// </summary>
-    public async Task<List<string>> GetUserDisplayNamesAsync()
-    {
-        var names = new List<string>();
-        var rows = await _page.Locator(TableRow).AllAsync();
-
-        foreach (var row in rows)
-        {
-            var nameCell = row.Locator($"{UserCell} .mud-typography-body2");
-            var text = await nameCell.TextContentAsync();
-            if (!string.IsNullOrEmpty(text))
-                names.Add(text.Trim());
-        }
-
-        return names;
-    }
-
-    /// <summary>
-    /// Checks if a user with the given name is displayed.
-    /// </summary>
-    public async Task<bool> IsUserDisplayedAsync(string displayName)
-    {
-        var row = _page.Locator(TableRow).Filter(new() { HasText = displayName });
-        return await row.IsVisibleAsync();
-    }
-
-    /// <summary>
-    /// Gets the status of a user by their display name.
-    /// </summary>
-    public async Task<string?> GetUserStatusAsync(string displayName)
-    {
-        var row = _page.Locator(TableRow).Filter(new() { HasText = displayName });
-        return await row.Locator($"{StatusCell} .mud-chip").TextContentAsync();
-    }
-
-    /// <summary>
-    /// Gets the chat count for a user by their display name.
-    /// </summary>
-    public async Task<string?> GetUserChatCountAsync(string displayName)
-    {
-        var row = _page.Locator(TableRow).Filter(new() { HasText = displayName });
-        return await row.Locator(ChatsCell).TextContentAsync();
-    }
-
-    /// <summary>
-    /// Checks if a user has a trusted indicator.
-    /// </summary>
-    public async Task<bool> HasTrustedIndicatorAsync(string displayName)
-    {
-        var row = _page.Locator(TableRow).Filter(new() { HasText = displayName });
-        var trustedIcon = row.Locator(".mud-icon-root[data-testid='VerifiedUserIcon']");
-        return await trustedIcon.IsVisibleAsync();
-    }
-
-    /// <summary>
-    /// Checks if a user has an admin indicator.
-    /// </summary>
-    public async Task<bool> HasAdminIndicatorAsync(string displayName)
-    {
-        var row = _page.Locator(TableRow).Filter(new() { HasText = displayName });
-        var adminIcon = row.Locator(".mud-icon-root[data-testid='ShieldIcon']");
-        return await adminIcon.IsVisibleAsync();
+        var match = Regex.Match(text ?? string.Empty, @"of\s+(\d+)\s*$");
+        return int.Parse(match.Groups[1].Value);
     }
 
     /// <summary>
@@ -258,26 +209,9 @@ public class UsersPage
     /// </summary>
     public async Task ClickViewDetailsAsync(string displayName)
     {
-        var row = _page.Locator(TableRow).Filter(new() { HasText = displayName });
-        var viewButton = row.Locator($"{ActionsCell} button").First;
+        var viewButton = UserRow(displayName).Locator($"{ActionsCell} button").First;
         await viewButton.ClickAsync();
-        await Expect(_page.Locator(".mud-dialog")).ToBeVisibleAsync();
-    }
-
-    /// <summary>
-    /// Checks if the table pager is visible.
-    /// </summary>
-    public async Task<bool> IsPagerVisibleAsync()
-    {
-        return await _page.Locator(TablePager).IsVisibleAsync();
-    }
-
-    /// <summary>
-    /// Checks if a dialog is open.
-    /// </summary>
-    public async Task<bool> IsDialogOpenAsync()
-    {
-        return await _page.Locator(".mud-dialog").IsVisibleAsync();
+        await Expect(Dialog).ToBeVisibleAsync();
     }
 
     /// <summary>
@@ -285,10 +219,13 @@ public class UsersPage
     /// </summary>
     public async Task CloseDialogAsync()
     {
-        var dialog = _page.Locator(".mud-dialog");
-        var closeButton = dialog.Locator("button:has-text('Close')");
+        var closeButton = Dialog.Locator("button:has-text('Close')");
 
-        if (await closeButton.IsVisibleAsync())
+#pragma warning disable RS0030 // Optional UI: not every dialog has a Close button; fall back to Escape
+        var hasCloseButton = await closeButton.IsVisibleAsync();
+#pragma warning restore RS0030
+
+        if (hasCloseButton)
         {
             await closeButton.ClickAsync();
         }
@@ -298,7 +235,7 @@ public class UsersPage
         }
 
         // Wait for dialog to close
-        await Expect(dialog).Not.ToBeVisibleAsync();
+        await Expect(Dialog).Not.ToBeVisibleAsync();
     }
 
     /// <summary>

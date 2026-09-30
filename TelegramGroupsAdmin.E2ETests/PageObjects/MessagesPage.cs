@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Microsoft.Playwright;
 using static Microsoft.Playwright.Assertions;
 
@@ -15,10 +16,10 @@ public class MessagesPage
     private const string TelegramLayout = ".telegram-layout";
     private const string ChatSidebar = ".telegram-sidebar";
     private const string MainView = ".telegram-main";
-    private const string SidebarTitle = ".sidebar-title";
+    private const string SidebarTitleSelector = ".sidebar-title";
     private const string SidebarSearch = ".sidebar-search";
-    private const string EmptyState = ".empty-state";
-    private const string EmptyStateText = ".empty-state-text";
+    private const string EmptyStateSelector = ".empty-state";
+    private const string EmptyStateTextSelector = ".empty-state-text";
     private const string LoadingIndicator = ".mud-progress-circular";
 
     // Chat list selectors
@@ -29,12 +30,12 @@ public class MessagesPage
     private const string ChatLastMessage = ".chat-last-message";
 
     // Chat header selectors
-    private const string ChatHeader = ".chat-header";
+    private const string ChatHeaderSelector = ".chat-header";
     private const string ChatHeaderTitle = ".chat-header-title";
     private const string BackButton = ".back-button";
 
     // Messages container
-    private const string MessagesContainer = ".messages-container";
+    private const string MessagesContainerSelector = ".messages-container";
     private const string MessageBubble = ".tg-message"; // Telegram-style message bubble
 
     public MessagesPage(IPage page)
@@ -48,7 +49,7 @@ public class MessagesPage
     public async Task NavigateAsync()
     {
         await _page.GotoAsync("/messages", new PageGotoOptions { WaitUntil = WaitUntilState.NetworkIdle });
-        await Expect(_page.Locator(TelegramLayout)).ToBeVisibleAsync();
+        await Expect(Layout).ToBeVisibleAsync();
     }
 
     /// <summary>
@@ -69,7 +70,7 @@ public class MessagesPage
             url += "?" + string.Join("&", queryParams);
 
         await _page.GotoAsync(url, new PageGotoOptions { WaitUntil = WaitUntilState.NetworkIdle });
-        await Expect(_page.Locator(TelegramLayout)).ToBeVisibleAsync();
+        await Expect(Layout).ToBeVisibleAsync();
     }
 
     /// <summary>
@@ -78,70 +79,34 @@ public class MessagesPage
     public async Task WaitForLoadAsync(int timeoutMs = 15000)
     {
         // Wait for the layout to be present
-        await _page.Locator(TelegramLayout).WaitForAsync(new LocatorWaitForOptions
+        await Layout.WaitForAsync(new LocatorWaitForOptions
         {
             State = WaitForSelectorState.Visible,
             Timeout = timeoutMs
         });
     }
 
-    /// <summary>
-    /// Checks if the page layout is visible.
-    /// </summary>
-    public async Task<bool> IsLayoutVisibleAsync()
-    {
-        return await _page.Locator(TelegramLayout).IsVisibleAsync();
-    }
+    /// <summary>The Telegram-style page layout.</summary>
+    public ILocator Layout => _page.Locator(TelegramLayout);
 
-    /// <summary>
-    /// Checks if the chat sidebar is visible.
-    /// </summary>
-    public async Task<bool> IsSidebarVisibleAsync()
-    {
-        return await _page.Locator(ChatSidebar).IsVisibleAsync();
-    }
+    /// <summary>The chat sidebar.</summary>
+    public ILocator Sidebar => _page.Locator(ChatSidebar);
 
-    /// <summary>
-    /// Gets the sidebar title text.
-    /// </summary>
-    public async Task<string?> GetSidebarTitleAsync()
-    {
-        return await _page.Locator(SidebarTitle).TextContentAsync();
-    }
+    /// <summary>The sidebar title ("Chats").</summary>
+    public ILocator SidebarTitle => _page.Locator(SidebarTitleSelector);
 
-    /// <summary>
-    /// Gets the count of chats displayed in the sidebar.
-    /// </summary>
-    public async Task<int> GetChatCountAsync()
-    {
-        return await _page.Locator(ChatListItem).CountAsync();
-    }
+    /// <summary>The chat entries listed in the sidebar.</summary>
+    public ILocator ChatItems => _page.Locator(ChatListItem);
 
-    /// <summary>
-    /// Gets the names of all chats in the sidebar.
-    /// </summary>
-    public async Task<List<string>> GetChatNamesAsync()
-    {
-        var chatNames = new List<string>();
-        var items = await _page.Locator($"{ChatListItem} {ChatTitle}").AllAsync();
+    /// <summary>The title of every chat entry in the sidebar.</summary>
+    public ILocator ChatTitles => _page.Locator($"{ChatListItem} {ChatTitle}");
 
-        foreach (var item in items)
-        {
-            var text = await item.TextContentAsync();
-            if (!string.IsNullOrEmpty(text))
-                chatNames.Add(text);
-        }
+    /// <summary>The sidebar chat title whose text is exactly <paramref name="chatName"/>.</summary>
+    public ILocator ChatTitleNamed(string chatName) =>
+        ChatTitles.Filter(new() { HasTextRegex = new Regex($@"^\s*{Regex.Escape(chatName)}\s*$") });
 
-        return chatNames;
-    }
-
-    /// <summary>
-    /// Checks if the "no chats available" empty state is visible in the sidebar.
-    /// </summary>
-    public async Task<bool> IsNoChatsSidebarVisibleAsync()
-    {
-        return await _page.Locator(ChatListEmpty).IsVisibleAsync();
-    }
+    /// <summary>The "no chats available" empty state in the sidebar.</summary>
+    public ILocator NoChatsSidebar => _page.Locator(ChatListEmpty);
 
     /// <summary>
     /// Clicks on a chat by its name.
@@ -150,7 +115,7 @@ public class MessagesPage
     {
         var chatItem = _page.Locator(ChatListItem).Filter(new() { HasText = chatName });
         await chatItem.ClickAsync();
-        await Expect(_page.Locator($"{MainView}.active")).ToBeVisibleAsync();
+        await Expect(ActiveChatView).ToBeVisibleAsync();
     }
 
     /// <summary>
@@ -178,29 +143,14 @@ public class MessagesPage
         await Expect(searchInput).ToHaveValueAsync("");
     }
 
-    /// <summary>
-    /// Checks if the empty state (no chat selected) is visible.
-    /// </summary>
-    public async Task<bool> IsEmptyStateVisibleAsync()
-    {
-        return await _page.Locator($"{MainView} {EmptyState}").IsVisibleAsync();
-    }
+    /// <summary>The empty state shown in the main view when no chat is selected.</summary>
+    public ILocator EmptyState => _page.Locator($"{MainView} {EmptyStateSelector}");
 
-    /// <summary>
-    /// Gets the empty state text.
-    /// </summary>
-    public async Task<string?> GetEmptyStateTextAsync()
-    {
-        return await _page.Locator($"{MainView} {EmptyStateText}").TextContentAsync();
-    }
+    /// <summary>The text of the main-view empty state.</summary>
+    public ILocator EmptyStateText => _page.Locator($"{MainView} {EmptyStateTextSelector}");
 
-    /// <summary>
-    /// Checks if the main chat view is active (a chat is selected).
-    /// </summary>
-    public async Task<bool> IsChatViewActiveAsync()
-    {
-        return await _page.Locator($"{MainView}.active").IsVisibleAsync();
-    }
+    /// <summary>The main chat view in its active state (a chat is selected).</summary>
+    public ILocator ActiveChatView => _page.Locator($"{MainView}.active");
 
     /// <summary>
     /// Waits for the chat view to become active after selecting a chat.
@@ -208,24 +158,14 @@ public class MessagesPage
     /// </summary>
     public async Task WaitForChatViewActiveAsync()
     {
-        await Expect(_page.Locator($"{MainView}.active")).ToBeVisibleAsync();
+        await Expect(ActiveChatView).ToBeVisibleAsync();
     }
 
-    /// <summary>
-    /// Checks if the chat header is visible.
-    /// </summary>
-    public async Task<bool> IsChatHeaderVisibleAsync()
-    {
-        return await _page.Locator(ChatHeader).IsVisibleAsync();
-    }
+    /// <summary>The chat header of the selected chat.</summary>
+    public ILocator ChatHeader => _page.Locator(ChatHeaderSelector);
 
-    /// <summary>
-    /// Gets the selected chat title from the header.
-    /// </summary>
-    public async Task<string?> GetSelectedChatTitleAsync()
-    {
-        return await _page.Locator(ChatHeaderTitle).TextContentAsync();
-    }
+    /// <summary>The selected chat's title in the chat header.</summary>
+    public ILocator SelectedChatTitle => _page.Locator(ChatHeaderTitle);
 
     /// <summary>
     /// Clicks the back button to return to chat list.
@@ -235,29 +175,11 @@ public class MessagesPage
         await _page.Locator(BackButton).ClickAsync();
     }
 
-    /// <summary>
-    /// Checks if the messages container is visible.
-    /// </summary>
-    public async Task<bool> IsMessagesContainerVisibleAsync()
-    {
-        return await _page.Locator(MessagesContainer).IsVisibleAsync();
-    }
+    /// <summary>The messages container of the selected chat.</summary>
+    public ILocator MessagesContainer => _page.Locator(MessagesContainerSelector);
 
-    /// <summary>
-    /// Gets the count of messages displayed.
-    /// </summary>
-    public async Task<int> GetMessageCountAsync()
-    {
-        return await _page.Locator(MessageBubble).CountAsync();
-    }
-
-    /// <summary>
-    /// Checks if loading indicator is visible.
-    /// </summary>
-    public async Task<bool> IsLoadingAsync()
-    {
-        return await _page.Locator($"{MessagesContainer} {LoadingIndicator}").IsVisibleAsync();
-    }
+    /// <summary>The loading indicator inside the messages container.</summary>
+    public ILocator MessagesLoadingIndicator => _page.Locator($"{MessagesContainerSelector} {LoadingIndicator}");
 
     /// <summary>
     /// Waits for messages to load (loading indicator disappears).
@@ -265,7 +187,7 @@ public class MessagesPage
     public async Task WaitForMessagesLoadAsync(int timeoutMs = 10000)
     {
         // Wait for loading to disappear
-        await _page.Locator($"{MessagesContainer} {LoadingIndicator}").WaitForAsync(new LocatorWaitForOptions
+        await MessagesLoadingIndicator.WaitForAsync(new LocatorWaitForOptions
         {
             State = WaitForSelectorState.Hidden,
             Timeout = timeoutMs
@@ -277,13 +199,8 @@ public class MessagesPage
     /// </summary>
     public ILocator MessageBubbles => _page.Locator(MessageBubble);
 
-    /// <summary>
-    /// Checks if the "no messages" empty state is visible (within messages container).
-    /// </summary>
-    public async Task<bool> IsNoMessagesStateVisibleAsync()
-    {
-        return await _page.Locator($"{MessagesContainer} {EmptyState}").IsVisibleAsync();
-    }
+    /// <summary>The "no messages" empty state within the messages container.</summary>
+    public ILocator NoMessagesState => _page.Locator($"{MessagesContainerSelector} {EmptyStateSelector}");
 
     /// <summary>
     /// Gets the current URL.
@@ -293,10 +210,13 @@ public class MessagesPage
     #region User Detail Dialog Methods
 
     /// <summary>
-    /// Gets a locator for the dialog using semantic ARIA role.
+    /// The user detail dialog, located by its semantic ARIA role.
     /// More resilient to UI framework changes than CSS class selectors.
     /// </summary>
-    private ILocator DialogLocator => _page.GetByRole(AriaRole.Dialog);
+    public ILocator UserDetailDialog => _page.GetByRole(AriaRole.Dialog);
+
+    /// <summary>The user detail dialog title.</summary>
+    public ILocator UserDetailDialogTitle => UserDetailDialog.Locator(".mud-dialog-title");
 
     /// <summary>
     /// Clicks on a username in a message bubble to open the user detail dialog.
@@ -308,43 +228,15 @@ public class MessagesPage
     }
 
     /// <summary>
-    /// Checks if the user detail dialog is visible.
-    /// </summary>
-    public async Task<bool> IsUserDetailDialogVisibleAsync()
-    {
-        return await DialogLocator.IsVisibleAsync();
-    }
-
-    /// <summary>
     /// Waits for the user detail dialog to be visible.
     /// </summary>
     public async Task WaitForUserDetailDialogAsync(int timeoutMs = 5000)
     {
-        await DialogLocator.WaitForAsync(new LocatorWaitForOptions
+        await UserDetailDialog.WaitForAsync(new LocatorWaitForOptions
         {
             State = WaitForSelectorState.Visible,
             Timeout = timeoutMs
         });
-    }
-
-    /// <summary>
-    /// Gets the user detail dialog title text.
-    /// </summary>
-    public async Task<string?> GetUserDetailDialogTitleAsync()
-    {
-        // Title is within the dialog - scope the search
-        return await DialogLocator.Locator(".mud-dialog-title").TextContentAsync();
-    }
-
-    /// <summary>
-    /// Gets the content text of the user detail dialog.
-    /// Uses InnerTextAsync for better text extraction from MudBlazor components.
-    /// </summary>
-    public async Task<string?> GetUserDetailDialogContentAsync()
-    {
-        // Get all visible text from the dialog using InnerTextAsync
-        // (TextContentAsync may return empty for complex MudBlazor component trees)
-        return await DialogLocator.InnerTextAsync();
     }
 
     /// <summary>
@@ -362,7 +254,7 @@ public class MessagesPage
     {
         // Use GetByLabel to target the icon button with aria-label="Close"
         // (avoids ambiguity with any button that has "Close" text)
-        await DialogLocator.GetByLabel("Close").ClickAsync();
+        await UserDetailDialog.GetByLabel("Close").ClickAsync();
     }
 
     /// <summary>
@@ -370,7 +262,7 @@ public class MessagesPage
     /// </summary>
     public async Task WaitForUserDetailDialogHiddenAsync(int timeoutMs = 5000)
     {
-        await DialogLocator.WaitForAsync(new LocatorWaitForOptions
+        await UserDetailDialog.WaitForAsync(new LocatorWaitForOptions
         {
             State = WaitForSelectorState.Hidden,
             Timeout = timeoutMs
