@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Microsoft.Playwright;
 using TelegramGroupsAdmin.Data.Models;
 using TelegramGroupsAdmin.E2ETests.Infrastructure;
@@ -53,18 +54,10 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
         await _reportsPage.NavigateAsync();
         await _reportsPage.WaitForLoadAsync();
 
-        using (Assert.EnterMultipleScope())
-        {
-            // Assert
-            Assert.That(await _reportsPage.HasReportsAsync(), Is.True,
-                "Should display exam review when pending exam failure exists");
-
-            Assert.That(await _reportsPage.IsPendingExamChipVisibleAsync(), Is.True,
-                "Pending exam chip should be visible");
-
-            Assert.That(await _reportsPage.GetPendingExamCountAsync(), Is.GreaterThanOrEqualTo(1),
-                "Should show at least 1 pending exam review");
-        }
+        // Assert - exam review displayed, and the exam chip shows a pending count of at least 1
+        await Expect(_reportsPage.AnyReportTitle.First).ToBeVisibleAsync(new() { Timeout = 5000 });
+        await Expect(_reportsPage.PendingExamChip).ToBeVisibleAsync();
+        await Expect(_reportsPage.PendingExamChip).ToHaveTextAsync(ReportsPage.PendingCountAtLeastOne("Exam"));
     }
 
     [Test]
@@ -182,16 +175,9 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
         await Expect(Page.GetByText("Exam Review", new() { Exact = true })).ToBeVisibleAsync();
         await Expect(Page.GetByText("Moderation Report", new() { Exact = true })).Not.ToBeVisibleAsync();
 
-        var examCount = await _reportsPage.GetExamReviewCountAsync();
-        var moderationCount = await _reportsPage.GetModerationReportCountAsync();
-
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(examCount, Is.GreaterThanOrEqualTo(1),
-                      "Should show exam reviews when filtered");
-            Assert.That(moderationCount, Is.EqualTo(0),
-                "Should not show moderation reports when filtered to exam reviews");
-        }
+        // At least one exam review, and no moderation report rendered at all
+        await Expect(_reportsPage.ExamReviewHeaders.First).ToBeVisibleAsync();
+        await Expect(_reportsPage.ModerationReportHeaders).ToHaveCountAsync(0);
     }
 
     [Test]
@@ -235,12 +221,9 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
         await _reportsPage.WaitForLoadAsync();
 
         // Default filter is "All Types"
-        // Assert - both report types should be visible
-        var examCount = await _reportsPage.GetExamReviewCountAsync();
-        var moderationCount = await _reportsPage.GetModerationReportCountAsync();
-
-        Assert.That(examCount + moderationCount, Is.GreaterThanOrEqualTo(2),
-            "Should show both exam reviews and moderation reports with All Types filter");
+        // Assert - both report types should be visible: at least two exam/moderation cards combined
+        await Expect(_reportsPage.ExamReviewHeaders.Or(_reportsPage.ModerationReportHeaders).Nth(1))
+            .ToBeVisibleAsync();
     }
 
     [Test]
@@ -301,35 +284,19 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
         await Page.WaitForLoadStateAsync(LoadState.NetworkIdle);
 
         // Assert - All three types should be visible with default "All Types" filter
-        var moderationCount = await _reportsPage.GetModerationReportCountAsync();
-        var impersonationCount = await _reportsPage.GetImpersonationAlertCountAsync();
-        var examCount = await _reportsPage.GetExamReviewCountAsync();
-
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(moderationCount, Is.GreaterThanOrEqualTo(1),
-                "Should display at least 1 moderation report");
-            Assert.That(impersonationCount, Is.GreaterThanOrEqualTo(1),
-                "Should display at least 1 impersonation alert");
-            Assert.That(examCount, Is.GreaterThanOrEqualTo(1),
-                "Should display at least 1 exam review");
-        }
+        await Expect(_reportsPage.ModerationReportHeaders.First).ToBeVisibleAsync();
+        await Expect(_reportsPage.ImpersonationAlertHeaders.First).ToBeVisibleAsync();
+        await Expect(_reportsPage.ExamReviewHeaders.First).ToBeVisibleAsync();
 
         // Verify each card type header is visible
         await Expect(Page.GetByText("Moderation Report", new() { Exact = true })).ToBeVisibleAsync();
         await Expect(Page.GetByText("Impersonation Alert", new() { Exact = true })).ToBeVisibleAsync();
         await Expect(Page.GetByText("Exam Review", new() { Exact = true })).ToBeVisibleAsync();
 
-        using (Assert.EnterMultipleScope())
-        {
-            // Verify pending count chips show all types
-            Assert.That(await _reportsPage.IsPendingModerationChipVisibleAsync(), Is.True,
-                "Pending moderation chip should be visible");
-            Assert.That(await _reportsPage.IsPendingImpersonationChipVisibleAsync(), Is.True,
-                "Pending impersonation chip should be visible");
-            Assert.That(await _reportsPage.IsPendingExamChipVisibleAsync(), Is.True,
-                "Pending exam chip should be visible");
-        }
+        // Verify pending count chips show all types
+        await Expect(_reportsPage.PendingModerationChip).ToBeVisibleAsync();
+        await Expect(_reportsPage.PendingImpersonationChip).ToBeVisibleAsync();
+        await Expect(_reportsPage.PendingExamChip).ToBeVisibleAsync();
     }
 
     #endregion
@@ -376,8 +343,7 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
         await _reportsPage.WaitForLoadAsync();
 
         // Assert
-        Assert.That(await _reportsPage.HasExamMcSectionAsync(), Is.True,
-            "Multiple Choice section should be visible");
+        await Expect(_reportsPage.ExamMcSection).ToBeVisibleAsync(new() { Timeout = 5000 });
     }
 
     [Test]
@@ -413,8 +379,7 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
         await _reportsPage.WaitForLoadAsync();
 
         // Assert
-        Assert.That(await _reportsPage.IsExamMcFailedAsync(), Is.True,
-            "Failed status should be visible for score below threshold");
+        await Expect(_reportsPage.ExamMcFailedChip).ToBeVisibleAsync(new() { Timeout = 5000 });
     }
 
     #endregion
@@ -455,8 +420,7 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
         await _reportsPage.WaitForLoadAsync();
 
         // Assert
-        Assert.That(await _reportsPage.HasExamOpenEndedSectionAsync(), Is.True,
-            "Open-Ended Question section should be visible");
+        await Expect(_reportsPage.ExamOpenEndedSection).ToBeVisibleAsync(new() { Timeout = 5000 });
     }
 
     [Test]
@@ -495,8 +459,7 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
         await _reportsPage.WaitForLoadAsync();
 
         // Assert
-        Assert.That(await _reportsPage.HasExamAiEvaluationAsync(), Is.True,
-            "AI Evaluation section should be visible");
+        await Expect(_reportsPage.ExamAiEvaluation).ToBeVisibleAsync(new() { Timeout = 5000 });
     }
 
     #endregion
@@ -530,13 +493,10 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
         await _reportsPage.WaitForLoadAsync();
 
         // Assert - action buttons are visible
-        var buttons = await _reportsPage.GetVisibleActionButtonsAsync();
-        Assert.That(buttons, Has.Some.Contain("Approve"),
-            "Approve button should be visible");
-        Assert.That(buttons, Has.Some.Contain("Deny"),
-            "Deny button should be visible");
-        Assert.That(buttons, Has.Some.Contain("Ban").IgnoreCase,
-            "Deny + Ban button should be visible");
+        await Expect(_reportsPage.ActionButtonsMatching(new Regex("Approve")).First).ToBeVisibleAsync();
+        await Expect(_reportsPage.ActionButtonsMatching(new Regex("Deny")).First).ToBeVisibleAsync();
+        await Expect(_reportsPage.ActionButtonsMatching(new Regex("Ban", RegexOptions.IgnoreCase)).First)
+            .ToBeVisibleAsync();
     }
 
     [Test]
@@ -578,10 +538,8 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
         await _reportsPage.ClickApproveExamAsync();
 
         // Assert - snackbar confirms success (orchestrator is mocked to return success)
-        var snackbarText = await _reportsPage.WaitForSnackbarAsync();
-        Assert.That(snackbarText, Does.Contain("approved").IgnoreCase
-            .Or.Contain("success").IgnoreCase,
-            "Snackbar should confirm the approve action succeeded");
+        await Expect(_reportsPage.Snackbar)
+            .ToContainTextAsync(new Regex("approved|success"), new() { IgnoreCase = true });
     }
 
     [Test]
@@ -617,11 +575,8 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
         await _reportsPage.ClickDenyExamAsync();
 
         // Assert - snackbar confirms success (orchestrator is mocked to return success)
-        var snackbarText = await _reportsPage.WaitForSnackbarAsync();
-        Assert.That(snackbarText, Does.Contain("denied").IgnoreCase
-            .Or.Contain("kicked").IgnoreCase
-            .Or.Contain("success").IgnoreCase,
-            "Snackbar should confirm the deny action succeeded");
+        await Expect(_reportsPage.Snackbar)
+            .ToContainTextAsync(new Regex("denied|kicked|success"), new() { IgnoreCase = true });
     }
 
     [Test]
@@ -657,11 +612,8 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
         await _reportsPage.ClickDenyAndBanExamAsync();
 
         // Assert - snackbar confirms success (orchestrator is mocked to return success)
-        var snackbarText = await _reportsPage.WaitForSnackbarAsync();
-        Assert.That(snackbarText, Does.Contain("banned").IgnoreCase
-            .Or.Contain("denied").IgnoreCase
-            .Or.Contain("success").IgnoreCase,
-            "Snackbar should confirm the deny + ban action succeeded");
+        await Expect(_reportsPage.Snackbar)
+            .ToContainTextAsync(new Regex("banned|denied|success"), new() { IgnoreCase = true });
     }
 
     #endregion
@@ -796,18 +748,13 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
         var examCard = Page.Locator(".mud-card:has-text('Exam Review')").First;
 
         // Assert - Dismiss/Deny/Deny+Ban are shown, Approve is not (this is an override, not a first decision)
-        using (Assert.EnterMultipleScope())
-        {
-            var buttons = await _reportsPage.GetVisibleActionButtonsAsync();
-            Assert.That(buttons, Has.Some.Contain("Dismiss"),
-                "Dismiss button should be visible for an auto-admitted pass");
-            Assert.That(buttons, Has.Some.Contain("Deny"),
-                "Deny button should be visible to override an auto-admitted pass");
-            Assert.That(buttons, Has.Some.Contain("Ban").IgnoreCase,
-                "Deny + Ban button should be visible to override an auto-admitted pass");
-            Assert.That(buttons, Has.None.Contain("Approve"),
-                "Approve should not be offered for an already-passed exam");
-        }
+        await Expect(_reportsPage.ActionButtonsMatching(new Regex("Dismiss")).First).ToBeVisibleAsync();
+        await Expect(_reportsPage.ActionButtonsMatching(new Regex("Deny")).First).ToBeVisibleAsync();
+        await Expect(_reportsPage.ActionButtonsMatching(new Regex("Ban", RegexOptions.IgnoreCase)).First)
+            .ToBeVisibleAsync();
+
+        // Absence check runs after the buttons above are rendered, so it cannot pass early
+        await Expect(_reportsPage.ActionButtonsMatching(new Regex("Approve"))).ToHaveCountAsync(0);
 
         // Act - switch to Pending Only
         await _reportsPage.SelectStatusFilterAsync("Pending Only");
@@ -847,8 +794,7 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
         await _reportsPage.WaitForLoadAsync();
 
         // Assert - GlobalAdmin should see exam reviews
-        Assert.That(await _reportsPage.HasReportsAsync(), Is.True,
-            "GlobalAdmin should be able to see exam reviews");
+        await Expect(_reportsPage.AnyReportTitle.First).ToBeVisibleAsync(new() { Timeout = 5000 });
     }
 
     [Test]
@@ -878,8 +824,7 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
         await _reportsPage.WaitForLoadAsync();
 
         // Assert - page loads (Admin may not see all reports, but can access page)
-        Assert.That(await _reportsPage.IsPageTitleVisibleAsync(), Is.True,
-            "Admin should be able to access reports page");
+        await Expect(_reportsPage.PageTitle).ToBeVisibleAsync();
     }
 
     #endregion

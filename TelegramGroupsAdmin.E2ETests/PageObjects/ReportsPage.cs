@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Microsoft.Playwright;
 using static Microsoft.Playwright.Assertions;
 
@@ -12,14 +13,14 @@ public class ReportsPage
     private readonly IPage _page;
 
     // Selectors
-    private const string PageTitle = ".mud-typography-h4";
-    private const string LoadingIndicator = ".mud-progress-linear";
+    private const string PageTitleSelector = ".mud-typography-h4";
+    private const string LoadingIndicatorSelector = ".mud-progress-linear";
     private const string FilterPaper = ".mud-paper.pa-3.mb-4";
     private const string TypeFilterSelect = "label:has-text('Type')";
     private const string StatusFilterSelect = "label:has-text('Status')";
     private const string RefreshButton = "button:has-text('Refresh')";
-    private const string PendingModerationChip = ".mud-chip:has-text('Moderation')";
-    private const string PendingImpersonationChip = ".mud-chip:has-text('Impersonation')";
+    private const string PendingModerationChipSelector = ".mud-chip:has-text('Moderation')";
+    private const string PendingImpersonationChipSelector = ".mud-chip:has-text('Impersonation')";
     private const string ReportCards = ".mud-stack .mud-card";
     private const string EmptyStateIcon = ".mud-icon-root.mud-success-text";
 
@@ -27,7 +28,7 @@ public class ReportsPage
     private const string ModerationReportCard = ".mud-card:has-text('Moderation Report')";
     private const string ImpersonationAlertCard = ".mud-card:has-text('Impersonation Alert')";
     private const string ExamReviewCard = ".mud-card:has-text('Exam Review')";
-    private const string PendingExamChip = ".mud-chip:has-text('Exam')";
+    private const string PendingExamChipSelector = ".mud-chip:has-text('Exam')";
 
     public ReportsPage(IPage page)
     {
@@ -48,53 +49,27 @@ public class ReportsPage
     public async Task WaitForLoadAsync()
     {
         // Wait for the page title to appear first
-        await _page.Locator(PageTitle).WaitForAsync(new LocatorWaitForOptions
+        await PageTitle.WaitForAsync(new LocatorWaitForOptions
         {
             State = WaitForSelectorState.Visible,
             Timeout = 10000
         });
 
-        // Wait for loading indicator to disappear (if it's visible)
-        var loadingIndicator = _page.Locator(LoadingIndicator);
-        if (await loadingIndicator.IsVisibleAsync())
-        {
-            await loadingIndicator.WaitForAsync(new LocatorWaitForOptions
-            {
-                State = WaitForSelectorState.Hidden,
-                Timeout = 5000
-            });
-        }
+        // Wait for loading indicator to disappear (passes immediately if it is not shown)
+        await Expect(LoadingIndicator).Not.ToBeVisibleAsync(new() { Timeout = 5000 });
 
         // Wait for filters to be visible (indicates page is loaded)
-        await Expect(_page.Locator(FilterPaper)).ToBeVisibleAsync();
+        await Expect(Filters).ToBeVisibleAsync();
     }
 
-    /// <summary>
-    /// Returns true if the page title is visible.
-    /// </summary>
-    public async Task<bool> IsPageTitleVisibleAsync()
-    {
-        var title = _page.Locator(PageTitle);
-        return await title.IsVisibleAsync();
-    }
+    /// <summary>The page title ("Reports Queue").</summary>
+    public ILocator PageTitle => _page.Locator(PageTitleSelector);
 
-    /// <summary>
-    /// Gets the page title text.
-    /// </summary>
-    public async Task<string> GetPageTitleAsync()
-    {
-        var title = _page.Locator(PageTitle);
-        return await title.TextContentAsync() ?? "";
-    }
+    /// <summary>The filter bar (type and status selects).</summary>
+    public ILocator Filters => _page.Locator(FilterPaper);
 
-    /// <summary>
-    /// Returns true if filters are visible.
-    /// </summary>
-    public async Task<bool> AreFiltersVisibleAsync()
-    {
-        var filterPaper = _page.Locator(FilterPaper);
-        return await filterPaper.IsVisibleAsync();
-    }
+    /// <summary>The page's linear loading indicator.</summary>
+    public ILocator LoadingIndicator => _page.Locator(LoadingIndicatorSelector);
 
     /// <summary>
     /// Selects a type filter option from the MudSelect dropdown.
@@ -104,7 +79,10 @@ public class ReportsPage
     {
         // Close any existing popovers first
         var existingPopover = _page.Locator(".mud-popover-open");
-        if (await existingPopover.CountAsync() > 0)
+#pragma warning disable RS0030 // Optional UI: only dismiss a popover that happens to be open; pressing Escape unconditionally is not intended
+        var hasOpenPopover = await existingPopover.CountAsync() > 0;
+#pragma warning restore RS0030
+        if (hasOpenPopover)
         {
             await _page.Keyboard.PressAsync("Escape");
             await Expect(existingPopover).Not.ToBeVisibleAsync(new() { Timeout = 3000 });
@@ -154,7 +132,10 @@ public class ReportsPage
     {
         // Close any existing popovers first
         var existingPopover = _page.Locator(".mud-popover-open");
-        if (await existingPopover.CountAsync() > 0)
+#pragma warning disable RS0030 // Optional UI: only dismiss a popover that happens to be open; pressing Escape unconditionally is not intended
+        var hasOpenPopover = await existingPopover.CountAsync() > 0;
+#pragma warning restore RS0030
+        if (hasOpenPopover)
         {
             await _page.Keyboard.PressAsync("Escape");
             await Expect(existingPopover).Not.ToBeVisibleAsync(new() { Timeout = 3000 });
@@ -204,199 +185,80 @@ public class ReportsPage
     }
 
     /// <summary>
-    /// Returns true if the pending moderation chip is visible.
+    /// The pending moderation count chip ("N Moderation"). Only rendered when N &gt; 0.
     /// </summary>
-    public async Task<bool> IsPendingModerationChipVisibleAsync()
-    {
-        var chip = _page.Locator(PendingModerationChip);
-        return await chip.IsVisibleAsync();
-    }
+    public ILocator PendingModerationChip => _page.Locator(PendingModerationChipSelector);
 
     /// <summary>
-    /// Returns true if the pending impersonation chip is visible.
+    /// The pending impersonation count chip ("N Impersonation"). Only rendered when N &gt; 0.
     /// </summary>
-    public async Task<bool> IsPendingImpersonationChipVisibleAsync()
-    {
-        var chip = _page.Locator(PendingImpersonationChip);
-        return await chip.IsVisibleAsync();
-    }
+    public ILocator PendingImpersonationChip => _page.Locator(PendingImpersonationChipSelector);
 
     /// <summary>
-    /// Gets the pending moderation count from the chip.
+    /// The pending exam count chip ("N Exam"). Only rendered when N &gt; 0.
     /// </summary>
-    public async Task<int> GetPendingModerationCountAsync()
-    {
-        var chip = _page.Locator(PendingModerationChip);
-        if (!await chip.IsVisibleAsync())
-            return 0;
-
-        var text = await chip.TextContentAsync() ?? "";
-        // Extract number from "X Moderation"
-        var parts = text.Trim().Split(' ');
-        if (parts.Length > 0 && int.TryParse(parts[0], out var count))
-            return count;
-        return 0;
-    }
+    public ILocator PendingExamChip => _page.Locator(PendingExamChipSelector);
 
     /// <summary>
-    /// Gets the pending impersonation count from the chip.
+    /// Matches a pending count chip's text when it shows a count of at least 1, e.g. "3 Moderation".
     /// </summary>
-    public async Task<int> GetPendingImpersonationCountAsync()
-    {
-        var chip = _page.Locator(PendingImpersonationChip);
-        if (!await chip.IsVisibleAsync())
-            return 0;
+    public static Regex PendingCountAtLeastOne(string label) => new($@"^\s*[1-9]\d*\s+{Regex.Escape(label)}");
 
-        var text = await chip.TextContentAsync() ?? "";
-        // Extract number from "X Impersonation"
-        var parts = text.Trim().Split(' ');
-        if (parts.Length > 0 && int.TryParse(parts[0], out var count))
-            return count;
-        return 0;
-    }
+    /// <summary>The "Moderation Report" card headers, one per moderation report card.</summary>
+    public ILocator ModerationReportHeaders =>
+        _page.GetByText("Moderation Report", new PageGetByTextOptions { Exact = true });
+
+    /// <summary>The "Impersonation Alert" card headers, one per impersonation alert card.</summary>
+    public ILocator ImpersonationAlertHeaders =>
+        _page.GetByText("Impersonation Alert", new PageGetByTextOptions { Exact = true });
+
+    /// <summary>The "Exam Review" card headers, one per exam review card.</summary>
+    public ILocator ExamReviewHeaders =>
+        _page.GetByText("Exam Review", new PageGetByTextOptions { Exact = true });
 
     /// <summary>
-    /// Returns the total count of report cards displayed.
+    /// Moderation report and impersonation alert card headers (exam reviews excluded), in document order.
+    /// </summary>
+    public ILocator DisplayedReportHeaders => ModerationReportHeaders.Or(ImpersonationAlertHeaders);
+
+    /// <summary>
+    /// Any report card title text (moderation, impersonation or exam review). Use <c>.First</c>
+    /// to assert that at least one report is displayed.
+    /// </summary>
+    public ILocator AnyReportTitle => _page.GetByText("Moderation Report")
+        .Or(_page.GetByText("Impersonation Alert"))
+        .Or(_page.GetByText("Exam Review"));
+
+    /// <summary>
+    /// Returns the number of moderation report and impersonation alert cards currently displayed.
+    /// Callers must first sync on the rendered list with an <c>Expect</c>; this is a one-shot read
+    /// for tests that compare counts across filter changes.
     /// </summary>
     public async Task<int> GetDisplayedReportCountAsync()
     {
-        var moderationCount = await GetModerationReportCountAsync();
-        var impersonationCount = await GetImpersonationAlertCountAsync();
-        return moderationCount + impersonationCount;
+#pragma warning disable RS0030 // Count feeds a before/after comparison across filters; callers sync with Expect first
+        return await DisplayedReportHeaders.CountAsync();
+#pragma warning restore RS0030
     }
+
+    /// <summary>The empty-state heading ("No reports found").</summary>
+    public ILocator EmptyState => _page.GetByText("No reports found");
+
+    /// <summary>The "All reports have been reviewed!" empty-state message (pending filter).</summary>
+    public ILocator AllReviewedMessage => _page.GetByText("All reports have been reviewed!");
+
+    /// <summary>The "No reports match the selected filters." empty-state message.</summary>
+    public ILocator NoMatchingFiltersMessage => _page.GetByText("No reports match the selected filters.");
 
     /// <summary>
-    /// Returns the count of moderation report cards.
+    /// The type filter's input. MudSelect stores the display text in the input element.
     /// </summary>
-    public async Task<int> GetModerationReportCountAsync()
-    {
-        // Find card headers with "Moderation Report" text
-        var cards = _page.GetByText("Moderation Report", new PageGetByTextOptions { Exact = true });
-        return await cards.CountAsync();
-    }
+    public ILocator TypeFilterInput => _page.GetByLabel("Type");
 
     /// <summary>
-    /// Returns the count of impersonation alert cards.
+    /// The status filter's input. MudSelect stores the display text in the input element.
     /// </summary>
-    public async Task<int> GetImpersonationAlertCountAsync()
-    {
-        // Find card headers with "Impersonation Alert" text
-        var cards = _page.GetByText("Impersonation Alert", new PageGetByTextOptions { Exact = true });
-        return await cards.CountAsync();
-    }
-
-    /// <summary>
-    /// Returns the count of exam review cards.
-    /// </summary>
-    public async Task<int> GetExamReviewCountAsync()
-    {
-        // Find card headers with "Exam Review" text
-        var cards = _page.GetByText("Exam Review", new PageGetByTextOptions { Exact = true });
-        return await cards.CountAsync();
-    }
-
-    /// <summary>
-    /// Returns true if the pending exam chip is visible.
-    /// </summary>
-    public async Task<bool> IsPendingExamChipVisibleAsync()
-    {
-        var chip = _page.Locator(PendingExamChip);
-        return await chip.IsVisibleAsync();
-    }
-
-    /// <summary>
-    /// Gets the pending exam count from the chip.
-    /// </summary>
-    public async Task<int> GetPendingExamCountAsync()
-    {
-        var chip = _page.Locator(PendingExamChip);
-        if (!await chip.IsVisibleAsync())
-            return 0;
-
-        var text = await chip.TextContentAsync() ?? "";
-        // Extract number from "X Exam"
-        var parts = text.Trim().Split(' ');
-        if (parts.Length > 0 && int.TryParse(parts[0], out var count))
-            return count;
-        return 0;
-    }
-
-    /// <summary>
-    /// Returns true if the empty state is visible.
-    /// </summary>
-    public async Task<bool> IsEmptyStateVisibleAsync()
-    {
-        var emptyState = _page.GetByText("No reports found");
-        return await emptyState.IsVisibleAsync();
-    }
-
-    /// <summary>
-    /// Returns true if the "All reports have been reviewed!" message is visible.
-    /// </summary>
-    public async Task<bool> IsAllReviewedMessageVisibleAsync()
-    {
-        var message = _page.GetByText("All reports have been reviewed!");
-        return await message.IsVisibleAsync();
-    }
-
-    /// <summary>
-    /// Returns true if the "No reports match the selected filters." message is visible.
-    /// </summary>
-    public async Task<bool> IsNoMatchingFiltersMessageVisibleAsync()
-    {
-        var message = _page.GetByText("No reports match the selected filters.");
-        return await message.IsVisibleAsync();
-    }
-
-    /// <summary>
-    /// Returns true if any report cards are displayed.
-    /// Uses web-first assertion with auto-retry to handle Blazor async data loading.
-    /// </summary>
-    public async Task<bool> HasReportsAsync()
-    {
-        try
-        {
-            // Use Or() locator composition with auto-retry for Blazor async rendering
-            var reportCard = _page.GetByText("Moderation Report")
-                .Or(_page.GetByText("Impersonation Alert"))
-                .Or(_page.GetByText("Exam Review"));
-            await Expect(reportCard.First).ToBeVisibleAsync(new() { Timeout = 5000 });
-            return true;
-        }
-        catch (PlaywrightException)
-        {
-            return false;
-        }
-    }
-
-    /// <summary>
-    /// Gets the type filter dropdown's current selected value.
-    /// MudSelect stores the display text in the input element.
-    /// </summary>
-    public async Task<string> GetSelectedTypeFilterAsync()
-    {
-        var typeSelect = _page.GetByLabel("Type");
-        return await typeSelect.InputValueAsync();
-    }
-
-    /// <summary>
-    /// Gets the status filter dropdown's current selected value.
-    /// MudSelect stores the display text in the input element.
-    /// </summary>
-    public async Task<string> GetSelectedStatusFilterAsync()
-    {
-        var statusSelect = _page.GetByLabel("Status");
-        return await statusSelect.InputValueAsync();
-    }
-
-    /// <summary>
-    /// Returns true if the page is currently loading.
-    /// </summary>
-    public async Task<bool> IsLoadingAsync()
-    {
-        var loadingIndicator = _page.Locator(LoadingIndicator);
-        return await loadingIndicator.IsVisibleAsync();
-    }
+    public ILocator StatusFilterInput => _page.GetByLabel("Status");
 
     #region Report Action Methods
 
@@ -547,157 +409,41 @@ public class ReportsPage
         await button.ClickAsync();
     }
 
-    /// <summary>
-    /// Waits for a snackbar message to appear and returns its text.
-    /// </summary>
-    public async Task<string?> WaitForSnackbarAsync(int timeoutMs = 5000)
-    {
-        var snackbar = _page.Locator(".mud-snackbar");
-        await snackbar.WaitForAsync(new LocatorWaitForOptions
-        {
-            State = WaitForSelectorState.Visible,
-            Timeout = timeoutMs
-        });
-        return await snackbar.TextContentAsync();
-    }
+    /// <summary>The MudBlazor snackbar that confirms a report action.</summary>
+    public ILocator Snackbar => _page.Locator(".mud-snackbar");
+
+    /// <summary>All action buttons across the displayed report cards.</summary>
+    public ILocator ActionButtons => _page.Locator(".mud-card-actions button");
 
     /// <summary>
-    /// Returns true if any action button is visible on the first report card.
+    /// The report card action buttons whose text matches <paramref name="text"/>
+    /// (pass <see cref="RegexOptions.IgnoreCase"/> for a case-insensitive match).
     /// </summary>
-    public async Task<bool> HasActionButtonsVisibleAsync()
-    {
-        var actionButtons = _page.Locator(".mud-card-actions button");
-        return await actionButtons.CountAsync() > 0;
-    }
-
-    /// <summary>
-    /// Gets all visible action button texts.
-    /// </summary>
-    public async Task<List<string>> GetVisibleActionButtonsAsync()
-    {
-        var buttons = new List<string>();
-        var actionButtons = await _page.Locator(".mud-card-actions button").AllAsync();
-        foreach (var button in actionButtons)
-        {
-            var text = await button.TextContentAsync();
-            if (!string.IsNullOrWhiteSpace(text))
-                buttons.Add(text.Trim());
-        }
-        return buttons;
-    }
+    public ILocator ActionButtonsMatching(Regex text) => ActionButtons.Filter(new() { HasTextRegex = text });
 
     #endregion
 
     #region Exam Review Card Methods
 
-    /// <summary>
-    /// Waits for and returns true if exam review cards show Multiple Choice section.
-    /// Uses web-first assertion pattern for Blazor compatibility.
-    /// </summary>
-    public async Task<bool> HasExamMcSectionAsync()
-    {
-        try
-        {
-            var mcSection = _page.GetByText("Multiple Choice");
-            await Expect(mcSection).ToBeVisibleAsync(new() { Timeout = 5000 });
-            return true;
-        }
-        catch (PlaywrightException)
-        {
-            return false;
-        }
-    }
+    /// <summary>The "Multiple Choice" section of an exam review card.</summary>
+    public ILocator ExamMcSection => _page.GetByText("Multiple Choice");
+
+    /// <summary>The "Open-Ended Question" section of an exam review card.</summary>
+    public ILocator ExamOpenEndedSection => _page.GetByText("Open-Ended Question");
+
+    /// <summary>The "AI Evaluation" section of an exam review card.</summary>
+    public ILocator ExamAiEvaluation => _page.GetByText("AI Evaluation");
 
     /// <summary>
-    /// Waits for and returns true if exam review cards show Open-Ended Question section.
-    /// Uses web-first assertion pattern for Blazor compatibility.
+    /// The score chip of the first exam review card, displayed as "X/Y correct (Z%)".
     /// </summary>
-    public async Task<bool> HasExamOpenEndedSectionAsync()
-    {
-        try
-        {
-            var openEndedSection = _page.GetByText("Open-Ended Question");
-            await Expect(openEndedSection).ToBeVisibleAsync(new() { Timeout = 5000 });
-            return true;
-        }
-        catch (PlaywrightException)
-        {
-            return false;
-        }
-    }
+    public ILocator ExamScoreChip => _page.Locator(".mud-chip").Filter(new() { HasText = "correct" }).First;
 
-    /// <summary>
-    /// Waits for and returns true if exam review cards show AI Evaluation section.
-    /// Uses web-first assertion pattern for Blazor compatibility.
-    /// </summary>
-    public async Task<bool> HasExamAiEvaluationAsync()
-    {
-        try
-        {
-            var aiEval = _page.GetByText("AI Evaluation");
-            await Expect(aiEval).ToBeVisibleAsync(new() { Timeout = 5000 });
-            return true;
-        }
-        catch (PlaywrightException)
-        {
-            return false;
-        }
-    }
+    /// <summary>The "Passed" status chip of an exam's MC section.</summary>
+    public ILocator ExamMcPassedChip => _page.Locator(".mud-chip:has-text('Passed')");
 
-    /// <summary>
-    /// Gets the score displayed in the first exam review card.
-    /// Returns null if no score found.
-    /// </summary>
-    public async Task<string?> GetExamScoreAsync()
-    {
-        try
-        {
-            // Score is displayed as "X/Y correct (Z%)"
-            var scoreElement = _page.Locator(".mud-chip").Filter(new() { HasText = "correct" }).First;
-            await Expect(scoreElement).ToBeVisibleAsync(new() { Timeout = 5000 });
-            return await scoreElement.TextContentAsync();
-        }
-        catch (PlaywrightException)
-        {
-            return null;
-        }
-    }
-
-    /// <summary>
-    /// Waits for and returns true if the exam shows a "Passed" status for MC section.
-    /// Uses web-first assertion pattern for Blazor compatibility.
-    /// </summary>
-    public async Task<bool> IsExamMcPassedAsync()
-    {
-        try
-        {
-            var passedChip = _page.Locator(".mud-chip:has-text('Passed')");
-            await Expect(passedChip).ToBeVisibleAsync(new() { Timeout = 5000 });
-            return true;
-        }
-        catch (PlaywrightException)
-        {
-            return false;
-        }
-    }
-
-    /// <summary>
-    /// Waits for and returns true if the exam shows a "Failed" status for MC section.
-    /// Uses web-first assertion pattern for Blazor compatibility.
-    /// </summary>
-    public async Task<bool> IsExamMcFailedAsync()
-    {
-        try
-        {
-            var failedChip = _page.Locator(".mud-chip:has-text('Failed')");
-            await Expect(failedChip).ToBeVisibleAsync(new() { Timeout = 5000 });
-            return true;
-        }
-        catch (PlaywrightException)
-        {
-            return false;
-        }
-    }
+    /// <summary>The "Failed" status chip of an exam's MC section.</summary>
+    public ILocator ExamMcFailedChip => _page.Locator(".mud-chip:has-text('Failed')");
 
     #endregion
 }
