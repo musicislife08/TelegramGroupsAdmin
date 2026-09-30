@@ -144,6 +144,20 @@ public class ContentDetectionOrchestratorTests
             Arg.Any<Report>(), message, Actor.AutoDetection, Arg.Any<CancellationToken>());
     }
 
+    // #521: the AI veto excludes this id from its history, so the edit re-scan no longer sees its own earlier verdict
+    [TestCase(0, TestName = "RunDetectionAsync_FirstEvaluation_RequestCarriesMessageId")]
+    [TestCase(1, TestName = "RunDetectionAsync_EditReScan_RequestCarriesMessageId")]
+    public async Task RunDetectionAsync_RequestCarriesMessageId(int editVersion)
+    {
+        var message = CreateMessage();
+        ArrangeScan(BorderlineSpamResult());
+
+        await _orchestrator.RunDetectionAsync(message, text: "hello", photoLocalPath: null, editVersion: editVersion);
+
+        await _coordinator.Received(1).CheckAsync(
+            Arg.Is<ContentCheckRequest>(r => r!.MessageId == 42), Arg.Any<CancellationToken>());
+    }
+
     private static Message CreateMessage() => new()
     {
         Id = 42,

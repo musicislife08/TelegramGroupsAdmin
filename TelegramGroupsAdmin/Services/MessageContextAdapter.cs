@@ -23,13 +23,14 @@ public class MessageContextAdapter : ContentDetectionServices.IMessageContextPro
 
     public async Task<IEnumerable<ContentDetectionServices.HistoryMessage>> GetRecentMessagesAsync(
         ChatIdentity chat,
-        int count = 10,
+        int count,
+        int? excludeMessageId,
         CancellationToken cancellationToken = default)
     {
         try
         {
             // Get recent messages with their current verdict (message_verdicts view) to determine spam status
-            var messages = await _messageHistoryRepository.GetRecentMessagesWithVerdictAsync(chat.Id, count, cancellationToken);
+            var messages = await _messageHistoryRepository.GetRecentMessagesWithVerdictAsync(chat.Id, count, excludeMessageId, cancellationToken);
 
             return messages.Select(m => new ContentDetectionServices.HistoryMessage
             {

@@ -93,6 +93,7 @@ public class ContentDetectionOrchestrator
                 Message = text ?? "", // Empty string for image-only messages
                 User = UserIdentity.From(message.From!),
                 Chat = ChatIdentity.From(message.Chat),
+                MessageId = message.MessageId, // AI veto leaves this message out of its own history context (#521)
                 PhotoLocalPath = photoFullPath, // Pass full for ImageSpamCheck layers
                 Metadata = new ContentCheckMetadata
                 {

@@ -1612,15 +1612,32 @@ public class MessageHistoryRepositoryTests
     public async Task GetRecentMessagesWithVerdictAsync_CorrectedToHam_IsNotShownAsSpam()
     {
         // Previously WasSpam = Any(row.IsSpam): an admin-corrected message stayed "spam" in the AI history.
-        var rows = await _repository!.GetRecentMessagesWithVerdictAsync(GoldenDatasetConstants.Chats.MainChatId, count: 1000);
+        var rows = await _repository!.GetRecentMessagesWithVerdictAsync(GoldenDatasetConstants.Chats.MainChatId, count: 1000, excludeMessageId: null);
         Assert.That(rows.Single(r => r.MessageId == GoldenDatasetConstants.Verdicts.CorrectedToHamMsgId).IsSpam, Is.False);
     }
 
     [Test]
     public async Task GetRecentMessagesWithVerdictAsync_AutoBanned_IsSpam()
     {
-        var rows = await _repository!.GetRecentMessagesWithVerdictAsync(GoldenDatasetConstants.Chats.MainChatId, count: 1000);
+        var rows = await _repository!.GetRecentMessagesWithVerdictAsync(GoldenDatasetConstants.Chats.MainChatId, count: 1000, excludeMessageId: null);
         Assert.That(rows.Single(r => r.MessageId == GoldenDatasetConstants.Verdicts.AutoBanMsgId).IsSpam, Is.True);
+    }
+
+    [Test]
+    public async Task GetRecentMessagesWithVerdictAsync_ExcludedMessage_IsOmittedAndWindowStillFilled()
+    {
+        // #521: the message under evaluation is usually the newest in its chat, so without
+        // exclusion the AI veto saw its own row (and on edit, its own earlier verdict) as history.
+        const int count = 3;
+        var chatId = GoldenDatasetConstants.Chats.MainChatId;
+        var unfiltered = await _repository!.GetRecentMessagesWithVerdictAsync(chatId, count + 1, excludeMessageId: null);
+        var newestMessageId = unfiltered[0].MessageId;
+
+        var rows = await _repository.GetRecentMessagesWithVerdictAsync(chatId, count, excludeMessageId: newestMessageId);
+
+        Assert.That(rows.Select(r => r.MessageId),
+            Is.EqualTo(unfiltered.Skip(1).Select(r => r.MessageId)),
+            "Excluded message must be omitted and the window filled with the next-newest messages");
     }
 
     [Test]

@@ -182,7 +182,7 @@ public class AIContentCheckV2(
                 wasCacheHit = false; // Factory called = cache miss
 
                 // Get message history for context (count from config)
-                var history = await messageContextProvider.GetRecentMessagesAsync(req.Chat, req.MessageHistoryCount, ct);
+                var history = await messageContextProvider.GetRecentMessagesAsync(req.Chat, req.MessageHistoryCount, req.MessageId, ct);
 
                 // Build prompts using the prompt builder
                 var prompts = AIPromptBuilder.CreatePrompts(req, history);
