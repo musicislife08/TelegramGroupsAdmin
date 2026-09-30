@@ -21,18 +21,18 @@ public class EnrichedDetectionView
     /// - telegram_users (message author info)
     /// Actor columns exposed raw - app-layer ActorMappings.ToActor() handles computation.
     /// </summary>
-    public const string CreateViewSql = """
+    public const string CreateViewSql = $"""
         CREATE VIEW enriched_detections AS
         SELECT
             -- Detection columns
             dr.id,
             dr.message_id,
             dr.detected_at,
-            dr.detection_source,
+            dr.source,
             dr.detection_method,
-            dr.is_spam,
+            dr.classification,
+            (dr.classification IN ({VerdictSql.SpamClassifications})) AS is_spam,
             dr.score,
-            dr.net_score,
             dr.reason,
             dr.check_results_json,
             dr.edit_version,
@@ -82,20 +82,23 @@ public class EnrichedDetectionView
     [Column("detected_at")]
     public DateTimeOffset DetectedAt { get; set; }
 
-    [Column("detection_source")]
-    public string DetectionSource { get; set; } = string.Empty;
+    /// <summary>Core VerdictSource value of this event.</summary>
+    [Column("source")]
+    public int Source { get; set; }
 
     [Column("detection_method")]
     public string DetectionMethod { get; set; } = string.Empty;
 
+    /// <summary>Core VerdictClassification value of this event.</summary>
+    [Column("classification")]
+    public int Classification { get; set; }
+
+    /// <summary>Computed in the view: classification is in <see cref="VerdictSql.SpamClassifications"/>.</summary>
     [Column("is_spam")]
     public bool IsSpam { get; set; }
 
     [Column("score")]
     public double Score { get; set; }
-
-    [Column("net_score")]
-    public double NetScore { get; set; }
 
     [Column("reason")]
     public string? Reason { get; set; }

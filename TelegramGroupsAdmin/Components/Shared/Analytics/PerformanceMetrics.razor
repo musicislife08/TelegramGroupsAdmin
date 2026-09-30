@@ -80,7 +80,7 @@
                                           Size="MudSize.Medium"
                                           Style="flex: 1;" />
                         <MudText Typo="Typo.body2" Color="MudColor.Secondary" Style="min-width: 150px; text-align: right;">
-                            @_accuracyStats.TotalFalsePositives (said spam, was ham)
+                            @_accuracyStats.TotalFalsePositives (said spam, was clean)
                         </MudText>
                     </MudStack>
                 </MudStack>
@@ -242,7 +242,7 @@
             <MudPaper Class="pa-4" Elevation="2">
                 <MudText Typo="Typo.h6" GutterBottom="true" Color="MudColor.Primary">Daily Detection Trends</MudText>
                 <MudText Typo="Typo.body2" Class="mb-3" Color="MudColor.Secondary">
-                    Number of spam and ham detections per day
+                    Number of spam and clean detections per day
                 </MudText>
                 <ApexChart TItem="DailyDetectionTrend"
                           Title=""
@@ -257,7 +257,7 @@
                                     OrderBy="e => e.X" />
                     <ApexPointSeries TItem="DailyDetectionTrend"
                                     Items="_dailyTrends"
-                                    Name="Ham Detections"
+                                    Name="Clean Detections"
                                     SeriesType="SeriesType.Line"
                                     XValue="@(e => DateToUnixMs(e.Date))"
                                     YAggregate="@(e => e.Sum(x => x.HamCount))"

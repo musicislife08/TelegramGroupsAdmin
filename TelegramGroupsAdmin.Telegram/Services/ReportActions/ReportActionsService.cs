@@ -44,6 +44,11 @@ internal sealed class ReportActionsService(
             scope.ServiceProvider.GetRequiredService<IContentReportHandler>()
                 .DismissAsync(reportId, executor, reason, cancellationToken: cancellationToken), cancellationToken);
 
+    public Task<ReviewActionResult> HandleContentCleanAsync(long reportId, Actor executor, CancellationToken cancellationToken)
+        => ExecuteWithLockAsync(reportId, "content", "clean", scope =>
+            scope.ServiceProvider.GetRequiredService<IContentReportHandler>()
+                .CleanAsync(reportId, executor, cancellationToken: cancellationToken), cancellationToken);
+
     // Profile scan actions
     public Task<ReviewActionResult> HandleProfileScanBanAsync(long alertId, Actor executor, CancellationToken cancellationToken)
         => ExecuteWithLockAsync(alertId, "profile_scan", "ban", scope =>

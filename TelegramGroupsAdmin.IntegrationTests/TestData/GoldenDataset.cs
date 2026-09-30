@@ -9,7 +9,7 @@ namespace TelegramGroupsAdmin.IntegrationTests.TestData;
 public static class GoldenDataset
 {
     /// <summary>
-    /// Loads the 36 canonical/*.sql fixtures FK-ordered into the target context, then
+    /// Loads the 33 canonical/*.sql fixtures FK-ordered into the target context, then
     /// runs the encrypted-column UPDATE post-step using the supplied DataProtection
     /// provider. Used by PostgresFixture.[OneTimeSetUp] to build golden_template, and
     /// by GoldenReducePlanTests to exercise Reduce against canonical without depending
@@ -24,7 +24,7 @@ public static class GoldenDataset
         IDataProtectionProvider dataProtection,
         CancellationToken ct = default)
     {
-        // FK-safe load order matching TestData/SQL/canonical/ exactly (36 files;
+        // FK-safe load order matching TestData/SQL/canonical/ exactly (33 files;
         // numeric on-disk order IS the FK-safe order — Pre-1b enforced this).
         // Resource names use '.' separators per .NET embedded-resource conventions:
         // path "TestData/SQL/canonical/01_users.sql" -> "SQL.canonical.01_users.sql".
@@ -46,8 +46,6 @@ public static class GoldenDataset
             "SQL.canonical.12_tag_definitions.sql",
             "SQL.canonical.13_username_blacklist.sql",   // 2 rows (Exact only)
             "SQL.canonical.14_domain_filters.sql",       // EMPTY
-            "SQL.canonical.15_image_training_samples.sql", // EMPTY
-            "SQL.canonical.16_video_training_samples.sql", // EMPTY
             "SQL.canonical.17_web_notifications.sql",    // EMPTY
             "SQL.canonical.18_notification_preferences.sql",
             // Layer 1 — children of roots
@@ -66,7 +64,6 @@ public static class GoldenDataset
             // Layer 2 — children of messages
             "SQL.canonical.31_message_edits.sql",
             "SQL.canonical.32_detection_results.sql",
-            "SQL.canonical.33_training_labels.sql",      // 200 rows
             "SQL.canonical.34_user_actions.sql",         // 993 rows
             // Layer 3 — child of messages AND message_edits
             "SQL.canonical.35_message_translations.sql",

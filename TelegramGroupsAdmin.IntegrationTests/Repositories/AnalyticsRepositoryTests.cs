@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using TelegramGroupsAdmin.ContentDetection.Repositories;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.IntegrationTests.TestData;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
@@ -66,6 +68,7 @@ public class AnalyticsRepositoryTests
         services.AddDbContextFactory<AppDbContext>((_, options) => options.UseNpgsql(_testHelper.ConnectionString));
         services.AddLogging(builder => builder.AddConsole().SetMinimumLevel(LogLevel.Warning));
         services.AddScoped<IAnalyticsRepository, AnalyticsRepository>();
+        services.AddScoped<IDetectionResultsRepository, DetectionResultsRepository>();
 
         _serviceProvider = services.BuildServiceProvider();
         _scope = _serviceProvider.CreateScope();
@@ -423,6 +426,24 @@ public class AnalyticsRepositoryTests
     }
 
     [Test]
+    public async Task GetDetectionAccuracyStats_ReviewQueueMarkClean_CountsAsFalsePositive()
+    {
+        // A review-queue "Mark clean" is the main way a false flag gets corrected; the accuracy
+        // view must treat it as a correction like web Mark Clean.
+        var startDate = DateTimeOffset.UtcNow.AddDays(-7);
+        var endDate = DateTimeOffset.UtcNow.AddDays(1);
+        var before = await _analyticsRepository.GetDetectionAccuracyStatsAsync(startDate, endDate, DefaultTimeZoneId);
+        Assert.That(before.TotalFalsePositives, Is.EqualTo(1), "canonical precondition: only the 213325 correction");
+
+        await _scope.ServiceProvider.GetRequiredService<IDetectionResultsRepository>().RecordDecisionAsync(
+            (int)GoldenDatasetConstants.Analytics.MsgId_TodaySpam1, GoldenDatasetConstants.Chats.MainChatId,
+            VerdictSource.ReviewClean, Actor.FromWebUser(GoldenDatasetConstants.WebUsers.OwnerId), "Report #1 - marked clean");
+
+        var after = await _analyticsRepository.GetDetectionAccuracyStatsAsync(startDate, endDate, DefaultTimeZoneId);
+        Assert.That(after.TotalFalsePositives, Is.EqualTo(2));
+    }
+
+    [Test]
     public async Task GetDetectionAccuracyStats_TotalDetections_MatchesExpected()
     {
         // Arrange
@@ -492,6 +513,25 @@ public class AnalyticsRepositoryTests
         {
             Assert.That(stats.DailyBreakdown[i].Date, Is.LessThan(stats.DailyBreakdown[i + 1].Date),
                 "Daily breakdown should be ordered by date ascending");
+        }
+    }
+
+    #endregion
+
+    #region Detection accuracy
+
+    [Test]
+    public async Task DetectionAccuracy_FlagsFalsePositive_FromCorrectionDecision_AndIgnoresDecisionRows()
+    {
+        await using var ctx = _testHelper.GetDbContext();
+        var rows = await ctx.DetectionAccuracy.AsNoTracking().ToListAsync();
+        var rowIds = rows.Select(r => r.Id).ToList();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(rows.Single(r => r.Id == GoldenDatasetConstants.Analytics.DrId_FpAuto).IsFalsePositive, Is.True);
+            Assert.That(rows.Any(r => r.Id == GoldenDatasetConstants.Analytics.DrId_FpManual), Is.False, "decision rows are not detector output");
+            Assert.That(await ctx.DetectionResults.Where(d => rowIds.Contains(d.Id)).AllAsync(d => d.Source == 0), Is.True);
         }
     }
 

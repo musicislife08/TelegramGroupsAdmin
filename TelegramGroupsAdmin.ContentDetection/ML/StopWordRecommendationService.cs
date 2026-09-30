@@ -1,12 +1,10 @@
 using System.Text.Json;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Services;
 using TelegramGroupsAdmin.ContentDetection.Utilities;
-using TelegramGroupsAdmin.Data;
 
 namespace TelegramGroupsAdmin.ContentDetection.ML;
 
@@ -17,18 +15,18 @@ namespace TelegramGroupsAdmin.ContentDetection.ML;
 /// </summary>
 public class StopWordRecommendationService : IStopWordRecommendationService
 {
-    private readonly IDbContextFactory<AppDbContext> _contextFactory;
+    private readonly IStopWordCorpusRepository _corpusRepository;
     private readonly IStopWordsRepository _stopWordsRepository;
     private readonly ITokenizerService _tokenizerService;
     private readonly ILogger<StopWordRecommendationService> _logger;
 
     public StopWordRecommendationService(
-        IDbContextFactory<AppDbContext> contextFactory,
+        IStopWordCorpusRepository corpusRepository,
         IStopWordsRepository stopWordsRepository,
         ITokenizerService tokenizerService,
         ILogger<StopWordRecommendationService> logger)
     {
-        _contextFactory = contextFactory;
+        _corpusRepository = corpusRepository;
         _stopWordsRepository = stopWordsRepository;
         _tokenizerService = tokenizerService;
         _logger = logger;
@@ -111,45 +109,22 @@ public class StopWordRecommendationService : IStopWordRecommendationService
     private async Task<DataAvailabilityResult>
         ValidateDataAvailabilityAsync(DateTimeOffset since, CancellationToken cancellationToken)
     {
-        await using var dbContext = await _contextFactory.CreateDbContextAsync(cancellationToken);
-
-        // Count spam training samples (using Message.Timestamp for consistent time window)
-        var spamSampleCount = await dbContext.DetectionResults
-            .AsNoTracking()
-            .Include(d => d.Message)
-            .Where(d => d.IsSpam &&
-                       d.UsedForTraining &&
-                       d.Message != null &&
-                       d.Message.Timestamp >= since)
-            .CountAsync(cancellationToken);
-
-        // Count legitimate messages (messages without spam detection results)
-        var legitMessageCount = await dbContext.Messages
-            .AsNoTracking()
-            .Where(m => m.Timestamp >= since)
-            .Where(m => !dbContext.DetectionResults.Any(d => d.MessageId == m.MessageId && d.ChatId == m.ChatId && d.IsSpam))
-            .CountAsync(cancellationToken);
-
-        // Count total detection results (for precision analysis)
-        var detectionResultCount = await dbContext.DetectionResults
-            .AsNoTracking()
-            .Where(d => d.DetectedAt >= since)
-            .CountAsync(cancellationToken);
+        var counts = await _corpusRepository.GetCountsAsync(since, cancellationToken);
 
         // Validate minimum requirements
-        if (spamSampleCount < MLConstants.MinimumSpamSamples)
+        if (counts.SpamSamples < MLConstants.MinimumSpamSamples)
         {
-            return new DataAvailabilityResult(spamSampleCount, legitMessageCount, detectionResultCount,
-                $"Insufficient spam samples: {spamSampleCount} found, need at least {MLConstants.MinimumSpamSamples}");
+            return new DataAvailabilityResult(counts.SpamSamples, counts.LegitMessages, counts.ScanResults,
+                $"Insufficient spam samples: {counts.SpamSamples} found, need at least {MLConstants.MinimumSpamSamples}");
         }
 
-        if (legitMessageCount < MLConstants.MinimumLegitMessages)
+        if (counts.LegitMessages < MLConstants.MinimumLegitMessages)
         {
-            return new DataAvailabilityResult(spamSampleCount, legitMessageCount, detectionResultCount,
-                $"Insufficient legitimate messages: {legitMessageCount} found, need at least {MLConstants.MinimumLegitMessages}");
+            return new DataAvailabilityResult(counts.SpamSamples, counts.LegitMessages, counts.ScanResults,
+                $"Insufficient legitimate messages: {counts.LegitMessages} found, need at least {MLConstants.MinimumLegitMessages}");
         }
 
-        return new DataAvailabilityResult(spamSampleCount, legitMessageCount, detectionResultCount, null);
+        return new DataAvailabilityResult(counts.SpamSamples, counts.LegitMessages, counts.ScanResults, null);
     }
 
     /// <summary>
@@ -162,35 +137,8 @@ public class StopWordRecommendationService : IStopWordRecommendationService
         int totalLegitMessages,
         CancellationToken cancellationToken)
     {
-        await using var dbContext = await _contextFactory.CreateDbContextAsync(cancellationToken);
-
-        // Step 1: Load spam training samples (using Message.Timestamp for consistent time window)
-        // Use translated text if available (same as ContentDetectionEngine does)
-        var spamMessages = await dbContext.DetectionResults
-            .AsNoTracking()
-            .Include(d => d.Message)
-            .Where(d => d.IsSpam &&
-                        d.UsedForTraining &&
-                        d.Message != null &&
-                        d.Message.Timestamp >= since)
-            .Select(d => new
-            {
-                MessageId = d.Message!.MessageId,
-                OriginalText = d.Message.MessageText
-            })
-            .ToListAsync(cancellationToken);
-
-        // Get translations for these messages
-        var messageIds = spamMessages.Select(m => m.MessageId).ToList();
-        var translations = await dbContext.MessageTranslations
-            .AsNoTracking()
-            .Where(t => t.MessageId != null && messageIds.Contains(t.MessageId.Value))
-            .ToDictionaryAsync(t => t.MessageId!.Value, t => t.TranslatedText, cancellationToken);
-
-        // Use translated text when available, otherwise original
-        var spamTexts = spamMessages
-            .Select(m => translations.GetValueOrDefault(m.MessageId) ?? m.OriginalText)
-            .ToList();
+        // Step 1: Load spam corpus text (current verdict in TrainingSpam), translated text preferred
+        var spamTexts = await _corpusRepository.GetSpamTextsAsync(since, cancellationToken);
 
         // Step 2: Extract words from spam corpus
         var spamWordCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
@@ -204,30 +152,8 @@ public class StopWordRecommendationService : IStopWordRecommendationService
             }
         }
 
-        // Step 3: Load legitimate messages and extract words (messages without spam detection results)
-        // Use translated text if available (same as ContentDetectionEngine does)
-        var legitMessages = await dbContext.Messages
-            .AsNoTracking()
-            .Where(m => m.Timestamp >= since)
-            .Where(m => !dbContext.DetectionResults.Any(d => d.MessageId == m.MessageId && d.ChatId == m.ChatId && d.IsSpam))
-            .Select(m => new
-            {
-                MessageId = m.MessageId,
-                OriginalText = m.MessageText
-            })
-            .ToListAsync(cancellationToken);
-
-        // Get translations for legitimate messages
-        var legitMessageIds = legitMessages.Select(m => m.MessageId).ToList();
-        var legitTranslations = await dbContext.MessageTranslations
-            .AsNoTracking()
-            .Where(t => t.MessageId != null && legitMessageIds.Contains(t.MessageId.Value))
-            .ToDictionaryAsync(t => t.MessageId!.Value, t => t.TranslatedText, cancellationToken);
-
-        // Use translated text when available, otherwise original
-        var legitTexts = legitMessages
-            .Select(m => legitTranslations.GetValueOrDefault(m.MessageId) ?? m.OriginalText)
-            .ToList();
+        // Step 3: Load legit corpus text (current verdict not spam), translated text preferred
+        var legitTexts = await _corpusRepository.GetLegitTextsAsync(since, cancellationToken);
 
         var legitWordCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         foreach (var message in legitTexts.Where(m => !string.IsNullOrWhiteSpace(m)))
@@ -301,23 +227,11 @@ public class StopWordRecommendationService : IStopWordRecommendationService
         DateTimeOffset since,
         CancellationToken cancellationToken)
     {
-        await using var dbContext = await _contextFactory.CreateDbContextAsync(cancellationToken);
-
         // Step 1: Get all current stop words
         var stopWords = (await _stopWordsRepository.GetAllStopWordsAsync(cancellationToken)).ToList();
 
-        // Step 2: Load detection results with check_results_json for StopWords check
-        var detectionResults = await dbContext.DetectionResults
-            .AsNoTracking()
-            .Where(d => d.DetectedAt >= since && d.CheckResultsJson != null)
-            .Select(d => new
-            {
-                d.Id,
-                d.IsSpam,
-                d.CheckResultsJson,
-                d.DetectedAt
-            })
-            .ToListAsync(cancellationToken);
+        // Step 2: Load ContentScan detection results with check_results_json for StopWords check
+        var detectionResults = await _corpusRepository.GetScanCheckResultsAsync(since, cancellationToken);
 
         // Step 3: Analyze each stop word
         var recommendations = new List<StopWordRemovalRecommendation>();
@@ -514,15 +428,13 @@ public class StopWordRecommendationService : IStopWordRecommendationService
     /// Performance cleanup recommendations will remain empty until query is implemented.
     /// This is acceptable - the service still provides addition/removal recommendations.
     /// </remarks>
-    private async Task<decimal?> GetAverageStopWordsExecutionTimeAsync(
+    private Task<decimal?> GetAverageStopWordsExecutionTimeAsync(
         DateTimeOffset since,
         CancellationToken cancellationToken)
     {
-        await using var dbContext = await _contextFactory.CreateDbContextAsync(cancellationToken);
-
         // TODO: Implement JSONB query to extract ProcessingTimeMs for StopWords check
         // Query pattern: Parse check_results_json -> filter by CheckName='StopWords' -> AVG(ProcessingTimeMs)
         // Will use GIN index on check_results_json for efficient querying
-        return null;
+        return Task.FromResult<decimal?>(null);
     }
 }

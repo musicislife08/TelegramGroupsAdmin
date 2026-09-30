@@ -32,8 +32,8 @@ namespace TelegramGroupsAdmin.IntegrationTests.ML;
 /// - TrainAsync with pre-cancelled token: Throws TaskCanceledException
 ///
 /// Training Data Substrate:
-/// - Database cloned from the canonical golden_template (`33_training_labels.sql`),
-///   which ships 100 spam (label=0) + 100 ham (label=1) — both classes comfortably
+/// - Database cloned from the canonical golden_template (`32_detection_results.sql`),
+///   whose explicit spam/ham decisions give both classes counts comfortably
 ///   above MLConstants.MinimumSamplesPerClass = 20.
 /// </summary>
 [TestFixture]

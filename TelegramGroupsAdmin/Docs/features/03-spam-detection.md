@@ -443,9 +443,9 @@ Join our VIP signals group for guaranteed profits!"
 **Layer 1 -- Perceptual Hash Similarity** (fastest):
 - Computes a perceptual hash of the image
 - Compares against training sample hashes (limited by `MaxTrainingSamplesToCompare`)
-- If similarity exceeds threshold (`HashSimilarityThreshold`), returns the configured `HashMatchConfidence` score
-- Matches against known ham samples cause an abstention (no negative scoring in V2)
-- Falls through to Layer 2 if no hash match
+- If similarity to a spam sample exceeds threshold (`HashSimilarityThreshold`), returns the configured `HashMatchConfidence` score
+- A match against an admin-verified ham sample (marked ham by an admin) at or above `HamSkipThreshold` (default 0.95) abstains and skips OCR and Vision (no negative scoring in V2)
+- Any other ham match (auto-scanned ham, or admin-verified ham below `HamSkipThreshold`) falls through to Layer 2, as does no hash match
 
 **Layer 2 -- OCR + Text-Based Spam Detection** (medium):
 - Extracts text from the image using OCR (Tesseract)
@@ -497,6 +497,7 @@ Score: 3.0 points
 - Computes perceptual hashes for each frame
 - Compares frame hashes against video training sample keyframes
 - Returns early with configured score if a spam hash match exceeds the threshold
+- Abstains early only on an admin-verified ham match at or above `HamSkipThreshold`; any other ham match falls through to Layer 2
 
 **Layer 2 -- OCR on Frames** (medium):
 - Runs OCR on all extracted frames and collects text

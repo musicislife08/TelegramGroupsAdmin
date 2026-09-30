@@ -3,9 +3,12 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Core.Extensions;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
+using TelegramGroupsAdmin.ContentDetection.Repositories.Mappings;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Telegram.Repositories.Mappings;
+using DataModels = TelegramGroupsAdmin.Data.Models;
 using UiModels = TelegramGroupsAdmin.Telegram.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Repositories;
@@ -49,13 +52,16 @@ public class MessageHistoryRepository : IMessageHistoryRepository
     public async Task<UiModels.MessageCleanupResult> CleanupExpiredAsync(TimeSpan retention, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        // Retention: Keep messages within retention period OR messages with training data (used_for_training = true)
+        // Retention: keep messages within the retention period, and any older message whose current
+        // verdict is curated training data (explicit labels, confident implicit spam). Media features
+        // live on the message row, so they are kept with it.
         var retentionCutoff = DateTimeOffset.UtcNow - retention;
 
         // MH2: Single query optimization - get all expired message data in one query
         var expiredData = await context.Messages
             .Where(m => m.Timestamp < retentionCutoff
-                && !context.DetectionResults.Any(dr => dr.MessageId == m.MessageId && dr.ChatId == m.ChatId && dr.UsedForTraining))
+                && !context.MessageVerdicts.Any(v => v.MessageId == m.MessageId && v.ChatId == m.ChatId
+                    && VerdictClassifications.CuratedValues.Contains(v.Classification)))
             .GroupJoin(
                 context.MessageEdits,
                 m => new { m.MessageId, m.ChatId },
@@ -351,58 +357,77 @@ public class MessageHistoryRepository : IMessageHistoryRepository
             .ToListAsync(cancellationToken);
     }
 
-    /// <summary>
-    /// Check if a similar SimHash exists in training data using Hamming distance.
-    /// </summary>
-    /// <remarks>
-    /// Raw SQL Required: PostgreSQL's bit_count() for Hamming distance calculation cannot be expressed in EF Core:
-    /// - bit_count() function is PostgreSQL-specific (no EF Core equivalent)
-    /// - XOR operator (#) is PostgreSQL-specific
-    /// - Cast to bit(64) is PostgreSQL-specific
-    /// This is the same pattern used in AnalyticsRepository for JSONB queries and TrainingLabelsRepository for upserts.
-    /// </remarks>
-    public async Task<bool> HasSimilarTrainingHashAsync(long hash, bool isSpam, int maxDistance = 10, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<UiModels.RecentMessageVerdict>> GetRecentMessagesWithVerdictAsync(
+        long chatId, int count, CancellationToken cancellationToken = default)
     {
-        if (hash == 0)
-            return false; // Empty/null text has no hash to compare
-
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var rows = await (
+            from m in context.Messages.AsNoTracking()
+            where m.ChatId == chatId
+            join v in context.MessageVerdicts.AsNoTracking() on new { m.MessageId, m.ChatId } equals new { v.MessageId, v.ChatId }
+            join tu in context.TelegramUsers.AsNoTracking() on m.UserId equals tu.TelegramUserId into users
+            from tu in users.DefaultIfEmpty()
+            orderby m.Timestamp descending
+            select new { m.MessageId, m.UserId, Username = tu != null ? tu.Username : null, m.MessageText, m.Timestamp, v.IsSpam }
+        ).Take(count).ToListAsync(cancellationToken);
 
-        // TrainingLabel enum: Spam=0, Ham=1
-        var labelValue = isSpam ? 0 : 1;
+        return rows.Select(r => new UiModels.RecentMessageVerdict(r.MessageId, r.UserId, r.Username, r.MessageText, r.Timestamp, r.IsSpam)).ToList();
+    }
 
-        // Training data comes from two sources:
-        // 1. detection_results with used_for_training=true (implicit labels from auto-detection)
-        // 2. training_labels (explicit labels from manual labeling)
-        // COALESCE prefers translation hash (analyzed text) over original message hash
-        var result = await context.Database
-            .SqlQuery<bool>($"""
-                SELECT EXISTS (
-                    SELECT 1
-                    FROM messages m
-                    LEFT JOIN message_translations mt ON mt.message_id = m.message_id AND mt.chat_id = m.chat_id AND mt.edit_id IS NULL
-                    WHERE COALESCE(mt.similarity_hash, m.similarity_hash) IS NOT NULL
-                      AND bit_count((COALESCE(mt.similarity_hash, m.similarity_hash) # {hash})::bit(64))::int <= {maxDistance}
-                      AND (
-                          EXISTS (
-                              SELECT 1 FROM detection_results dr
-                              WHERE dr.message_id = m.message_id
-                                AND dr.chat_id = m.chat_id
-                                AND dr.is_spam = {isSpam}
-                                AND dr.used_for_training = true
-                          )
-                          OR
-                          EXISTS (
-                              SELECT 1 FROM training_labels tl
-                              WHERE tl.message_id = m.message_id
-                                AND tl.chat_id = m.chat_id
-                                AND tl.label = {labelValue}
-                          )
-                      )
-                ) AS "Value"
-                """)
-            .FirstAsync(cancellationToken);
+    public async Task<Dictionary<int, UiModels.ContentCheckRecord>> GetCurrentContentChecksAsync(
+        long chatId, IReadOnlyCollection<int> messageIds, CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var rows = await (
+            from v in context.MessageVerdicts.AsNoTracking()
+            where v.ChatId == chatId && messageIds.Contains(v.MessageId) && v.VerdictId != null
+            join dr in context.DetectionResults.AsNoTracking() on v.VerdictId equals (long?)dr.Id
+            join m in context.Messages.AsNoTracking() on new { v.MessageId, v.ChatId } equals new { m.MessageId, m.ChatId }
+            select new { dr.DetectedAt, m.UserId, v.IsSpam, dr.Score, dr.Reason, dr.DetectionMethod, v.MessageId }
+        ).ToListAsync(cancellationToken);
 
-        return result;
+        return rows.ToDictionary(
+            r => r.MessageId,
+            r => new UiModels.ContentCheckRecord(
+                CheckTimestamp: r.DetectedAt,
+                UserId: r.UserId,
+                IsSpam: r.IsSpam,
+                Score: r.Score,
+                Reason: r.Reason ?? $"{r.DetectionMethod}: {(r.IsSpam ? "spam" : "ham")}",
+                MatchedMessageId: r.MessageId));
+    }
+
+    public async Task SetMediaFeaturesAsync(int messageId, long chatId, MediaFeatures features, CancellationToken cancellationToken = default)
+    {
+        // A single UPDATE (no read-modify-write): the startup backfill and a live scan can race on the
+        // same message, and whichever runs last simply wins with equally valid features.
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var dto = features.ToDto();
+        await context.Messages
+            .Where(m => m.MessageId == messageId && m.ChatId == chatId)
+            .ExecuteUpdateAsync(set => set.SetProperty(m => m.MediaFeatures, dto), cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<UiModels.MediaBackfillCandidate>> GetMediaFeatureBackfillCandidatesAsync(int limit, int offset, CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        DataModels.MediaType[] videoTypes = [DataModels.MediaType.Video, DataModels.MediaType.Animation, DataModels.MediaType.VideoNote];
+        var rows = await (
+            from v in context.MessageVerdicts.AsNoTracking()
+            where VerdictClassifications.CuratedValues.Contains(v.Classification)
+            join m in context.Messages.AsNoTracking() on new { v.MessageId, v.ChatId } equals new { m.MessageId, m.ChatId }
+            where m.MediaFeatures == null
+               && (m.PhotoLocalPath != null
+                   // TrainingHandler's defensive download stores a photo under media_local_path
+                   || (m.PhotoFileId != null && m.MediaLocalPath != null)
+                   || (m.MediaLocalPath != null && m.MediaType != null && videoTypes.Contains(m.MediaType.Value)))
+            // Newest decision first, with a stable tie-break so the caller can page past candidates
+            // whose files stay missing.
+            orderby v.DetectedAt descending, m.ChatId, m.MessageId
+            select new { m.MessageId, m.ChatId, m.PhotoFileId, m.PhotoLocalPath, m.MediaLocalPath, m.MediaType }
+        ).Skip(offset).Take(limit).ToListAsync(cancellationToken);
+        return [.. rows.Select(r => new UiModels.MediaBackfillCandidate(
+            r.MessageId, r.ChatId, r.PhotoLocalPath, r.MediaLocalPath,
+            r.PhotoFileId != null ? UiModels.MediaType.Photo : (UiModels.MediaType?)r.MediaType))];
     }
 }

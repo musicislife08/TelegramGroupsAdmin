@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Telegram.Bot.Types;
@@ -6,6 +7,7 @@ using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Metrics;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.BotCommands;
 
 namespace TelegramGroupsAdmin.UnitTests.Telegram.Services.BotCommands;
@@ -74,6 +76,8 @@ public class CommandRouterTests
         // Register repositories as scoped so CreateScope() resolves the substitutes
         services.AddScoped(_ => mappingRepo);
         services.AddScoped(_ => chatAdminsRepo);
+        services.AddScoped<ITelegramPermissionService, TelegramPermissionService>();
+        services.AddSingleton(typeof(ILogger<>), typeof(NullLogger<>));
 
         var provider = services.BuildServiceProvider();
         var router = new CommandRouter(

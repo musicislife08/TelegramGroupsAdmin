@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using NUnit.Framework;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.IntegrationTests.Fixtures;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
 
@@ -9,10 +10,31 @@ namespace TelegramGroupsAdmin.IntegrationTests.TestData.Tests;
 [TestFixture]
 public class GoldenReducePlanTests
 {
-    // training_labels.label is smallint (0=Spam, 1=Ham). The DTO exposes it as `short Label`,
-    // so test predicates compare against the cast enum value rather than a string literal.
-    private const short SpamLabel = (short)TrainingLabel.Spam; // 0
-    private const short HamLabel = (short)TrainingLabel.Ham;   // 1
+    // Task 8 fix round (R17): KeepDetectionResults now scopes to scan rows only
+    // (ContentScan/FileScan) — decision rows are the label store, pruned by KeepSpam/KeepHam.
+    private const int SourceContentScan = (int)VerdictSource.ContentScan; // 0
+    private const int SourceFileScan = (int)VerdictSource.FileScan;       // 1
+
+    // Task 8 fix round (R20): KeepSpam/KeepHam now select and prune by explicit *decision*
+    // rows in detection_results — source NOT IN (ContentScan/FileScan/TrainingExclude),
+    // classification ExplicitSpam/ExplicitHam — the label store the SUT's message_verdicts
+    // view reads. "N kept" is measured by counting distinct messages with a surviving
+    // decision row of that polarity.
+    private const int SourceTrainingExclude = (int)VerdictSource.TrainingExclude; // 17
+    private const int ClassificationExplicitSpam = (int)VerdictClassification.ExplicitSpam; // 0
+    private const int ClassificationExplicitHam = (int)VerdictClassification.ExplicitHam;   // 1
+
+    /// <summary>
+    /// Distinct (chat_id, message_id) count of explicit decision rows for the given
+    /// classification — the same predicate ChildReducePlan's KeepSpam/KeepHam select from.
+    /// </summary>
+    private static Task<int> CountExplicitDecisionMessagesAsync(AppDbContext ctx, int classification) =>
+        ctx.DetectionResults
+            .Where(dr => dr.Source != SourceContentScan && dr.Source != SourceFileScan && dr.Source != SourceTrainingExclude
+                      && dr.Classification == classification)
+            .Select(dr => new { dr.ChatId, dr.MessageId })
+            .Distinct()
+            .CountAsync();
 
     private MigrationTestHelper? _helper;
 
@@ -34,12 +56,12 @@ public class GoldenReducePlanTests
     public async Task KeepSpam_KeepsExactlyN_AndDoesNotTouchHam()
     {
         await using var ctx = _helper!.GetDbContext();
-        var hamBefore = await ctx.TrainingLabels.CountAsync(tl => tl.Label == HamLabel);
+        var hamBefore = await CountExplicitDecisionMessagesAsync(ctx, ClassificationExplicitHam);
 
         await GoldenDataset.Reduce(ctx).KeepSpam(5).ApplyAsync();
 
-        var spamAfter = await ctx.TrainingLabels.CountAsync(tl => tl.Label == SpamLabel);
-        var hamAfter = await ctx.TrainingLabels.CountAsync(tl => tl.Label == HamLabel);
+        var spamAfter = await CountExplicitDecisionMessagesAsync(ctx, ClassificationExplicitSpam);
+        var hamAfter = await CountExplicitDecisionMessagesAsync(ctx, ClassificationExplicitHam);
         Assert.That(spamAfter, Is.EqualTo(5));
         Assert.That(hamAfter, Is.EqualTo(hamBefore), "KeepSpam must not touch ham");
     }
@@ -48,12 +70,12 @@ public class GoldenReducePlanTests
     public async Task KeepSpam_Zero_RemovesAllSpam_KeepsAllHam()
     {
         await using var ctx = _helper!.GetDbContext();
-        var hamBefore = await ctx.TrainingLabels.CountAsync(tl => tl.Label == HamLabel);
+        var hamBefore = await CountExplicitDecisionMessagesAsync(ctx, ClassificationExplicitHam);
 
         await GoldenDataset.Reduce(ctx).KeepSpam(0).ApplyAsync();
 
-        Assert.That(await ctx.TrainingLabels.CountAsync(tl => tl.Label == SpamLabel), Is.EqualTo(0));
-        Assert.That(await ctx.TrainingLabels.CountAsync(tl => tl.Label == HamLabel), Is.EqualTo(hamBefore));
+        Assert.That(await CountExplicitDecisionMessagesAsync(ctx, ClassificationExplicitSpam), Is.EqualTo(0));
+        Assert.That(await CountExplicitDecisionMessagesAsync(ctx, ClassificationExplicitHam), Is.EqualTo(hamBefore));
     }
 
     // ── Task 1.12: KeepHam symmetry ─────────────────────────────────────────────
@@ -62,24 +84,24 @@ public class GoldenReducePlanTests
     public async Task KeepHam_KeepsExactlyN_AndDoesNotTouchSpam()
     {
         await using var ctx = _helper!.GetDbContext();
-        var spamBefore = await ctx.TrainingLabels.CountAsync(tl => tl.Label == SpamLabel);
+        var spamBefore = await CountExplicitDecisionMessagesAsync(ctx, ClassificationExplicitSpam);
 
         await GoldenDataset.Reduce(ctx).KeepHam(5).ApplyAsync();
 
-        Assert.That(await ctx.TrainingLabels.CountAsync(tl => tl.Label == HamLabel), Is.EqualTo(5));
-        Assert.That(await ctx.TrainingLabels.CountAsync(tl => tl.Label == SpamLabel), Is.EqualTo(spamBefore));
+        Assert.That(await CountExplicitDecisionMessagesAsync(ctx, ClassificationExplicitHam), Is.EqualTo(5));
+        Assert.That(await CountExplicitDecisionMessagesAsync(ctx, ClassificationExplicitSpam), Is.EqualTo(spamBefore));
     }
 
     [Test]
     public async Task KeepHam_Zero_RemovesAllHam_KeepsAllSpam()
     {
         await using var ctx = _helper!.GetDbContext();
-        var spamBefore = await ctx.TrainingLabels.CountAsync(tl => tl.Label == SpamLabel);
+        var spamBefore = await CountExplicitDecisionMessagesAsync(ctx, ClassificationExplicitSpam);
 
         await GoldenDataset.Reduce(ctx).KeepHam(0).ApplyAsync();
 
-        Assert.That(await ctx.TrainingLabels.CountAsync(tl => tl.Label == HamLabel), Is.EqualTo(0));
-        Assert.That(await ctx.TrainingLabels.CountAsync(tl => tl.Label == SpamLabel), Is.EqualTo(spamBefore));
+        Assert.That(await CountExplicitDecisionMessagesAsync(ctx, ClassificationExplicitHam), Is.EqualTo(0));
+        Assert.That(await CountExplicitDecisionMessagesAsync(ctx, ClassificationExplicitSpam), Is.EqualTo(spamBefore));
     }
 
     // ── Task 1.13: KeepDetectionResults & KeepUserActions ─────────────────────
@@ -90,7 +112,11 @@ public class GoldenReducePlanTests
         await using var ctx = _helper!.GetDbContext();
         await GoldenDataset.Reduce(ctx).KeepDetectionResults(3).ApplyAsync();
 
-        var ids = await ctx.DetectionResults.OrderBy(dr => dr.Id).Select(dr => dr.Id).ToListAsync();
+        // Scoped to scan rows (R17): KeepDetectionResults no longer touches decision rows
+        // (the label store, pruned by KeepSpam/KeepHam instead), so they survive untouched.
+        var ids = await ctx.DetectionResults
+            .Where(dr => dr.Source == SourceContentScan || dr.Source == SourceFileScan)
+            .OrderBy(dr => dr.Id).Select(dr => dr.Id).ToListAsync();
         Assert.That(ids, Has.Count.EqualTo(3));
         // No assertion on specific id values — bootstrap renumbering is opaque to this test.
         // The "lowest by id" property is verified by the count + orderedness alone.
@@ -120,7 +146,6 @@ public class GoldenReducePlanTests
 
         Assert.That(await ctx.Messages.CountAsync(), Is.EqualTo(0));
         Assert.That(await ctx.MessageEdits.CountAsync(), Is.EqualTo(0), "Cascade FK should clear message_edits");
-        Assert.That(await ctx.TrainingLabels.CountAsync(), Is.EqualTo(0), "Cascade FK should clear training_labels");
         Assert.That(await ctx.DetectionResults.CountAsync(), Is.EqualTo(0), "Cascade FK should clear detection_results");
         Assert.That(await ctx.MessageTranslations.CountAsync(), Is.EqualTo(0), "Cascade FK should clear message_translations");
 
@@ -138,13 +163,13 @@ public class GoldenReducePlanTests
 
         Assert.That(await ctx.Messages.CountAsync(), Is.EqualTo(5));
         // Children of the surviving 5 messages remain — exact count is bootstrap-defined,
-        // but every surviving training_labels row must reference one of the surviving 5
+        // but every surviving detection_results row must reference one of the surviving 5
         // messages. Phrased as a NOT EXISTS subquery so EF Core translates server-side
         // (an in-memory anonymous-type List<> in the predicate isn't translatable).
-        var hangingTl = await ctx.TrainingLabels
-            .Where(tl => !ctx.Messages.Any(m => m.ChatId == tl.ChatId && m.MessageId == tl.MessageId))
+        var hangingDr = await ctx.DetectionResults
+            .Where(dr => !ctx.Messages.Any(m => m.ChatId == dr.ChatId && m.MessageId == dr.MessageId))
             .CountAsync();
-        Assert.That(hangingTl, Is.EqualTo(0), "training_labels rows must all reference surviving messages");
+        Assert.That(hangingDr, Is.EqualTo(0), "detection_results rows must all reference surviving messages");
     }
 
     // ── KeepLabeledMessagesOnly: drop unlabeled survivors after Keep{Spam,Ham} ─
@@ -157,9 +182,14 @@ public class GoldenReducePlanTests
 
         await GoldenDataset.Reduce(ctx).KeepSpam(3).KeepHam(2).KeepLabeledMessagesOnly().ApplyAsync();
 
-        // Every surviving message must have at least one training_labels row.
+        // Every surviving message must have a surviving explicit decision row (R20: the
+        // label store, e.g. an admin mark, an AutoBan fold or a chat_id=0
+        // Training-Data-page/Import sample).
         var unlabeledSurvivors = await ctx.Messages
-            .Where(m => !ctx.TrainingLabels.Any(tl => tl.MessageId == m.MessageId && tl.ChatId == m.ChatId))
+            .Where(m => !ctx.DetectionResults.Any(dr =>
+                dr.MessageId == m.MessageId && dr.ChatId == m.ChatId
+                && dr.Source != SourceContentScan && dr.Source != SourceFileScan && dr.Source != SourceTrainingExclude
+                && (dr.Classification == ClassificationExplicitSpam || dr.Classification == ClassificationExplicitHam)))
             .CountAsync();
         Assert.That(unlabeledSurvivors, Is.EqualTo(0), "No surviving message may be unlabeled");
 
@@ -196,11 +226,14 @@ public class GoldenReducePlanTests
 
         await GoldenDataset.Reduce(ctx).KeepSpam(0).KeepHam(2).KeepLabeledMessagesOnly().ApplyAsync();
 
-        Assert.That(await ctx.TrainingLabels.CountAsync(tl => tl.Label == SpamLabel), Is.EqualTo(0));
-        Assert.That(await ctx.TrainingLabels.CountAsync(tl => tl.Label == HamLabel), Is.LessThanOrEqualTo(2));
-        // Every surviving message references a ham label (the only labels left).
+        Assert.That(await CountExplicitDecisionMessagesAsync(ctx, ClassificationExplicitSpam), Is.EqualTo(0));
+        Assert.That(await CountExplicitDecisionMessagesAsync(ctx, ClassificationExplicitHam), Is.LessThanOrEqualTo(2));
+        // Every surviving message references a ham decision (the only labels left; R20).
         var unlabeledSurvivors = await ctx.Messages
-            .Where(m => !ctx.TrainingLabels.Any(tl => tl.MessageId == m.MessageId && tl.ChatId == m.ChatId))
+            .Where(m => !ctx.DetectionResults.Any(dr =>
+                dr.MessageId == m.MessageId && dr.ChatId == m.ChatId
+                && dr.Source != SourceContentScan && dr.Source != SourceFileScan && dr.Source != SourceTrainingExclude
+                && (dr.Classification == ClassificationExplicitSpam || dr.Classification == ClassificationExplicitHam)))
             .CountAsync();
         Assert.That(unlabeledSurvivors, Is.EqualTo(0));
     }
@@ -214,7 +247,11 @@ public class GoldenReducePlanTests
         await GoldenDataset.Reduce(ctx).KeepMessages(5).KeepDetectionResults(2).ApplyAsync();
 
         Assert.That(await ctx.Messages.CountAsync(), Is.EqualTo(5));
-        Assert.That(await ctx.DetectionResults.CountAsync(), Is.EqualTo(2));
+        // Scoped to scan rows (R17) — decision rows on the surviving 5 messages, if any,
+        // are untouched by KeepDetectionResults.
+        Assert.That(
+            await ctx.DetectionResults.CountAsync(dr => dr.Source == SourceContentScan || dr.Source == SourceFileScan),
+            Is.EqualTo(2));
     }
 
     [Test]
@@ -241,7 +278,10 @@ public class GoldenReducePlanTests
         // Topological execution puts KeepMessages first regardless of registration order.
         // Result must equal the canonical-ordered chain Reduce(ctx).KeepMessages(5).KeepDetectionResults(2).
         Assert.That(await ctx.Messages.CountAsync(), Is.EqualTo(5));
-        Assert.That(await ctx.DetectionResults.CountAsync(), Is.EqualTo(2));
+        // Scoped to scan rows (R17) — see KeepMessages_FollowedByKeepDetectionResults_NarrowsFurther.
+        Assert.That(
+            await ctx.DetectionResults.CountAsync(dr => dr.Source == SourceContentScan || dr.Source == SourceFileScan),
+            Is.EqualTo(2));
     }
 
     // ── Task 1.16: validation rules (LIMIT semantics, negative count, last-wins) ─
@@ -258,11 +298,14 @@ public class GoldenReducePlanTests
     [Test]
     public async Task KeepSpam_CountGreaterThanCanonical_KeepsAllAvailable()
     {
+        // R20: "available" is the explicit-decision pool (the label store KeepSpam selects
+        // from). KeepSpam(n >= available) is the no-op case: every explicit spam decision
+        // survives.
         await using var ctx = _helper!.GetDbContext();
-        var spamBefore = await ctx.TrainingLabels.CountAsync(tl => tl.Label == SpamLabel);
+        var spamBefore = await CountExplicitDecisionMessagesAsync(ctx, ClassificationExplicitSpam);
         await GoldenDataset.Reduce(ctx).KeepSpam(spamBefore + 500).ApplyAsync();
 
-        Assert.That(await ctx.TrainingLabels.CountAsync(tl => tl.Label == SpamLabel), Is.EqualTo(spamBefore));
+        Assert.That(await CountExplicitDecisionMessagesAsync(ctx, ClassificationExplicitSpam), Is.EqualTo(spamBefore));
     }
 
     [Test]
@@ -278,11 +321,32 @@ public class GoldenReducePlanTests
     }
 
     [Test]
+    public async Task KeepDetectionResults_LeavesExplicitDecisionRowCountUnchanged()
+    {
+        // R20: KeepDetectionResults only drains the scan pool (source IN ContentScan/
+        // FileScan) — decision rows (the label store) are untouched by it, pruned only by
+        // KeepSpam/KeepHam.
+        await using var ctx = _helper!.GetDbContext();
+        var spamBefore = await CountExplicitDecisionMessagesAsync(ctx, ClassificationExplicitSpam);
+        var hamBefore = await CountExplicitDecisionMessagesAsync(ctx, ClassificationExplicitHam);
+
+        await GoldenDataset.Reduce(ctx).KeepDetectionResults(3).ApplyAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(await CountExplicitDecisionMessagesAsync(ctx, ClassificationExplicitSpam), Is.EqualTo(spamBefore),
+                "KeepDetectionResults must not prune explicit spam decision rows");
+            Assert.That(await CountExplicitDecisionMessagesAsync(ctx, ClassificationExplicitHam), Is.EqualTo(hamBefore),
+                "KeepDetectionResults must not prune explicit ham decision rows");
+        }
+    }
+
+    [Test]
     public async Task KeepSpam_CalledTwice_LastWins()
     {
         await using var ctx = _helper!.GetDbContext();
         await GoldenDataset.Reduce(ctx).KeepSpam(10).KeepSpam(3).ApplyAsync();
-        Assert.That(await ctx.TrainingLabels.CountAsync(tl => tl.Label == SpamLabel), Is.EqualTo(3));
+        Assert.That(await CountExplicitDecisionMessagesAsync(ctx, ClassificationExplicitSpam), Is.EqualTo(3));
     }
 
     // ── KeepMessages allowlist overload ─────────────────────────────────────────

@@ -6,7 +6,7 @@
     <MudStack Spacing="3">
         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
             <MudText Typo="Typo.h6" Color="Color.Primary">Naive Bayes Classifier</MudText>
-            <HelpTooltip Text="Statistical machine learning classifier that calculates spam probability based on word frequency patterns in training samples. Learns your community's unique spam patterns over time. Requires at least 50 spam and 50 ham samples for effective training." />
+            <HelpTooltip Text="Statistical machine learning classifier that calculates spam probability based on word frequency patterns in training samples. Learns your community's unique spam patterns over time. Requires at least 50 spam and 50 clean samples for effective training." />
         </MudStack>
 
         @if (!IsGlobalView)
@@ -39,7 +39,7 @@
         @if (activeConfig.Enabled)
         {
             <ConceptualAlert Severity="Severity.Info" Dense="true">
-                <strong>How it works:</strong> Analyzes word frequency differences between spam and ham training samples.
+                <strong>How it works:</strong> Analyzes word frequency differences between spam and clean training samples.
                 Words that appear more often in spam increase probability. Adapts automatically as you add more training samples.
             </ConceptualAlert>
         }

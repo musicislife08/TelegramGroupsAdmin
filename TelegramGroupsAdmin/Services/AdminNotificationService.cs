@@ -691,7 +691,11 @@ internal sealed class AdminNotificationService : IAdminNotificationService
                 new[]
                 {
                     InlineKeyboardButton.WithCallbackData("⚠️ Warn", $"rev:{contextId}:{(int)ReportAction.Warn}"),
-                    InlineKeyboardButton.WithCallbackData("✓ Dismiss", $"rev:{contextId}:{(int)ReportAction.Dismiss}")
+                    InlineKeyboardButton.WithCallbackData("✅ Mark Clean", $"rev:{contextId}:{(int)ReportAction.Clean}")
+                },
+                new[]
+                {
+                    InlineKeyboardButton.WithCallbackData("Dismiss (no change)", $"rev:{contextId}:{(int)ReportAction.Dismiss}")
                 }
             }),
             ReportType.ImpersonationAlert => new InlineKeyboardMarkup(new[]

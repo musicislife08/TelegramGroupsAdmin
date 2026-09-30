@@ -58,6 +58,19 @@ public class BanCallbackService : IBanCallbackService
             return;
         }
 
+        // The picker is posted in the group, so anyone can tap it: only an admin in this chat, as of now, may act.
+        using (var permissionScope = _scopeFactory.CreateScope())
+        {
+            var level = await permissionScope.ServiceProvider.GetRequiredService<ITelegramPermissionService>()
+                .GetEffectiveLevelAsync(chatId.Value, callbackQuery.From.Id, cancellationToken);
+            if (level < PermissionLevel.Admin)
+            {
+                _logger.LogWarning("Ban callback ignored: {User} is {Level} in chat {ChatId}, not an admin",
+                    callbackQuery.From.ToLogInfo(), level, chatId.Value);
+                return;
+            }
+        }
+
         if (data.StartsWith(CallbackConstants.BanSelectPrefix))
         {
             await HandleSelectAsync(callbackQuery, data, chatId.Value, selectionMessageId.Value, cancellationToken);

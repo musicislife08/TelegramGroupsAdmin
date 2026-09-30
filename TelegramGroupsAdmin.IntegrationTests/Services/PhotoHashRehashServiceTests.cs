@@ -1,23 +1,28 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using NSubstitute;
 using SkiaSharp;
 using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.ContentDetection.Services;
+using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Imaging;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Data.Models;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
+using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Hashing;
 
 namespace TelegramGroupsAdmin.IntegrationTests.Services;
 
 /// <summary>
 /// Integration tests for <see cref="PhotoHashRehashService"/> against real PostgreSQL
-/// (Testcontainers). Covers the four <c>photo_hash</c> byte-array/base64 stores the v1-to-v2
-/// hash migration cleared: telegram_users, linked_channels, ban_celebration_gifs and
-/// image_training_samples (via its message join). Video keyframe re-extraction is explicitly
-/// out of scope (tracked as a follow-up issue).
+/// (Testcontainers). Covers the three <c>photo_hash</c> byte-array/base64 stores the v1-to-v2
+/// hash migration cleared (telegram_users, linked_channels, ban_celebration_gifs) and the
+/// messages.media_features backfill for curated media messages. Infrastructure fixture on the
+/// empty template: it seeds its own rows.
 /// </summary>
 [TestFixture]
 public class PhotoHashRehashServiceTests
@@ -54,6 +59,10 @@ public class PhotoHashRehashServiceTests
 
         services.AddSingleton<IImageProcessor, SkiaImageProcessor>();
         services.AddSingleton<IPhotoHashService, PhotoHashService>();
+        services.AddCoreServices(); // SimHashService for MessageHistoryRepository
+        services.AddScoped<IMessageHistoryRepository, MessageHistoryRepository>();
+        services.AddSingleton(Substitute.For<IVideoFrameExtractionService>());
+        services.AddSingleton<IMediaFeatureExtractor, MediaFeatureExtractor>();
         services.AddScoped<IPhotoHashRehashService, PhotoHashRehashService>();
 
         _serviceProvider = services.BuildServiceProvider();
@@ -132,48 +141,35 @@ public class PhotoHashRehashServiceTests
             .SingleAsync(u => u.TelegramUserId == telegramUserId);
     }
 
-    private async Task<long> SeedImageTrainingSampleAsync(string photoLocalPath, byte[]? photoHash)
+    /// <summary>
+    /// Seeds a message with an admin spam decision (curated verdict, no media features), as a
+    /// never-scanned media message looks after an admin marks it spam.
+    /// </summary>
+    private async Task<(int MessageId, long ChatId)> SeedCuratedPhotoMessageAsync(string? photoLocalPath, string? mediaLocalPath = null)
     {
         var messageId = Interlocked.Increment(ref _nextMessageId);
-        const long chatId = -100_012_345_678_901L;
-        var now = DateTimeOffset.UtcNow;
+        const long chatId = -100_900_000_000_001L;
 
-        await using var context = NewContext();
-        context.Messages.Add(new MessageRecordDto
+        await using var ctx = NewContext();
+        ctx.Messages.Add(new MessageRecordDto
         {
-            MessageId = messageId,
-            ChatId = chatId,
-            UserId = 1,
-            Timestamp = now,
-            PhotoLocalPath = photoLocalPath,
+            MessageId = messageId, ChatId = chatId, UserId = 0, Timestamp = DateTimeOffset.UtcNow,
+            PhotoFileId = "f", PhotoLocalPath = photoLocalPath, MediaLocalPath = mediaLocalPath
         });
-        await context.SaveChangesAsync();
-
-        var sample = new ImageTrainingSampleDto
+        ctx.DetectionResults.Add(new DetectionResultRecordDto
         {
-            MessageId = messageId,
-            ChatId = chatId,
-            // [Required] on the model, but production code never assigns it either — the
-            // real source path comes from the joined message's PhotoLocalPath.
-            PhotoPath = string.Empty,
-            PhotoHash = photoHash,
-            FileSizeBytes = 1,
-            Width = 1,
-            Height = 1,
-            IsSpam = false,
-            MarkedBySystemIdentifier = "integration-test",
-            MarkedAt = now,
-        };
-        context.ImageTrainingSamples.Add(sample);
-        await context.SaveChangesAsync();
-
-        return sample.Id;
+            MessageId = messageId, ChatId = chatId, DetectedAt = DateTimeOffset.UtcNow,
+            Source = (int)VerdictSource.WebMarkSpam, Classification = (int)VerdictClassification.ExplicitSpam,
+            DetectionMethod = "WebMarkSpam", Score = 5, Reason = "test", SystemIdentifier = "integration-test"
+        });
+        await ctx.SaveChangesAsync();
+        return (messageId, chatId);
     }
 
-    private async Task<ImageTrainingSampleDto> ReloadSampleAsync(long id)
+    private async Task<MediaFeaturesDto?> ReloadMediaFeaturesAsync(int messageId, long chatId)
     {
-        await using var context = NewContext();
-        return await context.ImageTrainingSamples.AsNoTracking().SingleAsync(s => s.Id == id);
+        await using var ctx = NewContext();
+        return (await ctx.Messages.AsNoTracking().SingleAsync(m => m.MessageId == messageId && m.ChatId == chatId)).MediaFeatures;
     }
 
     private async Task<int> SeedLinkedChannelAsync(string channelIconPath, byte[]? photoHash)
@@ -307,16 +303,129 @@ public class PhotoHashRehashServiceTests
         });
     }
 
+    /// <summary>
+    /// Review focus: an admin marks a never-scanned media message spam; the next startup rehash
+    /// fills its media_features, so Layer 1 can match it.
+    /// </summary>
     [Test]
-    public async Task RehashAsync_TrainingSampleWithLiveMessagePhoto_RecomputesHash()
+    public async Task RehashAsync_CuratedPhotoMessageWithoutFeatures_GetsPhotoFeatures()
     {
-        var sampleId = await SeedImageTrainingSampleAsync("full/1/photo.jpg", photoHash: null);
-        WriteTestImage(Path.Combine(_dataPath, "media", "full", "1", "photo.jpg"));
+        var relative = $"full/-100900000000001/{Interlocked.Increment(ref _nextMessageId)}.jpg";
+        WriteTestImage(Path.Combine(_dataPath, "media", relative));
+        var (messageId, chatId) = await SeedCuratedPhotoMessageAsync(relative);
+
+        var result = await _service!.RehashAsync();
+
+        Assert.Multiple(async () =>
+        {
+            Assert.That(await ReloadMediaFeaturesAsync(messageId, chatId),
+                Is.TypeOf<PhotoFeaturesDto>().With.Property(nameof(PhotoFeaturesDto.Hash)).Length.EqualTo(8));
+            Assert.That(result.Recomputed, Is.EqualTo(1));
+        });
+    }
+
+    /// <summary>
+    /// The TrainingHandler defensive download stores a photo under media_local_path (media/photo/),
+    /// not photo_local_path; the backfill must still hash it.
+    /// </summary>
+    [Test]
+    public async Task RehashAsync_CuratedPhotoDownloadedToMediaLocalPath_GetsPhotoFeatures()
+    {
+        var fileName = $"photo_{Interlocked.Increment(ref _nextMessageId)}_uid.jpg";
+        WriteTestImage(Path.Combine(_dataPath, "media", "photo", fileName));
+        var (messageId, chatId) = await SeedCuratedPhotoMessageAsync(photoLocalPath: null, mediaLocalPath: fileName);
 
         await _service!.RehashAsync();
 
-        var reloaded = await ReloadSampleAsync(sampleId);
-        Assert.That(reloaded.PhotoHash, Is.Not.Null);
+        Assert.That(await ReloadMediaFeaturesAsync(messageId, chatId), Is.TypeOf<PhotoFeaturesDto>());
+    }
+
+    [Test]
+    public async Task RehashAsync_CuratedPhotoMessageFileMissing_LeavesFeaturesNull()
+    {
+        // Deliberately do not write the file.
+        var (messageId, chatId) = await SeedCuratedPhotoMessageAsync("full/-100900000000001/missing.jpg");
+
+        var result = await _service!.RehashAsync();
+
+        Assert.Multiple(async () =>
+        {
+            Assert.That(await ReloadMediaFeaturesAsync(messageId, chatId), Is.Null);
+            Assert.That(result.Unrecoverable, Is.EqualTo(1));
+        });
+    }
+
+    /// <summary>
+    /// A file that stays missing is retried every start and sorts ahead of older decisions. With a
+    /// batch of one, the backfill must page past it rather than spend the batch on it.
+    /// </summary>
+    [Test]
+    public async Task RehashAsync_MissingFileAheadOfValidCandidate_DoesNotBlockIt()
+    {
+        var relative = $"full/-100900000000001/{Interlocked.Increment(ref _nextMessageId)}.jpg";
+        WriteTestImage(Path.Combine(_dataPath, "media", relative));
+        var valid = await SeedCuratedPhotoMessageAsync(relative);
+        // Seeded second, so its decision is newer and it comes first.
+        var missing = await SeedCuratedPhotoMessageAsync("full/-100900000000001/gone.jpg");
+
+        var result = await CreateService(MediaFeatureExtractor(), mediaBackfillLimit: 1).RehashAsync();
+
+        Assert.Multiple(async () =>
+        {
+            Assert.That(await ReloadMediaFeaturesAsync(valid.MessageId, valid.ChatId), Is.TypeOf<PhotoFeaturesDto>());
+            Assert.That(await ReloadMediaFeaturesAsync(missing.MessageId, missing.ChatId), Is.Null);
+            Assert.That(result.Recomputed, Is.EqualTo(1));
+            Assert.That(result.Unrecoverable, Is.EqualTo(1));
+        });
+    }
+
+    /// <summary>
+    /// An exception for one candidate (extractor or write) is counted and must not abort the backfill.
+    /// </summary>
+    [Test]
+    public async Task RehashAsync_CandidateThrows_OtherCandidatesStillGetFeatures()
+    {
+        var goodRelative = $"full/-100900000000001/{Interlocked.Increment(ref _nextMessageId)}.jpg";
+        var badRelative = $"full/-100900000000001/{Interlocked.Increment(ref _nextMessageId)}.jpg";
+        WriteTestImage(Path.Combine(_dataPath, "media", goodRelative));
+        WriteTestImage(Path.Combine(_dataPath, "media", badRelative));
+        var good = await SeedCuratedPhotoMessageAsync(goodRelative);
+        var bad = await SeedCuratedPhotoMessageAsync(badRelative); // newer: processed first
+
+        var real = MediaFeatureExtractor();
+        var extractor = Substitute.For<IMediaFeatureExtractor>();
+        extractor.ExtractPhotoAsync(Arg.Any<string>())
+            .Returns(call => call.Arg<string>().EndsWith(badRelative, StringComparison.Ordinal)
+                ? throw new IOException("disk error")
+                : real.ExtractPhotoAsync(call.Arg<string>()));
+
+        var result = await CreateService(extractor).RehashAsync();
+
+        Assert.Multiple(async () =>
+        {
+            Assert.That(await ReloadMediaFeaturesAsync(good.MessageId, good.ChatId), Is.TypeOf<PhotoFeaturesDto>());
+            Assert.That(await ReloadMediaFeaturesAsync(bad.MessageId, bad.ChatId), Is.Null);
+            Assert.That(result.Recomputed, Is.EqualTo(1));
+            Assert.That(result.Unrecoverable, Is.EqualTo(1));
+        });
+    }
+
+    private IMediaFeatureExtractor MediaFeatureExtractor() =>
+        _scope!.ServiceProvider.GetRequiredService<IMediaFeatureExtractor>();
+
+    private PhotoHashRehashService CreateService(IMediaFeatureExtractor extractor, int mediaBackfillLimit = 500)
+    {
+        var sp = _scope!.ServiceProvider;
+        return new PhotoHashRehashService(
+            sp.GetRequiredService<IDbContextFactory<AppDbContext>>(),
+            sp.GetRequiredService<IPhotoHashService>(),
+            sp.GetRequiredService<IMessageHistoryRepository>(),
+            extractor,
+            sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<AppOptions>>(),
+            sp.GetRequiredService<ILogger<PhotoHashRehashService>>())
+        {
+            MediaBackfillLimit = mediaBackfillLimit
+        };
     }
 
     [Test]

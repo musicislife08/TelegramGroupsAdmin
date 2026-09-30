@@ -557,7 +557,7 @@
                                         <MudChip T="string"
                                                  Size="Size.Small"
                                                  Color="@(detection.IsSpam ? Color.Error : Color.Success)">
-                                            @(detection.IsSpam ? "SPAM" : "HAM")
+                                            @(detection.IsSpam ? "SPAM" : "CLEAN")
                                         </MudChip>
                                         <div style="flex: 1;">
                                             <MudText Typo="Typo.body2">Score: @detection.Score.ToString("F2")</MudText>

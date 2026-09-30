@@ -1,4 +1,5 @@
 using TelegramGroupsAdmin.ContentDetection.Models;
+using TelegramGroupsAdmin.Core.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Models;
 
@@ -41,6 +42,9 @@ public class MessageWithDetectionHistory
     /// Convenience property: Latest detection result (most recent spam check)
     /// </summary>
     public DetectionResultRecord? LatestDetection => DetectionResults.FirstOrDefault();
+
+    /// <summary>Latest content-detection scan (detector evidence), ignoring decisions and file scans.</summary>
+    public DetectionResultRecord? LatestScan => DetectionResults.FirstOrDefault(d => d.Source == VerdictSource.ContentScan);
 
     /// <summary>
     /// Convenience property: Does the message author have tags?

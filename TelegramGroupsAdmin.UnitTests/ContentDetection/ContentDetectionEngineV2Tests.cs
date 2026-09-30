@@ -361,6 +361,55 @@ public class ContentDetectionEngineV2Tests
         }
     }
 
+    [Test]
+    public async Task CheckMessageAsync_AIScoreBelowReviewThreshold_IsNotSpam()
+    {
+        // Pipeline 3.0 triggers the veto; AI answers "review" at 2.0 (< ReviewQueueThreshold 2.5).
+        // One rule: the verdict follows the threshold, so this is allowed ham, not "spam but allowed".
+        var pipelineCheck = BuildCheck(CheckName.StopWords, score: 3.0, abstained: false);
+        var aiCheck = BuildAICheck(score: 2.0, abstained: false, details: "AI: Review - borderline");
+
+        var config = BuildPermissiveConfig();
+        config.StopWords.Enabled = true;
+        config.AIVeto.Enabled = true;
+        _configService
+            .GetEffectiveContentDetectionAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
+            .Returns(config);
+        SetupEnabledAIInfrastructure();
+
+        var result = await BuildEngine([pipelineCheck, aiCheck]).CheckMessageAsync(BuildRequest("Borderline content"));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.IsSpam, Is.False);
+            Assert.That(result.TotalScore, Is.EqualTo(2.0));
+            Assert.That(result.RecommendedAction, Is.EqualTo(DetectionAction.Allow));
+        }
+    }
+
+    [Test]
+    public async Task CheckMessageAsync_AIScoreAtReviewThreshold_IsSpam()
+    {
+        var pipelineCheck = BuildCheck(CheckName.StopWords, score: 3.0, abstained: false);
+        var aiCheck = BuildAICheck(score: 2.5, abstained: false, details: "AI: Review");
+
+        var config = BuildPermissiveConfig();
+        config.StopWords.Enabled = true;
+        config.AIVeto.Enabled = true;
+        _configService
+            .GetEffectiveContentDetectionAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
+            .Returns(config);
+        SetupEnabledAIInfrastructure();
+
+        var result = await BuildEngine([pipelineCheck, aiCheck]).CheckMessageAsync(BuildRequest("Borderline content"));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.IsSpam, Is.True);
+            Assert.That(result.RecommendedAction, Is.EqualTo(DetectionAction.ReviewQueue));
+        }
+    }
+
     #endregion
 
     #region AI Veto - Abstained

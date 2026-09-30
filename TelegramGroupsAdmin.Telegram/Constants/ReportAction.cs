@@ -15,6 +15,9 @@ public enum ReportAction
     /// <summary>Send warning to user</summary>
     Warn = 2,
 
-    /// <summary>Dismiss report without action</summary>
-    Dismiss = 3
+    /// <summary>Acknowledge the report; the message's verdict is left unchanged</summary>
+    Dismiss = 3,
+
+    /// <summary>Mark the message clean (admin-confirmed not spam), trains the classifier</summary>
+    Clean = 4
 }

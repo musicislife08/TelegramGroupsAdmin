@@ -129,25 +129,8 @@ public class FileScanJob(
                     scanResult.Details);
 
                 // Step 5: Save detection history (for both clean and infected files)
-                var detectionRecord = new DetectionResultRecord
-                {
-                    MessageId = payload.MessageId,
-                    ChatId = payload.Chat.Id,
-                    UserId = payload.User.Id,
-                    DetectedAt = DateTimeOffset.UtcNow,
-                    DetectionSource = "file_scan", // Phase 4.14
-                    DetectionMethod = "FileScanningCheck",
-                    IsSpam = isInfected,
-                    Score = scanResult.Score,
-                    Reason = scanResult.Details,
-                    NetScore = isInfected ? scanResult.Score : -scanResult.Score,
-                    CheckResultsJson = null, // File scanning is a single check, no aggregation
-                    UsedForTraining = false, // File scans don't train spam detection
-                    MessageText = $"File: {payload.FileName ?? "unknown"} ({payload.FileSize} bytes)",
-                    AddedBy = Core.Models.Actor.FileScanner
-                };
-
-                await detectionResultsRepository.InsertAsync(detectionRecord, cancellationToken);
+                await detectionResultsRepository.RecordFileScanAsync(
+                    payload.MessageId, payload.Chat.Id, isInfected, scanResult.Score, scanResult.Details, cancellationToken);
 
                 logger.LogInformation(
                     "Created detection history record for file scan: message {MessageId}, infected={Infected}",

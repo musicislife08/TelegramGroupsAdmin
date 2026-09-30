@@ -95,6 +95,15 @@
                     </FieldWithHelp>
                 </MudItem>
                 <MudItem xs="12" md="6">
+                    <FieldWithHelp HelpText="Minimum perceptual hash similarity (0.0-1.0) to an admin-verified clean image (marked clean by an admin) for Layer 1 to skip OCR and Vision. Matches to auto-scanned clean images, or below this threshold, still run OCR and Vision.">
+                        <MudNumericField @bind-Value="activeConfig.HamSkipThreshold"
+                                        Label="Clean Skip Threshold"
+                                        Min="0.5" Max="1.0" Step="0.01"
+                                        Disabled="@isReadOnly"
+                                        HelperText="@(isReadOnly ? $"Using global: {activeConfig.HamSkipThreshold:F2}" : "Similarity to an admin-verified clean image required to skip OCR/Vision")" />
+                    </FieldWithHelp>
+                </MudItem>
+                <MudItem xs="12" md="6">
                     <FieldWithHelp HelpText="Score assigned when a hash matches a known spam sample (0.0-5.0). Should be high since hash matches are reliable.">
                         <MudNumericField @bind-Value="activeConfig.HashMatchConfidence"
                                         Label="Hash Match Score"

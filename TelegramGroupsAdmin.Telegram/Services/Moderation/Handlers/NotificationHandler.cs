@@ -268,6 +268,7 @@ public class NotificationHandler : INotificationHandler
     {
         var msg = enrichedMessage.Message;
         var detection = enrichedMessage.LatestDetection;
+        var evidence = enrichedMessage.LatestScan ?? detection;
 
         try
         {
@@ -278,9 +279,9 @@ public class NotificationHandler : INotificationHandler
                 : messageContent;
 
             // Truncate detection reason
-            var detectionReason = detection?.Reason is { Length: > 100 }
-                ? detection.Reason[..97] + "..."
-                : detection?.Reason;
+            var detectionReason = evidence?.Reason is { Length: > 100 }
+                ? evidence.Reason[..97] + "..."
+                : evidence?.Reason;
 
             // Get media paths from enriched message
             string? photoPath = null;
@@ -300,8 +301,8 @@ public class NotificationHandler : INotificationHandler
                 chat: msg.Chat,
                 user: msg.User,
                 bannedBy: detection?.AddedBy,
-                netScore: detection != null ? Math.Abs(detection.NetScore) : 0,
-                score: detection?.Score ?? 0,
+                netScore: evidence?.Score ?? 0,
+                score: evidence?.Score ?? 0,
                 detectionReason: detectionReason,
                 chatsAffected: chatsAffected,
                 messageDeleted: messageDeleted,

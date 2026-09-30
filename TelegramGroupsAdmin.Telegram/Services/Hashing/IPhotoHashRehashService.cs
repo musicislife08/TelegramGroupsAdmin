@@ -1,7 +1,8 @@
 namespace TelegramGroupsAdmin.Telegram.Services.Hashing;
 
 /// <summary>
-/// Refills perceptual hashes cleared by the v1-to-v2 hash migration.
+/// Refills perceptual hashes cleared by the v1-to-v2 hash migration, and backfills
+/// messages.media_features for curated media messages that have none.
 ///
 /// Idempotent by construction: it only visits rows whose hash is NULL, so a row
 /// already refilled is skipped by the query itself and no completion marker is

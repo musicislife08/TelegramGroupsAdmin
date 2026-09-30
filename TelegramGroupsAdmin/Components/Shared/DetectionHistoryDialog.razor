@@ -7,18 +7,14 @@
     <DialogContent>
         <MudText Typo="Typo.h6" Class="mb-4">Spam Detection History</MudText>
 
-        @* Show training label if exists (admin override) *@
-        @if (TrainingLabel != null)
+        @if (CurrentVerdict is { Source: not null } verdict)
         {
-            <MudAlert Severity="@(TrainingLabel.Label == TelegramGroupsAdmin.Core.Models.TrainingLabel.Spam ? Severity.Error : Severity.Success)" Class="mb-4" Icon="@Icons.Material.Filled.School">
+            <MudAlert Severity="@(verdict.IsSpam ? Severity.Error : Severity.Success)" Class="mb-4" Icon="@Icons.Material.Filled.Gavel">
                 <MudText Typo="Typo.body2">
-                    <strong>Admin Override:</strong> Explicitly labeled as <strong>@TrainingLabel.Label.ToString().ToUpper()</strong> for ML training
-                </MudText>
-                <MudText Typo="Typo.caption">
-                    Labeled on @TrainingLabel.LabeledAt.ToLocalTime().ToString("MMM d, yyyy h:mm tt")
-                    @if (!string.IsNullOrEmpty(TrainingLabel.Reason))
+                    <strong>Current verdict:</strong> @verdict.Classification.ToDisplayText() (@verdict.Source.Value.ToDisplayText())
+                    @if (verdict.DetectedAt is { } at)
                     {
-                        <text><br />Reason: @TrainingLabel.Reason</text>
+                        <text> · <LocalTimestamp Value="at" /></text>
                     }
                 </MudText>
             </MudAlert>
@@ -42,13 +38,13 @@
                                         <MudChip T="string"
                                                  Size="Size.Small"
                                                  Color="@(result.IsSpam ? Color.Error : Color.Success)">
-                                            @(result.IsSpam ? "SPAM" : "HAM")
+                                            @result.Classification.ToDisplayText()
                                         </MudChip>
                                         <MudChip T="string" Size="Size.Small" Color="Color.Info">
-                                            Net: @result.NetScore.ToString("F1")
+                                            Score: @result.Score.ToString("F1")
                                         </MudChip>
                                         <MudChip T="string" Size="Size.Small" Color="Color.Default">
-                                            @result.DetectionSource
+                                            @result.Source.ToDisplayText()
                                         </MudChip>
                                     </MudStack>
 
@@ -64,10 +60,7 @@
                                     }
 
                                     <MudStack Row="true" Spacing="1">
-                                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">
-                                            Score: @Math.Abs(result.NetScore).ToString("F1")
-                                        </MudChip>
-                                        @if (result.UsedForTraining)
+                                        @if (result.Classification.IsTrainingSample())
                                         {
                                             <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.School">
                                                 Training Sample
@@ -158,7 +151,7 @@
     public List<DetectionResultRecord>? DetectionResults { get; set; }
 
     [Parameter]
-    public TrainingLabelRecord? TrainingLabel { get; set; }
+    public MessageVerdict? CurrentVerdict { get; set; }
 
     private void Close() => MudDialog.Close();
 

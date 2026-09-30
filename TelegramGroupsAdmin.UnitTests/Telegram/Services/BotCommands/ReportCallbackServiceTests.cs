@@ -39,6 +39,7 @@ public class ReportCallbackServiceTests
     private IReportCallbackContextRepository _mockCallbackContextRepo = null!;
     private IBotDmService _mockDmService = null!;
     private IReportActionsService _mockReportActionsService = null!;
+    private ITelegramPermissionService _mockPermissionService = null!;
 
     private ReportCallbackService _service = null!;
 
@@ -61,6 +62,13 @@ public class ReportCallbackServiceTests
             .Returns(_mockCallbackContextRepo);
         _mockServiceProvider.GetService(typeof(IBotDmService))
             .Returns(_mockDmService);
+
+        // The clicker is a chat admin unless a test says otherwise.
+        _mockPermissionService = Substitute.For<ITelegramPermissionService>();
+        _mockPermissionService.GetEffectiveLevelAsync(Arg.Any<long>(), Arg.Any<long>(), Arg.Any<CancellationToken>())
+            .Returns(PermissionLevel.Admin);
+        _mockServiceProvider.GetService(typeof(ITelegramPermissionService))
+            .Returns(_mockPermissionService);
 
         _service = new ReportCallbackService(
             _mockLogger,
@@ -179,6 +187,57 @@ public class ReportCallbackServiceTests
 
     #endregion
 
+    #region Click-Time Permission Tests
+
+    [Test]
+    public async Task HandleCallbackAsync_ClickerNoLongerAdmin_RejectsWithoutRouting()
+    {
+        SetupContext(ReportType.ContentReport);
+        _mockPermissionService.GetEffectiveLevelAsync(TestChatId, 99999, Arg.Any<CancellationToken>())
+            .Returns(PermissionLevel.Member);
+
+        await _service.HandleCallbackAsync(CreateCallbackQuery(data: $"rev:{TestContextId}:4"));
+
+        await _mockReportActionsService.DidNotReceiveWithAnyArgs().HandleContentCleanAsync(default, default!, default);
+        await _mockReportActionsService.DidNotReceiveWithAnyArgs().HandleContentSpamAsync(default, default!, default);
+        await _mockDmService.Received(1).EditDmTextAsync(
+            TestDmChatId, TestDmMessageId,
+            Arg.Is<string>(s => s!.Contains("no longer have permission")),
+            replyMarkup: null,
+            cancellationToken: Arg.Any<CancellationToken>());
+    }
+
+    [TestCase(PermissionLevel.Admin)]
+    [TestCase(PermissionLevel.GlobalAdmin)]
+    [TestCase(PermissionLevel.Owner)]
+    public async Task HandleCallbackAsync_ClickerIsAdminNow_Routes(PermissionLevel level)
+    {
+        SetupContext(ReportType.ContentReport);
+        _mockPermissionService.GetEffectiveLevelAsync(TestChatId, 99999, Arg.Any<CancellationToken>())
+            .Returns(level);
+        _mockReportActionsService.HandleContentCleanAsync(TestReportId, Arg.Any<Actor>(), Arg.Any<CancellationToken>())
+            .Returns(new ReviewActionResult(true, "Marked clean", "Clean"));
+
+        await _service.HandleCallbackAsync(CreateCallbackQuery(data: $"rev:{TestContextId}:4"));
+
+        await _mockReportActionsService.Received(1)
+            .HandleContentCleanAsync(TestReportId, Arg.Any<Actor>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task HandleCallbackAsync_ChecksPermissionInTheReportsChat()
+    {
+        SetupContext(ReportType.ContentReport);
+        _mockReportActionsService.HandleContentSpamAsync(TestReportId, Arg.Any<Actor>(), Arg.Any<CancellationToken>())
+            .Returns(new ReviewActionResult(true, "Spam done", "Spam"));
+
+        await _service.HandleCallbackAsync(CreateCallbackQuery(data: $"rev:{TestContextId}:0"));
+
+        await _mockPermissionService.Received(1).GetEffectiveLevelAsync(TestChatId, 99999, Arg.Any<CancellationToken>());
+    }
+
+    #endregion
+
     #region Content Report Routing Tests
 
     [Test]
@@ -233,8 +292,21 @@ public class ReportCallbackServiceTests
             .HandleContentDismissAsync(TestReportId, Arg.Any<Actor>(), cancellationToken: Arg.Any<CancellationToken>());
     }
 
+    [Test]
+    public async Task HandleCallbackAsync_ContentClean_RoutesToHandleContentCleanAsync()
+    {
+        SetupContext(ReportType.ContentReport);
+        _mockReportActionsService.HandleContentCleanAsync(TestReportId, Arg.Any<Actor>(), Arg.Any<CancellationToken>())
+            .Returns(new ReviewActionResult(true, "Marked clean", "Clean"));
+
+        await _service.HandleCallbackAsync(CreateCallbackQuery(data: $"rev:{TestContextId}:4"));
+
+        await _mockReportActionsService.Received(1)
+            .HandleContentCleanAsync(TestReportId, Arg.Any<Actor>(), Arg.Any<CancellationToken>());
+    }
+
     [TestCase(-1)]
-    [TestCase(4)]
+    [TestCase(5)]
     [TestCase(99)]
     public async Task HandleCallbackAsync_ContentInvalidAction_ReturnsInvalidAction(int invalidAction)
     {

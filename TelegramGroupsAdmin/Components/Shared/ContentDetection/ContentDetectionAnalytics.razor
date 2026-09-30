@@ -1,11 +1,7 @@
-@using Microsoft.EntityFrameworkCore
-@using TelegramGroupsAdmin.Data
 @using TelegramGroupsAdmin.ContentDetection.Repositories
 @using TelegramGroupsAdmin.ContentDetection.Models
 @inject IStopWordsRepository StopWordsRepository
 @inject IMessageStatsService MessageStatsService
-@inject IDetectionResultsRepository DetectionResultsRepository
-@inject IDbContextFactory<AppDbContext> DbContextFactory
 @inject ISnackbar Snackbar
 
 
@@ -99,23 +95,23 @@
             </MudStack>
         </MudPaper>
 
-        <!-- Training Data Quality (from training_labels table) -->
+        <!-- Training Data Quality (from message_verdicts) -->
         <MudPaper Class="pa-4" Elevation="2">
             <MudStack Spacing="3">
                 <MudText Typo="Typo.h6" Color="Color.Primary">Training Data Overview</MudText>
                 <MudAlert Severity="Severity.Info">
-                    Training data is managed via explicit admin labels (training_labels table).
-                    Mark messages as spam/ham from the <strong>Messages</strong> page to improve ML accuracy.
+                    Training data is managed via explicit admin spam/clean decisions.
+                    Mark messages as spam or clean from the <strong>Messages</strong> page or the review queue to improve ML accuracy.
                 </MudAlert>
                 <MudGrid>
                     <MudItem xs="12" md="6">
                         <MudStack Spacing="2">
                             <MudStack Row="true" Justify="Justify.SpaceBetween">
-                                <MudText Typo="Typo.body1">Explicit Training Labels</MudText>
+                                <MudText Typo="Typo.body1">Confirmed Training Labels</MudText>
                                 <MudText Typo="Typo.body1" Class="font-weight-bold">@_totalTrainingSamples</MudText>
                             </MudStack>
                             <MudText Typo="Typo.caption" Color="Color.Info">
-                                Admin-labeled spam/ham samples for ML training
+                                Admin-labeled spam/clean samples for ML training
                             </MudText>
                         </MudStack>
                     </MudItem>
@@ -143,7 +139,7 @@
                             <MudTd>@context.CheckTimestamp.ToString("MM/dd HH:mm:ss")</MudTd>
                             <MudTd>
                                 <MudChip T="string" Size="Size.Small" Color="@(context.IsSpam ? Color.Error : Color.Success)">
-                                    @(context.IsSpam ? "SPAM" : "HAM")
+                                    @(context.IsSpam ? "SPAM" : "CLEAN")
                                 </MudChip>
                             </MudTd>
                             <MudTd>@context.Score.ToString("F1")</MudTd>
@@ -424,16 +420,7 @@
     {
         try
         {
-            // Query training_labels table (explicit admin labels)
-            await using var context = await DbContextFactory.CreateDbContextAsync();
-
-            _totalTrainingSamples = await context.TrainingLabels
-                .AsNoTracking()
-                .CountAsync();
-
-            _totalSpamSamples = await context.TrainingLabels
-                .AsNoTracking()
-                .CountAsync(tl => tl.Label == 0); // 0 = Spam
+            (_totalTrainingSamples, _totalSpamSamples) = await MessageStatsService.GetCuratedTrainingCountsAsync();
         }
         catch (Exception ex)
         {
@@ -509,8 +496,8 @@
         {
             // Get veto analytics for last 30 days
             var since = DateTimeOffset.UtcNow.AddDays(-30);
-            _vetoAnalytics = await DetectionResultsRepository.GetOpenAIVetoAnalyticsAsync(since);
-            _vetoedMessages = await DetectionResultsRepository.GetRecentVetoedMessagesAsync();
+            _vetoAnalytics = await MessageStatsService.GetOpenAIVetoAnalyticsAsync(since);
+            _vetoedMessages = await MessageStatsService.GetRecentVetoedMessagesAsync();
         }
         catch (Exception ex)
         {

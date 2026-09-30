@@ -224,7 +224,7 @@
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                     <MudSwitch T="bool" @bind-Value="_config.Bayes.Enabled" Color="Color.Primary" />
                     <MudText Typo="Typo.h6">Naive Bayes Classifier</MudText>
-                    <HelpTooltip Text="Machine learning classifier that learns spam patterns from word frequency in training samples. Adapts to your community's spam patterns over time. Fast algorithm. Requires at least 50 spam and 50 ham samples to train effectively." />
+                    <HelpTooltip Text="Machine learning classifier that learns spam patterns from word frequency in training samples. Adapts to your community's spam patterns over time. Fast algorithm. Requires at least 50 spam and 50 clean samples to train effectively." />
                     <MudChip T="string" Size="Size.Small" Color="@(_config.Bayes.Enabled ? Color.Success : Color.Default)">
                         @(_config.Bayes.Enabled ? "Enabled" : "Disabled")
                     </MudChip>

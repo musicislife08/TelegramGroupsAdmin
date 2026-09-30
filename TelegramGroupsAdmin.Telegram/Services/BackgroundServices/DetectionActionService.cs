@@ -67,7 +67,7 @@ public class DetectionActionService(
             var config = await GetConfigAsync(message.Chat, cancellationToken);
 
             // Only take action if spam was detected
-            if (!spamResult.IsSpam || spamResult.TotalScore <= config.ReviewQueueThreshold)
+            if (!spamResult.IsSpam || spamResult.TotalScore < config.ReviewQueueThreshold)
             {
                 return;
             }
@@ -97,6 +97,7 @@ public class DetectionActionService(
                         Chat = ChatIdentity.From(message.Chat),
                         MessageId = message.MessageId,
                         Executor = Actor.AutoDetection,
+                        Source = VerdictSource.AutoBan,
                         Reason = $"Hard block policy violation: {hardBlockResult.Details}",
                         TelegramMessage = message
                     },
@@ -128,13 +129,14 @@ public class DetectionActionService(
                         Chat = ChatIdentity.From(message.Chat),
                         MessageId = message.MessageId,
                         Executor = Actor.AutoDetection,
+                        Source = VerdictSource.AutoBan,
                         Reason = $"Auto-ban: High confidence spam (Score: {spamResult.TotalScore:F2}, OpenAI: {openAIResult.Score:F2})",
                         TelegramMessage = message
                     },
                     cancellationToken);
                 pipelineMetrics.RecordModerationAction("ban", "auto");
             }
-            else if (spamResult.TotalScore > config.ReviewQueueThreshold)
+            else if (spamResult.TotalScore >= config.ReviewQueueThreshold)
             {
                 // Borderline detection OR OpenAI uncertain → Admin review
                 var reason = spamResult.TotalScore >= config.AutoBanThreshold

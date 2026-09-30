@@ -11,9 +11,12 @@ public class DetectionResultRecord
     public int MessageId { get; set; }
     public long ChatId { get; set; }
     public DateTimeOffset DetectedAt { get; set; }
-    public string DetectionSource { get; set; } = string.Empty;
     public string DetectionMethod { get; set; } = string.Empty;
-    public bool IsSpam { get; set; }
+    public VerdictSource Source { get; set; }
+    public VerdictClassification Classification { get; set; }
+    public bool IsSpam => Classification.IsSpam();
+    public string? Properties { get; set; }
+    public long? AuditLogId { get; set; }
     public double Score { get; set; }
     public string? Reason { get; set; }
 
@@ -25,8 +28,6 @@ public class DetectionResultRecord
     public long UserId { get; set; }
     public string? MessageText { get; set; }
     public string? ContentHash { get; set; }
-    public bool UsedForTraining { get; set; } = true;
-    public double NetScore { get; set; }  // Required: computed column is_spam derives from this
     public string? CheckResultsJson { get; set; }  // Phase 2.6: JSON string with all check results
     public int EditVersion { get; set; }            // Phase 2.6: Message version (0 = original, 1+ = edits)
 

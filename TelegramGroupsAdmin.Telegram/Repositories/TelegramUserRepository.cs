@@ -884,7 +884,7 @@ public class TelegramUserRepository : ITelegramUserRepository
         // Get detection history (join through messages to filter by user)
         var detectionHistory = await (
             from dr in context.DetectionResults
-            join m in context.Messages on dr.MessageId equals m.MessageId
+            join m in context.Messages on new { dr.MessageId, dr.ChatId } equals new { m.MessageId, m.ChatId }
             where m.UserId == telegramUserId
             select dr
         )

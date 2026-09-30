@@ -1,10 +1,8 @@
 using Microsoft.Extensions.Logging;
-using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
-using TelegramGroupsAdmin.Telegram.Constants;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
@@ -12,16 +10,14 @@ using TelegramGroupsAdmin.Telegram.Services;
 namespace TelegramGroupsAdmin.Telegram.Services.Moderation.Handlers;
 
 /// <summary>
-/// Creates ML training data from spam classifications.
-/// Called by orchestrator for spam cases only.
+/// Records spam and ham decisions as verdict events and creates ML training data.
+/// Media similarity samples need no write here: Layer 1 reads messages' media features joined to
+/// their current verdict.
 /// </summary>
 public class TrainingHandler : ITrainingHandler
 {
     private readonly IMessageHistoryRepository _messageHistoryRepository;
     private readonly IDetectionResultsRepository _detectionResultsRepository;
-    private readonly ITrainingLabelsRepository _trainingLabelsRepository;
-    private readonly IImageTrainingSamplesRepository _imageTrainingSamplesRepository;
-    private readonly IVideoTrainingSamplesRepository _videoTrainingSamplesRepository;
     private readonly ITelegramMediaService _telegramMediaService;
     private readonly IJobTriggerService _jobTriggerService;
     private readonly ILogger<TrainingHandler> _logger;
@@ -29,18 +25,12 @@ public class TrainingHandler : ITrainingHandler
     public TrainingHandler(
         IMessageHistoryRepository messageHistoryRepository,
         IDetectionResultsRepository detectionResultsRepository,
-        ITrainingLabelsRepository trainingLabelsRepository,
-        IImageTrainingSamplesRepository imageTrainingSamplesRepository,
-        IVideoTrainingSamplesRepository videoTrainingSamplesRepository,
         ITelegramMediaService telegramMediaService,
         IJobTriggerService jobTriggerService,
         ILogger<TrainingHandler> logger)
     {
         _messageHistoryRepository = messageHistoryRepository;
         _detectionResultsRepository = detectionResultsRepository;
-        _trainingLabelsRepository = trainingLabelsRepository;
-        _imageTrainingSamplesRepository = imageTrainingSamplesRepository;
-        _videoTrainingSamplesRepository = videoTrainingSamplesRepository;
         _telegramMediaService = telegramMediaService;
         _jobTriggerService = jobTriggerService;
         _logger = logger;
@@ -51,8 +41,14 @@ public class TrainingHandler : ITrainingHandler
         int messageId,
         ChatIdentity chat,
         Actor executor,
+        VerdictSource source,
+        string reason,
         CancellationToken cancellationToken = default)
     {
+        if (source is not (VerdictSource.AutoBan or VerdictSource.WebMarkSpam or VerdictSource.SpamCommand or VerdictSource.ReviewSpam))
+            throw new ArgumentOutOfRangeException(nameof(source), source,
+                "Spam decisions are AutoBan, WebMarkSpam, SpamCommand or ReviewSpam");
+
         // Try to get message from database
         var message = await _messageHistoryRepository.GetMessageAsync(messageId, chat.Id, cancellationToken);
 
@@ -64,48 +60,14 @@ public class TrainingHandler : ITrainingHandler
             return;
         }
 
-        // Create detection result for history — only for manual moderator actions.
-        // Auto-detected spam already has a detection_result from the content detection pipeline;
-        // inserting a second "manual" entry would corrupt the notification reason and timeline.
+        // Every spam decision is a verdict event, auto-bans (System executor) included.
         var hasText = !string.IsNullOrWhiteSpace(message.MessageText);
-        if (executor.Type != ActorType.System)
-        {
-            var detectionResult = new DetectionResultRecord
-            {
-                MessageId = messageId,
-                ChatId = chat.Id,
-                DetectedAt = DateTimeOffset.UtcNow,
-                DetectionSource = SpamDetectionConstants.ManualDetectionSource,
-                DetectionMethod = SpamDetectionConstants.ManualDetectionMethod,
-                Score = 5.0,
-                Reason = SpamDetectionConstants.ManualSpamReason,
-                AddedBy = executor,
-                UserId = message.User.Id,
-                UsedForTraining = false, // History only - training handled by training_labels table
-                NetScore = 5.0,
-                CheckResultsJson = null,
-                EditVersion = 0
-            };
+        await _detectionResultsRepository.RecordDecisionAsync(
+            messageId, chat.Id, source, executor, reason, cancellationToken: cancellationToken);
 
-            await _detectionResultsRepository.InsertAsync(detectionResult, cancellationToken);
-        }
-
-        // Create explicit training label for ML (spam)
+        // The text classifiers train on message_verdicts; retrain when the message has text to learn from.
         if (hasText)
         {
-            var labelReason = executor.Type == ActorType.System
-                ? SpamDetectionConstants.AutoDetectedSpamReason
-                : SpamDetectionConstants.ManualSpamReason;
-
-            await _trainingLabelsRepository.UpsertLabelAsync(
-                messageId,
-                chat.Id,
-                label: TrainingLabel.Spam,
-                actor: executor,
-                reason: labelReason,
-                auditLogId: null,
-                cancellationToken: cancellationToken);
-
             // Trigger combined classifier retraining (SDCA + Bayes, immediate, no payload)
             await _jobTriggerService.TriggerNowAsync(
                 BackgroundJobNames.ClassifierRetraining,
@@ -113,18 +75,20 @@ public class TrainingHandler : ITrainingHandler
                 cancellationToken: cancellationToken);
 
             _logger.LogInformation(
-                "Created training label and triggered retraining for message {MessageId} marked as spam by {Executor}",
+                "Triggered retraining for message {MessageId} marked as spam by {Executor}",
                 messageId, executor.GetDisplayText());
         }
         else
         {
             _logger.LogInformation(
-                "Message {MessageId} has no text; skipped training label for {Executor}",
+                "Message {MessageId} has no text; skipped retraining for {Executor}",
                 messageId, executor.GetDisplayText());
         }
 
         // Defensive download: if message has a file ID but no local path, download now.
         // This handles edge cases where the original download failed, file was cleaned, or expired.
+        // The message now carries a curated verdict, so the startup media-feature backfill
+        // (PhotoHashRehashService) hashes the downloaded media on the next start.
         if (message.MediaLocalPath == null)
         {
             var fileId = message.PhotoFileId ?? message.MediaFileId;
@@ -145,7 +109,7 @@ public class TrainingHandler : ITrainingHandler
                     if (localPath != null)
                     {
                         _logger.LogInformation(
-                            "Downloaded missing media for message {MessageId} before training sample creation",
+                            "Downloaded missing media for message {MessageId} for media-feature backfill",
                             messageId);
                         await _messageHistoryRepository.UpdateMediaLocalPathAsync(
                             messageId,
@@ -162,42 +126,39 @@ public class TrainingHandler : ITrainingHandler
                 }
                 catch (Exception ex)
                 {
-                    // Non-fatal: log at Debug and continue. Training sample save will gracefully return false.
+                    // Non-fatal: log at Debug and continue; the decision is already recorded.
                     _logger.LogDebug(ex,
                         "Failed to download media for message {MessageId}, continuing without media",
                         messageId);
                 }
             }
         }
+    }
 
-        // Save image training sample if message has a photo
-        var imageSaved = await _imageTrainingSamplesRepository.SaveTrainingSampleAsync(
-            messageId,
-            chat.Id,
-            isSpam: true,
-            executor,
-            cancellationToken);
+    /// <inheritdoc />
+    public async Task CreateHamSampleAsync(int messageId, ChatIdentity chat, Actor executor, VerdictSource source,
+        string reason, CancellationToken cancellationToken = default)
+    {
+        if (source is not (VerdictSource.WebMarkHam or VerdictSource.ReviewClean))
+            throw new ArgumentOutOfRangeException(nameof(source), source, "Clean decisions are WebMarkHam or ReviewClean");
 
-        if (imageSaved)
+        // detection_results has an FK to messages: an unstored or retention-deleted message cannot carry a verdict.
+        var message = await _messageHistoryRepository.GetMessageAsync(messageId, chat.Id, cancellationToken);
+        if (message == null)
         {
-            _logger.LogInformation(
-                "Saved image training sample for message {MessageId}",
-                messageId);
+            _logger.LogWarning(
+                "Message {MessageId} not in database. Skipping {Source} ham decision.",
+                messageId, source);
+            return;
         }
 
-        // Save video training sample if message has a video
-        var videoSaved = await _videoTrainingSamplesRepository.SaveTrainingSampleAsync(
-            messageId,
-            chat.Id,
-            isSpam: true,
-            executor,
-            cancellationToken);
+        await _detectionResultsRepository.RecordDecisionAsync(
+            messageId, chat.Id, source, executor, reason, cancellationToken: cancellationToken);
 
-        if (videoSaved)
-        {
-            _logger.LogInformation(
-                "Saved video training sample for message {MessageId}",
-                messageId);
-        }
+        await _jobTriggerService.TriggerNowAsync(
+            BackgroundJobNames.ClassifierRetraining, payload: new { }, cancellationToken: cancellationToken);
+
+        _logger.LogInformation("Recorded {Source} ham decision for message {MessageId} by {Executor}",
+            source, messageId, executor.GetDisplayText());
     }
 }

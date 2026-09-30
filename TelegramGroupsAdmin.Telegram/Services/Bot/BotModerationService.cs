@@ -145,7 +145,7 @@ public class BotModerationService : IBotModerationService
 
         // Step 4: Create training data (non-critical - failure doesn't affect ban success)
         await SafeExecuteAsync(
-            () => _trainingHandler.CreateSpamSampleAsync(intent.MessageId, intent.Chat, intent.Executor, cancellationToken),
+            () => _trainingHandler.CreateSpamSampleAsync(intent.MessageId, intent.Chat, intent.Executor, intent.Source, intent.Reason, cancellationToken),
             $"Create training data for message {intent.MessageId}");
 
         await RemoveDmCelebrationSubscriptionsAsync(intent.User, cancellationToken);

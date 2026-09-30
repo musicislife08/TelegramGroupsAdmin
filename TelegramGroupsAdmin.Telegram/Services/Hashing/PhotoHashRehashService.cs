@@ -2,9 +2,13 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.ContentDetection.Services;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Data;
+using TelegramGroupsAdmin.Telegram.Models;
+using TelegramGroupsAdmin.Telegram.Repositories;
 
 namespace TelegramGroupsAdmin.Telegram.Services.Hashing;
 
@@ -12,6 +16,8 @@ namespace TelegramGroupsAdmin.Telegram.Services.Hashing;
 public sealed class PhotoHashRehashService(
     IDbContextFactory<AppDbContext> contextFactory,
     IPhotoHashService photoHashService,
+    IMessageHistoryRepository messageHistoryRepository,
+    IMediaFeatureExtractor mediaFeatureExtractor,
     IOptions<AppOptions> appOptions,
     ILogger<PhotoHashRehashService> logger) : IPhotoHashRehashService
 {
@@ -21,7 +27,7 @@ public sealed class PhotoHashRehashService(
             .Add(await RehashUsersAsync(ct))
             .Add(await RehashLinkedChannelsAsync(ct))
             .Add(await RehashBanCelebrationGifsAsync(ct))
-            .Add(await RehashImageTrainingSamplesAsync(ct));
+            .Add(await BackfillMessageMediaFeaturesAsync(ct));
 
         if (total != PhotoHashRehashResult.Empty)
         {
@@ -130,38 +136,98 @@ public sealed class PhotoHashRehashService(
         return new PhotoHashRehashResult(recomputed, unrecoverable, 0);
     }
 
-    private async Task<PhotoHashRehashResult> RehashImageTrainingSamplesAsync(CancellationToken ct)
+    /// <summary>
+    /// Maximum number of messages whose features the backfill computes per start. Internal so tests can shrink it.
+    /// </summary>
+    internal int MediaBackfillLimit { get; init; } = 500;
+
+    /// <summary>
+    /// Fills messages.media_features for curated media messages that have none (scanned before
+    /// features existed, or never scanned before an admin decision), so Layer 1 can match them.
+    /// Candidates whose file is missing, unreadable or fails stay candidates (they are retried next
+    /// start), so the backfill pages past them: they are counted and skipped with a cheap existence
+    /// check, and cannot starve later recoverable candidates out of the run.
+    /// </summary>
+    private async Task<PhotoHashRehashResult> BackfillMessageMediaFeaturesAsync(CancellationToken ct)
     {
-        await using var context = await contextFactory.CreateDbContextAsync(ct);
+        int recomputed = 0, missing = 0, unreadable = 0, failed = 0;
 
-        // PhotoPath on the sample row is never populated (it is [Required] but never
-        // assigned on insert), so the source image has to come from the joined message.
-        // Photos live in photo_local_path; media_local_path holds non-photo attachments
-        // and is not a usable source for a photo hash (see #527).
-        var candidates = await context.ImageTrainingSamples
-            .Where(its => its.PhotoHash == null)
-            .Join(context.Messages,
-                its => new { its.MessageId, its.ChatId },
-                m => new { m.MessageId, m.ChatId },
-                (its, m) => new { its.Id, m.PhotoLocalPath })
-            .Where(x => x.PhotoLocalPath != null)
-            .ToListAsync(ct);
-
-        var recomputed = 0;
-        var unrecoverable = 0;
-
-        foreach (var candidate in candidates)
+        // Each non-recovered candidate stays in the result set, so it advances the offset; a recovered
+        // one leaves the set (it now has features), so it does not.
+        var offset = 0;
+        while (recomputed < MediaBackfillLimit)
         {
-            var hash = await ComputeAsync(candidate.PhotoLocalPath!);
-            if (hash is null) { unrecoverable++; continue; }
+            var page = await messageHistoryRepository.GetMediaFeatureBackfillCandidatesAsync(MediaBackfillLimit, offset, ct);
+            foreach (var candidate in page)
+            {
+                if (recomputed >= MediaBackfillLimit)
+                    break;
 
-            await context.ImageTrainingSamples
-                .Where(its => its.Id == candidate.Id)
-                .ExecuteUpdateAsync(s => s.SetProperty(its => its.PhotoHash, hash), ct);
-            recomputed++;
+                var path = ResolveMediaPath(candidate);
+                if (path is null || !File.Exists(path))
+                {
+                    missing++;
+                    offset++;
+                    logger.LogDebug("Media-feature backfill: file missing for message {MessageId} in chat {ChatId} at {Path}",
+                        candidate.MessageId, candidate.ChatId, path);
+                    continue;
+                }
+
+                try
+                {
+                    MediaFeatures? features = candidate.PhotoLocalPath is not null || candidate.MediaType == MediaType.Photo
+                        ? await mediaFeatureExtractor.ExtractPhotoAsync(path)
+                        : await mediaFeatureExtractor.ExtractVideoAsync(path, ct);
+
+                    if (features is null)
+                    {
+                        unreadable++;
+                        offset++;
+                        logger.LogDebug("Media-feature backfill: file unreadable for message {MessageId} in chat {ChatId} at {Path}",
+                            candidate.MessageId, candidate.ChatId, path);
+                        continue;
+                    }
+
+                    await messageHistoryRepository.SetMediaFeaturesAsync(candidate.MessageId, candidate.ChatId, features, ct);
+                    recomputed++;
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    failed++;
+                    offset++;
+                    logger.LogWarning(ex, "Media-feature backfill failed for message {MessageId} in chat {ChatId}, continuing",
+                        candidate.MessageId, candidate.ChatId);
+                }
+            }
+
+            if (page.Count < MediaBackfillLimit)
+                break;
+        }
+
+        var unrecoverable = missing + unreadable + failed;
+        if (unrecoverable > 0)
+        {
+            logger.LogWarning(
+                "Media-feature backfill: {Unrecoverable} curated media messages have no features ({Missing} file missing, {Unreadable} unreadable, {Failed} failed); they are retried on the next start",
+                unrecoverable, missing, unreadable, failed);
         }
 
         return new PhotoHashRehashResult(recomputed, unrecoverable, 0);
+    }
+
+    /// <summary>The candidate's absolute media path, or null when it has none.</summary>
+    private string? ResolveMediaPath(MediaBackfillCandidate candidate)
+    {
+        if (candidate.PhotoLocalPath is not null)
+            return MediaUtilities.ToAbsolutePath(candidate.PhotoLocalPath, appOptions.Value.DataPath);
+
+        if (candidate is { MediaLocalPath: not null, MediaType: { } mediaType })
+        {
+            MediaUtilities.ValidateMediaPath(candidate.MediaLocalPath, (int)mediaType, appOptions.Value.DataPath, out var path);
+            return path;
+        }
+
+        return null;
     }
 
     private async Task<byte[]?> ComputeAsync(string relativePath)

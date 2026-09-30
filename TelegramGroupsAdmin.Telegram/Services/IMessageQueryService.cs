@@ -1,3 +1,5 @@
+using TelegramGroupsAdmin.ContentDetection.Models;
+using TelegramGroupsAdmin.Core.Models;
 using UiModels = TelegramGroupsAdmin.Telegram.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
@@ -77,4 +79,14 @@ public interface IMessageQueryService
         int limit = 50,
         DateTimeOffset? beforeTimestamp = null,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// A message's verdict events (detection history), newest first. Delegates to the detection results repository.
+    /// </summary>
+    Task<List<DetectionResultRecord>> GetDetectionHistoryAsync(int messageId, long chatId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// A message's current verdict (message_verdicts); null only if the message does not exist.
+    /// </summary>
+    Task<MessageVerdict?> GetCurrentVerdictAsync(int messageId, long chatId, CancellationToken cancellationToken = default);
 }

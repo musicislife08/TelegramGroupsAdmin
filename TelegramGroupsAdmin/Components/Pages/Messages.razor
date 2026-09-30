@@ -3,12 +3,11 @@
 @using TelegramGroupsAdmin.Telegram.Services.Media
 @using TelegramGroupsAdmin.Telegram.Services.Bot
 @using TelegramGroupsAdmin.ContentDetection.Models
-@using TelegramGroupsAdmin.ContentDetection.Repositories
-@using TelegramGroupsAdmin.Core.BackgroundJobs
 @using TelegramGroupsAdmin.Core.Extensions
 @using TelegramGroupsAdmin.Core.Models
 @using TelegramGroupsAdmin.Core.Services
 @using TelegramGroupsAdmin.Telegram.Services.Moderation
+@using TelegramGroupsAdmin.Telegram.Services.Moderation.Handlers
 @using TelegramGroupsAdmin.Core.Utilities
 @using TelegramGroupsAdmin.Telegram.Extensions
 @inject IMessageHistoryRepository MessageRepository
@@ -19,9 +18,7 @@
 @inject IJSRuntime Js
 @inject IDialogService DialogService
 @inject ITelegramBotService BotService
-@inject IDetectionResultsRepository DetectionResultsRepository
-@inject ITrainingLabelsRepository TrainingLabelsRepository
-@inject IJobTriggerService JobTriggerService
+@inject ITrainingHandler TrainingHandler
 @inject IBotModerationService ModerationService
 @inject ITelegramUserMappingRepository TelegramMappingRepository
 @inject ITelegramUserRepository TelegramUserRepository
@@ -417,7 +414,7 @@
                     // Load detection history for Admin+ users (now included in wrapper)
                     if (WebUser!.PermissionLevel >= PermissionLevel.GlobalAdmin)
                     {
-                        var history = await DetectionResultsRepository.GetByMessageIdAsync(targetMessageId, _selectedChatId!.Value);
+                        var history = await MessageQueryService.GetDetectionHistoryAsync(targetMessageId, _selectedChatId!.Value);
                         messageWrapper.DetectionResults.AddRange(history);
                     }
                 }
@@ -805,64 +802,35 @@
     {
         var messageIds = messages.Select(m => m.Message.MessageId).ToList();
 
-        if (WebUser!.PermissionLevel >= PermissionLevel.GlobalAdmin)
+        // Content checks (message badges) always come from the current verdict (message_verdicts view),
+        // for every permission level - see GetContentCheck.
+        var editCountsTask = MessageEditService.GetEditCountsForMessagesAsync(_selectedChatId!.Value, messageIds);
+        var contentChecksTask = MessageQueryService.GetContentChecksForMessagesAsync(_selectedChatId!.Value, messageIds);
+        await Task.WhenAll(editCountsTask, contentChecksTask);
+
+        var editCounts = await editCountsTask;
+        var contentChecks = await contentChecksTask;
+
+        if (replace)
         {
-            var editCounts = await MessageEditService.GetEditCountsForMessagesAsync(_selectedChatId!.Value, messageIds);
-            if (replace)
-            {
-                _editCounts = editCounts;
-            }
-            else
-            {
-                foreach (var kvp in editCounts)
-                    _editCounts[kvp.Key] = kvp.Value;
-            }
+            _editCounts = editCounts;
+            _contentChecks = contentChecks;
         }
         else
         {
-            var editCountsTask = MessageEditService.GetEditCountsForMessagesAsync(_selectedChatId!.Value, messageIds);
-            var contentChecksTask = MessageQueryService.GetContentChecksForMessagesAsync(_selectedChatId!.Value, messageIds);
-            await Task.WhenAll(editCountsTask, contentChecksTask);
-
-            var editCounts = await editCountsTask;
-            var contentChecks = await contentChecksTask;
-
-            if (replace)
-            {
-                _editCounts = editCounts;
-                _contentChecks = contentChecks;
-            }
-            else
-            {
-                foreach (var kvp in editCounts)
-                    _editCounts[kvp.Key] = kvp.Value;
-                foreach (var kvp in contentChecks)
-                    _contentChecks[kvp.Key] = kvp.Value;
-            }
+            foreach (var kvp in editCounts)
+                _editCounts[kvp.Key] = kvp.Value;
+            foreach (var kvp in contentChecks)
+                _contentChecks[kvp.Key] = kvp.Value;
         }
     }
 
     private ContentCheckRecord? GetContentCheck(int messageId)
     {
-        // PERF-APP-1: Use detection results already loaded via Include() instead of separate dictionary
-        var wrapper = _allMessages.FirstOrDefault(mw => mw.Message.MessageId == messageId);
-        if (wrapper?.DetectionResults.Any() != true)
-        {
-            // Fallback to dictionary for backward compatibility (messages loaded without detection history)
-            _contentChecks.TryGetValue(messageId, out var fallback);
-            return fallback;
-        }
-
-        // Use latest detection result (already ordered DESC by DetectedAt in repository)
-        var latest = wrapper.DetectionResults.First();
-        return new ContentCheckRecord(
-            CheckTimestamp: latest.DetectedAt,
-            UserId: latest.UserId,
-            IsSpam: latest.IsSpam,
-            Score: Math.Abs(latest.NetScore),
-            Reason: latest.Reason,
-            MatchedMessageId: messageId
-        );
+        // Badge always reflects the message's current verdict (message_verdicts view), never the raw
+        // latest detection_results row - see #521 Defect B. No entry (Unscanned) means no badge.
+        _contentChecks.TryGetValue(messageId, out var check);
+        return check;
     }
 
     private int GetEditCount(int messageId)
@@ -909,7 +877,7 @@
         await DialogService.ShowAsync<EditHistoryDialog>("Edit History", parameters, options);
     }
 
-    // Phase 2.7: Spam/Ham action handlers (uses ModerationActionService)
+    // Spam / clean action handlers (use the moderation and training services)
     private async Task HandleMarkAsSpam(MessageRecord message)
     {
         try
@@ -926,25 +894,29 @@
                     MessageId = message.MessageId,
                     Chat = message.Chat,
                     Executor = executor,
+                    Source = VerdictSource.WebMarkSpam,
                     Reason = "Manually marked as spam by admin via UI"
                 });
 
             if (result.Success)
             {
-                await RefreshDetectionHistoryDisplayAsync(message.MessageId, message.User.Id);
+                await RefreshDetectionHistoryDisplayAsync(message.MessageId);
 
                 Logger.LogInformation(
                     "Message {MessageId} marked as spam: user banned from {ChatsAffected} chats, message deleted: {MessageDeleted}",
                     message.MessageId, result.ChatsAffected, result.MessageDeleted);
+                Snackbar.Add($"Marked as spam - user banned from {result.ChatsAffected} chat(s)", Severity.Success);
             }
             else
             {
                 Logger.LogError("Failed to mark message {MessageId} as spam: {Error}", message.MessageId, result.ErrorMessage);
+                Snackbar.Add($"Failed to mark as spam: {result.ErrorMessage}", Severity.Error);
             }
         }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Failed to mark message {MessageId} as spam", message.MessageId);
+            Snackbar.Add("Failed to mark as spam", Severity.Error);
         }
     }
 
@@ -959,48 +931,14 @@
             // Check if this was previously marked as spam (false positive correction scenario)
             var wasPreviouslySpam = GetContentCheck(message.MessageId)?.IsSpam == true;
 
-            // 1. Create detection result marked as ham (for training data)
-            // Uses atomic method to invalidate old training data + insert new result in single transaction
             var reason = wasPreviouslySpam
-                ? "Manually marked as ham (not spam) by admin - false positive correction"
-                : "Manually added as ham training sample by admin";
+                ? "Manually marked clean (not spam) by admin - false positive correction"
+                : "Manually marked clean by admin";
 
-            // 1. Create detection result for history (NOT for training)
-            var detectionResult = new DetectionResultRecord
-            {
-                MessageId = message.MessageId,
-                ChatId = message.Chat.Id,
-                DetectedAt = DateTimeOffset.UtcNow,
-                DetectionSource = "manual",
-                DetectionMethod = "Manual",
-                // IsSpam computed from net_score (negative = ham)
-                Score = 0.0, // No spam score (ham)
-                Reason = reason,
-                AddedBy = executor,
-                UserId = message.User.Id, // Detection result uses raw ID for DB FK
-                UsedForTraining = false, // History only - training handled by training_labels
-                NetScore = -5.0, // Strong ham signal (manual admin decision)
-                CheckResultsJson = null,
-                EditVersion = 0
-            };
+            await TrainingHandler.CreateHamSampleAsync(
+                message.MessageId, message.Chat, executor, VerdictSource.WebMarkHam, reason);
 
-            await DetectionResultsRepository.InsertAsync(detectionResult);
-
-            // 2. Create explicit training label for ML
-            await TrainingLabelsRepository.UpsertLabelAsync(
-                message.MessageId,
-                message.Chat.Id,
-                label: TrainingLabel.Ham,
-                actor: executor,
-                reason: reason,
-                auditLogId: null);
-
-            // 3. Trigger classifier retraining (SDCA + Bayes)
-            await JobTriggerService.TriggerNowAsync(
-                BackgroundJobNames.ClassifierRetraining,
-                payload: new { });
-
-            // 2. Only unban and restore trust if this was previously marked as spam (false positive correction)
+            // Only unban and restore trust if this was previously marked as spam (false positive correction)
             if (wasPreviouslySpam)
             {
                 var unbanResult = await ModerationService.UnbanUserAsync(
@@ -1008,44 +946,48 @@
                     {
                         User = message.User,
                         Executor = executor,
-                        Reason = "False positive correction - message marked as ham by admin via UI",
+                        Reason = "False positive correction - message marked clean by admin via UI",
                         RestoreTrust = true // Restore trust to bypass future spam checks
                     });
 
                 if (unbanResult.Success)
                 {
                     Logger.LogInformation(
-                        "Message {MessageId} marked as ham (false positive correction): user unbanned from {ChatsAffected} chats, trust restored: {TrustRestored}",
+                        "Message {MessageId} marked clean (false positive correction): user unbanned from {ChatsAffected} chats, trust restored: {TrustRestored}",
                         message.MessageId, unbanResult.ChatsAffected, unbanResult.TrustRestored);
+                    Snackbar.Add($"Marked clean - user unbanned from {unbanResult.ChatsAffected} chat(s)", Severity.Success);
                 }
                 else
                 {
-                    Logger.LogWarning("Message {MessageId} marked as ham but unban failed: {Error}", message.MessageId, unbanResult.ErrorMessage);
+                    Logger.LogWarning("Message {MessageId} marked clean but unban failed: {Error}", message.MessageId, unbanResult.ErrorMessage);
+                    Snackbar.Add($"Marked clean, but unbanning the user failed: {unbanResult.ErrorMessage}", Severity.Warning);
                 }
             }
             else
             {
-                Logger.LogInformation(
-                    "Message {MessageId} marked as ham (training sample): detection result created with net_score = -5.0",
-                    message.MessageId);
+                Logger.LogInformation("Message {MessageId} marked clean", message.MessageId);
+                Snackbar.Add("Marked clean", Severity.Success);
             }
 
-            await RefreshDetectionHistoryDisplayAsync(message.MessageId, message.User.Id);
+            await RefreshDetectionHistoryDisplayAsync(message.MessageId);
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Failed to mark message {MessageId} as ham", message.MessageId);
+            Logger.LogError(ex, "Failed to mark message {MessageId} clean", message.MessageId);
+            Snackbar.Add("Failed to mark clean", Severity.Error);
         }
     }
 
     /// <summary>
     /// Refreshes detection history display for a message after spam/ham labeling.
-    /// Updates both the message wrapper's cached history and the content checks dictionary.
+    /// Updates both the message wrapper's cached history (detection-history dialog) and the
+    /// content checks dictionary (badge), the latter from the current verdict, never the raw
+    /// latest detection_results row - see #521 Defect B.
     /// </summary>
-    private async Task RefreshDetectionHistoryDisplayAsync(int messageId, long userId)
+    private async Task RefreshDetectionHistoryDisplayAsync(int messageId)
     {
-        // Refresh detection history for this message in the wrapper
-        var history = await DetectionResultsRepository.GetByMessageIdAsync(messageId, _selectedChatId!.Value);
+        // Refresh detection history for this message in the wrapper (feeds the detection-history dialog)
+        var history = await MessageQueryService.GetDetectionHistoryAsync(messageId, _selectedChatId!.Value);
         var messageWrapper = _allMessages.FirstOrDefault(m => m.Message.MessageId == messageId);
         if (messageWrapper != null)
         {
@@ -1053,18 +995,11 @@
             messageWrapper.DetectionResults.AddRange(history);
         }
 
-        // Refresh spam check display
-        if (history.Any())
+        // Refresh the badge from the current verdict (message_verdicts view)
+        var contentChecks = await MessageQueryService.GetContentChecksForMessagesAsync(_selectedChatId!.Value, [messageId]);
+        if (contentChecks.TryGetValue(messageId, out var current))
         {
-            var latest = history.OrderByDescending(h => h.DetectedAt).First();
-            _contentChecks[messageId] = new ContentCheckRecord(
-                CheckTimestamp: latest.DetectedAt,
-                UserId: userId,
-                IsSpam: latest.IsSpam,
-                Score: Math.Abs(latest.NetScore),
-                Reason: latest.Reason,
-                MatchedMessageId: null
-            );
+            _contentChecks[messageId] = current;
         }
 
         StateHasChanged();
@@ -1074,15 +1009,15 @@
     {
         // Use detection history from wrapper if available (avoids duplicate database query)
         var messageWrapper = _allMessages.FirstOrDefault(mw => mw.Message.MessageId == message.MessageId);
-        var history = messageWrapper?.DetectionResults ?? await DetectionResultsRepository.GetByMessageIdAsync(message.MessageId, message.Chat.Id);
+        var history = messageWrapper?.DetectionResults ?? await MessageQueryService.GetDetectionHistoryAsync(message.MessageId, message.Chat.Id);
 
-        var trainingLabel = await TrainingLabelsRepository.GetByMessageIdAsync(message.MessageId, message.Chat.Id);
+        var verdict = await MessageQueryService.GetCurrentVerdictAsync(message.MessageId, message.Chat.Id);
 
         var parameters = new DialogParameters<DetectionHistoryDialog>
         {
             { x => x.Message, message },
             { x => x.DetectionResults, history },
-            { x => x.TrainingLabel, trainingLabel }
+            { x => x.CurrentVerdict, verdict }
         };
 
         var options = new DialogOptions

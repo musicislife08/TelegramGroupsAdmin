@@ -1,5 +1,6 @@
 using DataModels = TelegramGroupsAdmin.Data.Models;
 using UiModels = TelegramGroupsAdmin.ContentDetection.Models;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Repositories.Mappings;
 
 namespace TelegramGroupsAdmin.ContentDetection.Repositories.Mappings;
@@ -23,46 +24,18 @@ public static class DetectionResultMappings
                 MessageId = data.MessageId,
                 ChatId = data.ChatId,
                 DetectedAt = data.DetectedAt,
-                DetectionSource = data.DetectionSource,
                 DetectionMethod = data.DetectionMethod,
-                IsSpam = data.IsSpam,
+                Source = (VerdictSource)data.Source,
+                Classification = (VerdictClassification)data.Classification,
+                Properties = data.Properties,
+                AuditLogId = data.AuditLogId,
                 Score = data.Score,
                 Reason = data.Reason,
                 AddedBy = ActorMappings.ToActor(data.WebUserId, data.TelegramUserId, data.SystemIdentifier, webUserEmail, telegramUsername, telegramFirstName, telegramLastName),
-                UsedForTraining = data.UsedForTraining,
-                NetScore = data.NetScore,
                 CheckResultsJson = data.CheckResultsJson,  // Phase 2.6
                 EditVersion = data.EditVersion,             // Phase 2.6
                 UserId = 0, // Will be populated by repository join
                 MessageText = null // Will be populated by repository join
-            };
-        }
-    }
-
-    extension(UiModels.DetectionResultRecord ui)
-    {
-        public DataModels.DetectionResultRecordDto ToDto()
-        {
-            ActorMappings.SetActorColumns(ui.AddedBy, out var webUserId, out var telegramUserId, out var systemIdentifier);
-
-            return new()
-            {
-                Id = ui.Id,
-                MessageId = ui.MessageId,
-                ChatId = ui.ChatId,
-                DetectedAt = ui.DetectedAt,
-                DetectionSource = ui.DetectionSource,
-                DetectionMethod = ui.DetectionMethod,
-                IsSpam = ui.IsSpam,
-                Score = ui.Score,
-                Reason = ui.Reason,
-                WebUserId = webUserId,
-                TelegramUserId = telegramUserId,
-                SystemIdentifier = systemIdentifier,
-                UsedForTraining = ui.UsedForTraining,
-                NetScore = ui.NetScore,
-                CheckResultsJson = ui.CheckResultsJson,  // Phase 2.6
-                EditVersion = ui.EditVersion              // Phase 2.6
             };
         }
     }

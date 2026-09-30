@@ -14,7 +14,7 @@ The binding rule set lives in `.claude/rules/integration-test-data.md` and is in
 ## Part 1 - Dataset orientation
 
 ### What this is
-The canonical dataset is a frozen superset of every entity type the integration suite needs to read from. Tests clone it per-method via Postgres template DBs (`MigrationTestHelper.CreateDatabaseFromGoldenTemplateAsync`) and either consume it as-is, reduce it down with `GoldenDataset.Reduce(ctx).KeepMessages(...).ApplyAsync()` (subtractive — FK CASCADE drops everything outside the allowlist), or mutate it in-place with `GoldenDataset.Mutate(ctx).ShiftDetectionResultTimestamps(...).ApplyAsync()` (NOW()-relative re-timing for windowed aggregations). Source: `TestData/SQL/canonical/*.sql` (36 files, 3,178 INSERT statements).
+The canonical dataset is a frozen superset of every entity type the integration suite needs to read from. Tests clone it per-method via Postgres template DBs (`MigrationTestHelper.CreateDatabaseFromGoldenTemplateAsync`) and either consume it as-is, reduce it down with `GoldenDataset.Reduce(ctx).KeepMessages(...).ApplyAsync()` (subtractive — FK CASCADE drops everything outside the allowlist), or mutate it in-place with `GoldenDataset.Mutate(ctx).ShiftDetectionResultTimestamps(...).ApplyAsync()` (NOW()-relative re-timing for windowed aggregations). Source: `TestData/SQL/canonical/*.sql` (33 files, 2,797 INSERT statements).
 
 True-empty tests use `MigrationTestHelper.CreateDatabaseFromEmptyTemplateAsync` instead (post-migrate, zero rows) — cheaper than a golden clone, and the right choice when the SUT writes its own state from scratch.
 
@@ -47,11 +47,9 @@ Origin: prod DB snapshot from 2026-04-30. Bootstrap pipeline (full detail in `do
 | 12 | tag_definitions | 7 | Reference data (6 prod-derived) + 1 synthetic `power-user` (usage_count 20) for the concurrent-decrement race test. |
 | 13 | username_blacklist | 2 | 1 enabled + 1 disabled, both Exact match. |
 | 14 | domain_filters | 0 | Empty by design. |
-| 15 | image_training_samples | 0 | Empty by design (no payloads carried). |
-| 16 | video_training_samples | 0 | Empty by design (no payloads carried). |
 | 17 | web_notifications | 0 | Empty by design. |
 | 18 | notification_preferences | 5 | One per active web user. |
-| 19 | messages | 407 | 100 per slice: explicit_spam, implicit_spam, explicit_ham, implicit_ham. Plus 7 SimHash test anchors appended in 3A.3 (4666, 14538, 212355, 220848, 221429, 221904, 222949) — all banned-user spam from dev DB, preserved verbatim, FK-resolved against existing canonical telegram_users and MainChat. |
+| 19 | messages | 409 | 100 per slice: explicit_spam, implicit_spam, explicit_ham, implicit_ham. Plus 7 SimHash test anchors appended in 3A.3 (4666, 14538, 212355, 220848, 221429, 221904, 222949) — all banned-user spam from dev DB, preserved verbatim, FK-resolved against existing canonical telegram_users and MainChat. Plus 2 messages with converted OpenAI vetoes (94, 22127) appended 2026-09-28 from prod, authored by existing non-banned canonical users (see Part 2 recipe 4h). |
 | 20 | chat_admins | 104 | Snapshot of admin membership across all 21 chats. |
 | 21 | linked_channels | 3 | One per chat that has a linked channel. |
 | 22 | telegram_user_mappings | 3 | Cross-chat user identity links. |
@@ -64,15 +62,14 @@ Origin: prod DB snapshot from 2026-04-30. Bootstrap pipeline (full detail in `do
 | 29 | invites | 19 | |
 | 30 | reports | 14 | `reviewed_by` mapped via deterministic hashtext to canonical fixture emails. Ids 186-188 are synthetic pending fixtures (one user, three report types) added for join-gate cleanup tests. All six pre-existing exam (`type=2`) contexts carry `"outcome": 0`. |
 | 31 | message_edits | 23 | Edit history for messages whose canonical row carries `edit_count > 0`. |
-| 32 | detection_results | 376 | URL hostnames in `check_results_json` scrubbed to `canonical-spam.test`. `is_spam` is a generated column. |
-| 33 | training_labels | 200 | 185 prod-derived + 15 synthetic explicit_ham promotions (`reason='canonical_synthetic_promotion'`). |
+| 32 | detection_results | 461 | Verdict events: `source`/`classification` set by `tools/convert-canonical-to-verdict-events.sql` (canonical edit 2026-09-27), which also folded the old explicit labels in as decision rows (84 added). Legacy verdict columns dropped by `DropLegacyVerdictColumns` (file regenerated without them, same rows). URL hostnames in `check_results_json` scrubbed to `canonical-spam.test`. dr 22 and 1639 appended 2026-09-28 (converted OpenAI vetoes, stored as `AddVerdictEvents` repairs them). `is_spam` is generated from `classification` (not in the file); the `message_verdicts` view is the verdict. |
 | 34 | user_actions | 993 | Bootstrap missed adding 7 synthetic ban-celebration anchor rows; see Part 2 ban-celebration note. |
 | 35 | message_translations | 14 | Non-noop translations only; URL hostnames scrubbed. |
 | 36 | ban_celebration_subscribers | 5 | Approved canonical addition 2026-09-25 (new table — no row to flag-edit). See Part 2 "DM ban celebration subscribers". |
 
 ### What's NOT in the dataset
 - **Encrypted JSONB credentials** in `configs` (sendgrid keys, web push keys, AI provider keys) - left NULL. Populated at runtime by the app via `IDataProtectionProvider`.
-- **File payloads** referenced by `image_training_samples` / `video_training_samples` - even the metadata rows are empty (0 rows in canonical).
+- **Media files** referenced by `messages.media_features` / local media paths - no payloads on disk.
 - **Email verification tokens, password reset tokens, locked_until timestamps** - all NULL.
 - **TOTP secrets** - NULL except where canonical fixtures need TOTP-enabled state for tests (see Part 2 scenarios).
 - **Operational / transient tables** (10 SKIP tables): `cached_blocked_domains`, `exam_sessions`, `file_scan_quota`, `file_scan_results`, `pending_notifications`, `push_subscriptions`, `report_callback_contexts`, `telegram_link_tokens`, `telegram_sessions`, `verification_tokens`. These are NOT exported. Tests that need them seed inline.
@@ -104,6 +101,7 @@ Layout (`internal static class GoldenDatasetConstants` with nested static classe
 - `Retention` — message anchors, `MessageShifts`, `AllMessageRefs`, `ExpectedDeletionsWith30DayRetention` (consumed by `MessageHistoryRepositoryTests.CleanupExpiredAsync_*`)
 - `Analytics` — DR / WR anchors, `DetectionResultShifts`, `WelcomeResponseShifts`, `AllMessageRefs`, expected counts (consumed by `AnalyticsRepositoryTests`)
 - `Reports` — `PendingExamFailureId`, `ResolvedExamFailureId`, `AutoApprovedExamPassId`, `AutoApprovedExamPassUserId` (consumed by `ExamResultRepositoryTests`)
+- `Verdicts` — verdict-event anchors for the `message_verdicts` view, training levels, auto-trust and retention (see Part 2 "Verdict events")
 
 Promote a constant to its top-level domain class (`WebUsers`, `Chats`) once a second consumer wants it; until then, keep it under a test-domain nested class next to the tests that use it. The `GoldenDataset.cs` loader file holds the canonical *behavior* (`LoadCanonicalAsync`, `Reduce`, `Mutate`); the constants file holds canonical *data*.
 
@@ -248,15 +246,15 @@ Recipe format: a heading, the anchor id(s), a one-line description, and "use whe
 - `message_translations` row 75 carries a Spanish-detected translation. (No translations exist in MainChat; pick a non-MainChat anchor.)
 - Use when: a test exercises translation lookup or asserts on detected_language metadata.
 
-#### Sample spam-labeled message (training_labels label=0)
+#### Sample spam-labeled message (explicit spam decision)
 - `message_id` = `4575`, `chat_id` = `-100048429560480`, `user_id` = `9331684387862`
-- `training_labels.label = 0` (spam). The synthetic `id < 0` rows (e.g., `-3`, `-6`) are training-only placeholders without real `messages` rows; prefer real message ids when the test needs the underlying message body.
-- Use when: a test needs a message that downstream training labels classify as spam.
+- Scan dr2084 (`ImplicitHam`) then decision dr2087 (`LegacyManual`, `ExplicitSpam`) → `message_verdicts` = `ExplicitSpam`.
+- Use when: a test needs a message whose verdict is an explicit spam label.
 
-#### Sample ham-labeled message (training_labels label=1)
+#### Sample ham-labeled message (explicit ham decision)
 - `message_id` = `103`, `chat_id` = `-100082190806505`, `user_id` = `9320215215920`
-- `training_labels.label = 1` (ham).
-- Use when: a test needs a message that downstream training labels classify as ham.
+- Scan dr27 (`ImplicitHam`) then decision dr41 (`LegacyManual`, `ExplicitHam`) → `message_verdicts` = `ExplicitHam`.
+- Use when: a test needs a message whose verdict is an explicit ham label.
 
 ### Configs
 
@@ -289,10 +287,43 @@ Anchors are in code as `GoldenDatasetConstants.DmCelebrations`. None of these us
 
 Workshop Alumni (`-100059667856554`) has no `ban_celebration_config`, so its effective celebration config is disabled: a subscribers-only chat.
 
+### Verdict events (canonical edit 2026-09-27)
+
+`detection_results` is an append-only verdict-event log; `message_verdicts` resolves each message to its latest non-FileScan row (`detected_at DESC, id DESC`, `Unscanned` when none). The conversion is `TestData/SQL/tools/convert-canonical-to-verdict-events.sql` (provenance, not embedded; its header records how it was run). `TestData/CanonicalSlices.cs` freezes every non-chat-0 message's slice under the old model (the since-dropped explicit label table + the legacy spam/training-membership flags); `CanonicalVerdictOracleTests` checks the view against it (msg 104948 is a documented spec-mandated override to ExplicitSpam) and checks chat-0 samples separately. Anchors are in code as `GoldenDatasetConstants.Verdicts`.
+
+| Constant | Anchor | Verdict | Use when |
+|---|---|---|---|
+| `CorrectedToHamMsgId` | msg 213409, @dinnersnazzy (9257421184750), MainChat | scan dr2026, then manual ham correction dr2031 (`LegacyManual`) → `ExplicitHam` | a later decision supersedes a scan |
+| `AutoBanMsgId` | msg 220384, @AndrewLong6 (9127536472473), MainChat | `AutoBan` decision (folded label, no user) → `ExplicitSpam` | auto-ban decisions; Remove from training |
+| `MarkAsHamSubjectMsgId` | msg 8646, Land Owners (sender 9550752264926) | `AutoBan` → `ExplicitSpam` | the Mark as Ham write subject |
+| `EditFlipMsgId` / `EditFlipChatId` | msg 82837, chat -100065252085265, @financerope (9468093502025), 5 edits | **edited:** ham-labeled, then edited into spam; the v1 rescan dr1334 wins → `ContentScan` / `ImplicitSpam` | an edit rescan supersedes an earlier admin decision; edits count once |
+| `SpamInTrustWindowMsgId` / `SpamInTrustWindowUserId` | msg 7796, @mouthsafeguard (9917295586642), Land Owners | **edited:** dr1339 → `UntrainedSpam`; ham decision dr1349 and its label removed | spam among a user's last three messages (auto-trust denied) |
+| `FileScanBesideScanMsgId` / `FileScanRowId` | msg 216684 (sender 9778846455554), MainChat; FileScan dr2535 | **edited:** dr2535 → clean `FileScan` (newest row, ignored by the view); verdict from dr2534 → `UntrainedSpam`; spam label removed | the view must skip FileScan rows |
+| `UntrainedHamMsgId` / `UntrainedHamChatId` / `UntrainedHamUserId` | msg 22160, Crypto Group (-100094881429433), @wrongedjersey (9621984255379, not banned) | **edited:** dr1933 → AI review 2.0 below threshold → `UntrainedHam` | allowed-but-untrained ham (auto-trust counts it, training does not) |
+| `UnscannedMsgId` (canonical edit 2026-09-28: distinctive `message_text`, `similarity_hash` recomputed via `SimHashService`) | msg 219219, @unhelpfulgrab, MainChat | no rows → `Unscanned` | unscanned messages; trains as implicit ham (text must survive SimHash dedup, so not lorem ipsum) |
+| `AllHamUserId` | user 9184102838760, msgs 71028/71030/71041 | all `ExplicitHam` | auto-trust with N ham messages |
+| `PhotoFeaturesMsgId` | msg 222818 (sender 9777802619662), MainChat, photo | **edited:** `media_features` = `{"type":"photo","hash":"8J8PDw8PH/8="}`; AutoBan dr3322 → `ExplicitSpam` | Layer 1 photo similarity reads a spam sample (messages ⋈ `message_verdicts`) |
+| `VideoFeaturesMsgId` (canonical edit 2026-09-28) | msg 214424 (sender 9607332364262), MainChat, video (`photo_file_id` NULL) | **edited:** `media_features` = video with 3 keyframes (0.1/0.5/0.9, hashes in `VideoFeaturesKeyframeHashes`); LegacyManual dr2168 → `ExplicitSpam` | Layer 1 video similarity reads a spam sample (`MediaSampleRepository.GetRecentVideoSamplesAsync`) |
+| `OpenAIVetoScanRowId` / `OpenAIVetoMsgId` (canonical edit 2026-09-28) | ContentScan dr1934 on msg 212950 (sender 9011155048805), MainChat | **edited:** OpenAI check → non-abstained clean (Score 0) over StopWords 2 + Bayes 5 → `ImplicitHam`, score 0; the message's verdict stays the later `/spam` decision dr1935 → `ExplicitSpam` | the current-encoding OpenAI veto (veto analytics / recently vetoed messages). dr1492 (FN pair, OpenAI *abstained*) is not a veto — see the veto tests. All canonical vetoes: `AllVetoScanRowIds` |
+| `LegacyVetoEarlyScanRowId` / `LegacyVetoEarlyMsgId` / `LegacyVetoEarlyChatId` (approved addition 2026-09-28) | ContentScan dr22 on msg 94, chat -100082190806505, sender 9320215215920 (existing non-banned user) | **added from prod:** OpenAI clean answer that `RemoveV1ContentDetectionBridge` (2026-03-06) converted to `Abstained=true`, Score 4.5 (Confidence/20), repaired to the veto encoding over Bayes 4.9 → `ImplicitHam`, `properties` `{"backfilled": true, "repaired_legacy_veto": true}` | a converted veto as `AddVerdictEvents` leaves it (veto analytics count it) |
+| `LegacyVetoLateScanRowId` / `LegacyVetoLateMsgId` / `LegacyVetoLateChatId` (approved addition 2026-09-28) | ContentScan dr1639 on msg 22127, chat -100094881429433, sender 9887521719353 (existing non-banned user) | **added from prod:** same repair from the later engine (score 0) over Bayes 0.5 → `ImplicitHam` | as above, second engine era |
+| `LabeledOnlyRetentionMsgId` | msg 7974, @arisepacifism (9702019239117) | manual ham dr2009 (`LegacyManual`) → `ExplicitHam` | retention keeps decision-only messages |
+| `Retention.MsgId_ExpiredWithEdits` (no canonical edit — pinned an unreferenced row) | msg 221932, MainChat, 1 edit (message_edits row 3014) | no `detection_results` rows → `Unscanned` (non-curated) | retention deletes an expired non-curated message together with its `message_edits` rows (edit-cascade coverage; task #548 review finding, 2026-09-27) |
+
+Flag-edits (all rows were unreferenced by tests and docs beforehand):
+- **4a** msg 82837: dr1343 (admin ham) and its explicit label row re-timed to `2025-10-29 21:59:00+00` (after scan dr1333, before the first edit at 22:00); dr1334 → score 4.5, `ImplicitSpam`, reason `[Edit #1] AI confirmed spam: …`.
+- **4b** msg 7796: dr1339 → score 3.0, `UntrainedSpam`; dr1349 deleted; its explicit label removed (label file since dropped).
+- **4c** msg 216684: dr2535 → `file_scan` / `FileScanningCheck`, `FileScan` / `UntrainedHam`, score 0, re-timed 1 minute after the newest row; its explicit label removed (label file since dropped).
+- **4d** msg 22160: dr1933 → score 2.0, `UntrainedHam`, reason `AI below review threshold: AI: Review …`, `check_results_json` with a Similarity 3.5 check and an OpenAI 2.0 review.
+- **4e** msg 222818: `media_features` set by an appended `UPDATE` in `19_messages.sql` (a scrubbed photo hash; no file on disk).
+- **4f** (2026-09-28) msg 214424: `media_features` set by an appended `UPDATE` in `19_messages.sql` (synthetic keyframe hashes; no file on disk).
+- **4g** (2026-09-28) dr1934 (msg 212950): OpenAI check `Score` 4.8 spam → 0 with an `AI: Clean - …` detail, `reason` = that detail, `score` 7 → 0, `classification` `UntrainedSpam` → `ImplicitHam` (what `ContentDetectionEngineV2.CreateVetoedResult` + `VerdictClassifier` would have written). Not the message's verdict, so `CanonicalSlices` is unchanged.
+- **4h** (2026-09-28, approved addition — rows appended, not flag-edited) msgs 94 and 22127 with their scans dr22 and dr1639, copied from prod and sanitized like every other non-banned author's message: `message_text` is the canonical lorem at the original length (111 / 34 chars — lengths no other lorem row uses, so no byte-identical duplicate: implicit ham is not deduplicated against explicit ham, and a same-length lorem would collide with `CorrectedToHamMsgId`), `content_hash` NULL, `similarity_hash` recomputed via `SimHashService`; timestamps verbatim; the OpenAI reason/detail replaced with synthetic prose (check scores and Bayes key words as in prod); user and chat ids mapped to the canonical rotations of the same prod users/chats (both authors already in canonical, non-banned and sanitized). The scans are stored post-`AddVerdictEvents`: only the OpenAI check is rewritten (other checks' converted V1 "clean" results keep `Abstained=true` + a leftover Score, which no reader counts). Not in `CanonicalSlices` (added after the freeze).
+
 ### Synthetic / reserved rows (do not regenerate)
 - `welcome_responses` IDs `999001..999005`: 5 status branches anchored on `(MainChat_Id=-100026957614982, user_id=9196379650113, username='canonical_user1')`. Mapping: `999001`=Pending, `999002`=Accepted, `999003`=Denied, `999004`=Timeout, `999005`=Left.
 - `username_blacklist` IDs `999001` (`pattern='spambot_admin'`, enabled, Exact match) + `999005` (`pattern='archived_pattern'`, disabled, Exact match). No Contains/Regex/StartsWith fixtures (feature not yet implemented).
-- `training_labels` rows with `reason='canonical_synthetic_promotion'`: 15 explicit_ham promotions. `labeled_by_user_id` is the rotated id of prod user `1312830442` (a stable canonical synthetic-promotion attribution anchor).
+- `detection_results` rows with `reason='canonical_synthetic_promotion'`: 15 synthetic explicit-ham decisions (`LegacyManual` / `ExplicitHam`, folded from the old explicit label table).
 - `reports` IDs `186..188`: 3 pending (`status=0`) fixtures, all for `9465377455871`, added for join-gate cleanup tests (the golden dataset's real reports are all already resolved). `186`=ContentReport pointing at real message `(70989, -100054416618415)` so the `enriched_reports.content_user_id` join resolves; `187`=ExamResult (failure) in chat `-100054416618415`; `188`=ProfileScanAlert in chat `-100048429560480`. `188` is also the one pre-existing pending profile-scan alert `ProfileScanAlertMappingTests` must account for.
 - `reports` ID `189`: synthetic auto-approved ExamResult pass (status=1, `reviewed_by='Exam Flow'`, `action_taken='auto-approved'`, context `outcome=1`) for user `9960171136314` in MainChat, anchoring the auto-approval override tests. All six pre-existing exam contexts (`179, 181, 182, 183, 185, 187`) now carry `"outcome": 0`.
 

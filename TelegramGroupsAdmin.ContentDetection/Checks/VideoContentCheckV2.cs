@@ -32,7 +32,8 @@ public class VideoContentCheckV2(
     IServiceProvider serviceProvider,
     IConfigService configService,
     IPhotoHashService photoHashService,
-    IVideoTrainingSamplesRepository videoTrainingSamplesRepository) : IContentCheckV2
+    IMediaFeatureExtractor extractor,
+    IMediaSampleRepository mediaSamples) : IContentCheckV2
 {
     // Lazy resolve to break circular dependency
 
@@ -68,6 +69,7 @@ public class VideoContentCheckV2(
     {
         var startTimestamp = Stopwatch.GetTimestamp();
         var req = (VideoCheckRequest)request;
+        VideoFeatures? videoFeatures = null;
 
         try
         {
@@ -124,51 +126,19 @@ public class VideoContentCheckV2(
             logger.LogDebug("Extracted {FrameCount} keyframes from video at {VideoPath}",
                 frames.Count, Path.GetFileName(req.VideoLocalPath));
 
-            // ML-6 Layer 1: Keyframe hash similarity check (fastest - check if we've seen this spam before)
-            if (videoConfig.UseHashSimilarity)
+            // Compute media features once, right after extraction. They ride on every response from
+            // here on so the scan stores them on the message.
+            videoFeatures = await extractor.FromFramesAsync(frames);
+
+            try
             {
-                var layer1Result = await CheckKeyframeHashSimilarityAsync(frames, videoConfig, startTimestamp, req.CancellationToken);
-                if (layer1Result != null)
-                {
-                    // Clean up extracted frames
-                    CleanupFrames(frames);
-                    return layer1Result;
-                }
+                var response = await CheckCoreAsync(req, frames, videoConfig, startTimestamp, videoFeatures);
+                return response with { MediaFeatures = videoFeatures };
             }
-
-            // ML-6 Layer 2: OCR on frames + text-based spam detection
-            if (videoConfig.UseOCR && imageTextExtractionService.IsAvailable)
+            finally
             {
-                var layer2Result = await CheckFrameOCRAsync(frames, videoConfig, req, startTimestamp, req.CancellationToken);
-                if (layer2Result != null)
-                {
-                    // Clean up extracted frames
-                    CleanupFrames(frames);
-                    return layer2Result;
-                }
+                frames.DeleteFiles(logger);
             }
-
-            // ML-6 Layer 3: AI Vision fallback on representative frame
-            if (videoConfig.UseOpenAIVision)
-            {
-                var layer3Result = await CheckFrameWithVisionAsync(frames, req, startTimestamp, req.CancellationToken);
-
-                // Clean up extracted frames
-                CleanupFrames(frames);
-
-                return layer3Result;
-            }
-
-            // No layers enabled or all failed - clean up and return clean
-            CleanupFrames(frames);
-            return new ContentCheckResponseV2
-            {
-                CheckName = CheckName,
-                Score = 0.0,
-                Abstained = true,
-                Details = "Video spam detection disabled or all layers failed",
-                ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
-            };
         }
         catch (Exception ex)
         {
@@ -180,41 +150,66 @@ public class VideoContentCheckV2(
                 Abstained = true,
                 Details = "Video spam check failed",
                 Error = ex,
-                ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
+                ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds,
+                MediaFeatures = videoFeatures
             };
         }
     }
 
     /// <summary>
-    /// ML-6 Layer 1: Check keyframe hash similarity against training samples
+    /// Layers 1-3 over already-extracted frames (the caller cleans the frames up).
+    /// </summary>
+    private async Task<ContentCheckResponseV2> CheckCoreAsync(
+        VideoCheckRequest req,
+        List<ExtractedFrame> frames,
+        VideoContentConfig videoConfig,
+        long startTimestamp,
+        VideoFeatures? videoFeatures)
+    {
+        // ML-6 Layer 1: Keyframe hash similarity against messages whose current verdict trains
+        if (videoConfig.UseHashSimilarity && videoFeatures is not null)
+        {
+            var layer1Result = await CheckKeyframeHashSimilarityAsync(videoFeatures, videoConfig, startTimestamp, req.CancellationToken);
+            if (layer1Result != null)
+                return layer1Result;
+        }
+
+        // ML-6 Layer 2: OCR on frames + text-based spam detection
+        if (videoConfig.UseOCR && imageTextExtractionService.IsAvailable)
+        {
+            var layer2Result = await CheckFrameOCRAsync(frames, videoConfig, req, startTimestamp, req.CancellationToken);
+            if (layer2Result != null)
+                return layer2Result;
+        }
+
+        // ML-6 Layer 3: AI Vision fallback on representative frame
+        if (videoConfig.UseOpenAIVision)
+            return await CheckFrameWithVisionAsync(frames, req, startTimestamp, req.CancellationToken);
+
+        // No layers enabled or all failed
+        return new ContentCheckResponseV2
+        {
+            CheckName = CheckName,
+            Score = 0.0,
+            Abstained = true,
+            Details = "Video spam detection disabled or all layers failed",
+            ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
+        };
+    }
+
+    /// <summary>
+    /// ML-6 Layer 1: Check keyframe hash similarity against messages whose current verdict trains
     /// </summary>
     private async Task<ContentCheckResponseV2?> CheckKeyframeHashSimilarityAsync(
-        List<ExtractedFrame> frames,
+        VideoFeatures videoFeatures,
         VideoContentConfig config,
         long startTimestamp,
         CancellationToken cancellationToken)
     {
         try
         {
-            // Compute hashes for all extracted frames (pre-allocate capacity to avoid resizing)
-            var frameHashes = new List<byte[]>(frames.Count);
-            foreach (var frame in frames)
-            {
-                var hash = await photoHashService.ComputePhotoHashAsync(frame.FramePath);
-                if (hash != null)
-                {
-                    frameHashes.Add(hash);
-                }
-            }
-
-            if (frameHashes.Count == 0)
-            {
-                logger.LogWarning("Failed to compute hashes for any video frames");
-                return null;
-            }
-
-            // Query training samples (limited by config for performance)
-            var trainingSamples = await videoTrainingSamplesRepository.GetRecentSamplesAsync(
+            // Query samples (limited by config for performance)
+            var trainingSamples = await mediaSamples.GetRecentVideoSamplesAsync(
                 config.MaxTrainingSamplesToCompare,
                 cancellationToken);
 
@@ -224,68 +219,71 @@ public class VideoContentCheckV2(
                 return null;
             }
 
-            // Find best match by comparing frame hashes to training sample keyframes
+            // Find best match by comparing each extracted keyframe hash to each sample keyframe hash
             double bestSimilarity = 0.0;
-            bool? matchedSpamLabel = null;
+            VerdictClassification? matchedClassification = null;
 
-            foreach (var (keyframeHashesJson, isSpam) in trainingSamples)
+            foreach (var (sampleFeatures, classification) in trainingSamples)
             {
-                // Parse JSON keyframe hashes
-                var keyframeHashes = JsonSerializer.Deserialize<List<KeyframeHashJson>>(keyframeHashesJson);
-                if (keyframeHashes == null || keyframeHashes.Count == 0)
+                foreach (var frame in videoFeatures.Keyframes)
                 {
-                    continue;
-                }
-
-                // Compare each extracted frame hash to each training sample keyframe hash
-                foreach (var frameHash in frameHashes)
-                {
-                    foreach (var keyframeHash in keyframeHashes)
+                    foreach (var sampleKeyframe in sampleFeatures.Keyframes)
                     {
-                        var sampleHash = Convert.FromBase64String(keyframeHash.Hash);
-                        var similarity = photoHashService.CompareHashes(frameHash, sampleHash);
+                        var similarity = photoHashService.CompareHashes(frame.Hash, sampleKeyframe.Hash);
 
                         if (similarity > bestSimilarity)
                         {
                             bestSimilarity = similarity;
-                            matchedSpamLabel = isSpam;
+                            matchedClassification = classification;
                         }
                     }
                 }
             }
 
             // Check if similarity meets threshold
-            if (bestSimilarity >= config.HashSimilarityThreshold)
+            if (bestSimilarity >= config.HashSimilarityThreshold && matchedClassification is { } matched)
             {
-                logger.LogInformation(
-                    "VideoSpam Layer 1: Keyframe hash match found ({Similarity:F2}% >= {Threshold:F2}%). Returning early with {Classification}",
-                    bestSimilarity * 100, config.HashSimilarityThreshold * 100,
-                    matchedSpamLabel == true ? "SPAM" : "CLEAN");
-
-                // Convert confidence to score: spam gets full score, clean abstains
-                double score;
-                bool abstained;
-                if (matchedSpamLabel == true)
+                if (matched.IsSpam())
                 {
                     // Use configured score directly, clamped to safety boundaries
-                    score = Math.Clamp(config.HashMatchConfidence, ContentDetectionConstants.MinScore, ContentDetectionConstants.MaxScore);
-                    abstained = false;
-                }
-                else
-                {
-                    // Clean: abstain
-                    score = 0.0;
-                    abstained = true;
+                    var score = Math.Clamp(config.HashMatchConfidence, ContentDetectionConstants.MinScore, ContentDetectionConstants.MaxScore);
+
+                    logger.LogInformation(
+                        "VideoSpam Layer 1: Keyframe hash match found ({Similarity:F2}% >= {Threshold:F2}%). Returning early with SPAM",
+                        bestSimilarity * 100, config.HashSimilarityThreshold * 100);
+
+                    return new ContentCheckResponseV2
+                    {
+                        CheckName = CheckName,
+                        Score = score,
+                        Abstained = false,
+                        Details = $"Video keyframe {bestSimilarity:P0} similar to known spam sample",
+                        ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
+                    };
                 }
 
-                return new ContentCheckResponseV2
+                // Only an admin-verified ham anchor, matched closely enough, skips OCR/Vision (abstain).
+                // Any other ham match can be a spammer reusing a benign video, so it falls through.
+                if (matched == VerdictClassification.ExplicitHam && bestSimilarity >= config.HamSkipThreshold)
                 {
-                    CheckName = CheckName,
-                    Score = score,
-                    Abstained = abstained,
-                    Details = $"Video keyframe {bestSimilarity:P0} similar to known {(matchedSpamLabel == true ? "spam" : "ham")} sample",
-                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
-                };
+                    logger.LogInformation(
+                        "VideoSpam Layer 1: Keyframe hash match found ({Similarity:F2}% >= {Threshold:F2}%) with admin-verified HAM sample. Returning early with CLEAN",
+                        bestSimilarity * 100, config.HamSkipThreshold * 100);
+
+                    return new ContentCheckResponseV2
+                    {
+                        CheckName = CheckName,
+                        Score = 0.0,
+                        Abstained = true,
+                        Details = $"Video keyframe {bestSimilarity:P0} similar to known ham sample",
+                        ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
+                    };
+                }
+
+                logger.LogInformation(
+                    "VideoSpam Layer 1: Keyframe hash match ({Similarity:F2}%) with {Classification} sample does not skip (needs ExplicitHam >= {HamSkipThreshold:F2}%), proceeding to OCR/Vision",
+                    bestSimilarity * 100, matched, config.HamSkipThreshold * 100);
+                return null;
             }
 
             logger.LogDebug(
@@ -623,27 +621,6 @@ public class VideoContentCheckV2(
                 Error = ex,
                 ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
             };
-        }
-    }
-
-    /// <summary>
-    /// Clean up extracted frame files
-    /// </summary>
-    private void CleanupFrames(List<ExtractedFrame> frames)
-    {
-        foreach (var frame in frames)
-        {
-            try
-            {
-                if (File.Exists(frame.FramePath))
-                {
-                    File.Delete(frame.FramePath);
-                }
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "Failed to clean up extracted frame at {FramePath}", frame.FramePath);
-            }
         }
     }
 }

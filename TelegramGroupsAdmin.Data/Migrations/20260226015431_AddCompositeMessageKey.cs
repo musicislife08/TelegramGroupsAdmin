@@ -326,7 +326,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
                 LEFT JOIN telegram_users msg_tu ON m.user_id = msg_tu.telegram_user_id;
                 """);
             migrationBuilder.Sql(EnrichedReportView.CreateViewSql);
-            migrationBuilder.Sql(DetectionAccuracyView.CreateViewSql);
+            migrationBuilder.Sql(LegacyDetectionViewSql.DetectionAccuracy);
             // Inline SQL snapshot — the C# constant was later updated for V2 scoring columns.
             migrationBuilder.Sql("""
                 CREATE VIEW hourly_detection_stats AS
@@ -614,7 +614,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
                 LEFT JOIN telegram_users msg_tu ON m.user_id = msg_tu.telegram_user_id;
                 """);
             migrationBuilder.Sql(EnrichedReportView.CreateViewSql);
-            migrationBuilder.Sql(DetectionAccuracyView.CreateViewSql);
+            migrationBuilder.Sql(LegacyDetectionViewSql.DetectionAccuracy);
             // Inline SQL snapshot — the C# constant was later updated for V2 scoring columns.
             migrationBuilder.Sql("""
                 CREATE VIEW hourly_detection_stats AS

@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Data;
@@ -108,8 +109,10 @@ public class MessageHistoryRepositoryTests
 
         // Register MessageHistoryRepository and extracted services (REFACTOR-3)
         services.AddScoped<IMessageHistoryRepository, MessageHistoryRepository>();
+        services.AddScoped<IDetectionResultsRepository, DetectionResultsRepository>(); // Required by MessageQueryService and MessageStatsService
         services.AddScoped<IMessageQueryService, MessageQueryService>();
         services.AddScoped<ITelegramUserRepository, TelegramUserRepository>(); // Required by MessageStatsService (UX-2.1)
+        services.AddScoped<IMessageStatsRepository, MessageStatsRepository>();
         services.AddScoped<IMessageStatsService, MessageStatsService>();
         services.AddScoped<IMessageTranslationService, MessageTranslationService>();
         services.AddScoped<IMessageEditService, MessageEditService>();
@@ -665,6 +668,27 @@ public class MessageHistoryRepositoryTests
     #region CRUD Tests
 
     [Test]
+    public async Task SetMediaFeaturesAsync_OverwritesStoredFeatures()
+    {
+        // Anchor: canonical photo message with stored photo features (hash 8J8PDw8PH/8=).
+        var newHash = new byte[] { 1, 2, 3, 4, 5, 6, 7, 8 };
+
+        await _repository!.SetMediaFeaturesAsync(
+            GoldenDatasetConstants.Verdicts.PhotoFeaturesMsgId, MainChatId, new PhotoFeatures(newHash));
+
+        await using var ctx = _testHelper!.GetDbContext();
+        var stored = await ctx.Messages.AsNoTracking()
+            .SingleAsync(m => m.MessageId == GoldenDatasetConstants.Verdicts.PhotoFeaturesMsgId && m.ChatId == MainChatId);
+        Assert.That(stored.MediaFeatures, Is.TypeOf<TelegramGroupsAdmin.Data.Models.PhotoFeaturesDto>()
+            .With.Property(nameof(TelegramGroupsAdmin.Data.Models.PhotoFeaturesDto.Hash)).EqualTo(newHash));
+    }
+
+    [Test]
+    public void SetMediaFeaturesAsync_UnknownMessage_IsANoOp()
+        => Assert.DoesNotThrowAsync(() => _repository!.SetMediaFeaturesAsync(
+            int.MaxValue, MainChatId, new PhotoFeatures([1, 2, 3, 4, 5, 6, 7, 8])));
+
+    [Test]
     public async Task InsertMessageAsync_ShouldInsert()
     {
         // Arrange
@@ -1043,15 +1067,15 @@ public class MessageHistoryRepositoryTests
     [Test]
     public async Task CleanupExpiredAsync_PreservesMessagesWithDetectionResults()
     {
-        // This test validates that old messages WITH used_for_training=true detection_results
+        // This test validates that old messages whose current verdict is curated training data
         // are preserved by cleanup (training data retention logic).
         //
-        // The retention logic: Delete messages where Timestamp < retention AND no training detection results.
-        // Messages with detection_results WHERE used_for_training=true are kept regardless of age.
+        // The retention logic: Delete messages where Timestamp < retention AND the message_verdicts
+        // classification is not curated. Messages with a curated verdict are kept regardless of age.
         //
-        // Canonical anchors (both in MainChat, ~180 days old, used_for_training=true):
-        // - message_id=210708: detection_result id=1409, used_for_training=true (UrlBlocklist)
-        // - message_id=210772: detection_result id=1438, used_for_training=true (auto detection)
+        // Canonical anchors (both in MainChat, ~180 days old, curated verdict):
+        // - message_id=210708: detection_result id=1409 (UrlBlocklist)
+        // - message_id=210772: detection_result id=1438 (auto detection)
 
         const int trainingMsg1 = 210708;
         const int trainingMsg2 = 210772;
@@ -1063,23 +1087,23 @@ public class MessageHistoryRepositoryTests
         Assert.That(msgBeforeCleanup2, Is.Not.Null, "Canonical training message 210772 should exist");
 
         // Act - Run cleanup with 30-day retention (these messages are ~180 days old, eligible for cleanup
-        // based on age alone — but used_for_training=true should prevent deletion)
+        // based on age alone — but their curated verdicts should prevent deletion)
         var result = await _repository.CleanupExpiredAsync(TimeSpan.FromDays(30));
 
-        // Assert - Messages with used_for_training=true detection results should NOT be deleted
+        // Assert - Messages with curated verdicts should NOT be deleted
         var msg1AfterCleanup = await _repository.GetMessageAsync(trainingMsg1, MainChatId);
         var msg2AfterCleanup = await _repository.GetMessageAsync(trainingMsg2, MainChatId);
         Assert.That(msg1AfterCleanup, Is.Not.Null,
-            "message_id=210708 (used_for_training=true) should be preserved by cleanup");
+            "message_id=210708 (curated verdict) should be preserved by cleanup");
         Assert.That(msg2AfterCleanup, Is.Not.Null,
-            "message_id=210772 (used_for_training=true) should be preserved by cleanup");
+            "message_id=210772 (curated verdict) should be preserved by cleanup");
     }
 
     [Test]
     public async Task CleanupExpiredAsync_WithOldMessages_DeletesExpiredAndPreservesTrainingData()
     {
         // Arrange - Reduce canonical to the 6 retention anchors (FK CASCADE drops all other
-        // messages' detection_results, edits, training_labels, translations) and shift their
+        // messages' detection_results, edits, translations) and shift their
         // timestamps to retention-test ages via midnight-anchored mutator.
         var contextFactory = _serviceProvider!.GetRequiredService<IDbContextFactory<AppDbContext>>();
         await using (var context = await contextFactory.CreateDbContextAsync())
@@ -1121,38 +1145,41 @@ public class MessageHistoryRepositoryTests
 
         // Assert - Correct number deleted
         Assert.That(result.DeletedCount, Is.EqualTo(GoldenDatasetConstants.Retention.ExpectedDeletionsWith30DayRetention),
-            "Should delete exactly 4 anchors past 30d without training preservation");
+            "Should delete exactly 2 anchors past 30d whose current verdict is not curated");
 
-        // Assert - Anchors past retention without training preservation are DELETED
-        var bareWithEditAfter = await _repository.GetMessageAsync(GoldenDatasetConstants.Retention.MsgId_BareWithEdit, MainChatId);
+        // Assert - Anchors past retention with no verdict (Unscanned, not curated) are DELETED
         var bareOrphan60After = await _repository.GetMessageAsync(GoldenDatasetConstants.Retention.MsgId_BareOrphan60d, MainChatId);
         var bareOrphan35After = await _repository.GetMessageAsync(GoldenDatasetConstants.Retention.MsgId_BareOrphan35d, MainChatId);
-        var nonTrainingAfter = await _repository.GetMessageAsync(GoldenDatasetConstants.Retention.MsgId_NonTrainingDeleted, MainChatId);
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(bareWithEditAfter, Is.Null, "45-day anchor should be deleted");
             Assert.That(bareOrphan60After, Is.Null, "60-day bare orphan should be deleted");
             Assert.That(bareOrphan35After, Is.Null, "35-day bare orphan should be deleted");
-            Assert.That(nonTrainingAfter, Is.Null,
-                "50-day message with non-training detection should be deleted (detection cascades)");
         }
 
-        // Assert - Anchor with training-flagged DR is PRESERVED despite -90d age
+        // Assert - Anchors past retention whose current verdict is curated are PRESERVED
+        var bareWithEditAfter = await _repository.GetMessageAsync(GoldenDatasetConstants.Retention.MsgId_BareWithEdit, MainChatId);
+        var nonTrainingAfter = await _repository.GetMessageAsync(GoldenDatasetConstants.Retention.MsgId_NonTrainingDeleted, MainChatId);
         var trainingPreservedAfter = await _repository.GetMessageAsync(GoldenDatasetConstants.Retention.MsgId_TrainingPreserved, MainChatId);
-        Assert.That(trainingPreservedAfter, Is.Not.Null,
-            "90-day anchor with used_for_training=true detection should be preserved");
-
-        // Assert - Boundary anchor (29 days) is PRESERVED
         var bareOrphan29After = await _repository.GetMessageAsync(GoldenDatasetConstants.Retention.MsgId_BareOrphan29d, MainChatId);
-        Assert.That(bareOrphan29After, Is.Not.Null,
-            "29-day anchor should NOT be deleted (just inside retention window)");
 
-        // Assert - Edit cascade (SUT's explicit MessageEdits.RemoveRange path)
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(bareWithEditAfter, Is.Not.Null,
+                "45-day anchor should be preserved (folded training label → ExplicitHam, a curated classification)");
+            Assert.That(nonTrainingAfter, Is.Not.Null,
+                "50-day message should be preserved (detection classification ExplicitSpam is curated)");
+            Assert.That(trainingPreservedAfter, Is.Not.Null,
+                "90-day anchor with a curated (ExplicitSpam) verdict should be preserved");
+            Assert.That(bareOrphan29After, Is.Not.Null,
+                "29-day anchor should NOT be deleted (just inside retention window)");
+        }
+
+        // Assert - Edit row for the 45-day anchor is preserved along with its now-kept parent message
         await using (var context = await contextFactory.CreateDbContextAsync())
         {
             var editAfter = await context.MessageEdits.FindAsync(GoldenDatasetConstants.Retention.EditId_ForBareWithEdit);
-            Assert.That(editAfter, Is.Null, "Edit row should be deleted along with its parent message");
+            Assert.That(editAfter, Is.Not.Null, "Edit row should be preserved along with its curated-verdict parent message");
         }
 
         using (Assert.EnterMultipleScope())
@@ -1160,6 +1187,51 @@ public class MessageHistoryRepositoryTests
             Assert.That(result.RemainingMessages, Is.GreaterThan(0), "Should have remaining messages (2 preserved anchors)");
             Assert.That(result.ImagePaths, Is.Empty, "Anchor messages are text-only (no photos)");
             Assert.That(result.MediaPaths, Is.Empty, "Anchor messages are text-only (no media)");
+        }
+    }
+
+    [Test]
+    public async Task CleanupExpiredAsync_LabeledOnlyMessage_IsPreserved()
+    {
+        var msgId = GoldenDatasetConstants.Verdicts.LabeledOnlyRetentionMsgId;
+        await using (var ctx = _testHelper!.GetDbContext())
+        {
+            // Guard the canonical precondition: its current verdict is an explicit label.
+            Assert.That((await ctx.MessageVerdicts.SingleAsync(v => v.MessageId == msgId && v.ChatId == GoldenDatasetConstants.Chats.LandOwnersChatId)).Classification,
+                Is.EqualTo((int)VerdictClassification.ExplicitHam));
+        }
+
+        // message 7974 is dated 2025-12-18, well past a 30-day retention window
+        await _repository!.CleanupExpiredAsync(TimeSpan.FromDays(30));
+
+        await using var after = _testHelper.GetDbContext();
+        Assert.That(await after.Messages.AnyAsync(m => m.MessageId == msgId && m.ChatId == GoldenDatasetConstants.Chats.LandOwnersChatId), Is.True);
+    }
+
+    [Test]
+    public async Task CleanupExpiredAsync_ExpiredNonCuratedMessageWithEdits_DeletesMessageAndEdits()
+    {
+        var msgId = GoldenDatasetConstants.Retention.MsgId_ExpiredWithEdits;
+        var editId = GoldenDatasetConstants.Retention.EditId_ForExpiredWithEdits;
+        await using (var ctx = _testHelper!.GetDbContext())
+        {
+            // Guard the canonical precondition: the message has its expected edit, and its current
+            // verdict (via message_verdicts) is non-curated, so the keep condition does not apply.
+            Assert.That(await ctx.MessageEdits.FindAsync(editId), Is.Not.Null, "Edit row should exist before cleanup");
+            Assert.That(await ctx.MessageVerdicts.AnyAsync(v => v.MessageId == msgId && v.ChatId == MainChatId
+                && VerdictClassifications.CuratedValues.Contains(v.Classification)), Is.False);
+        }
+
+        // message 221932 is dated 2026-04-09, well past a 30-day retention window
+        await _repository!.CleanupExpiredAsync(TimeSpan.FromDays(30));
+
+        await using var after = _testHelper.GetDbContext();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(await after.Messages.AnyAsync(m => m.MessageId == msgId && m.ChatId == MainChatId), Is.False,
+                "Expired non-curated message should be deleted");
+            Assert.That(await after.MessageEdits.FindAsync(editId), Is.Null,
+                "Its message_edits row should cascade-delete with it");
         }
     }
 
@@ -1258,6 +1330,93 @@ public class MessageHistoryRepositoryTests
             Assert.That(stats.SpamPercentage, Is.GreaterThanOrEqualTo(0));
         }
         Assert.That(stats.SpamPercentage, Is.LessThanOrEqualTo(100));
+    }
+
+    [Test]
+    public async Task GetDetectionStatsAsync_CountsOnlyContentScanRows()
+    {
+        // Canonical has decision rows (auto-bans, web/review decisions, imports) alongside the scans;
+        // detector statistics must count only what the detector said.
+        await using var ctx = _testHelper!.GetDbContext();
+        var scans = ctx.DetectionResults.AsNoTracking().Where(d => d.Source == (int)VerdictSource.ContentScan);
+        var expectedTotal = await scans.CountAsync();
+        var expectedSpam = await scans.CountAsync(d => VerdictClassifications.SpamValues.Contains(d.Classification));
+        var decisionRows = await ctx.DetectionResults.AsNoTracking().CountAsync(d => d.Source != (int)VerdictSource.ContentScan);
+        Assert.That(decisionRows, Is.GreaterThan(0), "canonical must carry non-scan rows or this test is vacuous");
+
+        var stats = await _statsService!.GetDetectionStatsAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(stats.TotalDetections, Is.EqualTo(expectedTotal));
+            Assert.That(stats.SpamDetected, Is.EqualTo(expectedSpam));
+        }
+    }
+
+    [Test]
+    public async Task GetCuratedTrainingCountsAsync_CountsCuratedCurrentVerdicts()
+    {
+        await using var ctx = _testHelper!.GetDbContext();
+        var curated = ctx.MessageVerdicts.AsNoTracking()
+            .Where(v => VerdictClassifications.CuratedValues.Contains(v.Classification));
+        var expectedTotal = await curated.CountAsync();
+        var expectedSpam = await curated.CountAsync(v => v.IsSpam);
+        Assert.That(expectedSpam, Is.GreaterThan(0).And.LessThan(expectedTotal),
+            "canonical must carry both curated spam and curated ham");
+
+        var (total, spam) = await _statsService!.GetCuratedTrainingCountsAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(total, Is.EqualTo(expectedTotal));
+            Assert.That(spam, Is.EqualTo(expectedSpam));
+        }
+    }
+
+    [Test]
+    public async Task GetMessageTrendsAsync_SpamOutput_MatchesCurrentVerdictsPerChatAndMessage()
+    {
+        // Window = the whole canonical message span, all chats. Expectations come from
+        // messages joined to message_verdicts on (chat, message), read at runtime. The totals are
+        // per (chat, message) pair, so two chats sharing a message_id would both be counted.
+        await using var ctx = _testHelper!.GetDbContext();
+        var startDate = await ctx.Messages.MinAsync(m => m.Timestamp);
+        var endDate = await ctx.Messages.MaxAsync(m => m.Timestamp);
+
+        var verdicts =
+            from m in ctx.Messages.AsNoTracking()
+            join v in ctx.MessageVerdicts.AsNoTracking()
+                on new { m.MessageId, m.ChatId } equals new { v.MessageId, v.ChatId }
+            select new { m.Timestamp, v.IsSpam };
+
+        var expectedTotal = await verdicts.CountAsync(x => x.Timestamp >= startDate && x.Timestamp <= endDate);
+        var expectedSpam = await verdicts.CountAsync(x => x.Timestamp >= startDate && x.Timestamp <= endDate && x.IsSpam);
+        Assert.That(expectedSpam, Is.GreaterThan(0).And.LessThan(expectedTotal),
+            "window must hold both spam and non-spam current verdicts");
+
+        // Week-over-week windows are relative to endDate (current: [end-7d, end], previous: [end-14d, end-7d)).
+        var currentWeekStart = endDate.AddDays(-7);
+        var previousWeekStart = endDate.AddDays(-14);
+        var currentTotal = await verdicts.CountAsync(x => x.Timestamp >= currentWeekStart && x.Timestamp <= endDate);
+        var currentSpam = await verdicts.CountAsync(x => x.Timestamp >= currentWeekStart && x.Timestamp <= endDate && x.IsSpam);
+        var previousTotal = await verdicts.CountAsync(x => x.Timestamp >= previousWeekStart && x.Timestamp < currentWeekStart);
+        var previousSpam = await verdicts.CountAsync(x => x.Timestamp >= previousWeekStart && x.Timestamp < currentWeekStart && x.IsSpam);
+        Assert.That(previousSpam, Is.GreaterThan(0), "previous week must hold spam so the growth percentage is defined");
+        var currentPct = currentSpam / (double)currentTotal * 100.0;
+        var previousPct = previousSpam / (double)previousTotal * 100.0;
+        var expectedGrowth = (currentPct - previousPct) / previousPct * 100.0;
+
+        var trends = await _statsService!.GetMessageTrendsAsync([], startDate, endDate, "UTC");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(trends.TotalMessages, Is.EqualTo(expectedTotal));
+            Assert.That(trends.SpamPercentage, Is.EqualTo(expectedSpam / (double)expectedTotal * 100.0).Within(1e-9));
+            Assert.That(trends.DailySpam.Sum(d => d.Count), Is.EqualTo(expectedSpam));
+            Assert.That(trends.DailyHam.Sum(d => d.Count), Is.EqualTo(expectedTotal - expectedSpam));
+            Assert.That(trends.WeekOverWeekGrowth, Is.Not.Null);
+            Assert.That(trends.WeekOverWeekGrowth!.SpamGrowthPercent, Is.EqualTo(expectedGrowth).Within(1e-9));
+        }
     }
 
     [Test]
@@ -1443,6 +1602,45 @@ public class MessageHistoryRepositoryTests
         // Assert
         Assert.That(messages, Is.Empty,
             "Should return no messages when accessible chat list is empty");
+    }
+
+    #endregion
+
+    #region Current verdict reads
+
+    [Test]
+    public async Task GetRecentMessagesWithVerdictAsync_CorrectedToHam_IsNotShownAsSpam()
+    {
+        // Previously WasSpam = Any(row.IsSpam): an admin-corrected message stayed "spam" in the AI history.
+        var rows = await _repository!.GetRecentMessagesWithVerdictAsync(GoldenDatasetConstants.Chats.MainChatId, count: 1000);
+        Assert.That(rows.Single(r => r.MessageId == GoldenDatasetConstants.Verdicts.CorrectedToHamMsgId).IsSpam, Is.False);
+    }
+
+    [Test]
+    public async Task GetRecentMessagesWithVerdictAsync_AutoBanned_IsSpam()
+    {
+        var rows = await _repository!.GetRecentMessagesWithVerdictAsync(GoldenDatasetConstants.Chats.MainChatId, count: 1000);
+        Assert.That(rows.Single(r => r.MessageId == GoldenDatasetConstants.Verdicts.AutoBanMsgId).IsSpam, Is.True);
+    }
+
+    [Test]
+    public async Task GetCurrentContentChecksAsync_UsesCurrentVerdict_NotANewerFileScan()
+    {
+        var checks = await _repository!.GetCurrentContentChecksAsync(
+            GoldenDatasetConstants.Verdicts.FileScanBesideScanChatId, [GoldenDatasetConstants.Verdicts.FileScanBesideScanMsgId]);
+
+        // Read the current-verdict row's (dr2534, the ContentScan) reason at runtime rather than
+        // hard-coding it, so the assertion stays honest if canonical ever changes.
+        var contextFactory = _serviceProvider!.GetRequiredService<IDbContextFactory<AppDbContext>>();
+        await using var context = await contextFactory.CreateDbContextAsync();
+        var expectedReason = await context.DetectionResults
+            .AsNoTracking()
+            .Where(dr => dr.Id == GoldenDatasetConstants.Verdicts.FileScanBesideScanVerdictRowId)
+            .Select(dr => dr.Reason)
+            .SingleAsync();
+
+        Assert.That(checks[GoldenDatasetConstants.Verdicts.FileScanBesideScanMsgId].Reason, Is.Not.EqualTo("No threats detected"));
+        Assert.That(checks[GoldenDatasetConstants.Verdicts.FileScanBesideScanMsgId].Reason, Is.EqualTo(expectedReason));
     }
 
     #endregion

@@ -35,6 +35,7 @@ public static class ServiceCollectionExtensions
             services.AddSingleton<IImageTextExtractionService, ImageTextExtractionService>(); // ML-5: OCR service (Singleton: binary path lookup happens once)
             services.AddSingleton<IVideoFrameExtractionService, VideoFrameExtractionService>(); // ML-6: FFmpeg frame extraction (Singleton: binary path lookup happens once)
                                                                                                 // NOTE: IMessageContextProvider is registered by the main app (MessageContextAdapter)
+            services.AddSingleton<IMediaFeatureExtractor, MediaFeatureExtractor>(); // Perceptual-hash media features (photo / video keyframes)
 
             // Register domain metrics
             services.AddSingleton<DetectionMetrics>();
@@ -55,11 +56,8 @@ public static class ServiceCollectionExtensions
             services.AddScoped<IFileScanResultRepository, FileScanResultRepository>();
             services.AddScoped<IFileScanQuotaRepository, FileScanQuotaRepository>();  // Phase 2: Cloud quota tracking
 
-            // Register image training samples repository (ML-5: Layer 2 hash similarity)
-            services.AddScoped<IImageTrainingSamplesRepository, ImageTrainingSamplesRepository>();
-
-            // Register video training samples repository (ML-6: Layer 2 hash similarity)
-            services.AddScoped<IVideoTrainingSamplesRepository, VideoTrainingSamplesRepository>();
+            // Layer 1 media similarity samples: messages' media features joined to their current verdict
+            services.AddScoped<IMediaSampleRepository, MediaSampleRepository>();
 
             // Register prompt version repository (Phase 4.X: AI-powered prompt builder)
             services.AddScoped<IPromptVersionRepository, PromptVersionRepository>();
@@ -95,12 +93,12 @@ public static class ServiceCollectionExtensions
             // Register stop words repository
             services.AddScoped<IStopWordsRepository, StopWordsRepository>();
 
-            // Register training labels repository (Phase 1: ML.NET training labels)
-            services.AddScoped<ITrainingLabelsRepository, TrainingLabelsRepository>();
-
             // Register ML training data repository (aggregates training data from multiple tables)
             // Scoped: Matches standard pattern used by all other repositories
             services.AddScoped<IMLTrainingDataRepository, MLTrainingDataRepository>();
+
+            // Register stop word corpus repository (spam/legit/scan corpora for recommendations)
+            services.AddScoped<IStopWordCorpusRepository, StopWordCorpusRepository>();
 
             // Note: ContentDetectionEngineV2 registered above (line 25) with IContentDetectionEngine interface
 

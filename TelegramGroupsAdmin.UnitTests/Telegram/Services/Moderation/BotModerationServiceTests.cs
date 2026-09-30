@@ -542,6 +542,7 @@ public class BotModerationServiceTests
                 MessageId = messageId,
                 Chat = ChatIdentity.FromId(chatId),
                 Executor = executor,
+                Source = VerdictSource.AutoBan,
                 Reason = "Spam detected"
             });
 
@@ -565,7 +566,7 @@ public class BotModerationServiceTests
             Arg.Is<UserIdentity>(u => u!.Id == userId), executor, Arg.Any<string>(), Arg.Any<int?>(), Arg.Any<CancellationToken>());
 
         await _mockTrainingHandler.Received(1).CreateSpamSampleAsync(
-            messageId, Arg.Any<ChatIdentity>(), executor, Arg.Any<CancellationToken>());
+            messageId, Arg.Any<ChatIdentity>(), executor, VerdictSource.AutoBan, "Spam detected", Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -597,6 +598,7 @@ public class BotModerationServiceTests
                 MessageId = messageId,
                 Chat = ChatIdentity.FromId(chatId),
                 Executor = executor,
+                Source = VerdictSource.AutoBan,
                 Reason = "Spam detected"
             });
 
@@ -635,6 +637,7 @@ public class BotModerationServiceTests
                 MessageId = messageId,
                 Chat = ChatIdentity.FromId(chatId),
                 Executor = executor,
+                Source = VerdictSource.AutoBan,
                 Reason = "Spam detected"
             });
 
@@ -650,6 +653,8 @@ public class BotModerationServiceTests
             Arg.Any<int>(),
             Arg.Any<ChatIdentity>(),
             Arg.Any<Actor>(),
+            Arg.Any<VerdictSource>(),
+            Arg.Any<string>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -675,6 +680,7 @@ public class BotModerationServiceTests
             MessageId = messageId,
             Chat = ChatIdentity.FromId(chatId),
             Executor = executor,
+            Source = VerdictSource.AutoBan,
             Reason = "Spam detected"
         });
 
@@ -1306,7 +1312,7 @@ public class BotModerationServiceTests
         _mockTrustHandler.UntrustAsync(Arg.Any<UserIdentity>(), executor, Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(UntrustResult.Succeeded());
 
-        _mockTrainingHandler.CreateSpamSampleAsync(messageId, Arg.Any<ChatIdentity>(), executor, Arg.Any<CancellationToken>())
+        _mockTrainingHandler.CreateSpamSampleAsync(messageId, Arg.Any<ChatIdentity>(), executor, Arg.Any<VerdictSource>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new Exception("Database error"));
 
         // Act
@@ -1317,6 +1323,7 @@ public class BotModerationServiceTests
                 MessageId = messageId,
                 Chat = ChatIdentity.FromId(chatId),
                 Executor = executor,
+                Source = VerdictSource.AutoBan,
                 Reason = "Spam detected"
             });
 
@@ -1330,7 +1337,7 @@ public class BotModerationServiceTests
 
         // Verify training data creation was attempted
         await _mockTrainingHandler.Received(1).CreateSpamSampleAsync(
-            messageId, Arg.Any<ChatIdentity>(), executor, Arg.Any<CancellationToken>());
+            messageId, Arg.Any<ChatIdentity>(), executor, VerdictSource.AutoBan, "Spam detected", Arg.Any<CancellationToken>());
     }
 
     #endregion

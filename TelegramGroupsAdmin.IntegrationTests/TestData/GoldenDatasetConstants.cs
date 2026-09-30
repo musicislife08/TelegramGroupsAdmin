@@ -12,6 +12,7 @@ namespace TelegramGroupsAdmin.IntegrationTests.TestData;
 ///   • <see cref="Retention"/>  — anchors for retention-cleanup tests
 ///   • <see cref="Analytics"/>  — anchors for analytics-aggregation tests
 ///   • <see cref="Reports"/>    — anchors for exam-result repository tests
+///   • <see cref="Verdicts"/>   — verdict-event anchors (message_verdicts view, training levels)
 ///
 /// Promote a constant up to a top-level domain class (e.g. <see cref="WebUsers"/>,
 /// <see cref="Chats"/>) once a second consumer wants it; until then, keep it next
@@ -88,6 +89,22 @@ internal static class GoldenDatasetConstants
     }
 
     /// <summary>
+    /// Content detection config anchors from <c>canonical/05_content_detection_configs.sql</c>.
+    /// </summary>
+    public static class ContentDetectionConfigs
+    {
+        /// <summary>
+        /// The global config row (<c>chat_id = 0</c>). Its stored JSON predates the
+        /// <c>HamSkipThreshold</c> image/video settings (the key is absent) and carries a non-default
+        /// <c>ImageSpam.OcrConfidenceThreshold</c> of 75, which proves a read came from the row.
+        /// </summary>
+        public const long GlobalRowId = 2;
+
+        /// <summary>The stored (non-default) <c>ImageSpam.OcrConfidenceThreshold</c> of <see cref="GlobalRowId"/>.</summary>
+        public const double GlobalImageOcrConfidenceThreshold = 75;
+    }
+
+    /// <summary>
     /// Telegram user anchors from <c>canonical/02_telegram_users.sql</c>. Each constant
     /// pins a specific role the test suite relies on (top author, second author,
     /// labeling actor). Identity boundary: all IDs land in
@@ -107,13 +124,6 @@ internal static class GoldenDatasetConstants
         /// scenarios. Per CLAUDE.md Part 2 recipe.
         /// </summary>
         public const long SecondMainChatHamAuthorId = 9960171136314L;
-
-        /// <summary>
-        /// Canonical user that appears as <c>labeled_by_user_id</c> on training_labels rows.
-        /// Stable anchor for tests that need an Actor recognized as a prior labeler in the
-        /// canonical training set.
-        /// </summary>
-        public const long TrainingLabelActorId = 9084745993769L;
     }
 
     /// <summary>
@@ -179,43 +189,6 @@ internal static class GoldenDatasetConstants
     }
 
     /// <summary>
-    /// Canonical anchors used by <c>TrainingLabelsRepositoryTests</c> to pin existing
-    /// spam/ham label rows and FK-valid-but-unlabeled message rows. The chat side of
-    /// each anchor is in <see cref="Chats.TrainingFixturesChatId"/> for the labeled set
-    /// and <see cref="Chats.LandOwnersChatId"/> for most of the unlabeled set
-    /// (see per-constant notes).
-    /// </summary>
-    public static class TrainingLabels
-    {
-        /// <summary>Canonical spam label (label=0) — message_id in <see cref="Chats.TrainingFixturesChatId"/>.</summary>
-        public const int ExistingSpamMsgId = 4575;
-
-        /// <summary>Canonical ham label (label=1) — message_id in <see cref="Chats.TrainingFixturesChatId"/>.</summary>
-        public const int ExistingHamMsgId = 4602;
-
-        /// <summary>Second canonical spam label — used for PK-uniqueness enforcement tests. Chat: <see cref="Chats.TrainingFixturesChatId"/>.</summary>
-        public const int ExistingSpam2MsgId = 4655;
-
-        /// <summary>Unlabeled FK-valid message in <see cref="Chats.TrainingFixturesChatId"/>.</summary>
-        public const int UnlabeledMsg1Id = 4620;
-
-        /// <summary>Unlabeled FK-valid message in <see cref="Chats.LandOwnersChatId"/>.</summary>
-        public const int UnlabeledMsg2Id = 7789;
-
-        /// <summary>Unlabeled FK-valid message in <see cref="Chats.LandOwnersChatId"/>.</summary>
-        public const int UnlabeledMsg3Id = 7834;
-
-        /// <summary>Unlabeled FK-valid message in <see cref="Chats.LandOwnersChatId"/>.</summary>
-        public const int UnlabeledMsg4Id = 7836;
-
-        /// <summary>Unlabeled FK-valid message in <see cref="Chats.LandOwnersChatId"/>.</summary>
-        public const int UnlabeledMsg5Id = 7853;
-
-        /// <summary>Unlabeled FK-valid message in <see cref="Chats.LandOwnersChatId"/>.</summary>
-        public const int UnlabeledMsg6Id = 8095;
-    }
-
-    /// <summary>
     /// Canonical IDs and target NOW()-relative offsets used by
     /// <c>MessageHistoryRepositoryTests.CleanupExpiredAsync_WithOldMessages_*</c>
     /// to shape the substrate for retention-cleanup testing. All anchors are in
@@ -227,9 +200,10 @@ internal static class GoldenDatasetConstants
     /// </summary>
     public static class Retention
     {
-        // ── Anchor 1: bare message with attached edit (cascade-tests edit deletion) ──
-        // 0 detection_results, 1 message_edits row (id 337). Shifted to -45d → DELETED;
-        // SUT's explicit MessageEdits.RemoveRange exercises the edit-cascade path.
+        // ── Anchor 1: bare message with attached edit ──
+        // 1 message_edits row (id 337). detection_results row 3267 (folded training label,
+        // canonical edit 2026-09-27) → ExplicitHam, a curated classification. Shifted to
+        // -45d → PRESERVED (with its edit) despite age, since its verdict is curated.
         public const int MsgId_BareWithEdit = 212340;
         public const long EditId_ForBareWithEdit = 337L;
 
@@ -238,7 +212,10 @@ internal static class GoldenDatasetConstants
         public const int MsgId_BareOrphan60d = 212694;
 
         // ── Anchor 3: training-flagged message (preserved despite age) ──
-        // 1 detection_result with used_for_training=true. Shifted to -90d → PRESERVED.
+        // 2 detection_results: dr2842 (ContentScan, ImplicitSpam) and the later
+        // dr3286 (AutoBan, ExplicitSpam). dr3286 is newer (detected_at DESC) so it
+        // is the current verdict → ExplicitSpam, a curated classification. Shifted to
+        // -90d → PRESERVED.
         public const int MsgId_TrainingPreserved = 218579;
 
         // ── Anchor 4: bare orphan just past retention threshold ──
@@ -249,14 +226,27 @@ internal static class GoldenDatasetConstants
         // 0 detection_results, no edits. Shifted to -29d → PRESERVED.
         public const int MsgId_BareOrphan29d = 213117;
 
-        // ── Anchor 6: non-training detection (DR cascades with message) ──
-        // 1 detection_result with used_for_training=false. Shifted to -50d → DELETED.
+        // ── Anchor 6: non-training detection, curated classification ──
+        // 1 detection_result (id 3033, LegacyManual) with classification=ExplicitSpam
+        // (a curated value). Shifted to -50d → PRESERVED despite age, since its verdict is curated.
         public const int MsgId_NonTrainingDeleted = 220885;
+
+        /// <summary>
+        /// Standalone anchor (not part of <see cref="AllMessageRefs"/>/<see cref="MessageShifts"/> —
+        /// used against the unreduced canonical dataset, like <c>Verdicts.LabeledOnlyRetentionMsgId</c>)
+        /// covering the message_edits cascade-delete path (task #548 review finding): a message whose
+        /// current verdict is non-curated (Unscanned — no detection_results rows at all) and which
+        /// carries an edit, so deleting it must also delete the edit. In <see cref="Chats.MainChatId"/>;
+        /// message_edits row id 3014. Timestamped 2026-04-09, already well past a 30-day window
+        /// relative to "now" — no shift needed. DELETED along with its edit.
+        /// </summary>
+        public const int MsgId_ExpiredWithEdits = 221932;
+        public const long EditId_ForExpiredWithEdits = 3014L;
 
         /// <summary>
         /// All 6 (chat_id, message_id) tuples passed to <c>Reduce.KeepMessages(...)</c>.
         /// FK CASCADE drops every other canonical message's detection_results,
-        /// training_labels, edits, and translations.
+        /// edits, and translations.
         /// </summary>
         public static readonly IReadOnlyList<(long ChatId, long MessageId)> AllMessageRefs =
         [
@@ -285,10 +275,14 @@ internal static class GoldenDatasetConstants
 
         /// <summary>
         /// Expected DeletedCount when CleanupExpiredAsync is called with 30-day retention:
-        /// anchors 1, 2, 4, 6 (45d, 60d, 35d, 50d past midnight without training preservation).
-        /// Anchors 3 (training) and 5 (boundary) are preserved.
+        /// anchors 2 and 4 (60d and 35d bare orphans; Unscanned, not curated). Anchor 3
+        /// (training, curated) and 5 (boundary) are preserved as before. Anchors 1 and 6
+        /// were 4 before task #548's curated-verdict keep condition (folded/edited canonical
+        /// rows on 212340 and 220885 both resolve to a curated classification via
+        /// message_verdicts — ExplicitHam and ExplicitSpam respectively) — they are now
+        /// preserved instead of deleted, so the count dropped from 4 to 2.
         /// </summary>
-        public const int ExpectedDeletionsWith30DayRetention = 4;
+        public const int ExpectedDeletionsWith30DayRetention = 2;
     }
 
     /// <summary>
@@ -307,13 +301,13 @@ internal static class GoldenDatasetConstants
         // All 7 picks have real ProcessingTimeMs > 0 in check_results_json so the
         // algorithm-performance test sees honest timing data.
 
-        public const long DrId_TodaySpam1 = 2952;        // msg 220017, net_score=5.0
-        public const long DrId_TodaySpam2 = 2955;        // msg 220093, net_score=4.6
-        public const long DrId_TodaySpam3 = 2959;        // msg 220224, net_score=4.8
-        public const long DrId_YesterdaySpam1 = 2998;    // msg 220364, net_score=4.9
-        public const long DrId_YesterdaySpam2 = 3055;    // msg 221125, net_score=4.6
-        public const long DrId_LastWeekSpam1 = 3119;     // msg 221604, net_score=4.3
-        public const long DrId_LastWeekSpam2 = 3221;     // msg 222793, net_score=4.8
+        public const long DrId_TodaySpam1 = 2952;        // msg 220017, score=5.0, ImplicitSpam
+        public const long DrId_TodaySpam2 = 2955;        // msg 220093, score=4.6, UntrainedSpam
+        public const long DrId_TodaySpam3 = 2959;        // msg 220224, score=4.8, ImplicitSpam
+        public const long DrId_YesterdaySpam1 = 2998;    // msg 220364, score=4.9, ImplicitSpam
+        public const long DrId_YesterdaySpam2 = 3055;    // msg 221125, score=4.6, UntrainedSpam
+        public const long DrId_LastWeekSpam1 = 3119;     // msg 221604, score=4.3, UntrainedSpam
+        public const long DrId_LastWeekSpam2 = 3221;     // msg 222793, score=4.8, ImplicitSpam
 
         public const long MsgId_TodaySpam1 = 220017;
         public const long MsgId_TodaySpam2 = 220093;
@@ -325,13 +319,13 @@ internal static class GoldenDatasetConstants
 
         // ── FP pair on msg 213325 (organic auto-spam + manual-ham correction) ──
         public const long MsgId_FalsePositive = 213325;
-        public const long DrId_FpAuto = 2012;            // net_score=10.15, auto-spam
-        public const long DrId_FpManual = 2013;          // net_score=-5, manual-ham (later timestamp)
+        public const long DrId_FpAuto = 2012;            // score=5.5, auto-spam (ImplicitSpam)
+        public const long DrId_FpManual = 2013;          // manual-ham ExplicitHam (later timestamp)
 
         // ── FN pair on msg 211184 (organic auto-ham + manual-spam correction) ──
         public const long MsgId_FalseNegative = 211184;
-        public const long DrId_FnAuto = 1492;            // net_score=-1.45, auto-ham
-        public const long DrId_FnManual = 1494;          // net_score=5, manual-spam (later timestamp)
+        public const long DrId_FnAuto = 1492;            // score=0, auto-ham (ImplicitHam)
+        public const long DrId_FnManual = 1494;          // score=5, manual-spam ExplicitSpam (later timestamp)
 
         // ── Welcome response anchors in MainChat (3 Accepted + 1 Denied + 1 Timeout + 1 Left) ──
         public const long WrId_TodayAccepted1 = 73;       // Accepted, prod-derived
@@ -344,7 +338,7 @@ internal static class GoldenDatasetConstants
         /// <summary>
         /// All 9 (chat_id, message_id) tuples passed to <c>Reduce.KeepMessages(...)</c>.
         /// FK CASCADE drops every other canonical message's detection_results,
-        /// training_labels, edits, and translations.
+        /// edits, and translations.
         /// </summary>
         public static readonly IReadOnlyList<(long ChatId, long MessageId)> AllMessageRefs =
         [
@@ -411,7 +405,7 @@ internal static class GoldenDatasetConstants
 
         /// <summary>
         /// Automated ham detections in the 7-day window — the FN pair's auto row
-        /// (DrId 1492, net_score=-1.45) which the manual correction later flags as a
+        /// (DrId 1492, ImplicitHam) which the manual correction later flags as a
         /// false negative. Counts toward DetectionAccuracyStats.TotalDetections.
         /// </summary>
         public const int InWindowHamAutoCount = 1;
@@ -443,5 +437,133 @@ internal static class GoldenDatasetConstants
 
         /// <summary>telegram_user_id behind <see cref="AutoApprovedExamPassId"/> (@sillywolf, ham).</summary>
         public const long AutoApprovedExamPassUserId = 9960171136314;
+    }
+
+    /// <summary>
+    /// Verdict-event anchors (canonical edit 2026-09-27). See IntegrationTests/CLAUDE.md Part 2
+    /// "Verdict events". Edited rows are guarded by read-back assertions in their tests.
+    /// </summary>
+    public static class Verdicts
+    {
+        /// <summary>Scan, then manual ham correction (LegacyManual) → ExplicitHam. @dinnersnazzy, MainChat.</summary>
+        public const int CorrectedToHamMsgId = 213409;
+
+        /// <summary>Auto-ban decision (migrated label, no user) → ExplicitSpam. @AndrewLong6, MainChat.</summary>
+        public const int AutoBanMsgId = 220384;
+
+        /// <summary>Auto-banned message on Land Owners used as the Mark as Ham subject (AutoBan → ExplicitSpam).</summary>
+        public const int MarkAsHamSubjectMsgId = 8646;
+
+        /// <summary>
+        /// Edited: ham-labeled, then edited into spam (dr 1334 re-scan wins; label re-timed before the edit)
+        /// → ImplicitSpam. @financerope (9468093502025), 5 edits.
+        /// </summary>
+        public const int EditFlipMsgId = 82837;
+
+        /// <summary>Chat of <see cref="EditFlipMsgId"/>.</summary>
+        public const long EditFlipChatId = -100065252085265L;
+
+        /// <summary>Edited: UntrainedSpam scan (dr 1339), ham label removed. @mouthsafeguard's latest of three messages (Land Owners).</summary>
+        public const int SpamInTrustWindowMsgId = 7796;
+
+        /// <summary>@mouthsafeguard.</summary>
+        public const long SpamInTrustWindowUserId = 9917295586642L;
+
+        /// <summary>
+        /// Edited: newest row is a clean FileScan (dr 2535) that the view must ignore; the verdict comes
+        /// from ContentScan dr 2534 (UntrainedSpam). Spam label removed. MainChat.
+        /// </summary>
+        public const int FileScanBesideScanMsgId = 216684;
+
+        /// <summary>The FileScan row of <see cref="FileScanBesideScanMsgId"/>.</summary>
+        public const long FileScanRowId = 2535;
+
+        /// <summary>Chat of <see cref="FileScanBesideScanMsgId"/> (MainChat).</summary>
+        public const long FileScanBesideScanChatId = -100026957614982L;
+
+        /// <summary>The ContentScan row (dr2534, UntrainedSpam) that is <see cref="FileScanBesideScanMsgId"/>'s current verdict; the view must resolve to this row, not the newer <see cref="FileScanRowId"/> FileScan.</summary>
+        public const long FileScanBesideScanVerdictRowId = 2534;
+
+        /// <summary>Edited: UntrainedHam (AI review 2.0 below threshold, dr 1933). Crypto Group; message kept, sender not banned.</summary>
+        public const int UntrainedHamMsgId = 22160;
+
+        /// <summary>Chat of <see cref="UntrainedHamMsgId"/> (Crypto Group).</summary>
+        public const long UntrainedHamChatId = -100094881429433L;
+
+        /// <summary>Sender of <see cref="UntrainedHamMsgId"/> (@wrongedjersey, not banned).</summary>
+        public const long UntrainedHamUserId = 9621984255379L;
+
+        /// <summary>
+        /// Unscanned message (no verdict rows, trusted sender). @unhelpfulgrab, MainChat. Edited: distinctive
+        /// text (not scrubbed lorem ipsum, with its similarity_hash recomputed) so training-sample dedup keeps it.
+        /// </summary>
+        public const int UnscannedMsgId = 219219;
+
+        /// <summary>
+        /// Edited: photo message (sender 9777802619662, MainChat) whose current verdict is an AutoBan
+        /// decision (dr 3322, ExplicitSpam); media_features set to a photo hash (base64 <c>8J8PDw8PH/8=</c>).
+        /// Layer 1 photo similarity reads it as a spam sample.
+        /// </summary>
+        public const int PhotoFeaturesMsgId = 222818;
+
+        /// <summary>
+        /// Edited 2026-09-28: video message (sender 9607332364262, MainChat, no photo_file_id) whose current
+        /// verdict is a LegacyManual spam decision (dr 2168, ExplicitSpam); media_features set to three
+        /// keyframe hashes at positions 0.1/0.5/0.9 (<see cref="VideoFeaturesKeyframeHashes"/>).
+        /// Layer 1 video similarity reads it as a spam sample.
+        /// </summary>
+        public const int VideoFeaturesMsgId = 214424;
+
+        /// <summary>The base64 keyframe hashes stored on <see cref="VideoFeaturesMsgId"/>, in position order.</summary>
+        public static readonly string[] VideoFeaturesKeyframeHashes = ["PH7/58OBGDw=", "Dx8/f/78+PA=", "qlWqVQ/wD/A="];
+
+        /// <summary>
+        /// Edited 2026-09-28: the canonical OpenAI veto written in the current encoding. ContentScan dr 1934 on msg 212950 (MainChat,
+        /// sender 9011155048805): StopWords 2 and Bayes 5 flagged spam, OpenAI returned a non-abstained clean
+        /// (Score 0) → ImplicitHam, score 0. The message's verdict is the later /spam decision (dr 1935,
+        /// ExplicitSpam), so the veto was a miss an admin corrected.
+        /// </summary>
+        public const long OpenAIVetoScanRowId = 1934;
+
+        /// <summary>Message of <see cref="OpenAIVetoScanRowId"/>.</summary>
+        public const int OpenAIVetoMsgId = 212950;
+
+        /// <summary>
+        /// Added 2026-09-28 (approved addition): prod scan whose OpenAI clean answer (the veto)
+        /// RemoveV1ContentDetectionBridge (2026-03-06) converted to Abstained=true, Score = Confidence/20 (4.5). Stored as
+        /// AddVerdictEvents leaves it: OpenAI check repaired to the veto encoding (Abstained=false, Score 0),
+        /// properties <c>repaired_legacy_veto</c>, ContentScan/ImplicitHam. dr 22 on msg 94 in
+        /// <see cref="LegacyVetoEarlyChatId"/>, sender 9320215215920; Bayes 4.9 was the overridden flag.
+        /// Message text is lorem at the original length (111), like every non-banned author's message.
+        /// </summary>
+        public const long LegacyVetoEarlyScanRowId = 22;
+
+        /// <summary>Message of <see cref="LegacyVetoEarlyScanRowId"/>.</summary>
+        public const int LegacyVetoEarlyMsgId = 94;
+
+        /// <summary>Chat of <see cref="LegacyVetoEarlyScanRowId"/> (not MainChat).</summary>
+        public const long LegacyVetoEarlyChatId = -100082190806505;
+
+        /// <summary>
+        /// Added 2026-09-28 (approved addition): second converted OpenAI veto ("OpenAI vetoed spam" wording, Score 4.5), same repair as
+        /// <see cref="LegacyVetoEarlyScanRowId"/>. dr 1639 on msg 22127 in <see cref="LegacyVetoLateChatId"/>,
+        /// sender 9887521719353, from the later engine (score 0); Bayes 0.5 was the overridden flag. Lorem text (34).
+        /// </summary>
+        public const long LegacyVetoLateScanRowId = 1639;
+
+        /// <summary>Message of <see cref="LegacyVetoLateScanRowId"/>.</summary>
+        public const int LegacyVetoLateMsgId = 22127;
+
+        /// <summary>Chat of <see cref="LegacyVetoLateScanRowId"/> (not MainChat).</summary>
+        public const long LegacyVetoLateChatId = -100094881429433;
+
+        /// <summary>Every canonical OpenAI veto scan: the current-encoding anchor and the two repaired converted ones.</summary>
+        public static readonly long[] AllVetoScanRowIds = [OpenAIVetoScanRowId, LegacyVetoEarlyScanRowId, LegacyVetoLateScanRowId];
+
+        /// <summary>User whose three latest messages are all training ham (msgs 71028/71030/71041).</summary>
+        public const long AllHamUserId = 9184102838760L;
+
+        /// <summary>Only its curated verdict keeps this old message (latest row dr2009, an explicit ham decision). @arisepacifism.</summary>
+        public const int LabeledOnlyRetentionMsgId = 7974;
     }
 }

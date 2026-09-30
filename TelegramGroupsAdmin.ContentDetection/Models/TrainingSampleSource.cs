@@ -6,14 +6,14 @@ namespace TelegramGroupsAdmin.ContentDetection.Models;
 public enum TrainingSampleSource
 {
     /// <summary>
-    /// Explicit label from training_labels table (admin decision overrides auto-detection).
+    /// explicit = ExplicitSpam/ExplicitHam verdict (admin decision overrides auto-detection).
     /// High quality, manually verified.
     /// </summary>
     Explicit,
 
     /// <summary>
-    /// Implicit sample from auto-detection (high-confidence spam or quality ham).
-    /// Never manually corrected.
+    /// implicit = ImplicitSpam/ImplicitHam/Unscanned verdict (auto-detection, never
+    /// manually corrected).
     /// </summary>
     Implicit
 }

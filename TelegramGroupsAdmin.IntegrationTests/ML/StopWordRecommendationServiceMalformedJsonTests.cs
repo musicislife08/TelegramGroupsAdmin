@@ -72,6 +72,7 @@ public class StopWordRecommendationServiceMalformedJsonTests
         services.AddLogging(builder => builder.AddConsole().SetMinimumLevel(LogLevel.Warning));
         services.AddSingleton<ITokenizerService, TokenizerService>();
         services.AddScoped<IStopWordsRepository, StopWordsRepository>();
+        services.AddScoped<IStopWordCorpusRepository, StopWordCorpusRepository>();
         services.AddScoped<IStopWordRecommendationService, StopWordRecommendationService>();
 
         _serviceProvider = services.BuildServiceProvider();

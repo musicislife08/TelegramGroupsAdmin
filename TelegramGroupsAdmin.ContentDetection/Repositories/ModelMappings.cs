@@ -28,7 +28,7 @@ internal static class ModelMappings
         };
     }
 
-    // NOTE: TrainingSample mappings removed - training data comes from detection_results.used_for_training
+    // NOTE: TrainingSample mappings removed - training data comes from message_verdicts
     // NOTE: ContentCheckConfig mappings removed - critical checks now stored in ContentDetectionConfig.AlwaysRun
 
     // FileScanResult mappings (Phase 4.17: File Scanning)
