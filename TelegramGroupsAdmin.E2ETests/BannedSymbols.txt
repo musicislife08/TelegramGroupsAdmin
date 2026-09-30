@@ -1,0 +1,39 @@
+# One-shot reads return the page state at a single instant and never retry. Asserting on them races
+# Blazor Server renders and flakes (and a negative check passes before the element can appear).
+# Assert with Expect(locator) instead: ToBeVisibleAsync, Not.ToBeVisibleAsync, ToHaveTextAsync, ToHaveCountAsync, ...
+# Branching on genuinely optional UI, or reading a value the test needs later (after an Expect sync), are the only
+# legitimate uses: wrap that one line in #pragma warning disable/restore RS0030 with a reason.
+# Gotcha: ToHaveTextAsync/ToContainTextAsync ignore RegexOptions.IgnoreCase; pass new() { IgnoreCase = true } instead.
+M:Microsoft.Playwright.IFrame.GetAttributeAsync(System.String,System.String,Microsoft.Playwright.FrameGetAttributeOptions);Assert with a web-first Expect(...) instead; one-shot reads never retry
+M:Microsoft.Playwright.IFrame.InnerTextAsync(System.String,Microsoft.Playwright.FrameInnerTextOptions);Assert with a web-first Expect(...) instead; one-shot reads never retry
+M:Microsoft.Playwright.IFrame.InputValueAsync(System.String,Microsoft.Playwright.FrameInputValueOptions);Assert with a web-first Expect(...) instead; one-shot reads never retry
+M:Microsoft.Playwright.IFrame.IsCheckedAsync(System.String,Microsoft.Playwright.FrameIsCheckedOptions);Assert with a web-first Expect(...) instead; one-shot reads never retry
+M:Microsoft.Playwright.IFrame.IsDisabledAsync(System.String,Microsoft.Playwright.FrameIsDisabledOptions);Assert with a web-first Expect(...) instead; one-shot reads never retry
+M:Microsoft.Playwright.IFrame.IsEditableAsync(System.String,Microsoft.Playwright.FrameIsEditableOptions);Assert with a web-first Expect(...) instead; one-shot reads never retry
+M:Microsoft.Playwright.IFrame.IsEnabledAsync(System.String,Microsoft.Playwright.FrameIsEnabledOptions);Assert with a web-first Expect(...) instead; one-shot reads never retry
+M:Microsoft.Playwright.IFrame.IsHiddenAsync(System.String,Microsoft.Playwright.FrameIsHiddenOptions);Assert with a web-first Expect(...) instead; one-shot reads never retry
+M:Microsoft.Playwright.IFrame.IsVisibleAsync(System.String,Microsoft.Playwright.FrameIsVisibleOptions);Assert with a web-first Expect(...) instead; one-shot reads never retry
+M:Microsoft.Playwright.IFrame.TextContentAsync(System.String,Microsoft.Playwright.FrameTextContentOptions);Assert with a web-first Expect(...) instead; one-shot reads never retry
+M:Microsoft.Playwright.ILocator.AllInnerTextsAsync;Assert with a web-first Expect(...) instead; one-shot reads never retry
+M:Microsoft.Playwright.ILocator.AllTextContentsAsync;Assert with a web-first Expect(...) instead; one-shot reads never retry
+M:Microsoft.Playwright.ILocator.CountAsync;Assert with a web-first Expect(...) instead; one-shot reads never retry
+M:Microsoft.Playwright.ILocator.GetAttributeAsync(System.String,Microsoft.Playwright.LocatorGetAttributeOptions);Assert with a web-first Expect(...) instead; one-shot reads never retry
+M:Microsoft.Playwright.ILocator.InnerTextAsync(Microsoft.Playwright.LocatorInnerTextOptions);Assert with a web-first Expect(...) instead; one-shot reads never retry
+M:Microsoft.Playwright.ILocator.InputValueAsync(Microsoft.Playwright.LocatorInputValueOptions);Assert with a web-first Expect(...) instead; one-shot reads never retry
+M:Microsoft.Playwright.ILocator.IsCheckedAsync(Microsoft.Playwright.LocatorIsCheckedOptions);Assert with a web-first Expect(...) instead; one-shot reads never retry
+M:Microsoft.Playwright.ILocator.IsDisabledAsync(Microsoft.Playwright.LocatorIsDisabledOptions);Assert with a web-first Expect(...) instead; one-shot reads never retry
+M:Microsoft.Playwright.ILocator.IsEditableAsync(Microsoft.Playwright.LocatorIsEditableOptions);Assert with a web-first Expect(...) instead; one-shot reads never retry
+M:Microsoft.Playwright.ILocator.IsEnabledAsync(Microsoft.Playwright.LocatorIsEnabledOptions);Assert with a web-first Expect(...) instead; one-shot reads never retry
+M:Microsoft.Playwright.ILocator.IsHiddenAsync(Microsoft.Playwright.LocatorIsHiddenOptions);Assert with a web-first Expect(...) instead; one-shot reads never retry
+M:Microsoft.Playwright.ILocator.IsVisibleAsync(Microsoft.Playwright.LocatorIsVisibleOptions);Assert with a web-first Expect(...) instead; one-shot reads never retry
+M:Microsoft.Playwright.ILocator.TextContentAsync(Microsoft.Playwright.LocatorTextContentOptions);Assert with a web-first Expect(...) instead; one-shot reads never retry
+M:Microsoft.Playwright.IPage.GetAttributeAsync(System.String,System.String,Microsoft.Playwright.PageGetAttributeOptions);Assert with a web-first Expect(...) instead; one-shot reads never retry
+M:Microsoft.Playwright.IPage.InnerTextAsync(System.String,Microsoft.Playwright.PageInnerTextOptions);Assert with a web-first Expect(...) instead; one-shot reads never retry
+M:Microsoft.Playwright.IPage.InputValueAsync(System.String,Microsoft.Playwright.PageInputValueOptions);Assert with a web-first Expect(...) instead; one-shot reads never retry
+M:Microsoft.Playwright.IPage.IsCheckedAsync(System.String,Microsoft.Playwright.PageIsCheckedOptions);Assert with a web-first Expect(...) instead; one-shot reads never retry
+M:Microsoft.Playwright.IPage.IsDisabledAsync(System.String,Microsoft.Playwright.PageIsDisabledOptions);Assert with a web-first Expect(...) instead; one-shot reads never retry
+M:Microsoft.Playwright.IPage.IsEditableAsync(System.String,Microsoft.Playwright.PageIsEditableOptions);Assert with a web-first Expect(...) instead; one-shot reads never retry
+M:Microsoft.Playwright.IPage.IsEnabledAsync(System.String,Microsoft.Playwright.PageIsEnabledOptions);Assert with a web-first Expect(...) instead; one-shot reads never retry
+M:Microsoft.Playwright.IPage.IsHiddenAsync(System.String,Microsoft.Playwright.PageIsHiddenOptions);Assert with a web-first Expect(...) instead; one-shot reads never retry
+M:Microsoft.Playwright.IPage.IsVisibleAsync(System.String,Microsoft.Playwright.PageIsVisibleOptions);Assert with a web-first Expect(...) instead; one-shot reads never retry
+M:Microsoft.Playwright.IPage.TextContentAsync(System.String,Microsoft.Playwright.PageTextContentOptions);Assert with a web-first Expect(...) instead; one-shot reads never retry
