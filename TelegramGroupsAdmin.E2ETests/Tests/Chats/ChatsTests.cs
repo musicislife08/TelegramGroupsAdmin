@@ -31,12 +31,8 @@ public class ChatsTests : SharedAuthenticatedTestBase
         await _chatsPage.WaitForLoadAsync();
 
         // Assert - page title is visible
-        Assert.That(await _chatsPage.IsPageTitleVisibleAsync(), Is.True,
-            "Chats page title should be visible");
-
-        var pageTitle = await _chatsPage.GetPageTitleAsync();
-        Assert.That(pageTitle, Is.EqualTo("Chat Management"),
-            "Page title should be 'Chat Management'");
+        await Expect(_chatsPage.PageTitle).ToBeVisibleAsync();
+        await Expect(_chatsPage.PageTitle).ToHaveTextAsync("Chat Management");
     }
 
     [Test]
@@ -50,12 +46,8 @@ public class ChatsTests : SharedAuthenticatedTestBase
         await _chatsPage.WaitForLoadAsync();
 
         // Assert - empty state alert is visible
-        Assert.That(await _chatsPage.IsEmptyStateVisibleAsync(), Is.True,
-            "Empty state should be visible when no chats exist");
-
-        var emptyTitle = await _chatsPage.GetEmptyStateTitleAsync();
-        Assert.That(emptyTitle, Is.EqualTo("No chats available"),
-            "Empty state should show 'No chats available'");
+        await Expect(_chatsPage.EmptyStateAlert).ToBeVisibleAsync();
+        await Expect(_chatsPage.EmptyStateTitle).ToHaveTextAsync("No chats available");
     }
 
     [Test]
@@ -73,12 +65,8 @@ public class ChatsTests : SharedAuthenticatedTestBase
         await _chatsPage.WaitForLoadAsync();
 
         // Assert - table is visible
-        Assert.That(await _chatsPage.IsTableVisibleAsync(), Is.True,
-            "Chats table should be visible when chats exist");
-
-        var tableTitle = await _chatsPage.GetTableTitleAsync();
-        Assert.That(tableTitle, Is.EqualTo("Managed Chats"),
-            "Table title should be 'Managed Chats'");
+        await Expect(_chatsPage.ChatsTable).ToBeVisibleAsync();
+        await Expect(_chatsPage.TableTitle).ToHaveTextAsync("Managed Chats");
     }
 
     [Test]
@@ -102,15 +90,10 @@ public class ChatsTests : SharedAuthenticatedTestBase
         await _chatsPage.WaitForLoadAsync();
 
         // Assert - chats are displayed
-        var chatCount = await _chatsPage.GetChatCountAsync();
-        Assert.That(chatCount, Is.EqualTo(2),
-            "Should display 2 chats");
+        await _chatsPage.ExpectChatCountAsync(2);
 
-        var chatNames = await _chatsPage.GetChatNamesAsync();
-        Assert.That(chatNames, Does.Contain("Alpha Chat"),
-            "Should display 'Alpha Chat'");
-        Assert.That(chatNames, Does.Contain("Beta Chat"),
-            "Should display 'Beta Chat'");
+        await Expect(_chatsPage.ChatName("Alpha Chat")).ToBeVisibleAsync();
+        await Expect(_chatsPage.ChatName("Beta Chat")).ToBeVisibleAsync();
     }
 
     [Test]
@@ -134,13 +117,8 @@ public class ChatsTests : SharedAuthenticatedTestBase
         await _chatsPage.WaitForLoadAsync();
 
         // Assert - chat types are displayed correctly
-        var groupType = await _chatsPage.GetChatTypeByNameAsync("My Group");
-        Assert.That(groupType?.Trim(), Is.EqualTo("Group"),
-            "Group chat should show type 'Group'");
-
-        var supergroupType = await _chatsPage.GetChatTypeByNameAsync("My Supergroup");
-        Assert.That(supergroupType?.Trim(), Is.EqualTo("Supergroup"),
-            "Supergroup chat should show type 'Supergroup'");
+        await Expect(_chatsPage.ChatTypeCellFor("My Group")).ToHaveTextAsync("Group");
+        await Expect(_chatsPage.ChatTypeCellFor("My Supergroup")).ToHaveTextAsync("Supergroup");
     }
 
     [Test]
@@ -171,10 +149,10 @@ public class ChatsTests : SharedAuthenticatedTestBase
         // Assert - only Development chats visible (uses auto-retry for Blazor re-render)
         await _chatsPage.ExpectChatCountAsync(2);
 
-        var chatNames = await _chatsPage.GetChatNamesAsync();
-        Assert.That(chatNames, Does.Contain("Development Team"));
-        Assert.That(chatNames, Does.Contain("Development Support"));
-        Assert.That(chatNames, Does.Not.Contain("Marketing Team"));
+        await Expect(_chatsPage.ChatName("Development Team")).ToBeVisibleAsync();
+        await Expect(_chatsPage.ChatName("Development Support")).ToBeVisibleAsync();
+        // Absence check runs after the positive checks above on the same filtered render
+        await Expect(_chatsPage.ChatName("Marketing Team")).ToHaveCountAsync(0);
     }
 
     [Test]
@@ -226,8 +204,7 @@ public class ChatsTests : SharedAuthenticatedTestBase
         await _chatsPage.WaitForLoadAsync();
 
         // Assert - Admin can view chats page
-        Assert.That(await _chatsPage.IsPageTitleVisibleAsync(), Is.True,
-            "Admin should be able to view chats page");
+        await Expect(_chatsPage.PageTitle).ToBeVisibleAsync();
     }
 
     [Test]
@@ -241,8 +218,7 @@ public class ChatsTests : SharedAuthenticatedTestBase
         await _chatsPage.WaitForLoadAsync();
 
         // Assert - GlobalAdmin can view chats page
-        Assert.That(await _chatsPage.IsPageTitleVisibleAsync(), Is.True,
-            "GlobalAdmin should be able to view chats page");
+        await Expect(_chatsPage.PageTitle).ToBeVisibleAsync();
     }
 
     [Test]
@@ -264,9 +240,7 @@ public class ChatsTests : SharedAuthenticatedTestBase
         await _chatsPage.WaitForLoadAsync();
 
         // Assert - GlobalAdmin sees all chats
-        var chatCount = await _chatsPage.GetChatCountAsync();
-        Assert.That(chatCount, Is.EqualTo(2),
-            "GlobalAdmin should see all chats");
+        await _chatsPage.ExpectChatCountAsync(2);
     }
 
     [Test]
@@ -292,9 +266,7 @@ public class ChatsTests : SharedAuthenticatedTestBase
         await _chatsPage.WaitForLoadAsync();
 
         // Assert - Owner sees all chats
-        var chatCount = await _chatsPage.GetChatCountAsync();
-        Assert.That(chatCount, Is.EqualTo(3),
-            "Owner should see all chats");
+        await _chatsPage.ExpectChatCountAsync(3);
     }
 
     [Test]
@@ -312,9 +284,7 @@ public class ChatsTests : SharedAuthenticatedTestBase
         await _chatsPage.WaitForLoadAsync();
 
         // Assert - health status is displayed (default is Unknown for fresh chats)
-        var healthStatus = await _chatsPage.GetHealthStatusByNameAsync("Health Test Chat");
-        Assert.That(healthStatus, Is.Not.Null.And.Not.Empty,
-            "Health status should be displayed for each chat");
+        await Expect(_chatsPage.HealthStatusChip("Health Test Chat")).Not.ToBeEmptyAsync();
     }
 
     [Test]
@@ -332,9 +302,9 @@ public class ChatsTests : SharedAuthenticatedTestBase
         await _chatsPage.WaitForLoadAsync();
 
         // Assert - custom config indicator is NOT visible (shows "Global" text instead)
-        var hasCustomConfig = await _chatsPage.HasCustomConfigAsync("Global Config Chat");
-        Assert.That(hasCustomConfig, Is.False,
-            "Chat without custom config should show 'Global' indicator, not checkmark");
+        // Sync on the row being rendered first so the absence check cannot pass before it lands
+        await Expect(_chatsPage.ChatRow("Global Config Chat")).ToBeVisibleAsync();
+        await Expect(_chatsPage.CustomConfigIcon("Global Config Chat")).Not.ToBeVisibleAsync();
     }
 
     [Test]
@@ -353,9 +323,7 @@ public class ChatsTests : SharedAuthenticatedTestBase
 
         // Assert - Configure button exists (we test it's clickable)
         // Note: Actually clicking it opens a dialog which we test separately
-        var chatNames = await _chatsPage.GetChatNamesAsync();
-        Assert.That(chatNames, Does.Contain("Configurable Chat"),
-            "Chat should be visible to verify button exists");
+        await Expect(_chatsPage.ChatName("Configurable Chat")).ToBeVisibleAsync();
     }
 
     [Test]
@@ -379,9 +347,7 @@ public class ChatsTests : SharedAuthenticatedTestBase
         await Expect(Page.Locator(".mud-dialog")).ToBeVisibleAsync();
 
         // Verify dialog title contains the chat name
-        var dialogTitle = await _chatsPage.GetDialogTitleAsync();
-        Assert.That(dialogTitle, Does.Contain("Dialog Test Chat"),
-            "Dialog title should contain the chat name");
+        await Expect(_chatsPage.DialogTitle).ToContainTextAsync("Dialog Test Chat");
     }
 
     [Test]
@@ -408,8 +374,6 @@ public class ChatsTests : SharedAuthenticatedTestBase
         // Assert - only the chat with matching ID is shown (uses auto-retry for Blazor re-render)
         await _chatsPage.ExpectChatCountAsync(1);
 
-        var chatNames = await _chatsPage.GetChatNamesAsync();
-        Assert.That(chatNames, Does.Contain("ID Search Chat"),
-            "Should show the chat with matching ID");
+        await Expect(_chatsPage.ChatName("ID Search Chat")).ToBeVisibleAsync();
     }
 }

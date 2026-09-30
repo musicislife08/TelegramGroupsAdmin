@@ -17,10 +17,11 @@ public class AnalyticsPage
     private const string BasePath = "/analytics";
 
     // Page elements
-    private const string PageTitle = ".mud-typography-h4";
+    private const string PageTitleSelector = ".mud-typography-h4";
     private const string TabContainer = ".mud-tabs";
     private const string TabPanel = ".mud-tab";
     private const string ActiveTabPanel = ".mud-tab-panel:not([hidden])";
+    private const string DisabledClass = "mud-disabled";
 
     public AnalyticsPage(IPage page)
     {
@@ -61,48 +62,29 @@ public class AnalyticsPage
     #region Page Title
 
     /// <summary>
-    /// Checks if the page title is visible.
+    /// The page title.
     /// Uses .First because the page may have multiple H4 elements (page title + tab content titles).
     /// </summary>
-    public async Task<bool> IsPageTitleVisibleAsync()
-    {
-        return await _page.Locator(PageTitle).First.IsVisibleAsync();
-    }
-
-    /// <summary>
-    /// Gets the page title text.
-    /// </summary>
-    public async Task<string?> GetPageTitleAsync()
-    {
-        return await _page.Locator(PageTitle).First.TextContentAsync();
-    }
+    public ILocator PageTitle => _page.Locator(PageTitleSelector).First;
 
     #endregion
 
     #region Tabs
 
-    /// <summary>
-    /// Checks if the tabs container is visible.
-    /// </summary>
-    public async Task<bool> IsTabsVisibleAsync()
-    {
-        return await _page.Locator(TabContainer).IsVisibleAsync();
-    }
+    /// <summary>The tabs container.</summary>
+    public ILocator TabsContainer => _page.Locator(TabContainer);
+
+    /// <summary>Every tab header (<c>.mud-tab</c>) in the tab bar.</summary>
+    public ILocator Tabs => _page.Locator(TabPanel);
 
     /// <summary>
-    /// Gets the names of all visible tabs.
+    /// The clickable tab element (button) for the given tab name.
+    /// MudBlazor renders each tab as a <c>.mud-tab</c> element with role="tab" and marks the
+    /// active one with aria-selected="true"; a disabled <c>MudTabPanel</c> adds the
+    /// <c>mud-disabled</c> class to this element.
     /// </summary>
-    public async Task<List<string>> GetTabNamesAsync()
-    {
-        var tabs = await _page.Locator(TabPanel).AllAsync();
-        var textTasks = tabs.Select(tab => tab.TextContentAsync());
-        var texts = await Task.WhenAll(textTasks);
-
-        return texts
-            .Where(text => !string.IsNullOrEmpty(text))
-            .Select(text => text!.Trim())
-            .ToList();
-    }
+    public ILocator Tab(string tabName) =>
+        _page.GetByRole(AriaRole.Tab, new() { Name = tabName });
 
     /// <summary>
     /// Clicks a tab by its text content and waits for it to become active.
@@ -110,7 +92,7 @@ public class AnalyticsPage
     /// </summary>
     public async Task SelectTabAsync(string tabName)
     {
-        var tab = _page.GetByRole(AriaRole.Tab, new() { Name = tabName });
+        var tab = Tab(tabName);
         await tab.ClickAsync();
 
         // Wait for the tab to actually become active (aria-selected="true")
@@ -121,179 +103,55 @@ public class AnalyticsPage
     }
 
     /// <summary>
-    /// Checks if a tab with the given name is active.
+    /// Asserts the tab with the given name is rendered but disabled/greyed
+    /// (<c>mud-disabled</c> class on the <c>.mud-tab</c> element).
     /// </summary>
-    private async Task<bool> IsTabActiveAsync(string tabName)
+    public async Task ExpectTabDisabledAsync(string tabName)
     {
-        var tab = _page.GetByRole(AriaRole.Tab, new() { Name = tabName });
-        var ariaSelected = await tab.GetAttributeAsync("aria-selected");
-        return ariaSelected == "true";
-    }
-
-    /// <summary>
-    /// Locates the clickable tab element (button) for the given tab name.
-    /// MudBlazor renders each tab as a <c>.mud-tab</c> element; a disabled
-    /// <c>MudTabPanel</c> adds the <c>mud-disabled</c> class to this element.
-    /// </summary>
-    private ILocator TabButton(string tabName) =>
-        _page.GetByRole(AriaRole.Tab, new() { Name = tabName });
-
-    /// <summary>
-    /// Checks whether the tab with the given name is rendered but disabled.
-    /// MudBlazor marks a disabled <c>MudTabPanel</c> tab with the
-    /// <c>mud-disabled</c> CSS class on the <c>.mud-tab</c> element.
-    /// Web-first <see cref="Assertions.Expect(ILocator)"/> is used as the sync
-    /// point so the tab is rendered before its class list is inspected.
-    /// </summary>
-    public async Task<bool> IsTabDisabledAsync(string tabName)
-    {
-        var tab = TabButton(tabName);
+        var tab = Tab(tabName);
         await Expect(tab).ToBeVisibleAsync(new() { Timeout = 10000 });
-
-        var classAttr = await tab.GetAttributeAsync("class");
-        return classAttr is not null && classAttr.Split(' ').Contains("mud-disabled");
+        await Expect(tab).ToContainClassAsync(DisabledClass);
     }
 
     /// <summary>
-    /// Checks if the Content Detection tab is active.
+    /// Asserts the tab with the given name is rendered and enabled (no <c>mud-disabled</c> class).
+    /// The tab is asserted visible first so the absence check cannot pass before it renders.
     /// </summary>
-    public Task<bool> IsContentDetectionTabActiveAsync() => IsTabActiveAsync("Content Detection");
-
-    /// <summary>
-    /// Checks if the Message Trends tab is active.
-    /// </summary>
-    public Task<bool> IsMessageTrendsTabActiveAsync() => IsTabActiveAsync("Message Trends");
-
-    /// <summary>
-    /// Checks if the Performance tab is active.
-    /// </summary>
-    public Task<bool> IsPerformanceTabActiveAsync() => IsTabActiveAsync("Performance");
-
-    /// <summary>
-    /// Checks if the Welcome Analytics tab is active.
-    /// </summary>
-    public Task<bool> IsWelcomeAnalyticsTabActiveAsync() => IsTabActiveAsync("Welcome Analytics");
-
-    #endregion
-
-    #region Content Detection Tab
-
-    /// <summary>
-    /// Checks if the Content Detection analytics component is visible.
-    /// </summary>
-    public async Task<bool> IsContentDetectionAnalyticsVisibleAsync()
+    public async Task ExpectTabEnabledAsync(string tabName)
     {
-        // ContentDetectionAnalytics component should be in the active tab panel
-        var panel = _page.Locator(ActiveTabPanel);
-        // Look for characteristic elements of the content detection analytics
-        var hasContent = await panel.Locator(".mud-chart, .mud-table, .mud-card, .mud-paper").First.IsVisibleAsync();
-        return hasContent;
+        var tab = Tab(tabName);
+        await Expect(tab).ToBeVisibleAsync(new() { Timeout = 10000 });
+        await Expect(tab).Not.ToContainClassAsync(DisabledClass);
     }
 
     #endregion
 
-    #region Message Trends Tab
+    #region Tab Content
 
     /// <summary>
-    /// Checks if the Message Trends component is visible.
+    /// The first characteristic content element (chart, table, card or paper) in the active tab panel,
+    /// e.g. the Content Detection or Message Trends analytics component.
     /// </summary>
-    public async Task<bool> IsMessageTrendsVisibleAsync()
-    {
-        var panel = _page.Locator(ActiveTabPanel);
-        var hasContent = await panel.Locator(".mud-chart, .mud-table, .mud-card, .mud-paper").First.IsVisibleAsync();
-        return hasContent;
-    }
+    public ILocator ActiveTabContent =>
+        _page.Locator(ActiveTabPanel).Locator(".mud-chart, .mud-table, .mud-card, .mud-paper").First;
 
     #endregion
 
     #region Trend Cards (Message Trends Tab)
 
     /// <summary>
-    /// Gets the trend card value (percentage or difference) for Week over Week.
+    /// The trend card titled <paramref name="title"/>: "Week over Week", "Month over Month" or "Year over Year".
     /// </summary>
-    public async Task<string?> GetWeekOverWeekValueAsync()
-    {
-        var card = _page.Locator(".mud-card").Filter(new() { HasText = "Week over Week" });
-        await Expect(card).ToBeVisibleAsync(new() { Timeout = 10000 });
-        return await card.Locator(".mud-typography-h4").TextContentAsync();
-    }
+    public ILocator TrendCard(string title) => _page.Locator(".mud-card").Filter(new() { HasText = title });
+
+    /// <summary>The trend card value (percentage or difference) of the card titled <paramref name="title"/>.</summary>
+    public ILocator TrendCardValue(string title) => TrendCard(title).Locator(".mud-typography-h4");
 
     /// <summary>
-    /// Gets the trend card average text for Week over Week (e.g., "4.6 → 6.9/day").
+    /// The trend card average text of the card titled <paramref name="title"/>
+    /// (e.g., "4.6 → 6.9/day", "22.8 → 33.3/week", "0 → 5.3/month").
     /// </summary>
-    public async Task<string?> GetWeekOverWeekAverageAsync()
-    {
-        var card = _page.Locator(".mud-card").Filter(new() { HasText = "Week over Week" });
-        await Expect(card).ToBeVisibleAsync(new() { Timeout = 10000 });
-        return await card.Locator(".mud-typography-caption").Last.TextContentAsync();
-    }
-
-    /// <summary>
-    /// Gets the trend card value (percentage or difference) for Month over Month.
-    /// </summary>
-    public async Task<string?> GetMonthOverMonthValueAsync()
-    {
-        var card = _page.Locator(".mud-card").Filter(new() { HasText = "Month over Month" });
-        await Expect(card).ToBeVisibleAsync(new() { Timeout = 10000 });
-        return await card.Locator(".mud-typography-h4").TextContentAsync();
-    }
-
-    /// <summary>
-    /// Gets the trend card average text for Month over Month (e.g., "22.8 → 33.3/week").
-    /// </summary>
-    public async Task<string?> GetMonthOverMonthAverageAsync()
-    {
-        var card = _page.Locator(".mud-card").Filter(new() { HasText = "Month over Month" });
-        await Expect(card).ToBeVisibleAsync(new() { Timeout = 10000 });
-        return await card.Locator(".mud-typography-caption").Last.TextContentAsync();
-    }
-
-    /// <summary>
-    /// Gets the trend card value (percentage or difference) for Year over Year.
-    /// </summary>
-    public async Task<string?> GetYearOverYearValueAsync()
-    {
-        var card = _page.Locator(".mud-card").Filter(new() { HasText = "Year over Year" });
-        await Expect(card).ToBeVisibleAsync(new() { Timeout = 10000 });
-        return await card.Locator(".mud-typography-h4").TextContentAsync();
-    }
-
-    /// <summary>
-    /// Gets the trend card average text for Year over Year (e.g., "0 → 5.3/month").
-    /// </summary>
-    public async Task<string?> GetYearOverYearAverageAsync()
-    {
-        var card = _page.Locator(".mud-card").Filter(new() { HasText = "Year over Year" });
-        await Expect(card).ToBeVisibleAsync(new() { Timeout = 10000 });
-        return await card.Locator(".mud-typography-caption").Last.TextContentAsync();
-    }
-
-    /// <summary>
-    /// Checks if the Week card average shows "/day" suffix.
-    /// </summary>
-    public async Task<bool> WeekCardShowsPerDayAsync()
-    {
-        var avg = await GetWeekOverWeekAverageAsync();
-        return avg?.Contains("/day") == true;
-    }
-
-    /// <summary>
-    /// Checks if the Month card average shows "/week" suffix.
-    /// </summary>
-    public async Task<bool> MonthCardShowsPerWeekAsync()
-    {
-        var avg = await GetMonthOverMonthAverageAsync();
-        return avg?.Contains("/week") == true;
-    }
-
-    /// <summary>
-    /// Checks if the Year card average shows "/month" suffix.
-    /// </summary>
-    public async Task<bool> YearCardShowsPerMonthAsync()
-    {
-        var avg = await GetYearOverYearAverageAsync();
-        return avg?.Contains("/month") == true;
-    }
+    public ILocator TrendCardAverage(string title) => TrendCard(title).Locator(".mud-typography-caption").Last;
 
     /// <summary>
     /// Asserts all three trend cards are visible.
@@ -302,13 +160,9 @@ public class AnalyticsPage
     /// </summary>
     public async Task AssertTrendCardsVisibleAsync()
     {
-        var weekCard = _page.Locator(".mud-card").Filter(new() { HasText = "Week over Week" });
-        var monthCard = _page.Locator(".mud-card").Filter(new() { HasText = "Month over Month" });
-        var yearCard = _page.Locator(".mud-card").Filter(new() { HasText = "Year over Year" });
-
-        await Expect(weekCard).ToBeVisibleAsync(new() { Timeout = 10000 });
-        await Expect(monthCard).ToBeVisibleAsync();
-        await Expect(yearCard).ToBeVisibleAsync();
+        await Expect(TrendCard("Week over Week")).ToBeVisibleAsync(new() { Timeout = 10000 });
+        await Expect(TrendCard("Month over Month")).ToBeVisibleAsync();
+        await Expect(TrendCard("Year over Year")).ToBeVisibleAsync();
     }
 
     #endregion
@@ -316,32 +170,20 @@ public class AnalyticsPage
     #region Performance Tab
 
     /// <summary>
-    /// Checks if the Performance metrics component is visible.
-    /// The Performance tab has a specific info alert.
+    /// The Performance tab's info alert about global statistics.
     /// </summary>
-    public async Task<bool> IsPerformanceMetricsVisibleAsync()
-    {
-        var panel = _page.Locator(ActiveTabPanel);
-        // Performance tab has an info alert about global statistics
-        var hasInfoAlert = await panel.Locator(".mud-alert:has-text('Performance metrics')").IsVisibleAsync();
-        return hasInfoAlert;
-    }
+    public ILocator PerformanceMetricsAlert =>
+        _page.Locator(ActiveTabPanel).Locator(".mud-alert:has-text('Performance metrics')");
 
     #endregion
 
     #region Welcome Analytics Tab
 
     /// <summary>
-    /// Checks if the Welcome Analytics component is visible.
-    /// The Welcome Analytics tab has a specific info alert.
+    /// The Welcome Analytics tab's info alert about welcome system metrics.
     /// </summary>
-    public async Task<bool> IsWelcomeAnalyticsVisibleAsync()
-    {
-        var panel = _page.Locator(ActiveTabPanel);
-        // Welcome tab has an info alert about welcome system metrics
-        var hasInfoAlert = await panel.Locator(".mud-alert:has-text('Welcome system metrics')").IsVisibleAsync();
-        return hasInfoAlert;
-    }
+    public ILocator WelcomeAnalyticsAlert =>
+        _page.Locator(ActiveTabPanel).Locator(".mud-alert:has-text('Welcome system metrics')");
 
     #endregion
 
@@ -356,15 +198,6 @@ public class AnalyticsPage
     /// Checks if we're on the analytics page.
     /// </summary>
     public bool IsOnAnalyticsPage => _page.Url.Contains("/analytics");
-
-    /// <summary>
-    /// Gets the current URL fragment (e.g., "detection", "trends").
-    /// </summary>
-    public string? GetCurrentFragment()
-    {
-        var uri = new Uri(_page.Url);
-        return uri.Fragment.TrimStart('#');
-    }
 
     #endregion
 }

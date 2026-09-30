@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Microsoft.Playwright;
 using static Microsoft.Playwright.Assertions;
 
@@ -12,15 +13,15 @@ public class ChatsPage
     private readonly IPage _page;
 
     // Selectors - Layout
-    private const string PageTitle = ".mud-typography-h4";
+    private const string PageTitleSelector = ".mud-typography-h4";
     private const string LoadingIndicator = ".mud-progress-linear";
-    private const string EmptyAlert = ".mud-alert";
-    private const string EmptyAlertTitle = ".mud-alert .mud-typography-h6";
+    private const string EmptyAlertSelector = ".mud-alert";
+    private const string EmptyAlertTitleSelector = ".mud-alert .mud-typography-h6";
 
     // Selectors - MudTable
-    private const string ChatsTable = ".mud-table";
+    private const string ChatsTableSelector = ".mud-table";
     private const string TableToolbar = ".mud-table-toolbar";
-    private const string TableTitle = ".mud-table-toolbar .mud-typography-h6";
+    private const string TableTitleSelector = ".mud-table-toolbar .mud-typography-h6";
     private const string SearchInput = ".mud-table-toolbar .mud-input input";
     private const string TableBody = ".mud-table-body";
     private const string TableRow = ".mud-table-body tr";
@@ -34,7 +35,7 @@ public class ChatsPage
     private const string CustomConfigCell = "td[data-label='Custom Config']";
     private const string ActionsCell = "td[data-label='Actions']";
     private const string ConfigureButton = "button:has-text('Configure')";
-    private const string RefreshButton = "button[title='Refresh health status']";
+    private const string RefreshHealthButton = "button[title='Refresh health status']";
 
     public ChatsPage(IPage page)
     {
@@ -47,7 +48,7 @@ public class ChatsPage
     public async Task NavigateAsync()
     {
         await _page.GotoAsync("/chats", new PageGotoOptions { WaitUntil = WaitUntilState.NetworkIdle });
-        await Expect(_page.Locator(PageTitle)).ToBeVisibleAsync();
+        await Expect(PageTitle).ToBeVisibleAsync();
     }
 
     /// <summary>
@@ -63,72 +64,20 @@ public class ChatsPage
         });
     }
 
-    /// <summary>
-    /// Checks if the page title is visible.
-    /// </summary>
-    public async Task<bool> IsPageTitleVisibleAsync()
-    {
-        return await _page.Locator(PageTitle).IsVisibleAsync();
-    }
+    /// <summary>The page title.</summary>
+    public ILocator PageTitle => _page.Locator(PageTitleSelector);
 
-    /// <summary>
-    /// Gets the page title text.
-    /// </summary>
-    public async Task<string?> GetPageTitleAsync()
-    {
-        return await _page.Locator(PageTitle).TextContentAsync();
-    }
+    /// <summary>The empty state alert.</summary>
+    public ILocator EmptyStateAlert => _page.Locator(EmptyAlertSelector);
 
-    /// <summary>
-    /// Checks if the empty state alert is visible.
-    /// </summary>
-    public async Task<bool> IsEmptyStateVisibleAsync()
-    {
-        return await _page.Locator(EmptyAlert).IsVisibleAsync();
-    }
+    /// <summary>The empty state alert title.</summary>
+    public ILocator EmptyStateTitle => _page.Locator(EmptyAlertTitleSelector);
 
-    /// <summary>
-    /// Gets the empty state alert title text.
-    /// </summary>
-    public async Task<string?> GetEmptyStateTitleAsync()
-    {
-        return await _page.Locator(EmptyAlertTitle).TextContentAsync();
-    }
+    /// <summary>The chats table.</summary>
+    public ILocator ChatsTable => _page.Locator(ChatsTableSelector);
 
-    /// <summary>
-    /// Checks if the chats table is visible.
-    /// </summary>
-    public async Task<bool> IsTableVisibleAsync()
-    {
-        return await _page.Locator(ChatsTable).IsVisibleAsync();
-    }
-
-    /// <summary>
-    /// Gets the table title text.
-    /// </summary>
-    public async Task<string?> GetTableTitleAsync()
-    {
-        return await _page.Locator(TableTitle).TextContentAsync();
-    }
-
-    /// <summary>
-    /// Gets the count of visible rows in the table.
-    /// MudTable filtering may leave hidden rows in the DOM - only count visible ones.
-    /// </summary>
-    public async Task<int> GetChatCountAsync()
-    {
-        var rows = _page.Locator(TableRow);
-        var count = await rows.CountAsync();
-        var visibleCount = 0;
-
-        for (var i = 0; i < count; i++)
-        {
-            if (await rows.Nth(i).IsVisibleAsync())
-                visibleCount++;
-        }
-
-        return visibleCount;
-    }
+    /// <summary>The table title.</summary>
+    public ILocator TableTitle => _page.Locator(TableTitleSelector);
 
     /// <summary>
     /// Searches for chats using the search input.
@@ -148,7 +97,7 @@ public class ChatsPage
 
     /// <summary>
     /// Waits for the visible chat count to equal the expected value using Playwright's auto-retry.
-    /// Use this instead of GetChatCountAsync + Assert for reliable filtering tests.
+    /// MudTable filtering may leave hidden rows in the DOM - only visible ones are counted.
     /// </summary>
     public async Task ExpectChatCountAsync(int expectedCount, int timeoutMs = 5000)
     {
@@ -181,79 +130,41 @@ public class ChatsPage
     }
 
     /// <summary>
-    /// Gets the names of all visible chats in the table.
+    /// The chat name text of the table row whose chat name is exactly <paramref name="chatName"/>.
     /// </summary>
-    public async Task<List<string>> GetChatNamesAsync()
-    {
-        var chatNames = new List<string>();
-        var rows = await _page.Locator(TableRow).AllAsync();
+    public ILocator ChatName(string chatName) =>
+        _page.Locator($"{TableRow} {ChatNameCell} .mud-typography-body2")
+            .Filter(new() { HasTextRegex = new Regex($@"^\s*{Regex.Escape(chatName)}\s*$") });
 
-        foreach (var row in rows)
-        {
-            var nameCell = row.Locator(ChatNameCell);
-            var nameText = await nameCell.Locator(".mud-typography-body2").TextContentAsync();
-            if (!string.IsNullOrEmpty(nameText))
-                chatNames.Add(nameText);
-        }
-
-        return chatNames;
-    }
+    /// <summary>The table row containing <paramref name="chatName"/>.</summary>
+    public ILocator ChatRow(string chatName) => _page.Locator(TableRow).Filter(new() { HasText = chatName });
 
     /// <summary>
-    /// Gets the chat ID displayed for a chat by its name.
+    /// The chat ID caption (rendered as "ID: 123456") for a chat by its name.
     /// </summary>
-    public async Task<string?> GetChatIdByNameAsync(string chatName)
-    {
-        var row = _page.Locator(TableRow).Filter(new() { HasText = chatName });
-        var idText = await row.Locator($"{ChatNameCell} .mud-typography-caption").TextContentAsync();
-        // Extract just the ID number from "ID: 123456"
-        return idText?.Replace("ID: ", "");
-    }
+    public ILocator ChatIdCaption(string chatName) => ChatRow(chatName).Locator($"{ChatNameCell} .mud-typography-caption");
+
+    /// <summary>The chat type cell for a chat by its name.</summary>
+    public ILocator ChatTypeCellFor(string chatName) => ChatRow(chatName).Locator(ChatTypeCell);
+
+    /// <summary>The bot status chip for a chat by its name.</summary>
+    public ILocator BotStatusChip(string chatName) => ChatRow(chatName).Locator($"{BotStatusCell} .mud-chip");
+
+    /// <summary>The health status chip for a chat by its name.</summary>
+    public ILocator HealthStatusChip(string chatName) => ChatRow(chatName).Locator($"{HealthCell} .mud-chip");
 
     /// <summary>
-    /// Gets the chat type for a chat by its name.
+    /// The custom config indicator (check icon) for a chat by its name.
+    /// Absent when the chat uses the global config (the cell shows "Global" instead).
     /// </summary>
-    public async Task<string?> GetChatTypeByNameAsync(string chatName)
-    {
-        var row = _page.Locator(TableRow).Filter(new() { HasText = chatName });
-        return await row.Locator(ChatTypeCell).TextContentAsync();
-    }
-
-    /// <summary>
-    /// Gets the bot status for a chat by its name.
-    /// </summary>
-    public async Task<string?> GetBotStatusByNameAsync(string chatName)
-    {
-        var row = _page.Locator(TableRow).Filter(new() { HasText = chatName });
-        return await row.Locator($"{BotStatusCell} .mud-chip").TextContentAsync();
-    }
-
-    /// <summary>
-    /// Gets the health status for a chat by its name.
-    /// </summary>
-    public async Task<string?> GetHealthStatusByNameAsync(string chatName)
-    {
-        var row = _page.Locator(TableRow).Filter(new() { HasText = chatName });
-        return await row.Locator($"{HealthCell} .mud-chip").TextContentAsync();
-    }
-
-    /// <summary>
-    /// Checks if a chat has a custom config indicator.
-    /// </summary>
-    public async Task<bool> HasCustomConfigAsync(string chatName)
-    {
-        var row = _page.Locator(TableRow).Filter(new() { HasText = chatName });
-        var checkIcon = row.Locator($"{CustomConfigCell} .mud-icon-root");
-        return await checkIcon.IsVisibleAsync();
-    }
+    public ILocator CustomConfigIcon(string chatName) => ChatRow(chatName).Locator($"{CustomConfigCell} .mud-icon-root");
 
     /// <summary>
     /// Clicks the Configure button for a chat by its name.
     /// </summary>
     public async Task ClickConfigureAsync(string chatName)
     {
-        var row = _page.Locator(TableRow).Filter(new() { HasText = chatName });
-        await row.Locator(ConfigureButton).ClickAsync();
+        await ChatRow(chatName).Locator(ConfigureButton).ClickAsync();
         await Expect(_page.GetByRole(AriaRole.Dialog)).ToBeVisibleAsync();
     }
 
@@ -262,47 +173,25 @@ public class ChatsPage
     /// </summary>
     public async Task ClickRefreshHealthAsync(string chatName)
     {
-        var row = _page.Locator(TableRow).Filter(new() { HasText = chatName });
-        await row.Locator(RefreshButton).ClickAsync();
+        await ChatRow(chatName).Locator(RefreshHealthButton).ClickAsync();
     }
 
-    /// <summary>
-    /// Checks if the inactive chip is visible for a chat.
-    /// </summary>
-    public async Task<bool> HasInactiveChipAsync(string chatName)
-    {
-        var row = _page.Locator(TableRow).Filter(new() { HasText = chatName });
-        var inactiveChip = row.Locator(".mud-chip:has-text('Inactive')");
-        return await inactiveChip.IsVisibleAsync();
-    }
+    /// <summary>The "Inactive" chip for a chat by its name.</summary>
+    public ILocator InactiveChip(string chatName) => ChatRow(chatName).Locator(".mud-chip:has-text('Inactive')");
+
+    /// <summary>The table pager.</summary>
+    public ILocator Pager => _page.Locator(TablePager);
 
     /// <summary>
-    /// Checks if the table pager is visible.
+    /// The open dialog. MudBlazor dialogs render with .mud-dialog-container containing .mud-dialog element;
+    /// the semantic role locator is used for better reliability.
     /// </summary>
-    public async Task<bool> IsPagerVisibleAsync()
-    {
-        return await _page.Locator(TablePager).IsVisibleAsync();
-    }
+    public ILocator Dialog => _page.GetByRole(AriaRole.Dialog);
 
     /// <summary>
-    /// Checks if a dialog is open.
-    /// MudBlazor dialogs render with .mud-dialog-container containing .mud-dialog element.
+    /// The dialog title. The dialog title is typically in a header element or the first text.
     /// </summary>
-    public async Task<bool> IsDialogOpenAsync()
-    {
-        // Use semantic role locator for better reliability
-        var dialog = _page.GetByRole(AriaRole.Dialog);
-        return await dialog.IsVisibleAsync();
-    }
-
-    /// <summary>
-    /// Gets the dialog title.
-    /// </summary>
-    public async Task<string?> GetDialogTitleAsync()
-    {
-        // The dialog title is typically in a header element or the first text
-        return await _page.Locator(".mud-dialog-container .mud-typography-h6").First.TextContentAsync();
-    }
+    public ILocator DialogTitle => _page.Locator(".mud-dialog-container .mud-typography-h6").First;
 
     /// <summary>
     /// Closes the dialog by clicking the close button or pressing Escape.
@@ -312,7 +201,12 @@ public class ChatsPage
         var dialog = _page.GetByRole(AriaRole.Dialog);
         var closeButton = dialog.Locator("button:has-text('Close')");
 
-        if (await closeButton.IsVisibleAsync())
+        // Genuinely optional UI: some dialogs have no Close button and are dismissed with Escape instead.
+        // The dialog itself is already open (ClickConfigureAsync waits for it) before this branch runs.
+#pragma warning disable RS0030 // Branching on optional UI (Close button may not exist), not an assertion
+        var hasCloseButton = await closeButton.IsVisibleAsync();
+#pragma warning restore RS0030
+        if (hasCloseButton)
         {
             await closeButton.ClickAsync();
         }
