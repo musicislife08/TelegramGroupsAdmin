@@ -293,6 +293,63 @@ public class ContentDetectionEngineV2Tests
 
     #endregion
 
+    #region Message Identity (#521)
+
+    [Test]
+    public async Task CheckMessageAsync_AIVeto_RequestCarriesMessageId()
+    {
+        // The AI veto needs the message id to leave the message out of its own history context
+        var pipelineCheck = BuildCheck(CheckName.StopWords, score: 3.5, abstained: false);
+        var aiCheck = BuildAICheck(score: 2.3, abstained: false, details: "Review");
+
+        var config = BuildPermissiveConfig();
+        config.StopWords.Enabled = true;
+        config.AIVeto.Enabled = true;
+        _configService
+            .GetEffectiveContentDetectionAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
+            .Returns(config);
+        SetupEnabledAIInfrastructure();
+
+        var engine = BuildEngine([pipelineCheck, aiCheck]);
+
+        await engine.CheckMessageAsync(BuildRequest("Get this amazing deal!") with { MessageId = 77310 });
+
+        await aiCheck.Received(1).CheckAsync(Arg.Is<ContentCheckRequestBase>(r => r!.MessageId == 77310));
+    }
+
+    [Test]
+    public async Task CheckMessageAsync_MediaCheckRequests_CarryMessageId()
+    {
+        // Image and video checks re-run the engine on OCR text, which reaches the AI veto again
+        var imageCheck = BuildCheck(CheckName.ImageSpam, score: 0, abstained: true);
+        var videoCheck = BuildCheck(CheckName.VideoSpam, score: 0, abstained: true);
+
+        var config = BuildPermissiveConfig();
+        config.ImageSpam.Enabled = true;
+        config.VideoSpam.Enabled = true;
+        _configService
+            .GetEffectiveContentDetectionAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
+            .Returns(config);
+
+        var engine = BuildEngine([imageCheck, videoCheck]);
+        var request = BuildRequest("caption") with
+        {
+            MessageId = 77310,
+            PhotoLocalPath = "/tmp/photo.jpg",
+            VideoLocalPath = "/tmp/video.mp4"
+        };
+
+        await engine.CheckMessageAsync(request);
+
+        using (Assert.EnterMultipleScope())
+        {
+            await imageCheck.Received(1).CheckAsync(Arg.Is<ContentCheckRequestBase>(r => r!.MessageId == 77310));
+            await videoCheck.Received(1).CheckAsync(Arg.Is<ContentCheckRequestBase>(r => r!.MessageId == 77310));
+        }
+    }
+
+    #endregion
+
     #region AI Veto - Confirms Spam
 
     [Test]

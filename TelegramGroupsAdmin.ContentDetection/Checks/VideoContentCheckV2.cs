@@ -349,6 +349,7 @@ public class VideoContentCheckV2(
                 Message = allText,
                 User = req.User,
                 Chat = req.Chat,
+                MessageId = req.MessageId,
                 // Use defaults for properties not on VideoCheckRequest
                 Metadata = new ContentCheckMetadata(),
                 HasSpamFlags = false,

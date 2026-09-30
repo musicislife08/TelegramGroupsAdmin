@@ -358,12 +358,12 @@ public class MessageHistoryRepository : IMessageHistoryRepository
     }
 
     public async Task<IReadOnlyList<UiModels.RecentMessageVerdict>> GetRecentMessagesWithVerdictAsync(
-        long chatId, int count, CancellationToken cancellationToken = default)
+        long chatId, int count, int? excludeMessageId, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var rows = await (
             from m in context.Messages.AsNoTracking()
-            where m.ChatId == chatId
+            where m.ChatId == chatId && (excludeMessageId == null || m.MessageId != excludeMessageId)
             join v in context.MessageVerdicts.AsNoTracking() on new { m.MessageId, m.ChatId } equals new { v.MessageId, v.ChatId }
             join tu in context.TelegramUsers.AsNoTracking() on m.UserId equals tu.TelegramUserId into users
             from tu in users.DefaultIfEmpty()

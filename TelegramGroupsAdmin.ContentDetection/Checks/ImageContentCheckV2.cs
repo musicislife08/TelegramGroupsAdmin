@@ -146,6 +146,7 @@ public class ImageContentCheckV2(
                 Message = extractedOcrText,
                 User = req.User,
                 Chat = req.Chat,
+                MessageId = req.MessageId,
                 Metadata = new ContentCheckMetadata(),
                 HasSpamFlags = false,
                 IsUserTrusted = false,

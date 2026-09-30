@@ -23,6 +23,12 @@ public record ContentCheckRequest
     public required ChatIdentity Chat { get; init; }
 
     /// <summary>
+    /// Telegram message ID of the message under evaluation (null for text not tied to a stored message).
+    /// Lets the AI veto leave the message out of its own history context.
+    /// </summary>
+    public int? MessageId { get; init; }
+
+    /// <summary>
     /// Message metadata from Telegram
     /// </summary>
     public ContentCheckMetadata Metadata { get; init; } = new();

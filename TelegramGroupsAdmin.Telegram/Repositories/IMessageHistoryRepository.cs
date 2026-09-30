@@ -34,10 +34,13 @@ public interface IMessageHistoryRepository
     /// Gets the most recent messages in a chat along with each message's current verdict
     /// (message_verdicts view), newest first. Used to build AI veto history context so
     /// admin-corrected and sub-threshold-allowed messages are not shown as spam exemplars.
+    /// <paramref name="excludeMessageId"/> (the message under evaluation) is left out before the
+    /// window is taken, so the AI never sees its own row as history and still gets <paramref name="count"/> others.
     /// </summary>
     Task<IReadOnlyList<UiModels.RecentMessageVerdict>> GetRecentMessagesWithVerdictAsync(
         long chatId,
         int count,
+        int? excludeMessageId,
         CancellationToken cancellationToken = default);
 
     /// <summary>

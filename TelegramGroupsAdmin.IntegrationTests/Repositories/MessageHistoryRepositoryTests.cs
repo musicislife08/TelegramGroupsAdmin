@@ -1612,15 +1612,98 @@ public class MessageHistoryRepositoryTests
     public async Task GetRecentMessagesWithVerdictAsync_CorrectedToHam_IsNotShownAsSpam()
     {
         // Previously WasSpam = Any(row.IsSpam): an admin-corrected message stayed "spam" in the AI history.
-        var rows = await _repository!.GetRecentMessagesWithVerdictAsync(GoldenDatasetConstants.Chats.MainChatId, count: 1000);
+        var rows = await _repository!.GetRecentMessagesWithVerdictAsync(GoldenDatasetConstants.Chats.MainChatId, count: 1000, excludeMessageId: null);
         Assert.That(rows.Single(r => r.MessageId == GoldenDatasetConstants.Verdicts.CorrectedToHamMsgId).IsSpam, Is.False);
     }
 
     [Test]
     public async Task GetRecentMessagesWithVerdictAsync_AutoBanned_IsSpam()
     {
-        var rows = await _repository!.GetRecentMessagesWithVerdictAsync(GoldenDatasetConstants.Chats.MainChatId, count: 1000);
+        var rows = await _repository!.GetRecentMessagesWithVerdictAsync(GoldenDatasetConstants.Chats.MainChatId, count: 1000, excludeMessageId: null);
         Assert.That(rows.Single(r => r.MessageId == GoldenDatasetConstants.Verdicts.AutoBanMsgId).IsSpam, Is.True);
+    }
+
+    [Test]
+    public async Task GetRecentMessagesWithVerdictAsync_ExcludedMessage_IsOmittedAndWindowStillFilled()
+    {
+        // #521: the message under evaluation is usually the newest in its chat, so without
+        // exclusion the AI veto saw its own row (and on edit, its own earlier verdict) as history.
+        const int count = 3;
+        var chatId = GoldenDatasetConstants.Chats.MainChatId;
+        var unfiltered = await _repository!.GetRecentMessagesWithVerdictAsync(chatId, count + 1, excludeMessageId: null);
+        var newestMessageId = unfiltered[0].MessageId;
+
+        var rows = await _repository.GetRecentMessagesWithVerdictAsync(chatId, count, excludeMessageId: newestMessageId);
+
+        Assert.That(rows.Select(r => r.MessageId),
+            Is.EqualTo(unfiltered.Skip(1).Select(r => r.MessageId)),
+            "Excluded message must be omitted and the window filled with the next-newest messages");
+    }
+
+    [Test]
+    public async Task GetRecentMessagesWithVerdictAsync_SharedIdAcrossChats_AppearsOncePerChat()
+    {
+        await AssertSharedIdPreconditionAsync();
+
+        var poultry = await _repository!.GetRecentMessagesWithVerdictAsync(
+            GoldenDatasetConstants.AIVetoHistory.SharedIdChatId, 1000, excludeMessageId: null);
+        var main = await _repository.GetRecentMessagesWithVerdictAsync(
+            GoldenDatasetConstants.Chats.MainChatId, 1000, excludeMessageId: null);
+
+        // A verdict join on MessageId alone would pair each row with both chats' verdicts
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(poultry.Count(r => r.MessageId == GoldenDatasetConstants.AIVetoHistory.SharedMessageId), Is.EqualTo(1));
+            Assert.That(main.Count(r => r.MessageId == GoldenDatasetConstants.AIVetoHistory.SharedMessageId), Is.EqualTo(1));
+        }
+    }
+
+    [Test]
+    public async Task GetRecentMessagesWithVerdictAsync_SharedIdAcrossChats_ExclusionDropsOnlyTheEvaluatedChatsRow()
+    {
+        // #521: the message under evaluation is identified by id within its chat. Excluding Poultry
+        // Community's newest message must leave MainChat's same-id message alone.
+        await AssertSharedIdPreconditionAsync();
+        const int count = 3;
+        var chatId = GoldenDatasetConstants.AIVetoHistory.SharedIdChatId;
+        var sharedId = GoldenDatasetConstants.AIVetoHistory.SharedMessageId;
+        var unfiltered = await _repository!.GetRecentMessagesWithVerdictAsync(chatId, count + 1, excludeMessageId: null);
+
+        var rows = await _repository.GetRecentMessagesWithVerdictAsync(chatId, count, excludeMessageId: sharedId);
+        var main = await _repository.GetRecentMessagesWithVerdictAsync(
+            GoldenDatasetConstants.Chats.MainChatId, 1000, excludeMessageId: null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(rows.Select(r => r.MessageId), Is.EqualTo(unfiltered.Skip(1).Select(r => r.MessageId)));
+            Assert.That(main.Select(r => r.MessageId), Does.Contain(sharedId));
+        }
+    }
+
+    /// <summary>
+    /// Canonical edit 2026-09-30: the shared id must exist in exactly MainChat and Poultry Community,
+    /// and be Poultry Community's newest message, or the shared-id tests pass vacuously.
+    /// </summary>
+    private async Task AssertSharedIdPreconditionAsync()
+    {
+        var contextFactory = _serviceProvider!.GetRequiredService<IDbContextFactory<AppDbContext>>();
+        await using var context = await contextFactory.CreateDbContextAsync();
+        var sharedIdChats = await context.Messages.AsNoTracking()
+            .Where(m => m.MessageId == GoldenDatasetConstants.AIVetoHistory.SharedMessageId)
+            .Select(m => m.ChatId)
+            .ToListAsync();
+        var poultryNewest = await context.Messages.AsNoTracking()
+            .Where(m => m.ChatId == GoldenDatasetConstants.AIVetoHistory.SharedIdChatId)
+            .OrderByDescending(m => m.Timestamp)
+            .Select(m => m.MessageId)
+            .FirstAsync();
+
+        Assert.That(sharedIdChats, Is.EquivalentTo(new[]
+        {
+            GoldenDatasetConstants.Chats.MainChatId, GoldenDatasetConstants.AIVetoHistory.SharedIdChatId
+        }), "Precondition: shared id must exist in exactly MainChat and Poultry Community");
+        Assert.That(poultryNewest, Is.EqualTo(GoldenDatasetConstants.AIVetoHistory.SharedMessageId),
+            "Precondition: shared id must be Poultry Community's newest message");
     }
 
     [Test]

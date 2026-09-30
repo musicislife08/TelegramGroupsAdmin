@@ -131,6 +131,31 @@ public class MediaHashLayerTests
         await AssertSpamOutcome(response, _config.VideoSpam.HashMatchConfidence);
     }
 
+    // #521: the OCR text re-runs the engine, whose AI veto must still leave the message out of its own history
+    [Test]
+    public async Task Image_OcrRequest_CarriesMessageId()
+    {
+        var check = CreateImageCheck();
+        SetPhotoSample(VerdictClassification.ImplicitHam, similarity: 0.99);
+
+        await check.CheckAsync(CreateImageRequest(messageId: 77310));
+
+        await _engine.Received(1).CheckMessageAsync(
+            Arg.Is<ContentCheckRequest>(r => r!.MessageId == 77310), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task Video_OcrRequest_CarriesMessageId()
+    {
+        var check = CreateVideoCheck();
+        SetVideoSample(VerdictClassification.ImplicitHam, similarity: 0.99);
+
+        await check.CheckAsync(CreateVideoRequest(messageId: 77310));
+
+        await _engine.Received(1).CheckMessageAsync(
+            Arg.Is<ContentCheckRequest>(r => r!.MessageId == 77310), Arg.Any<CancellationToken>());
+    }
+
     private async Task AssertHamOutcome(ContentCheckResponseV2 response, bool skips, AIFeatureType visionFeature)
     {
         if (skips)
@@ -189,18 +214,19 @@ public class MediaHashLayerTests
             .Returns([(features, anchor)]);
     }
 
-    private ImageCheckRequest CreateImageRequest() => new()
+    private ImageCheckRequest CreateImageRequest(int? messageId = null) => new()
     {
         Message = "caption",
         User = UserIdentity.FromId(123),
         Chat = ChatIdentity.FromId(-100),
+        MessageId = messageId,
         CancellationToken = CancellationToken.None,
         PhotoFileId = "photo-file-id",
         PhotoLocalPath = WriteTempFile("photo.jpg"),
         CustomPrompt = null
     };
 
-    private VideoCheckRequest CreateVideoRequest()
+    private VideoCheckRequest CreateVideoRequest(int? messageId = null)
     {
         _frames.IsAvailable.Returns(true);
         var framePath = WriteTempFile("frame.jpg");
@@ -212,6 +238,7 @@ public class MediaHashLayerTests
             Message = "caption",
             User = UserIdentity.FromId(123),
             Chat = ChatIdentity.FromId(-100),
+            MessageId = messageId,
             CancellationToken = CancellationToken.None,
             VideoLocalPath = WriteTempFile("video.mp4"),
             CustomPrompt = null
