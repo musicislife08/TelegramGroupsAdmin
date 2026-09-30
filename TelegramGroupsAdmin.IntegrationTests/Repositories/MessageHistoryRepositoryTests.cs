@@ -1641,21 +1641,69 @@ public class MessageHistoryRepositoryTests
     }
 
     [Test]
-    public async Task GetRecentMessagesWithVerdictAsync_ExcludedIdFromAnotherChat_LeavesWindowUnchanged()
+    public async Task GetRecentMessagesWithVerdictAsync_SharedIdAcrossChats_AppearsOncePerChat()
     {
-        // Telegram message ids are only unique per chat: excluding MainChat's newest id must not
-        // touch Crypto Group's window.
+        await AssertSharedIdPreconditionAsync();
+
+        var poultry = await _repository!.GetRecentMessagesWithVerdictAsync(
+            GoldenDatasetConstants.AIVetoHistory.SharedIdChatId, 1000, excludeMessageId: null);
+        var main = await _repository.GetRecentMessagesWithVerdictAsync(
+            GoldenDatasetConstants.Chats.MainChatId, 1000, excludeMessageId: null);
+
+        // A verdict join on MessageId alone would pair each row with both chats' verdicts
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(poultry.Count(r => r.MessageId == GoldenDatasetConstants.AIVetoHistory.SharedMessageId), Is.EqualTo(1));
+            Assert.That(main.Count(r => r.MessageId == GoldenDatasetConstants.AIVetoHistory.SharedMessageId), Is.EqualTo(1));
+        }
+    }
+
+    [Test]
+    public async Task GetRecentMessagesWithVerdictAsync_SharedIdAcrossChats_ExclusionDropsOnlyTheEvaluatedChatsRow()
+    {
+        // #521: the message under evaluation is identified by id within its chat. Excluding Poultry
+        // Community's newest message must leave MainChat's same-id message alone.
+        await AssertSharedIdPreconditionAsync();
         const int count = 3;
-        var mainChatNewest = (await _repository!.GetRecentMessagesWithVerdictAsync(
-            GoldenDatasetConstants.Chats.MainChatId, 1, excludeMessageId: null))[0].MessageId;
-        var otherChatId = GoldenDatasetConstants.Verdicts.UntrainedHamChatId;
-        var otherChatAll = await _repository.GetRecentMessagesWithVerdictAsync(otherChatId, 1000, excludeMessageId: null);
-        Assert.That(otherChatAll.Select(r => r.MessageId), Does.Not.Contain(mainChatNewest),
-            "Precondition: the excluded id must not also exist in the other chat");
+        var chatId = GoldenDatasetConstants.AIVetoHistory.SharedIdChatId;
+        var sharedId = GoldenDatasetConstants.AIVetoHistory.SharedMessageId;
+        var unfiltered = await _repository!.GetRecentMessagesWithVerdictAsync(chatId, count + 1, excludeMessageId: null);
 
-        var rows = await _repository.GetRecentMessagesWithVerdictAsync(otherChatId, count, excludeMessageId: mainChatNewest);
+        var rows = await _repository.GetRecentMessagesWithVerdictAsync(chatId, count, excludeMessageId: sharedId);
+        var main = await _repository.GetRecentMessagesWithVerdictAsync(
+            GoldenDatasetConstants.Chats.MainChatId, 1000, excludeMessageId: null);
 
-        Assert.That(rows.Select(r => r.MessageId), Is.EqualTo(otherChatAll.Take(count).Select(r => r.MessageId)));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(rows.Select(r => r.MessageId), Is.EqualTo(unfiltered.Skip(1).Select(r => r.MessageId)));
+            Assert.That(main.Select(r => r.MessageId), Does.Contain(sharedId));
+        }
+    }
+
+    /// <summary>
+    /// Canonical edit 2026-09-30: the shared id must exist in exactly MainChat and Poultry Community,
+    /// and be Poultry Community's newest message, or the shared-id tests pass vacuously.
+    /// </summary>
+    private async Task AssertSharedIdPreconditionAsync()
+    {
+        var contextFactory = _serviceProvider!.GetRequiredService<IDbContextFactory<AppDbContext>>();
+        await using var context = await contextFactory.CreateDbContextAsync();
+        var sharedIdChats = await context.Messages.AsNoTracking()
+            .Where(m => m.MessageId == GoldenDatasetConstants.AIVetoHistory.SharedMessageId)
+            .Select(m => m.ChatId)
+            .ToListAsync();
+        var poultryNewest = await context.Messages.AsNoTracking()
+            .Where(m => m.ChatId == GoldenDatasetConstants.AIVetoHistory.SharedIdChatId)
+            .OrderByDescending(m => m.Timestamp)
+            .Select(m => m.MessageId)
+            .FirstAsync();
+
+        Assert.That(sharedIdChats, Is.EquivalentTo(new[]
+        {
+            GoldenDatasetConstants.Chats.MainChatId, GoldenDatasetConstants.AIVetoHistory.SharedIdChatId
+        }), "Precondition: shared id must exist in exactly MainChat and Poultry Community");
+        Assert.That(poultryNewest, Is.EqualTo(GoldenDatasetConstants.AIVetoHistory.SharedMessageId),
+            "Precondition: shared id must be Poultry Community's newest message");
     }
 
     [Test]

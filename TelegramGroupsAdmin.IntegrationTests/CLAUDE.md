@@ -320,6 +320,16 @@ Flag-edits (all rows were unreferenced by tests and docs beforehand):
 - **4g** (2026-09-28) dr1934 (msg 212950): OpenAI check `Score` 4.8 spam → 0 with an `AI: Clean - …` detail, `reason` = that detail, `score` 7 → 0, `classification` `UntrainedSpam` → `ImplicitHam` (what `ContentDetectionEngineV2.CreateVetoedResult` + `VerdictClassifier` would have written). Not the message's verdict, so `CanonicalSlices` is unchanged.
 - **4h** (2026-09-28, approved addition — rows appended, not flag-edited) msgs 94 and 22127 with their scans dr22 and dr1639, copied from prod and sanitized like every other non-banned author's message: `message_text` is the canonical lorem at the original length (111 / 34 chars — lengths no other lorem row uses, so no byte-identical duplicate: implicit ham is not deduplicated against explicit ham, and a same-length lorem would collide with `CorrectedToHamMsgId`), `content_hash` NULL, `similarity_hash` recomputed via `SimHashService`; timestamps verbatim; the OpenAI reason/detail replaced with synthetic prose (check scores and Bayes key words as in prod); user and chat ids mapped to the canonical rotations of the same prod users/chats (both authors already in canonical, non-banned and sanitized). The scans are stored post-`AddVerdictEvents`: only the OpenAI check is rewritten (other checks' converted V1 "clean" results keep `Abstained=true` + a leftover Score, which no reader counts). Not in `CanonicalSlices` (added after the freeze).
 
+### AI veto history: message id shared by two chats (canonical edit 2026-09-30)
+
+Telegram message ids are only unique per chat, but no two canonical chats shared one. Anchors are in code as `GoldenDatasetConstants.AIVetoHistory`.
+
+| Constant | Anchor | Use when |
+|---|---|---|
+| `SharedMessageId` / `SharedIdChatId` | msg 14538 exists in Poultry Community (-100017608907459, its newest message, sender 9718812162815, ExplicitHam via synthetic promotion dr3325) **and** MainChat (the WORMGPT SimHash anchor) | a chat-scoped query or `(MessageId, ChatId)` join must not confuse the two rows; AI veto history exclusion (#521) |
+
+Flag-edit: Poultry Community's msg 14498 renumbered to 14538 (still after the chat's 14352; timestamp unchanged) in `19_messages.sql` (row + its `content_hash` `UPDATE`), dr3325's `message_id` in `32_detection_results.sql`, and its `CanonicalSlices` entry. Lookups of these ids by `message_id` alone are now ambiguous: always add the chat (`SimHashIntegrationTests` scopes its WORMGPT lookup to MainChat for this reason).
+
 ### Synthetic / reserved rows (do not regenerate)
 - `welcome_responses` IDs `999001..999005`: 5 status branches anchored on `(MainChat_Id=-100026957614982, user_id=9196379650113, username='canonical_user1')`. Mapping: `999001`=Pending, `999002`=Accepted, `999003`=Denied, `999004`=Timeout, `999005`=Left.
 - `username_blacklist` IDs `999001` (`pattern='spambot_admin'`, enabled, Exact match) + `999005` (`pattern='archived_pattern'`, disabled, Exact match). No Contains/Regex/StartsWith fixtures (feature not yet implemented).

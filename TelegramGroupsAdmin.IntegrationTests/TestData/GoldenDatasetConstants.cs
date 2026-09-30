@@ -566,4 +566,20 @@ internal static class GoldenDatasetConstants
         /// <summary>Only its curated verdict keeps this old message (latest row dr2009, an explicit ham decision). @arisepacifism.</summary>
         public const int LabeledOnlyRetentionMsgId = 7974;
     }
+
+    /// <summary>
+    /// AI veto history anchors (canonical edit 2026-09-30). Telegram message ids are only unique per
+    /// chat, so one id is shared by two chats to pin the chat-scoped history query and verdict join.
+    /// </summary>
+    public static class AIVetoHistory
+    {
+        /// <summary>
+        /// Message id present in two chats: Poultry Community's newest message (renumbered from 14498,
+        /// ExplicitHam via synthetic promotion dr3325) and MainChat's WORMGPT SimHash anchor.
+        /// </summary>
+        public const int SharedMessageId = 14538;
+
+        /// <summary>Poultry Community — the chat whose newest message carries <see cref="SharedMessageId"/>.</summary>
+        public const long SharedIdChatId = DmCelebrations.PoultryCommunityChatId;
+    }
 }
