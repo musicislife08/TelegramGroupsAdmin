@@ -48,8 +48,8 @@ public class AuditLogPage
     public async Task NavigateAsync()
     {
         await _page.GotoAsync(BasePath);
-        // Audit log has interactive data loading - need Blazor circuit connected
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        // Audit log has interactive data loading - need the Blazor circuit live
+        await _page.WaitForInteractiveAsync();
     }
 
     /// <summary>
@@ -58,7 +58,7 @@ public class AuditLogPage
     public async Task NavigateToTabAsync(string tabFragment)
     {
         await _page.GotoAsync($"{BasePath}#{tabFragment}");
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        await _page.WaitForInteractiveAsync();
     }
 
     /// <summary>
@@ -66,7 +66,7 @@ public class AuditLogPage
     /// </summary>
     public async Task WaitForLoadAsync()
     {
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        await _page.WaitForInteractiveAsync();
     }
 
     #endregion

@@ -36,8 +36,8 @@ public class AnalyticsPage
     public async Task NavigateAsync()
     {
         await _page.GotoAsync(BasePath);
-        // Analytics has interactive charts - need Blazor circuit connected
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        // Analytics has interactive charts - need the Blazor circuit live
+        await _page.WaitForInteractiveAsync();
     }
 
     /// <summary>
@@ -46,7 +46,7 @@ public class AnalyticsPage
     public async Task NavigateToTabAsync(string tabFragment)
     {
         await _page.GotoAsync($"{BasePath}#{tabFragment}");
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        await _page.WaitForInteractiveAsync();
     }
 
     /// <summary>
@@ -54,7 +54,7 @@ public class AnalyticsPage
     /// </summary>
     public async Task WaitForLoadAsync()
     {
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        await _page.WaitForInteractiveAsync();
     }
 
     #endregion

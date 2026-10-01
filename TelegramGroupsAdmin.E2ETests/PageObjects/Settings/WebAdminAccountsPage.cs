@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using Microsoft.Playwright;
+using static Microsoft.Playwright.Assertions;
 
 namespace TelegramGroupsAdmin.E2ETests.PageObjects.Settings;
 
@@ -66,8 +67,8 @@ public class WebAdminAccountsPage
     public async Task NavigateAsync()
     {
         await _page.GotoAsync("/settings/system/accounts");
-        // Settings pages need Blazor circuit connected for interactions
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        // Settings pages need the Blazor circuit live for interactions
+        await _page.WaitForInteractiveAsync();
     }
 
     /// <summary>
@@ -84,18 +85,7 @@ public class WebAdminAccountsPage
 
         // Wait for loading indicator to disappear (use .First to avoid strict mode when multiple progress bars exist)
         var loadingIndicator = _page.Locator(LoadingIndicator).First;
-        try
-        {
-            await loadingIndicator.WaitForAsync(new LocatorWaitForOptions
-            {
-                State = WaitForSelectorState.Hidden,
-                Timeout = 5000
-            });
-        }
-        catch (TimeoutException)
-        {
-            // Loading indicator may have already disappeared
-        }
+        await Expect(loadingIndicator).Not.ToBeVisibleAsync(new() { Timeout = 5000 });
     }
 
     /// <summary>The page title.</summary>

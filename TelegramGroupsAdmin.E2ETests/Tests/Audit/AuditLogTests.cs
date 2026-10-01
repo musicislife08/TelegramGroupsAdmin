@@ -50,7 +50,6 @@ public class AuditLogTests : SharedAuthenticatedTestBase
 
         // Act - try to navigate to audit page
         await Page.GotoAsync("/audit");
-        await Page.WaitForLoadStateAsync(Microsoft.Playwright.LoadState.NetworkIdle);
 
         // Assert - Admin should be blocked from accessing the page.
         // Admin is redirected away from /audit (server-side forbid -> /access-denied?ReturnUrl=%2Faudit,

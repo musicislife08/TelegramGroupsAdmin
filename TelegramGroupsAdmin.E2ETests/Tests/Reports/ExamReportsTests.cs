@@ -280,8 +280,8 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
         await _reportsPage.NavigateAsync();
         await _reportsPage.WaitForLoadAsync();
 
-        // Wait for all data to fully load (Blazor SignalR + async data fetching)
-        await Page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        // Wait for the interactive circuit; the assertions below retry until the data lands
+        await Page.WaitForInteractiveAsync();
 
         // Assert - All three types should be visible with default "All Types" filter
         await Expect(_reportsPage.ModerationReportHeaders.First).ToBeVisibleAsync();

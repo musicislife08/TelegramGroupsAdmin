@@ -55,18 +55,7 @@ public class SettingsPage
 
         // Wait for loading indicator to disappear
         var loadingIndicator = _page.Locator(LoadingIndicator);
-        try
-        {
-            await loadingIndicator.WaitForAsync(new LocatorWaitForOptions
-            {
-                State = WaitForSelectorState.Hidden,
-                Timeout = 5000
-            });
-        }
-        catch (TimeoutException)
-        {
-            // Loading indicator may have already disappeared
-        }
+        await Expect(loadingIndicator).Not.ToBeVisibleAsync(new() { Timeout = 5000 });
 
         // Wait for the settings sidebar heading to confirm the page body has rendered past the auth gate,
         // or for the access denied alert. The sidebar "Settings" h6 is always present for any authorised

@@ -209,9 +209,6 @@ public class MessagesTests : SharedAuthenticatedTestBase
         await _messagesPage.WaitForLoadAsync();
         await _messagesPage.SelectChatByNameAsync("Empty Chat");
 
-        // Wait for loading to complete
-        await Page.WaitForTimeoutAsync(500);
-
         // Assert - "no messages" state visible
         await Expect(_messagesPage.NoMessagesState).ToBeVisibleAsync();
 
@@ -359,9 +356,6 @@ public class MessagesTests : SharedAuthenticatedTestBase
         // Act - navigate with chat ID in query string
         await _messagesPage.NavigateAsync(chatId: chat.ChatId);
         await _messagesPage.WaitForLoadAsync();
-
-        // Wait for chat to be selected
-        await Page.WaitForTimeoutAsync(500);
 
         // Assert - chat is auto-selected
         await Expect(_messagesPage.ActiveChatView).ToBeVisibleAsync();

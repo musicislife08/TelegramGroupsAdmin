@@ -47,7 +47,8 @@ public class ChatsPage
     /// </summary>
     public async Task NavigateAsync()
     {
-        await _page.GotoAsync("/chats", new PageGotoOptions { WaitUntil = WaitUntilState.NetworkIdle });
+        await _page.GotoAsync("/chats");
+        await _page.WaitForInteractiveAsync();
         await Expect(PageTitle).ToBeVisibleAsync();
     }
 

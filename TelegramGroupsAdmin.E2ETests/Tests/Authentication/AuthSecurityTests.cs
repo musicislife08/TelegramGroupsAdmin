@@ -33,9 +33,6 @@ public class AuthSecurityTests : E2ETestBase
     /// </summary>
     private async Task AssertOnAuthPageAsync(string context, int timeoutMs = 10000)
     {
-        // Wait for network to stabilize (SignalR connection for Blazor Server)
-        await Page.WaitForLoadStateAsync(LoadState.NetworkIdle);
-
         // Use Playwright's auto-retry assertion for URL matching
         await Expect(Page).ToHaveURLAsync(
             new Regex(@".*/(?:login|register).*"),

@@ -40,7 +40,8 @@ public class ReportsPage
     /// </summary>
     public async Task NavigateAsync()
     {
-        await _page.GotoAsync("/reports", new PageGotoOptions { WaitUntil = WaitUntilState.NetworkIdle });
+        await _page.GotoAsync("/reports");
+        await _page.WaitForInteractiveAsync();
     }
 
     /// <summary>
@@ -92,28 +93,12 @@ public class ReportsPage
         // Find the MudSelect by its input-control wrapper that contains the hidden input
         var typeSelectContainer = _page.Locator(".mud-input-control:has(#type-filter)");
         await Expect(typeSelectContainer).ToBeVisibleAsync(new() { Timeout = 5000 });
+        // A click on the prerendered select has no handler and never opens the popover
+        await _page.WaitForInteractiveAsync();
         await typeSelectContainer.ClickAsync();
 
-        // Wait for popover to appear
         var popover = _page.Locator(".mud-popover-open");
-
-        // Retry click if popover doesn't appear
-        for (var attempt = 0; attempt < 3; attempt++)
-        {
-            try
-            {
-                await Expect(popover).ToBeVisibleAsync(new() { Timeout = 2000 });
-                break;
-            }
-            catch (PlaywrightException) when (attempt < 2)
-            {
-                // Popover didn't open, try clicking again
-                await typeSelectContainer.ClickAsync();
-            }
-        }
-
-        // Final check - popover must be visible
-        await Expect(popover).ToBeVisibleAsync(new() { Timeout = 3000 });
+        await Expect(popover).ToBeVisibleAsync(new() { Timeout = 5000 });
 
         // MudBlazor renders options as .mud-list-item inside .mud-popover-open
         var option = popover.Locator(".mud-list-item-clickable").Filter(new() { HasText = filterOption });
@@ -144,26 +129,12 @@ public class ReportsPage
         // MudBlazor renders hidden input for form, but visual container is clickable
         var statusSelectContainer = _page.Locator(".mud-input-control:has(#status-filter)");
         await Expect(statusSelectContainer).ToBeVisibleAsync(new() { Timeout = 5000 });
+        // A click on the prerendered select has no handler and never opens the popover
+        await _page.WaitForInteractiveAsync();
         await statusSelectContainer.ClickAsync();
 
-        // Wait for popover to appear
         var popover = _page.Locator(".mud-popover-open");
-
-        // Retry click if popover doesn't appear
-        for (var attempt = 0; attempt < 3; attempt++)
-        {
-            try
-            {
-                await Expect(popover).ToBeVisibleAsync(new() { Timeout = 2000 });
-                break;
-            }
-            catch (PlaywrightException) when (attempt < 2)
-            {
-                await statusSelectContainer.ClickAsync();
-            }
-        }
-
-        await Expect(popover).ToBeVisibleAsync(new() { Timeout = 3000 });
+        await Expect(popover).ToBeVisibleAsync(new() { Timeout = 5000 });
 
         // MudBlazor renders options as .mud-list-item inside .mud-popover-open
         var option = popover.Locator(".mud-list-item-clickable").Filter(new() { HasText = filterOption });
@@ -270,8 +241,8 @@ public class ReportsPage
     {
         var button = _page.Locator("button:has-text('Delete as Spam')").First;
 
-        // Wait for Blazor SignalR circuit to be fully established before clicking
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        // A click on the prerendered button has no handler; wait for the live circuit first
+        await _page.WaitForInteractiveAsync();
 
         await button.ClickAsync();
     }
@@ -284,8 +255,8 @@ public class ReportsPage
     {
         var button = _page.Locator("button:has-text('Ban User')").First;
 
-        // Wait for Blazor SignalR circuit to be fully established before clicking
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        // A click on the prerendered button has no handler; wait for the live circuit first
+        await _page.WaitForInteractiveAsync();
 
         await button.ClickAsync();
     }
@@ -298,8 +269,8 @@ public class ReportsPage
     {
         var button = _page.Locator("button:has-text('Warn')").First;
 
-        // Wait for Blazor SignalR circuit to be fully established before clicking
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        // A click on the prerendered button has no handler; wait for the live circuit first
+        await _page.WaitForInteractiveAsync();
 
         await button.ClickAsync();
     }
@@ -313,8 +284,8 @@ public class ReportsPage
     {
         var button = _page.Locator("button:has-text('Dismiss')").First;
 
-        // Wait for Blazor SignalR circuit to be fully established before clicking
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        // A click on the prerendered button has no handler; wait for the live circuit first
+        await _page.WaitForInteractiveAsync();
 
         await button.ClickAsync();
     }
@@ -327,8 +298,8 @@ public class ReportsPage
     {
         var button = _page.Locator("button:has-text('Confirm')").First;
 
-        // Wait for Blazor SignalR circuit to be fully established before clicking
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        // A click on the prerendered button has no handler; wait for the live circuit first
+        await _page.WaitForInteractiveAsync();
 
         await button.ClickAsync();
     }
@@ -341,8 +312,8 @@ public class ReportsPage
     {
         var button = _page.Locator("button:has-text('Trust')").First;
 
-        // Wait for Blazor SignalR circuit to be fully established before clicking
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        // A click on the prerendered button has no handler; wait for the live circuit first
+        await _page.WaitForInteractiveAsync();
 
         await button.ClickAsync();
     }
@@ -361,9 +332,8 @@ public class ReportsPage
         await Expect(button).ToBeVisibleAsync(new() { Timeout = 5000 });
         await Expect(button).ToBeEnabledAsync(new() { Timeout = 5000 });
 
-        // Wait for Blazor SignalR circuit to be fully established
-        // Network idle indicates all initial requests (including SignalR) are complete
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        // A click on the prerendered button has no handler; wait for the live circuit first
+        await _page.WaitForInteractiveAsync();
 
         await button.ClickAsync();
     }
@@ -383,8 +353,8 @@ public class ReportsPage
         await Expect(denyButton).ToBeVisibleAsync(new() { Timeout = 5000 });
         await Expect(denyButton).ToBeEnabledAsync(new() { Timeout = 5000 });
 
-        // Wait for Blazor SignalR circuit to be fully established
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        // A click on the prerendered button has no handler; wait for the live circuit first
+        await _page.WaitForInteractiveAsync();
 
         await denyButton.ClickAsync();
     }
@@ -403,8 +373,8 @@ public class ReportsPage
         await Expect(button).ToBeVisibleAsync(new() { Timeout = 5000 });
         await Expect(button).ToBeEnabledAsync(new() { Timeout = 5000 });
 
-        // Wait for Blazor SignalR circuit to be fully established
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        // A click on the prerendered button has no handler; wait for the live circuit first
+        await _page.WaitForInteractiveAsync();
 
         await button.ClickAsync();
     }

@@ -387,34 +387,11 @@ public class ProfilePage
     {
         var unlinkButton = LinkedAccountRows.Nth(rowIndex)
             .GetByRole(AriaRole.Button, new() { Name = "Unlink" });
-        // Confirm the button is enabled before clicking — ensures the Blazor circuit is live and
-        // the row is fully interactive, not just painted.
-        await Expect(unlinkButton).ToBeEnabledAsync(new() { Timeout = 10000 });
+        // A click on the prerendered button has no handler; wait for the live circuit first
+        await _page.WaitForInteractiveAsync();
         await unlinkButton.ClickAsync();
-        // Wait for snackbar to appear (indicates operation completed).
-        // If the circuit briefly dropped and swallowed the click, the button remains and we retry once.
-        try
-        {
-            await Expect(Snackbar).ToBeVisibleAsync(new() { Timeout = 10000 });
-        }
-        catch (PlaywrightException)
-        {
-            // Circuit may have reconnected without processing the click — retry if the row is still there.
-#pragma warning disable RS0030 // Optional recovery: only re-click if the swallowed click left the row in place; the snackbar Expect above already timed out
-            var rowStillPresent = await unlinkButton.IsVisibleAsync();
-#pragma warning restore RS0030
-            if (rowStillPresent)
-            {
-                await Expect(unlinkButton).ToBeEnabledAsync(new() { Timeout = 10000 });
-                await unlinkButton.ClickAsync();
-                await Expect(Snackbar).ToBeVisibleAsync(new() { Timeout = 15000 });
-            }
-            else
-            {
-                // Row is gone — the unlink succeeded silently; re-throw to surface any other issue.
-                throw;
-            }
-        }
+        // Snackbar indicates the operation completed
+        await Expect(Snackbar).ToBeVisibleAsync(new() { Timeout = 10000 });
     }
 
     #endregion

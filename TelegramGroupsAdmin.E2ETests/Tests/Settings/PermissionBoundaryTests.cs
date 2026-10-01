@@ -1,3 +1,4 @@
+using static TelegramGroupsAdmin.E2ETests.PageObjects.BlazorPageExtensions;
 using System.Text.RegularExpressions;
 using Microsoft.Playwright;
 using TelegramGroupsAdmin.E2ETests.PageObjects.Settings;
@@ -204,7 +205,7 @@ public class PermissionBoundaryTests : AuthenticatedTestBase
 
         // Act
         await NavigateToAsync("/audit");
-        await Page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        await Page.WaitForInteractiveAsync();
 
         // Assert - Should be on audit page
         var pageTitle = Page.Locator(".mud-typography-h4");
@@ -238,7 +239,7 @@ public class PermissionBoundaryTests : AuthenticatedTestBase
 
         // Act
         await NavigateToAsync("/reports");
-        await Page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        await Page.WaitForInteractiveAsync();
 
         // Assert - Should be able to access (page title visible)
         var pageTitle = Page.Locator(".mud-typography-h4");
@@ -253,7 +254,7 @@ public class PermissionBoundaryTests : AuthenticatedTestBase
 
         // Act
         await NavigateToAsync("/users");
-        await Page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        await Page.WaitForInteractiveAsync();
 
         // Assert - Should be able to access (page title visible)
         var pageTitle = Page.Locator(".mud-typography-h4");

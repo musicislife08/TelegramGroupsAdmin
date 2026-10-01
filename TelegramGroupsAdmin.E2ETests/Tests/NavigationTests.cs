@@ -21,15 +21,6 @@ public class NavigationTests : E2ETestBase
     }
 
     /// <summary>
-    /// Waits for page to stabilize after navigation/redirect.
-    /// NetworkIdle ensures SignalR connection is established for Blazor Server.
-    /// </summary>
-    private async Task WaitForPageStableAsync()
-    {
-        await Page.WaitForLoadStateAsync(LoadState.NetworkIdle);
-    }
-
-    /// <summary>
     /// Waits until the URL contains the expected path using Playwright's auto-retry.
     /// Uses Expect() which automatically retries until timeout.
     /// </summary>
@@ -48,7 +39,6 @@ public class NavigationTests : E2ETestBase
 
         // Act - navigate to login page
         await NavigateToAsync("/login");
-        await WaitForPageStableAsync();
 
         // Assert - should redirect to register page (first-run mode)
         // The app redirects to /register when no users exist
@@ -71,7 +61,6 @@ public class NavigationTests : E2ETestBase
 
         // Act - navigate to root
         await NavigateToAsync("/");
-        await WaitForPageStableAsync();
 
         // Assert - should eventually end up at register
         // Root may redirect through login first, then to register

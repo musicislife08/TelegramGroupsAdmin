@@ -25,8 +25,8 @@ public class HomePage
     public async Task NavigateAsync()
     {
         await _page.GotoAsync("/");
-        // Dashboard has interactive stats - need Blazor circuit connected
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        // Dashboard has interactive stats - need the Blazor circuit live
+        await _page.WaitForInteractiveAsync();
     }
 
     /// <summary>

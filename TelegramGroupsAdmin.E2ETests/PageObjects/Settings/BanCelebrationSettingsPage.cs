@@ -67,7 +67,7 @@ public class BanCelebrationSettingsPage
     public async Task NavigateAsync()
     {
         await _page.GotoAsync(PagePath);
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        await _page.WaitForInteractiveAsync();
     }
 
     /// <summary>
@@ -84,18 +84,7 @@ public class BanCelebrationSettingsPage
 
         // Wait for loading indicator to disappear
         var loadingIndicator = _page.Locator(LoadingIndicator);
-        try
-        {
-            await loadingIndicator.WaitForAsync(new LocatorWaitForOptions
-            {
-                State = WaitForSelectorState.Hidden,
-                Timeout = 5000
-            });
-        }
-        catch (TimeoutException)
-        {
-            // Loading indicator may have already disappeared
-        }
+        await Expect(loadingIndicator).Not.ToBeVisibleAsync(new() { Timeout = 5000 });
     }
 
     #endregion

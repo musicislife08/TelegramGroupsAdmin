@@ -48,7 +48,8 @@ public class MessagesPage
     /// </summary>
     public async Task NavigateAsync()
     {
-        await _page.GotoAsync("/messages", new PageGotoOptions { WaitUntil = WaitUntilState.NetworkIdle });
+        await _page.GotoAsync("/messages");
+        await _page.WaitForInteractiveAsync();
         await Expect(Layout).ToBeVisibleAsync();
     }
 
@@ -69,7 +70,8 @@ public class MessagesPage
         if (queryParams.Count > 0)
             url += "?" + string.Join("&", queryParams);
 
-        await _page.GotoAsync(url, new PageGotoOptions { WaitUntil = WaitUntilState.NetworkIdle });
+        await _page.GotoAsync(url);
+        await _page.WaitForInteractiveAsync();
         await Expect(Layout).ToBeVisibleAsync();
     }
 

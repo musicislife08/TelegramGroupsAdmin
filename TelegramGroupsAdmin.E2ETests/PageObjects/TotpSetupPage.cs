@@ -47,18 +47,7 @@ public class TotpSetupPage
         });
 
         // Wait for either the setup steps to load or an error message
-        try
-        {
-            await SetupSteps.Or(ErrorAlert).WaitForAsync(new LocatorWaitForOptions
-            {
-                State = WaitForSelectorState.Visible,
-                Timeout = timeoutMs
-            });
-        }
-        catch (PlaywrightException)
-        {
-            // May timeout if redirect happens
-        }
+        await Expect(SetupSteps.Or(ErrorAlert).First).ToBeVisibleAsync(new() { Timeout = timeoutMs });
     }
 
     /// <summary>The page title.</summary>

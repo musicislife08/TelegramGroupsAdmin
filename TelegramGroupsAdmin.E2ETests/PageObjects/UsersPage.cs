@@ -53,7 +53,8 @@ public class UsersPage
     /// </summary>
     public async Task NavigateAsync()
     {
-        await _page.GotoAsync("/users", new PageGotoOptions { WaitUntil = WaitUntilState.NetworkIdle });
+        await _page.GotoAsync("/users");
+        await _page.WaitForInteractiveAsync();
         await Expect(PageTitle).ToBeVisibleAsync();
     }
 
@@ -62,8 +63,8 @@ public class UsersPage
     /// </summary>
     public async Task WaitForLoadAsync(int timeoutMs = 15000)
     {
-        // Wait for Blazor SignalR circuit to be established (required for interactivity)
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        // Wait for the Blazor circuit to be live (required for interactivity)
+        await _page.WaitForInteractiveAsync();
 
         // Wait for tabs to be visible
         await Expect(Tabs).ToBeVisibleAsync(new() { Timeout = timeoutMs });

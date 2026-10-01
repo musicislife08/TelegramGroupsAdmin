@@ -28,7 +28,8 @@ public class ForgotPasswordPage
     /// </summary>
     public async Task NavigateAsync()
     {
-        await _page.GotoAsync("/forgot-password", new PageGotoOptions { WaitUntil = WaitUntilState.NetworkIdle });
+        await _page.GotoAsync("/forgot-password");
+        await _page.WaitForInteractiveAsync();
         await Expect(PageTitle).ToBeVisibleAsync();
     }
 

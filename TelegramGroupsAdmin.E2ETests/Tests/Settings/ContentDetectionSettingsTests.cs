@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Microsoft.Playwright;
 using TelegramGroupsAdmin.E2ETests.PageObjects;
 using static Microsoft.Playwright.Assertions;
@@ -272,25 +273,11 @@ public class ContentDetectionSettingsTests : AuthenticatedTestBase
 
         // Act - try to navigate to settings
         await Page.GotoAsync("/settings/content-detection/algorithms");
-        await Page.WaitForLoadStateAsync(LoadState.NetworkIdle);
 
-        // Assert - should be redirected or show access denied
-        // Check that we're not on the expected settings page with algorithm content visible
-#pragma warning disable RS0030 // Test deliberately reports Pass/Warn instead of asserting; the read only picks the message
-        var hasAlgorithmCards = await Page.Locator(".mud-card-header:has-text('Stop Words Detection')").IsVisibleAsync();
-#pragma warning restore RS0030
-
-        // If Admin CAN see Detection Algorithms, they have access (which may be intended)
-        // If they can't, they'll see an error or be redirected
-        if (!hasAlgorithmCards)
-        {
-            Assert.Pass("Admin correctly blocked from Content Detection settings");
-        }
-        else
-        {
-            // Admin can see it - the policy may allow it
-            Assert.Warn("Admin can access Content Detection settings - verify if this is intended");
-        }
+        // Assert - Settings is [Authorize(GlobalAdminOrOwner)], so an Admin is always redirected away
+        // (server forbid -> /access-denied?ReturnUrl=..., or the router's NotAuthorized -> /login).
+        // Retry until the redirect lands; the encoded ReturnUrl does not match the pattern.
+        await Expect(Page).Not.ToHaveURLAsync(new Regex(@"/settings(?:[/?#]|$)"));
     }
 
     [Test]

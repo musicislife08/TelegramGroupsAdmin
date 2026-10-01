@@ -31,8 +31,8 @@ public class SettingsPage
     /// </summary>
     public async Task WaitForLoadAsync()
     {
-        // Settings page has complex interactivity - NetworkIdle ensures Blazor SignalR circuit is established
-        await Page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        // Settings page has complex interactivity - wait for the Blazor circuit to be live
+        await Page.WaitForInteractiveAsync();
     }
 
     /// <summary>

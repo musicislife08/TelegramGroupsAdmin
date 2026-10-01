@@ -29,8 +29,9 @@ public class RegisterPage
     /// </summary>
     public async Task NavigateAsync()
     {
-        // NetworkIdle ensures SignalR connection is established for this interactive Blazor page
-        await _page.GotoAsync("/register", new PageGotoOptions { WaitUntil = WaitUntilState.NetworkIdle });
+        // Interactive Blazor page: wait for the live circuit before interacting
+        await _page.GotoAsync("/register");
+        await _page.WaitForInteractiveAsync();
         // Wait for MudBlazor to fully render - wait for the Create Account button
         await _page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "Create Account" }).WaitForAsync();
     }
