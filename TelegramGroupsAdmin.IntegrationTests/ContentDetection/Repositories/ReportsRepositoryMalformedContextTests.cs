@@ -11,9 +11,11 @@ namespace TelegramGroupsAdmin.IntegrationTests.ContentDetection.Repositories;
 
 /// <summary>
 /// One report whose JSONB context no longer deserializes must not take the whole queue down:
-/// <see cref="ReportsRepository"/> list queries skip that row with a warning naming the report id
-/// (never the payload) and return every other row. The malformed row is the assertion subject, so
-/// it is written here (a raw UPDATE of a canonical row) — the only write in these tests.
+/// <see cref="ReportsRepository"/> queue list queries skip that row with a warning naming the report
+/// id (never the payload) and return every other row — while the per-user sibling-cleanup query keeps
+/// throwing, so an Allow never strands a pending alert. The malformed row is the assertion subject and
+/// is produced by <see cref="CorruptContextAsync"/> (a sanctioned raw UPDATE of one pinned canonical
+/// row on this test's clone; see the TEST-DATA RULE EXCEPTION there) — the only write in these tests.
 /// Integration level because the skip lives in the repository's per-row mapping loop; the mapping
 /// extension itself is static and throws by design.
 /// </summary>
@@ -59,8 +61,7 @@ public class ReportsRepositoryMalformedContextTests
         Assert.That(profileScanAlerts, Is.GreaterThan(1));
 
         // The subject: aiSignals is string[]; a string there is what a sanitizer artifact once produced.
-        await _helper.ExecuteSqlAsync(
-            $"UPDATE reports SET context = jsonb_set(context, '{{aiSignals}}', '\"a, b\"') WHERE id = {malformedId}");
+        await CorruptContextAsync(malformedId, "aiSignals", "\"a, b\"");
 
         var results = await _repository!.GetProfileScanAlertsAsync(pendingOnly: false, CancellationToken.None);
 
@@ -77,8 +78,7 @@ public class ReportsRepositoryMalformedContextTests
         Assert.That(examResults, Is.GreaterThan(1));
 
         // The subject: score is an int; a string there cannot be read.
-        await _helper.ExecuteSqlAsync(
-            $"UPDATE reports SET context = jsonb_set(context, '{{score}}', '\"ninety\"') WHERE id = {malformedId}");
+        await CorruptContextAsync(malformedId, "score", "\"ninety\"");
 
         var results = await _repository!.GetExamResultsAsync(pendingOnly: false, cancellationToken: CancellationToken.None);
 
@@ -110,13 +110,27 @@ public class ReportsRepositoryMalformedContextTests
     public async Task GetPendingProfileScanAlertsForUserAsync_ThrowsWhenAPendingAlertDoesNotDeserialize()
     {
         const long malformedId = GoldenDatasetConstants.Reports.PendingProfileScanAlertId;
-        await _helper!.ExecuteSqlAsync(
-            $"UPDATE reports SET context = jsonb_set(context, '{{aiSignals}}', '\"a, b\"') WHERE id = {malformedId}");
+        await CorruptContextAsync(malformedId, "aiSignals", "\"a, b\"");
 
         Assert.That(
             () => _repository!.GetPendingProfileScanAlertsForUserAsync(
                 GoldenDatasetConstants.Reports.PendingFixturesTelegramUserId, CancellationToken.None),
             Throws.TypeOf<System.Text.Json.JsonException>());
+    }
+
+    /// <summary>
+    /// Overwrites one key of a pinned canonical report's <c>context</c> with <paramref name="jsonValue"/>.
+    /// </summary>
+    private async Task CorruptContextAsync(long reportId, string key, string jsonValue)
+    {
+        // TEST-DATA RULE EXCEPTION: directly overwrite one canonical report's context via raw SQL
+        // rather than via a GoldenMutatePlanBuilder verb. The golden dataset is scrubbed real prod
+        // data and must never carry a deserialization-breaking context by construction
+        // (CanonicalReportContextShapeTests forbids it), and a builder verb for this one fixture
+        // would be YAGNI. No rows are added or removed — only one pinned existing row's column
+        // value is overwritten, on this test's own clone. The malformed row is the assertion subject.
+        await _helper!.ExecuteSqlAsync(
+            $"UPDATE reports SET context = jsonb_set(context, '{{{key}}}', '{jsonValue}') WHERE id = {reportId}");
     }
 
     private void AssertSkipWasLogged(long reportId, string payloadFragment)
