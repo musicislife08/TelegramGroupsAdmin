@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Playwright;
@@ -42,6 +43,13 @@ public abstract class GoldenE2ETestBase : E2ETestBase
             GoldenTemplates.ConnectionStringFor(E2EFixture.BaseConnectionString, DatabaseName)) { Pooling = false };
         return new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(cs.ConnectionString).Options);
     }
+
+    /// <summary>
+    /// The key ring every golden-test app instance shares (the one the template's encrypted columns were
+    /// protected with). For mutate verbs that write encrypted columns in <see cref="ArrangeDataAsync"/>.
+    /// </summary>
+    protected static IDataProtectionProvider SharedKeyRing() => DataProtectionProvider.Create(
+        new DirectoryInfo(E2EFixture.SharedKeysDirectory), b => b.SetApplicationName("TgSpamPreFilter"));
 
     protected override async Task<TestWebApplicationFactory> CreateFactoryAsync()
     {

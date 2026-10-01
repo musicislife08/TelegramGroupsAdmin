@@ -144,6 +144,13 @@ public class ResetPasswordPage
         });
     }
 
+    /// <summary>Clicks the "Sign In" link (an interactive page: the live circuit must be up first).</summary>
+    public async Task ClickSignInLinkAsync()
+    {
+        await _page.WaitForInteractiveAsync();
+        await _page.ClickAsync(SignInLink);
+    }
+
     /// <summary>The success alert shown after the password is reset.</summary>
     public ILocator SuccessAlert => _page.Locator(SuccessAlertSelector);
 

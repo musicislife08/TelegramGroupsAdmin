@@ -88,6 +88,13 @@ public class ForgotPasswordPage
         });
     }
 
+    /// <summary>Clicks the "Sign In" link (an interactive page: the live circuit must be up first).</summary>
+    public async Task ClickSignInLinkAsync()
+    {
+        await _page.WaitForInteractiveAsync();
+        await _page.ClickAsync(SignInLink);
+    }
+
     /// <summary>The page title.</summary>
     public ILocator PageTitle => _page.Locator(PageTitleSelector);
 
