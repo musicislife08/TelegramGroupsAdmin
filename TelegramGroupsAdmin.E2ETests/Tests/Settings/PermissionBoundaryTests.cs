@@ -172,10 +172,12 @@ public class PermissionBoundaryTests : AuthenticatedTestBase
         await settingsPage.NavigateAsync();
         await settingsPage.WaitForLoadAsync();
 
-        // Assert - Should be able to access (no access denied). The sidebar heading renders in the
-        // same pass as any access denied alert, so asserting it first keeps the absence check honest.
+        // Assert - Should be able to access: the page body rendered past the Authorize gate and the URL
+        // stayed on /settings (an unauthorised role is redirected away, see Admin_CannotAccessSettingsPage).
+        // Settings.razor has no page-level access-denied alert to check for; the per-section
+        // "Owner access required" alert is a different fact, asserted in GlobalAdmin_CannotSeeInfrastructureSettings.
         await Expect(settingsPage.SettingsSidebarHeading).ToBeVisibleAsync();
-        await Expect(settingsPage.AccessDeniedAlert).Not.ToBeVisibleAsync();
+        await Expect(Page).ToHaveURLAsync(new Regex(@"/settings(?:[/?#]|$)"));
     }
 
     [Test]
@@ -198,6 +200,9 @@ public class PermissionBoundaryTests : AuthenticatedTestBase
 
         // ...but the Owner-only infrastructure links are hidden
         await Expect(settingsPage.GeneralSettingsLink).Not.ToBeVisibleAsync();
+
+        // ...and the default section (General, infrastructure) shows the Owner-access-required alert in place of its body
+        await Expect(settingsPage.OwnerAccessRequiredAlert).ToBeVisibleAsync();
     }
 
     [Test]

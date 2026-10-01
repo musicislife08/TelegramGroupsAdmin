@@ -15,7 +15,12 @@ public class SettingsPage
     private const string PageTitle = ".mud-typography-h4";
     private const string LoadingIndicator = ".mud-progress-linear";
     private const string SettingsSidebarHeadingSelector = ".mud-typography-h6:has-text('Settings')";
-    private const string AccessDeniedAlertSelector = ".mud-alert-error";
+    // MudBlazor 9 renders MudAlert severity as mud-alert-{variant}-{severity}; the default Text variant
+    // gives .mud-alert-text-error (plain .mud-alert-error never matches). Settings.razor is
+    // [Authorize(GlobalAdminOrOwner)], so it has no page-level access-denied alert: its only error alert
+    // is the per-section one a non-Owner gets in place of an infrastructure section's body.
+    private const string ErrorAlertSelector = ".mud-alert-text-error";
+    private const string OwnerAccessRequiredText = "Owner access required for infrastructure settings";
 
     // Settings navigation links (in sidebar)
     private const string GeneralSettingsLinkSelector = "a[href='/settings/system/general']";
@@ -40,11 +45,11 @@ public class SettingsPage
     /// </summary>
     public async Task WaitForLoadAsync()
     {
-        // Wait for either the page content or access denied message
+        // Wait for either the section title or the Owner-access-required alert that replaces a section body.
+        // Both render for a non-Owner on an infrastructure section, so take .First (WaitForAsync is strict).
         var pageContent = _page.Locator(PageTitle);
-        var accessDenied = _page.Locator(AccessDeniedAlertSelector);
 
-        await pageContent.Or(accessDenied).WaitForAsync(new LocatorWaitForOptions
+        await pageContent.Or(OwnerAccessRequiredAlert).First.WaitForAsync(new LocatorWaitForOptions
         {
             State = WaitForSelectorState.Visible,
             Timeout = 10000
@@ -55,9 +60,9 @@ public class SettingsPage
         await Expect(loadingIndicator).Not.ToBeVisibleAsync(new() { Timeout = 5000 });
 
         // Wait for the settings sidebar heading to confirm the page body has rendered past the auth gate,
-        // or for the access denied alert. The sidebar "Settings" h6 is always present for any authorised
-        // user (it lives outside the permission-gated nav links), so it is safe to wait on regardless of role.
-        await Expect(SettingsSidebarHeading.Or(AccessDeniedAlert).First).ToBeVisibleAsync(new() { Timeout = 15000 });
+        // or for the Owner-access-required alert. The sidebar "Settings" h6 is always present for any
+        // authorised user (it lives outside the permission-gated nav links), so it is safe to wait on regardless of role.
+        await Expect(SettingsSidebarHeading.Or(OwnerAccessRequiredAlert).First).ToBeVisibleAsync(new() { Timeout = 15000 });
     }
 
     /// <summary>
@@ -67,9 +72,12 @@ public class SettingsPage
     public ILocator SettingsSidebarHeading => _page.Locator(SettingsSidebarHeadingSelector).First;
 
     /// <summary>
-    /// The access denied / error alert. Its absence means the settings page loaded successfully.
+    /// The "Owner access required for infrastructure settings" alert that Settings.razor renders in place of an
+    /// infrastructure section's body for a non-Owner (the default /settings section, General, is one). It is the
+    /// page's only error alert: an unauthorised role never reaches the page at all (the Authorize policy redirects).
     /// </summary>
-    public ILocator AccessDeniedAlert => _page.Locator(AccessDeniedAlertSelector);
+    public ILocator OwnerAccessRequiredAlert =>
+        _page.Locator(ErrorAlertSelector).Filter(new() { HasText = OwnerAccessRequiredText });
 
     /// <summary>
     /// The General settings nav link, representative of the infrastructure settings links (Owner only).

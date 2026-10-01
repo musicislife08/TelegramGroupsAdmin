@@ -149,8 +149,7 @@ public class InviteGoldenTests : GoldenE2ETestBase
         // The note promised an immediate login: a new account lands on TOTP setup (TotpEnabled by default).
         var login = new LoginPage(Page);
         await login.LoginAsync(email, password);
-        await Page.WaitForURLAsync("**/login/setup-2fa**", new() { Timeout = 10000 });
-        await Expect(Page).ToHaveURLAsync(new Regex("/login/setup-2fa"));
+        await Expect(Page).ToHaveURLAsync(new Regex("/login/setup-2fa"), new() { Timeout = 10000 });
 
         await using var ctx = CreateDbContext();
         var normalizedEmail = email.ToUpperInvariant();
@@ -191,9 +190,13 @@ public class InviteGoldenTests : GoldenE2ETestBase
 #pragma warning restore RS0030
     }
 
+    /// <summary>The <c>invite</c> query value of a generated link (<c>{BaseUri}register?invite={token}</c>).</summary>
     private static string TokenFromLink(string inviteLink)
     {
-        const string Marker = "invite=";
-        return inviteLink[(inviteLink.IndexOf(Marker, StringComparison.Ordinal) + Marker.Length)..];
+        var query = new Uri(inviteLink).Query.TrimStart('?');
+        var invite = query.Split('&', StringSplitOptions.RemoveEmptyEntries)
+            .Select(pair => pair.Split('=', 2))
+            .Single(kv => kv[0] == "invite");
+        return Uri.UnescapeDataString(invite[1]);
     }
 }
