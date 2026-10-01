@@ -342,10 +342,18 @@ public class UsersTests : SharedAuthenticatedTestBase
         await _usersPage.NavigateAsync();
         await _usersPage.WaitForLoadAsync();
 
-        // Assert - user info is displayed
-        // At least one row shows a non-empty name
-        await Expect(_usersPage.UserDisplayNames.Filter(new() { HasTextRegex = new Regex(@"\S") }).First)
-            .ToBeVisibleAsync();
+        // Assert - the seeded user's row is listed on the default (All) tab
+        await Expect(_usersPage.UserRow("Info User")).ToBeVisibleAsync();
+
+        // Switch to the Active tab, which shows per-user Chats and Status columns
+        await _usersPage.SelectTabAsync("Active");
+        await Expect(_usersPage.UserRow("Info User")).ToBeVisibleAsync();
+
+        // Chats = number of distinct chats the user has messaged in (one seeded message, one chat)
+        await Expect(_usersPage.UserChatsCell("Info User")).ToHaveTextAsync(new Regex(@"^\s*1\s*$"));
+
+        // Status = Clean (not trusted, banned, warned or tagged); the chip prefixes a status icon
+        await Expect(_usersPage.UserStatusChip("Info User")).ToContainTextAsync("Clean");
     }
 
     [Test]
