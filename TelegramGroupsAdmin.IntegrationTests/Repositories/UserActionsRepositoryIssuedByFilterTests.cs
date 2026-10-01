@@ -182,6 +182,30 @@ public class UserActionsRepositoryIssuedByFilterTests
         Assert.That(total, Is.Zero);
     }
 
+    [Test]
+    public async Task GetRecent_NamesIssuersTheWayTheAuditColumnRenders()
+    {
+        // Home's Recent Activity widget reads GetRecentAsync; its issuers must carry the same text as the Audit page.
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var ownerEmail = await context.Users.AsNoTracking()
+            .Where(u => u.Id == OwnerId).Select(u => u.Email).SingleAsync();
+        var admin = await context.TelegramUsers.AsNoTracking()
+            .Where(u => u.TelegramUserId == TelegramAdminId)
+            .Select(u => new { u.Username, u.FirstName, u.LastName })
+            .SingleAsync();
+        var adminName = TelegramDisplayName.Format(admin.FirstName, admin.LastName, admin.Username, TelegramAdminId);
+
+        var recent = await _repository.GetRecentAsync(AllRows);
+
+        var ownerRows = recent.Where(a => a.IssuedBy.WebUserId == OwnerId).ToList();
+        Assert.That(ownerRows, Is.Not.Empty, "canonical must carry Owner-issued actions");
+        Assert.That(ownerRows.Select(a => a.IssuedBy.DisplayName).Distinct(), Is.EqualTo([ownerEmail]));
+
+        var adminRows = recent.Where(a => a.IssuedBy.TelegramUserId == TelegramAdminId).ToList();
+        Assert.That(adminRows, Is.Not.Empty, "canonical must carry Telegram-admin-issued actions");
+        Assert.That(adminRows.Select(a => a.IssuedBy.DisplayName).Distinct(), Is.EqualTo([adminName]));
+    }
+
     private async Task<List<long>> IdsWhereAsync(System.Linq.Expressions.Expression<Func<Data.Models.UserActionRecordDto, bool>> predicate)
     {
         await using var context = await _contextFactory.CreateDbContextAsync();

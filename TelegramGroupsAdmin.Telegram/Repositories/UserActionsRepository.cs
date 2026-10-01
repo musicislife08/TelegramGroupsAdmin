@@ -209,10 +209,41 @@ public class UserActionsRepository : IUserActionsRepository
             .Take(limit)
             .ToListAsync(cancellationToken);
 
-        return entities.Select(e => e.ToModel(
-            targetUsername: e.TargetUser?.Username,
-            targetFirstName: e.TargetUser?.FirstName,
-            targetLastName: e.TargetUser?.LastName)).ToList();
+        return await ToModelsWithIssuersAsync(context, entities, cancellationToken);
+    }
+
+    /// <summary>
+    /// Maps entities (loaded with TargetUser) to models, enriching issuers the way the Audit column renders
+    /// them: web users by email, Telegram admins by name (without this a Telegram issuer would display as "User &lt;id&gt;").
+    /// </summary>
+    private static async Task<List<UserActionRecord>> ToModelsWithIssuersAsync(
+        AppDbContext context,
+        List<Data.Models.UserActionRecordDto> entities,
+        CancellationToken cancellationToken)
+    {
+        var issuerWebUserIds = entities.Where(e => e.WebUserId != null).Select(e => e.WebUserId!).Distinct().ToList();
+        var issuerEmails = await context.Users.AsNoTracking()
+            .Where(u => issuerWebUserIds.Contains(u.Id))
+            .ToDictionaryAsync(u => u.Id, u => u.Email, cancellationToken);
+
+        var issuerTelegramIds = entities.Where(e => e.TelegramUserId != null).Select(e => e.TelegramUserId!.Value).Distinct().ToList();
+        var issuerTelegramUsers = await context.TelegramUsers.AsNoTracking()
+            .Where(t => issuerTelegramIds.Contains(t.TelegramUserId))
+            .Select(t => new { t.TelegramUserId, t.Username, t.FirstName, t.LastName })
+            .ToDictionaryAsync(t => t.TelegramUserId, t => t, cancellationToken);
+
+        return entities.Select(e =>
+        {
+            var issuer = e.TelegramUserId is { } telegramId && issuerTelegramUsers.TryGetValue(telegramId, out var found) ? found : null;
+            return e.ToModel(
+                webUserEmail: e.WebUserId != null && issuerEmails.TryGetValue(e.WebUserId, out var email) ? email : null,
+                telegramUsername: issuer?.Username,
+                telegramFirstName: issuer?.FirstName,
+                telegramLastName: issuer?.LastName,
+                targetUsername: e.TargetUser?.Username,
+                targetFirstName: e.TargetUser?.FirstName,
+                targetLastName: e.TargetUser?.LastName);
+        }).ToList();
     }
 
     public async Task<(List<UserActionRecord> Actions, int TotalCount)> GetPagedActionsAsync(
@@ -272,31 +303,7 @@ public class UserActionsRepository : IUserActionsRepository
             .Take(take)
             .ToListAsync(cancellationToken);
 
-        // Enrich the page's issuers the way the column renders them: web users by email, Telegram
-        // admins by name (without this a Telegram issuer would display as "User <id>").
-        var issuerWebUserIds = entities.Where(e => e.WebUserId != null).Select(e => e.WebUserId!).Distinct().ToList();
-        var issuerEmails = await context.Users.AsNoTracking()
-            .Where(u => issuerWebUserIds.Contains(u.Id))
-            .ToDictionaryAsync(u => u.Id, u => u.Email, cancellationToken);
-
-        var issuerTelegramIds = entities.Where(e => e.TelegramUserId != null).Select(e => e.TelegramUserId!.Value).Distinct().ToList();
-        var issuerTelegramUsers = await context.TelegramUsers.AsNoTracking()
-            .Where(t => issuerTelegramIds.Contains(t.TelegramUserId))
-            .Select(t => new { t.TelegramUserId, t.Username, t.FirstName, t.LastName })
-            .ToDictionaryAsync(t => t.TelegramUserId, t => t, cancellationToken);
-
-        var actions = entities.Select(e =>
-        {
-            var issuer = e.TelegramUserId is { } telegramId && issuerTelegramUsers.TryGetValue(telegramId, out var found) ? found : null;
-            return e.ToModel(
-                webUserEmail: e.WebUserId != null && issuerEmails.TryGetValue(e.WebUserId, out var email) ? email : null,
-                telegramUsername: issuer?.Username,
-                telegramFirstName: issuer?.FirstName,
-                telegramLastName: issuer?.LastName,
-                targetUsername: e.TargetUser?.Username,
-                targetFirstName: e.TargetUser?.FirstName,
-                targetLastName: e.TargetUser?.LastName);
-        }).ToList();
+        var actions = await ToModelsWithIssuersAsync(context, entities, cancellationToken);
 
         return (actions, totalCount);
     }
