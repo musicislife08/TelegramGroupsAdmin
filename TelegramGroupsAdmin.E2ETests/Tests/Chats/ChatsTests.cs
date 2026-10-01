@@ -321,9 +321,11 @@ public class ChatsTests : SharedAuthenticatedTestBase
         await _chatsPage.NavigateAsync();
         await _chatsPage.WaitForLoadAsync();
 
-        // Assert - Configure button exists (we test it's clickable)
-        // Note: Actually clicking it opens a dialog which we test separately
+        // Assert - the chat row renders an enabled Configure button
+        // (clicking it opens the config dialog, covered by Chats_OpensConfigDialog_WhenConfigureClicked)
         await Expect(_chatsPage.ChatName("Configurable Chat")).ToBeVisibleAsync();
+        await Expect(_chatsPage.ConfigureButtonFor("Configurable Chat")).ToBeVisibleAsync();
+        await Expect(_chatsPage.ConfigureButtonFor("Configurable Chat")).ToBeEnabledAsync();
     }
 
     [Test]

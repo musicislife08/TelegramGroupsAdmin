@@ -157,12 +157,15 @@ public class ChatsPage
     /// </summary>
     public ILocator CustomConfigIcon(string chatName) => ChatRow(chatName).Locator($"{CustomConfigCell} .mud-icon-root");
 
+    /// <summary>The Configure button in the row of the chat named <paramref name="chatName"/>.</summary>
+    public ILocator ConfigureButtonFor(string chatName) => ChatRow(chatName).Locator(ConfigureButton);
+
     /// <summary>
     /// Clicks the Configure button for a chat by its name.
     /// </summary>
     public async Task ClickConfigureAsync(string chatName)
     {
-        await ChatRow(chatName).Locator(ConfigureButton).ClickAsync();
+        await ConfigureButtonFor(chatName).ClickAsync();
         await Expect(_page.GetByRole(AriaRole.Dialog)).ToBeVisibleAsync();
     }
 
