@@ -288,7 +288,8 @@ public class RecoveryCodesTests : SharedE2ETestBase
         await _verifyPage.ClickUseRecoveryCodeAsync();
         await _verifyPage.WaitForRecoveryCodeFormAsync();
 
-        // Assert - recovery code form replaces the authenticator form
+        // Assert - recovery code form replaces the authenticator form (useRecovery=true in the URL)
+        await Expect(Page).ToHaveURLAsync(new Regex(@"/login/verify\?.*useRecovery=true"));
         await Expect(_verifyPage.RecoveryCodeInput).ToBeVisibleAsync();
         await Expect(_verifyPage.TotpCodeInput).Not.ToBeVisibleAsync();
 
@@ -298,7 +299,8 @@ public class RecoveryCodesTests : SharedE2ETestBase
         // Act - go back to the authenticator form
         await _verifyPage.ClickBackToAuthenticatorAsync();
 
-        // Assert - authenticator form is back and the recovery form is gone
+        // Assert - authenticator form is back (no useRecovery flag) and the recovery form is gone
+        await Expect(Page).Not.ToHaveURLAsync(new Regex(@"useRecovery=true"));
         await Expect(_verifyPage.TotpCodeInput).ToBeVisibleAsync();
         await Expect(_verifyPage.RecoveryCodeInput).Not.ToBeVisibleAsync();
         await Expect(_verifyPage.UseRecoveryCodeLink).ToBeVisibleAsync();

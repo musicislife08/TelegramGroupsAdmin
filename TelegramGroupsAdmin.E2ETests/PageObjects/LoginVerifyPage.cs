@@ -147,11 +147,14 @@ public class LoginVerifyPage
     }
 
     /// <summary>
-    /// Clicks the "Back to authenticator code" link.
+    /// Clicks the "Back to authenticator code" link and waits for the authenticator form to render.
+    /// The link is a full navigation (static SSR page), so waiting on the TOTP input keeps later
+    /// assertions from running against the unloading recovery form.
     /// </summary>
     public async Task ClickBackToAuthenticatorAsync()
     {
         await _page.ClickAsync(BackToAuthenticatorLinkSelector);
+        await Expect(TotpCodeInput).ToBeVisibleAsync();
     }
 
     /// <summary>
