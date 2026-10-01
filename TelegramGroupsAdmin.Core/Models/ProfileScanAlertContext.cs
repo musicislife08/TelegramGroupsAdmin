@@ -1,5 +1,4 @@
 using System.Text.Json.Serialization;
-using TelegramGroupsAdmin.Core.Utilities;
 
 namespace TelegramGroupsAdmin.Core.Models;
 
@@ -20,12 +19,7 @@ public record ProfileScanAlertContext
     [JsonPropertyName("aiReason")]
     public string? AiReason { get; init; }
 
-    /// <summary>
-    /// Rows written before the context carried an array store this as one comma-separated string;
-    /// both shapes read, the array shape is written.
-    /// </summary>
     [JsonPropertyName("aiSignals")]
-    [JsonConverter(typeof(CommaSeparatedOrArrayJsonConverter))]
     public string[]? AiSignals { get; init; }
 
     [JsonPropertyName("bio")]
