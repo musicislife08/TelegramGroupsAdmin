@@ -36,8 +36,8 @@ public class ChatsGoldenTests : GoldenE2ETestBase
 
         bool Unique(ChatRow c) => _all.Count(o => o.Name.Contains(c.Name, StringComparison.Ordinal)) == 1;
 
-        _activeChat = _all.First(c => c is { IsActive: true, IsDeleted: false } && Unique(c));
-        _inactiveChat = _all.First(c => c is { IsActive: false, IsDeleted: true } && Unique(c));
+        _activeChat = _all.OrderBy(c => c.ChatId).First(c => c is { IsActive: true, IsDeleted: false } && Unique(c));
+        _inactiveChat = _all.OrderBy(c => c.ChatId).First(c => c is { IsActive: false, IsDeleted: true } && Unique(c));
         Assert.That(_inactiveChat.BotStatus, Is.Not.EqualTo(_activeChat.BotStatus),
             "the anchors must differ in bot status so the chip assertions discriminate");
     }
@@ -90,6 +90,10 @@ public class ChatsGoldenTests : GoldenE2ETestBase
     [Test]
     public async Task RefreshHealth_QueuesAHealthCheckJobForThatChat()
     {
+        // The table pages at 10 rows: narrow to the chat before clicking its row's button.
+        await _chats.SearchChatsAsync(_activeChat.Name);
+        await Expect(_chats.ChatName(_activeChat.Name)).ToBeVisibleAsync();
+
         await _chats.ClickRefreshHealthAsync(_activeChat.Name);
 
         await Expect(Page.Locator(".mud-snackbar")).ToContainTextAsync("Chat health refresh queued");

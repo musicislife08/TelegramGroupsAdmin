@@ -427,7 +427,12 @@ public class ReportsPage
 
     /// <summary>The MC section header row within <paramref name="scope"/> (MudStack Row renders <c>d-flex flex-row</c>).</summary>
     public static ILocator ExamMcSectionHeaderIn(ILocator scope) =>
-        scope.Locator(".flex-row").Filter(new() { HasText = "Multiple Choice" });
+        scope.Locator(".flex-row").Filter(new()
+        {
+            HasText = "Multiple Choice",
+            // Truly innermost: drop any row that itself contains another row with the title.
+            HasNot = scope.Page.Locator(".flex-row").Filter(new() { HasText = "Multiple Choice" })
+        });
 
     /// <summary>
     /// The MC score chip, displayed as "X/Y correct (Z%)". Scoped to the Multiple Choice section of

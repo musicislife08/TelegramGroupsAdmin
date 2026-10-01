@@ -58,7 +58,7 @@ public class LoginLinksGoldenTests : GoldenE2ETestBase
         await forgot.ClickSignInLinkAsync();
 
         await Expect(Page).ToHaveURLAsync(UrlEndingIn("/login"));
-        await Expect(Page.Locator("input#email")).ToBeVisibleAsync();
+        await Expect(new LoginPage(Page).EmailField).ToBeVisibleAsync();
     }
 
     [Test]
@@ -71,7 +71,7 @@ public class LoginLinksGoldenTests : GoldenE2ETestBase
         await reset.ClickSignInLinkAsync();
 
         await Expect(Page).ToHaveURLAsync(UrlEndingIn("/login"));
-        await Expect(Page.Locator("input#email")).ToBeVisibleAsync();
+        await Expect(new LoginPage(Page).EmailField).ToBeVisibleAsync();
     }
 
     [Test]
@@ -83,6 +83,6 @@ public class LoginLinksGoldenTests : GoldenE2ETestBase
         await register.ClickSignInLinkAsync();
 
         await Expect(Page).ToHaveURLAsync(UrlEndingIn("/login"));
-        await Expect(Page.Locator("input#email")).ToBeVisibleAsync();
+        await Expect(new LoginPage(Page).EmailField).ToBeVisibleAsync();
     }
 }

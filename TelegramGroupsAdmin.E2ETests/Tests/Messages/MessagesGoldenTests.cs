@@ -28,7 +28,12 @@ public class MessagesGoldenTests : GoldenE2ETestBase
             .Select(c => new { c.ChatId, c.ChatName }).ToListAsync();
         var chatNames = chats.Select(c => c.ChatName!).ToList();
 
-        var anchors = new List<(Anchor Anchor, string Shape)>();
+        Assert.That(chatNames, Is.Unique, "the page object finds chats by exact title");
+
+        // Classify EVERY chat's newest message, so a canonical change that adds a shape this test does not
+        // assert fails here instead of passing blind.
+        var shapes = new Dictionary<string, string>();
+        var longAnchors = new List<Anchor>();
         foreach (var chat in chats)
         {
             var top = await context.Messages.AsNoTracking()
@@ -36,59 +41,54 @@ public class MessagesGoldenTests : GoldenE2ETestBase
                 .OrderByDescending(m => m.Timestamp)
                 .Select(m => new { m.Timestamp, m.MessageText, m.MediaType, m.PhotoFileId })
                 .Take(2).ToListAsync();
-            // Skip chats without messages and chats whose newest message ties with the runner-up.
-            if (top.Count == 0 || (top.Count > 1 && top[0].Timestamp == top[1].Timestamp))
-            {
-                continue;
-            }
-            // The page-object lookup is by exact title; a title that is a substring elsewhere is fine, but
-            // ambiguous duplicates are not.
-            if (chatNames.Count(n => n == chat.ChatName) != 1)
-            {
-                continue;
-            }
 
-            var latest = top[0];
-            if (latest.MediaType is { } media and not MediaType.None)
+            string shape;
+            if (top.Count == 0)
             {
-                anchors.Add((new Anchor(chat.ChatName!, MediaDisplayName(media)), "media"));
+                shape = "empty";
             }
-            else if (latest.MediaType is null && !string.IsNullOrWhiteSpace(latest.MessageText)
-                     && !CutsASurrogatePair(latest.MessageText))
+            else if (top.Count > 1 && top[0].Timestamp == top[1].Timestamp)
             {
-                var text = latest.MessageText;
-                var preview = text.Length > 40 ? text[..40] + "..." : text;
-                anchors.Add((new Anchor(chat.ChatName!, Normalize(preview)), text.Length > 40 ? "long" : "short"));
+                shape = "tied-newest";
             }
+            else if (top[0].MediaType is not null)
+            {
+                shape = top[0].MediaType == MediaType.None ? "media-none" : "media";
+            }
+            else if (string.IsNullOrWhiteSpace(top[0].MessageText))
+            {
+                shape = string.IsNullOrEmpty(top[0].PhotoFileId) ? "blank-text" : "photo-only";
+            }
+            else if (top[0].MessageText!.Length > 40)
+            {
+                var text = top[0].MessageText!;
+                shape = CutsASurrogatePair(text) ? "long-surrogate-cut" : "long";
+                if (shape == "long")
+                {
+                    longAnchors.Add(new Anchor(chat.ChatName!, Normalize(text[..40] + "...")));
+                }
+            }
+            else
+            {
+                shape = "short";
+            }
+            shapes[chat.ChatName!] = shape;
         }
 
-        // Canonical's newest message in every chat with messages is a long text (no short or media one),
-        // so the 40-character boundary and the media labels have no canonical anchor: two truncated chats.
-        var longAnchors = anchors.Where(a => a.Shape == "long").Select(a => a.Anchor).ToList();
+        // Asserted below: long text (truncated) and empty chats. Ties are skipped (no defined "newest").
+        // Anything else (short, media, photo-only, blank) has no assertion here yet.
+        var unasserted = shapes.Where(kv => kv.Value is not ("long" or "empty" or "tied-newest")).ToList();
+        Assert.That(unasserted, Is.Empty,
+            "canonical now carries a newest-message shape this test does not assert: extend the preview assertions ("
+            + string.Join(", ", unasserted.Select(kv => kv.Value).Distinct()) + ")");
+
         Assert.That(longAnchors, Has.Count.GreaterThanOrEqualTo(2));
         _truncatedText = longAnchors[0];
         _otherTruncatedText = longAnchors[1];
         Assert.That(_truncatedText.ExpectedPreview, Is.Not.EqualTo(_otherTruncatedText.ExpectedPreview));
-        Assert.That(anchors.Any(a => a.Shape is "short" or "media"), Is.False,
-            "canonical now carries a short or media newest message: extend the preview assertions to cover it");
 
-        var withMessages = await context.Messages.AsNoTracking().Select(m => m.ChatId).Distinct().ToListAsync();
-        _emptyChatName = chats.Where(c => !withMessages.Contains(c.ChatId) && chatNames.Count(n => n == c.ChatName) == 1)
-            .Select(c => c.ChatName!).First();
+        _emptyChatName = shapes.OrderBy(kv => kv.Key, StringComparer.Ordinal).First(kv => kv.Value == "empty").Key;
     }
-
-    // Independent mirror of the sidebar's media labels.
-    private static string MediaDisplayName(MediaType media) => media switch
-    {
-        MediaType.Animation => "GIF",
-        MediaType.Video => "Video",
-        MediaType.Audio => "Audio",
-        MediaType.Voice => "Voice message",
-        MediaType.Sticker => "Sticker",
-        MediaType.VideoNote => "Video message",
-        MediaType.Document => "Document",
-        _ => "Media"
-    };
 
     // HTML collapses whitespace runs and Playwright's string text assertion normalises them, so compare
     // normalised text; a cut inside a surrogate pair would render a replacement character.

@@ -60,6 +60,9 @@ public class LoginPage
     }
 
     /// <summary>The error alert (e.g. invalid credentials, unverified email, locked or disabled account).</summary>
+    /// <summary>The email input (present once the login form has rendered).</summary>
+    public ILocator EmailField => _page.Locator(EmailInput);
+
     public ILocator ErrorAlert => _page.Locator(ErrorAlertSelector);
 
     /// <summary>The success alert.</summary>
