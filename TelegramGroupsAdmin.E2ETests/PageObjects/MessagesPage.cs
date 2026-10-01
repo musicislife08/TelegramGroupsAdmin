@@ -28,7 +28,6 @@ public class MessagesPage
     private const string ChatLastMessage = ".chat-last-message";
 
     // Chat header selectors
-    private const string ChatHeaderSelector = ".chat-header";
     private const string ChatHeaderTitle = ".chat-header-title";
     private const string BackButton = ".back-button";
 
@@ -160,9 +159,6 @@ public class MessagesPage
     {
         await Expect(ActiveChatView).ToBeVisibleAsync();
     }
-
-    /// <summary>The chat header of the selected chat.</summary>
-    public ILocator ChatHeader => _page.Locator(ChatHeaderSelector);
 
     /// <summary>The selected chat's title in the chat header.</summary>
     public ILocator SelectedChatTitle => _page.Locator(ChatHeaderTitle);

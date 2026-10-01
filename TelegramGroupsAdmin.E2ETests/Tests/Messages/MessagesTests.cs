@@ -189,8 +189,9 @@ public class MessagesTests : SharedAuthenticatedTestBase
         // Wait for Blazor re-render to apply .active class
         await _messagesPage.WaitForChatViewActiveAsync();
 
-        // Assert - chat view becomes active and shows the messages container
+        // Assert - chat view becomes active for the clicked chat and shows the messages container
         await Expect(_messagesPage.ActiveChatView).ToBeVisibleAsync();
+        await Expect(_messagesPage.SelectedChatTitle).ToHaveTextAsync("Test Group");
         await Expect(_messagesPage.MessagesContainer).ToBeVisibleAsync();
     }
 
@@ -357,8 +358,9 @@ public class MessagesTests : SharedAuthenticatedTestBase
         await _messagesPage.NavigateAsync(chatId: chat.ChatId);
         await _messagesPage.WaitForLoadAsync();
 
-        // Assert - chat is auto-selected
+        // Assert - the chat named in the query string is auto-selected
         await Expect(_messagesPage.ActiveChatView).ToBeVisibleAsync();
+        await Expect(_messagesPage.SelectedChatTitle).ToHaveTextAsync("Target Chat");
     }
 
     #region User Detail Dialog Tests (#107)
