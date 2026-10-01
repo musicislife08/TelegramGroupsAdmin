@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Microsoft.Playwright;
 using static Microsoft.Playwright.Assertions;
 
@@ -119,6 +120,16 @@ public class SettingsPage
         Page.Locator(".mud-paper:has-text('Global Detection Settings')")
             .Locator(".mud-switch:has-text('Training Mode') input");
 
+    /// <summary>Clicks the Training Mode switch on the Detection Algorithms page.</summary>
+    public async Task ToggleTrainingModeAsync()
+    {
+        await Page.Locator(".mud-paper:has-text('Global Detection Settings')")
+            .Locator(".mud-switch:has-text('Training Mode')").ClickAsync();
+    }
+
+    /// <summary>The "Training Mode Active" chip beside the save button; rendered only while the bound config has Training Mode on.</summary>
+    public ILocator TrainingModeActiveChip => Page.Locator(".mud-chip").Filter(new() { HasText = "Training Mode Active" });
+
     #endregion
 
     #region Stop Words Section
@@ -211,10 +222,24 @@ public class SettingsPage
     public ILocator TrainingSampleRows => Page.Locator(".mud-table tbody tr:not(.mud-table-row-no-records)");
 
     /// <summary>
-    /// The training samples table container, filtered to one containing <paramref name="sampleText"/>.
+    /// The training sample row whose text contains <paramref name="sampleText"/>.
     /// </summary>
     public ILocator TrainingSample(string sampleText) =>
-        Page.Locator(".mud-table-container").Filter(new() { HasText = sampleText });
+        TrainingSampleRows.Filter(new() { HasText = sampleText });
+
+    /// <summary>The SPAM/CLEAN chip in the Type cell of the row containing <paramref name="sampleText"/>.</summary>
+    public ILocator TrainingSampleTypeChip(string sampleText) =>
+        TrainingSample(sampleText).Locator("td[data-label='Type'] .mud-chip").First;
+
+    /// <summary>The Source chip of the row containing <paramref name="sampleText"/>.</summary>
+    public ILocator TrainingSampleSourceChip(string sampleText) =>
+        TrainingSample(sampleText).Locator("td[data-label='Source'] .mud-chip");
+
+    /// <summary>The Source chips of every rendered training sample row (one per row).</summary>
+    public ILocator TrainingSampleSourceChips => TrainingSampleRows.Locator("td[data-label='Source'] .mud-chip");
+
+    /// <summary>The "Showing X of Y samples" counter above the training samples table.</summary>
+    public ILocator TrainingSamplesShowingText => Page.GetByText(new Regex(@"Showing \d+ of \d+ samples"));
 
     /// <summary>
     /// Selects a type filter on the Training Samples page.
@@ -362,6 +387,9 @@ public class SettingsPage
     /// </summary>
     public ILocator Snackbar => Page.Locator(".mud-snackbar").First;
 
+    /// <summary>The snackbar whose text contains <paramref name="text"/>.</summary>
+    public ILocator SnackbarWithText(string text) => Page.Locator(".mud-snackbar").Filter(new() { HasText = text });
+
     #endregion
 
     #region Service Messages Section
@@ -472,35 +500,25 @@ public class SettingsPage
     }
 
     /// <summary>
-    /// Fills in the Add Sample dialog and submits it.
+    /// Fills in the Add Training Sample dialog (AddTrainingSampleDialog.razor) and submits it.
+    /// The classification radios read "SPAM - …" and "CLEAN - …". The message field is a
+    /// non-Immediate MudTextField: clicking the radio blurs it, which commits the value, and the
+    /// Add Sample button (disabled while the bound text is empty) is awaited enabled before the click.
     /// </summary>
     public async Task FillAndSubmitAddSampleDialogAsync(string text, bool isSpam)
     {
-        // Wait for dialog to appear
         var dialog = Page.GetByRole(AriaRole.Dialog);
         await Expect(dialog).ToBeVisibleAsync();
 
-        // Fill in the text field
-        var textField = dialog.Locator("textarea").First;
-        await textField.FillAsync(text);
+        await dialog.GetByLabel("Message Text (Original)").FillAsync(text);
 
-        // Select spam/ham classification
-        if (isSpam)
-        {
-            var spamRadio = dialog.Locator(".mud-radio:has-text('Spam')");
-            await spamRadio.ClickAsync();
-        }
-        else
-        {
-            var hamRadio = dialog.Locator(".mud-radio:has-text('Ham')");
-            await hamRadio.ClickAsync();
-        }
+        var radio = dialog.Locator(".mud-radio").Filter(new() { HasText = isSpam ? "SPAM" : "CLEAN" });
+        await radio.ClickAsync();
 
-        // Click the Add button
-        var addButton = dialog.GetByRole(AriaRole.Button, new() { Name = "Add" });
+        var addButton = dialog.GetByRole(AriaRole.Button, new() { Name = "Add Sample" });
+        await Expect(addButton).ToBeEnabledAsync();
         await addButton.ClickAsync();
 
-        // Wait for dialog to close
         await Expect(dialog).Not.ToBeVisibleAsync();
     }
 
