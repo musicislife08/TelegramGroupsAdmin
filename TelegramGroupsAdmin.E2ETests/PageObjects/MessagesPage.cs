@@ -108,6 +108,16 @@ public class MessagesPage
     public ILocator NoChatsSidebar => _page.Locator(ChatListEmpty);
 
     /// <summary>
+    /// The sidebar entry of the chat titled exactly <paramref name="chatName"/> (not a substring match,
+    /// so a chat whose name contains another's still resolves to one entry).
+    /// </summary>
+    public ILocator ChatItem(string chatName) =>
+        ChatItems.Filter(new() { Has = _page.Locator(ChatTitle).Filter(new() { HasTextRegex = new Regex($@"^\s*{Regex.Escape(chatName)}\s*$") }) });
+
+    /// <summary>The last-message preview line of the chat titled exactly <paramref name="chatName"/>.</summary>
+    public ILocator ChatLastMessagePreview(string chatName) => ChatItem(chatName).Locator(ChatLastMessage);
+
+    /// <summary>
     /// Clicks on a chat by its name.
     /// </summary>
     public async Task SelectChatByNameAsync(string chatName)
