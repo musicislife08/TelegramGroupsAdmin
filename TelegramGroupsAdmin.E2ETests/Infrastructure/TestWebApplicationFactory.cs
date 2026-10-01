@@ -37,6 +37,8 @@ namespace TelegramGroupsAdmin.E2ETests.Infrastructure;
 public class TestWebApplicationFactory : WebApplicationFactory<Program>
 {
     private readonly string _databaseName;
+    private readonly bool _databaseAlreadyExists;
+    private readonly string? _sharedKeysDirectory;
     private readonly TestEmailService _testEmailService;
     private string? _tempDataPath;
     private bool _databaseCreated;
@@ -62,9 +64,21 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
     // Exam evaluation mock (for controlling AI responses in exam flow tests)
     private readonly IExamEvaluationService _mockExamEvaluationService;
 
-    public TestWebApplicationFactory(string? databaseName = null)
+    /// <param name="databaseName">Database to run against; a unique name when null.</param>
+    /// <param name="databaseAlreadyExists">
+    /// When true the database was cloned by the caller (e.g. from a golden template) and
+    /// <see cref="EnsureDatabaseCreated"/> skips CREATE DATABASE.
+    /// </param>
+    /// <param name="sharedKeysDirectory">
+    /// Data-protection key ring whose key XML files are copied into this instance's key path
+    /// before the host builds, so data encrypted under that ring decrypts in the app under test.
+    /// </param>
+    public TestWebApplicationFactory(
+        string? databaseName = null, bool databaseAlreadyExists = false, string? sharedKeysDirectory = null)
     {
         _databaseName = databaseName ?? E2EFixture.GetUniqueDatabaseName();
+        _databaseAlreadyExists = databaseAlreadyExists;
+        _sharedKeysDirectory = sharedKeysDirectory;
         _testEmailService = new TestEmailService();
 
         // Configure NSubstitute mocks with safe defaults
@@ -392,6 +406,22 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
         // Create a temp directory for data protection keys and other files
         _tempDataPath = Path.Combine(Path.GetTempPath(), "e2e_tests", _databaseName);
         Directory.CreateDirectory(_tempDataPath);
+
+        // Seed this instance's key ring from the shared one (Program.cs persists keys to {DataPath}/keys)
+        if (_sharedKeysDirectory != null)
+        {
+            var keysDir = Directory.CreateDirectory(Path.Combine(_tempDataPath, "keys"));
+            foreach (var key in Directory.EnumerateFiles(_sharedKeysDirectory, "*.xml"))
+            {
+                File.Copy(key, Path.Combine(keysDir.FullName, Path.GetFileName(key)), overwrite: true);
+            }
+        }
+
+        if (_databaseAlreadyExists)
+        {
+            _databaseCreated = true;
+            return;
+        }
 
         // Create the test database on the shared PostgreSQL container
         // Retry with exponential backoff for transient container startup delays

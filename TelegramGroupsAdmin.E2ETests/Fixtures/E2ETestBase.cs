@@ -22,12 +22,25 @@ public abstract class E2ETestBase
     /// </summary>
     protected TestEmailService EmailService => Factory.EmailService;
 
+    /// <summary>
+    /// Creates this test's factory. The default is a fresh factory with its own isolated database;
+    /// override to prepare the database first (e.g. clone a golden template).
+    /// </summary>
+    protected virtual Task<TestWebApplicationFactory> CreateFactoryAsync()
+        => Task.FromResult(new TestWebApplicationFactory());
+
+    /// <summary>
+    /// Runs as the last step of <see cref="BaseTearDown"/>, after the factory is disposed —
+    /// also when setup failed before a factory existed. Override for extra cleanup.
+    /// </summary>
+    protected virtual Task OnFactoryDisposedAsync() => Task.CompletedTask;
+
     [SetUp]
     public async Task BaseSetUp()
     {
         // Create a new factory with isolated database for each test
         // UseKestrel(0) is called in the constructor for dynamic port assignment
-        Factory = new TestWebApplicationFactory();
+        Factory = await CreateFactoryAsync();
 
         // Start the server explicitly (or access Services to trigger startup)
         Factory.StartServer();
@@ -124,6 +137,9 @@ public abstract class E2ETestBase
         if (Context != null) await Context.CloseAsync();
         if (Client != null) Client.Dispose();
         if (Factory != null) await Factory.DisposeAsync();
+
+        // Deliberately outside the null guard: runs even when CreateFactoryAsync threw
+        await OnFactoryDisposedAsync();
     }
 
     /// <summary>
