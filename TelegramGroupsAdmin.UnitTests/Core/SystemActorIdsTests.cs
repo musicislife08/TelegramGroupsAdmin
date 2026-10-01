@@ -30,6 +30,31 @@ public class SystemActorIdsTests
     }
 
     [Test]
+    public void All_ListsEveryConstant_Once()
+    {
+        var constants = typeof(SystemActorIds)
+            .GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
+            .Where(f => f.IsLiteral && f.FieldType == typeof(string))
+            .Select(f => (string)f.GetRawConstantValue()!)
+            .ToList();
+
+        Assert.That(constants, Is.Not.Empty);
+        Assert.That(SystemActorIds.All, Is.EquivalentTo(constants));
+        Assert.That(SystemActorIds.All, Is.Unique);
+    }
+
+    [Test]
+    public void SystemDisplayName_IsWhatFromSystemShows_AndEchoesUnknownIdentifiers()
+    {
+        foreach (var id in SystemActorIds.All)
+        {
+            Assert.That(Actor.SystemDisplayName(id), Is.EqualTo(Actor.FromSystem(id).DisplayName), id);
+        }
+
+        Assert.That(Actor.SystemDisplayName("not_a_known_actor"), Is.EqualTo("not_a_known_actor"));
+    }
+
+    [Test]
     public void FromSystem_ResolvesDisplayName_ForEveryKnownConstant()
     {
         Assert.That(Actor.FromSystem(SystemActorIds.AutoDetection).DisplayName, Is.EqualTo("Auto-Detection"));

@@ -217,7 +217,7 @@ public class AuditLogPage
     public ILocator TelegramUserIdFilter => _page.GetByPlaceholder("Enter Telegram ID");
 
     /// <summary>The Issued By filter (Moderation Log tab).</summary>
-    public ILocator IssuedByFilter => _page.GetByPlaceholder("e.g. system_bot_protection");
+    public ILocator IssuedByFilter => _page.GetByPlaceholder("e.g. Exam Flow or an admin's email");
 
     /// <summary>
     /// Selects an action type filter option.
@@ -242,7 +242,8 @@ public class AuditLogPage
     /// <summary>
     /// Fills the Telegram User ID filter and commits it. The field is a non-Immediate MudTextField,
     /// so typing alone never reaches <c>ValueChanged</c>: the value only commits on the input's
-    /// change event, which Enter raises. The table reload is awaited by the caller's Expects.
+    /// change event, which Enter raises. The table reload is awaited by the caller's Expects on the
+    /// table (nothing on the field itself distinguishes a committed value from a typed one).
     /// </summary>
     public async Task FilterByTelegramUserIdAsync(string userId)
     {

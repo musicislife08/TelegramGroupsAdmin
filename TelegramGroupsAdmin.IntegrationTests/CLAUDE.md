@@ -193,7 +193,7 @@ Recipe format: a heading, the anchor id(s), a one-line description, and "use whe
 #### Mixed-issuer moderation subject (Audit Log filters)
 - `telegram_user_id` = `9704804870465`
 - Untouched canonical row with 9 `user_actions` (ids 196..245, Nov 2025): Auto-Detection (ban + deletes), three web users (Owner, the stored-TOTP GlobalAdmin, the no-TOTP GlobalAdmin: trust/untrust pairs) and a Telegram admin (`telegram_user_id` 9906913218017) — every actor kind the moderation log's Issued By column renders. Fewer rows than the moderation table's first page (25), so a filtered first page shows them all.
-- Use when: a test filters the Audit Log's Telegram Moderation Log by user and needs to prove the user column alone drives the narrowing. Constant: `GoldenDatasetConstants.ModerationLog.MixedIssuerUserId`. The paired issued-by anchor is `SystemActorIds.ExamFlow` (8 `user_actions`, all rendered as "Exam Flow"); counts are read from the clone at runtime.
+- Use when: a test filters the Audit Log's Telegram Moderation Log by user and needs to prove the user column alone drives the narrowing. Constant: `GoldenDatasetConstants.ModerationLog.MixedIssuerUserId`. Issued-by anchors for the same filter (`UserActionsRepositoryIssuedByFilterTests`, `AuditLogGoldenTests`): `SystemActorIds.ExamFlow` (8 `user_actions`, rendered "Exam Flow"), the no-TOTP GlobalAdmin (`WebUsers.NoTotpGlobalAdminId`, 8 rows, rendered as its email) and the Telegram admin `ModerationLog.TelegramAdminIssuerId` (20 rows, rendered as its full name — read the names from the clone, never paste them). Counts are read from the clone at runtime.
 
 #### Trusted kicked joiner (canonical edit 2026-09-13)
 - `telegram_user_id` = `9301917046112`

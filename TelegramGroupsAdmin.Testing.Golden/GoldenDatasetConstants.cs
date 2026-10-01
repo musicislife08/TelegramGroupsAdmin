@@ -689,6 +689,13 @@ public static class GoldenDatasetConstants
         /// on the moderation table's first page, so the filtered row count equals the DB count.
         /// </summary>
         public const long MixedIssuerUserId = 9704804870465L;
+
+        /// <summary>
+        /// Telegram admin who issued 20 <c>user_actions</c> rows (among them <see cref="MixedIssuerUserId"/>'s
+        /// trust, row 206). Has a <c>telegram_users</c> row with username, first and last name, so the
+        /// Issued By column renders its full name; tests read the names from the clone at runtime.
+        /// </summary>
+        public const long TelegramAdminIssuerId = 9906913218017L;
     }
 
     /// <summary>
