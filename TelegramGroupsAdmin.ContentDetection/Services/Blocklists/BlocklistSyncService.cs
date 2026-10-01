@@ -1,7 +1,9 @@
+using System.Text;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.DependencyInjection;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
+using TelegramGroupsAdmin.Core.Http;
 
 namespace TelegramGroupsAdmin.ContentDetection.Services.Blocklists;
 
@@ -9,10 +11,27 @@ namespace TelegramGroupsAdmin.ContentDetection.Services.Blocklists;
 /// Service for downloading, parsing, and syncing external blocklists
 /// Phase 4.13: URL Filtering
 /// </summary>
+/// <remarks>
+/// Subscription URLs are admin-entered, so downloads go through <see cref="IPublicUrlFetcher"/>:
+/// a URL that resolves to a loopback, LAN or other non-public address is refused before any
+/// request is made. A refused or failed subscription is reported by name through
+/// <see cref="BlocklistSyncException"/>; in <see cref="SyncAllAsync"/> and
+/// <see cref="RebuildCacheAsync"/> the remaining subscriptions are still synced first.
+/// </remarks>
 public class BlocklistSyncService : IBlocklistSyncService
 {
+    /// <summary>
+    /// Most bytes accepted for one blocklist. The largest widely used lists (HaGeZi "ultimate"
+    /// in hosts format, OISD "big", StevenBlack unified with every extension) are tens of
+    /// megabytes; 64 MB leaves headroom while bounding what one subscription can make the
+    /// single-instance server buffer and parse.
+    /// </summary>
+    public const long MaxBlocklistBytes = 64L * 1024 * 1024;
+
+    private static readonly PublicUrlFetchOptions FetchOptions = new() { MaxBytes = MaxBlocklistBytes };
+
     private readonly IServiceScopeFactory _scopeFactory;
-    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly IPublicUrlFetcher _urlFetcher;
     private readonly ILogger<BlocklistSyncService> _logger;
 
     // Map of parsers by format
@@ -20,11 +39,11 @@ public class BlocklistSyncService : IBlocklistSyncService
 
     public BlocklistSyncService(
         IServiceScopeFactory scopeFactory,
-        IHttpClientFactory httpClientFactory,
+        IPublicUrlFetcher urlFetcher,
         ILogger<BlocklistSyncService> logger)
     {
         _scopeFactory = scopeFactory;
-        _httpClientFactory = httpClientFactory;
+        _urlFetcher = urlFetcher;
         _logger = logger;
 
         // Initialize parsers
@@ -40,25 +59,56 @@ public class BlocklistSyncService : IBlocklistSyncService
     {
         _logger.LogInformation("Starting blocklist sync for all enabled subscriptions");
 
-        // Get enabled subscription IDs using a separate scope
-        List<long> enabledSubscriptionIds;
+        // Get enabled subscriptions using a separate scope
+        List<(long Id, string Name)> enabled;
         using (var scope = _scopeFactory.CreateScope())
         {
             var subscriptionsRepo = scope.ServiceProvider.GetRequiredService<IBlocklistSubscriptionsRepository>();
             var subscriptions = await subscriptionsRepo.GetAllAsync(cancellationToken: cancellationToken);
-            enabledSubscriptionIds = subscriptions.Where(s => s.Enabled).Select(s => s.Id).ToList();
+            enabled = subscriptions.Where(s => s.Enabled).Select(s => (s.Id, s.Name)).ToList();
         }
 
-        _logger.LogInformation("Found {Count} enabled subscriptions to sync", enabledSubscriptionIds.Count);
+        _logger.LogInformation("Found {Count} enabled subscriptions to sync", enabled.Count);
 
-        // Sync each subscription sequentially to avoid database deadlocks
-        // (parallel execution causes deadlocks on unique index: domain, block_mode, chat_id)
-        foreach (var subscriptionId in enabledSubscriptionIds)
+        var failures = await SyncEachAsync(enabled, cancellationToken);
+
+        _logger.LogInformation("Completed blocklist sync for all subscriptions ({Failed} failed)", failures.Count);
+
+        if (failures.Count > 0)
+            throw new BlocklistSyncException(failures, enabled.Count);
+    }
+
+    /// <summary>
+    /// Syncs each subscription sequentially (parallel execution deadlocks on the unique index
+    /// domain, block_mode, chat_id) and keeps going past one that fails, so a single refused or
+    /// unreachable list cannot stop the others from refreshing.
+    /// </summary>
+    private async Task<List<BlocklistSyncFailure>> SyncEachAsync(
+        List<(long Id, string Name)> subscriptions, CancellationToken cancellationToken)
+    {
+        var failures = new List<BlocklistSyncFailure>();
+        foreach (var (id, name) in subscriptions)
         {
-            await SyncSubscriptionAsync(subscriptionId, cancellationToken);
+            try
+            {
+                await SyncSubscriptionAsync(id, cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (BlocklistSyncException ex)
+            {
+                failures.AddRange(ex.Failures);
+            }
+            catch (Exception ex)
+            {
+                // Already logged by SyncSubscriptionAsync; recorded here so the run can report it.
+                failures.Add(new BlocklistSyncFailure(id, name, ex.Message));
+            }
         }
 
-        _logger.LogInformation("Completed blocklist sync for all subscriptions");
+        return failures;
     }
 
     public async Task SyncSubscriptionAsync(long subscriptionId, CancellationToken cancellationToken = default)
@@ -121,11 +171,12 @@ public class BlocklistSyncService : IBlocklistSyncService
 
             _logger.LogInformation("Successfully synced {Count} domains for {Name}", domains.Count, subscription.Name);
         }
-        catch (HttpRequestException ex)
+        catch (PublicUrlFetchException ex)
         {
-            _logger.LogError(ex, "HTTP error downloading blocklist {Name} from {Url}",
-                subscription.Name, subscription.Url);
-            throw;
+            // ex.Message is safe to show; ex.Reason may name the address and stays in the log.
+            _logger.LogError("Could not download blocklist {Name} ({SubscriptionId}) from {Url}: {Reason}",
+                subscription.Name, subscriptionId, subscription.Url, ex.Reason);
+            throw new BlocklistSyncException(new BlocklistSyncFailure(subscriptionId, subscription.Name, ex.Message), ex);
         }
         catch (Exception ex)
         {
@@ -139,8 +190,8 @@ public class BlocklistSyncService : IBlocklistSyncService
     {
         _logger.LogInformation("Starting full cache rebuild for chatId={ChatId}", chatId == 0 ? "global" : chatId.ToString());
 
-        // Get enabled subscription IDs using a separate scope
-        List<long> enabledSubscriptionIds;
+        // Get enabled subscriptions using a separate scope
+        List<(long Id, string Name)> enabled;
         using (var scope = _scopeFactory.CreateScope())
         {
             var cacheRepo = scope.ServiceProvider.GetRequiredService<ICachedBlockedDomainsRepository>();
@@ -151,21 +202,22 @@ public class BlocklistSyncService : IBlocklistSyncService
 
             // Get all enabled subscriptions for this chat
             var subscriptions = await subscriptionsRepo.GetAllAsync(chatId, cancellationToken);
-            enabledSubscriptionIds = subscriptions.Where(s => s.Enabled).Select(s => s.Id).ToList();
+            enabled = subscriptions.Where(s => s.Enabled).Select(s => (s.Id, s.Name)).ToList();
         }
 
-        _logger.LogInformation("Rebuilding cache from {Count} enabled subscriptions", enabledSubscriptionIds.Count);
+        _logger.LogInformation("Rebuilding cache from {Count} enabled subscriptions", enabled.Count);
 
-        // Sync each subscription (this will repopulate cache with its own scope)
-        foreach (var subscriptionId in enabledSubscriptionIds)
-        {
-            await SyncSubscriptionAsync(subscriptionId, cancellationToken);
-        }
+        // Sync each subscription (this will repopulate cache with its own scope); a failed one
+        // must not leave the cache without the others or without the manual filters.
+        var failures = await SyncEachAsync(enabled, cancellationToken);
 
         // Add manual domain filters to cache
         await SyncManualFiltersAsync(chatId, cancellationToken);
 
-        _logger.LogInformation("Completed full cache rebuild");
+        _logger.LogInformation("Completed full cache rebuild ({Failed} subscriptions failed)", failures.Count);
+
+        if (failures.Count > 0)
+            throw new BlocklistSyncException(failures, enabled.Count);
     }
 
     public async Task RemoveCachedDomainsAsync(long subscriptionId, CancellationToken cancellationToken = default)
@@ -178,14 +230,13 @@ public class BlocklistSyncService : IBlocklistSyncService
     }
 
     /// <summary>
-    /// Download blocklist content from URL
-    /// Automatically upgrades HTTP to HTTPS for security (with HTTP fallback)
+    /// Download blocklist content from URL through the public-url fetcher, under <see cref="MaxBlocklistBytes"/>.
+    /// Automatically upgrades HTTP to HTTPS for security (with HTTP fallback), except when the
+    /// policy refused the HTTPS attempt — the address is the same, so HTTP would be refused too.
     /// </summary>
+    /// <exception cref="PublicUrlFetchException">The URL was refused, too large, unreachable or answered an error.</exception>
     private async Task<string> DownloadBlocklistAsync(string url, CancellationToken cancellationToken)
     {
-        using var httpClient = _httpClientFactory.CreateClient();
-        httpClient.Timeout = TimeSpan.FromSeconds(30);
-
         // Security: If URL starts with http://, try https:// first to prevent MitM attacks
         if (url.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
         {
@@ -195,20 +246,17 @@ public class BlocklistSyncService : IBlocklistSyncService
             {
                 _logger.LogDebug("Attempting HTTPS upgrade for blocklist: {OriginalUrl} → {HttpsUrl}", url, httpsUrl);
 
-                var httpsResponse = await httpClient.GetAsync(httpsUrl, cancellationToken);
-                httpsResponse.EnsureSuccessStatusCode();
-
-                var httpsContent = await httpsResponse.Content.ReadAsStringAsync(cancellationToken);
+                var httpsContent = await FetchTextAsync(httpsUrl, cancellationToken);
 
                 _logger.LogInformation("Successfully downloaded blocklist via HTTPS (upgraded from HTTP): {HttpsUrl} ({Size} bytes)",
                     httpsUrl, httpsContent.Length);
 
                 return httpsContent;
             }
-            catch (HttpRequestException ex)
+            catch (PublicUrlFetchException ex) when (ex.Kind != PublicUrlFetchFailure.NotAllowed)
             {
-                _logger.LogWarning(ex, "HTTPS upgrade failed for {HttpsUrl}, falling back to insecure HTTP {HttpUrl}",
-                    httpsUrl, url);
+                _logger.LogWarning("HTTPS upgrade failed for {HttpsUrl} ({Reason}), falling back to insecure HTTP {HttpUrl}",
+                    httpsUrl, ex.Reason, url);
                 // Fall through to HTTP attempt below
             }
         }
@@ -216,10 +264,7 @@ public class BlocklistSyncService : IBlocklistSyncService
         // Original URL (either already HTTPS, or HTTP fallback after HTTPS failed)
         _logger.LogDebug("Downloading blocklist from {Url}", url);
 
-        var response = await httpClient.GetAsync(url, cancellationToken);
-        response.EnsureSuccessStatusCode();
-
-        var content = await response.Content.ReadAsStringAsync(cancellationToken);
+        var content = await FetchTextAsync(url, cancellationToken);
 
         // Warn if we're downloading via insecure HTTP
         if (url.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
@@ -234,6 +279,13 @@ public class BlocklistSyncService : IBlocklistSyncService
         }
 
         return content;
+    }
+
+    /// <summary>Blocklists are ASCII/UTF-8 text (domains, hosts lines, CSV); decoded as UTF-8.</summary>
+    private async Task<string> FetchTextAsync(string url, CancellationToken cancellationToken)
+    {
+        var fetched = await _urlFetcher.FetchAsync(url, FetchOptions, cancellationToken);
+        return Encoding.UTF8.GetString(fetched.Content);
     }
 
     /// <summary>
