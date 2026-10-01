@@ -223,6 +223,10 @@ public class AuthService(
             return new RegisterResult(false, null, "Email already registered");
         }
 
+        // Without an email service there is no verification link to follow and login rejects unverified
+        // accounts outright, so the account starts verified — the same rule CreateOwnerAccountAsync applies.
+        var emailVerificationEnabled = await featureAvailability.IsEmailVerificationEnabledAsync();
+
         // Atomic: register user (create or reactivate) + mark invite as used
         var passwordHash = passwordHasher.HashPassword(password);
         var userId = await userRepository.RegisterUserWithInviteAsync(
@@ -231,6 +235,7 @@ public class AuthService(
             inviteValidation.PermissionLevel,
             inviteValidation.InvitedBy,
             inviteToken!,
+            emailVerified: !emailVerificationEnabled,
             cancellationToken);
 
         logger.LogInformation("User registered: {Email} via invite from {InviterId}", email, inviteValidation.InvitedBy);
@@ -244,7 +249,7 @@ public class AuthService(
             cancellationToken: cancellationToken);
 
         // Send verification email if email service is configured
-        if (await featureAvailability.IsEmailVerificationEnabledAsync())
+        if (emailVerificationEnabled)
         {
             await SendVerificationEmailAsync(userId, email, cancellationToken);
         }

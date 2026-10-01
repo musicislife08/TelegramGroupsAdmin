@@ -104,6 +104,7 @@ public class UserRepository : IUserRepository
         PermissionLevel permissionLevel,
         string? invitedBy,
         string inviteToken,
+        bool emailVerified,
         CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
@@ -140,7 +141,7 @@ public class UserRepository : IUserRepository
             existingEntity.TotpSecret = null;
             existingEntity.TotpEnabled = true; // All users must set up 2FA by default
             existingEntity.TotpSetupStartedAt = null;
-            existingEntity.EmailVerified = false;
+            existingEntity.EmailVerified = emailVerified;
             existingEntity.EmailVerificationToken = null;
             existingEntity.EmailVerificationTokenExpiresAt = null;
             existingEntity.PasswordResetToken = null;
@@ -170,7 +171,7 @@ public class UserRepository : IUserRepository
                 TotpSetupStartedAt = null,
                 CreatedAt = now,
                 LastLoginAt = null,
-                EmailVerified = false,
+                EmailVerified = emailVerified,
                 EmailVerificationToken = null,
                 EmailVerificationTokenExpiresAt = null,
                 PasswordResetToken = null,

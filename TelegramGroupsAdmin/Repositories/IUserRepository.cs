@@ -29,6 +29,10 @@ public interface IUserRepository
     /// <param name="permissionLevel">Permission level from invite</param>
     /// <param name="invitedBy">ID of user who created the invite</param>
     /// <param name="inviteToken">The invite token to mark as used</param>
+    /// <param name="emailVerified">
+    /// Initial <c>email_verified</c> state: false when a verification email follows, true when email
+    /// verification is disabled (no email service) so the account can log in straight away.
+    /// </param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>The user's ID (new or existing)</returns>
     Task<string> RegisterUserWithInviteAsync(
@@ -37,6 +41,7 @@ public interface IUserRepository
         PermissionLevel permissionLevel,
         string? invitedBy,
         string inviteToken,
+        bool emailVerified,
         CancellationToken cancellationToken = default);
     Task UpdateLastLoginAsync(string userId, CancellationToken cancellationToken = default);
     Task UpdateSecurityStampAsync(string userId, CancellationToken cancellationToken = default);
