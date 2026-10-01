@@ -177,6 +177,17 @@ public class ChatsPage
         await ChatRow(chatName).Locator(RefreshHealthButton).ClickAsync();
     }
 
+    /// <summary>
+    /// Ticks the "Show deleted chats" checkbox (MudCheckBox: the label text is the click target).
+    /// Callers sync on a deleted chat's row appearing.
+    /// </summary>
+    public async Task ShowDeletedChatsAsync()
+    {
+        // A click on the prerendered checkbox has no handler; wait for the live circuit first
+        await _page.WaitForInteractiveAsync();
+        await _page.GetByText("Show deleted chats").ClickAsync();
+    }
+
     /// <summary>The "Inactive" chip for a chat by its name.</summary>
     public ILocator InactiveChip(string chatName) => ChatRow(chatName).Locator(".mud-chip:has-text('Inactive')");
 
