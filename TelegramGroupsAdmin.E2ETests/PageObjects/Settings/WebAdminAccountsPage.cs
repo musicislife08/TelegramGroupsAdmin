@@ -31,8 +31,9 @@ public class WebAdminAccountsPage
     private const string PermissionCell = "td[data-label='Permission Level']";
     private const string TotpCell = "td[data-label='TOTP']";
 
-    // Selectors - Action menu
-    private const string ActionMenuButton = "button:has(.mud-icon-root[data-testid='MoreVertIcon'])";
+    // Selectors - Action menu (the MudMenu trigger is the only button in the Actions cell;
+    // MudBlazor 9.9 renders no data-testid on icons)
+    private const string ActionMenuButton = "td[data-label='Actions'] button";
 
     // Selectors - Dialogs
     private const string DialogSelector = ".mud-dialog";
@@ -225,25 +226,16 @@ public class WebAdminAccountsPage
         });
     }
 
-    /// <summary>The available action menu items.</summary>
-    public ILocator ActionMenuItems => _page.Locator(".mud-popover .mud-list-item, .mud-menu .mud-menu-item");
+    /// <summary>The items of the open action menu.</summary>
+    public ILocator ActionMenuItems => OpenPopover.Locator(".mud-menu-item");
 
     /// <summary>
-    /// Clicks an action menu item by text and waits for menu to close.
+    /// Clicks an action menu item by text. The menu closes once the item's handler returns, which for
+    /// the confirming actions is only after their dialog closes — so this does not wait for the menu;
+    /// <see cref="ConfirmDialogAsync"/> / <see cref="CancelDialogAsync"/> wait for it instead.
     /// </summary>
-    public async Task ClickActionMenuItemAsync(string itemText)
-    {
-        var menuPopover = _page.Locator(".mud-popover-open");
-        var menuItem = ActionMenuItems.Filter(new() { HasText = itemText });
-        await menuItem.ClickAsync();
-
-        // Wait for menu to close
-        await menuPopover.WaitForAsync(new LocatorWaitForOptions
-        {
-            State = WaitForSelectorState.Hidden,
-            Timeout = 5000
-        });
-    }
+    public Task ClickActionMenuItemAsync(string itemText) =>
+        ActionMenuItems.Filter(new() { HasText = itemText }).ClickAsync();
 
     /// <summary>
     /// Confirms the current confirmation dialog and waits for it to close.
@@ -259,7 +251,15 @@ public class WebAdminAccountsPage
             State = WaitForSelectorState.Hidden,
             Timeout = 5000
         });
+        await WaitForMenuClosedAsync();
     }
+
+    /// <summary>
+    /// The action menu that opened a dialog stays open until the dialog's result is in; wait for its
+    /// popover to go so the next click lands on the page and not on the menu's overlay.
+    /// </summary>
+    private Task WaitForMenuClosedAsync() =>
+        OpenPopover.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Hidden, Timeout = 5000 });
 
     /// <summary>
     /// Cancels the current confirmation dialog and waits for it to close.
@@ -275,10 +275,11 @@ public class WebAdminAccountsPage
             State = WaitForSelectorState.Hidden,
             Timeout = 5000
         });
+        await WaitForMenuClosedAsync();
     }
 
-    /// <summary>The table row for the user with <paramref name="email"/>.</summary>
-    private ILocator UserRow(string email) => UserRows.Filter(new() { HasText = email });
+    /// <summary>The table row for the user with <paramref name="email"/> (count 0 once the status filter hides it).</summary>
+    public ILocator UserRow(string email) => UserRows.Filter(new() { HasText = email });
 
     /// <summary>The status chip reading <paramref name="status"/> in the user's row.</summary>
     public ILocator UserStatusChip(string email, string status) =>
@@ -302,6 +303,44 @@ public class WebAdminAccountsPage
 
     /// <summary>The snackbar.</summary>
     public ILocator Snackbar => _page.Locator(".mud-snackbar");
+
+    /// <summary>The snackbar whose message contains <paramref name="text"/>.</summary>
+    public ILocator SnackbarWithText(string text) => Snackbar.Filter(new() { HasText = text });
+
+    /// <summary>
+    /// Toggles <paramref name="status"/> ("Active", "Pending", "Disabled", "Deleted") in the multi-select
+    /// Status Filter and closes the dropdown. The default selection is Active + Pending + Disabled.
+    /// </summary>
+    public async Task ToggleStatusFilterAsync(string status)
+    {
+        await StatusFilter.ClickAsync();
+        await OpenPopover.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible, Timeout = 5000 });
+
+        await OpenPopover.Locator(".mud-list-item").Filter(new() { HasTextRegex = new Regex($@"^\s*{Regex.Escape(status)}\s*$") }).ClickAsync();
+
+        // MudSelect handles Escape on its input; a page-level key press goes wherever focus landed.
+        await StatusFilter.PressAsync("Escape");
+        await OpenPopover.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Hidden, Timeout = 5000 });
+    }
+
+    /// <summary>
+    /// The radio option labelled exactly <paramref name="level"/> ("Admin", "GlobalAdmin", "Owner") in the
+    /// open Edit Permission dialog.
+    /// </summary>
+    public ILocator PermissionLevelOption(string level) =>
+        Dialog.Locator(".mud-radio").Filter(new() { Has = _page.GetByText(level, new() { Exact = true }) });
+
+    /// <summary>Picks <paramref name="level"/> in the open Edit Permission dialog.</summary>
+    public Task SelectPermissionLevelAsync(string level) => PermissionLevelOption(level).ClickAsync();
+
+    /// <summary>Clicks Save in the open dialog and waits for it to close.</summary>
+    public async Task SaveDialogAsync()
+    {
+        var dialog = Dialog;
+        await Dialog.GetByRole(AriaRole.Button, new() { Name = "Save" }).ClickAsync();
+        await dialog.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Hidden, Timeout = 5000 });
+        await WaitForMenuClosedAsync();
+    }
 
     /// <summary>
     /// Gets the current URL.
