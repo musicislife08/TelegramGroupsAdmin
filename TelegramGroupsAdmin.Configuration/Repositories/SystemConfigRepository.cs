@@ -155,6 +155,9 @@ public class SystemConfigRepository : ISystemConfigRepository
     }
 
     public async Task<ApiKeysConfig?> GetApiKeysAsync(CancellationToken cancellationToken = default)
+        => (await ReadApiKeysAsync(cancellationToken)).Keys;
+
+    public async Task<ApiKeysReadResult> ReadApiKeysAsync(CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
@@ -166,7 +169,7 @@ public class SystemConfigRepository : ISystemConfigRepository
 
         if (configRecord?.ApiKeys == null)
         {
-            return null;
+            return ApiKeysReadResult.NotStored();
         }
 
         try
@@ -176,12 +179,12 @@ public class SystemConfigRepository : ISystemConfigRepository
             var decryptedJson = protector.Unprotect(configRecord.ApiKeys);
 
             // Deserialize from JSON
-            return JsonSerializer.Deserialize<ApiKeysConfig>(decryptedJson, _jsonOptions);
+            return ApiKeysReadResult.Decrypted(JsonSerializer.Deserialize<ApiKeysConfig>(decryptedJson, _jsonOptions));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to decrypt/deserialize API keys");
-            return null;
+            return ApiKeysReadResult.Undecryptable();
         }
     }
 

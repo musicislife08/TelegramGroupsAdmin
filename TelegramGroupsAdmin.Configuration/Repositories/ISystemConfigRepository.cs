@@ -37,8 +37,15 @@ public interface ISystemConfigRepository
     /// Keys are stored encrypted in configs.api_keys JSONB column using Data Protection
     /// </summary>
     /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>API keys or null if not configured</returns>
+    /// <returns>API keys or null if not configured — or if stored keys could not be decrypted (logged)</returns>
     Task<ApiKeysConfig?> GetApiKeysAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Strict read of the API keys: tells "nothing stored" from "stored but undecryptable", for callers
+    /// that must fail closed. <see cref="GetApiKeysAsync"/> is this with both failure shapes collapsed to null.
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token</param>
+    Task<ApiKeysReadResult> ReadApiKeysAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Save API keys for external services (global only - chat_id = NULL)
