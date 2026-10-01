@@ -126,14 +126,90 @@ public class AnalyticsPage
 
     #endregion
 
-    #region Tab Content
+    #region Content Detection Tab
 
     /// <summary>
-    /// The first characteristic content element (chart, table, card or paper) in the active tab panel,
-    /// e.g. the Content Detection or Message Trends analytics component.
+    /// A section heading of ContentDetectionAnalytics.razor in the active panel: "Overview",
+    /// "Training Data Overview", "Recent Spam Checks", "System Health" or "OpenAI False Positive Prevention"
+    /// (each a <c>MudText Typo.h6</c>, so an h6 heading).
     /// </summary>
-    public ILocator ActiveTabContent =>
-        _page.Locator(ActiveTabPanel).Locator(".mud-chart, .mud-table, .mud-card, .mud-paper").First;
+    public ILocator ContentDetectionHeading(string heading) =>
+        _page.Locator(ActiveTabPanel).GetByRole(AriaRole.Heading, new() { Name = heading, Exact = true });
+
+    /// <summary>
+    /// The section paper (<c>MudPaper Class="pa-4"</c>) of ContentDetectionAnalytics.razor titled
+    /// <paramref name="heading"/>. The cards inside System Health are papers too but carry no pa-4 class
+    /// and no section heading, so exactly one element matches.
+    /// </summary>
+    public ILocator ContentDetectionSection(string heading) =>
+        _page.Locator(ActiveTabPanel).Locator(".mud-paper.pa-4")
+            .Filter(new() { Has = _page.GetByRole(AriaRole.Heading, new() { Name = heading, Exact = true }) });
+
+    /// <summary>
+    /// The h6 value beside an Overview row label ("Total Checks", "Spam Detected", "Stop Words Enabled",
+    /// "Admin-Labeled Training Samples"): the label and the value are siblings in one row stack.
+    /// </summary>
+    public ILocator OverviewValue(string label) =>
+        ContentDetectionSection("Overview").GetByText(label, new() { Exact = true }).Locator("..").Locator(".mud-typography-h6");
+
+    /// <summary>
+    /// The percentage text beside the progress bar under an Overview row ("Spam Detected", "Stop Words Enabled",
+    /// "Admin-Labeled Training Samples"): the bar row is the sibling of the label's row inside the metric stack.
+    /// </summary>
+    public ILocator OverviewPercentage(string label) =>
+        ContentDetectionSection("Overview").GetByText(label, new() { Exact = true }).Locator("../..").Locator(".mud-typography-body2");
+
+    /// <summary>The bold count beside "Confirmed Training Labels" in the Training Data Overview section.</summary>
+    public ILocator ConfirmedTrainingLabelsValue =>
+        ContentDetectionSection("Training Data Overview").GetByText("Confirmed Training Labels", new() { Exact = true })
+            .Locator("..").Locator(".font-weight-bold");
+
+    /// <summary>The System Health card labelled "Stop Words", "Spam Samples", "Training Data" or "Detection Rate".</summary>
+    public ILocator HealthCard(string label) =>
+        ContentDetectionSection("System Health").Locator(".mud-card")
+            .Filter(new() { Has = _page.GetByText(label, new() { Exact = true }) });
+
+    /// <summary>The h6 value of the System Health card labelled <paramref name="label"/>.</summary>
+    public ILocator HealthCardValue(string label) => HealthCard(label).Locator(".mud-typography-h6");
+
+    private ILocator VetoSection => ContentDetectionSection("OpenAI False Positive Prevention");
+
+    /// <summary>The veto summary alert: "OpenAI prevented N false positives (P% of detections) in the last 30 days."</summary>
+    public ILocator VetoSummaryAlert => VetoSection.Locator(".mud-alert").Filter(new() { HasText = "OpenAI prevented" });
+
+    /// <summary>The veto empty state: "No veto data available for the last 30 days. …"</summary>
+    public ILocator VetoEmptyAlert => VetoSection.Locator(".mud-alert").Filter(new() { HasText = "No veto data available" });
+
+    /// <summary>The Algorithm Veto Rates table (the simple table whose first column header is "Algorithm").</summary>
+    public ILocator AlgorithmVetoRatesTable =>
+        VetoSection.Locator(".mud-simple-table")
+            .Filter(new() { Has = _page.GetByRole(AriaRole.Columnheader, new() { Name = "Algorithm", Exact = true }) });
+
+    /// <summary>The body rows of <see cref="AlgorithmVetoRatesTable"/>, one per vetoed algorithm.</summary>
+    public ILocator AlgorithmVetoRateRows => AlgorithmVetoRatesTable.Locator("tbody tr");
+
+    /// <summary>
+    /// The Algorithm Veto Rates row of <paramref name="algorithm"/> (the CheckName as rendered, e.g. "Bayes").
+    /// Cells: Algorithm, Spam Flags, Vetoed by OpenAI, Veto Rate.
+    /// </summary>
+    public ILocator AlgorithmVetoRateRow(string algorithm) =>
+        AlgorithmVetoRateRows.Filter(new() { Has = _page.GetByRole(AriaRole.Cell, new() { Name = algorithm, Exact = true }) });
+
+    /// <summary>The "Recent Vetoed Messages (N)" expansion panel header; the count is every stored veto, unwindowed.</summary>
+    public ILocator RecentVetoedMessagesHeader(int count) =>
+        VetoSection.GetByText($"Recent Vetoed Messages ({count})", new() { Exact = true });
+
+    /// <summary>The body rows of the Recent Spam Checks table (newest detection first, at most 20).</summary>
+    public ILocator RecentSpamCheckRows => ContentDetectionSection("Recent Spam Checks").Locator("tbody tr");
+
+    /// <summary>The Result chip (SPAM / CLEAN) of the Recent Spam Checks row at <paramref name="index"/>.</summary>
+    public ILocator RecentSpamCheckResult(int index) => RecentSpamCheckRows.Nth(index).Locator(".mud-chip");
+
+    /// <summary>
+    /// A cell of the Recent Spam Checks row at <paramref name="index"/>. Columns: 0 Timestamp, 1 Result,
+    /// 2 Score, 3 Reason, 4 User.
+    /// </summary>
+    public ILocator RecentSpamCheckCell(int index, int column) => RecentSpamCheckRows.Nth(index).Locator("td").Nth(column);
 
     #endregion
 
