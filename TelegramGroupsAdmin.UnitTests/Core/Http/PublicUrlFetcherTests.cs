@@ -422,6 +422,49 @@ public class PublicUrlFetcherTests
         Assert.That(DateTime.UtcNow - started, Is.LessThan(TimeSpan.FromSeconds(10)));
     }
 
+    [TestCase(0)]
+    [TestCase(-1)]
+    [TestCase(-1000)]
+    public void PublicUrlFetchOptions_ZeroNegativeOrInfiniteTimeout_IsRejected(int milliseconds)
+    {
+        // Timeout.InfiniteTimeSpan is -1 ms; none of these may ever reach the body read.
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            _ = new PublicUrlFetchOptions { MaxBytes = OneMegabyte, Timeout = TimeSpan.FromMilliseconds(milliseconds) });
+    }
+
+    [Test]
+    public void PublicUrlFetchOptions_TimeoutOverTheMaximum_IsRejected()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            _ = new PublicUrlFetchOptions { MaxBytes = OneMegabyte, Timeout = PublicUrlFetchOptions.MaxTimeout + TimeSpan.FromTicks(1) });
+        Assert.DoesNotThrow(() =>
+            _ = new PublicUrlFetchOptions { MaxBytes = OneMegabyte, Timeout = PublicUrlFetchOptions.MaxTimeout });
+    }
+
+    [Test]
+    public void UsePublicUrlPolicy_PinsHttp11_SoQuicCannotBypassTheConnectCallback()
+    {
+        // HTTP/3 runs over QUIC, which SocketsHttpHandler opens itself - ConnectCallback is never
+        // consulted - so the guarded clients must never be allowed to negotiate it.
+        // .NET's defaults already are 1.1 / RequestVersionOrLower, so an earlier registration
+        // asks for HTTP/3 to prove the policy overrides whatever composition did before it.
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddHttpClient(PublicUrlFetcher.ClientName).ConfigureHttpClient(WantHttp3);
+        services.AddHttpClient<ProbeClient>().ConfigureHttpClient(WantHttp3);
+        services.AddPublicUrlFetcher();
+        services.AddHttpClient<ProbeClient>().UsePublicUrlPolicy();
+        using var provider = services.BuildServiceProvider();
+        var factory = provider.GetRequiredService<IHttpClientFactory>();
+
+        foreach (var name in new[] { PublicUrlFetcher.ClientName, nameof(ProbeClient) })
+        {
+            using var client = factory.CreateClient(name);
+            Assert.That(client.DefaultRequestVersion, Is.EqualTo(HttpVersion.Version11), name);
+            Assert.That(client.DefaultVersionPolicy, Is.EqualTo(HttpVersionPolicy.RequestVersionOrLower), name);
+        }
+    }
+
     [Test]
     public void FetchAsync_Failures_CarryTheirKind()
     {
@@ -506,6 +549,12 @@ public class PublicUrlFetcherTests
 
         Assert.That((int)response.StatusCode, Is.EqualTo(307));
         Assert.That(target.LogEntries, Is.Empty);
+    }
+
+    private static void WantHttp3(HttpClient client)
+    {
+        client.DefaultRequestVersion = HttpVersion.Version30;
+        client.DefaultVersionPolicy = HttpVersionPolicy.RequestVersionOrHigher;
     }
 
     private ProbeClient CreateProbeClient(IPublicUrlFetchAllowance? allowance = null)

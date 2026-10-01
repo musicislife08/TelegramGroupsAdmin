@@ -16,6 +16,8 @@ public class PushEndpointPolicyTests
     [TestCase("https://wns2-bl2p.notify.windows.com/w/?token=AwYAAA")]
     [TestCase("https://8.8.8.8/push")]
     [TestCase("https://[2001:4860:4860::8888]/push")]
+    [TestCase("https://fcm.googleapis.com./fcm/send/trailing-dot")]
+    [TestCase("https://web.push.apple.com:443/QGxyz")]
     public void IsAcceptable_PublicHttpsEndpoint_IsAccepted(string endpoint)
     {
         Assert.That(PushEndpointPolicy.IsAcceptable(endpoint, out var reason), Is.True, reason);
@@ -36,6 +38,11 @@ public class PushEndpointPolicyTests
     [TestCase("https://169.254.169.254/latest/meta-data/", "link-local")]
     [TestCase("https://0.0.0.0/push", "unspecified")]
     [TestCase("https://[fd00::1]/push", "unique-local")]
+    [TestCase("https://localhost/push", "localhost")]
+    [TestCase("https://LOCALHOST:8443/push", "localhost")]
+    [TestCase("https://push.localhost/push", "localhost")]
+    [TestCase("https://pushserver/push", "single-label")]
+    [TestCase("https://nas:5000/push", "single-label")]
     public void IsAcceptable_NonHttpsOrNonPublicLiteral_IsRejected(string endpoint, string expectedReasonFragment)
     {
         Assert.That(PushEndpointPolicy.IsAcceptable(endpoint, out var reason), Is.False);

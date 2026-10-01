@@ -159,6 +159,27 @@ public class UrlContentScrapingServiceTests
         Assert.That(enriched, Does.Contain("Café Über"));
     }
 
+    [Test]
+    public async Task EnrichMessageWithUrlPreviewsAsync_MoreUrlsThanTheCap_FetchesOnlyTheFirstDistinctOnes()
+    {
+        // A message is one unit of work; a wall of links must not turn into unbounded fetches.
+        var server = WireMockServer.Start();
+        _disposables.Add(server);
+        server.Given(Request.Create().UsingGet())
+            .RespondWith(Response.Create().WithStatusCode(200).WithHeader("Content-Type", "text/html")
+                .WithBody("<html><head><title>Page</title></head></html>"));
+        var sut = CreateService(new LoopbackPortAllowance(server.Port));
+        var cap = UrlContentScrapingService.MaxUrlsPerMessage;
+        var urls = Enumerable.Range(0, cap + 3).Select(i => $"http://localhost:{server.Port}/p{i}").ToList();
+        // A repeat of the first URL before the others must not use up a slot.
+        var text = string.Join(" ", urls.Prepend(urls[0]));
+
+        await sut.EnrichMessageWithUrlPreviewsAsync(text);
+
+        var requested = server.LogEntries.Select(e => e.RequestMessage!.Path).Order().ToList();
+        Assert.That(requested, Is.EqualTo(Enumerable.Range(0, cap).Select(i => $"/p{i}").Order().ToList()));
+    }
+
     #region Helpers
 
     private IUrlContentScrapingService CreateService(IPublicUrlFetchAllowance? allowance = null)

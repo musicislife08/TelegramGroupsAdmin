@@ -45,8 +45,23 @@ public sealed record PublicUrlFetchOptions
     /// </summary>
     public bool TruncateAtCap { get; init; }
 
-    /// <summary>Overall deadline across every hop and the body; null means <see cref="PublicUrlFetcher.FetchTimeout"/>.</summary>
-    public TimeSpan? Timeout { get; init; }
+    /// <summary>Longest deadline a caller may ask for; the body read must never run unbounded.</summary>
+    public static readonly TimeSpan MaxTimeout = TimeSpan.FromMinutes(5);
+
+    /// <summary>
+    /// Overall deadline across every hop and the body; null means <see cref="PublicUrlFetcher.FetchTimeout"/>.
+    /// Must be positive and at most <see cref="MaxTimeout"/>; <see cref="System.Threading.Timeout.InfiniteTimeSpan"/> is refused.
+    /// </summary>
+    public TimeSpan? Timeout
+    {
+        get;
+        init
+        {
+            if (value is { } timeout && (timeout <= TimeSpan.Zero || timeout > MaxTimeout))
+                throw new ArgumentOutOfRangeException(nameof(Timeout), timeout, $"Timeout must be positive and at most {MaxTimeout}.");
+            field = value;
+        }
+    }
 }
 
 /// <summary>What a public-url fetch returned.</summary>

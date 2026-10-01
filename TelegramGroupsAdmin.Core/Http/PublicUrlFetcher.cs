@@ -307,7 +307,15 @@ public static class PublicUrlFetcherServiceCollectionExtensions
     public static IHttpClientBuilder UsePublicUrlPolicy(this IHttpClientBuilder builder)
     {
         builder.Services.TryAddSingleton<IPublicUrlFetchAllowance, NoFetchAllowance>();
-        return builder.ConfigurePrimaryHttpMessageHandler(sp =>
-            PublicUrlFetcher.CreateHandler(sp.GetRequiredService<IPublicUrlFetchAllowance>()));
+        return builder
+            .ConfigureHttpClient(client =>
+            {
+                // HTTP/3 runs over QUIC, which SocketsHttpHandler opens itself without consulting
+                // ConnectCallback; pinning HTTP/1.1-or-lower means it can never be negotiated.
+                client.DefaultRequestVersion = HttpVersion.Version11;
+                client.DefaultVersionPolicy = HttpVersionPolicy.RequestVersionOrLower;
+            })
+            .ConfigurePrimaryHttpMessageHandler(sp =>
+                PublicUrlFetcher.CreateHandler(sp.GetRequiredService<IPublicUrlFetchAllowance>()));
     }
 }

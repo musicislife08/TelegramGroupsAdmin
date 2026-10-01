@@ -4,10 +4,10 @@ namespace TelegramGroupsAdmin.Core.Http;
 
 /// <summary>
 /// What a browser push subscription endpoint must look like before the server will store it or
-/// POST to it: an absolute https URL without userinfo whose host, when it is an IP literal, is a
-/// public address under <see cref="PublicAddressPolicy"/>. Hostnames are not resolved here; the
-/// push client's connections run on the public-url handler, which judges the resolved address at
-/// connect time.
+/// POST to it: an absolute https URL without userinfo whose host is either a public IP literal
+/// under <see cref="PublicAddressPolicy"/> or a fully qualified name (not localhost, not a
+/// single label). Hostnames are not resolved here; the push client's connections run on the
+/// public-url handler, which judges the resolved address at connect time.
 /// </summary>
 public static class PushEndpointPolicy
 {
@@ -42,10 +42,32 @@ public static class PushEndpointPolicy
         }
 
         if (uri.HostNameType is UriHostNameType.IPv4 or UriHostNameType.IPv6
-            && IPAddress.TryParse(uri.Host.Trim('[', ']'), out var literal)
-            && !PublicAddressPolicy.IsPublic(literal, out var rangeReason))
+            && IPAddress.TryParse(uri.Host.Trim('[', ']'), out var literal))
         {
-            reason = $"{literal} is {rangeReason}";
+            if (!PublicAddressPolicy.IsPublic(literal, out var rangeReason))
+            {
+                reason = $"{literal} is {rangeReason}";
+                return false;
+            }
+
+            reason = string.Empty;
+            return true;
+        }
+
+        // Real push services (FCM, Mozilla, Apple, WNS) are fully qualified names. "localhost",
+        // anything under ".localhost" (RFC 6761) and single-label names only ever mean the local
+        // machine or the local network.
+        var host = uri.Host.TrimEnd('.');
+        if (host.Equals("localhost", StringComparison.OrdinalIgnoreCase)
+            || host.EndsWith(".localhost", StringComparison.OrdinalIgnoreCase))
+        {
+            reason = $"host '{uri.Host}' is localhost";
+            return false;
+        }
+
+        if (!host.Contains('.'))
+        {
+            reason = $"host '{uri.Host}' is a single-label name";
             return false;
         }
 

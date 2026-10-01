@@ -1,7 +1,7 @@
 using System.Net;
-using System.Net.Sockets;
 using System.Security.Cryptography;
 using Lib.Net.Http.WebPush;
+using Lib.Net.Http.WebPush.Authentication;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
@@ -35,6 +35,7 @@ public class WebPushNotificationServiceTests
     private ISystemConfigRepository _config = null!;
     private IUserRepository _users = null!;
     private UserRecord _user = null!;
+    private VapidAuthentication _vapid = null!;
 
     [SetUp]
     public void SetUp()
@@ -46,6 +47,7 @@ public class WebPushNotificationServiceTests
         _user = CreateTestUser("owner-1");
 
         var (publicKey, privateKey) = GenerateVapidKeys();
+        _vapid = new VapidAuthentication(publicKey, privateKey) { Subject = "mailto:admin@example.com" };
         _config.GetWebPushConfigAsync(Arg.Any<CancellationToken>())
             .Returns(new WebPushConfig { Enabled = true, VapidPublicKey = publicKey, ContactEmail = "admin@example.com" });
         _config.HasVapidKeysAsync(Arg.Any<CancellationToken>()).Returns(true);
@@ -55,6 +57,7 @@ public class WebPushNotificationServiceTests
     [TearDown]
     public void DisposeAll()
     {
+        _vapid.Dispose();
         foreach (var d in _disposables) d.Dispose();
         _disposables.Clear();
     }
@@ -80,53 +83,139 @@ public class WebPushNotificationServiceTests
     }
 
     [Test]
-    public async Task SendAsync_StoredEndpointResolvingToLoopback_IsRefusedAtConnectTimeWithoutTheAllowance()
+    public async Task SendAsync_HandlerRefusesTheResolvedAddress_IsLoggedAndTheSubscriptionIsKept()
     {
-        // "localhost" passes the endpoint policy (it is a hostname), so only the guarded handler
-        // can stop the POST: no socket is opened, the subscription is kept (DNS can be transient),
-        // and SendAsync still succeeds for the in-app notification.
-        using var listener = new ConnectionCounter();
-        StoreSubscription($"https://localhost:{listener.Port}/push");
-        var sut = CreateService();
+        // A fully qualified endpoint passes the policy; if its name resolves to a non-public
+        // address the guarded handler refuses to connect (a PublicUrlFetchException wrapped in
+        // HttpRequestException, as SocketsHttpHandler surfaces a ConnectCallback failure). DNS can
+        // be transient, so the subscription is kept and SendAsync still succeeds.
+        const string endpoint = "https://push.example.test/sub/1";
+        var handler = new StubHandler(_ => throw new HttpRequestException("connect failed",
+            new PublicUrlFetchException(PublicUrlFetchFailure.NotAllowed, PublicUrlFetchException.NotAllowedMessage,
+                "'push.example.test:443' only resolves to non-public addresses: 127.0.0.1 is loopback (127.0.0.0/8)")));
+        StoreSubscription(endpoint);
+        var sut = CreateService(handler);
 
         var sent = await sut.SendAsync(_user, NotificationEventType.SpamDetected, "subject", "body");
 
         Assert.That(sent, Is.True);
-        Assert.That(await listener.ConnectionWithin(TimeSpan.FromSeconds(1)), Is.False, "no connection may be opened");
+        Assert.That(handler.Requests.Select(r => r.RequestUri!.AbsoluteUri), Is.EqualTo(new[] { endpoint }));
         await _subscriptions.DidNotReceiveWithAnyArgs().DeleteByEndpointAsync(default!, default);
+        await _notifications.Received(1).CreateAsync(Arg.Any<WebNotification>(), Arg.Any<CancellationToken>());
     }
 
     [Test]
-    public async Task SendAsync_StoredEndpointResolvingToLoopback_ConnectsThroughTheAllowance()
+    public async Task SendAsync_DeliverableEndpoint_IsPushedAndKept()
     {
-        // Same endpoint, allowance registered: the handler opens the socket (the TLS handshake
-        // then fails against the bare listener, which is not what is under test). This pins
-        // that the allowance is the only thing between the push client and the socket.
-        using var listener = new ConnectionCounter();
-        StoreSubscription($"https://localhost:{listener.Port}/push");
-        var sut = CreateService(new LoopbackPortAllowance(listener.Port));
+        const string endpoint = "https://push.example.test/sub/1";
+        var handler = new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.Created));
+        StoreSubscription(endpoint);
+        var sut = CreateService(handler);
 
         var sent = await sut.SendAsync(_user, NotificationEventType.SpamDetected, "subject", "body");
 
         Assert.That(sent, Is.True);
-        Assert.That(await listener.ConnectionWithin(TimeSpan.FromSeconds(5)), Is.True, "the allowance opens the port");
+        Assert.That(handler.Requests.Select(r => (r.Method, r.RequestUri!.AbsoluteUri)), Is.EqualTo(new[] { (HttpMethod.Post, endpoint) }));
         await _subscriptions.DidNotReceiveWithAnyArgs().DeleteByEndpointAsync(default!, default);
     }
 
     [Test]
     public async Task SendAsync_OneBadEndpointAmongGood_SkipsOnlyTheBadOne()
     {
-        var server = StartPushServer();
-        var bad = $"https://127.0.0.1:{server.Port}/push";
-        var good = $"https://localhost:{server.Port}/push";
+        const string bad = "https://127.0.0.1:8443/push";
+        const string good = "https://push.example.test/sub/2";
+        var handler = new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.Created));
         StoreSubscription(bad, good);
-        var sut = CreateService(new LoopbackPortAllowance(server.Port));
+        var sut = CreateService(handler);
 
         var sent = await sut.SendAsync(_user, NotificationEventType.SpamDetected, "subject", "body");
 
         Assert.That(sent, Is.True);
+        Assert.That(handler.Requests.Select(r => r.RequestUri!.AbsoluteUri), Is.EqualTo(new[] { good }));
         await _subscriptions.Received(1).DeleteByEndpointAsync(bad, Arg.Any<CancellationToken>());
         await _subscriptions.DidNotReceive().DeleteByEndpointAsync(good, Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public void ProductionPushClient_LoopbackEndpoint_IsRefusedWithoutTheAllowance()
+    {
+        // Resolves PushServiceClient from the production AddWebPushClient() registration and
+        // pushes straight through the library, bypassing the service's endpoint check, so only
+        // the client's own handler stands between it and the socket.
+        var server = StartPushServer();
+        var client = CreateProductionPushClient();
+
+        var ex = Assert.ThrowsAsync<HttpRequestException>(() => client.RequestPushMessageDeliveryAsync(
+            LibrarySubscription($"http://localhost:{server.Port}/push"), new PushMessage("hi"), _vapid));
+
+        Assert.That(FindRefusal(ex!), Is.Not.Null, "the connect callback's refusal must be the cause");
+        Assert.That(server.LogEntries, Is.Empty, "the push service must never see a request");
+    }
+
+    [Test]
+    public async Task ProductionPushClient_LoopbackEndpoint_IsDeliveredThroughTheAllowance()
+    {
+        var server = StartPushServer();
+        var client = CreateProductionPushClient(new LoopbackPortAllowance(server.Port));
+
+        await client.RequestPushMessageDeliveryAsync(
+            LibrarySubscription($"http://localhost:{server.Port}/push"), new PushMessage("hi"), _vapid);
+
+        Assert.That(server.LogEntries.Select(e => e.RequestMessage!.Path), Is.EqualTo(new[] { "/push" }));
+    }
+
+    [Test]
+    public void ProductionPushClient_PinsHttp11()
+    {
+        // .NET's defaults already are 1.1 / RequestVersionOrLower, so an earlier registration
+        // asks for HTTP/3 to prove the production registration overrides it.
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddHttpClient<PushServiceClient>().ConfigureHttpClient(c =>
+        {
+            c.DefaultRequestVersion = HttpVersion.Version30;
+            c.DefaultVersionPolicy = HttpVersionPolicy.RequestVersionOrHigher;
+        });
+        services.AddWebPushClient();
+        using var provider = services.BuildServiceProvider();
+
+        using var http = provider.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(PushServiceClient));
+
+        Assert.That(http.DefaultRequestVersion, Is.EqualTo(HttpVersion.Version11));
+        Assert.That(http.DefaultVersionPolicy, Is.EqualTo(HttpVersionPolicy.RequestVersionOrLower));
+    }
+
+    private PushServiceClient CreateProductionPushClient(IPublicUrlFetchAllowance? allowance = null)
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        if (allowance != null)
+        {
+            services.AddSingleton(allowance);
+        }
+        services.AddWebPushClient();
+        var provider = services.BuildServiceProvider();
+        _disposables.Add(provider);
+        return provider.GetRequiredService<PushServiceClient>();
+    }
+
+    private static Lib.Net.Http.WebPush.PushSubscription LibrarySubscription(string endpoint)
+    {
+        var (p256dh, auth) = GenerateSubscriberKeys();
+        return new Lib.Net.Http.WebPush.PushSubscription
+        {
+            Endpoint = endpoint,
+            Keys = new Dictionary<string, string> { ["p256dh"] = p256dh, ["auth"] = auth }
+        };
+    }
+
+    private static PublicUrlFetchException? FindRefusal(Exception ex)
+    {
+        for (Exception? inner = ex; inner != null; inner = inner.InnerException)
+        {
+            if (inner is PublicUrlFetchException refused) return refused;
+        }
+        return null;
     }
 
     #region Helpers
@@ -146,6 +235,22 @@ public class WebPushNotificationServiceTests
             .Returns(rows);
     }
 
+    private IWebPushNotificationService CreateService(HttpMessageHandler handler)
+    {
+        var http = new HttpClient(handler);
+        _disposables.Add(http);
+        return CreateService(new PushServiceClient(http));
+    }
+
+    private IWebPushNotificationService CreateService(PushServiceClient pushClient) =>
+        new WebPushNotificationService(
+            _notifications,
+            _subscriptions,
+            _config,
+            _users,
+            pushClient,
+            NullLogger<WebPushNotificationService>.Instance);
+
     private IWebPushNotificationService CreateService(IPublicUrlFetchAllowance? allowance = null)
     {
         var services = new ServiceCollection();
@@ -154,18 +259,12 @@ public class WebPushNotificationServiceTests
         {
             services.AddSingleton(allowance);
         }
-        // Mirrors the production registration in ServiceCollectionExtensions.
-        services.AddHttpClient<PushServiceClient>().UsePublicUrlPolicy();
+        // The production registration, not a copy of it.
+        services.AddWebPushClient();
         var provider = services.BuildServiceProvider();
         _disposables.Add(provider);
 
-        return new WebPushNotificationService(
-            _notifications,
-            _subscriptions,
-            _config,
-            _users,
-            provider.GetRequiredService<PushServiceClient>(),
-            NullLogger<WebPushNotificationService>.Instance);
+        return CreateService(provider.GetRequiredService<PushServiceClient>());
     }
 
     private WireMockServer StartPushServer()
@@ -226,49 +325,16 @@ public class WebPushNotificationServiceTests
             FailedLoginAttempts: 0,
             LockedUntil: null);
 
-    /// <summary>A bare loopback listener that only records whether anything connected to it.</summary>
-    private sealed class ConnectionCounter : IDisposable
+    /// <summary>Stands in for the push service: records each request and answers (or throws) as configured.</summary>
+    private sealed class StubHandler(Func<HttpRequestMessage, HttpResponseMessage> respond) : HttpMessageHandler
     {
-        private readonly TcpListener _listener;
-        private readonly TaskCompletionSource<bool> _connected = new();
+        public List<HttpRequestMessage> Requests { get; } = [];
 
-        public ConnectionCounter()
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
-            _listener = new TcpListener(IPAddress.Loopback, 0);
-            _listener.Start();
-            Port = ((IPEndPoint)_listener.LocalEndpoint).Port;
-            _ = AcceptAsync();
+            Requests.Add(request);
+            return Task.FromResult(respond(request));
         }
-
-        public int Port { get; }
-
-        public async Task<bool> ConnectionWithin(TimeSpan wait)
-        {
-            try
-            {
-                return await _connected.Task.WaitAsync(wait);
-            }
-            catch (TimeoutException)
-            {
-                return false;
-            }
-        }
-
-        private async Task AcceptAsync()
-        {
-            try
-            {
-                using var client = await _listener.AcceptTcpClientAsync();
-                _connected.TrySetResult(true);
-            }
-            catch (Exception)
-            {
-                // Listener stopped before anything connected.
-                _connected.TrySetResult(false);
-            }
-        }
-
-        public void Dispose() => _listener.Stop();
     }
 
     #endregion
