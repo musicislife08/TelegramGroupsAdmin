@@ -1,4 +1,4 @@
-namespace TelegramGroupsAdmin.IntegrationTests.TestData;
+namespace TelegramGroupsAdmin.Testing.Golden;
 
 /// <summary>
 /// Canonical constants — anchor IDs, expected counts, mutation offsets — for tests
@@ -18,7 +18,7 @@ namespace TelegramGroupsAdmin.IntegrationTests.TestData;
 /// <see cref="Chats"/>) once a second consumer wants it; until then, keep it next
 /// to the tests that use it under a domain nested class.
 /// </summary>
-internal static class GoldenDatasetConstants
+public static class GoldenDatasetConstants
 {
     /// <summary>
     /// Web user fixtures from <c>canonical/01_users.sql</c>. UUIDs are stable

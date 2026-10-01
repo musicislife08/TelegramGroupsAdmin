@@ -2,7 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Data;
 
-namespace TelegramGroupsAdmin.IntegrationTests.TestData;
+namespace TelegramGroupsAdmin.Testing.Golden;
 
 /// <summary>
 /// Stage-2 reducer plan, returned once any child reducer (KeepSpam / KeepHam /

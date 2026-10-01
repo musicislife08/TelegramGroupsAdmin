@@ -1,4 +1,4 @@
-namespace TelegramGroupsAdmin.IntegrationTests.TestData;
+namespace TelegramGroupsAdmin.Testing.Golden;
 
 /// <summary>
 /// Wraps any exception raised inside GoldenReducePlanState.ApplyAsync. The transaction

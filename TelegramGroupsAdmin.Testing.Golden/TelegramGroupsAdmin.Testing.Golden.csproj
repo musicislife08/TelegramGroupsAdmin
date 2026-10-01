@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- EF1002: ExecuteSqlRawAsync SQL injection warning - all SQL here is hardcoded test fixture text -->
+    <NoWarn>$(NoWarn);EF1002</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\TelegramGroupsAdmin.Data\TelegramGroupsAdmin.Data.csproj" />
+    <ProjectReference Include="..\TelegramGroupsAdmin.Core\TelegramGroupsAdmin.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Canonical SQL fixtures (canonical/*.sql is FK-ordered by filename prefix). -->
+    <EmbeddedResource Include="SQL\**\*.sql" Exclude="SQL\tools\**" />
+  </ItemGroup>
+
+</Project>

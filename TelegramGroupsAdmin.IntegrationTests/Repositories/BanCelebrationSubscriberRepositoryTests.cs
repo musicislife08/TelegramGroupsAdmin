@@ -5,7 +5,7 @@ using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.IntegrationTests.TestData;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
 using TelegramGroupsAdmin.Telegram.Repositories;
-using Anchors = TelegramGroupsAdmin.IntegrationTests.TestData.GoldenDatasetConstants.DmCelebrations;
+using Anchors = TelegramGroupsAdmin.Testing.Golden.GoldenDatasetConstants.DmCelebrations;
 
 namespace TelegramGroupsAdmin.IntegrationTests.Repositories;
 

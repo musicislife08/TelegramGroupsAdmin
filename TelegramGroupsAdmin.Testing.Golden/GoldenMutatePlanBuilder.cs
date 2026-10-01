@@ -1,7 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using TelegramGroupsAdmin.Data;
 
-namespace TelegramGroupsAdmin.IntegrationTests.TestData;
+namespace TelegramGroupsAdmin.Testing.Golden;
 
 /// <summary>
 /// In-place mutator for canonical substrate. Sibling of <see cref="GoldenReducePlanBuilder"/>

@@ -1,6 +1,6 @@
 using TelegramGroupsAdmin.Data;
 
-namespace TelegramGroupsAdmin.IntegrationTests.TestData;
+namespace TelegramGroupsAdmin.Testing.Golden;
 
 /// <summary>
 /// Stage-1 reducer plan returned by GoldenDataset.Reduce(ctx). All five Keep* methods

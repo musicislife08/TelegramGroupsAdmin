@@ -4,7 +4,7 @@ using Npgsql;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Data.Constants;
 
-namespace TelegramGroupsAdmin.IntegrationTests.TestData;
+namespace TelegramGroupsAdmin.Testing.Golden;
 
 public static class GoldenDataset
 {
@@ -118,7 +118,7 @@ public static class GoldenDataset
     private static async Task LoadCanonicalSqlScriptAsync(AppDbContext context, string scriptPath)
     {
         var assembly = typeof(GoldenDataset).Assembly;
-        var resourceName = $"TelegramGroupsAdmin.IntegrationTests.TestData.{scriptPath}";
+        var resourceName = $"{assembly.GetName().Name}.{scriptPath}";
         await using var stream = assembly.GetManifestResourceStream(resourceName);
         if (stream == null)
         {

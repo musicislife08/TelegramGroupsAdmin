@@ -1,4 +1,4 @@
-namespace TelegramGroupsAdmin.IntegrationTests.TestData;
+namespace TelegramGroupsAdmin.Testing.Golden;
 
 /// <summary>
 /// A single in-place timestamp mutation: replace the target row's timestamp column
