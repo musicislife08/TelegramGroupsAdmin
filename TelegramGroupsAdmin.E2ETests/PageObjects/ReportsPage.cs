@@ -419,15 +419,27 @@ public class ReportsPage
     public ILocator ExamAiEvaluation => _page.GetByText("AI Evaluation");
 
     /// <summary>
-    /// The score chip of the first exam review card, displayed as "X/Y correct (Z%)".
+    /// The header row of an exam review card's "Multiple Choice" section (title, score chip and the
+    /// MC Passed/Failed chip). The innermost flex row containing the title, so the card's own header
+    /// ("Passed — auto-admitted") and the AI evaluation chip are outside it.
     /// </summary>
-    public ILocator ExamScoreChip => _page.Locator(".mud-chip").Filter(new() { HasText = "correct" }).First;
+    public ILocator ExamMcSectionHeader => ExamMcSectionHeaderIn(_page.Locator("body"));
 
-    /// <summary>The "Passed" status chip of an exam's MC section.</summary>
-    public ILocator ExamMcPassedChip => _page.Locator(".mud-chip:has-text('Passed')");
+    /// <summary>The MC section header row within <paramref name="scope"/> (MudStack Row renders <c>d-flex flex-row</c>).</summary>
+    public static ILocator ExamMcSectionHeaderIn(ILocator scope) =>
+        scope.Locator(".flex-row").Filter(new() { HasText = "Multiple Choice" });
 
-    /// <summary>The "Failed" status chip of an exam's MC section.</summary>
-    public ILocator ExamMcFailedChip => _page.Locator(".mud-chip:has-text('Failed')");
+    /// <summary>
+    /// The MC score chip, displayed as "X/Y correct (Z%)". Scoped to the Multiple Choice section of
+    /// every exam review card on the page; narrow with <see cref="ExamReviewCards"/> when several are shown.
+    /// </summary>
+    public ILocator ExamScoreChip => ExamMcSectionHeader.Locator(".mud-chip").Filter(new() { HasText = "correct" });
+
+    /// <summary>The MC "Passed" chip, scoped to the Multiple Choice section (not "Passed — auto-admitted" or the AI chip).</summary>
+    public ILocator ExamMcPassedChip => ExamMcSectionHeader.Locator(".mud-chip").Filter(new() { HasTextRegex = new Regex(@"^\s*Passed\s*$") });
+
+    /// <summary>The MC "Failed" chip, scoped to the Multiple Choice section (not the AI chip).</summary>
+    public ILocator ExamMcFailedChip => ExamMcSectionHeader.Locator(".mud-chip").Filter(new() { HasTextRegex = new Regex(@"^\s*Failed\s*$") });
 
     #endregion
 }
