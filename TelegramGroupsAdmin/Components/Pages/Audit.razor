@@ -325,7 +325,7 @@
                 <MudTd DataLabel="Issued By">
                     @if (context.IssuedBy.Type == ActorType.System)
                     {
-                        @if (context.IssuedBy.SystemIdentifier == "bot_protection")
+                        @if (context.IssuedBy.SystemIdentifier == SystemActorIds.BotProtection)
                         {
                             <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.Shield" Color="Color.Info">
                                 Bot Protection
