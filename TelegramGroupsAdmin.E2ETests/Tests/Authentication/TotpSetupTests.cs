@@ -166,6 +166,18 @@ public class TotpSetupTests : SharedE2ETestBase
         // Assert - confirmation checkbox should be visible and unchecked by default
         await Expect(_setupPage.ConfirmCheckbox).ToBeVisibleAsync();
         await Expect(_setupPage.ConfirmCheckbox).Not.ToBeCheckedAsync();
+
+        // Act - submit without confirming. The confirm form is a static SSR post with a
+        // [Range(true, true)] on Confirmed, so the server re-renders the page with a validation
+        // message instead of signing the user in.
+        await _setupPage.ClickCompleteSetupAsync();
+
+        // Assert - still on the setup page, validation message shown, form still available
+        await Expect(_setupPage.ConfirmValidationMessage)
+            .ToHaveTextAsync("You must confirm you have saved your recovery codes");
+        await Expect(Page).ToHaveURLAsync(new Regex(@"/login/setup-2fa"));
+        await Expect(_setupPage.ConfirmCheckbox).Not.ToBeCheckedAsync();
+        await Expect(_setupPage.CompleteSetupButtonLocator).ToBeVisibleAsync();
     }
 
     [Test]

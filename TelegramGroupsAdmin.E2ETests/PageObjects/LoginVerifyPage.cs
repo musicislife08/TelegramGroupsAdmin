@@ -96,6 +96,9 @@ public class LoginVerifyPage
 
     #region Recovery Code Methods
 
+    /// <summary>The authenticator (TOTP) code input, shown on the default verification form.</summary>
+    public ILocator TotpCodeInput => _page.Locator(CodeInput);
+
     /// <summary>The "Use a recovery code instead" link.</summary>
     public ILocator UseRecoveryCodeLink => _page.Locator(UseRecoveryCodeLinkSelector);
 

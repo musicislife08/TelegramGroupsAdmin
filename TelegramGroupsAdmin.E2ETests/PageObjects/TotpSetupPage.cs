@@ -26,6 +26,7 @@ public class TotpSetupPage
     private const string RecoveryCodeItemSelector = ".recovery-code";
     private const string ConfirmCheckboxSelector = ".confirm-checkbox input[type='checkbox']";
     private const string CompleteSetupButton = ".recovery-codes-section button[type='submit']";
+    private const string ConfirmValidationMessageSelector = ".confirm-checkbox .validation-message";
 
     public TotpSetupPage(IPage page)
     {
@@ -175,21 +176,21 @@ public class TotpSetupPage
         await ConfirmCheckbox.CheckAsync();
     }
 
+    /// <summary>The "Complete Setup" submit button of the recovery codes form.</summary>
+    public ILocator CompleteSetupButtonLocator => _page.Locator(CompleteSetupButton);
+
     /// <summary>
-    /// Unchecks the confirmation checkbox.
+    /// The DataAnnotations validation message under the confirmation checkbox, rendered after the
+    /// form is posted without the box checked.
     /// </summary>
-    public async Task UncheckConfirmationAsync()
-    {
-        // UncheckAsync is a no-op when the box is already unchecked.
-        await ConfirmCheckbox.UncheckAsync();
-    }
+    public ILocator ConfirmValidationMessage => _page.Locator(ConfirmValidationMessageSelector);
 
     /// <summary>
     /// Clicks the "Complete Setup" button.
     /// </summary>
     public async Task ClickCompleteSetupAsync()
     {
-        await _page.Locator(CompleteSetupButton).ClickAsync();
+        await CompleteSetupButtonLocator.ClickAsync();
     }
 
     /// <summary>
