@@ -489,14 +489,19 @@ public class ReportsTests : SharedAuthenticatedTestBase
         await _reportsPage.NavigateAsync();
         await _reportsPage.WaitForLoadAsync();
 
-        // Filter to impersonation only (which doesn't exist)
+        // Sync on the seeded moderation report before filtering
+        await Expect(_reportsPage.ModerationReportHeaders).ToBeVisibleAsync();
+
+        // Widen to all statuses, then narrow to impersonation only (none exist). Reports.razor only
+        // renders "No reports match the selected filters." when the status filter is not Pending;
+        // with Pending it says "All reports have been reviewed!" instead.
+        await _reportsPage.SelectStatusFilterAsync("All Statuses");
         await _reportsPage.SelectTypeFilterAsync("Impersonation Alerts");
 
-        // Wait for Blazor to re-render - use web-first assertion
-        await Expect(Page.GetByText("No reports found")).ToBeVisibleAsync();
-
-        // Assert - should show empty state
+        // Assert - empty state explains that the filters matched nothing
         await Expect(_reportsPage.EmptyState).ToBeVisibleAsync();
+        await Expect(_reportsPage.NoMatchingFiltersMessage).ToBeVisibleAsync();
+        await Expect(_reportsPage.AllReviewedMessage).Not.ToBeVisibleAsync();
     }
 
     #region Dangerous Action Tests - NO CONFIRMATION
