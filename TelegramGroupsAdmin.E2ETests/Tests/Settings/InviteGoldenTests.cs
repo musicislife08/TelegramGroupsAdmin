@@ -29,8 +29,6 @@ public class InviteGoldenTests : GoldenE2ETestBase
     private const string PermissionGlobalAdmin = "GlobalAdmin - Global moderation";
     private const string PermissionOwner = "Owner - Full system access";
 
-    private static readonly Regex InviteLinkPattern = new(@"^https?://[^/]+/register\?invite=[0-9a-f-]{36}$");
-
     private WebAdminAccountsPage _accounts = null!;
     private int _canonicalInviteCount;
 
@@ -72,10 +70,10 @@ public class InviteGoldenTests : GoldenE2ETestBase
         await _accounts.GenerateInviteAsync();
 
         await Expect(_accounts.DialogTitle).ToHaveTextAsync("Invite Link Created");
-        await Expect(_accounts.InviteLinkInput).ToHaveValueAsync(InviteLinkPattern);
+        await Expect(_accounts.InviteLinkInput).ToHaveValueAsync(InviteLinks.Pattern);
         await Expect(_accounts.SnackbarWithText("Invite created successfully")).ToBeVisibleAsync();
 
-        var token = TokenFromLink(await ReadInviteLinkAsync());
+        var token = InviteLinks.TokenFrom(await InviteLinks.ReadAsync(_accounts));
         await _accounts.ClickDoneAsync();
 
         await using var ctx = CreateDbContext();
@@ -123,9 +121,9 @@ public class InviteGoldenTests : GoldenE2ETestBase
         await OpenAccountsPageAsync(LoginAsOwnerAsync);
         await _accounts.ClickCreateUserAsync();
         await _accounts.GenerateInviteAsync();
-        await Expect(_accounts.InviteLinkInput).ToHaveValueAsync(InviteLinkPattern);
-        var inviteLink = await ReadInviteLinkAsync();
-        var token = TokenFromLink(inviteLink);
+        await Expect(_accounts.InviteLinkInput).ToHaveValueAsync(InviteLinks.Pattern);
+        var inviteLink = await InviteLinks.ReadAsync(_accounts);
+        var token = InviteLinks.TokenFrom(inviteLink);
         await _accounts.ClickDoneAsync();
 
         // Continue as the invitee: anonymous, following the link the Owner would send.
@@ -178,20 +176,140 @@ public class InviteGoldenTests : GoldenE2ETestBase
         await _accounts.NavigateAsync();
         await _accounts.WaitForLoadAsync();
     }
+}
+
+/// <summary>
+/// The verification-ON sibling of <see cref="InviteGoldenTests.RegisterWithInvite_CreatesAnActiveAccountThatLogsIn"/>:
+/// the same canonical, plus a dummy SendGrid key (<c>EnableSendGridApiKey</c>) so the strict email gate reads
+/// email as configured. The key is never sent anywhere — the factory swaps <c>IEmailService</c> for a capturing
+/// stub, and the verification email the app hands that stub is an assertion subject here. Its own fixture
+/// because <see cref="GoldenE2ETestBase.ArrangeDataAsync"/> runs once, before the app starts.
+/// </summary>
+[TestFixture]
+public class InviteEmailVerificationGoldenTests : GoldenE2ETestBase
+{
+    /// <summary>A value, not a key: it only has to be present for the gate to read email as configured.</summary>
+    private const string DummySendGridApiKey = "SG.e2e-dummy";
+
+    /// <summary><c>verification_tokens.token_type</c> for an email-verification token (<c>TokenType.EmailVerification</c>).</summary>
+    private const string EmailVerifyTokenType = "email_verify";
+
+    protected override async Task ArrangeDataAsync(AppDbContext context)
+    {
+        await GoldenDataset.Mutate(context)
+            .EnableSendGridApiKey(SharedKeyRing(), DummySendGridApiKey)
+            .ApplyAsync();
+    }
+
+    [Test]
+    public async Task RegisterWithInvite_WithEmailConfigured_SendsVerificationAndRefusesLoginUntilVerified()
+    {
+        using (var scope = Factory.Services.CreateScope())
+        {
+            var features = scope.ServiceProvider.GetRequiredService<IFeatureAvailabilityService>();
+            Assert.That(await features.IsEmailVerificationEnabledAsync(), Is.True,
+                "the dummy SendGrid key in api_keys must make the strict email gate read Enabled — this test covers the verification-on path");
+        }
+
+        // The Owner creates an invite with the dialog defaults (Admin, 7 days).
+        var accounts = new WebAdminAccountsPage(Page);
+        await LoginAsOwnerAsync();
+        await accounts.NavigateAsync();
+        await accounts.WaitForLoadAsync();
+        await accounts.ClickCreateUserAsync();
+        await accounts.GenerateInviteAsync();
+        await Expect(accounts.InviteLinkInput).ToHaveValueAsync(InviteLinks.Pattern);
+        var inviteLink = await InviteLinks.ReadAsync(accounts);
+        var token = InviteLinks.TokenFrom(inviteLink);
+        await accounts.ClickDoneAsync();
+
+        // Continue as the invitee: anonymous, following the link the Owner would send.
+        await Context.ClearCookiesAsync();
+        var email = TestCredentials.GenerateEmail("invited-verify");
+        var password = TestCredentials.GeneratePassword();
+        var register = new RegisterPage(Page);
+        await register.NavigateToInviteLinkAsync(inviteLink);
+
+        // The invite code only populates once the page has resolved its first-run and email state, so the
+        // note's absence is checked against that settled render.
+        await Expect(register.InviteCodeInput).ToHaveValueAsync(token);
+        await Expect(register.EmailVerificationDisabledNote).ToHaveCountAsync(0);
+
+        await register.FillEmailAsync(email);
+        await register.FillPasswordAsync(password);
+        await register.FillConfirmPasswordAsync(password);
+        await register.SubmitAsync();
+
+        // The register endpoint returns the same message on both paths; the login flow owns verification.
+        await Expect(register.SuccessAlert).ToContainTextAsync("Account created successfully");
+        await Page.WaitForURLAsync("**/login", new() { Timeout = 10000 });
+
+        // Unverified, so the login is refused before any TOTP step: the page re-renders with the error and never
+        // redirects to /login/setup-2fa (the URL check runs against the render that carries the error).
+        var login = new LoginPage(Page);
+        await login.LoginAsync(email, password);
+        await Expect(login.ErrorAlert).ToContainTextAsync("Please verify your email before logging in");
+        await Expect(Page).ToHaveURLAsync(new Regex("/login$"));
+
+        await using var ctx = CreateDbContext();
+        var normalizedEmail = email.ToUpperInvariant();
+        var user = await ctx.Users.AsNoTracking().Where(u => u.NormalizedEmail == normalizedEmail)
+            .Select(u => new { u.Id, u.PermissionLevel, u.InvitedBy, u.EmailVerified, u.TotpEnabled, u.Status, u.IsActive }).SingleAsync();
+        var invite = await ctx.Invites.AsNoTracking().Where(i => i.Token == token)
+            .Select(i => new { i.Status, i.UsedBy }).SingleAsync();
+        var storedTokens = await ctx.VerificationTokens.AsNoTracking()
+            .Where(t => t.UserId == user.Id && t.TokenTypeString == EmailVerifyTokenType)
+            .Select(t => new { t.Token, t.UsedAt, t.ExpiresAt }).ToListAsync();
+        var verificationEmails = EmailService.GetEmailsByTemplate(EmailTemplate.EmailVerification).ToList();
+
+        // The two "exactly one" checks gate the indexing below, so they run first and fail on their own message.
+        Assert.That(verificationEmails, Has.Count.EqualTo(1), "exactly one verification email was handed to the email service");
+        Assert.That(storedTokens, Has.Count.EqualTo(1), "registration stores exactly one email-verification token");
+        var verificationEmail = verificationEmails[0];
+        var storedToken = storedTokens[0];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(user.PermissionLevel, Is.EqualTo(0), "PermissionLevel.Admin from the invite");
+            Assert.That(user.InvitedBy, Is.EqualTo(GoldenDatasetConstants.WebUsers.OwnerId));
+            Assert.That(user.EmailVerified, Is.False, "verification is on, so the account starts unverified");
+            Assert.That(user.TotpEnabled, Is.True, "every new account must set up 2FA (once verified)");
+            Assert.That((UserStatus)(int)user.Status, Is.EqualTo(UserStatus.Active));
+            Assert.That(user.IsActive, Is.True);
+            Assert.That(invite.Status, Is.EqualTo(InviteStatus.Used));
+            Assert.That(invite.UsedBy, Is.EqualTo(user.Id));
+
+            Assert.That(storedToken.UsedAt, Is.Null, "the token is unused until the link is followed");
+            Assert.That(storedToken.ExpiresAt, Is.GreaterThan(DateTimeOffset.UtcNow));
+
+            Assert.That(verificationEmail.To, Is.EqualTo(new[] { email }), "sent to the invitee's address only");
+            Assert.That(verificationEmail.Parameters, Is.Not.Null);
+            Assert.That(verificationEmail.Parameters!["VerificationToken"], Is.EqualTo(storedToken.Token),
+                "the token in the email is the one stored for the user");
+            Assert.That(verificationEmail.Parameters!["BaseUrl"], Is.EqualTo(BaseUrl), "the link points at this app instance");
+            Assert.That(EmailService.GetEmailsTo(email).Count(), Is.EqualTo(1), "no other email reached the invitee");
+        }
+    }
+}
+
+/// <summary>The generated invite link, shared by the invite fixtures in this file.</summary>
+file static class InviteLinks
+{
+    /// <summary>What the "Invite Link Created" dialog shows: <c>{BaseUri}register?invite={guid}</c>.</summary>
+    public static readonly Regex Pattern = new(@"^https?://[^/]+/register\?invite=[0-9a-f-]{36}$");
 
     /// <summary>
     /// The generated link, read once its value has been asserted with Expect: the test needs the value
     /// itself (to follow the link and to find the invite row), which no Expect can hand back.
     /// </summary>
-    private async Task<string> ReadInviteLinkAsync()
+    public static async Task<string> ReadAsync(WebAdminAccountsPage accounts)
     {
 #pragma warning disable RS0030 // Legitimate value read after the ToHaveValueAsync sync on the same field
-        return await _accounts.InviteLinkInput.InputValueAsync();
+        return await accounts.InviteLinkInput.InputValueAsync();
 #pragma warning restore RS0030
     }
 
-    /// <summary>The <c>invite</c> query value of a generated link (<c>{BaseUri}register?invite={token}</c>).</summary>
-    private static string TokenFromLink(string inviteLink)
+    /// <summary>The <c>invite</c> query value of a generated link.</summary>
+    public static string TokenFrom(string inviteLink)
     {
         var query = new Uri(inviteLink).Query.TrimStart('?');
         var invite = query.Split('&', StringSplitOptions.RemoveEmptyEntries)
