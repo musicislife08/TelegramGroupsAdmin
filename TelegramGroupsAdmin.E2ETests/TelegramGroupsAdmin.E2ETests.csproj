@@ -30,6 +30,7 @@
     <PackageReference Include="Testcontainers.PostgreSql" />
     <PackageReference Include="Otp.NET" />
     <PackageReference Include="NSubstitute" />
+    <PackageReference Include="WireMock.Net" />
   </ItemGroup>
 
   <ItemGroup>

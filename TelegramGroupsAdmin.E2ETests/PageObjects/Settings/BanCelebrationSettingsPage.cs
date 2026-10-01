@@ -39,8 +39,8 @@ public class BanCelebrationSettingsPage
     private const string FileInput = "input[type='file']";
     private const string UrlTab = ".mud-tab:has-text('From URL')";
     private const string UrlInput = "input[placeholder*='example.com']";
-    private const string NameInput = ".mud-dialog input[aria-label='Name (optional)'], .mud-dialog .mud-input-slot:has-text('Name') input";
     private const string SubmitGifButton = ".mud-dialog-actions button:has-text('Add GIF')";
+    private const string SubmitCaptionButton = ".mud-dialog-actions button:has-text('Add Caption')";
     private const string CancelButton = ".mud-dialog-actions button:has-text('Cancel')";
 
     // Selectors - Duplicate Warning
@@ -79,9 +79,9 @@ public class BanCelebrationSettingsPage
             Timeout = timeoutMs
         });
 
-        // Wait for loading indicator to disappear
-        var loadingIndicator = _page.Locator(LoadingIndicator);
-        await Expect(loadingIndicator).Not.ToBeVisibleAsync(new() { Timeout = 5000 });
+        // Wait for every loading indicator (global config, GIF table, caption table) to go away.
+        // A count assertion is not strict, so it holds while several are still rendered at once.
+        await Expect(_page.Locator(LoadingIndicator)).ToHaveCountAsync(0, new() { Timeout = timeoutMs });
     }
 
     #endregion
@@ -116,6 +116,22 @@ public class BanCelebrationSettingsPage
 
     /// <summary>The dialog title.</summary>
     public ILocator DialogTitle => _page.Locator(DialogTitleSelector);
+
+    /// <summary>
+    /// The "Name (optional)" field of whichever dialog is open (Add GIF — only the active tab's panel is
+    /// rendered — or Add Caption). MudBlazor labels the input, so the accessible name is the locator.
+    /// </summary>
+    public ILocator NameInput => Dialog.GetByLabel("Name (optional)");
+
+    /// <summary>
+    /// Types <paramref name="name"/> into the Name field and tabs away. The field is not Immediate,
+    /// so the bound value only commits on blur.
+    /// </summary>
+    public async Task FillNameAsync(string name)
+    {
+        await NameInput.FillAsync(name);
+        await NameInput.PressAsync("Tab");
+    }
 
     /// <summary>
     /// Closes the dialog by pressing Escape key.
@@ -213,7 +229,9 @@ public class BanCelebrationSettingsPage
     /// </summary>
     public async Task EnterUrlAsync(string url)
     {
+        // Not Immediate: the bound value (which enables Add GIF) only commits on blur.
         await _page.Locator(UrlInput).FillAsync(url);
+        await _page.Locator(UrlInput).PressAsync("Tab");
     }
 
     #endregion
@@ -329,12 +347,50 @@ public class BanCelebrationSettingsPage
     /// <summary>The caption library data rows (excludes the no-records row).</summary>
     public ILocator CaptionRows => _page.Locator(CaptionTableRowSelector);
 
+    /// <summary>The caption library row containing <paramref name="text"/>.</summary>
+    public ILocator CaptionRow(string text) => CaptionRows.Filter(new() { HasText = text });
+
+    /// <summary>The Add Caption dialog's Chat Caption field.</summary>
+    public ILocator ChatCaptionInput => Dialog.GetByLabel("Chat Caption");
+
+    /// <summary>The Add Caption dialog's DM Caption field.</summary>
+    public ILocator DmCaptionInput => Dialog.GetByLabel("DM Caption");
+
+    /// <summary>The Add Caption dialog's submit button. Disabled until both captions are filled.</summary>
+    public ILocator SubmitCaptionButtonLocator => _page.Locator(SubmitCaptionButton);
+
+    /// <summary>
+    /// Fills the Add Caption dialog. Each field is tabbed out of so its non-Immediate binding commits.
+    /// </summary>
+    public async Task FillCaptionDialogAsync(string name, string chatText, string dmText)
+    {
+        await FillNameAsync(name);
+        await ChatCaptionInput.FillAsync(chatText);
+        await ChatCaptionInput.PressAsync("Tab");
+        await DmCaptionInput.FillAsync(dmText);
+        await DmCaptionInput.PressAsync("Tab");
+    }
+
+    /// <summary>Clicks Add Caption in the dialog and waits for the dialog to close.</summary>
+    public async Task SubmitCaptionAndWaitForCloseAsync()
+    {
+        await _page.Locator(SubmitCaptionButton).ClickAsync();
+        await _page.Locator(DialogSelector).WaitForAsync(new LocatorWaitForOptions
+        {
+            State = WaitForSelectorState.Hidden,
+            Timeout = 10000
+        });
+    }
+
     #endregion
 
     #region Snackbar
 
     /// <summary>The snackbar.</summary>
     public ILocator Snackbar => _page.Locator(SnackbarSelector);
+
+    /// <summary>The snackbar(s) whose text contains <paramref name="text"/>.</summary>
+    public ILocator SnackbarWithText(string text) => Snackbar.Filter(new() { HasText = text });
 
     #endregion
 }
