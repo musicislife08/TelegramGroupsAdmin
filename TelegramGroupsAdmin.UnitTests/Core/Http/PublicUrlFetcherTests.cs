@@ -334,6 +334,205 @@ public class PublicUrlFetcherTests
 
     #endregion
 
+    #region Per-call options
+
+    [Test]
+    public async Task FetchAsync_TruncateAtCap_ReturnsTheFirstBytesAndFlagsTruncation()
+    {
+        // A caller that only needs the start of a document (an HTML head) asks for truncation
+        // instead of refusal: a declared Content-Length over the cap is not a reason to refuse,
+        // and reading stops at the cap.
+        var server = WireMockServer.Start();
+        _disposables.Add(server);
+        var body = Enumerable.Range(0, 4096).Select(i => (byte)(i % 251)).ToArray();
+        server.Given(Request.Create().WithPath("/page").UsingGet())
+            .RespondWith(Response.Create().WithStatusCode(200).WithHeader("Content-Type", "text/html").WithBody(body));
+        var fetcher = CreateFetcher(new LoopbackPortAllowance(server.Port));
+
+        var result = await fetcher.FetchAsync(
+            $"http://127.0.0.1:{server.Port}/page",
+            new PublicUrlFetchOptions { MaxBytes = 1024, TruncateAtCap = true });
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Content, Is.EqualTo(body.Take(1024).ToArray()));
+            Assert.That(result.Truncated, Is.True);
+            Assert.That(result.MediaType, Is.EqualTo("text/html"));
+        }
+    }
+
+    [Test]
+    public async Task FetchAsync_TruncateAtCap_BodyWithinTheCap_IsReturnedWhole()
+    {
+        var server = StartGifServer("/anim.gif");
+        var fetcher = CreateFetcher(new LoopbackPortAllowance(server.Port));
+
+        var result = await fetcher.FetchAsync(
+            $"http://127.0.0.1:{server.Port}/anim.gif",
+            new PublicUrlFetchOptions { MaxBytes = OneMegabyte, TruncateAtCap = true });
+
+        Assert.That(result.Content, Is.EqualTo(GifBytes));
+        Assert.That(result.Truncated, Is.False);
+    }
+
+    [Test]
+    public async Task FetchAsync_TruncateAtCap_BodyExactlyAtTheCap_IsNotFlagged()
+    {
+        using var server = new RawHttpServer(bodyBytes: 1024);
+        var fetcher = CreateFetcher(new LoopbackPortAllowance(server.Port));
+
+        var result = await fetcher.FetchAsync(
+            $"http://127.0.0.1:{server.Port}/stream.gif",
+            new PublicUrlFetchOptions { MaxBytes = 1024, TruncateAtCap = true });
+
+        Assert.That(result.Content, Has.Length.EqualTo(1024));
+        Assert.That(result.Truncated, Is.False);
+    }
+
+    [Test]
+    public void FetchAsync_TruncateAtCap_StillRefusesNonPublicTargets()
+    {
+        var server = StartGifServer("/anim.gif");
+        var fetcher = CreateFetcher();
+
+        var ex = Assert.ThrowsAsync<PublicUrlFetchException>(() => fetcher.FetchAsync(
+            $"http://127.0.0.1:{server.Port}/anim.gif",
+            new PublicUrlFetchOptions { MaxBytes = 1024, TruncateAtCap = true }));
+
+        Assert.That(ex!.Kind, Is.EqualTo(PublicUrlFetchFailure.NotAllowed));
+        Assert.That(server.LogEntries, Is.Empty);
+    }
+
+    [Test]
+    public void FetchAsync_PerCallTimeout_CutsTheFetchShort()
+    {
+        var server = WireMockServer.Start();
+        _disposables.Add(server);
+        server.Given(Request.Create().WithPath("/slow").UsingGet())
+            .RespondWith(Response.Create().WithStatusCode(200).WithBody("late").WithDelay(TimeSpan.FromSeconds(20)));
+        var fetcher = CreateFetcher(new LoopbackPortAllowance(server.Port));
+
+        var started = DateTime.UtcNow;
+        var ex = Assert.ThrowsAsync<PublicUrlFetchException>(() => fetcher.FetchAsync(
+            $"http://127.0.0.1:{server.Port}/slow",
+            new PublicUrlFetchOptions { MaxBytes = OneMegabyte, Timeout = TimeSpan.FromMilliseconds(500) }));
+
+        Assert.That(ex!.Kind, Is.EqualTo(PublicUrlFetchFailure.Timeout));
+        Assert.That(ex.Message, Is.EqualTo(PublicUrlFetchException.TimeoutMessage));
+        Assert.That(DateTime.UtcNow - started, Is.LessThan(TimeSpan.FromSeconds(10)));
+    }
+
+    [Test]
+    public void FetchAsync_Failures_CarryTheirKind()
+    {
+        var server = WireMockServer.Start();
+        _disposables.Add(server);
+        server.Given(Request.Create().WithPath("/missing").UsingGet())
+            .RespondWith(Response.Create().WithStatusCode(404));
+        server.Given(Request.Create().WithPath("/big").UsingGet())
+            .RespondWith(Response.Create().WithStatusCode(200).WithBody(new byte[4096]));
+        var fetcher = CreateFetcher(new LoopbackPortAllowance(server.Port));
+        var unreachablePort = ReserveUnusedPort();
+        var unreachable = CreateFetcher(new LoopbackPortAllowance(unreachablePort));
+
+        var status = Assert.ThrowsAsync<PublicUrlFetchException>(() => fetcher.FetchAsync($"http://127.0.0.1:{server.Port}/missing", OneMegabyte));
+        var tooLarge = Assert.ThrowsAsync<PublicUrlFetchException>(() => fetcher.FetchAsync($"http://127.0.0.1:{server.Port}/big", 1024));
+        var scheme = Assert.ThrowsAsync<PublicUrlFetchException>(() => fetcher.FetchAsync("ftp://example.com/x", OneMegabyte));
+        var refused = Assert.ThrowsAsync<PublicUrlFetchException>(() => unreachable.FetchAsync($"http://127.0.0.1:{unreachablePort}/x", OneMegabyte));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(status!.Kind, Is.EqualTo(PublicUrlFetchFailure.HttpStatus));
+            Assert.That(tooLarge!.Kind, Is.EqualTo(PublicUrlFetchFailure.TooLarge));
+            Assert.That(scheme!.Kind, Is.EqualTo(PublicUrlFetchFailure.NotAllowed));
+            Assert.That(refused!.Kind, Is.EqualTo(PublicUrlFetchFailure.Unreachable));
+        }
+    }
+
+    #endregion
+
+    #region Typed clients on the same policy
+
+    private sealed class ProbeClient(HttpClient http)
+    {
+        public Task<HttpResponseMessage> PostAsync(string url) => http.PostAsync(url, new StringContent("ping"));
+    }
+
+    [Test]
+    public void UsePublicUrlPolicy_TypedClient_RefusesLoopbackWithoutTheAllowance()
+    {
+        var server = WireMockServer.Start();
+        _disposables.Add(server);
+        server.Given(Request.Create().WithPath("/push").UsingPost())
+            .RespondWith(Response.Create().WithStatusCode(201));
+        var probe = CreateProbeClient();
+
+        var ex = Assert.ThrowsAsync<HttpRequestException>(() => probe.PostAsync($"http://localhost:{server.Port}/push"));
+
+        Assert.That(FindRefusal(ex!), Is.Not.Null, "the connect callback's refusal must be the cause");
+        Assert.That(FindRefusal(ex!)!.Kind, Is.EqualTo(PublicUrlFetchFailure.NotAllowed));
+        Assert.That(server.LogEntries, Is.Empty, "the server must never see a request");
+    }
+
+    [Test]
+    public async Task UsePublicUrlPolicy_TypedClient_ConnectsThroughTheAllowance()
+    {
+        var server = WireMockServer.Start();
+        _disposables.Add(server);
+        server.Given(Request.Create().WithPath("/push").UsingPost())
+            .RespondWith(Response.Create().WithStatusCode(201));
+        var probe = CreateProbeClient(new LoopbackPortAllowance(server.Port));
+
+        using var response = await probe.PostAsync($"http://localhost:{server.Port}/push");
+
+        Assert.That((int)response.StatusCode, Is.EqualTo(201));
+        Assert.That(server.LogEntries.Select(e => e.RequestMessage!.Path), Is.EqualTo(new[] { "/push" }));
+    }
+
+    [Test]
+    public void UsePublicUrlPolicy_TypedClient_DoesNotFollowRedirectsOnItsOwn()
+    {
+        // A push service or API answering 3xx must not drag the client to an unjudged address:
+        // the typed client sees the redirect status and goes no further.
+        var allowed = WireMockServer.Start();
+        _disposables.Add(allowed);
+        var target = WireMockServer.Start();
+        _disposables.Add(target);
+        allowed.Given(Request.Create().WithPath("/push").UsingPost())
+            .RespondWith(Response.Create().WithStatusCode(307).WithHeader("Location", $"http://127.0.0.1:{target.Port}/elsewhere"));
+        var probe = CreateProbeClient(new LoopbackPortAllowance(allowed.Port, target.Port));
+
+        using var response = probe.PostAsync($"http://127.0.0.1:{allowed.Port}/push").GetAwaiter().GetResult();
+
+        Assert.That((int)response.StatusCode, Is.EqualTo(307));
+        Assert.That(target.LogEntries, Is.Empty);
+    }
+
+    private ProbeClient CreateProbeClient(IPublicUrlFetchAllowance? allowance = null)
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        if (allowance != null)
+        {
+            services.AddSingleton(allowance);
+        }
+        services.AddHttpClient<ProbeClient>().UsePublicUrlPolicy();
+        var provider = services.BuildServiceProvider();
+        _disposables.Add(provider);
+        return provider.GetRequiredService<ProbeClient>();
+    }
+
+    private static PublicUrlFetchException? FindRefusal(Exception ex)
+    {
+        for (Exception? inner = ex; inner != null; inner = inner.InnerException)
+        {
+            if (inner is PublicUrlFetchException refused) return refused;
+        }
+        return null;
+    }
+
+    #endregion
+
     #region Helpers
 
     private static readonly byte[] GifBytes = "GIF89a\0\0\0\0;"u8.ToArray();

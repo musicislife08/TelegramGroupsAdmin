@@ -24,33 +24,43 @@ public sealed class PublicUrlFetcher(
     /// <summary>Redirect hops followed before the fetch is refused; each hop is re-validated.</summary>
     public const int MaxRedirects = 3;
 
-    /// <summary>Overall deadline for a fetch, across every hop and the whole body.</summary>
+    /// <summary>Default overall deadline for a fetch, across every hop and the whole body.</summary>
     public static readonly TimeSpan FetchTimeout = TimeSpan.FromSeconds(60);
 
     /// <summary>How long the handler waits for a single response's headers.</summary>
     public static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(30);
 
-    public async Task<PublicUrlFetchResult> FetchAsync(string url, long maxBytes, CancellationToken ct = default)
+    public Task<PublicUrlFetchResult> FetchAsync(string url, long maxBytes, CancellationToken ct = default)
+        => FetchAsync(url, new PublicUrlFetchOptions { MaxBytes = maxBytes }, ct);
+
+    public async Task<PublicUrlFetchResult> FetchAsync(string url, PublicUrlFetchOptions options, CancellationToken ct = default)
     {
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxBytes);
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(options.MaxBytes);
 
         try
         {
-            return await FetchCoreAsync(url, maxBytes, ct);
+            return await FetchCoreAsync(url, options, ct);
         }
         catch (PublicUrlFetchException ex)
         {
-            logger.LogWarning("Refused to fetch URL {Url}: {Reason}", url, ex.Reason);
+            // A policy refusal is a security signal worth a warning; a dead link, a slow server or
+            // an oversized file is the caller's business and is reported through the exception.
+            if (ex.Kind == PublicUrlFetchFailure.NotAllowed)
+                logger.LogWarning("Refused to fetch URL {Url}: {Reason}", url, ex.Reason);
+            else
+                logger.LogDebug("Could not fetch URL {Url}: {Reason}", url, ex.Reason);
             throw;
         }
     }
 
-    private async Task<PublicUrlFetchResult> FetchCoreAsync(string url, long maxBytes, CancellationToken ct)
+    private async Task<PublicUrlFetchResult> FetchCoreAsync(string url, PublicUrlFetchOptions options, CancellationToken ct)
     {
         var current = ValidateUrl(url);
+        var timeout = options.Timeout ?? FetchTimeout;
 
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        deadline.CancelAfter(FetchTimeout);
+        deadline.CancelAfter(timeout);
         var token = deadline.Token;
 
         var client = httpClientFactory.CreateClient(ClientName);
@@ -69,7 +79,8 @@ public sealed class PublicUrlFetcher(
             }
             catch (OperationCanceledException) when (!ct.IsCancellationRequested)
             {
-                throw new PublicUrlFetchException(PublicUrlFetchException.TimeoutMessage, $"no response within {FetchTimeout}");
+                throw new PublicUrlFetchException(
+                    PublicUrlFetchFailure.Timeout, PublicUrlFetchException.TimeoutMessage, $"no response within {timeout}");
             }
 
             using (response)
@@ -78,11 +89,12 @@ public sealed class PublicUrlFetcher(
                 {
                     if (hop >= MaxRedirects)
                         throw new PublicUrlFetchException(
-                            PublicUrlFetchException.NotAllowedMessage, $"more than {MaxRedirects} redirects");
+                            PublicUrlFetchFailure.NotAllowed, PublicUrlFetchException.NotAllowedMessage, $"more than {MaxRedirects} redirects");
 
                     var location = response.Headers.Location
                         ?? throw new PublicUrlFetchException(
-                            PublicUrlFetchException.NotAllowedMessage, $"HTTP {(int)response.StatusCode} redirect without a Location header");
+                            PublicUrlFetchFailure.NotAllowed, PublicUrlFetchException.NotAllowedMessage,
+                            $"HTTP {(int)response.StatusCode} redirect without a Location header");
 
                     var next = location.IsAbsoluteUri ? location : new Uri(current, location);
                     current = ValidateUrl(next.AbsoluteUri);
@@ -91,15 +103,17 @@ public sealed class PublicUrlFetcher(
 
                 if (!response.IsSuccessStatusCode)
                     throw new PublicUrlFetchException(
-                        $"The URL returned HTTP {(int)response.StatusCode}.", $"HTTP {(int)response.StatusCode} from {current}");
+                        PublicUrlFetchFailure.HttpStatus, $"The URL returned HTTP {(int)response.StatusCode}.",
+                        $"HTTP {(int)response.StatusCode} from {current}");
 
                 var declared = response.Content.Headers.ContentLength;
-                if (declared > maxBytes)
+                if (declared > options.MaxBytes && !options.TruncateAtCap)
                     throw new PublicUrlFetchException(
-                        PublicUrlFetchException.TooLargeMessage(maxBytes), $"Content-Length {declared} exceeds the {maxBytes}-byte cap");
+                        PublicUrlFetchFailure.TooLarge, PublicUrlFetchException.TooLargeMessage(options.MaxBytes),
+                        $"Content-Length {declared} exceeds the {options.MaxBytes}-byte cap");
 
-                var content = await ReadCappedAsync(response, maxBytes, ct, token);
-                return new PublicUrlFetchResult(content, response.Content.Headers.ContentType?.MediaType, current);
+                var (content, truncated) = await ReadCappedAsync(response, options, timeout, ct, token);
+                return new PublicUrlFetchResult(content, response.Content.Headers.ContentType?.MediaType, current, truncated);
             }
         }
     }
@@ -108,27 +122,32 @@ public sealed class PublicUrlFetcher(
     private static Uri ValidateUrl(string url)
     {
         if (string.IsNullOrWhiteSpace(url) || !Uri.TryCreate(url, UriKind.Absolute, out var uri))
-            throw new PublicUrlFetchException(PublicUrlFetchException.NotAllowedMessage, "not an absolute URL");
+            throw Refused("not an absolute URL");
 
         if (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
-            throw new PublicUrlFetchException(PublicUrlFetchException.NotAllowedMessage, $"scheme '{uri.Scheme}' is not http or https");
+            throw Refused($"scheme '{uri.Scheme}' is not http or https");
 
         if (!string.IsNullOrEmpty(uri.UserInfo))
-            throw new PublicUrlFetchException(PublicUrlFetchException.NotAllowedMessage, "URL carries userinfo");
+            throw Refused("URL carries userinfo");
 
         if (string.IsNullOrEmpty(uri.Host))
-            throw new PublicUrlFetchException(PublicUrlFetchException.NotAllowedMessage, "URL has no host");
+            throw Refused("URL has no host");
 
         return uri;
     }
+
+    private static PublicUrlFetchException Refused(string reason)
+        => new(PublicUrlFetchFailure.NotAllowed, PublicUrlFetchException.NotAllowedMessage, reason);
 
     private static bool IsRedirect(HttpStatusCode status) => status is
         HttpStatusCode.MovedPermanently or HttpStatusCode.Found or HttpStatusCode.SeeOther
         or HttpStatusCode.TemporaryRedirect or HttpStatusCode.PermanentRedirect;
 
-    private static async Task<byte[]> ReadCappedAsync(
-        HttpResponseMessage response, long maxBytes, CancellationToken callerToken, CancellationToken token)
+    private static async Task<(byte[] Content, bool Truncated)> ReadCappedAsync(
+        HttpResponseMessage response, PublicUrlFetchOptions options, TimeSpan timeout,
+        CancellationToken callerToken, CancellationToken token)
     {
+        var maxBytes = options.MaxBytes;
         try
         {
             await using var body = await response.Content.ReadAsStreamAsync(token);
@@ -140,16 +159,26 @@ public sealed class PublicUrlFetcher(
             {
                 total += read;
                 if (total > maxBytes)
-                    throw new PublicUrlFetchException(
-                        PublicUrlFetchException.TooLargeMessage(maxBytes), $"body exceeded the {maxBytes}-byte cap while streaming");
+                {
+                    if (!options.TruncateAtCap)
+                        throw new PublicUrlFetchException(
+                            PublicUrlFetchFailure.TooLarge, PublicUrlFetchException.TooLargeMessage(maxBytes),
+                            $"body exceeded the {maxBytes}-byte cap while streaming");
+
+                    // Keep only what fits; disposing the response (by the caller) drops the rest of the connection.
+                    var keep = (int)(maxBytes - (total - read));
+                    buffered.Write(buffer, 0, keep);
+                    return (buffered.ToArray(), true);
+                }
                 buffered.Write(buffer, 0, read);
             }
 
-            return buffered.ToArray();
+            return (buffered.ToArray(), false);
         }
         catch (OperationCanceledException) when (!callerToken.IsCancellationRequested)
         {
-            throw new PublicUrlFetchException(PublicUrlFetchException.TimeoutMessage, $"body not received within {FetchTimeout}");
+            throw new PublicUrlFetchException(
+                PublicUrlFetchFailure.Timeout, PublicUrlFetchException.TimeoutMessage, $"body not received within {timeout}");
         }
         catch (HttpRequestException ex)
         {
@@ -157,7 +186,8 @@ public sealed class PublicUrlFetcher(
         }
         catch (IOException ex)
         {
-            throw new PublicUrlFetchException(PublicUrlFetchException.UnreachableMessage, $"body read failed: {ex.Message}");
+            throw new PublicUrlFetchException(
+                PublicUrlFetchFailure.Unreachable, PublicUrlFetchException.UnreachableMessage, $"body read failed: {ex.Message}");
         }
     }
 
@@ -169,8 +199,23 @@ public sealed class PublicUrlFetcher(
             if (inner is PublicUrlFetchException refused) return refused;
         }
 
-        return new PublicUrlFetchException(PublicUrlFetchException.UnreachableMessage, ex.Message);
+        return new PublicUrlFetchException(PublicUrlFetchFailure.Unreachable, PublicUrlFetchException.UnreachableMessage, ex.Message);
     }
+
+    /// <summary>
+    /// The primary handler every guarded client uses: no automatic redirects (a redirect hop would
+    /// otherwise connect to an unjudged address), no proxy (it would do the connecting), and
+    /// <see cref="ConnectAsync"/> judging the address of every socket it opens.
+    /// </summary>
+    internal static SocketsHttpHandler CreateHandler(IPublicUrlFetchAllowance allowance) => new()
+    {
+        AllowAutoRedirect = false,
+        UseProxy = false,
+        UseCookies = false,
+        AutomaticDecompression = DecompressionMethods.None,
+        ConnectTimeout = TimeSpan.FromSeconds(10),
+        ConnectCallback = (context, ct) => ConnectAsync(context, allowance, ct)
+    };
 
     /// <summary>
     /// The connect callback for the <see cref="ClientName"/> handler: resolve the host, keep the
@@ -189,7 +234,8 @@ public sealed class PublicUrlFetcher(
             : await Dns.GetHostAddressesAsync(host, ct);
 
         if (resolved.Length == 0)
-            throw new PublicUrlFetchException(PublicUrlFetchException.UnreachableMessage, $"'{host}' resolved to no addresses");
+            throw new PublicUrlFetchException(
+                PublicUrlFetchFailure.Unreachable, PublicUrlFetchException.UnreachableMessage, $"'{host}' resolved to no addresses");
 
         var candidates = new List<IPAddress>(resolved.Length);
         var refusals = new List<string>();
@@ -202,8 +248,7 @@ public sealed class PublicUrlFetcher(
         }
 
         if (candidates.Count == 0)
-            throw new PublicUrlFetchException(
-                PublicUrlFetchException.NotAllowedMessage, $"'{host}:{port}' only resolves to non-public addresses: {string.Join("; ", refusals)}");
+            throw Refused($"'{host}:{port}' only resolves to non-public addresses: {string.Join("; ", refusals)}");
 
         SocketException? last = null;
         foreach (var address in candidates)
@@ -247,22 +292,21 @@ public static class PublicUrlFetcherServiceCollectionExtensions
                 client.Timeout = PublicUrlFetcher.RequestTimeout;
                 client.DefaultRequestHeaders.UserAgent.ParseAdd("TelegramGroupsAdmin/1.0");
             })
-            .ConfigurePrimaryHttpMessageHandler(sp =>
-            {
-                var allowance = sp.GetRequiredService<IPublicUrlFetchAllowance>();
-                return new SocketsHttpHandler
-                {
-                    // Redirects are followed by PublicUrlFetcher so each hop is re-validated.
-                    AllowAutoRedirect = false,
-                    // A proxy would do the connecting and the target address would never be judged.
-                    UseProxy = false,
-                    UseCookies = false,
-                    AutomaticDecompression = DecompressionMethods.None,
-                    ConnectTimeout = TimeSpan.FromSeconds(10),
-                    ConnectCallback = (context, ct) => PublicUrlFetcher.ConnectAsync(context, allowance, ct)
-                };
-            });
+            .UsePublicUrlPolicy();
 
         return services;
+    }
+
+    /// <summary>
+    /// Puts a named or typed HttpClient on the public-url address policy: its primary handler is
+    /// the same guarded <see cref="SocketsHttpHandler"/> the fetcher uses (connect-time address
+    /// check, no automatic redirects, no proxy). For third-party clients that need their own
+    /// request semantics but must still only talk to public addresses.
+    /// </summary>
+    public static IHttpClientBuilder UsePublicUrlPolicy(this IHttpClientBuilder builder)
+    {
+        builder.Services.TryAddSingleton<IPublicUrlFetchAllowance, NoFetchAllowance>();
+        return builder.ConfigurePrimaryHttpMessageHandler(sp =>
+            PublicUrlFetcher.CreateHandler(sp.GetRequiredService<IPublicUrlFetchAllowance>()));
     }
 }
