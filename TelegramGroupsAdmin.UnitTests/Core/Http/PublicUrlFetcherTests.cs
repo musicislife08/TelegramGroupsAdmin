@@ -74,6 +74,31 @@ public class PublicUrlFetcherTests
         Assert.That(server.LogEntries, Is.Empty, "the server must never see a request");
     }
 
+    // Non-dotted and non-canonical spellings of 127.0.0.1. System.Uri canonicalises every one of
+    // these to "127.0.0.1" (checked on .NET 10), and the connect callback judges that address;
+    // pinned so a parser change that starts passing them through as hostnames is caught.
+    [TestCase("http://2130706433:{port}/anim.gif")]
+    [TestCase("http://0x7f.0.0.1:{port}/anim.gif")]
+    [TestCase("http://0x7f000001:{port}/anim.gif")]
+    [TestCase("http://0177.0.0.1:{port}/anim.gif")]
+    [TestCase("http://127.1:{port}/anim.gif")]
+    [TestCase("http://[::127.0.0.1]:{port}/anim.gif")]
+    [TestCase("http://[::ffff:7f00:1]:{port}/anim.gif")]
+    [TestCase("http://[64:ff9b::7f00:1]:{port}/anim.gif")]
+    [TestCase("http://[64:ff9b:1::7f00:1]:{port}/anim.gif")]
+    public void FetchAsync_NonCanonicalLoopbackLiteral_IsRefusedWithoutConnecting(string template)
+    {
+        var server = StartGifServer("/anim.gif");
+        var fetcher = CreateFetcher();
+        var url = template.Replace("{port}", server.Port.ToString());
+
+        var ex = Assert.ThrowsAsync<PublicUrlFetchException>(() => fetcher.FetchAsync(url, OneMegabyte));
+
+        Assert.That(ex!.Message, Is.EqualTo(PublicUrlFetchException.NotAllowedMessage));
+        Assert.That(ex.Reason, Does.Contain("loopback").Or.Contain("NAT64"));
+        Assert.That(server.LogEntries, Is.Empty, "the server must never see a request");
+    }
+
     [Test]
     public void FetchAsync_HostnameResolvingToLoopback_IsRefusedAtConnectTime()
     {

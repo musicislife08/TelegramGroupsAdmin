@@ -6,7 +6,7 @@ namespace TelegramGroupsAdmin.Core.Http;
 /// <summary>
 /// Decides whether an IP address is a public Internet address the server may connect to on a
 /// user's behalf. Everything loopback, private, link-local (including cloud metadata),
-/// unspecified, carrier-grade NAT, multicast, reserved or documentation-only is refused, in its
+/// unspecified, carrier-grade NAT, multicast, discard, reserved or documentation-only is refused, in its
 /// IPv4 form, its native IPv6 form, and every IPv6 form that embeds an IPv4 address
 /// (IPv4-mapped, IPv4-compatible, NAT64 and 6to4). This is the rule the public-url HttpClient
 /// applies to the address it actually connects to, so it holds for DNS answers and redirect hops.
@@ -57,6 +57,10 @@ public static class PublicAddressPolicy
     [
         new(IPAddress.Parse("::"), 128, "unspecified (::)"),
         new(IPAddress.Parse("::1"), 128, "loopback (::1)"),
+        new(IPAddress.Parse("100::"), 64, "discard-only (100::/64)"),
+        // Local-use NAT64 (RFC 8215): the translator is on the local network by definition, so the
+        // whole /48 is refused rather than judging the embedded IPv4.
+        new(IPAddress.Parse("64:ff9b:1::"), 48, "local-use NAT64 (64:ff9b:1::/48)"),
         new(IPAddress.Parse("fc00::"), 7, "unique-local (fc00::/7)"),
         new(IPAddress.Parse("fe80::"), 10, "link-local (fe80::/10)"),
         new(IPAddress.Parse("fec0::"), 10, "site-local (fec0::/10)"),

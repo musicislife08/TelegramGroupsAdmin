@@ -24,9 +24,10 @@ public sealed class NoFetchAllowance : IPublicUrlFetchAllowance
 
 /// <summary>
 /// Allows loopback addresses on an explicit set of ports — for test hosts that serve fixtures from
-/// a local WireMock server. Never registered by production composition.
+/// a local WireMock server. Internal so that only the test assemblies named in Core's
+/// InternalsVisibleTo can register it; production composition cannot see it.
 /// </summary>
-public sealed class LoopbackPortAllowance : IPublicUrlFetchAllowance
+internal sealed class LoopbackPortAllowance : IPublicUrlFetchAllowance
 {
     private readonly ConcurrentDictionary<int, byte> _ports = new();
 

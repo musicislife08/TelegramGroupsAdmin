@@ -10,6 +10,9 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="TelegramGroupsAdmin.ComponentTests" />
+    <InternalsVisibleTo Include="TelegramGroupsAdmin.UnitTests" />
+    <InternalsVisibleTo Include="TelegramGroupsAdmin.IntegrationTests" />
+    <InternalsVisibleTo Include="TelegramGroupsAdmin.E2ETests" />
   </ItemGroup>
 
   <ItemGroup>

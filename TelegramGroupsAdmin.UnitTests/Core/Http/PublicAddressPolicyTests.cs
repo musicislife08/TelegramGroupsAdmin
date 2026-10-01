@@ -43,6 +43,10 @@ public class PublicAddressPolicyTests
     [TestCase("fec0::1", "site-local")]
     [TestCase("ff02::1", "multicast")]
     [TestCase("2001:db8::1", "documentation")]
+    [TestCase("100::1", "discard")]
+    [TestCase("100::ffff:ffff:ffff:ffff", "discard")]
+    [TestCase("64:ff9b:1::7f00:1", "local-use NAT64")]
+    [TestCase("64:ff9b:1:abcd::808:808", "local-use NAT64")]
     // IPv4 embedded in IPv6
     [TestCase("::ffff:127.0.0.1", "loopback")]
     [TestCase("::ffff:10.0.0.1", "private")]
@@ -74,6 +78,9 @@ public class PublicAddressPolicyTests
     [TestCase("2001:4860:4860::8888")]
     [TestCase("::ffff:8.8.8.8")]
     [TestCase("64:ff9b::808:808")]
+    [TestCase("64:ff9c::1")]
+    [TestCase("101::1")]
+    [TestCase("2001::1")]
     [TestCase("2002:808:808::")]
     public void IsPublic_PublicAddress_IsAccepted(string address)
     {

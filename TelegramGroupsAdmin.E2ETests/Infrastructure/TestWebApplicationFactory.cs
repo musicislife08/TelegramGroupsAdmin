@@ -283,7 +283,7 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
     /// WireMock host it started; the production registration allows nothing and has no
     /// configuration path to this.
     /// </summary>
-    public LoopbackPortAllowance PublicUrlAllowance { get; } = new();
+    internal LoopbackPortAllowance PublicUrlAllowance { get; } = new();
 
     /// <summary>
     /// Gets the connection string for this test's isolated database.
