@@ -142,6 +142,12 @@ public class WebAdminAccountsPage
     private ILocator OpenPopover => _page.Locator(".mud-popover-open");
 
     /// <summary>
+    /// The open action menu's popover. Scoped to a popover holding menu items so an incidental
+    /// tooltip or select popover never satisfies (or strict-mode-breaks) a menu wait.
+    /// </summary>
+    private ILocator OpenMenu => _page.Locator(".mud-popover-open:has(.mud-menu-item)");
+
+    /// <summary>
     /// The permission options in the open permission dropdown of the create invite dialog.
     /// Call <see cref="OpenPermissionOptionsAsync"/> first.
     /// </summary>
@@ -218,8 +224,7 @@ public class WebAdminAccountsPage
         await menuButton.ClickAsync();
 
         // Wait for menu popover to appear
-        var menuPopover = _page.Locator(".mud-popover-open");
-        await menuPopover.WaitForAsync(new LocatorWaitForOptions
+        await OpenMenu.WaitForAsync(new LocatorWaitForOptions
         {
             State = WaitForSelectorState.Visible,
             Timeout = 5000
@@ -227,7 +232,7 @@ public class WebAdminAccountsPage
     }
 
     /// <summary>The items of the open action menu.</summary>
-    public ILocator ActionMenuItems => OpenPopover.Locator(".mud-menu-item");
+    public ILocator ActionMenuItems => OpenMenu.Locator(".mud-menu-item");
 
     /// <summary>
     /// Clicks an action menu item by text. The menu closes once the item's handler returns, which for
@@ -259,7 +264,7 @@ public class WebAdminAccountsPage
     /// popover to go so the next click lands on the page and not on the menu's overlay.
     /// </summary>
     private Task WaitForMenuClosedAsync() =>
-        OpenPopover.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Hidden, Timeout = 5000 });
+        OpenMenu.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Hidden, Timeout = 5000 });
 
     /// <summary>
     /// Cancels the current confirmation dialog and waits for it to close.

@@ -20,7 +20,8 @@ public class WebAdminAccountsGoldenTests : GoldenE2ETestBase
     private const string Admin = GoldenDatasetConstants.WebUsers.NoTotpAdminEmail;          // reshoot@, Admin, active
     private const string TotpGlobalAdmin = GoldenDatasetConstants.WebUsers.GlobalAdminEmail;  // ahead@, GlobalAdmin, TOTP on
     private const string DisabledAdmin = GoldenDatasetConstants.WebUsers.DisabledAdminEmail;  // rerun@, Disabled
-    private const string DeletedAdmin = "deleted@example.com";                                // DeletedAdminId, Deleted
+    private const string DeletedAdmin = GoldenDatasetConstants.WebUsers.DeletedAdminEmail;      // deleted@, Deleted
+    private const string StoredTotpAdmin = GoldenDatasetConstants.WebUsers.StoredTotpGlobalAdminEmail; // perfume@, stored TOTP secret
 
     private WebAdminAccountsPage _accounts = null!;
 
@@ -39,6 +40,13 @@ public class WebAdminAccountsGoldenTests : GoldenE2ETestBase
             .Select(u => new { u.Email, u.Status }).SingleAsync();
         Assert.That((int)deleted.Status, Is.EqualTo(GoldenDatasetConstants.WebUsers.DeletedAdminStatus));
         Assert.That(deleted.Email, Is.EqualTo(DeletedAdmin));
+
+        var totpSecret = await context.Users.AsNoTracking()
+            .Where(u => u.Id == GoldenDatasetConstants.WebUsers.StoredTotpGlobalAdminId)
+            .Select(u => new { u.Email, u.TotpSecret, u.TotpEnabled }).SingleAsync();
+        Assert.That(totpSecret.Email, Is.EqualTo(StoredTotpAdmin));
+        Assert.That(totpSecret.TotpSecret, Is.Not.Null.And.Not.Empty, "canonical edit 2026-10-01: perfume@ must carry a stored TOTP secret");
+        Assert.That(totpSecret.TotpEnabled, Is.True);
     }
 
     [SetUp]
@@ -75,6 +83,8 @@ public class WebAdminAccountsGoldenTests : GoldenE2ETestBase
         await Expect(_accounts.DialogTitle).ToHaveTextAsync("Disable User");
         await _accounts.CancelDialogAsync();
 
+        // CancelDialogAsync waited for the dialog and the menu to close: that is the render the
+        // absence check (no snackbar) runs against, after the Active chip presence check.
         await Expect(_accounts.UserStatusChip(Admin, "Active")).ToBeVisibleAsync();
         await Expect(_accounts.Snackbar).ToHaveCountAsync(0);
 
@@ -176,12 +186,40 @@ public class WebAdminAccountsGoldenTests : GoldenE2ETestBase
         Assert.That(user.SecurityStamp, Is.Not.EqualTo(GoldenDatasetConstants.WebUsers.SecurityStamp), "the stamp rotates to end the user's sessions");
     }
 
-    private async Task<(UserStatus Status, bool IsActive, int PermissionLevel, bool TotpEnabled, string SecurityStamp)> ReadUserAsync(string userId)
+    [Test]
+    public async Task ResetTotp_ClearsTheSecretAndSwitchesTheIconToWarning()
+    {
+        // Reset TOTP is offered only for a user with a stored secret: perfume@ is the one canonical such user.
+        await Expect(_accounts.UserTotpIcon(StoredTotpAdmin)).ToHaveClassAsync(new Regex(@"\bmud-success-text\b"));
+
+        await _accounts.OpenActionMenuForUserAsync(StoredTotpAdmin);
+        await _accounts.ClickActionMenuItemAsync("Reset TOTP");
+        await Expect(_accounts.DialogTitle).ToHaveTextAsync("Reset TOTP");
+        await _accounts.ConfirmDialogAsync();
+
+        await Expect(_accounts.SnackbarWithText($"Reset TOTP for {StoredTotpAdmin}")).ToBeVisibleAsync();
+        await Expect(_accounts.UserTotpIcon(StoredTotpAdmin)).ToHaveClassAsync(new Regex(@"\bmud-warning-text\b"));
+
+        // With the secret wiped and TOTP off, the reopened menu offers Enable TOTP and no longer Reset TOTP
+        // (the Enable TOTP presence check is the sync point for the absence check). The menu is left open:
+        // only the DB read-back follows.
+        await _accounts.OpenActionMenuForUserAsync(StoredTotpAdmin);
+        await Expect(_accounts.ActionMenuItems.Filter(new() { HasText = "Enable TOTP" })).ToBeVisibleAsync();
+        await Expect(_accounts.ActionMenuItems.Filter(new() { HasText = "Reset TOTP" })).ToHaveCountAsync(0);
+
+        var user = await ReadUserAsync(GoldenDatasetConstants.WebUsers.StoredTotpGlobalAdminId);
+        Assert.That(user.TotpSecret, Is.Null, "ResetTotpAsync wipes the secret");
+        Assert.That(user.TotpEnabled, Is.False);
+        Assert.That(user.TotpSetupStartedAt, Is.Null);
+        Assert.That(user.SecurityStamp, Is.Not.EqualTo(GoldenDatasetConstants.WebUsers.SecurityStamp), "the stamp rotates to end the user's sessions");
+    }
+
+    private async Task<(UserStatus Status, bool IsActive, int PermissionLevel, bool TotpEnabled, string SecurityStamp, string? TotpSecret, DateTimeOffset? TotpSetupStartedAt)> ReadUserAsync(string userId)
     {
         await using var ctx = CreateDbContext();
         var u = await ctx.Users.AsNoTracking().Where(x => x.Id == userId)
-            .Select(x => new { x.Status, x.IsActive, x.PermissionLevel, x.TotpEnabled, x.SecurityStamp }).SingleAsync();
-        return ((UserStatus)(int)u.Status, u.IsActive, u.PermissionLevel, u.TotpEnabled, u.SecurityStamp);
+            .Select(x => new { x.Status, x.IsActive, x.PermissionLevel, x.TotpEnabled, x.SecurityStamp, x.TotpSecret, x.TotpSetupStartedAt }).SingleAsync();
+        return ((UserStatus)(int)u.Status, u.IsActive, u.PermissionLevel, u.TotpEnabled, u.SecurityStamp, u.TotpSecret, u.TotpSetupStartedAt);
     }
 }
 
@@ -220,6 +258,8 @@ public class WebAdminAccountsLockedUserGoldenTests : GoldenE2ETestBase
         await Expect(accounts.Dialog).ToContainTextAsync("minutes remaining");
         await accounts.ConfirmDialogAsync();
 
+        // The snackbar (and ConfirmDialogAsync's menu-close wait) is the sync point for the post-unlock
+        // render; the Locked-chip absence check follows the Active-chip presence check on that render.
         await Expect(accounts.SnackbarWithText($"Unlocked account for {LockedAdmin}")).ToBeVisibleAsync();
         await Expect(accounts.UserStatusChip(LockedAdmin, "Active")).ToBeVisibleAsync();
         await Expect(accounts.UserLockedChip(LockedAdmin)).ToHaveCountAsync(0);
