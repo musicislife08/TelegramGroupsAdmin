@@ -154,6 +154,10 @@ Recipe format: a heading, the anchor id(s), a one-line description, and "use whe
 - Edit: status 3 → 2. Story: the Owner disabled the account twelve minutes after creating it (modified_by Owner, modified_at 06:12) rather than deleting it. Canonical had no Disabled web user; the two remaining soft-deleted rows (`deleted@`, `globaladmin@`) keep the soft-delete recipes intact.
 - Use when: a test needs a web user in the Disabled state — the Enable action, or the default status filter (Active + Pending + Disabled) showing a non-active row. Constants: `GoldenDatasetConstants.WebUsers.DisabledAdminId` / `DisabledAdminEmail` / `DisabledAdminStatus`. Guarded by `CanonicalWebUserAnchorTests.DisabledAnchor_IsADisabledInactiveAdmin`; E2E tests read the status back in `ArrangeDataAsync`.
 
+#### Locked web user: `GoldenDataset.Mutate(ctx).LockWebUser(id, lockFor)` (no canonical edit)
+- A lockout is only "locked" while `locked_until` is ahead of NOW(), so canonical's frozen snapshot cannot carry one. The mutate verb sets `locked_until = NOW() + lockFor` and `failed_login_attempts = 5` (`AccountLockoutConstants.MaxFailedAttempts`) on any canonical web user — the shape `AccountLockoutService` leaves after the fifth failed login.
+- Use when: a test needs the Locked chip / Unlock Account action (E2E) or `UserRecord.IsLocked` / `CanLogin` false. Lock an active anchor such as `NoTotpAdminId`; apply before the app starts.
+
 ### Telegram users
 
 #### Top MainChat author (ham)

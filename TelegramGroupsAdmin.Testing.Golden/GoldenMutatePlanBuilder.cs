@@ -8,8 +8,8 @@ namespace TelegramGroupsAdmin.Testing.Golden;
 /// but strictly limited to <em>editing</em> existing rows — never creates them. Reach for this
 /// only when canonical structurally cannot provide the shape (e.g., analytics aggregations
 /// need timestamps relative to NOW() but canonical's timestamps are frozen at the bootstrap
-/// snapshot date). If a verb would need to insert rows, that's the signal to extend canonical
-/// instead.
+/// snapshot date; an account lockout is only "locked" while <c>locked_until</c> is still ahead of
+/// NOW()). If a verb would need to insert rows, that's the signal to extend canonical instead.
 ///
 /// Verb count is intentionally bounded — see <c>docs/superpowers/plans/2026-04-30-canonical-
 /// golden-snapshot-and-template-cloning.md</c> for the active register.
@@ -20,6 +20,13 @@ public sealed class GoldenMutatePlanBuilder
     private List<TimestampShift>? _detectionResultShifts;
     private List<TimestampShift>? _welcomeResponseShifts;
     private List<(long ChatId, TimestampShift Shift)>? _messageShifts;
+    private List<(string UserId, TimeSpan LockFor)>? _webUserLocks;
+
+    /// <summary>
+    /// <c>failed_login_attempts</c> written by <see cref="LockWebUser"/>: the first lockout happens at
+    /// <c>AccountLockoutConstants.MaxFailedAttempts</c> (5) failed logins, so a locked row carries 5.
+    /// </summary>
+    public const int LockedFailedLoginAttempts = 5;
 
     internal GoldenMutatePlanBuilder(AppDbContext context) => _context = context;
 
@@ -61,11 +68,45 @@ public sealed class GoldenMutatePlanBuilder
         return this;
     }
 
+    /// <summary>
+    /// Locks the web user: sets <c>users.locked_until = NOW() + lockFor</c> and
+    /// <c>failed_login_attempts = <see cref="LockedFailedLoginAttempts"/></c> where <c>id</c> matches —
+    /// the shape <c>AccountLockoutService</c> leaves after the fifth failed login. A lockout is
+    /// NOW()-relative by nature (the UI reads it as locked only while <c>locked_until</c> is in the
+    /// future), so canonical's frozen snapshot cannot carry it. Other rows are left untouched.
+    /// </summary>
+    public GoldenMutatePlanBuilder LockWebUser(string userId, TimeSpan lockFor)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(userId);
+        if (lockFor <= TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(nameof(lockFor), lockFor, "a lock must end in the future");
+        }
+
+        (_webUserLocks ??= new()).Add((userId, lockFor));
+        return this;
+    }
+
     public async Task ApplyAsync(CancellationToken ct = default)
     {
         await using var tx = await _context.Database.BeginTransactionAsync(ct);
         try
         {
+            if (_webUserLocks is { Count: > 0 } locks)
+            {
+                foreach (var (userId, lockFor) in locks)
+                {
+                    var rows = await _context.Database.ExecuteSqlRawAsync(
+                        "UPDATE users SET locked_until = NOW() + ({0}::text)::interval, failed_login_attempts = {1} WHERE id = {2}",
+                        new object[] { FormatInterval(lockFor), LockedFailedLoginAttempts, userId },
+                        ct);
+                    if (rows != 1)
+                    {
+                        throw new InvalidOperationException($"LockWebUser: expected to lock exactly one users row for id {userId}, updated {rows}");
+                    }
+                }
+            }
+
             if (_detectionResultShifts is { Count: > 0 } drShifts)
             {
                 foreach (var s in drShifts)

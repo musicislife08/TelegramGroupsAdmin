@@ -148,6 +148,67 @@ public class GoldenMutatePlanTests
     }
 
     [Test]
+    public async Task LockWebUser_SetsLockedUntilInTheFutureAndTheFailedAttemptCount()
+    {
+        var lockFor = TimeSpan.FromMinutes(30);
+
+        await using var ctx = _helper!.GetDbContext();
+        var before = await ctx.Users.AsNoTracking()
+            .Where(u => u.Id == GoldenDatasetConstants.WebUsers.NoTotpAdminId)
+            .Select(u => new { u.LockedUntil, u.FailedLoginAttempts }).SingleAsync();
+        Assert.That(before.LockedUntil, Is.Null, "canonical anchor must start unlocked");
+
+        var appliedAt = DateTimeOffset.UtcNow;
+        await GoldenDataset.Mutate(ctx)
+            .LockWebUser(GoldenDatasetConstants.WebUsers.NoTotpAdminId, lockFor)
+            .ApplyAsync();
+
+        var after = await ctx.Users.AsNoTracking()
+            .Where(u => u.Id == GoldenDatasetConstants.WebUsers.NoTotpAdminId)
+            .Select(u => new { u.LockedUntil, u.FailedLoginAttempts }).SingleAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(after.LockedUntil, Is.Not.Null);
+            Assert.That(after.LockedUntil!.Value, Is.EqualTo(appliedAt + lockFor).Within(TimeSpan.FromSeconds(5)),
+                "locked_until must be NOW() + lockFor");
+            Assert.That(after.FailedLoginAttempts, Is.EqualTo(GoldenMutatePlanBuilder.LockedFailedLoginAttempts));
+        }
+    }
+
+    [Test]
+    public async Task LockWebUser_DoesNotTouchOtherUsers()
+    {
+        await using var ctx = _helper!.GetDbContext();
+
+        await GoldenDataset.Mutate(ctx)
+            .LockWebUser(GoldenDatasetConstants.WebUsers.NoTotpAdminId, TimeSpan.FromMinutes(30))
+            .ApplyAsync();
+
+        var lockedOthers = await ctx.Users.AsNoTracking()
+            .CountAsync(u => u.Id != GoldenDatasetConstants.WebUsers.NoTotpAdminId
+                             && (u.LockedUntil != null || u.FailedLoginAttempts != 0));
+        Assert.That(lockedOthers, Is.Zero);
+    }
+
+    [Test]
+    public void LockWebUser_RejectsANonPositiveDuration()
+    {
+        using var ctx = _helper!.GetDbContext();
+        Assert.That(() => GoldenDataset.Mutate(ctx).LockWebUser(GoldenDatasetConstants.WebUsers.NoTotpAdminId, TimeSpan.Zero),
+            Throws.TypeOf<ArgumentOutOfRangeException>());
+    }
+
+    [Test]
+    public async Task LockWebUser_FailsLoudlyForAnUnknownUser()
+    {
+        await using var ctx = _helper!.GetDbContext();
+        var plan = GoldenDataset.Mutate(ctx).LockWebUser("00000000-0000-0000-0000-000000000000", TimeSpan.FromMinutes(1));
+
+        Assert.That(async () => await plan.ApplyAsync(), Throws.TypeOf<InvalidOperationException>());
+    }
+
+    [Test]
     public async Task ShiftMessageTimestamps_DoesNotTouchUnshiftedRows()
     {
         const long ChatId = -100026957614982L;
