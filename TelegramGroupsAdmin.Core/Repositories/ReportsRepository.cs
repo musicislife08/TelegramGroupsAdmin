@@ -420,7 +420,7 @@ public class ReportsRepository : IReportsRepository
 
         // Map and sort by risk level (critical first), then by date
         return results
-            .Select(r => r.ToImpersonationAlert())
+            .Select(r => MapOrSkip(r, v => v.ToImpersonationAlert(), ReportType.ImpersonationAlert))
             .Where(r => r != null)
             .Cast<ImpersonationAlertRecord>()
             .OrderByDescending(r => r.RiskLevel)
@@ -469,7 +469,7 @@ public class ReportsRepository : IReportsRepository
             .ToListAsync(cancellationToken);
 
         return results
-            .Select(r => r.ToImpersonationAlert())
+            .Select(r => MapOrSkip(r, v => v.ToImpersonationAlert(), ReportType.ImpersonationAlert))
             .Where(r => r != null)
             .Cast<ImpersonationAlertRecord>()
             .ToList();
@@ -563,7 +563,7 @@ public class ReportsRepository : IReportsRepository
             .ToListAsync(cancellationToken);
 
         return results
-            .Select(r => r.ToProfileScanAlert())
+            .Select(r => MapOrSkip(r, v => v.ToProfileScanAlert(), ReportType.ProfileScanAlert))
             .Where(r => r != null)
             .Cast<ProfileScanAlertRecord>()
             .ToList();
@@ -587,10 +587,32 @@ public class ReportsRepository : IReportsRepository
             .ToListAsync(cancellationToken);
 
         return results
-            .Select(r => r.ToProfileScanAlert())
+            .Select(r => MapOrSkip(r, v => v.ToProfileScanAlert(), ReportType.ProfileScanAlert))
             .Where(r => r != null)
             .Cast<ProfileScanAlertRecord>()
             .ToList();
+    }
+
+    /// <summary>
+    /// Maps one enriched row for a list query. A row whose JSONB context no longer deserializes is
+    /// skipped with a warning naming the report (never its payload), so one malformed row cannot
+    /// fail the whole queue. Single-row lookups keep throwing: there the row is the subject.
+    /// </summary>
+    private TRecord? MapOrSkip<TRecord>(
+        EnrichedReportView view, Func<EnrichedReportView, TRecord?> map, ReportType type)
+        where TRecord : class
+    {
+        try
+        {
+            return map(view);
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogWarning(ex,
+                "Skipping {ReportType} report {ReportId}: its context could not be read",
+                type, view.Id);
+            return null;
+        }
     }
 
     // ============================================================
@@ -680,7 +702,7 @@ public class ReportsRepository : IReportsRepository
             .ToListAsync(cancellationToken);
 
         return results
-            .Select(r => r.ToExamResult())
+            .Select(r => MapOrSkip(r, v => v.ToExamResult(), ReportType.ExamResult))
             .Where(r => r != null)
             .Cast<ExamResultRecord>()
             .ToList();

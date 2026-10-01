@@ -525,6 +525,13 @@ public static class GoldenDatasetConstants
         /// <summary>Real resolved exam failure (status=1, action_taken='approve', reviewed by globaladmin).</summary>
         public const long ResolvedExamFailureId = 185;
 
+        /// <summary>
+        /// Real resolved profile-scan alert (status=1, type=3, outcome Banned) whose context carries a
+        /// string-array aiSignals (canonical edit 2026-10-01). The malformed-context repository tests
+        /// corrupt this row's context as their subject.
+        /// </summary>
+        public const long ResolvedProfileScanAlertId = 177;
+
         /// <summary>Synthetic auto-approved exam pass (status=1, reviewed_by='Exam Flow', action_taken='auto-approved', outcome=1) in MainChat.</summary>
         public const long AutoApprovedExamPassId = 189;
 
