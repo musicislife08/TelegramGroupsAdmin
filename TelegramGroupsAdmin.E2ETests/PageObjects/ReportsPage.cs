@@ -420,6 +420,10 @@ public class ReportsPage
             HasNot = scope.Page.Locator(".flex-row").Filter(new() { HasText = "Multiple Choice" })
         });
 
+    /// <summary>The MC score chip ("X/Y correct (Z%)") inside the Multiple Choice section header within <paramref name="scope"/>.</summary>
+    public static ILocator ExamScoreChipIn(ILocator scope) =>
+        ExamMcSectionHeaderIn(scope).Locator(".mud-chip").Filter(new() { HasText = "correct" });
+
     /// <summary>The MC "Passed" chip, scoped to the Multiple Choice section (not "Passed — auto-admitted" or the AI chip).</summary>
     public ILocator ExamMcPassedChip => ExamMcSectionHeader.Locator(".mud-chip").Filter(new() { HasTextRegex = new Regex(@"^\s*Passed\s*$") });
 

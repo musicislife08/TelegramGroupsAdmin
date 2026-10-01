@@ -78,7 +78,7 @@ public class ReportsExamChipsGoldenTests : GoldenE2ETestBase
     {
         await Expect(Card).ToHaveCountAsync(1);
 
-        await Expect(ReportsPage.ExamMcSectionHeaderIn(Card).Locator(".mud-chip").Filter(new() { HasText = "correct" }))
+        await Expect(ReportsPage.ExamScoreChipIn(Card))
             .ToContainTextAsync($"{_correct}/{_answered} correct ({_score}%)");
     }
 
