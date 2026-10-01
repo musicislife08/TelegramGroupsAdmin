@@ -112,6 +112,22 @@ public class MessagesGoldenTests : GoldenE2ETestBase
     }
 
     [Test]
+    public async Task OpenChat_OnAPhoneViewport_FitsTheViewportWithTheInputReachable()
+    {
+        await Page.SetViewportSizeAsync(390, 844);
+        await LoginAsOwnerAsync();
+        await _messages.NavigateAsync();
+        await _messages.ChatItem(_truncatedText.ChatName).ClickAsync();
+        await _messages.WaitForChatViewActiveAsync();
+        await Expect(_messages.SelectedChatTitle).ToHaveTextAsync(_truncatedText.ChatName);
+
+        // The pane is bounded by the layout, so the message list scrolls inside it and the input stays on screen.
+        // Ratio 1 = entirely inside the viewport: an unbounded pane would extend far below the fold.
+        await Expect(_messages.ChatInput).ToBeInViewportAsync(new() { Ratio = 1 });
+        await Expect(_messages.MessagesContainer).ToBeInViewportAsync(new() { Ratio = 1 });
+    }
+
+    [Test]
     public async Task BackButton_OnAPhoneViewport_ReturnsFromTheOpenChatToTheChatList()
     {
         // The back button is hidden from 769px up; below it the chat list and the open chat are full-width
