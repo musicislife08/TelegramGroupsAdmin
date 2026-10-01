@@ -96,9 +96,10 @@ public class ContentDetectionSettingsTests : AuthenticatedTestBase
         // Use specific locators to avoid matching nav items
         await Expect(Page.GetByText("Global Detection Settings", new() { Exact = true })).ToBeVisibleAsync();
 
-        // Training Mode is inside the Global Detection Settings paper - target specifically
+        // Training Mode is a switch inside the Global Detection Settings paper (its checkbox input
+        // is visually hidden by MudBlazor, so assert it is attached rather than visible)
+        await Expect(_settingsPage.TrainingModeToggleInput).ToBeAttachedAsync();
         var globalSettingsPaper = Page.Locator(".mud-paper:has-text('Global Detection Settings')");
-        await Expect(globalSettingsPaper.GetByText("Training Mode", new() { Exact = true })).ToBeVisibleAsync();
         await Expect(globalSettingsPaper.GetByText("Auto-Ban Threshold", new() { Exact = true })).ToBeVisibleAsync();
         await Expect(globalSettingsPaper.GetByText("Review Queue Threshold", new() { Exact = true })).ToBeVisibleAsync();
     }

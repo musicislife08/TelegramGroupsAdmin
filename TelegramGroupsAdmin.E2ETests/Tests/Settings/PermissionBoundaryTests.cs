@@ -193,7 +193,10 @@ public class PermissionBoundaryTests : AuthenticatedTestBase
         // absence check cannot pass before the nav renders
         await Expect(settingsPage.LoggingSettingsLink).ToBeVisibleAsync();
 
-        // Assert - Infrastructure settings should be hidden
+        // Assert - GlobalAdmin keeps the Admin Accounts link (gated on IsGlobalAdminOrHigher)...
+        await Expect(settingsPage.AdminAccountsLink).ToBeVisibleAsync();
+
+        // ...but the Owner-only infrastructure links are hidden
         await Expect(settingsPage.GeneralSettingsLink).Not.ToBeVisibleAsync();
     }
 
