@@ -48,8 +48,7 @@ public class EmailVerificationTests : E2ETestBase
         await Expect(Page).ToHaveURLAsync(new System.Text.RegularExpressions.Regex(@"/login\?verified=success"));
 
         // Verify the success banner is shown on login page
-        var successBanner = Page.Locator(".alert-success, .mud-alert-text-success");
-        await Expect(successBanner).ToBeVisibleAsync(new() { Timeout = 5000 });
+        await Expect(_loginPage.SuccessAlert).ToBeVisibleAsync(new() { Timeout = 5000 });
     }
 
     [Test]

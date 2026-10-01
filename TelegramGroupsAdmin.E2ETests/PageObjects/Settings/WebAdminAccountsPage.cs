@@ -155,7 +155,7 @@ public class WebAdminAccountsPage
         // Find the Permission Level select within the dialog (scoped to avoid the status filter
         // select outside the dialog). MudSelect creates an input with the label, we need to click
         // on the select container
-        var selectContainer = Dialog.Locator(".mud-select").First;
+        var selectContainer = _page.Locator(PermissionSelect).First;
         await selectContainer.ClickAsync();
 
         // Wait for the popover to open - Playwright's auto-waiting handles this

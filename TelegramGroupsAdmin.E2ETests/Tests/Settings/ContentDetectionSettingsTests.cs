@@ -141,8 +141,8 @@ public class ContentDetectionSettingsTests : AuthenticatedTestBase
         await _settingsPage.FillAndSubmitAddStopWordDialogAsync(testWord, "E2E test word");
 
         // Assert - snackbar confirms addition (use First to handle multiple snackbars)
-        await Expect(Page.Locator(".mud-snackbar").First).ToBeVisibleAsync();
-        await Expect(Page.Locator(".mud-snackbar").First).ToContainTextAsync("added", new() { IgnoreCase = true });
+        await Expect(_settingsPage.Snackbar).ToBeVisibleAsync();
+        await Expect(_settingsPage.Snackbar).ToContainTextAsync("added", new() { IgnoreCase = true });
 
         // Word should appear in the table - use proper wait
         await _settingsPage.WaitForStopWordVisibleAsync(testWord);

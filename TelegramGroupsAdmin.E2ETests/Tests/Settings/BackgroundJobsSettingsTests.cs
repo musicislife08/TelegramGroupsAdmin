@@ -66,16 +66,16 @@ public class BackgroundJobsSettingsTests : AuthenticatedTestBase
         await Expect(_settingsPage.JobToggleInput(jobName)).Not.ToBeCheckedAsync();
 
         // Assert - status chip shows Disabled initially
-        await Expect(Page.Locator($".mud-table tbody tr:has-text('{jobName}') .mud-chip:has-text('Disabled')")).ToBeVisibleAsync();
+        await Expect(_settingsPage.JobStatusChip(jobName).Filter(new() { HasText = "Disabled" })).ToBeVisibleAsync();
 
         // Act - enable the job
         await _settingsPage.ToggleJobAsync(jobName);
 
         // Assert - snackbar confirms enabling (message includes job name)
-        await Expect(Page.Locator(".mud-snackbar").First).ToContainTextAsync("enabled", new() { IgnoreCase = true });
+        await Expect(_settingsPage.Snackbar).ToContainTextAsync("enabled", new() { IgnoreCase = true });
 
         // Assert - status chip shows Enabled
-        await Expect(Page.Locator($".mud-table tbody tr:has-text('{jobName}') .mud-chip:has-text('Enabled')")).ToBeVisibleAsync();
+        await Expect(_settingsPage.JobStatusChip(jobName).Filter(new() { HasText = "Enabled" })).ToBeVisibleAsync();
 
         // Assert - toggle switch is now checked
         await Expect(_settingsPage.JobToggleInput(jobName)).ToBeCheckedAsync();
@@ -85,7 +85,7 @@ public class BackgroundJobsSettingsTests : AuthenticatedTestBase
         await Expect(Page.Locator(".mud-snackbar")).Not.ToBeVisibleAsync(new() { Timeout = 10000 });
         await _settingsPage.ToggleJobAsync(jobName);
         // Just verify the toggle happened by checking the chip state, not the snackbar
-        await Expect(Page.Locator($".mud-table tbody tr:has-text('{jobName}') .mud-chip:has-text('Disabled')")).ToBeVisibleAsync();
+        await Expect(_settingsPage.JobStatusChip(jobName).Filter(new() { HasText = "Disabled" })).ToBeVisibleAsync();
     }
 
     [Test]
@@ -106,16 +106,16 @@ public class BackgroundJobsSettingsTests : AuthenticatedTestBase
         await Expect(_settingsPage.JobToggleInput(jobName)).ToBeCheckedAsync();
 
         // Assert - status chip shows Enabled initially
-        await Expect(Page.Locator($".mud-table tbody tr:has-text('{jobName}') .mud-chip:has-text('Enabled')")).ToBeVisibleAsync();
+        await Expect(_settingsPage.JobStatusChip(jobName).Filter(new() { HasText = "Enabled" })).ToBeVisibleAsync();
 
         // Act - disable the job
         await _settingsPage.ToggleJobAsync(jobName);
 
         // Assert - snackbar confirms disabling (message includes job name)
-        await Expect(Page.Locator(".mud-snackbar").First).ToContainTextAsync("disabled", new() { IgnoreCase = true });
+        await Expect(_settingsPage.Snackbar).ToContainTextAsync("disabled", new() { IgnoreCase = true });
 
         // Assert - status chip shows Disabled
-        await Expect(Page.Locator($".mud-table tbody tr:has-text('{jobName}') .mud-chip:has-text('Disabled')")).ToBeVisibleAsync();
+        await Expect(_settingsPage.JobStatusChip(jobName).Filter(new() { HasText = "Disabled" })).ToBeVisibleAsync();
 
         // Assert - toggle switch is now unchecked
         await Expect(_settingsPage.JobToggleInput(jobName)).Not.ToBeCheckedAsync();
@@ -125,7 +125,7 @@ public class BackgroundJobsSettingsTests : AuthenticatedTestBase
         await Expect(Page.Locator(".mud-snackbar")).Not.ToBeVisibleAsync(new() { Timeout = 10000 });
         await _settingsPage.ToggleJobAsync(jobName);
         // Just verify the toggle happened by checking the chip state, not the snackbar
-        await Expect(Page.Locator($".mud-table tbody tr:has-text('{jobName}') .mud-chip:has-text('Enabled')")).ToBeVisibleAsync();
+        await Expect(_settingsPage.JobStatusChip(jobName).Filter(new() { HasText = "Enabled" })).ToBeVisibleAsync();
     }
 
     [Test]
@@ -164,7 +164,7 @@ public class BackgroundJobsSettingsTests : AuthenticatedTestBase
         await _settingsPage.UpdateJobScheduleAsync(newSchedule);
 
         // Assert - snackbar confirms save
-        await Expect(Page.Locator(".mud-snackbar").First).ToContainTextAsync("saved", new() { IgnoreCase = true });
+        await Expect(_settingsPage.Snackbar).ToContainTextAsync("saved", new() { IgnoreCase = true });
 
         // Assert - schedule in table is updated
         await Expect(scheduleCell).ToHaveTextAsync(newSchedule);

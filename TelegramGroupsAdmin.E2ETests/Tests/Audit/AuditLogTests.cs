@@ -58,7 +58,7 @@ public class AuditLogTests : SharedAuthenticatedTestBase
         await Expect(Page).Not.ToHaveURLAsync(new Regex(@"/audit(?:[?#]|$)"));
 
         // The page should NOT show the audit log content
-        await Expect(Page.Locator(".mud-typography-h4:has-text('Audit Log')")).Not.ToBeVisibleAsync();
+        await Expect(_auditLogPage.PageTitle).Not.ToBeVisibleAsync();
     }
 
     #endregion
@@ -133,8 +133,7 @@ public class AuditLogTests : SharedAuthenticatedTestBase
         await _auditLogPage.SelectEventTypeFilterAsync("Login");
 
         // Wait for the table to show exactly 1 row (the filtered Login event)
-        var filteredRows = Page.Locator(".mud-tab-panel:not([hidden]) .mud-table-body tr");
-        await Expect(filteredRows).ToHaveCountAsync(1, new() { Timeout = 10000 });
+        await Expect(_auditLogPage.TableRows).ToHaveCountAsync(1, new() { Timeout = 10000 });
 
         // Verify the event type chip shows Login
         await Expect(_auditLogPage.LogEntryWithEventType("Login")).ToBeVisibleAsync();
@@ -143,8 +142,7 @@ public class AuditLogTests : SharedAuthenticatedTestBase
         await _auditLogPage.ClearEventTypeFilterAsync();
 
         // Wait for the table to show 2 rows (both Login and UserRegistered)
-        var tableRows = Page.Locator(".mud-tab-panel:not([hidden]) .mud-table-body tr");
-        await Expect(tableRows).ToHaveCountAsync(2, new() { Timeout = 10000 });
+        await Expect(_auditLogPage.TableRows).ToHaveCountAsync(2, new() { Timeout = 10000 });
     }
 
     [Test]
@@ -177,8 +175,7 @@ public class AuditLogTests : SharedAuthenticatedTestBase
         await Expect(_auditLogPage.ActorFilter).ToBeVisibleAsync();
 
         // Open the Actor filter dropdown
-        var actorSelect = Page.Locator(".mud-select").Filter(new() { HasText = "Actor (Who)" }).First;
-        await actorSelect.ClickAsync();
+        await _auditLogPage.ActorFilter.ClickAsync();
 
         var popover = Page.Locator(".mud-popover-open");
         await Expect(popover).ToBeVisibleAsync();
@@ -192,8 +189,7 @@ public class AuditLogTests : SharedAuthenticatedTestBase
         await Expect(popover).Not.ToBeVisibleAsync();
 
         // Wait for the table to show exactly 1 row (the owner's entry)
-        var filteredRows = Page.Locator(".mud-tab-panel:not([hidden]) .mud-table-body tr");
-        await Expect(filteredRows).ToHaveCountAsync(1, new() { Timeout = 10000 });
+        await Expect(_auditLogPage.TableRows).ToHaveCountAsync(1, new() { Timeout = 10000 });
 
         // Verify the Actor column shows the owner's email
         await Expect(_auditLogPage.LogEntryWithActor(owner.Email)).ToBeVisibleAsync();
@@ -202,8 +198,7 @@ public class AuditLogTests : SharedAuthenticatedTestBase
         await _auditLogPage.ClearActorFilterAsync();
 
         // Wait for the table to show 2 rows (one from each actor)
-        var tableRows = Page.Locator(".mud-tab-panel:not([hidden]) .mud-table-body tr");
-        await Expect(tableRows).ToHaveCountAsync(2, new() { Timeout = 10000 });
+        await Expect(_auditLogPage.TableRows).ToHaveCountAsync(2, new() { Timeout = 10000 });
     }
 
     #endregion
@@ -285,8 +280,7 @@ public class AuditLogTests : SharedAuthenticatedTestBase
         await _auditLogPage.NavigateToTabAsync("telegram");
 
         // Wait for table to be visible (prevents flaky timing issues)
-        var tableRows = Page.Locator(".mud-tab-panel:not([hidden]) .mud-table-body tr");
-        await Expect(tableRows.First).ToBeVisibleAsync(new() { Timeout = 10000 });
+        await Expect(_auditLogPage.TableRows.First).ToBeVisibleAsync(new() { Timeout = 10000 });
 
         // Verify we have entries before filtering (the Expect above already proved at least one row).
         // The initial count is read (not merely asserted) because the cleared-filter check below
@@ -310,7 +304,7 @@ public class AuditLogTests : SharedAuthenticatedTestBase
         await _auditLogPage.ClearActionTypeFilterAsync();
 
         // Wait for table to show at least the initial row count (Expect retries until condition met)
-        await Expect(tableRows).ToHaveCountAsync(initialRowCount, new() { Timeout = 5000 });
+        await Expect(_auditLogPage.TableRows).ToHaveCountAsync(initialRowCount, new() { Timeout = 5000 });
 
         // The ToHaveCountAsync above proved the cleared table shows initialRowCount rows,
         // so that is the cleared row count compared here.

@@ -78,7 +78,7 @@ public class ServiceMessageSettingsTests : AuthenticatedTestBase
         await _settingsPage.NavigateToServiceMessagesAsync();
 
         // Act - click save
-        await Page.GetByRole(AriaRole.Button, new() { Name = "Save Configuration" }).ClickAsync();
+        await _settingsPage.ClickSaveServiceMessagesAsync();
 
         // Assert - snackbar confirms save
         await Expect(Page.Locator(".mud-snackbar")).ToBeVisibleAsync();
@@ -101,7 +101,7 @@ public class ServiceMessageSettingsTests : AuthenticatedTestBase
 
         // Act - toggle and save
         await _settingsPage.ToggleServiceMessageDeletionAsync("Delete Photo Changes");
-        await Page.GetByRole(AriaRole.Button, new() { Name = "Save Configuration" }).ClickAsync();
+        await _settingsPage.ClickSaveServiceMessagesAsync();
 
         // Wait for save confirmation
         await Expect(Page.Locator(".mud-snackbar")).ToContainTextAsync("saved", new() { IgnoreCase = true });
@@ -114,7 +114,7 @@ public class ServiceMessageSettingsTests : AuthenticatedTestBase
 
         // Cleanup - toggle back and save
         await _settingsPage.ToggleServiceMessageDeletionAsync("Delete Photo Changes");
-        await Page.GetByRole(AriaRole.Button, new() { Name = "Save Configuration" }).ClickAsync();
+        await _settingsPage.ClickSaveServiceMessagesAsync();
         await Expect(Page.Locator(".mud-snackbar")).ToBeVisibleAsync();
     }
 

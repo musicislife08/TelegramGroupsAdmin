@@ -181,6 +181,9 @@ public class ReportsPage
     public ILocator ExamReviewHeaders =>
         _page.GetByText("Exam Review", new PageGetByTextOptions { Exact = true });
 
+    /// <summary>The exam review cards (MudCards containing an "Exam Review" header).</summary>
+    public ILocator ExamReviewCards => _page.Locator(ExamReviewCard);
+
     /// <summary>
     /// Moderation report and impersonation alert card headers (exam reviews excluded), in document order.
     /// </summary>
@@ -309,7 +312,7 @@ public class ReportsPage
     public async Task ClickApproveExamAsync()
     {
         // Scope to the exam review card to avoid clicking wrong button
-        var examCard = _page.Locator(".mud-card:has-text('Exam Review')").First;
+        var examCard = ExamReviewCards.First;
         await Expect(examCard).ToBeVisibleAsync(new() { Timeout = 5000 });
 
         var button = examCard.Locator("button:has-text('Approve')");
@@ -329,7 +332,7 @@ public class ReportsPage
     public async Task ClickDenyExamAsync()
     {
         // Scope to the exam review card
-        var examCard = _page.Locator(".mud-card:has-text('Exam Review')").First;
+        var examCard = ExamReviewCards.First;
         await Expect(examCard).ToBeVisibleAsync(new() { Timeout = 5000 });
 
         // Find the Deny button (exact match, not "Deny + Ban")
@@ -350,7 +353,7 @@ public class ReportsPage
     public async Task ClickDenyAndBanExamAsync()
     {
         // Scope to the exam review card
-        var examCard = _page.Locator(".mud-card:has-text('Exam Review')").First;
+        var examCard = ExamReviewCards.First;
         await Expect(examCard).ToBeVisibleAsync(new() { Timeout = 5000 });
 
         var button = examCard.Locator("button:has-text('Deny + Ban')");

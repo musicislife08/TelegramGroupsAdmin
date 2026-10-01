@@ -742,10 +742,10 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
         await _reportsPage.SelectStatusFilterAsync("All Statuses");
 
         // Assert - card visible with the auto-admitted chip
-        await Expect(Page.GetByText("Exam Review", new() { Exact = true })).ToBeVisibleAsync();
+        await Expect(_reportsPage.ExamReviewHeaders).ToBeVisibleAsync();
         await Expect(Page.GetByText("Passed — auto-admitted")).ToBeVisibleAsync();
 
-        var examCard = Page.Locator(".mud-card:has-text('Exam Review')").First;
+        var examCard = _reportsPage.ExamReviewCards.First;
 
         // Assert - Dismiss/Deny/Deny+Ban are shown, Approve is not (this is an override, not a first decision)
         await Expect(_reportsPage.ActionButtonsMatching(new Regex("Dismiss")).First).ToBeVisibleAsync();

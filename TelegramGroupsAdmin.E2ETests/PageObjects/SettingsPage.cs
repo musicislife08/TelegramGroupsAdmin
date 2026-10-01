@@ -358,12 +358,9 @@ public class SettingsPage
     }
 
     /// <summary>
-    /// Waits for the snackbar to appear with a message containing the specified text.
+    /// The first MudBlazor snackbar currently shown (a save/toggle confirmation).
     /// </summary>
-    public async Task WaitForSnackbarAsync(string containsText)
-    {
-        await Expect(Page.Locator(".mud-snackbar").First).ToContainTextAsync(containsText, new() { IgnoreCase = true });
-    }
+    public ILocator Snackbar => Page.Locator(".mud-snackbar").First;
 
     #endregion
 
@@ -406,11 +403,11 @@ public class SettingsPage
     }
 
     /// <summary>
-    /// Clicks the Save button on the Service Messages settings page.
+    /// Clicks the "Save Configuration" button on the Service Messages settings page.
     /// </summary>
     public async Task ClickSaveServiceMessagesAsync()
     {
-        var saveButton = Page.GetByRole(AriaRole.Button, new() { Name = "Save" });
+        var saveButton = Page.GetByRole(AriaRole.Button, new() { Name = "Save Configuration" });
         await saveButton.ClickAsync();
     }
 

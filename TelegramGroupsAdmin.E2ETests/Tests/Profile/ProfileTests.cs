@@ -152,7 +152,7 @@ public class ProfileTests : SharedAuthenticatedTestBase
 
         // Assert - TOTP section shows disabled state. The positive checks come first so the
         // absence check cannot pass before the TOTP section has rendered its state.
-        await Expect(_profilePage.TotpDisabledAlert).ToBeVisibleAsync();
+        await _profilePage.AssertTotpDisabledAsync();
         await Expect(_profilePage.Enable2FAButton).ToBeVisibleAsync();
         await Expect(_profilePage.Reset2FAButton).Not.ToBeVisibleAsync();
     }
@@ -175,7 +175,7 @@ public class ProfileTests : SharedAuthenticatedTestBase
 
         // Assert - TOTP section shows enabled state. The positive checks come first so the
         // absence check cannot pass before the TOTP section has rendered its state.
-        await Expect(_profilePage.TotpEnabledAlert).ToBeVisibleAsync();
+        await _profilePage.AssertTotpEnabledAsync();
         await Expect(_profilePage.Reset2FAButton).ToBeVisibleAsync();
         await Expect(_profilePage.Enable2FAButton).Not.ToBeVisibleAsync();
     }
