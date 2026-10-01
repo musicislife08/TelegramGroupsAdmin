@@ -562,8 +562,11 @@ public class ReportsRepository : IReportsRepository
                         && r.ProfileUserId == userId)
             .ToListAsync(cancellationToken);
 
+        // No MapOrSkip here: this feeds sibling cleanup after an Allow. A skipped sibling would stay
+        // Pending and invisible in the queue while HasPendingProfileScanAlertAsync (raw JSONB) keeps
+        // holding the user at the join gate, so an unreadable row must fail the action loudly.
         return results
-            .Select(r => MapOrSkip(r, v => v.ToProfileScanAlert(), ReportType.ProfileScanAlert))
+            .Select(r => r.ToProfileScanAlert())
             .Where(r => r != null)
             .Cast<ProfileScanAlertRecord>()
             .ToList();
@@ -594,9 +597,10 @@ public class ReportsRepository : IReportsRepository
     }
 
     /// <summary>
-    /// Maps one enriched row for a list query. A row whose JSONB context no longer deserializes is
-    /// skipped with a warning naming the report (never its payload), so one malformed row cannot
-    /// fail the whole queue. Single-row lookups keep throwing: there the row is the subject.
+    /// Maps one enriched row for a queue list query. A row whose JSONB context no longer deserializes
+    /// is skipped with a warning naming the report (never its payload), so one malformed row cannot
+    /// fail the whole queue. Single-row lookups and per-user cleanup queries keep throwing: there the
+    /// row is the subject, or a silent skip would strand state.
     /// </summary>
     private TRecord? MapOrSkip<TRecord>(
         EnrichedReportView view, Func<EnrichedReportView, TRecord?> map, ReportType type)

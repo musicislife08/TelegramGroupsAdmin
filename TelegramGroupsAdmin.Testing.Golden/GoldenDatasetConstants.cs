@@ -522,6 +522,12 @@ public static class GoldenDatasetConstants
         /// <summary>Synthetic pending exam failure (status=0, user 9465377455871, chat -100054416618415).</summary>
         public const long PendingExamFailureId = 187;
 
+        /// <summary>
+        /// Synthetic pending profile-scan alert (status=0, type=3) for <see cref="PendingFixturesTelegramUserId"/>
+        /// in chat -100048429560480 — the one pending profile-scan alert in canonical.
+        /// </summary>
+        public const long PendingProfileScanAlertId = 188;
+
         /// <summary>Real resolved exam failure (status=1, action_taken='approve', reviewed by globaladmin).</summary>
         public const long ResolvedExamFailureId = 185;
 

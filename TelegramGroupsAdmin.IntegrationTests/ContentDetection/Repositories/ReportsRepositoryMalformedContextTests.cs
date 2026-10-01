@@ -87,6 +87,38 @@ public class ReportsRepositoryMalformedContextTests
         AssertSkipWasLogged(malformedId, payloadFragment: "ninety");
     }
 
+    [Test]
+    public async Task GetPendingProfileScanAlertsForUserAsync_ReturnsTheUsersPendingAlertOnCleanData()
+    {
+        const long userId = GoldenDatasetConstants.Reports.PendingFixturesTelegramUserId;
+        var pendingForUser = await _helper!.ExecuteScalarAsync<long>(
+            $"SELECT count(*) FROM reports WHERE type = 3 AND status = 0 AND (context->>'userId')::bigint = {userId}");
+        Assert.That(pendingForUser, Is.GreaterThan(0));
+
+        var results = await _repository!.GetPendingProfileScanAlertsForUserAsync(userId, CancellationToken.None);
+
+        Assert.That(results, Has.Count.EqualTo(pendingForUser));
+        Assert.That(results.Select(r => r.Id), Does.Contain(GoldenDatasetConstants.Reports.PendingProfileScanAlertId));
+    }
+
+    /// <summary>
+    /// Sibling cleanup after an Allow (<c>ProfileScanHandler.CleanupSiblingAlertsAsync</c>) must not
+    /// silently skip: a skipped sibling stays Pending, invisible in the queue, while the raw JSONB
+    /// <c>HasPendingProfileScanAlertAsync</c> keeps holding the user at the join gate.
+    /// </summary>
+    [Test]
+    public async Task GetPendingProfileScanAlertsForUserAsync_ThrowsWhenAPendingAlertDoesNotDeserialize()
+    {
+        const long malformedId = GoldenDatasetConstants.Reports.PendingProfileScanAlertId;
+        await _helper!.ExecuteSqlAsync(
+            $"UPDATE reports SET context = jsonb_set(context, '{{aiSignals}}', '\"a, b\"') WHERE id = {malformedId}");
+
+        Assert.That(
+            () => _repository!.GetPendingProfileScanAlertsForUserAsync(
+                GoldenDatasetConstants.Reports.PendingFixturesTelegramUserId, CancellationToken.None),
+            Throws.TypeOf<System.Text.Json.JsonException>());
+    }
+
     private void AssertSkipWasLogged(long reportId, string payloadFragment)
     {
         var warnings = _logs!.Entries
