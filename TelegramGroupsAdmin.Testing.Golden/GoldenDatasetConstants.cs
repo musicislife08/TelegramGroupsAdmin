@@ -24,8 +24,8 @@ public static class GoldenDatasetConstants
     /// <summary>
     /// Web user fixtures from <c>canonical/01_users.sql</c>. UUIDs are stable
     /// fixtures preserved verbatim across canonical regenerations — they're the
-    /// 7 hand-picked canonical anchors that tests can pin to (5 active login anchors
-    /// plus 2 soft-deleted). Password for all 9 canonical web users:
+    /// 8 hand-picked canonical anchors that tests can pin to (5 active login anchors,
+    /// 2 soft-deleted, 1 disabled). Password for all 9 canonical web users:
     /// <see cref="Password"/> (every row carries the same PBKDF2 hash, equal to the E2E
     /// <c>PrehashedTestCredentials.StandardPasswordHash</c>).
     /// </summary>
@@ -98,6 +98,21 @@ public static class GoldenDatasetConstants
         /// soft-deleted state through round-trips.
         /// </summary>
         public const int DeletedAdminStatus = 3;
+
+        /// <summary>
+        /// Disabled Admin fixture (rerun@canonical.test, permission_level=0, status=2, is_active=false,
+        /// TOTP disabled, invited by Owner; canonical edit 2026-10-01: the Owner disabled this account
+        /// twelve minutes after creating it, instead of deleting it — previously status 3). Use when a
+        /// test needs a web user in the Disabled state (the Enable action, the default status filter).
+        /// Tests that rely on it read the status back first.
+        /// </summary>
+        public const string DisabledAdminId = "6a66f0f6-6e59-45ac-ac5f-51a2df0c9c58";
+
+        /// <summary>Disabled Admin fixture email — paired with <see cref="DisabledAdminId"/>.</summary>
+        public const string DisabledAdminEmail = "rerun@canonical.test";
+
+        /// <summary>Status value carried by the Disabled Admin fixture (UserStatus.Disabled = 2).</summary>
+        public const int DisabledAdminStatus = 2;
     }
 
     /// <summary>

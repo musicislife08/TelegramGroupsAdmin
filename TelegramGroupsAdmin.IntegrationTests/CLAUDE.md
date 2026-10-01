@@ -33,7 +33,7 @@ Origin: prod DB snapshot from 2026-04-30. Bootstrap pipeline (full detail in `do
 
 | Order | Table | Rows | Notes |
 |-------|-------|------|-------|
-| 01 | users | 9 | Web users: 7 hand-picked anchors (5 active, 2 soft-deleted) + 2 prod-derived. All share one PBKDF2 hash. |
+| 01 | users | 9 | Web users: 7 hand-picked anchors (5 active, 2 soft-deleted) + 2 prod-derived; `rerun@` flag-edited to Disabled 2026-10-01 (see Part 2). All share one PBKDF2 hash. |
 | 02 | telegram_users | 335 | Anchor set after Strict-Plus prune (every row referenced by >=1 child). Two rows flag-edited 2026-09-13 for Users-tab tests (see Part 2 recipes). |
 | 03 | managed_chats | 21 | Synthetic themed names; one disambiguated duplicate via `is_deleted`. |
 | 04 | configs | 20 | `chat_id=0` global row + 19 per-chat. Encrypted JSONB columns NULL in the SQL; `api_keys` on the global row is filled at load from the plaintext fixture `04_configs.api_keys.json` (encrypted with the template-build key ring). `welcome_config` populated only on global + Main Chat. |
@@ -136,17 +136,23 @@ Recipe format: a heading, the anchor id(s), a one-line description, and "use whe
 #### Admin: standard-permission fixture
 - `User.Id` = `921637d5-0f65-4c66-b143-6f057dd06a1c`
 - Email: `admin@example.com`, permission_level 0, status 1, TOTP enabled, invited by Owner
-- Use when: a test needs an authenticated user with normal permissions (most authenticated-flow tests). The other Admin-level rows are the no-TOTP Admin (`reshoot@`, recipe below) and a soft-deleted one (`rerun@`, status 3).
+- Use when: a test needs an authenticated user with normal permissions (most authenticated-flow tests). The other Admin-level rows are the no-TOTP Admin (`reshoot@`, recipe below) and the disabled one (`rerun@`, status 2, recipe below).
 
 #### Deleted Admin: soft-delete fixture
 - `User.Id` = `a8dc8371-afc5-4b61-9d71-d177f2dd9ddd`
 - Email: `deleted@example.com`, status 3 (deleted), is_active false
-- Use when: a test asserts on soft-delete behavior or filters out deleted users. One further deleted Admin exists in canonical (`rerun@`, status 3) but only this one is recipe-exposed.
+- Use when: a test asserts on soft-delete behavior or filters out deleted users (E2E: the Restore action on the Web Admin Accounts page). The other soft-deleted row is the GlobalAdmin below.
 
 #### Deleted GlobalAdmin: soft-deleted elevated fixture
 - `User.Id` = `ba9ba542-3df6-4473-a820-578562780c57`
 - Email: `globaladmin@example.com`, permission_level 1, status 3
 - Use when: a test asserts that elevated-but-deleted users are still excluded.
+
+#### Disabled Admin: disabled-account fixture (canonical edit 2026-10-01)
+- `User.Id` = `6a66f0f6-6e59-45ac-ac5f-51a2df0c9c58`
+- Email: `rerun@canonical.test`, permission_level 0, status 2 (Disabled), is_active false, TOTP disabled, invited by Owner
+- Edit: status 3 → 2. Story: the Owner disabled the account twelve minutes after creating it (modified_by Owner, modified_at 06:12) rather than deleting it. Canonical had no Disabled web user; the two remaining soft-deleted rows (`deleted@`, `globaladmin@`) keep the soft-delete recipes intact.
+- Use when: a test needs a web user in the Disabled state — the Enable action, or the default status filter (Active + Pending + Disabled) showing a non-active row. Constants: `GoldenDatasetConstants.WebUsers.DisabledAdminId` / `DisabledAdminEmail` / `DisabledAdminStatus`. Guarded by `CanonicalWebUserAnchorTests.DisabledAnchor_IsADisabledInactiveAdmin`; E2E tests read the status back in `ArrangeDataAsync`.
 
 ### Telegram users
 

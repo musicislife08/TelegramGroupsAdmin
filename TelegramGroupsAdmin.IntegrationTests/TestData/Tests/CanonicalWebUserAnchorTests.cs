@@ -43,4 +43,21 @@ public class CanonicalWebUserAnchorTests
             Assert.That(user.SecurityStamp, Is.EqualTo(GoldenDatasetConstants.WebUsers.SecurityStamp));
         }
     }
+
+    /// <summary>Canonical edit 2026-10-01: rerun@ carries the Disabled state (Enable-user E2E coverage).</summary>
+    [Test]
+    public async Task DisabledAnchor_IsADisabledInactiveAdmin()
+    {
+        await using var ctx = _db.GetDbContext();
+        var user = await ctx.Users.AsNoTracking().SingleAsync(u => u.Id == GoldenDatasetConstants.WebUsers.DisabledAdminId);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(user.Email, Is.EqualTo(GoldenDatasetConstants.WebUsers.DisabledAdminEmail));
+            Assert.That((int)user.Status, Is.EqualTo(GoldenDatasetConstants.WebUsers.DisabledAdminStatus));
+            Assert.That(user.IsActive, Is.False);
+            Assert.That(user.PermissionLevel, Is.Zero, "Admin");
+            Assert.That(user.LockedUntil, Is.Null);
+        }
+    }
 }
