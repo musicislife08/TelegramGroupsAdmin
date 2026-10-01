@@ -503,6 +503,22 @@ public static class GoldenDatasetConstants
     /// </summary>
     public static class Reports
     {
+        /// <summary>
+        /// Synthetic pending moderation (content) report: status=0, type=0, reported_by 'Auto-Detection',
+        /// pointing at the real canonical message (70989, chat -100054416618415) authored by
+        /// <see cref="PendingFixturesTelegramUserId"/>. The only pending moderation report in canonical —
+        /// the Reports page's Warn/Spam/Ban/Dismiss actions resolve this row.
+        /// </summary>
+        public const long PendingModerationReportId = 186;
+
+        /// <summary>
+        /// Telegram user behind the three synthetic pending report fixtures (186..188): author of the
+        /// message <see cref="PendingModerationReportId"/> points at and the subject of
+        /// <see cref="PendingExamFailureId"/>. Has a first name (no username), so report cards render
+        /// its "ID: …" caption.
+        /// </summary>
+        public const long PendingFixturesTelegramUserId = 9465377455871;
+
         /// <summary>Synthetic pending exam failure (status=0, user 9465377455871, chat -100054416618415).</summary>
         public const long PendingExamFailureId = 187;
 

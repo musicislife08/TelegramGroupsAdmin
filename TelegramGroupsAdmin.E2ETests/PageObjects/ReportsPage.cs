@@ -22,6 +22,7 @@ public class ReportsPage
 
     // Report card selectors - All use MudCard component
     private const string ExamReviewCard = ".mud-card:has-text('Exam Review')";
+    private const string ModerationReportCard = ".mud-card:has-text('Moderation Report')";
     private const string PendingExamChipSelector = ".mud-chip:has-text('Exam')";
 
     public ReportsPage(IPage page)
@@ -183,6 +184,17 @@ public class ReportsPage
 
     /// <summary>The exam review cards (MudCards containing an "Exam Review" header).</summary>
     public ILocator ExamReviewCards => _page.Locator(ExamReviewCard);
+
+    /// <summary>The moderation report cards (MudCards containing a "Moderation Report" header).</summary>
+    public ILocator ModerationReportCards => _page.Locator(ModerationReportCard);
+
+    /// <summary>
+    /// The moderation report card for the given reported Telegram user, matched on the card's
+    /// "ID: &lt;id&gt;" caption (rendered when the reported user has a name or username).
+    /// No <c>\b</c> anchors: they do not survive the hand-off to Playwright's regex engine.
+    /// </summary>
+    public ILocator ModerationReportCardFor(long reportedUserId) =>
+        ModerationReportCards.Filter(new() { HasTextRegex = new Regex($@"ID:\s*{reportedUserId}(?!\d)") });
 
     /// <summary>
     /// Moderation report and impersonation alert card headers (exam reviews excluded), in document order.

@@ -271,6 +271,12 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
     public ICloudScannerService MockCloudScanner => _mockCloudScannerService;
 
     /// <summary>
+    /// Gets the mock bot moderation service. Every moderation call succeeds without touching Telegram
+    /// or the warnings/user_actions tables; use <c>Received()</c> to verify the intent the app dispatched.
+    /// </summary>
+    public IBotModerationService MockBotModeration => _mockBotModerationService;
+
+    /// <summary>
     /// Gets the connection string for this test's isolated database.
     /// </summary>
     public string ConnectionString => BuildConnectionString(_databaseName);
