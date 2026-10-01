@@ -23,8 +23,10 @@ public static class GoldenDatasetConstants
     /// <summary>
     /// Web user fixtures from <c>canonical/01_users.sql</c>. UUIDs are stable
     /// fixtures preserved verbatim across canonical regenerations — they're the
-    /// 4 hand-picked canonical anchors that tests can pin to. Password for all
-    /// 9 canonical web users: <c>Passw0rd!SaidNoSecurityAuditorEver</c>.
+    /// 7 hand-picked canonical anchors that tests can pin to (5 active login anchors
+    /// plus 2 soft-deleted). Password for all 9 canonical web users:
+    /// <see cref="Password"/> (every row carries the same PBKDF2 hash, equal to the E2E
+    /// <c>PrehashedTestCredentials.StandardPasswordHash</c>).
     /// </summary>
     public static class WebUsers
     {
@@ -44,6 +46,42 @@ public static class GoldenDatasetConstants
         /// authenticated-flow tests that don't need elevated permissions.
         /// </summary>
         public const string AdminId = "921637d5-0f65-4c66-b143-6f057dd06a1c";
+
+        /// <summary>Admin fixture email — paired with <see cref="AdminId"/>.</summary>
+        public const string AdminEmail = "admin@example.com";
+
+        /// <summary>
+        /// GlobalAdmin fixture (ahead@canonical.test, permission_level=1, status=1, TOTP enabled
+        /// with no stored secret). Use for UI password login as an elevated non-Owner user.
+        /// </summary>
+        public const string GlobalAdminId = "8e3a7211-d0eb-40c6-af8e-7d15bb42d10a";
+
+        /// <summary>GlobalAdmin fixture email — paired with <see cref="GlobalAdminId"/>.</summary>
+        public const string GlobalAdminEmail = "ahead@canonical.test";
+
+        /// <summary>
+        /// GlobalAdmin without TOTP (machine@canonical.test, permission_level=1, status=1,
+        /// TOTP disabled). Use for UI password login with no TOTP prompt as an elevated user.
+        /// </summary>
+        public const string NoTotpGlobalAdminId = "c2674f3a-16e6-4537-9cbc-a80a0ea9c686";
+
+        /// <summary>No-TOTP GlobalAdmin email — paired with <see cref="NoTotpGlobalAdminId"/>.</summary>
+        public const string NoTotpGlobalAdminEmail = "machine@canonical.test";
+
+        /// <summary>
+        /// Admin without TOTP (reshoot@canonical.test, permission_level=0, status=1, TOTP
+        /// disabled). Use for UI password login with no TOTP prompt as a standard-permission user.
+        /// </summary>
+        public const string NoTotpAdminId = "28d7aa41-5be5-43a3-a48e-7b1a4bbe5891";
+
+        /// <summary>No-TOTP Admin email — paired with <see cref="NoTotpAdminId"/>.</summary>
+        public const string NoTotpAdminEmail = "reshoot@canonical.test";
+
+        /// <summary>Security stamp carried by every canonical web user.</summary>
+        public const string SecurityStamp = "TEST_SECURITY_STAMP";
+
+        /// <summary>Plaintext password for every canonical web user.</summary>
+        public const string Password = "Passw0rd!SaidNoSecurityAuditorEver";
 
         /// <summary>
         /// Deleted Admin fixture (deleted@example.com, status=3, is_active=false,

@@ -7,14 +7,14 @@ This file is auto-loaded by Claude Code when working under `TelegramGroupsAdmin.
 The binding rule set lives in `.claude/rules/integration-test-data.md` and is injected automatically when you edit files in this project or a superpowers plan/spec. The short form:
 
 - A test asserts its logic against canonical rows. **Never seed a precondition** — no SUT write method (`GetOrCreateAsync`, `UpsertAsync`, `SetBanStatusAsync`, `TrustUserAsync`, …) as setup, no `ctx.<Table>.Add`, no raw `INSERT`. A SUT write appears only when that write **is** the assertion subject.
-- Canonical lacks a shape? **Do not add rows.** Find a canonical row no test or doc references and flag-edit it in place; keep the story plausible; pin it in `TestData/GoldenDatasetConstants.cs`; add a Part 2 recipe marked "(canonical edit <date>)"; guard the precondition in the test by reading the row back.
+- Canonical lacks a shape? **Do not add rows.** Find a canonical row no test or doc references and flag-edit it in place; keep the story plausible; pin it in `TelegramGroupsAdmin.Testing.Golden/GoldenDatasetConstants.cs`; add a Part 2 recipe marked "(canonical edit <date>)"; guard the precondition in the test by reading the row back.
 - Read expected counts/names at runtime, never hard-code them.
 - Hit an infrastructure problem (template build, FK, sequence, missing shape)? Escalate — never change the assertion to make it pass.
 
 ## Part 1 - Dataset orientation
 
 ### What this is
-The canonical dataset is a frozen superset of every entity type the integration suite needs to read from. Tests clone it per-method via Postgres template DBs (`MigrationTestHelper.CreateDatabaseFromGoldenTemplateAsync`) and either consume it as-is, reduce it down with `GoldenDataset.Reduce(ctx).KeepMessages(...).ApplyAsync()` (subtractive — FK CASCADE drops everything outside the allowlist), or mutate it in-place with `GoldenDataset.Mutate(ctx).ShiftDetectionResultTimestamps(...).ApplyAsync()` (NOW()-relative re-timing for windowed aggregations). Source: `TestData/SQL/canonical/*.sql` (33 files, 2,797 INSERT statements).
+The canonical dataset is a frozen superset of every entity type the integration suite needs to read from. Tests clone it per-method via Postgres template DBs (`MigrationTestHelper.CreateDatabaseFromGoldenTemplateAsync`) and either consume it as-is, reduce it down with `GoldenDataset.Reduce(ctx).KeepMessages(...).ApplyAsync()` (subtractive — FK CASCADE drops everything outside the allowlist), or mutate it in-place with `GoldenDataset.Mutate(ctx).ShiftDetectionResultTimestamps(...).ApplyAsync()` (NOW()-relative re-timing for windowed aggregations). Source: `TelegramGroupsAdmin.Testing.Golden/SQL/canonical/*.sql` (33 files, 2,797 INSERT statements).
 
 True-empty tests use `MigrationTestHelper.CreateDatabaseFromEmptyTemplateAsync` instead (post-migrate, zero rows) — cheaper than a golden clone, and the right choice when the SUT writes its own state from scratch.
 
@@ -33,7 +33,7 @@ Origin: prod DB snapshot from 2026-04-30. Bootstrap pipeline (full detail in `do
 
 | Order | Table | Rows | Notes |
 |-------|-------|------|-------|
-| 01 | users | 9 | Web users: 4 canonical fixtures + 5 prod-derived. All share one bcrypt hash. |
+| 01 | users | 9 | Web users: 7 hand-picked anchors (5 active, 2 soft-deleted) + 2 prod-derived. All share one PBKDF2 hash. |
 | 02 | telegram_users | 335 | Anchor set after Strict-Plus prune (every row referenced by >=1 child). Two rows flag-edited 2026-09-13 for Users-tab tests (see Part 2 recipes). |
 | 03 | managed_chats | 21 | Synthetic themed names; one disambiguated duplicate via `is_deleted`. |
 | 04 | configs | 20 | `chat_id=0` global row + 19 per-chat. Encrypted JSONB columns NULL; `welcome_config` populated only on global + Main Chat. |
@@ -93,17 +93,17 @@ Origin: prod DB snapshot from 2026-04-30. Bootstrap pipeline (full detail in `do
 For column-level details, read the per-table SQL file directly (`head -1 <file>` shows the INSERT column list, then read a row or two). Do not transcribe column lists into this document.
 
 ### Canonical anchors in code
-Test code references canonical IDs through `TestData/GoldenDatasetConstants.cs` — the single discovery surface for every ID the test suite pins to. **Magic-string UUIDs and bare numeric chat/message ids in test code are a code smell**: extend `GoldenDatasetConstants` with a named constant instead.
+Test code references canonical IDs through `TelegramGroupsAdmin.Testing.Golden/GoldenDatasetConstants.cs` — the single discovery surface for every ID the test suite pins to. **Magic-string UUIDs and bare numeric chat/message ids in test code are a code smell**: extend `GoldenDatasetConstants` with a named constant instead.
 
-Layout (`internal static class GoldenDatasetConstants` with nested static classes):
-- `WebUsers` — `OwnerId`, `AdminId` (canonical `web_users.id` UUIDs)
+Layout (`public static class GoldenDatasetConstants` with nested static classes):
+- `WebUsers` — ids and emails for the Owner, Admin, GlobalAdmin, no-TOTP GlobalAdmin, no-TOTP Admin, Deleted Admin and Deleted GlobalAdmin anchors, plus the shared `SecurityStamp` and `Password` (canonical `users.id` UUIDs)
 - `Chats` — `MainChatId`
 - `Retention` — message anchors, `MessageShifts`, `AllMessageRefs`, `ExpectedDeletionsWith30DayRetention` (consumed by `MessageHistoryRepositoryTests.CleanupExpiredAsync_*`)
 - `Analytics` — DR / WR anchors, `DetectionResultShifts`, `WelcomeResponseShifts`, `AllMessageRefs`, expected counts (consumed by `AnalyticsRepositoryTests`)
 - `Reports` — `PendingExamFailureId`, `ResolvedExamFailureId`, `AutoApprovedExamPassId`, `AutoApprovedExamPassUserId` (consumed by `ExamResultRepositoryTests`)
 - `Verdicts` — verdict-event anchors for the `message_verdicts` view, training levels, auto-trust and retention (see Part 2 "Verdict events")
 
-Promote a constant to its top-level domain class (`WebUsers`, `Chats`) once a second consumer wants it; until then, keep it under a test-domain nested class next to the tests that use it. The `GoldenDataset.cs` loader file holds the canonical *behavior* (`LoadCanonicalAsync`, `Reduce`, `Mutate`); the constants file holds canonical *data*.
+Promote a constant to its top-level domain class (`WebUsers`, `Chats`) once a second consumer wants it; until then, keep it under a test-domain nested class next to the tests that use it. The `GoldenDataset.cs` loader file (also in `TelegramGroupsAdmin.Testing.Golden`) holds the canonical *behavior* (`LoadCanonicalAsync`, `Reduce`, `Mutate`); the constants file holds canonical *data*.
 
 ## Part 2 - Scenario recipes
 
@@ -121,17 +121,27 @@ Recipe format: a heading, the anchor id(s), a one-line description, and "use whe
 #### GlobalAdmin: cross-chat elevated fixture
 - `User.Id` = `8e3a7211-d0eb-40c6-af8e-7d15bb42d10a`
 - Email: `ahead@canonical.test`, permission_level 1, status 1, TOTP enabled, invited by Owner
-- Use when: a test needs an active elevated (cross-chat) admin who is NOT the Owner (permission boundary tests). Two additional active GlobalAdmins exist in canonical (`perfume@`, `machine@`) but only this one is recipe-exposed.
+- Use when: a test needs an active elevated (cross-chat) admin who is NOT the Owner (permission boundary tests). One further active GlobalAdmin (`perfume@`) is not recipe-exposed; the no-TOTP GlobalAdmin (`machine@`) has its own recipe below.
+
+#### GlobalAdmin without TOTP: password-login elevated fixture
+- `User.Id` = `c2674f3a-16e6-4537-9cbc-a80a0ea9c686`
+- Email: `machine@canonical.test`, permission_level 1, status 1, TOTP disabled
+- Use when: E2E or integration tests need an elevated user who logs in with password alone (no TOTP prompt). Constants: `GoldenDatasetConstants.WebUsers.NoTotpGlobalAdminId` / `NoTotpGlobalAdminEmail`. Password: `GoldenDatasetConstants.WebUsers.Password`.
+
+#### Admin without TOTP: password-login standard fixture
+- `User.Id` = `28d7aa41-5be5-43a3-a48e-7b1a4bbe5891`
+- Email: `reshoot@canonical.test`, permission_level 0, status 1, TOTP disabled
+- Use when: E2E or integration tests need a standard-permission user who logs in with password alone (no TOTP prompt). Constants: `GoldenDatasetConstants.WebUsers.NoTotpAdminId` / `NoTotpAdminEmail`.
 
 #### Admin: standard-permission fixture
 - `User.Id` = `921637d5-0f65-4c66-b143-6f057dd06a1c`
 - Email: `admin@example.com`, permission_level 0, status 1, TOTP enabled, invited by Owner
-- Use when: a test needs an authenticated user with normal permissions (most authenticated-flow tests). One additional active Admin exists in canonical (`rerun@`) but only this one is recipe-exposed.
+- Use when: a test needs an authenticated user with normal permissions (most authenticated-flow tests). The other Admin-level rows are the no-TOTP Admin (`reshoot@`, recipe below) and a soft-deleted one (`rerun@`, status 3).
 
 #### Deleted Admin: soft-delete fixture
 - `User.Id` = `a8dc8371-afc5-4b61-9d71-d177f2dd9ddd`
 - Email: `deleted@example.com`, status 3 (deleted), is_active false
-- Use when: a test asserts on soft-delete behavior or filters out deleted users. One additional deleted Admin exists in canonical (`reshoot@`) but only this one is recipe-exposed.
+- Use when: a test asserts on soft-delete behavior or filters out deleted users. One further deleted Admin exists in canonical (`rerun@`, status 3) but only this one is recipe-exposed.
 
 #### Deleted GlobalAdmin: soft-deleted elevated fixture
 - `User.Id` = `ba9ba542-3df6-4473-a820-578562780c57`
@@ -289,7 +299,7 @@ Workshop Alumni (`-100059667856554`) has no `ban_celebration_config`, so its eff
 
 ### Verdict events (canonical edit 2026-09-27)
 
-`detection_results` is an append-only verdict-event log; `message_verdicts` resolves each message to its latest non-FileScan row (`detected_at DESC, id DESC`, `Unscanned` when none). The conversion is `TestData/SQL/tools/convert-canonical-to-verdict-events.sql` (provenance, not embedded; its header records how it was run). `TestData/CanonicalSlices.cs` freezes every non-chat-0 message's slice under the old model (the since-dropped explicit label table + the legacy spam/training-membership flags); `CanonicalVerdictOracleTests` checks the view against it (msg 104948 is a documented spec-mandated override to ExplicitSpam) and checks chat-0 samples separately. Anchors are in code as `GoldenDatasetConstants.Verdicts`.
+`detection_results` is an append-only verdict-event log; `message_verdicts` resolves each message to its latest non-FileScan row (`detected_at DESC, id DESC`, `Unscanned` when none). The conversion is `TelegramGroupsAdmin.Testing.Golden/SQL/tools/convert-canonical-to-verdict-events.sql` (provenance, not embedded; its header records how it was run). `TestData/CanonicalSlices.cs` freezes every non-chat-0 message's slice under the old model (the since-dropped explicit label table + the legacy spam/training-membership flags); `CanonicalVerdictOracleTests` checks the view against it (msg 104948 is a documented spec-mandated override to ExplicitSpam) and checks chat-0 samples separately. Anchors are in code as `GoldenDatasetConstants.Verdicts`.
 
 | Constant | Anchor | Verdict | Use when |
 |---|---|---|---|
