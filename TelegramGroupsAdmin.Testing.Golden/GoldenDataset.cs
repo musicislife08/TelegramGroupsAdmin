@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
@@ -93,6 +94,27 @@ public static class GoldenDataset
         await context.Database.ExecuteSqlRawAsync(
             "UPDATE configs SET api_keys = {0} WHERE chat_id = 0",
             apiKeysCanonical);
+
+        // users.totp_secret is NULL in 01_users.sql for the same reason. The plaintext secrets live in
+        // 01_users.totp_secrets.json (user id → base32 secret) and are protected here with the purpose
+        // the app's DataProtectionService uses (DataProtectionPurposes.TotpSecrets), so TotpService
+        // can unprotect them. Canonical edit 2026-10-01: one user (perfume@) carries a secret.
+        var totpSecretsJson = await ReadCanonicalResourceAsync("SQL.canonical.01_users.totp_secrets.json");
+        var totpSecrets = JsonSerializer.Deserialize<Dictionary<string, string>>(totpSecretsJson)
+            ?? throw new InvalidOperationException("01_users.totp_secrets.json did not deserialise to a user id → secret map");
+        var totpProtector = dataProtection.CreateProtector(DataProtectionPurposes.TotpSecrets);
+        foreach (var (userId, secret) in totpSecrets)
+        {
+            ct.ThrowIfCancellationRequested();
+            var rows = await context.Database.ExecuteSqlRawAsync(
+                "UPDATE users SET totp_secret = {0} WHERE id = {1}",
+                new object[] { totpProtector.Protect(secret), userId },
+                ct);
+            if (rows != 1)
+            {
+                throw new InvalidOperationException($"01_users.totp_secrets.json names user {userId}, which matched {rows} users rows");
+            }
+        }
     }
 
     /// <summary>

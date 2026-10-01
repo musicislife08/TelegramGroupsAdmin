@@ -33,7 +33,7 @@ Origin: prod DB snapshot from 2026-04-30. Bootstrap pipeline (full detail in `do
 
 | Order | Table | Rows | Notes |
 |-------|-------|------|-------|
-| 01 | users | 9 | Web users: 7 hand-picked anchors (5 active, 2 soft-deleted) + 2 prod-derived; `rerun@` flag-edited to Disabled 2026-10-01 (see Part 2). All share one PBKDF2 hash. |
+| 01 | users | 9 | Web users, all 9 pinned in `GoldenDatasetConstants.WebUsers` (5 active login anchors, 1 active GlobalAdmin with a stored TOTP secret, 2 soft-deleted, 1 disabled). Canonical edits 2026-10-01: `rerun@` flag-edited to Disabled; `perfume@`'s `totp_secret` is filled at load from the plaintext fixture `01_users.totp_secrets.json` (see Part 2). All share one PBKDF2 hash. |
 | 02 | telegram_users | 335 | Anchor set after Strict-Plus prune (every row referenced by >=1 child). Two rows flag-edited 2026-09-13 for Users-tab tests (see Part 2 recipes). |
 | 03 | managed_chats | 21 | Synthetic themed names; one disambiguated duplicate via `is_deleted`. |
 | 04 | configs | 20 | `chat_id=0` global row + 19 per-chat. Encrypted JSONB columns NULL in the SQL; `api_keys` on the global row is filled at load from the plaintext fixture `04_configs.api_keys.json` (encrypted with the template-build key ring). `welcome_config` populated only on global + Main Chat. |
@@ -121,7 +121,7 @@ Recipe format: a heading, the anchor id(s), a one-line description, and "use whe
 #### GlobalAdmin: cross-chat elevated fixture
 - `User.Id` = `8e3a7211-d0eb-40c6-af8e-7d15bb42d10a`
 - Email: `ahead@canonical.test`, permission_level 1, status 1, TOTP enabled, invited by Owner
-- Use when: a test needs an active elevated (cross-chat) admin who is NOT the Owner (permission boundary tests). One further active GlobalAdmin (`perfume@`) is not recipe-exposed; the no-TOTP GlobalAdmin (`machine@`) has its own recipe below.
+- Use when: a test needs an active elevated (cross-chat) admin who is NOT the Owner (permission boundary tests). The other active GlobalAdmins have their own recipes below: `machine@` (no TOTP) and `perfume@` (stored TOTP secret).
 
 #### GlobalAdmin without TOTP: password-login elevated fixture
 - `User.Id` = `c2674f3a-16e6-4537-9cbc-a80a0ea9c686`
@@ -153,6 +153,12 @@ Recipe format: a heading, the anchor id(s), a one-line description, and "use whe
 - Email: `rerun@canonical.test`, permission_level 0, status 2 (Disabled), is_active false, TOTP disabled, invited by Owner
 - Edit: status 3 → 2. Story: the Owner disabled the account twelve minutes after creating it (modified_by Owner, modified_at 06:12) rather than deleting it. Canonical had no Disabled web user; the two remaining soft-deleted rows (`deleted@`, `globaladmin@`) keep the soft-delete recipes intact.
 - Use when: a test needs a web user in the Disabled state — the Enable action, or the default status filter (Active + Pending + Disabled) showing a non-active row. Constants: `GoldenDatasetConstants.WebUsers.DisabledAdminId` / `DisabledAdminEmail` / `DisabledAdminStatus`. Guarded by `CanonicalWebUserAnchorTests.DisabledAnchor_IsADisabledInactiveAdmin`; E2E tests read the status back in `ArrangeDataAsync`.
+
+#### GlobalAdmin with a stored TOTP secret (canonical edit 2026-10-01)
+- `User.Id` = `f2f2f5c2-2cd2-45a1-a272-83f59076fb40`
+- Email: `perfume@canonical.test`, permission_level 1, status 1, TOTP enabled, email verified
+- Edit: the only web user whose `users.totp_secret` is non-NULL. The SQL keeps the column NULL (ciphertext is key-ring bound, like `configs.api_keys`); the base32 plaintext lives in `SQL/canonical/01_users.totp_secrets.json` (user id → secret) and `GoldenDataset.LoadCanonicalAsync` protects it at load with `DataProtectionPurposes.TotpSecrets` — the purpose the app's `DataProtectionService` uses — so `TotpService` can unprotect it. A dummy 20-byte secret; it protects nothing.
+- Use when: a test needs a user with a completed TOTP setup — the Owner's Reset TOTP action (the menu item renders only with a stored secret), or a real authenticator login (`TotpHelper` + the plaintext). Constants: `GoldenDatasetConstants.WebUsers.StoredTotpGlobalAdminId` / `StoredTotpGlobalAdminEmail` / `StoredTotpGlobalAdminBase32`. Guarded by `CanonicalWebUserAnchorTests.StoredTotpAnchor_*`. Do not give owner@/admin@/ahead@ a secret: UI-login tests rely on them landing on /login/setup-2fa.
 
 #### Locked web user: `GoldenDataset.Mutate(ctx).LockWebUser(id, lockFor)` (no canonical edit)
 - A lockout is only "locked" while `locked_until` is ahead of NOW(), so canonical's frozen snapshot cannot carry one. The mutate verb sets `locked_until = NOW() + lockFor` and `failed_login_attempts = 5` (`AccountLockoutConstants.MaxFailedAttempts`) on any canonical web user — the shape `AccountLockoutService` leaves after the fifth failed login.

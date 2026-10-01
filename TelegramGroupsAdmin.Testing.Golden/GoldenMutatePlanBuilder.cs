@@ -11,8 +11,9 @@ namespace TelegramGroupsAdmin.Testing.Golden;
 /// snapshot date; an account lockout is only "locked" while <c>locked_until</c> is still ahead of
 /// NOW()). If a verb would need to insert rows, that's the signal to extend canonical instead.
 ///
-/// Verb count is intentionally bounded — see <c>docs/superpowers/plans/2026-04-30-canonical-
-/// golden-snapshot-and-template-cloning.md</c> for the active register.
+/// Verb count is intentionally bounded. The verbs' XML docs on this class are the register; each
+/// has a self-test in <c>IntegrationTests/TestData/Tests/GoldenMutatePlanTests.cs</c> and a Part 2
+/// recipe in <c>TelegramGroupsAdmin.IntegrationTests/CLAUDE.md</c> where a test shape needs it.
 /// </summary>
 public sealed class GoldenMutatePlanBuilder
 {

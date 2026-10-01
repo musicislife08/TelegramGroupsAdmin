@@ -24,8 +24,8 @@ public static class GoldenDatasetConstants
     /// <summary>
     /// Web user fixtures from <c>canonical/01_users.sql</c>. UUIDs are stable
     /// fixtures preserved verbatim across canonical regenerations — they're the
-    /// 8 hand-picked canonical anchors that tests can pin to (5 active login anchors,
-    /// 2 soft-deleted, 1 disabled). Password for all 9 canonical web users:
+    /// 9 canonical web users, all pinned (5 active login anchors, 1 active GlobalAdmin carrying
+    /// a stored TOTP secret, 2 soft-deleted, 1 disabled). Password for all 9 canonical web users:
     /// <see cref="Password"/> (every row carries the same PBKDF2 hash, equal to the E2E
     /// <c>PrehashedTestCredentials.StandardPasswordHash</c>).
     /// </summary>
@@ -92,6 +92,9 @@ public static class GoldenDatasetConstants
         /// </summary>
         public const string DeletedAdminId = "a8dc8371-afc5-4b61-9d71-d177f2dd9ddd";
 
+        /// <summary>Deleted Admin fixture email — paired with <see cref="DeletedAdminId"/>.</summary>
+        public const string DeletedAdminEmail = "deleted@example.com";
+
         /// <summary>
         /// Status value carried by the Deleted Admin fixture (UserStatus.Deleted = 3).
         /// Pair with <see cref="DeletedAdminId"/> when verifying canonical persists the
@@ -113,6 +116,26 @@ public static class GoldenDatasetConstants
 
         /// <summary>Status value carried by the Disabled Admin fixture (UserStatus.Disabled = 2).</summary>
         public const int DisabledAdminStatus = 2;
+
+        /// <summary>
+        /// GlobalAdmin with a stored TOTP secret (perfume@canonical.test, permission_level=1, status=1,
+        /// TOTP enabled; canonical edit 2026-10-01). The only canonical web user whose
+        /// <c>users.totp_secret</c> is non-NULL: the plaintext lives in
+        /// <c>canonical/01_users.totp_secrets.json</c> and <c>GoldenDataset.LoadCanonicalAsync</c> protects it
+        /// at load with <c>DataProtectionPurposes.TotpSecrets</c>. Use for the Owner's Reset TOTP action
+        /// (the menu item renders only with a stored secret) or a real authenticator login via the secret.
+        /// Not a UI-login anchor — owner@/admin@/ahead@ keep no secret and land on /login/setup-2fa.
+        /// </summary>
+        public const string StoredTotpGlobalAdminId = "f2f2f5c2-2cd2-45a1-a272-83f59076fb40";
+
+        /// <summary>TOTP-secret GlobalAdmin email — paired with <see cref="StoredTotpGlobalAdminId"/>.</summary>
+        public const string StoredTotpGlobalAdminEmail = "perfume@canonical.test";
+
+        /// <summary>
+        /// Base32 plaintext of <see cref="StoredTotpGlobalAdminId"/>'s stored TOTP secret, mirroring
+        /// <c>canonical/01_users.totp_secrets.json</c> (a dummy 20-byte test secret; it protects nothing).
+        /// </summary>
+        public const string StoredTotpGlobalAdminBase32 = "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP";
     }
 
     /// <summary>
