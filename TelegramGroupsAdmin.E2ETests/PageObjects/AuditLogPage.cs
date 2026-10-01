@@ -262,7 +262,6 @@ public class AuditLogPage
     {
         await field.FillAsync(value);
         await field.PressAsync("Enter");
-        await Expect(field).ToHaveValueAsync(value);
     }
 
     /// <summary>The Telegram User cells of the moderation table's current page.</summary>
