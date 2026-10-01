@@ -240,22 +240,43 @@ public class AuditLogPage
     }
 
     /// <summary>
-    /// Fills the Telegram User ID filter.
+    /// Fills the Telegram User ID filter and commits it. The field is a non-Immediate MudTextField,
+    /// so typing alone never reaches <c>ValueChanged</c>: the value only commits on the input's
+    /// change event, which Enter raises. The table reload is awaited by the caller's Expects.
     /// </summary>
     public async Task FilterByTelegramUserIdAsync(string userId)
     {
-        await TelegramUserIdFilter.FillAsync(userId);
-        await WaitForLoadAsync();
+        await CommitFilterAsync(TelegramUserIdFilter, userId);
     }
 
     /// <summary>
-    /// Fills the Issued By filter.
+    /// Fills the Issued By filter and commits it (see <see cref="FilterByTelegramUserIdAsync"/>).
     /// </summary>
     public async Task FilterByIssuedByAsync(string issuedBy)
     {
-        await IssuedByFilter.FillAsync(issuedBy);
-        await WaitForLoadAsync();
+        await CommitFilterAsync(IssuedByFilter, issuedBy);
     }
+
+    private static async Task CommitFilterAsync(ILocator field, string value)
+    {
+        await field.FillAsync(value);
+        await field.PressAsync("Enter");
+        await Expect(field).ToHaveValueAsync(value);
+    }
+
+    /// <summary>The Telegram User cells of the moderation table's current page.</summary>
+    public ILocator ModerationTelegramUserCells => _page.Locator($"{ActivePanel} td[data-label='Telegram User']");
+
+    /// <summary>The Issued By cells of the moderation table's current page.</summary>
+    public ILocator ModerationIssuedByCells => _page.Locator($"{ActivePanel} td[data-label='Issued By']");
+
+    /// <summary>
+    /// The Telegram User cells whose user id is exactly <paramref name="userId"/>: a known user renders
+    /// its display name over an "ID: 123" caption, an unknown one renders the bare id. Lookarounds
+    /// stand in for <c>\b</c>, which never matches in Playwright's regex bridge.
+    /// </summary>
+    public ILocator ModerationEntriesForTelegramUser(long userId) =>
+        ModerationTelegramUserCells.Filter(new() { HasTextRegex = new Regex($@"(?<!\d){userId}(?!\d)") });
 
     /// <summary>
     /// Clears the Action Type filter by selecting "All Actions".
@@ -283,6 +304,16 @@ public class AuditLogPage
 
     /// <summary>The table pager of the currently visible table.</summary>
     public ILocator Pager => _page.Locator($"{ActivePanel} {TablePager}");
+
+    /// <summary>The pager's "1-10 of N" text of the currently visible table.</summary>
+    public ILocator PagerInformation => Pager.Locator(".mud-table-page-number-information");
+
+    /// <summary>
+    /// Asserts the visible table's pager reports exactly <paramref name="expectedTotal"/> rows in total
+    /// (the "of N" part of "1-10 of N"), retrying until the server-side data lands.
+    /// </summary>
+    public Task ExpectTotalRowCountAsync(int expectedTotal) =>
+        Expect(PagerInformation).ToHaveTextAsync(new Regex($@"of\s+{expectedTotal}\s*$"));
 
     /// <summary>
     /// Clicks the refresh button for the current tab.

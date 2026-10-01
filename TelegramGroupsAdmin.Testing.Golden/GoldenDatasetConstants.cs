@@ -13,6 +13,7 @@ namespace TelegramGroupsAdmin.Testing.Golden;
 ///   • <see cref="Analytics"/>  — anchors for analytics-aggregation tests
 ///   • <see cref="Reports"/>    — anchors for exam-result repository tests
 ///   • <see cref="Verdicts"/>   — verdict-event anchors (message_verdicts view, training levels)
+///   • <see cref="ModerationLog"/> — user_actions anchors for the Audit Log page's moderation filters
 ///   • <see cref="SystemConfig"/> — global configs row: encrypted-column plaintexts written post-load
 ///
 /// Promote a constant up to a top-level domain class (e.g. <see cref="WebUsers"/>,
@@ -671,6 +672,23 @@ public static class GoldenDatasetConstants
 
         /// <summary>Only its curated verdict keeps this old message (latest row dr2009, an explicit ham decision). @arisepacifism.</summary>
         public const int LabeledOnlyRetentionMsgId = 7974;
+    }
+
+    /// <summary>
+    /// Anchors for the Audit Log page's Telegram Moderation Log tab (<c>canonical/34_user_actions.sql</c>,
+    /// filtered by the page's Telegram User ID and Issued By fields). Untouched canonical rows; the
+    /// counts are read from the clone at runtime, and tests guard the shapes below in ArrangeDataAsync.
+    /// </summary>
+    public static class ModerationLog
+    {
+        /// <summary>
+        /// Telegram user with nine <c>user_actions</c> rows (ids 196..245, Nov 2025) issued by every actor
+        /// kind the Issued By column renders: Auto-Detection, three web users (Owner, the stored-TOTP
+        /// GlobalAdmin and the no-TOTP GlobalAdmin) and a Telegram admin. Has its own <c>telegram_users</c>
+        /// row, so the Telegram User cell renders its display name with the "ID: …" caption. Nine rows fit
+        /// on the moderation table's first page, so the filtered row count equals the DB count.
+        /// </summary>
+        public const long MixedIssuerUserId = 9704804870465L;
     }
 
     /// <summary>
