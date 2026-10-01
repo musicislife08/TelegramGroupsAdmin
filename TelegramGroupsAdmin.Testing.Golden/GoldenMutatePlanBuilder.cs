@@ -22,6 +22,7 @@ public sealed class GoldenMutatePlanBuilder
     private List<TimestampShift>? _welcomeResponseShifts;
     private List<(long ChatId, TimestampShift Shift)>? _messageShifts;
     private List<(string UserId, TimeSpan LockFor)>? _webUserLocks;
+    private List<(long TelegramUserId, TimeSpan ExpiresIn)>? _warningExtensions;
 
     /// <summary>
     /// <c>failed_login_attempts</c> written by <see cref="LockWebUser"/>: the first lockout happens at
@@ -88,6 +89,25 @@ public sealed class GoldenMutatePlanBuilder
         return this;
     }
 
+    /// <summary>
+    /// Re-times the Telegram user's warnings: sets every element's <c>ExpiresAt</c> in
+    /// <c>telegram_users.warnings</c> to <c>NOW() + expiresIn</c> where <c>telegram_user_id</c> matches,
+    /// leaving IssuedAt, Reason, actor and context alone. A warning counts only while <c>ExpiresAt</c> is
+    /// ahead of NOW() (90-day default expiry), so canonical's frozen snapshot carries only expired ones;
+    /// this is the NOW()-relative shape, like <see cref="LockWebUser"/>. Fails loudly for a user with no
+    /// warnings — that is a missing anchor, not something to invent. Other rows are left untouched.
+    /// </summary>
+    public GoldenMutatePlanBuilder ExtendTelegramUserWarnings(long telegramUserId, TimeSpan expiresIn)
+    {
+        if (expiresIn <= TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(nameof(expiresIn), expiresIn, "a warning in force must expire in the future");
+        }
+
+        (_warningExtensions ??= new()).Add((telegramUserId, expiresIn));
+        return this;
+    }
+
     public async Task ApplyAsync(CancellationToken ct = default)
     {
         await using var tx = await _context.Database.BeginTransactionAsync(ct);
@@ -104,6 +124,27 @@ public sealed class GoldenMutatePlanBuilder
                     if (rows != 1)
                     {
                         throw new InvalidOperationException($"LockWebUser: expected to lock exactly one users row for id {userId}, updated {rows}");
+                    }
+                }
+            }
+
+            if (_warningExtensions is { Count: > 0 } extensions)
+            {
+                foreach (var (telegramUserId, expiresIn) in extensions)
+                {
+                    // jsonb_build_object renders the timestamptz as ISO 8601 with offset, the shape
+                    // System.Text.Json wrote the canonical entries in (WarningEntry.ExpiresAt).
+                    var rows = await _context.Database.ExecuteSqlRawAsync(
+                        "UPDATE telegram_users SET warnings = (" +
+                        "  SELECT jsonb_agg(w || jsonb_build_object('ExpiresAt', NOW() + ({0}::text)::interval)) " +
+                        "  FROM jsonb_array_elements(warnings) AS w) " +
+                        "WHERE telegram_user_id = {1} AND jsonb_array_length(COALESCE(warnings, '[]'::jsonb)) > 0",
+                        new object[] { FormatInterval(expiresIn), telegramUserId },
+                        ct);
+                    if (rows != 1)
+                    {
+                        throw new InvalidOperationException(
+                            $"ExtendTelegramUserWarnings: expected exactly one telegram_users row with warnings for id {telegramUserId}, updated {rows}");
                     }
                 }
             }

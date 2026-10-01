@@ -209,6 +209,87 @@ public class GoldenMutatePlanTests
     }
 
     [Test]
+    public async Task ExtendTelegramUserWarnings_MovesEveryWarningExpiryToNowPlusDuration()
+    {
+        const long UserId = GoldenDatasetConstants.UsersPage.WarnedTrustedMemberId;
+        var expiresIn = TimeSpan.FromDays(30);
+
+        await using var ctx = _helper!.GetDbContext();
+        var before = await ctx.TelegramUsers.AsNoTracking()
+            .Where(u => u.TelegramUserId == UserId).Select(u => u.Warnings).SingleAsync();
+        Assert.That(before, Is.Not.Null.And.Not.Empty, "canonical anchor must carry at least one warning");
+        Assert.That(before!.All(w => w.ExpiresAt < DateTimeOffset.UtcNow), "canonical warnings are expired");
+
+        var appliedAt = DateTimeOffset.UtcNow;
+        await GoldenDataset.Mutate(ctx)
+            .ExtendTelegramUserWarnings(UserId, expiresIn)
+            .ApplyAsync();
+
+        var after = await ctx.TelegramUsers.AsNoTracking()
+            .Where(u => u.TelegramUserId == UserId).Select(u => u.Warnings).SingleAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(after, Has.Count.EqualTo(before.Count), "no warning is added or dropped");
+            foreach (var (original, extended) in before.Zip(after!))
+            {
+                Assert.That(extended.ExpiresAt, Is.Not.Null);
+                Assert.That(extended.ExpiresAt!.Value, Is.EqualTo(appliedAt + expiresIn).Within(TimeSpan.FromSeconds(5)),
+                    "ExpiresAt must be NOW() + expiresIn");
+                Assert.That(extended.IssuedAt, Is.EqualTo(original.IssuedAt), "IssuedAt is left alone");
+                Assert.That(extended.Reason, Is.EqualTo(original.Reason), "Reason is left alone");
+                Assert.That(extended.ActorType, Is.EqualTo(original.ActorType));
+                Assert.That(extended.ActorId, Is.EqualTo(original.ActorId));
+                Assert.That(extended.ChatId, Is.EqualTo(original.ChatId));
+                Assert.That(extended.MessageId, Is.EqualTo(original.MessageId));
+            }
+        }
+    }
+
+    [Test]
+    public async Task ExtendTelegramUserWarnings_DoesNotTouchOtherUsers()
+    {
+        const long Extended = GoldenDatasetConstants.UsersPage.WarnedTrustedMemberId;
+        const long Untouched = GoldenDatasetConstants.UsersPage.ExpiredWarningTrustedMemberId;
+
+        await using var ctx = _helper!.GetDbContext();
+        var untouchedBefore = await ctx.TelegramUsers.AsNoTracking()
+            .Where(u => u.TelegramUserId == Untouched).Select(u => u.Warnings).SingleAsync();
+
+        await GoldenDataset.Mutate(ctx)
+            .ExtendTelegramUserWarnings(Extended, TimeSpan.FromDays(30))
+            .ApplyAsync();
+
+        var untouchedAfter = await ctx.TelegramUsers.AsNoTracking()
+            .Where(u => u.TelegramUserId == Untouched).Select(u => u.Warnings).SingleAsync();
+        Assert.That(untouchedAfter!.Select(w => w.ExpiresAt), Is.EqualTo(untouchedBefore!.Select(w => w.ExpiresAt)));
+    }
+
+    [Test]
+    public void ExtendTelegramUserWarnings_RejectsANonPositiveDuration()
+    {
+        using var ctx = _helper!.GetDbContext();
+        Assert.That(
+            () => GoldenDataset.Mutate(ctx).ExtendTelegramUserWarnings(GoldenDatasetConstants.UsersPage.WarnedTrustedMemberId, TimeSpan.Zero),
+            Throws.TypeOf<ArgumentOutOfRangeException>());
+    }
+
+    [Test]
+    public async Task ExtendTelegramUserWarnings_FailsLoudlyForAUserWithoutWarnings()
+    {
+        await using var ctx = _helper!.GetDbContext();
+        var hasWarnings = await ctx.TelegramUsers.AsNoTracking()
+            .Where(u => u.TelegramUserId == GoldenDatasetConstants.UsersPage.KickedJoinerId)
+            .Select(u => u.Warnings != null && u.Warnings.Any()).SingleAsync();
+        Assert.That(hasWarnings, Is.False, "the kicked joiner must carry no warnings for this test to mean anything");
+
+        var plan = GoldenDataset.Mutate(ctx)
+            .ExtendTelegramUserWarnings(GoldenDatasetConstants.UsersPage.KickedJoinerId, TimeSpan.FromDays(1));
+
+        Assert.That(async () => await plan.ApplyAsync(), Throws.TypeOf<InvalidOperationException>());
+    }
+
+    [Test]
     public async Task ShiftMessageTimestamps_DoesNotTouchUnshiftedRows()
     {
         const long ChatId = -100026957614982L;

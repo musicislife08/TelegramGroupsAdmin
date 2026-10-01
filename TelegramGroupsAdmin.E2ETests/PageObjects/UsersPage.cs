@@ -33,11 +33,16 @@ public class UsersPage
     private const string WarningsCell = "td[data-label='Warnings']";
     private const string ActionsCell = "td[data-label='Actions']";
 
-    // Action buttons
-    private const string TrustButton = "button:has([data-testid='VerifiedUserIcon']), button:has([data-testid='PersonOffIcon'])";
+    // Accessible names (UserInfoCell badges, Users.razor trust toggle). "Trust user" is a
+    // case-insensitive substring of "Untrust user", so every lookup is Exact.
+    private const string TrustedBadgeName = "Trusted user";
+    private const string AdminBadgeName = "Chat admin";
+    private const string TrustToggleName = "Trust user";
+    private const string UntrustToggleName = "Untrust user";
 
     // Dialog
     private const string DialogSelector = ".mud-dialog";
+    private const string SnackbarSelector = ".mud-snackbar";
 
     public UsersPage(IPage page)
     {
@@ -104,19 +109,53 @@ public class UsersPage
     /// <summary>The Chats cell of the user row containing <paramref name="displayName"/>.</summary>
     public ILocator UserChatsCell(string displayName) => UserRow(displayName).Locator(ChatsCell);
 
+    /// <summary>
+    /// The table row of the user with <paramref name="telegramUserId"/>, matched on the "ID: n" caption
+    /// UserInfoCell renders (a lookahead stops a shorter id matching a longer one's prefix).
+    /// </summary>
+    public ILocator UserRowById(long telegramUserId) =>
+        UserRows.Filter(new() { HasTextRegex = new Regex($@"ID: {telegramUserId}(?!\d)") });
+
+    /// <summary>The Trusted badge icon (role=img "Trusted user") inside <paramref name="row"/>.</summary>
+    public ILocator TrustedBadge(ILocator row) =>
+        row.GetByRole(AriaRole.Img, new() { Name = TrustedBadgeName, Exact = true });
+
+    /// <summary>The Chat admin badge icon (role=img "Chat admin") inside <paramref name="row"/>.</summary>
+    public ILocator AdminBadge(ILocator row) =>
+        row.GetByRole(AriaRole.Img, new() { Name = AdminBadgeName, Exact = true });
+
     /// <summary>The trusted indicator icon in the user row containing <paramref name="displayName"/>.</summary>
-    public ILocator TrustedIndicator(string displayName) =>
-        UserRow(displayName).Locator(".mud-icon-root[data-testid='VerifiedUserIcon']");
+    public ILocator TrustedIndicator(string displayName) => TrustedBadge(UserRow(displayName));
 
     /// <summary>The admin indicator icon in the user row containing <paramref name="displayName"/>.</summary>
-    public ILocator AdminIndicator(string displayName) =>
-        UserRow(displayName).Locator(".mud-icon-root[data-testid='ShieldIcon']");
+    public ILocator AdminIndicator(string displayName) => AdminBadge(UserRow(displayName));
+
+    /// <summary>
+    /// The "Trust user" toggle inside <paramref name="row"/> — rendered for an untrusted user on the
+    /// All and Active tabs. Scoped to the row because the toggle exists in several tab tables.
+    /// </summary>
+    public ILocator TrustToggle(ILocator row) =>
+        row.GetByRole(AriaRole.Button, new() { Name = TrustToggleName, Exact = true });
+
+    /// <summary>The "Untrust user" toggle inside <paramref name="row"/> (a trusted user, All and Active tabs).</summary>
+    public ILocator UntrustToggle(ILocator row) =>
+        row.GetByRole(AriaRole.Button, new() { Name = UntrustToggleName, Exact = true });
+
+    /// <summary>The Warnings cell of <paramref name="row"/> (Active, Tagged and Banned tabs render one).</summary>
+    public ILocator WarningsCellOf(ILocator row) => row.Locator(WarningsCell);
+
+    /// <summary>The count badge on the tab header whose text contains <paramref name="tabName"/>.</summary>
+    public ILocator TabBadgeOf(string tabName) => TabHeader(tabName).Locator(TabBadge);
 
     /// <summary>The pager information text of the current table, e.g. "1-25 of 42".</summary>
     public ILocator PagerInformation => _page.Locator(PagerInformationSelector);
 
     /// <summary>The open dialog, if any.</summary>
     public ILocator Dialog => _page.Locator(DialogSelector);
+
+    /// <summary>The snackbar(s) whose text contains <paramref name="text"/>.</summary>
+    public ILocator SnackbarWithText(string text) =>
+        _page.Locator(SnackbarSelector).Filter(new() { HasText = text });
 
     /// <summary>
     /// Clicks a tab by its name and waits for it to become active.
@@ -198,9 +237,15 @@ public class UsersPage
     /// <summary>
     /// Clicks the View Details button for a user.
     /// </summary>
-    public async Task ClickViewDetailsAsync(string displayName)
+    public Task ClickViewDetailsAsync(string displayName) => ClickViewDetailsAsync(UserRow(displayName));
+
+    /// <summary>
+    /// Clicks the View Details button of <paramref name="row"/>: the first Actions-cell button on
+    /// every tab but Banned (where Unban comes first).
+    /// </summary>
+    public async Task ClickViewDetailsAsync(ILocator row)
     {
-        var viewButton = UserRow(displayName).Locator($"{ActionsCell} button").First;
+        var viewButton = row.Locator($"{ActionsCell} button").First;
         await viewButton.ClickAsync();
         await Expect(Dialog).ToBeVisibleAsync();
     }

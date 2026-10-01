@@ -224,6 +224,35 @@ public static class GoldenDatasetConstants
 
         /// <summary>@curveabdominal — is_active=false, is_banned=true with ban_expires_at in the past (canonical edit: expired temp-ban whose flag was never cleared).</summary>
         public const long ExpiredBanUserId = 9995544961449L;
+
+        /// <summary>
+        /// Untouched canonical member: is_active=true, is_banned=false, is_trusted=false, not a bot,
+        /// no chat_admins row, 2 messages in one chat. The subject of the Users page trust toggle
+        /// (<c>UsersGoldenTests</c>): trusting it is the assertion, not setup.
+        /// </summary>
+        public const long UntrustedActiveMemberId = 9704788798695L;
+
+        /// <summary>
+        /// Untouched canonical member: is_active=true, is_trusted=true, not a bot, no active chat_admins
+        /// row, one <c>warnings</c> entry whose ExpiresAt (2026-04-26) is in the past. Carries the Trusted
+        /// badge without the Chat admin badge; re-timed by <c>ExtendTelegramUserWarnings</c> when a test
+        /// needs the warning in force.
+        /// </summary>
+        public const long WarnedTrustedMemberId = 9685233957282L;
+
+        /// <summary>
+        /// Untouched canonical member: is_active=true, is_trusted=true, no active chat_admins row, one
+        /// <c>warnings</c> entry whose ExpiresAt (2026-04-28) is in the past. Left expired so the Users
+        /// page's active-warning predicate is proven (Active renders "None"; Tagged still lists it).
+        /// </summary>
+        public const long ExpiredWarningTrustedMemberId = 9086323729821L;
+
+        /// <summary>
+        /// Untouched canonical member: is_active=true, is_trusted=true, not a bot, is_active=true on
+        /// 4 chat_admins rows (admin in four managed chats). Carries both the Chat admin and the
+        /// Trusted badge; every non-bot active canonical admin is also trusted.
+        /// </summary>
+        public const long ChatAdminMemberId = 9187417286258L;
     }
 
     /// <summary>

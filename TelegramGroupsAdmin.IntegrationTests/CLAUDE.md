@@ -205,6 +205,16 @@ Recipe format: a heading, the anchor id(s), a one-line description, and "use whe
 - `@curveabdominal`, "Crawling", `is_active=false`, `is_banned=true`, `ban_expires_at=2026-04-30 12:56:53+00` (past), `banned_at=2026-04-30 00:56:53+00`
 - Use when: a test needs a user the Banned tab drops (expired) that every other status tab also excludes — the shape the All tab guarantees. Constant: `UsersPage.ExpiredBanUserId`.
 
+#### Users page members: trust subject, badge holders, warned members (no canonical edit — pinned unreferenced rows)
+- `UsersPage.UntrustedActiveMemberId` = `9704788798695`: `is_active=true`, `is_banned=false`, `is_trusted=false`, not a bot, no `chat_admins` row, 2 messages in one chat. The Users page trust toggle's subject (`UsersGoldenTests`): the app write IS the assertion (`is_trusted` + a `Trust` `user_actions` row by the Owner).
+- `UsersPage.ChatAdminMemberId` = `9187417286258`: trusted active member with 4 `is_active=true` `chat_admins` rows. Carries both the Chat admin and the Trusted badge — every non-bot active canonical admin is also trusted, so no canonical row proves the admin badge alone.
+- `UsersPage.WarnedTrustedMemberId` = `9685233957282` and `UsersPage.ExpiredWarningTrustedMemberId` = `9086323729821`: trusted active members, no active admin seat, one `warnings` JSONB entry each with `ExpiresAt` in April 2026 — like all three canonical warnings, expired at the snapshot. The first is the anchor for `ExtendTelegramUserWarnings` (below); the second stays expired to prove the active-warning predicate (Active renders "None"; Tagged still lists it because its predicate is "any warning").
+- Use when: a test needs a trust toggle target, a row with the Trusted / Chat admin badge, or a member with a warning. Read-backs in the tests guard every flag.
+
+#### Warning in force: `GoldenDataset.Mutate(ctx).ExtendTelegramUserWarnings(id, expiresIn)` (no canonical edit)
+- A warning counts only while its `ExpiresAt` is ahead of NOW() (90-day default expiry), so canonical's frozen snapshot carries only expired warnings. The mutate verb sets every element's `ExpiresAt` in `telegram_users.warnings` to `NOW() + expiresIn`, leaving IssuedAt, Reason, actor and context alone; it fails loudly for a user with no warnings (that is a missing anchor, not something to invent).
+- Use when: a test needs the Warnings cell chip, `WarningCount > 0`, or `GetActiveWarningCountAsync` non-zero. Re-time `UsersPage.WarnedTrustedMemberId` and read the expected count back with the same predicate (`ExpiresAt == null || ExpiresAt > now`); apply before the app starts. Self-tests: `GoldenMutatePlanTests.ExtendTelegramUserWarnings_*`.
+
 #### Heavily-banned spammer
 - `telegram_user_id` = `9971261287520`
 - `@lazinessunsheathe`, "Reappear Math"
