@@ -219,6 +219,11 @@ Recipe format: a heading, the anchor id(s), a one-line description, and "use whe
 - Canonical's global `sendgrid_config` is enabled with a from-address, but no SendGrid key is stored in `api_keys` (encrypted columns are not in the SQL), so `IFeatureAvailabilityService.GetEmailConfigurationStateAsync` reads `Disabled`: the Login page hides the forgot-password / resend-verification links and the Register page shows the "email verification disabled" note. The mutate verb decrypts the canonical `api_keys` under `DataProtectionPurposes.ApiKeys`, adds `sendGrid`, and re-encrypts, leaving the AI connection keys and every other row alone; it fails loudly without a stored key set. Pass the key ring the app under test uses (E2E: the fixture's shared key directory, application name `TgSpamPreFilter`). The key is a dummy.
 - Use when: a test needs email read as configured (Login page links, password-reset or verification flows) without a SUT write. Self-tests: `GoldenMutatePlanTests.EnableSendGridApiKey_*`.
 
+#### Removed tag on an otherwise untagged member (canonical edit 2026-10-01)
+- `user_tags.id` = `11` (`UserTags.RemovedTagId`), `telegram_user_id` = `9579510369392` (`UserTags.RemovedTagUserId`)
+- `@parasailprojector`, "Recycler": active, trusted, not banned, no admin note, no `chat_admins` row; its only tag, "helpful-user", has `removed_at=2025-11-15 17:20:00+00` (after `added_at` 2025-10-28) and `removed_by_web_user_id` = the Owner
+- Use when: a test needs a member whose only tag is removed — Tagged/`IsTagged`/`TaggedCount` must ignore it (`TelegramUserRepositoryTests` removed-tag tests). Guarded by a read-back of `removed_at`.
+
 #### Heavily-banned spammer
 - `telegram_user_id` = `9971261287520`
 - `@lazinessunsheathe`, "Reappear Math"

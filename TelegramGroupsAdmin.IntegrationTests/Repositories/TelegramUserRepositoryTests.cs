@@ -153,6 +153,57 @@ public class TelegramUserRepositoryTests
         Assert.That(counts.TaggedCount, Is.EqualTo((await ExpectedTaggedIdsAsync(ctx)).Count));
     }
 
+    private static async Task GuardRemovedTagAnchorAsync(AppDbContext ctx)
+    {
+        const long id = GoldenDatasetConstants.UserTags.RemovedTagUserId;
+        var tags = await ctx.UserTags.AsNoTracking().Where(t => t.TelegramUserId == id).ToListAsync();
+        Assert.That(tags.Select(t => t.Id), Is.EqualTo(new[] { GoldenDatasetConstants.UserTags.RemovedTagId }), "the anchor's only tag is the edited one");
+        Assert.That(tags[0].RemovedAt, Is.Not.Null.And.GreaterThan(tags[0].AddedAt), "the anchor's tag is removed");
+        Assert.That(await ctx.AdminNotes.AnyAsync(n => n.TelegramUserId == id), Is.False, "no note");
+        Assert.That(await ctx.ChatAdmins.AnyAsync(a => a.TelegramId == id), Is.False, "no admin seat");
+        Assert.That(await ctx.TelegramUsers.AsNoTracking().Where(u => u.TelegramUserId == id).Select(u => u.IsActive).SingleAsync(), "active");
+    }
+
+    [Test]
+    public async Task GetPagedUsersAsync_RemovedTag_DoesNotMarkTheMemberTagged()
+    {
+        await using var ctx = _testHelper!.GetDbContext();
+        await GuardRemovedTagAnchorAsync(ctx);
+
+        var (items, _) = await _repository!.GetPagedUsersAsync(
+            UiModels.UserListFilter.Active, skip: 0, take: 1000,
+            searchText: null, chatIds: GlobalScope, sortLabel: null, sortDescending: false);
+
+        var member = items.Single(i => i.TelegramUserId == GoldenDatasetConstants.UserTags.RemovedTagUserId);
+        Assert.That(member.IsTagged, Is.False, "a removed tag is not a tag");
+    }
+
+    [Test]
+    public async Task GetAllWithStatsAsync_RemovedTag_DoesNotMarkTheMemberTagged()
+    {
+        await using var ctx = _testHelper!.GetDbContext();
+        await GuardRemovedTagAnchorAsync(ctx);
+
+        var all = await _repository!.GetAllWithStatsAsync();
+
+        var member = all.Single(i => i.TelegramUserId == GoldenDatasetConstants.UserTags.RemovedTagUserId);
+        Assert.That(member.IsTagged, Is.False, "a removed tag is not a tag");
+    }
+
+    [Test]
+    public async Task GetModerationQueueStatsAsync_TaggedCount_IgnoresRemovedTags()
+    {
+        await using var ctx = _testHelper!.GetDbContext();
+        await GuardRemovedTagAnchorAsync(ctx);
+        var noted = await ctx.AdminNotes.Select(n => n.TelegramUserId).ToListAsync();
+        var liveTagged = await ctx.UserTags.Where(t => t.RemovedAt == null).Select(t => t.TelegramUserId).ToListAsync();
+        var expected = await ctx.TelegramUsers.CountAsync(u => noted.Contains(u.TelegramUserId) || liveTagged.Contains(u.TelegramUserId));
+
+        var stats = await _repository!.GetModerationQueueStatsAsync();
+
+        Assert.That(stats.TaggedCount, Is.EqualTo(expected));
+    }
+
     private async Task SeedActiveUserAsync(long userId, string? username = null, string? firstName = null, string? lastName = null)
     {
         await using var scope = _serviceProvider!.CreateAsyncScope();

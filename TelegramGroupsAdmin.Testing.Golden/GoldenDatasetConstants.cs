@@ -256,6 +256,25 @@ public static class GoldenDatasetConstants
     }
 
     /// <summary>
+    /// Anchors from <c>canonical/27_user_tags.sql</c> (canonical edit 2026-10-01).
+    /// </summary>
+    public static class UserTags
+    {
+        /// <summary>
+        /// @parasailprojector — active, trusted, not banned, no admin note, no chat_admins row. Its only
+        /// tag (<see cref="RemovedTagId"/>, "helpful-user") is removed, so it is Tagged by nothing live:
+        /// stats and counts that ignore <c>removed_at</c> would wrongly flag it.
+        /// </summary>
+        public const long RemovedTagUserId = 9579510369392L;
+
+        /// <summary>
+        /// <c>user_tags.id</c> 11 — canonical edit: <c>removed_at</c> set (2025-11-15 17:20 UTC, after its
+        /// 2025-10-28 added_at) and <c>removed_by_web_user_id</c> the Owner; the tag was later withdrawn.
+        /// </summary>
+        public const long RemovedTagId = 11L;
+    }
+
+    /// <summary>
     /// DM ban celebration subscriber anchors from <c>canonical/36_ban_celebration_subscribers.sql</c>
     /// (canonical addition 2026-09-25 — a new table has no row to flag-edit; approved by owner).
     /// Every user is active, not banned, not a bot, and has real messages in the chats they are
