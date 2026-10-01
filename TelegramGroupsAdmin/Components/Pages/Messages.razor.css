@@ -6,6 +6,7 @@
 }
 
 .telegram-layout {
+    position: relative; /* containing block for the absolutely positioned mobile panes */
     display: flex;
     height: calc(100vh - 64px - 48px); /* Account for app header (64px) and container margin (my-4 = 48px) */
     background: #0e1621;
