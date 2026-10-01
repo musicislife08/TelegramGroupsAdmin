@@ -79,6 +79,7 @@
                         <MudTooltip Text="@(context.IsTrusted ? "Remove Trust" : "Trust User")">
                             <MudIconButton Icon="@(context.IsTrusted ? Icons.Material.Filled.PersonOff : Icons.Material.Filled.VerifiedUser)"
                                           Size="Size.Small"
+                                          aria-label="@(context.IsTrusted ? "Untrust user" : "Trust user")"
                                           Color="@(context.IsTrusted ? Color.Default : Color.Success)"
                                           OnClick="@(() => ToggleTrust(context))" />
                         </MudTooltip>
@@ -133,6 +134,7 @@
                         <MudTooltip Text="@(context.IsTrusted ? "Remove Trust" : "Trust User")">
                             <MudIconButton Icon="@(context.IsTrusted ? Icons.Material.Filled.PersonOff : Icons.Material.Filled.VerifiedUser)"
                                           Size="Size.Small"
+                                          aria-label="@(context.IsTrusted ? "Untrust user" : "Trust user")"
                                           Color="@(context.IsTrusted ? Color.Default : Color.Success)"
                                           OnClick="@(() => ToggleTrust(context))" />
                         </MudTooltip>

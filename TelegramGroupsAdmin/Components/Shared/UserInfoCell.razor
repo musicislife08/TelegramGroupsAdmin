@@ -19,13 +19,13 @@
                 @if (User.IsTrusted)
                 {
                     <MudTooltip Text="Trusted User">
-                        <MudIcon Icon="@Icons.Material.Filled.VerifiedUser" Color="Color.Success" Size="Size.Small" />
+                        <MudIcon Icon="@Icons.Material.Filled.VerifiedUser" Color="Color.Success" Size="Size.Small" role="img" aria-label="Trusted user" />
                     </MudTooltip>
                 }
                 @if (User.IsAdmin)
                 {
                     <MudTooltip Text="Admin in at least one chat">
-                        <MudIcon Icon="@Icons.Material.Filled.Shield" Color="Color.Info" Size="Size.Small" />
+                        <MudIcon Icon="@Icons.Material.Filled.Shield" Color="Color.Info" Size="Size.Small" role="img" aria-label="Chat admin" />
                     </MudTooltip>
                 }
                 @if (User.IsTagged)
