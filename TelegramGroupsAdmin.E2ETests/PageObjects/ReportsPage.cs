@@ -275,6 +275,21 @@ public class ReportsPage
     }
 
     /// <summary>
+    /// Clicks the "Warn" button inside <paramref name="card"/> (a moderation report card, e.g.
+    /// <see cref="ModerationReportCardFor"/>), so a test with several pending reports acts on the one it means.
+    /// </summary>
+    public async Task ClickWarnInCardAsync(ILocator card)
+    {
+        var button = card.GetByRole(AriaRole.Button, new() { Name = "Warn", Exact = true });
+        await Expect(button).ToBeEnabledAsync(new() { Timeout = 5000 });
+
+        // A click on the prerendered button has no handler; wait for the live circuit first
+        await _page.WaitForInteractiveAsync();
+
+        await button.ClickAsync();
+    }
+
+    /// <summary>
     /// Clicks the "Dismiss" button on a report card.
     /// This is a NO-CONFIRMATION action that immediately dismisses the report.
     /// Works for both moderation reports and impersonation alerts.

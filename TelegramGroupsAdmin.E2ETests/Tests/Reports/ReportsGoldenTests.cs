@@ -28,6 +28,7 @@ public class ReportsGoldenTests : GoldenE2ETestBase
 
     private ReportsPage _reports = null!;
     private long _reportChatId;
+    private int _reportMessageId;
     private int _pendingModerationCount;
     private int _pendingExamCount;
     private int _visibleModerationCount;
@@ -44,6 +45,7 @@ public class ReportsGoldenTests : GoldenE2ETestBase
         Assert.That(report.ReviewedBy, Is.Null);
         Assert.That(report.ActionTaken, Is.Null);
         _reportChatId = report.ChatId;
+        _reportMessageId = report.MessageId;
 
         var authorId = await context.Messages.AsNoTracking()
             .Where(m => m.MessageId == report.MessageId && m.ChatId == report.ChatId)
@@ -91,7 +93,7 @@ public class ReportsGoldenTests : GoldenE2ETestBase
         await Expect(card).ToHaveCountAsync(1);
         await Expect(card.Locator(".mud-card-header .mud-chip")).ToContainTextAsync("Pending");
 
-        await _reports.ClickWarnAsync();
+        await _reports.ClickWarnInCardAsync(card);
 
         await Expect(_reports.Snackbar).ToContainTextAsync(new Regex("Warning issued"));
 
@@ -100,10 +102,8 @@ public class ReportsGoldenTests : GoldenE2ETestBase
         await Expect(_reports.ExamReviewHeaders).ToHaveCountAsync(_pendingExamCount);
         await Expect(_reports.ModerationReportHeaders).ToHaveCountAsync(_pendingModerationCount - 1);
         await Expect(card).ToHaveCountAsync(0);
-        if (_pendingModerationCount == 1)
-        {
-            await Expect(_reports.PendingModerationChip).ToHaveCountAsync(0);
-        }
+        // The pending chip only renders while at least one moderation report is pending.
+        await Expect(_reports.PendingModerationChip).ToHaveCountAsync(_pendingModerationCount - 1 > 0 ? 1 : 0);
 
         // Under "All Statuses" every moderation report of a visible chat is listed and the same card
         // is back, now Reviewed and without its action buttons.
@@ -128,6 +128,7 @@ public class ReportsGoldenTests : GoldenE2ETestBase
         await Factory.MockBotModeration.Received(1).WarnUserAsync(
             Arg.Is<WarnIntent>(i => i!.User.Id == ReportedUserId
                                     && i.Chat.Id == _reportChatId
+                                    && i.MessageId == _reportMessageId
                                     && i.OriginReportId == ReportId
                                     && i.Executor.WebUserId == GoldenDatasetConstants.WebUsers.OwnerId),
             Arg.Any<CancellationToken>());
