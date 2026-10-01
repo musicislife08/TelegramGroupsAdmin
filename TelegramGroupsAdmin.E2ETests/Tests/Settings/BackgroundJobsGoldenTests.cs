@@ -79,12 +79,13 @@ public class BackgroundJobsGoldenTests : GoldenE2ETestBase
 
         await _settings.CancelJobConfigDialogAsync();
 
+        // Sync point: the dialog is hidden. The dialog only closes after the Cancel handler (and any
+        // awaited save it wrongly performs) has run, so everything below observes the settled state.
+        await Expect(dialog).Not.ToBeVisibleAsync();
+
         // Table still shows the original schedule and nothing was saved.
         await Expect(scheduleCell).ToHaveTextAsync(_originalSchedule);
         await Expect(scheduleCell).Not.ToContainTextAsync(editedSchedule);
-
-        // Sync point: the dialog is gone and the table cell has re-rendered with the original schedule,
-        // so a snackbar from a (wrongly) triggered save would be visible by now.
         await Expect(_settings.Snackbar).Not.ToBeVisibleAsync();
         Assert.That(await ReadJobsConfigAsync(), Is.EqualTo(configBefore), "Cancel must not change the stored job config");
 
