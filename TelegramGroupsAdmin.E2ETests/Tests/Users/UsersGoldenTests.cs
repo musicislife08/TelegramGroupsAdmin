@@ -5,6 +5,7 @@ using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.E2ETests.PageObjects;
+using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Testing.Golden;
 using static Microsoft.Playwright.Assertions;
 
@@ -52,6 +53,9 @@ public class UsersGoldenTests : GoldenE2ETestBase
         Assert.That(subject.IsActive && !subject.IsBanned && !subject.IsBot, "the trust subject must be a plain active member");
         _trustActionsBefore = await context.UserActions
             .CountAsync(a => a.UserId == UntrustedMemberId && a.ActionType == (int)UserActionType.Trust);
+        Assert.That(await context.UserActions.CountAsync(a =>
+                a.UserId == UntrustedMemberId && a.ActionType == (int)UserActionType.Trust && a.WebUserId == OwnerId),
+            Is.Zero, "the Owner must not have trusted the subject before, so the recorded action is unambiguous");
 
         // The badge anchors: an active admin (also trusted — every non-bot canonical admin is) and a
         // trusted member with no admin seat, so each badge is proven present and absent.
@@ -105,6 +109,66 @@ public class UsersGoldenTests : GoldenE2ETestBase
         Assert.That(_taggedCount, Is.GreaterThan(0), "Tagged must be non-empty");
         Assert.That(_kickedCount, Is.GreaterThan(0), "Kicked must be non-empty");
         Assert.That(_bannedCount, Is.GreaterThan(0), "Banned must be non-empty");
+
+        // The same counts under the narrowing search, mirrored with the search rule too: a
+        // case-insensitive substring of username, first name, last name, the id, or any
+        // username_history name. Every tab must land in 1..99 so its badge shows the exact number.
+        var allMembers = await members
+            .Select(u => new { u.TelegramUserId, u.Username, u.FirstName, u.LastName, u.IsActive, u.IsBanned, u.IsTrusted, u.BanExpiresAt, u.Warnings })
+            .ToListAsync();
+        var historyNames = (await context.UsernameHistory
+                .Select(h => new { h.UserId, h.Username, h.FirstName, h.LastName })
+                .ToListAsync())
+            .GroupBy(h => h.UserId)
+            .ToDictionary(g => g.Key, g => g.SelectMany(h => new[] { h.Username, h.FirstName, h.LastName }).ToList());
+        bool Matches(string? value) => value is not null && value.Contains(NarrowingSearchTerm, StringComparison.OrdinalIgnoreCase);
+        var narrowed = allMembers.Where(u =>
+                Matches(u.Username) || Matches(u.FirstName) || Matches(u.LastName) || Matches(u.TelegramUserId.ToString())
+                || (historyNames.TryGetValue(u.TelegramUserId, out var names) && names.Any(Matches)))
+            .ToList();
+        _narrowed = new UserTabCounts
+        {
+            AllCount = narrowed.Count,
+            ActiveCount = narrowed.Count(u => u.IsActive && !u.IsBanned),
+            TaggedCount = narrowed.Count(u => u.IsActive && (notedIds.Contains(u.TelegramUserId) || taggedIds.Contains(u.TelegramUserId)
+                || (u.Warnings?.Any(w => w.ExpiresAt == null || w.ExpiresAt > now) ?? false))),
+            TrustedCount = narrowed.Count(u => u.IsTrusted),
+            BannedCount = narrowed.Count(u => u.IsBanned && (u.BanExpiresAt == null || u.BanExpiresAt > now)),
+            KickedCount = narrowed.Count(u => !u.IsActive && !u.IsBanned)
+        };
+        foreach (var (tab, count) in NarrowedCounts())
+        {
+            Assert.That(count, Is.InRange(1, 99), $"the narrowing search must leave {tab} with an exact, non-empty badge");
+        }
+        Assert.That(narrowed.Count(u => u.IsActive && u.IsBanned), Is.GreaterThan(0),
+            "the narrowed set must hold an active banned member, so Active's !IsBanned term is load-bearing");
+    }
+
+    /// <summary>
+    /// A search term the tab counts honour, chosen so every tab's count on canonical lands below
+    /// MudBadge's 99+ cap while staying non-empty (All 86, Active 58, Tagged 2, Trusted 38, Banned 25,
+    /// Kicked 2 when pinned). The expected numbers are still read from the clone, never hard-coded.
+    /// </summary>
+    private const string NarrowingSearchTerm = "in";
+
+    private UserTabCounts _narrowed = new();
+
+    private IEnumerable<(string Tab, int Count)> NarrowedCounts() =>
+    [
+        ("All", _narrowed.AllCount), ("Active", _narrowed.ActiveCount), ("Tagged", _narrowed.TaggedCount),
+        ("Trusted", _narrowed.TrustedCount), ("Banned", _narrowed.BannedCount), ("Kicked", _narrowed.KickedCount)
+    ];
+
+    [Test]
+    public async Task TabBadges_UnderANarrowingSearch_ShowEveryCountExactly()
+    {
+        await _users.SearchUsersAsync(NarrowingSearchTerm);
+        await _users.ExpectTotalUserCountAsync(_narrowed.AllCount);
+
+        foreach (var (tab, count) in NarrowedCounts())
+        {
+            await Expect(_users.TabBadgeOf(tab)).ToHaveTextAsync(count.ToString());
+        }
     }
 
     [SetUp]
