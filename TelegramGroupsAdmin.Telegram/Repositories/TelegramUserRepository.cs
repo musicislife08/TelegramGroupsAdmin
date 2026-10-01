@@ -370,6 +370,7 @@ public class TelegramUserRepository : ITelegramUserRepository
 
         // Query 7: Users with tags
         var usersWithTags = await context.UserTags
+            .Where(t => t.RemovedAt == null)
             .Select(t => t.TelegramUserId)
             .Distinct()
             .ToHashSetAsync(cancellationToken);
@@ -608,7 +609,7 @@ public class TelegramUserRepository : ITelegramUserRepository
             .ToHashSetAsync(cancellationToken);
 
         var taggedUserIds = await context.UserTags
-            .Where(t => bannedUserIds.Contains(t.TelegramUserId))
+            .Where(t => bannedUserIds.Contains(t.TelegramUserId) && t.RemovedAt == null)
             .Select(t => t.TelegramUserId)
             .Union(context.AdminNotes
                 .Where(n => bannedUserIds.Contains(n.TelegramUserId))
@@ -749,7 +750,7 @@ public class TelegramUserRepository : ITelegramUserRepository
 
         // Users with tags
         var usersWithTags = await context.UserTags
-            .Where(t => userIds.Contains(t.TelegramUserId))
+            .Where(t => userIds.Contains(t.TelegramUserId) && t.RemovedAt == null)
             .Select(t => t.TelegramUserId)
             .Distinct()
             .ToHashSetAsync(cancellationToken);
@@ -807,7 +808,7 @@ public class TelegramUserRepository : ITelegramUserRepository
             // Tagged count (users with notes or tags for tracking)
             TaggedCount = await context.TelegramUsers
                 .Where(u => context.AdminNotes.Any(n => n.TelegramUserId == u.TelegramUserId)
-                    || context.UserTags.Any(t => t.TelegramUserId == u.TelegramUserId))
+                    || context.UserTags.Any(t => t.TelegramUserId == u.TelegramUserId && t.RemovedAt == null))
                 .CountAsync(cancellationToken),
 
             // Notes count (Phase 4.12)
