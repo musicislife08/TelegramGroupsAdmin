@@ -281,8 +281,8 @@ public class FeatureAvailabilityServiceTests
     public async Task IsEmailConfiguredAsync_WhenRepositoryThrows_ReturnsFalse()
     {
         // Arrange
-        _mockConfigRepo.GetSendGridConfigAsync(Arg.Any<CancellationToken>())
-            .Returns<SendGridConfig?>(x => throw new InvalidOperationException("Database error"));
+        _mockConfigRepo.ReadSendGridConfigAsync(Arg.Any<CancellationToken>())
+            .Returns<SendGridConfigReadResult>(x => throw new InvalidOperationException("Database error"));
 
         // Act
         var result = await _service.IsEmailConfiguredAsync();
@@ -296,8 +296,8 @@ public class FeatureAvailabilityServiceTests
     {
         // Arrange
         var exception = new InvalidOperationException("Database error");
-        _mockConfigRepo.GetSendGridConfigAsync(Arg.Any<CancellationToken>())
-            .Returns<SendGridConfig?>(x => throw exception);
+        _mockConfigRepo.ReadSendGridConfigAsync(Arg.Any<CancellationToken>())
+            .Returns<SendGridConfigReadResult>(x => throw exception);
 
         // Act
         await _service.IsEmailConfiguredAsync();
@@ -316,8 +316,8 @@ public class FeatureAvailabilityServiceTests
     #region GetEmailConfigurationStateAsync Tests (strict gate for security decisions)
 
     private void SendGridEnabled() =>
-        _mockConfigRepo.GetSendGridConfigAsync(Arg.Any<CancellationToken>())
-            .Returns(new SendGridConfig { Enabled = true, FromAddress = "noreply@unit.test", FromName = "Unit" });
+        _mockConfigRepo.ReadSendGridConfigAsync(Arg.Any<CancellationToken>())
+            .Returns(SendGridConfigReadResult.Parsed(new SendGridConfig { Enabled = true, FromAddress = "noreply@unit.test", FromName = "Unit" }));
 
     [Test]
     public async Task GetEmailConfigurationStateAsync_WhenEnabledWithAKey_ReturnsEnabled()
@@ -338,8 +338,8 @@ public class FeatureAvailabilityServiceTests
     public async Task GetEmailConfigurationStateAsync_WhenSendGridIsNotEnabled_ReturnsDisabled()
     {
         // Arrange
-        _mockConfigRepo.GetSendGridConfigAsync(Arg.Any<CancellationToken>())
-            .Returns(new SendGridConfig { Enabled = false, FromAddress = "noreply@unit.test" });
+        _mockConfigRepo.ReadSendGridConfigAsync(Arg.Any<CancellationToken>())
+            .Returns(SendGridConfigReadResult.Parsed(new SendGridConfig { Enabled = false, FromAddress = "noreply@unit.test" }));
 
         // Act
         var state = await _service.GetEmailConfigurationStateAsync();
@@ -392,8 +392,8 @@ public class FeatureAvailabilityServiceTests
     {
         // Arrange
         var exception = new InvalidOperationException("Database error");
-        _mockConfigRepo.GetSendGridConfigAsync(Arg.Any<CancellationToken>())
-            .Returns<SendGridConfig?>(x => throw exception);
+        _mockConfigRepo.ReadSendGridConfigAsync(Arg.Any<CancellationToken>())
+            .Returns<SendGridConfigReadResult>(x => throw exception);
 
         // Act
         var state = await _service.GetEmailConfigurationStateAsync();
@@ -406,6 +406,52 @@ public class FeatureAvailabilityServiceTests
             Arg.Is<object>(o => o!.ToString()!.Contains("Failed to check email configuration status")),
             exception,
             Arg.Any<Func<object, Exception?, string>>());
+    }
+
+    [Test]
+    public async Task GetEmailConfigurationStateAsync_WhenTheSendGridConfigIsUnreadable_ReturnsIndeterminate()
+    {
+        // Arrange - corrupt sendgrid_config JSON: the service may well be configured, so the answer is unknown
+        _mockConfigRepo.ReadSendGridConfigAsync(Arg.Any<CancellationToken>()).Returns(SendGridConfigReadResult.Unreadable());
+
+        // Act
+        var state = await _service.GetEmailConfigurationStateAsync();
+
+        // Assert - and the keys are never consulted
+        Assert.That(state, Is.EqualTo(EmailConfigurationState.Indeterminate));
+        await _mockConfigRepo.DidNotReceive().ReadApiKeysAsync(Arg.Any<CancellationToken>());
+        _mockLogger.Received(1).Log(
+            LogLevel.Error,
+            Arg.Any<EventId>(),
+            Arg.Is<object>(o => o!.ToString()!.Contains("SendGrid config could not be read")),
+            null,
+            Arg.Any<Func<object, Exception?, string>>());
+    }
+
+    [Test]
+    public async Task GetEmailConfigurationStateAsync_WhenNoSendGridConfigIsStored_ReturnsDisabled()
+    {
+        // Arrange
+        _mockConfigRepo.ReadSendGridConfigAsync(Arg.Any<CancellationToken>()).Returns(SendGridConfigReadResult.NotStored());
+
+        // Act
+        var state = await _service.GetEmailConfigurationStateAsync();
+
+        // Assert
+        Assert.That(state, Is.EqualTo(EmailConfigurationState.Disabled));
+    }
+
+    [Test]
+    public async Task IsEmailConfiguredAsync_WhenTheSendGridConfigIsUnreadable_ReadsAsFalse()
+    {
+        // Arrange - the lenient gate keeps collapsing "unknown" to false for UI toggles
+        _mockConfigRepo.ReadSendGridConfigAsync(Arg.Any<CancellationToken>()).Returns(SendGridConfigReadResult.Unreadable());
+
+        // Act
+        var result = await _service.IsEmailConfiguredAsync();
+
+        // Assert
+        Assert.That(result, Is.False);
     }
 
     [Test]

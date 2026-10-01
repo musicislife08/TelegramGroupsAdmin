@@ -27,8 +27,16 @@ public class FeatureAvailabilityService : IFeatureAvailabilityService
     {
         try
         {
-            // Check if SendGrid is enabled in database config
-            var sendGridConfig = await _configRepo.GetSendGridConfigAsync();
+            // Check if SendGrid is enabled in database config. Stored-but-unreadable JSON is not "disabled":
+            // the service may well be configured, so the answer is unknown and callers must fail closed.
+            var sendGridRead = await _configRepo.ReadSendGridConfigAsync();
+            if (sendGridRead.Status == SendGridConfigReadStatus.Unreadable)
+            {
+                _logger.LogError("Email configuration state is indeterminate: stored SendGrid config could not be read");
+                return EmailConfigurationState.Indeterminate;
+            }
+
+            var sendGridConfig = sendGridRead.Config;
             if (sendGridConfig?.Enabled != true)
             {
                 return EmailConfigurationState.Disabled;

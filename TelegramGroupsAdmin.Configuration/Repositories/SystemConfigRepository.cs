@@ -178,8 +178,11 @@ public class SystemConfigRepository : ISystemConfigRepository
             var protector = _dataProtectionProvider.CreateProtector(DataProtectionPurposes.ApiKeys);
             var decryptedJson = protector.Unprotect(configRecord.ApiKeys);
 
-            // Deserialize from JSON
-            return ApiKeysReadResult.Decrypted(JsonSerializer.Deserialize<ApiKeysConfig>(decryptedJson, _jsonOptions));
+            // Deserialize from JSON. A ciphertext that decrypts to a JSON null is not a key set the app ever
+            // writes (SaveApiKeysAsync serialises an object), so it is treated as unreadable, not as "no keys".
+            var keys = JsonSerializer.Deserialize<ApiKeysConfig>(decryptedJson, _jsonOptions)
+                ?? throw new JsonException("API keys ciphertext decrypted to a JSON null");
+            return ApiKeysReadResult.Decrypted(keys);
         }
         catch (Exception ex)
         {
@@ -232,6 +235,9 @@ public class SystemConfigRepository : ISystemConfigRepository
     // OpenAI config methods removed - superseded by AIProviderConfig
 
     public async Task<SendGridConfig?> GetSendGridConfigAsync(CancellationToken cancellationToken = default)
+        => (await ReadSendGridConfigAsync(cancellationToken)).Config ?? new SendGridConfig(); // default when not stored or unreadable
+
+    public async Task<SendGridConfigReadResult> ReadSendGridConfigAsync(CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
@@ -242,18 +248,20 @@ public class SystemConfigRepository : ISystemConfigRepository
 
         if (configRecord?.SendGridConfig == null)
         {
-            // Return default config if not set
-            return new SendGridConfig();
+            return SendGridConfigReadResult.NotStored();
         }
 
         try
         {
-            return JsonSerializer.Deserialize<SendGridConfig>(configRecord.SendGridConfig, _jsonOptions) ?? new SendGridConfig();
+            var config = JsonSerializer.Deserialize<SendGridConfig>(configRecord.SendGridConfig, _jsonOptions);
+            return config is null
+                ? SendGridConfigReadResult.NotStored() // a JSON null: nothing configured
+                : SendGridConfigReadResult.Parsed(config);
         }
         catch (JsonException ex)
         {
             _logger.LogError(ex, "Failed to deserialize SendGrid config");
-            return new SendGridConfig();
+            return SendGridConfigReadResult.Unreadable();
         }
     }
 
