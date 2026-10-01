@@ -15,7 +15,6 @@ public class LoginVerifyPage
     private const string CodeInput = "input#code";
     private const string SubmitButton = "button[type='submit']";
     private const string ErrorAlertSelector = ".alert-error";
-    private const string SuccessAlert = ".alert-success";
     private const string BackToLoginLink = "a[href='/login']";
 
     // Recovery code selectors

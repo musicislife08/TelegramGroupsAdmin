@@ -16,17 +16,11 @@ public class ReportsPage
     private const string PageTitleSelector = ".mud-typography-h4";
     private const string LoadingIndicatorSelector = ".mud-progress-linear";
     private const string FilterPaper = ".mud-paper.pa-3.mb-4";
-    private const string TypeFilterSelect = "label:has-text('Type')";
-    private const string StatusFilterSelect = "label:has-text('Status')";
     private const string RefreshButton = "button:has-text('Refresh')";
     private const string PendingModerationChipSelector = ".mud-chip:has-text('Moderation')";
     private const string PendingImpersonationChipSelector = ".mud-chip:has-text('Impersonation')";
-    private const string ReportCards = ".mud-stack .mud-card";
-    private const string EmptyStateIcon = ".mud-icon-root.mud-success-text";
 
     // Report card selectors - All use MudCard component
-    private const string ModerationReportCard = ".mud-card:has-text('Moderation Report')";
-    private const string ImpersonationAlertCard = ".mud-card:has-text('Impersonation Alert')";
     private const string ExamReviewCard = ".mud-card:has-text('Exam Review')";
     private const string PendingExamChipSelector = ".mud-chip:has-text('Exam')";
 
@@ -220,16 +214,6 @@ public class ReportsPage
 
     /// <summary>The "No reports match the selected filters." empty-state message.</summary>
     public ILocator NoMatchingFiltersMessage => _page.GetByText("No reports match the selected filters.");
-
-    /// <summary>
-    /// The type filter's input. MudSelect stores the display text in the input element.
-    /// </summary>
-    public ILocator TypeFilterInput => _page.GetByLabel("Type");
-
-    /// <summary>
-    /// The status filter's input. MudSelect stores the display text in the input element.
-    /// </summary>
-    public ILocator StatusFilterInput => _page.GetByLabel("Status");
 
     #region Report Action Methods
 

@@ -20,10 +20,8 @@ public class ChatsPage
 
     // Selectors - MudTable
     private const string ChatsTableSelector = ".mud-table";
-    private const string TableToolbar = ".mud-table-toolbar";
     private const string TableTitleSelector = ".mud-table-toolbar .mud-typography-h6";
     private const string SearchInput = ".mud-table-toolbar .mud-input input";
-    private const string TableBody = ".mud-table-body";
     private const string TableRow = ".mud-table-body tr";
     private const string TablePager = ".mud-table-pagination";
 
@@ -33,7 +31,6 @@ public class ChatsPage
     private const string BotStatusCell = "td[data-label='Bot Status']";
     private const string HealthCell = "td[data-label='Health']";
     private const string CustomConfigCell = "td[data-label='Custom Config']";
-    private const string ActionsCell = "td[data-label='Actions']";
     private const string ConfigureButton = "button:has-text('Configure')";
     private const string RefreshHealthButton = "button[title='Refresh health status']";
 

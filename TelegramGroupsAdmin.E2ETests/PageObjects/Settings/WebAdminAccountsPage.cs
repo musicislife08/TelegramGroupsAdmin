@@ -16,7 +16,6 @@ public class WebAdminAccountsPage
     private const string PageTitleSelector = ".mud-typography-h4";
     private const string LoadingIndicator = ".mud-progress-linear";
     private const string UserTableSelector = ".mud-table";
-    private const string UserTableBody = ".mud-table-body";
     private const string UserTableRow = ".mud-table-body tr";
 
     // Selectors - Action buttons (top)
@@ -24,28 +23,20 @@ public class WebAdminAccountsPage
     private const string ManageInvitesButtonSelector = "button:has-text('Manage Invites')";
 
     // Selectors - Status filter (the MudSelect has Label="Status Filter")
-    private const string StatusFilterContainer = ".mud-paper:has-text('Filter by Status')";
-    private const string StatusFilterSelect = ".mud-paper:has-text('Filter by Status') .mud-select";
 
     // Selectors - Table headers
     private const string TableHeaderSelector = ".mud-table-head th";
 
     // Selectors - Table cells
-    private const string EmailCell = "td[data-label='Email']";
     private const string PermissionCell = "td[data-label='Permission Level']";
-    private const string StatusCell = "td[data-label='Status']";
     private const string TotpCell = "td[data-label='TOTP']";
-    private const string ActionsCell = "td[data-label='Actions']";
 
     // Selectors - Action menu
     private const string ActionMenuButton = "button:has(.mud-icon-root[data-testid='MoreVertIcon'])";
-    private const string ActionMenuItem = ".mud-menu-item, .mud-list-item";
 
     // Selectors - Dialogs
     private const string DialogSelector = ".mud-dialog";
     private const string DialogTitleSelector = ".mud-dialog-title";
-    private const string DialogContent = ".mud-dialog-content";
-    private const string DialogActions = ".mud-dialog-actions";
     private const string ConfirmButton = ".mud-dialog button:has-text('Disable'), .mud-dialog button:has-text('Delete'), .mud-dialog button:has-text('Reset'), .mud-dialog button:has-text('Unlock'), .mud-dialog button:has-text('Restore')";
     private const string CancelButton = ".mud-dialog button:has-text('Cancel')";
 
@@ -54,7 +45,6 @@ public class WebAdminAccountsPage
     private const string ValidDaysInput = ".mud-dialog .mud-input input[type='number']";
     private const string CreateInviteDialogButton = ".mud-dialog button:has-text('Create Invite')";
     private const string InviteLinkText = ".mud-dialog .mud-typography:has-text('register?invite=')";
-    private const string CopyLinkButton = ".mud-dialog button:has-text('Copy Link')";
 
     public WebAdminAccountsPage(IPage page)
     {
@@ -102,9 +92,6 @@ public class WebAdminAccountsPage
 
     /// <summary>The user rows displayed in the table.</summary>
     public ILocator UserRows => _page.Locator(UserTableRow);
-
-    /// <summary>The Email cells of the user rows.</summary>
-    public ILocator UserEmailCells => UserRows.Locator(EmailCell);
 
     /// <summary>The Create User button.</summary>
     public ILocator CreateUserButton => _page.Locator(CreateUserButtonSelector);

@@ -20,10 +20,8 @@ public class MessagesPage
     private const string SidebarSearch = ".sidebar-search";
     private const string EmptyStateSelector = ".empty-state";
     private const string EmptyStateTextSelector = ".empty-state-text";
-    private const string LoadingIndicator = ".mud-progress-circular";
 
     // Chat list selectors
-    private const string ChatList = ".chat-list";
     private const string ChatListEmpty = ".chat-list-empty";
     private const string ChatListItem = ".chat-list-item";
     private const string ChatTitle = ".chat-title";
@@ -180,22 +178,6 @@ public class MessagesPage
     /// <summary>The messages container of the selected chat.</summary>
     public ILocator MessagesContainer => _page.Locator(MessagesContainerSelector);
 
-    /// <summary>The loading indicator inside the messages container.</summary>
-    public ILocator MessagesLoadingIndicator => _page.Locator($"{MessagesContainerSelector} {LoadingIndicator}");
-
-    /// <summary>
-    /// Waits for messages to load (loading indicator disappears).
-    /// </summary>
-    public async Task WaitForMessagesLoadAsync(int timeoutMs = 10000)
-    {
-        // Wait for loading to disappear
-        await MessagesLoadingIndicator.WaitForAsync(new LocatorWaitForOptions
-        {
-            State = WaitForSelectorState.Hidden,
-            Timeout = timeoutMs
-        });
-    }
-
     /// <summary>
     /// Gets a locator for message bubbles (for use with Expect assertions).
     /// </summary>
@@ -203,11 +185,6 @@ public class MessagesPage
 
     /// <summary>The "no messages" empty state within the messages container.</summary>
     public ILocator NoMessagesState => _page.Locator($"{MessagesContainerSelector} {EmptyStateSelector}");
-
-    /// <summary>
-    /// Gets the current URL.
-    /// </summary>
-    public string CurrentUrl => _page.Url;
 
     #region User Detail Dialog Methods
 

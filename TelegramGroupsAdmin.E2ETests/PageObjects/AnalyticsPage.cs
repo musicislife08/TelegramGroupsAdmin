@@ -194,10 +194,5 @@ public class AnalyticsPage
     /// </summary>
     public string CurrentUrl => _page.Url;
 
-    /// <summary>
-    /// Checks if we're on the analytics page.
-    /// </summary>
-    public bool IsOnAnalyticsPage => _page.Url.Contains("/analytics");
-
     #endregion
 }

@@ -323,15 +323,6 @@ public class ProfilePage
     }
 
     /// <summary>
-    /// Clicks "Copy All Codes" button in the recovery codes dialog.
-    /// </summary>
-    public async Task ClickCopyAllCodesAsync()
-    {
-        var button = RecoveryCodesDialog.GetByRole(AriaRole.Button, new() { Name = "Copy All Codes" });
-        await button.ClickAsync();
-    }
-
-    /// <summary>
     /// Clicks "I Have Saved My Codes" to close the recovery codes dialog.
     /// </summary>
     public async Task ClickSavedCodesAsync()
@@ -406,16 +397,6 @@ public class ProfilePage
     #endregion
 
     #region Helper Properties
-
-    /// <summary>
-    /// Gets the current URL.
-    /// </summary>
-    public string CurrentUrl => _page.Url;
-
-    /// <summary>
-    /// Checks if we're on the profile page.
-    /// </summary>
-    public bool IsOnProfilePage => _page.Url.Contains("/profile");
 
     #endregion
 }

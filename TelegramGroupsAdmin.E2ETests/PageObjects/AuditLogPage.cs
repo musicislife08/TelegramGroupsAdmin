@@ -19,18 +19,12 @@ public class AuditLogPage
     // Page elements
     private const string PageTitleSelector = ".mud-typography-h4";
     private const string TabContainer = ".mud-tabs";
-    private const string TabPanel = ".mud-tab";
-    private const string ActiveTab = ".mud-tab-active";
 
     // Tables
-    private const string WebAdminTable = ".mud-tab-panel:not([hidden]) .mud-table";
-    private const string TableBody = ".mud-table-body";
     private const string TableRow = ".mud-table-body tr";
     private const string TablePager = ".mud-table-pagination";
-    private const string LoadingIndicator = ".mud-progress-linear";
 
     // Filter elements
-    private const string FilterContainer = ".mud-tab-panel:not([hidden]) .mud-paper";
 
     // Active tab panel scope
     private const string ActivePanel = ".mud-tab-panel:not([hidden])";
@@ -104,9 +98,6 @@ public class AuditLogPage
         await WaitForLoadAsync();
     }
 
-    /// <summary>The currently active tab (aria-selected="true").</summary>
-    public ILocator SelectedTab => _page.Locator("[role='tab'][aria-selected='true']").First;
-
     /// <summary>The Web Admin Log tab.</summary>
     public ILocator WebAdminLogTab => Tab("Web Admin Log");
 
@@ -116,9 +107,6 @@ public class AuditLogPage
     #endregion
 
     #region Web Admin Log Tab
-
-    /// <summary>The Web Admin Log table.</summary>
-    public ILocator WebAdminLogTable => _page.Locator(WebAdminTable);
 
     /// <summary>The rows in the currently visible table.</summary>
     public ILocator TableRows => _page.Locator($"{ActivePanel} {TableRow}");
@@ -201,10 +189,6 @@ public class AuditLogPage
         await SelectActorFilterAsync("All Actors");
     }
 
-    /// <summary>The event type chip in the row at <paramref name="rowIndex"/>.</summary>
-    public ILocator EventTypeChipInRow(int rowIndex) =>
-        TableRows.Nth(rowIndex).Locator("td[data-label='Event Type'] .mud-chip");
-
     /// <summary>
     /// The event type chip of the log entry whose event type contains <paramref name="eventTypeText"/>.
     /// Tests should create deterministic data so only one entry matches.
@@ -281,10 +265,6 @@ public class AuditLogPage
         await SelectActionTypeFilterAsync("All Actions");
     }
 
-    /// <summary>The action type chip in the row at <paramref name="rowIndex"/>.</summary>
-    public ILocator ActionTypeChipInRow(int rowIndex) =>
-        TableRows.Nth(rowIndex).Locator("td[data-label='Action Type'] .mud-chip");
-
     /// <summary>
     /// The action type chip of the moderation entry whose action type contains <paramref name="actionTypeText"/>.
     /// </summary>
@@ -322,11 +302,6 @@ public class AuditLogPage
     /// Gets the current URL.
     /// </summary>
     public string CurrentUrl => _page.Url;
-
-    /// <summary>
-    /// Checks if we're on the audit page.
-    /// </summary>
-    public bool IsOnAuditPage => _page.Url.Contains("/audit");
 
     #endregion
 }

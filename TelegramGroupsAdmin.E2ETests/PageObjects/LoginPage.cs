@@ -92,14 +92,4 @@ public class LoginPage
         });
     }
 
-    /// <summary>
-    /// Waits for redirect to a specific URL pattern.
-    /// </summary>
-    public async Task WaitForUrlAsync(string urlPattern, int timeoutMs = 10000)
-    {
-        await _page.WaitForURLAsync(urlPattern, new PageWaitForURLOptions
-        {
-            Timeout = timeoutMs
-        });
-    }
 }

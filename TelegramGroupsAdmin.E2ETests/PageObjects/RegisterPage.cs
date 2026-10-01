@@ -14,7 +14,6 @@ public class RegisterPage
     // MudAlert uses specific classes for severity
     private const string ErrorAlertSelector = ".mud-alert-error, .mud-alert-filled-error";
     private const string SuccessAlertSelector = ".mud-alert-success, .mud-alert-filled-success";
-    private const string InfoAlert = ".mud-alert-info, .mud-alert-filled-info";
     private const string WarningAlert = ".mud-alert-warning, .mud-alert-filled-warning";
     private const string SignInLink = "a[href='/login']";
     private const string RestoreBackupButtonSelector = "button:has-text('Restore from Backup')";
@@ -152,26 +151,4 @@ public class RegisterPage
         });
     }
 
-    /// <summary>
-    /// Waits for the loading spinner to appear (form submission started).
-    /// </summary>
-    public async Task WaitForLoadingAsync()
-    {
-        await _page.GetByText("Creating Account...").WaitForAsync(new LocatorWaitForOptions
-        {
-            Timeout = 5000
-        });
-    }
-
-    /// <summary>
-    /// Waits for the loading spinner to disappear (form submission complete).
-    /// </summary>
-    public async Task WaitForLoadingCompleteAsync(int timeoutMs = 10000)
-    {
-        await _page.GetByText("Creating Account...").WaitForAsync(new LocatorWaitForOptions
-        {
-            State = WaitForSelectorState.Hidden,
-            Timeout = timeoutMs
-        });
-    }
 }

@@ -19,11 +19,8 @@ public class SettingsPage
 
     // Settings navigation links (in sidebar)
     private const string GeneralSettingsLinkSelector = "a[href='/settings/system/general']";
-    private const string SecuritySettingsLink = "a[href='/settings/system/security']";
     private const string AdminAccountsLinkSelector = "a[href='/settings/system/accounts']";
     private const string LoggingSettingsLinkSelector = "a[href='/settings/system/logging']";
-    private const string BackgroundJobsLink = "a[href='/settings/system/jobs']";
-    private const string ContentDetectionLinkSelector = "a[href='/settings/content-detection']";
 
     public SettingsPage(IPage page)
     {
@@ -85,18 +82,7 @@ public class SettingsPage
     /// </summary>
     public ILocator LoggingSettingsLink => _page.Locator(LoggingSettingsLinkSelector);
 
-    /// <summary>The content detection settings nav link.</summary>
-    public ILocator ContentDetectionLink => _page.Locator(ContentDetectionLinkSelector);
-
     /// <summary>The admin accounts nav link.</summary>
     public ILocator AdminAccountsLink => _page.Locator(AdminAccountsLinkSelector);
 
-    /// <summary>
-    /// Gets the current URL path.
-    /// </summary>
-    public string GetCurrentPath()
-    {
-        var uri = new Uri(_page.Url);
-        return uri.AbsolutePath;
-    }
 }

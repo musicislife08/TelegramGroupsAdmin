@@ -52,9 +52,6 @@ public class SettingsPage
     /// </summary>
     public ILocator PageTitle => Page.Locator("main .mud-text-h4, .mud-container h4, .mud-item h4").First;
 
-    /// <summary>The settings nav menu.</summary>
-    public ILocator NavMenu => Page.Locator(".mud-navmenu");
-
     #region Content Detection Section
 
     /// <summary>
@@ -134,11 +131,6 @@ public class SettingsPage
         var addButton = Page.GetByRole(AriaRole.Button, new() { Name = "Add Stop Word" });
         await addButton.ClickAsync();
     }
-
-    /// <summary>
-    /// The stop word rows in the MudTable, excluding header and no-records rows.
-    /// </summary>
-    public ILocator StopWordRows => Page.Locator(".mud-table tbody tr:not(.mud-table-row-no-records)");
 
     /// <summary>The stop words table container.</summary>
     public ILocator StopWordsTable => Page.Locator(".mud-table-container");

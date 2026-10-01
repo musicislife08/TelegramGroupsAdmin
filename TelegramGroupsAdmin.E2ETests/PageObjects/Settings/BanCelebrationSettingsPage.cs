@@ -25,7 +25,6 @@ public class BanCelebrationSettingsPage
 
     // Selectors - Caption Section
     private const string AddCaptionButton = "button:has-text('Add Caption')";
-    private const string CaptionTable = ".mud-paper:has-text('Caption Library') .mud-table";
     // Exclude NoRecordsContent row by requiring td with DataLabel attribute (actual data rows)
     private const string CaptionTableRowSelector = ".mud-paper:has-text('Caption Library') .mud-table-body tr:has(td[data-label])";
 
@@ -33,14 +32,12 @@ public class BanCelebrationSettingsPage
     private const string DialogSelector = "[role='dialog']";
     private const string DialogTitleSelector = ".mud-dialog-title";
     private const string DialogContent = ".mud-dialog-content";
-    private const string DialogActions = ".mud-dialog-actions";
     private const string Backdrop = ".mud-overlay";
     private const string LoadingIndicator = ".mud-progress-linear";
 
     // Selectors - Add GIF Dialog
     private const string FileInput = "input[type='file']";
     private const string UrlTab = ".mud-tab:has-text('From URL')";
-    private const string UploadTab = ".mud-tab:has-text('Upload File')";
     private const string UrlInput = "input[placeholder*='example.com']";
     private const string NameInput = ".mud-dialog input[aria-label='Name (optional)'], .mud-dialog .mud-input-slot:has-text('Name') input";
     private const string SubmitGifButton = ".mud-dialog-actions button:has-text('Add GIF')";
@@ -212,14 +209,6 @@ public class BanCelebrationSettingsPage
     }
 
     /// <summary>
-    /// Switches to the Upload File tab in the dialog.
-    /// </summary>
-    public async Task SwitchToUploadTabAsync()
-    {
-        await _page.Locator(UploadTab).ClickAsync();
-    }
-
-    /// <summary>
     /// Enters a URL in the URL input field.
     /// </summary>
     public async Task EnterUrlAsync(string url)
@@ -346,9 +335,6 @@ public class BanCelebrationSettingsPage
 
     /// <summary>The snackbar.</summary>
     public ILocator Snackbar => _page.Locator(SnackbarSelector);
-
-    /// <summary>The snackbar containing <paramref name="text"/>.</summary>
-    public ILocator SnackbarWithText(string text) => Snackbar.Filter(new() { HasText = text });
 
     #endregion
 }

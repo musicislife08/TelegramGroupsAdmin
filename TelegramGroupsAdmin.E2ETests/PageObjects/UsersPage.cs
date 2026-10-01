@@ -19,14 +19,11 @@ public class UsersPage
     // Selectors - Tabs
     private const string TabContainer = ".mud-tabs";
     private const string TabPanel = ".mud-tab";
-    private const string ActiveTab = ".mud-tab-active";
     private const string TabBadge = ".mud-badge";
 
     // Selectors - Table
     private const string UserTable = ".mud-table";
-    private const string TableBody = ".mud-table-body";
     private const string TableRow = ".mud-table-body tr";
-    private const string TablePager = ".mud-table-pagination";
     private const string PagerInformationSelector = ".mud-table-page-number-information";
 
     // Selectors - Row content
@@ -37,7 +34,6 @@ public class UsersPage
     private const string ActionsCell = "td[data-label='Actions']";
 
     // Action buttons
-    private const string ViewDetailsButton = "button[aria-label*='View'], button:has(.mud-icon-root)";
     private const string TrustButton = "button:has([data-testid='VerifiedUserIcon']), button:has([data-testid='PersonOffIcon'])";
 
     // Dialog
@@ -88,9 +84,6 @@ public class UsersPage
     /// </summary>
     public ILocator TabHeader(string tabName) => TabHeaders.Filter(new() { HasText = tabName });
 
-    /// <summary>The currently active tab header.</summary>
-    public ILocator ActiveTabHeader => _page.Locator(ActiveTab);
-
     /// <summary>
     /// The user tables. Only the active tab's panel is rendered, so this is normally a single table.
     /// </summary>
@@ -118,9 +111,6 @@ public class UsersPage
     /// <summary>The admin indicator icon in the user row containing <paramref name="displayName"/>.</summary>
     public ILocator AdminIndicator(string displayName) =>
         UserRow(displayName).Locator(".mud-icon-root[data-testid='ShieldIcon']");
-
-    /// <summary>The table pager.</summary>
-    public ILocator Pager => _page.Locator(TablePager);
 
     /// <summary>The pager information text of the current table, e.g. "1-25 of 42".</summary>
     public ILocator PagerInformation => _page.Locator(PagerInformationSelector);
@@ -239,8 +229,4 @@ public class UsersPage
         await Expect(Dialog).Not.ToBeVisibleAsync();
     }
 
-    /// <summary>
-    /// Gets the current URL.
-    /// </summary>
-    public string CurrentUrl => _page.Url;
 }
