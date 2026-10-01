@@ -5,6 +5,13 @@ namespace TelegramGroupsAdmin.Telegram.Models;
 /// </summary>
 public class BanCelebrationGif
 {
+    /// <summary>
+    /// Largest GIF or video the library accepts, whether uploaded or downloaded from a URL
+    /// (50 MB, the Telegram Bot API's send ceiling). The upload dialog and the URL fetch cap
+    /// both read this.
+    /// </summary>
+    public const long MaxFileBytes = 50 * 1024 * 1024;
+
     public int Id { get; set; }
 
     /// <summary>

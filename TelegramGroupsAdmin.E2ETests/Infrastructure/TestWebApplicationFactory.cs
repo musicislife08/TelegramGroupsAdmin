@@ -12,6 +12,7 @@ using Telegram.Bot.Types.ReplyMarkups;
 using TelegramGroupsAdmin.Configuration.Models;
 using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Services;
+using TelegramGroupsAdmin.Core.Http;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.AI.Services;
@@ -277,6 +278,14 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
     public IBotModerationService MockBotModeration => _mockBotModerationService;
 
     /// <summary>
+    /// Loopback ports the app's public-url fetcher (Add GIF from URL) may connect to in this
+    /// instance. Empty until a test calls <see cref="LoopbackPortAllowance.AllowPort"/> for the
+    /// WireMock host it started; the production registration allows nothing and has no
+    /// configuration path to this.
+    /// </summary>
+    public LoopbackPortAllowance PublicUrlAllowance { get; } = new();
+
+    /// <summary>
     /// Gets the connection string for this test's isolated database.
     /// </summary>
     public string ConnectionString => BuildConnectionString(_databaseName);
@@ -402,6 +411,10 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
             services.RemoveAll<IExamEvaluationService>();
             services.AddScoped<IExamEvaluationService>(_ => _mockExamEvaluationService);
 
+            // Public-url fetcher: tests serve GIFs from loopback WireMock hosts, which the
+            // production allowance (nothing) would refuse. Only the ports a test opens are allowed.
+            services.RemoveAll<IPublicUrlFetchAllowance>();
+            services.AddSingleton<IPublicUrlFetchAllowance>(PublicUrlAllowance);
         });
     }
 

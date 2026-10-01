@@ -38,8 +38,13 @@ public interface IBanCelebrationGifRepository
     Task<BanCelebrationGif> AddFromFileAsync(Stream fileStream, string fileName, string? name, CancellationToken ct = default);
 
     /// <summary>
-    /// Adds a new GIF from a URL (downloads and stores locally)
+    /// Adds a new GIF from a URL (downloads and stores locally). The download goes through the
+    /// public-url fetcher: only http/https to public addresses, at most
+    /// <see cref="BanCelebrationGif.MaxFileBytes"/>.
     /// </summary>
+    /// <exception cref="Core.Http.PublicUrlFetchException">
+    /// The URL was refused or could not be fetched; nothing is written. The message is safe to show.
+    /// </exception>
     Task<BanCelebrationGif> AddFromUrlAsync(string url, string? name, CancellationToken ct = default);
 
     /// <summary>

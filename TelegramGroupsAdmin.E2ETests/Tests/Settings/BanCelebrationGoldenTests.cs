@@ -219,6 +219,9 @@ public class BanCelebrationGoldenTests : GoldenE2ETestBase
                 .WithHeader("Content-Type", "image/gif")
                 .WithBody(FixtureGifBytes));
         var url = $"{gifHost.Urls[0]}{gifPath}";
+        // The app only fetches public addresses; the test host is loopback, so this test's DI
+        // opens exactly this port. Nothing in the app's configuration can do the same.
+        Factory.PublicUrlAllowance.AllowPort(gifHost.Port);
 
         await _page.OpenAddGifDialogAsync();
         await _page.SwitchToUrlTabAsync();
@@ -241,6 +244,36 @@ public class BanCelebrationGoldenTests : GoldenE2ETestBase
 
         var requests = gifHost.LogEntries.Select(e => e.RequestMessage?.Path).ToList();
         Assert.That(requests, Is.EqualTo(new[] { gifPath }), "the app fetched the URL exactly once");
+    }
+
+    [Test]
+    public async Task AddGifFromUrl_LoopbackTargetWithoutAllowance_IsRefusedAndStoresNothing()
+    {
+        var name = $"e2e synthetic refused gif {Guid.NewGuid():N}";
+        // A loopback port this test never opened through the allowance: the server must refuse to
+        // connect, before it matters whether anything listens there.
+        var url = $"http://127.0.0.1:{ReserveUnusedPort()}/x.gif";
+        var gifDir = Path.GetDirectoryName(FullMediaPath("ban-gifs/x.gif"))!;
+        var filesBefore = Directory.Exists(gifDir) ? Directory.GetFiles(gifDir) : [];
+
+        await _page.OpenAddGifDialogAsync();
+        await _page.SwitchToUrlTabAsync();
+        await _page.FillNameAsync(name);
+        await _page.EnterUrlAsync(url);
+        await _page.SubmitAsync();
+
+        await Expect(_page.ErrorAlert).ToContainTextAsync("That URL isn't allowed");
+        await Expect(_page.ErrorAlert).Not.ToContainTextAsync("127.0.0.1");
+        await Expect(_page.Dialog).ToBeVisibleAsync();
+        await _page.CloseDialogByCancelButtonAsync();
+        await Expect(_page.GifRow(name)).ToHaveCountAsync(0);
+        await Expect(_page.GifRows).ToHaveCountAsync(_canonicalGifCount);
+
+        await using var ctx = CreateDbContext();
+        Assert.That(await ctx.BanCelebrationGifs.AnyAsync(g => g.Name == name), Is.False, "no row is written for a refused URL");
+        Assert.That(await ctx.BanCelebrationGifs.CountAsync(), Is.EqualTo(_canonicalGifCount));
+        var filesAfter = Directory.Exists(gifDir) ? Directory.GetFiles(gifDir) : [];
+        Assert.That(filesAfter, Is.EquivalentTo(filesBefore), "no file is written for a refused URL");
     }
 
     #endregion
@@ -339,6 +372,15 @@ public class BanCelebrationGoldenTests : GoldenE2ETestBase
     {
         using var scope = Factory.Services.CreateScope();
         return scope.ServiceProvider.GetRequiredService<IBanCelebrationGifRepository>().GetFullPath(relativePath);
+    }
+
+    private static int ReserveUnusedPort()
+    {
+        var listener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+        listener.Start();
+        var port = ((System.Net.IPEndPoint)listener.LocalEndpoint).Port;
+        listener.Stop();
+        return port;
     }
 
     private sealed record StoredGif(string FilePath, string? FileId, byte[]? PhotoHash);

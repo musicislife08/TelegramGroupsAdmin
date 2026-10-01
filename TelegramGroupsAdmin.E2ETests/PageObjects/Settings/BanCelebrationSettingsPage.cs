@@ -252,6 +252,11 @@ public class BanCelebrationSettingsPage
     public ILocator SubmitButton => _page.Locator(SubmitGifButton);
 
     /// <summary>
+    /// The error alert the dialog shows when adding the GIF failed (MudAlert Severity.Error).
+    /// </summary>
+    public ILocator ErrorAlert => Dialog.Locator(".mud-alert-text-error");
+
+    /// <summary>
     /// Submits and waits for dialog to close (for successful uploads).
     /// </summary>
     public async Task SubmitAndWaitForCloseAsync()
