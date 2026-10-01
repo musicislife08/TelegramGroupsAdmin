@@ -181,10 +181,10 @@ public class MessagesPage
         await _page.Locator(BackButton).ClickAsync();
     }
 
-    /// <summary>The messages container of the selected chat.</summary>
     /// <summary>The message composer at the bottom of the open chat.</summary>
     public ILocator ChatInput => _page.Locator(".chat-input-container");
 
+    /// <summary>The messages container of the selected chat.</summary>
     public ILocator MessagesContainer => _page.Locator(MessagesContainerSelector);
 
     /// <summary>
