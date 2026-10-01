@@ -41,11 +41,9 @@ public class WebAdminAccountsPage
     private const string ConfirmButton = ".mud-dialog button:has-text('Disable'), .mud-dialog button:has-text('Delete'), .mud-dialog button:has-text('Reset'), .mud-dialog button:has-text('Unlock'), .mud-dialog button:has-text('Restore')";
     private const string CancelButton = ".mud-dialog button:has-text('Cancel')";
 
-    // Create Invite Dialog selectors
+    // Create Invite Dialog selectors (CreateInviteDialog.razor): the permission MudSelect is the only
+    // select in the dialog; the days field and the generated link are found by their MudBlazor labels.
     private const string PermissionSelect = ".mud-dialog .mud-select";
-    private const string ValidDaysInput = ".mud-dialog .mud-input input[type='number']";
-    private const string CreateInviteDialogButton = ".mud-dialog button:has-text('Create Invite')";
-    private const string InviteLinkText = ".mud-dialog .mud-typography:has-text('register?invite=')";
 
     public WebAdminAccountsPage(IPage page)
     {
@@ -184,6 +182,50 @@ public class WebAdminAccountsPage
             State = WaitForSelectorState.Hidden,
             Timeout = 2000
         });
+    }
+
+    /// <summary>
+    /// Picks the option whose text starts with <paramref name="level"/> ("Admin", "GlobalAdmin", "Owner")
+    /// in the open permission dropdown of the create invite dialog; a single-select popover closes itself.
+    /// </summary>
+    public async Task SelectPermissionOptionAsync(string level)
+    {
+        await PermissionOptions.Filter(new() { HasTextRegex = new Regex($@"^\s*{Regex.Escape(level)}\b") }).ClickAsync();
+        await OpenPopover.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Hidden, Timeout = 5000 });
+    }
+
+    /// <summary>The "Invite valid for (days)" numeric field of the create invite dialog.</summary>
+    public ILocator ValidDaysInput => Dialog.GetByLabel("Invite valid for (days)");
+
+    /// <summary>
+    /// Sets the invite validity in days. MudNumericField commits its text on blur, so the field is
+    /// tabbed out of before returning; callers assert the value with Expect before generating.
+    /// </summary>
+    public async Task FillValidDaysAsync(int days)
+    {
+        await ValidDaysInput.FillAsync(days.ToString());
+        await ValidDaysInput.PressAsync("Tab");
+    }
+
+    /// <summary>The "Generate Invite" button of the create invite dialog.</summary>
+    public ILocator GenerateInviteButton => Dialog.GetByRole(AriaRole.Button, new() { Name = "Generate Invite" });
+
+    /// <summary>
+    /// Clicks Generate Invite. The create dialog closes and WebAdminAccounts opens a second
+    /// CreateInviteDialog ("Invite Link Created") once the invite is stored; wait for it with Expect on
+    /// <see cref="DialogTitle"/> / <see cref="InviteLinkInput"/>.
+    /// </summary>
+    public Task GenerateInviteAsync() => GenerateInviteButton.ClickAsync();
+
+    /// <summary>The read-only "Invite Link" field of the Invite Link Created dialog (value is the register URL).</summary>
+    public ILocator InviteLinkInput => Dialog.GetByLabel("Invite Link");
+
+    /// <summary>Clicks Done in the Invite Link Created dialog and waits for it to close.</summary>
+    public async Task ClickDoneAsync()
+    {
+        var dialog = Dialog;
+        await Dialog.GetByRole(AriaRole.Button, new() { Name = "Done" }).ClickAsync();
+        await dialog.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Hidden, Timeout = 5000 });
     }
 
     /// <summary>

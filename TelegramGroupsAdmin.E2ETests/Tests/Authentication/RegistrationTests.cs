@@ -123,12 +123,9 @@ public class RegistrationTests : E2ETestBase
         await Expect(mismatchError).ToBeVisibleAsync(new() { Timeout = 5000 });
     }
 
-    // TODO: Add test for invited user registration with email verification
-    // This requires:
-    // 1. Create owner account (first-run)
-    // 2. Log in as owner
-    // 3. Configure email settings via Settings UI
-    // 4. Create an invite
-    // 5. Register new user with invite code
-    // 6. Verify email verification flow works for invited user
+    // Invited-user registration (invite created by the Owner, registration through the generated link,
+    // account read back, login) is covered on canonical golden data by
+    // Tests/Settings/InviteGoldenTests.RegisterWithInvite_CreatesAnActiveAccountThatLogsIn. Canonical has
+    // no SendGrid API key, so that covers the verification-off path; the verification-on path for an
+    // invited user needs a config shape canonical does not carry (see the E2E test's class doc).
 }

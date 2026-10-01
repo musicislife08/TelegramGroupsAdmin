@@ -11,10 +11,11 @@ public class RegisterPage
     private readonly IPage _page;
 
     // MudBlazor components use labels - Playwright's GetByLabel works well
-    // MudAlert uses specific classes for severity
-    private const string ErrorAlertSelector = ".mud-alert-error, .mud-alert-filled-error";
-    private const string SuccessAlertSelector = ".mud-alert-success, .mud-alert-filled-success";
-    private const string WarningAlert = ".mud-alert-warning, .mud-alert-filled-warning";
+    // MudAlert (MudBlazor 9) renders its severity as mud-alert-{variant}-{severity}; Register.razor
+    // uses the default Text variant, so plain .mud-alert-{severity} never matches.
+    private const string ErrorAlertSelector = ".mud-alert-text-error, .mud-alert-filled-error, .mud-alert-outlined-error";
+    private const string SuccessAlertSelector = ".mud-alert-text-success, .mud-alert-filled-success, .mud-alert-outlined-success";
+    private const string WarningAlert = ".mud-alert-text-warning, .mud-alert-filled-warning, .mud-alert-outlined-warning";
     private const string SignInLink = "a[href='/login']";
     private const string RestoreBackupButtonSelector = "button:has-text('Restore from Backup')";
 
@@ -26,10 +27,18 @@ public class RegisterPage
     /// <summary>
     /// Navigates to the register page.
     /// </summary>
-    public async Task NavigateAsync()
+    public Task NavigateAsync() => NavigateToAsync("/register");
+
+    /// <summary>
+    /// Navigates to an invite link as the app generates it (<c>{BaseUri}register?invite={token}</c>);
+    /// the page copies the <c>invite</c> query value into the Invite Code field.
+    /// </summary>
+    public Task NavigateToInviteLinkAsync(string inviteLink) => NavigateToAsync(inviteLink);
+
+    private async Task NavigateToAsync(string url)
     {
         // Interactive Blazor page: wait for the live circuit before interacting
-        await _page.GotoAsync("/register");
+        await _page.GotoAsync(url);
         await _page.WaitForInteractiveAsync();
         // Wait for MudBlazor to fully render - wait for the Create Account button
         await _page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "Create Account" }).WaitForAsync();
@@ -128,6 +137,16 @@ public class RegisterPage
 
     /// <summary>The invite code field (hidden in first-run mode).</summary>
     public ILocator InviteCodeField => _page.Locator(".mud-input-control:has-text('Invite Code')");
+
+    /// <summary>The Invite Code input itself (assert its value with Expect; the invite link pre-fills it).</summary>
+    public ILocator InviteCodeInput => _page.GetByLabel("Invite Code");
+
+    /// <summary>
+    /// The warning shown on a non-first-run register page when email verification is disabled
+    /// (no email service configured): the account can log in straight after registration.
+    /// </summary>
+    public ILocator EmailVerificationDisabledNote =>
+        _page.Locator(WarningAlert).Filter(new() { HasText = "Email verification is currently disabled" });
 
     /// <summary>The "Restore from Backup" button (first-run only).</summary>
     public ILocator RestoreBackupButton => _page.Locator(RestoreBackupButtonSelector);
