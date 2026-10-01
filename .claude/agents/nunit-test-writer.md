@@ -9,7 +9,7 @@ You are an elite .NET testing architect specializing in modern unit testing prac
 
 ## Integration / E2E tests: canonical data only (MANDATORY)
 
-If the test you are writing lives in `TelegramGroupsAdmin.IntegrationTests` or `TelegramGroupsAdmin.E2ETests`, read `.claude/rules/integration-test-data.md` and `TelegramGroupsAdmin.IntegrationTests/CLAUDE.md` Part 0 first. Preconditions come from canonical (golden) rows pinned in `TestData/GoldenDatasetConstants.cs` — never from SUT write methods used as setup, `ctx.<Table>.Add`, or raw `INSERT`. When canonical lacks a shape, flag-edit an unreferenced canonical row in place; never add rows. If you cannot satisfy a precondition that way, stop and report instead of seeding.
+If the test you are writing lives in `TelegramGroupsAdmin.IntegrationTests` or `TelegramGroupsAdmin.E2ETests`, read `.claude/rules/integration-test-data.md` and `TelegramGroupsAdmin.IntegrationTests/CLAUDE.md` Part 0 first. Preconditions come from canonical (golden) rows pinned in `TelegramGroupsAdmin.Testing.Golden/GoldenDatasetConstants.cs` — never from SUT write methods used as setup, `ctx.<Table>.Add`, or raw `INSERT`. When canonical lacks a shape, flag-edit an unreferenced canonical row in place; never add rows. If you cannot satisfy a precondition that way, stop and report instead of seeding.
 
 ## Core Testing Philosophy
 

@@ -24,10 +24,10 @@ public static class GoldenDataset
         IDataProtectionProvider dataProtection,
         CancellationToken ct = default)
     {
-        // FK-safe load order matching TestData/SQL/canonical/ exactly (33 files;
+        // FK-safe load order matching TelegramGroupsAdmin.Testing.Golden/SQL/canonical/ exactly (33 files;
         // numeric on-disk order IS the FK-safe order — Pre-1b enforced this).
         // Resource names use '.' separators per .NET embedded-resource conventions:
-        // path "TestData/SQL/canonical/01_users.sql" -> "SQL.canonical.01_users.sql".
+        // path "TelegramGroupsAdmin.Testing.Golden/SQL/canonical/01_users.sql" -> "SQL.canonical.01_users.sql".
         string[] fixtures =
         {
             // Layer 0 roots — users, telegram_users, managed_chats first

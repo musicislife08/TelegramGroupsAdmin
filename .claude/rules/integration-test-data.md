@@ -2,6 +2,8 @@
 paths:
   - "TelegramGroupsAdmin.IntegrationTests/**/*.cs"
   - "TelegramGroupsAdmin.IntegrationTests/**/*.sql"
+  - "TelegramGroupsAdmin.Testing.Golden/**/*.cs"
+  - "TelegramGroupsAdmin.Testing.Golden/**/*.sql"
   - "TelegramGroupsAdmin.E2ETests/**/*.cs"
   - "docs/superpowers/plans/**/*.md"
   - "docs/superpowers/specs/**/*.md"

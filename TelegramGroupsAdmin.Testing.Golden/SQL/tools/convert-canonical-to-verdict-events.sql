@@ -12,7 +12,7 @@
 --   (--no-launch-profile is required: the launch profile's ConnectionStrings__PostgreSQL overrides the shell's.)
 --   docker exec tga-db psql -U tgadmin -d canonical_convert -c "TRUNCATE ban_celebration_captions RESTART IDENTITY"
 --   (startup seeds default captions, which collide with 06_ban_celebration_captions.sql)
---   for f in $(ls TelegramGroupsAdmin.IntegrationTests/TestData/SQL/canonical/*.sql | sort); do
+--   for f in $(ls TelegramGroupsAdmin.Testing.Golden/SQL/canonical/*.sql | sort); do
 --     docker exec -i tga-db psql -q -v ON_ERROR_STOP=1 -U tgadmin -d canonical_convert < "$f"; done
 --   docker exec -i tga-db psql -v ON_ERROR_STOP=1 -U tgadmin -d canonical_convert < <this file>
 --   docker exec tga-db pg_dump -U tgadmin -d canonical_convert --data-only --column-inserts -t detection_results \
