@@ -36,7 +36,7 @@ Origin: prod DB snapshot from 2026-04-30. Bootstrap pipeline (full detail in `do
 | 01 | users | 9 | Web users: 7 hand-picked anchors (5 active, 2 soft-deleted) + 2 prod-derived. All share one PBKDF2 hash. |
 | 02 | telegram_users | 335 | Anchor set after Strict-Plus prune (every row referenced by >=1 child). Two rows flag-edited 2026-09-13 for Users-tab tests (see Part 2 recipes). |
 | 03 | managed_chats | 21 | Synthetic themed names; one disambiguated duplicate via `is_deleted`. |
-| 04 | configs | 20 | `chat_id=0` global row + 19 per-chat. Encrypted JSONB columns NULL; `welcome_config` populated only on global + Main Chat. |
+| 04 | configs | 20 | `chat_id=0` global row + 19 per-chat. Encrypted JSONB columns NULL in the SQL; `api_keys` on the global row is filled at load from the plaintext fixture `04_configs.api_keys.json` (encrypted with the template-build key ring). `welcome_config` populated only on global + Main Chat. |
 | 05 | content_detection_configs | 18 | One per non-deleted managed_chat. |
 | 06 | ban_celebration_captions | 74 | Reference data, copied whole. |
 | 07 | ban_celebration_gifs | 92 | Reference data, copied whole. |
@@ -68,7 +68,7 @@ Origin: prod DB snapshot from 2026-04-30. Bootstrap pipeline (full detail in `do
 | 36 | ban_celebration_subscribers | 5 | Approved canonical addition 2026-09-25 (new table — no row to flag-edit). See Part 2 "DM ban celebration subscribers". |
 
 ### What's NOT in the dataset
-- **Encrypted JSONB credentials** in `configs` (sendgrid keys, web push keys, AI provider keys) - left NULL. Populated at runtime by the app via `IDataProtectionProvider`.
+- **Encrypted JSONB credentials** in `configs` (sendgrid keys, web push keys) - left NULL. Populated at runtime by the app via `IDataProtectionProvider`. Exception: `api_keys` on the global row — `GoldenDataset.LoadCanonicalAsync` encrypts the plaintext fixture `canonical/04_configs.api_keys.json` (one dummy AI connection key, `GoldenDatasetConstants.SystemConfig`) with the session's provider, so the app under test can read it back.
 - **Media files** referenced by `messages.media_features` / local media paths - no payloads on disk.
 - **Email verification tokens, password reset tokens, locked_until timestamps** - all NULL.
 - **TOTP secrets** - NULL except where canonical fixtures need TOTP-enabled state for tests (see Part 2 scenarios).
@@ -270,7 +270,7 @@ Recipe format: a heading, the anchor id(s), a one-line description, and "use whe
 
 #### Global config (chat_id = 0)
 - `configs.id` = `1`, `chat_id` = `0`
-- Carries the only non-NULL global `welcome_config` baseline. All encrypted JSONB columns NULL (DataProtection injection target).
+- Carries the only non-NULL global `welcome_config` baseline. Encrypted JSONB columns NULL in the SQL (DataProtection injection target); `api_keys` is written post-load from `04_configs.api_keys.json` (`GoldenDatasetConstants.SystemConfig`).
 - Use when: a test reads global fallback configuration or exercises the encrypted-column injection path.
 
 #### Main Community per-chat config (overrides global)

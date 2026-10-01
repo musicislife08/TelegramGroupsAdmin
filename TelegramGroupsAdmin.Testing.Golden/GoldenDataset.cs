@@ -78,13 +78,17 @@ public static class GoldenDataset
         }
 
         // Encrypted-column post-step: 04_configs.sql seeds the configs rows with all
-        // DataProtection-encrypted columns NULL. Encrypt canonical plaintext under the
-        // shared provider and UPDATE. Each column has its OWN purpose string — production
-        // code in TelegramGroupsAdmin.Configuration uses DataProtectionPurposes.ApiKeys
-        // ("ApiKeys") for the api_keys column, so canonical MUST use the same constant —
-        // mismatched purposes would write ciphertext production code can't decrypt.
+        // DataProtection-encrypted columns NULL, because ciphertext is only readable under the
+        // key ring of the session that built the template. The plaintext therefore lives in its
+        // own canonical fixture (04_configs.api_keys.json, the exact JSON shape ApiKeysConfig
+        // deserialises from) and is encrypted here, at load, with the supplied provider.
+        // Each column has its OWN purpose string — production code in
+        // TelegramGroupsAdmin.Configuration uses DataProtectionPurposes.ApiKeys ("ApiKeys") for
+        // the api_keys column, so canonical MUST use the same constant — mismatched purposes
+        // would write ciphertext production code can't decrypt.
+        var apiKeysPlaintext = await ReadCanonicalResourceAsync("SQL.canonical.04_configs.api_keys.json");
         var apiKeysProtector = dataProtection.CreateProtector(DataProtectionPurposes.ApiKeys);
-        var apiKeysCanonical = apiKeysProtector.Protect("""{"openai":"sk-canonical-test-key"}""");
+        var apiKeysCanonical = apiKeysProtector.Protect(apiKeysPlaintext.Trim());
 
         await context.Database.ExecuteSqlRawAsync(
             "UPDATE configs SET api_keys = {0} WHERE chat_id = 0",
@@ -117,20 +121,29 @@ public static class GoldenDataset
     /// </summary>
     private static async Task LoadCanonicalSqlScriptAsync(AppDbContext context, string scriptPath)
     {
-        var assembly = typeof(GoldenDataset).Assembly;
-        var resourceName = $"{assembly.GetName().Name}.{scriptPath}";
-        await using var stream = assembly.GetManifestResourceStream(resourceName);
-        if (stream == null)
-        {
-            throw new InvalidOperationException($"Embedded resource not found: {resourceName}. Ensure the SQL file is marked as EmbeddedResource in the .csproj file.");
-        }
-
-        using var reader = new StreamReader(stream);
-        var sqlScript = await reader.ReadToEndAsync();
+        var sqlScript = await ReadCanonicalResourceAsync(scriptPath);
 
         await using var connection = new NpgsqlConnection(context.Database.GetConnectionString());
         await connection.OpenAsync();
         await using var cmd = new NpgsqlCommand(sqlScript, connection);
         await cmd.ExecuteNonQueryAsync();
+    }
+
+    /// <summary>
+    /// Reads an embedded canonical fixture by its resource path relative to the library root
+    /// ("SQL.canonical.01_users.sql"); the assembly name prefix is derived, not hardcoded.
+    /// </summary>
+    private static async Task<string> ReadCanonicalResourceAsync(string resourcePath)
+    {
+        var assembly = typeof(GoldenDataset).Assembly;
+        var resourceName = $"{assembly.GetName().Name}.{resourcePath}";
+        await using var stream = assembly.GetManifestResourceStream(resourceName);
+        if (stream == null)
+        {
+            throw new InvalidOperationException($"Embedded resource not found: {resourceName}. Ensure the file is marked as EmbeddedResource in the .csproj file.");
+        }
+
+        using var reader = new StreamReader(stream);
+        return await reader.ReadToEndAsync();
     }
 }

@@ -1,10 +1,8 @@
 using System.Text.RegularExpressions;
-using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.Data;
-using TelegramGroupsAdmin.Data.Constants;
 using TelegramGroupsAdmin.E2ETests.PageObjects;
 using TelegramGroupsAdmin.Testing.Golden;
 using static Microsoft.Playwright.Assertions;
@@ -68,6 +66,8 @@ public class GoldenHarnessTests : GoldenE2ETestBase
     {
         // Deliberate write-as-subject probe: the write itself is what is under test — the next
         // test asserts its clone does not see it. Not a seeding pattern; do not copy it.
+        // The pair is only meaningful when both run, in this order (Order(1) then Order(2));
+        // Isolation_NextTestSeesCleanCanonical passes trivially when filtered on its own.
         await LoginAsOwnerAsync();
         await using var ctx = CreateDbContext();
         var rows = await ctx.Database.ExecuteSqlRawAsync(
@@ -93,25 +93,29 @@ public class GoldenHarnessTests : GoldenE2ETestBase
     {
         await LoginAsOwnerAsync();
 
+        // The app's own read path: a key-ring mismatch makes Unprotect throw (the repository logs
+        // it and returns null); a plaintext in the wrong shape deserialises to an empty key set.
+        // Reading the key back through ApiKeysConfig therefore pins both the key ring and the format.
         using var scope = Factory.Services.CreateScope();
-
-        // The app's own read path: a key-ring mismatch makes Unprotect throw, which the
-        // repository logs and turns into null.
         var configs = scope.ServiceProvider.GetRequiredService<ISystemConfigRepository>();
         var apiKeys = await configs.GetApiKeysAsync();
+
         Assert.That(apiKeys, Is.Not.Null, "the app could not decrypt canonical configs.api_keys");
+        Assert.That(apiKeys!.GetAIConnectionKey(GoldenDatasetConstants.SystemConfig.OpenAiConnectionId),
+            Is.EqualTo(GoldenDatasetConstants.SystemConfig.OpenAiConnectionKey));
+    }
 
-        // And the canonical plaintext itself, decrypted with the app's provider.
-        string? encrypted;
-        await using (var ctx = CreateDbContext())
-        {
-            encrypted = await ctx.Configs.AsNoTracking()
-                .Where(c => c.ChatId == 0).Select(c => c.ApiKeys).SingleAsync();
-        }
-        var protector = scope.ServiceProvider.GetRequiredService<IDataProtectionProvider>()
-            .CreateProtector(DataProtectionPurposes.ApiKeys);
+    [Test]
+    public async Task CanonicalNoTotpAdmin_LogsInThroughTheUi()
+    {
+        await LoginViaUiAsync(GoldenDatasetConstants.WebUsers.NoTotpAdminEmail);
 
-        Assert.That(protector.Unprotect(encrypted!), Is.EqualTo("""{"openai":"sk-canonical-test-key"}"""));
+        // Authenticated as that user: the profile shows the canonical email.
+        var profile = new ProfilePage(Page);
+        await profile.NavigateAsync();
+
+        await Expect(profile.AccountInfoSection.GetByLabel("Email"))
+            .ToHaveValueAsync(GoldenDatasetConstants.WebUsers.NoTotpAdminEmail);
     }
 
     protected override async Task ArrangeDataAsync(AppDbContext context)

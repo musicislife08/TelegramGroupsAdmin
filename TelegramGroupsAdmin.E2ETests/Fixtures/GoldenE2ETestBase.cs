@@ -1,8 +1,10 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Playwright;
+using Npgsql;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.E2ETests.Infrastructure;
+using TelegramGroupsAdmin.E2ETests.PageObjects;
 using TelegramGroupsAdmin.Repositories;
 using TelegramGroupsAdmin.Services.Auth;
 using TelegramGroupsAdmin.Testing.Golden;
@@ -29,11 +31,17 @@ public abstract class GoldenE2ETestBase : E2ETestBase
     /// </summary>
     protected virtual Task ArrangeDataAsync(AppDbContext context) => Task.CompletedTask;
 
-    /// <summary>A direct context on this test's clone, for arrangement and read-back assertions.</summary>
+    /// <summary>
+    /// A direct context on this test's clone, for arrangement and read-back assertions.
+    /// Pooling is off (GoldenTemplates' policy): the clone is dropped at teardown, so a pooled
+    /// connection would only linger as an orphan and trip pg_terminate_backend (57P01).
+    /// </summary>
     protected AppDbContext CreateDbContext()
-        => new(new DbContextOptionsBuilder<AppDbContext>()
-            .UseNpgsql(GoldenTemplates.ConnectionStringFor(E2EFixture.BaseConnectionString, DatabaseName))
-            .Options);
+    {
+        var cs = new NpgsqlConnectionStringBuilder(
+            GoldenTemplates.ConnectionStringFor(E2EFixture.BaseConnectionString, DatabaseName)) { Pooling = false };
+        return new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(cs.ConnectionString).Options);
+    }
 
     protected override async Task<TestWebApplicationFactory> CreateFactoryAsync()
     {
@@ -57,6 +65,20 @@ public abstract class GoldenE2ETestBase : E2ETestBase
         {
             await GoldenTemplates.DropAsync(E2EFixture.BaseConnectionString, DatabaseName);
         }
+    }
+
+    /// <summary>
+    /// Logs in through the login page with the shared canonical password and waits for the
+    /// post-login redirect. For the no-TOTP canonical users (<c>NoTotpGlobalAdminEmail</c>,
+    /// <c>NoTotpAdminEmail</c>); the TOTP-enabled anchors (owner@/admin@) have no TOTP secret and
+    /// would land on /login/setup-2fa — use the cookie helpers for them.
+    /// </summary>
+    protected async Task LoginViaUiAsync(string email)
+    {
+        var loginPage = new LoginPage(Page);
+        await loginPage.NavigateAsync();
+        await loginPage.LoginAsync(email, GoldenDatasetConstants.WebUsers.Password);
+        await loginPage.WaitForRedirectAsync();
     }
 
     protected Task LoginAsOwnerAsync() => LoginAsCanonicalAsync(GoldenDatasetConstants.WebUsers.OwnerId);

@@ -7,6 +7,7 @@
     <IsPackable>false</IsPackable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <!-- EF1002: ExecuteSqlRawAsync SQL injection warning - all SQL here is hardcoded test fixture text -->
+    <!-- slopwatch-ignore: SW005 EF1002 flags ExecuteSqlRaw with composed SQL; every statement here is fixture text built from constants, values go through {n} parameters -->
     <NoWarn>$(NoWarn);EF1002</NoWarn>
   </PropertyGroup>
 
@@ -21,8 +22,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Canonical SQL fixtures (canonical/*.sql is FK-ordered by filename prefix). -->
-    <EmbeddedResource Include="SQL\**\*.sql" Exclude="SQL\tools\**" />
+    <!-- Canonical SQL fixtures (canonical/*.sql is FK-ordered by filename prefix) plus the
+         plaintext fixtures for encrypted columns (canonical/*.json, protected at load time). -->
+    <EmbeddedResource Include="SQL\**\*.sql;SQL\**\*.json" Exclude="SQL\tools\**" />
   </ItemGroup>
 
 </Project>

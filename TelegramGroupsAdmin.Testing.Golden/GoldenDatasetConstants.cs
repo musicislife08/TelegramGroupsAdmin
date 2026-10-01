@@ -13,6 +13,7 @@ namespace TelegramGroupsAdmin.Testing.Golden;
 ///   • <see cref="Analytics"/>  — anchors for analytics-aggregation tests
 ///   • <see cref="Reports"/>    — anchors for exam-result repository tests
 ///   • <see cref="Verdicts"/>   — verdict-event anchors (message_verdicts view, training levels)
+///   • <see cref="SystemConfig"/> — global configs row: encrypted-column plaintexts written post-load
 ///
 /// Promote a constant up to a top-level domain class (e.g. <see cref="WebUsers"/>,
 /// <see cref="Chats"/>) once a second consumer wants it; until then, keep it next
@@ -619,5 +620,21 @@ public static class GoldenDatasetConstants
 
         /// <summary>Poultry Community — the chat whose newest message carries <see cref="SharedMessageId"/>.</summary>
         public const long SharedIdChatId = DmCelebrations.PoultryCommunityChatId;
+    }
+
+    /// <summary>
+    /// Global system config (<c>configs</c>, chat_id = 0) anchors. The encrypted columns are NULL in
+    /// <c>canonical/04_configs.sql</c>; their plaintexts are separate canonical fixtures
+    /// (<c>canonical/04_configs.api_keys.json</c>) that <c>GoldenDataset.LoadCanonicalAsync</c>
+    /// protects with the session's data-protection provider after the SQL load. The values below
+    /// mirror that fixture so tests can assert what the app reads back through <c>ApiKeysConfig</c>.
+    /// </summary>
+    public static class SystemConfig
+    {
+        /// <summary>AI connection id carrying the canonical API key — the key under <c>aiConnectionKeys</c> in <c>04_configs.api_keys.json</c>.</summary>
+        public const string OpenAiConnectionId = "openai";
+
+        /// <summary>Dummy API key stored for <see cref="OpenAiConnectionId"/> in <c>04_configs.api_keys.json</c>. Only the format matters; it is never sent anywhere.</summary>
+        public const string OpenAiConnectionKey = "sk-canonical-test-key";
     }
 }
