@@ -51,7 +51,9 @@
             </MudAlert>
         }
 
-        @if (_emailState == EmailConfigurationState.Indeterminate)
+        @* Until the first-run and email state are resolved the defaults below are placeholders: render neither
+           the note nor the invite field, so the page never flashes a note or a field that then disappears. *@
+        @if (_stateResolved && _emailState == EmailConfigurationState.Indeterminate)
         {
             <MudAlert Severity="Severity.Warning" Class="mb-4">
                 <MudText Typo="Typo.body2">
@@ -60,7 +62,7 @@
                 </MudText>
             </MudAlert>
         }
-        else if (!_isFirstRun && _emailState == EmailConfigurationState.Disabled)
+        else if (_stateResolved && !_isFirstRun && _emailState == EmailConfigurationState.Disabled)
         {
             <MudAlert Severity="Severity.Warning" Class="mb-4">
                 <MudText Typo="Typo.body2">
@@ -70,7 +72,7 @@
             </MudAlert>
         }
 
-        @if (!_isFirstRun)
+        @if (_stateResolved && !_isFirstRun)
         {
             <MudTextField T="string"
                           Label="Invite Code"
@@ -138,6 +140,7 @@
     private bool _isLoading;
     private bool _registrationSuccess;
     private bool _isFirstRun;
+    private bool _stateResolved;
     // Strict state so the note matches what the register endpoint will do: Indeterminate means AuthService
     // refuses registration (fail closed), so the page must not promise an immediate login.
     private EmailConfigurationState _emailState = EmailConfigurationState.Enabled;
@@ -186,6 +189,7 @@
     {
         _isFirstRun = await AuthService.IsFirstRunAsync();
         _emailState = await FeatureAvailability.GetEmailConfigurationStateAsync();
+        _stateResolved = true;
 
         if (!string.IsNullOrEmpty(InviteQueryParam))
         {

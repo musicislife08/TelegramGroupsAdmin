@@ -45,7 +45,8 @@ public class RegisterEmailWarningEmailConfiguredGoldenTests : GoldenE2ETestBase
         var register = new RegisterPage(Page);
         await register.NavigateAsync();
 
-        // The invite field renders in the same initialisation that decides the note, so the page is settled.
+        // The invite field only renders once the page has resolved its first-run and email state (Register.razor
+        // renders nothing for them before that), so the absence check below runs on the resolved render.
         await Expect(register.InviteCodeInput).ToBeVisibleAsync();
         await Expect(register.EmailVerificationDisabledNote).ToHaveCountAsync(0);
     }
