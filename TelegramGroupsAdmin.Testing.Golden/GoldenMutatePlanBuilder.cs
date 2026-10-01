@@ -1,5 +1,8 @@
+using System.Text.Json.Nodes;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using TelegramGroupsAdmin.Data;
+using TelegramGroupsAdmin.Data.Constants;
 
 namespace TelegramGroupsAdmin.Testing.Golden;
 
@@ -23,6 +26,7 @@ public sealed class GoldenMutatePlanBuilder
     private List<(long ChatId, TimestampShift Shift)>? _messageShifts;
     private List<(string UserId, TimeSpan LockFor)>? _webUserLocks;
     private List<(long TelegramUserId, TimeSpan ExpiresIn)>? _warningExtensions;
+    private (IDataProtectionProvider Provider, string ApiKey)? _sendGridApiKey;
 
     /// <summary>
     /// <c>failed_login_attempts</c> written by <see cref="LockWebUser"/>: the first lockout happens at
@@ -108,6 +112,24 @@ public sealed class GoldenMutatePlanBuilder
         return this;
     }
 
+    /// <summary>
+    /// Adds a SendGrid API key to the stored global <c>configs.api_keys</c> (chat_id = 0): decrypts the
+    /// canonical ciphertext with <paramref name="dataProtection"/> under <c>DataProtectionPurposes.ApiKeys</c>,
+    /// sets <c>sendGrid</c> in the JSON (the AI connection keys stay), and re-encrypts. Canonical's
+    /// <c>sendgrid_config</c> is already enabled with a from-address but, like every encrypted column, its
+    /// key is not part of the SQL — so the app reads email as Disabled. The key only makes the app read
+    /// email as configured (login page links, password reset); it is a dummy that is never sent anywhere.
+    /// The provider must be the key ring the app under test uses. Fails loudly when no key set is stored.
+    /// </summary>
+    public GoldenMutatePlanBuilder EnableSendGridApiKey(IDataProtectionProvider dataProtection, string apiKey)
+    {
+        ArgumentNullException.ThrowIfNull(dataProtection);
+        ArgumentException.ThrowIfNullOrWhiteSpace(apiKey);
+
+        _sendGridApiKey = (dataProtection, apiKey);
+        return this;
+    }
+
     public async Task ApplyAsync(CancellationToken ct = default)
     {
         await using var tx = await _context.Database.BeginTransactionAsync(ct);
@@ -183,6 +205,31 @@ public sealed class GoldenMutatePlanBuilder
                         "WHERE chat_id = {1} AND message_id = {2}",
                         new object[] { FormatInterval(s.Offset), chatId, s.Id },
                         ct);
+                }
+            }
+
+            if (_sendGridApiKey is { } sendGrid)
+            {
+                var protector = sendGrid.Provider.CreateProtector(DataProtectionPurposes.ApiKeys);
+                var cipher = await _context.Configs.AsNoTracking()
+                    .Where(c => c.ChatId == 0)
+                    .Select(c => c.ApiKeys)
+                    .SingleOrDefaultAsync(ct);
+                if (string.IsNullOrEmpty(cipher))
+                {
+                    throw new InvalidOperationException("EnableSendGridApiKey: no stored global api_keys to extend");
+                }
+
+                var keys = JsonNode.Parse(protector.Unprotect(cipher))!.AsObject();
+                keys["sendGrid"] = sendGrid.ApiKey;
+
+                var rows = await _context.Database.ExecuteSqlRawAsync(
+                    "UPDATE configs SET api_keys = {0} WHERE chat_id = 0",
+                    new object[] { protector.Protect(keys.ToJsonString()) },
+                    ct);
+                if (rows != 1)
+                {
+                    throw new InvalidOperationException($"EnableSendGridApiKey: expected to update exactly one configs row, updated {rows}");
                 }
             }
 

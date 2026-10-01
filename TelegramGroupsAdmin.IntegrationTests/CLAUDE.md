@@ -215,6 +215,10 @@ Recipe format: a heading, the anchor id(s), a one-line description, and "use whe
 - A warning counts only while its `ExpiresAt` is ahead of NOW() (90-day default expiry), so canonical's frozen snapshot carries only expired warnings. The mutate verb sets every element's `ExpiresAt` in `telegram_users.warnings` to `NOW() + expiresIn`, leaving IssuedAt, Reason, actor and context alone; it fails loudly for a user with no warnings (that is a missing anchor, not something to invent).
 - Use when: a test needs the Warnings cell chip, `WarningCount > 0`, or `GetActiveWarningCountAsync` non-zero. Re-time `UsersPage.WarnedTrustedMemberId` and read the expected count back with the same predicate (`ExpiresAt == null || ExpiresAt > now`); apply before the app starts. Self-tests: `GoldenMutatePlanTests.ExtendTelegramUserWarnings_*`.
 
+#### Email configured: `GoldenDataset.Mutate(ctx).EnableSendGridApiKey(provider, key)` (no canonical edit)
+- Canonical's global `sendgrid_config` is enabled with a from-address, but no SendGrid key is stored in `api_keys` (encrypted columns are not in the SQL), so `IFeatureAvailabilityService.GetEmailConfigurationStateAsync` reads `Disabled`: the Login page hides the forgot-password / resend-verification links and the Register page shows the "email verification disabled" note. The mutate verb decrypts the canonical `api_keys` under `DataProtectionPurposes.ApiKeys`, adds `sendGrid`, and re-encrypts, leaving the AI connection keys and every other row alone; it fails loudly without a stored key set. Pass the key ring the app under test uses (E2E: the fixture's shared key directory, application name `TgSpamPreFilter`). The key is a dummy.
+- Use when: a test needs email read as configured (Login page links, password-reset or verification flows) without a SUT write. Self-tests: `GoldenMutatePlanTests.EnableSendGridApiKey_*`.
+
 #### Heavily-banned spammer
 - `telegram_user_id` = `9971261287520`
 - `@lazinessunsheathe`, "Reappear Math"

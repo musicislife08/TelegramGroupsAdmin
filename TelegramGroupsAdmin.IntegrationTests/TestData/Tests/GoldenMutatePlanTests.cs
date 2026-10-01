@@ -1,6 +1,9 @@
+using System.Text.Json.Nodes;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using NUnit.Framework;
 using TelegramGroupsAdmin.IntegrationTests.Fixtures;
+using TelegramGroupsAdmin.Data.Constants;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
 
 namespace TelegramGroupsAdmin.IntegrationTests.TestData.Tests;
@@ -307,5 +310,77 @@ public class GoldenMutatePlanTests
         var untouchedAfter = await ctx.Messages.Where(m => m.MessageId == UntouchedMsgId && m.ChatId == ChatId)
             .Select(m => m.Timestamp).SingleAsync();
         Assert.That(untouchedAfter, Is.EqualTo(untouchedBefore));
+    }
+
+    private static async Task<JsonObject> ReadApiKeysAsync(Data.AppDbContext ctx)
+    {
+        var cipher = await ctx.Configs.AsNoTracking().Where(c => c.ChatId == 0).Select(c => c.ApiKeys).SingleAsync();
+        Assert.That(cipher, Is.Not.Null);
+        var plaintext = PostgresFixture.SharedDataProtectionProvider
+            .CreateProtector(DataProtectionPurposes.ApiKeys).Unprotect(cipher!);
+        return JsonNode.Parse(plaintext)!.AsObject();
+    }
+
+    [Test]
+    public async Task EnableSendGridApiKey_StoresTheKeyUnderTheApiKeysPurposeAndKeepsTheAiConnectionKeys()
+    {
+        const string ApiKey = "SG.canonical-mutate-test";
+
+        await using var ctx = _helper!.GetDbContext();
+        var before = await ReadApiKeysAsync(ctx);
+        Assert.That(before["sendGrid"], Is.Null, "canonical carries no SendGrid key");
+
+        await GoldenDataset.Mutate(ctx)
+            .EnableSendGridApiKey(PostgresFixture.SharedDataProtectionProvider, ApiKey)
+            .ApplyAsync();
+
+        var after = await ReadApiKeysAsync(ctx);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That((string?)after["sendGrid"], Is.EqualTo(ApiKey));
+            Assert.That(after["aiConnectionKeys"]!.ToJsonString(), Is.EqualTo(before["aiConnectionKeys"]!.ToJsonString()),
+                "the canonical AI connection keys are kept");
+        }
+    }
+
+    [Test]
+    public async Task EnableSendGridApiKey_DoesNotTouchTheSendGridConfigOrOtherConfigRows()
+    {
+        await using var ctx = _helper!.GetDbContext();
+        var before = await ctx.Configs.AsNoTracking().OrderBy(c => c.ChatId)
+            .Select(c => new { c.ChatId, c.SendGridConfig, c.WelcomeConfig, c.ApiKeys }).ToListAsync();
+
+        await GoldenDataset.Mutate(ctx)
+            .EnableSendGridApiKey(PostgresFixture.SharedDataProtectionProvider, "SG.canonical-mutate-test")
+            .ApplyAsync();
+
+        var after = await ctx.Configs.AsNoTracking().OrderBy(c => c.ChatId)
+            .Select(c => new { c.ChatId, c.SendGridConfig, c.WelcomeConfig, c.ApiKeys }).ToListAsync();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(after.Select(c => c.SendGridConfig), Is.EqualTo(before.Select(c => c.SendGridConfig)));
+            Assert.That(after.Select(c => c.WelcomeConfig), Is.EqualTo(before.Select(c => c.WelcomeConfig)));
+            Assert.That(after.Where(c => c.ChatId != 0).Select(c => c.ApiKeys), Is.EqualTo(before.Where(c => c.ChatId != 0).Select(c => c.ApiKeys)));
+        }
+    }
+
+    [Test]
+    public void EnableSendGridApiKey_RejectsABlankKey()
+    {
+        using var ctx = _helper!.GetDbContext();
+        Assert.That(
+            () => GoldenDataset.Mutate(ctx).EnableSendGridApiKey(PostgresFixture.SharedDataProtectionProvider, " "),
+            Throws.InstanceOf<ArgumentException>());
+    }
+
+    [Test]
+    public async Task EnableSendGridApiKey_FailsLoudlyWithoutAStoredApiKeysRow()
+    {
+        await using var ctx = _helper!.GetDbContext();
+        await ctx.Database.ExecuteSqlRawAsync("UPDATE configs SET api_keys = NULL WHERE chat_id = 0");
+
+        var plan = GoldenDataset.Mutate(ctx).EnableSendGridApiKey(PostgresFixture.SharedDataProtectionProvider, "SG.x");
+
+        Assert.That(async () => await plan.ApplyAsync(), Throws.TypeOf<InvalidOperationException>());
     }
 }
