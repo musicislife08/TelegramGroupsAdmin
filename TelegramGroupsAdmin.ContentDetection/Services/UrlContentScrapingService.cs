@@ -33,14 +33,6 @@ public partial class UrlContentScrapingService(
     /// <summary>Overall deadline per URL; previews are nice-to-have and must not hold up a message.</summary>
     public static readonly TimeSpan FetchTimeout = TimeSpan.FromSeconds(10);
 
-    /// <summary>
-    /// Most distinct URLs fetched for one message, in order of appearance; the rest get no
-    /// preview. Spam rarely needs more than a couple of links to be recognisable, and the cap
-    /// also bounds concurrency (all fetches for a message run in parallel) and the time one
-    /// message can hold the pipeline (at most <see cref="FetchTimeout"/> in total).
-    /// </summary>
-    public const int MaxUrlsPerMessage = 5;
-
     private static readonly PublicUrlFetchOptions FetchOptions = new()
     {
         MaxBytes = MaxBytesPerUrl,
@@ -180,18 +172,17 @@ public partial class UrlContentScrapingService(
         if (string.IsNullOrWhiteSpace(text))
             return null;
 
-        var allUrls = UrlUtilities.ExtractUrls(text);
-        if (allUrls == null || allUrls.Count == 0)
+        var extracted = UrlUtilities.ExtractUrls(text);
+        if (extracted == null || extracted.Count == 0)
             return null;
 
-        var urls = allUrls.Distinct(StringComparer.Ordinal).Take(MaxUrlsPerMessage).ToList();
-        if (urls.Count < allUrls.Count)
-        {
-            logger.LogDebug("Scraping {Kept} of {Total} URLs in message (distinct, capped at {Cap})",
-                urls.Count, allUrls.Count, MaxUrlsPerMessage);
-        }
+        // Deliberately no per-message URL limit: every link must go through the spam checks, and
+        // a cap would let a spammer hide the real link past position N. Each fetch is bounded on
+        // its own (MaxBytesPerUrl, FetchTimeout, the address policy). Identical URLs are fetched
+        // once; deduplication hides nothing.
+        var urls = extracted.Distinct(StringComparer.Ordinal).ToList();
 
-        // Scrape the kept URLs in parallel (bounded by the cap above)
+        // Scrape all URLs in parallel
         var scrapeTasks = urls.Select(url => ScrapeUrlAsync(url, cancellationToken)).ToArray();
         var results = await Task.WhenAll(scrapeTasks);
 

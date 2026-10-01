@@ -160,24 +160,24 @@ public class UrlContentScrapingServiceTests
     }
 
     [Test]
-    public async Task EnrichMessageWithUrlPreviewsAsync_MoreUrlsThanTheCap_FetchesOnlyTheFirstDistinctOnes()
+    public async Task EnrichMessageWithUrlPreviewsAsync_ManyUrls_FetchesEveryDistinctOne()
     {
-        // A message is one unit of work; a wall of links must not turn into unbounded fetches.
+        // No per-message cap: every link goes through the spam checks, so a spammer cannot hide
+        // the real link behind N decoys. Identical URLs are fetched once.
         var server = WireMockServer.Start();
         _disposables.Add(server);
         server.Given(Request.Create().UsingGet())
             .RespondWith(Response.Create().WithStatusCode(200).WithHeader("Content-Type", "text/html")
                 .WithBody("<html><head><title>Page</title></head></html>"));
         var sut = CreateService(new LoopbackPortAllowance(server.Port));
-        var cap = UrlContentScrapingService.MaxUrlsPerMessage;
-        var urls = Enumerable.Range(0, cap + 3).Select(i => $"http://localhost:{server.Port}/p{i}").ToList();
-        // A repeat of the first URL before the others must not use up a slot.
-        var text = string.Join(" ", urls.Prepend(urls[0]));
+        var urls = Enumerable.Range(0, 8).Select(i => $"http://localhost:{server.Port}/p{i}").ToList();
+        var text = string.Join(" ", urls.Prepend(urls[0]).Append(urls[7]));
 
         await sut.EnrichMessageWithUrlPreviewsAsync(text);
 
         var requested = server.LogEntries.Select(e => e.RequestMessage!.Path).Order().ToList();
-        Assert.That(requested, Is.EqualTo(Enumerable.Range(0, cap).Select(i => $"/p{i}").Order().ToList()));
+        Assert.That(requested, Is.EqualTo(Enumerable.Range(0, 8).Select(i => $"/p{i}").Order().ToList()),
+            "all eight distinct URLs are fetched, each exactly once");
     }
 
     #region Helpers
