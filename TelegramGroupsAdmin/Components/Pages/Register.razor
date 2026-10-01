@@ -51,7 +51,16 @@
             </MudAlert>
         }
 
-        @if (!_isFirstRun && !_isEmailVerificationEnabled)
+        @if (_emailState == EmailConfigurationState.Indeterminate)
+        {
+            <MudAlert Severity="Severity.Warning" Class="mb-4">
+                <MudText Typo="Typo.body2">
+                    <strong>Note:</strong> Registration is temporarily unavailable: the server could not determine its
+                    email service configuration. Please try again later or contact your administrator.
+                </MudText>
+            </MudAlert>
+        }
+        else if (!_isFirstRun && _emailState == EmailConfigurationState.Disabled)
         {
             <MudAlert Severity="Severity.Warning" Class="mb-4">
                 <MudText Typo="Typo.body2">
@@ -129,7 +138,9 @@
     private bool _isLoading;
     private bool _registrationSuccess;
     private bool _isFirstRun;
-    private bool _isEmailVerificationEnabled;
+    // Strict state so the note matches what the register endpoint will do: Indeterminate means AuthService
+    // refuses registration (fail closed), so the page must not promise an immediate login.
+    private EmailConfigurationState _emailState = EmailConfigurationState.Enabled;
     private string _inviteToken = string.Empty;
     private string _email = string.Empty;
     private string _password = string.Empty; // Initialized as empty, never null
@@ -174,7 +185,7 @@
     protected override async Task OnInitializedAsync()
     {
         _isFirstRun = await AuthService.IsFirstRunAsync();
-        _isEmailVerificationEnabled = await FeatureAvailability.IsEmailVerificationEnabledAsync();
+        _emailState = await FeatureAvailability.GetEmailConfigurationStateAsync();
 
         if (!string.IsNullOrEmpty(InviteQueryParam))
         {
