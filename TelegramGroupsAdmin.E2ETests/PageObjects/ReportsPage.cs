@@ -261,20 +261,6 @@ public class ReportsPage
     }
 
     /// <summary>
-    /// Clicks the "Warn" button on a moderation report card.
-    /// This is a NO-CONFIRMATION action that immediately issues a warning.
-    /// </summary>
-    public async Task ClickWarnAsync()
-    {
-        var button = _page.Locator("button:has-text('Warn')").First;
-
-        // A click on the prerendered button has no handler; wait for the live circuit first
-        await _page.WaitForInteractiveAsync();
-
-        await button.ClickAsync();
-    }
-
-    /// <summary>
     /// Clicks the "Warn" button inside <paramref name="card"/> (a moderation report card, e.g.
     /// <see cref="ModerationReportCardFor"/>), so a test with several pending reports acts on the one it means.
     /// </summary>
@@ -433,12 +419,6 @@ public class ReportsPage
             // Truly innermost: drop any row that itself contains another row with the title.
             HasNot = scope.Page.Locator(".flex-row").Filter(new() { HasText = "Multiple Choice" })
         });
-
-    /// <summary>
-    /// The MC score chip, displayed as "X/Y correct (Z%)". Scoped to the Multiple Choice section of
-    /// every exam review card on the page; narrow with <see cref="ExamReviewCards"/> when several are shown.
-    /// </summary>
-    public ILocator ExamScoreChip => ExamMcSectionHeader.Locator(".mud-chip").Filter(new() { HasText = "correct" });
 
     /// <summary>The MC "Passed" chip, scoped to the Multiple Choice section (not "Passed — auto-admitted" or the AI chip).</summary>
     public ILocator ExamMcPassedChip => ExamMcSectionHeader.Locator(".mud-chip").Filter(new() { HasTextRegex = new Regex(@"^\s*Passed\s*$") });

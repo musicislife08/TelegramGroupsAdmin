@@ -124,12 +124,6 @@ public class UsersPage
     public ILocator AdminBadge(ILocator row) =>
         row.GetByRole(AriaRole.Img, new() { Name = AdminBadgeName, Exact = true });
 
-    /// <summary>The trusted indicator icon in the user row containing <paramref name="displayName"/>.</summary>
-    public ILocator TrustedIndicator(string displayName) => TrustedBadge(UserRow(displayName));
-
-    /// <summary>The admin indicator icon in the user row containing <paramref name="displayName"/>.</summary>
-    public ILocator AdminIndicator(string displayName) => AdminBadge(UserRow(displayName));
-
     /// <summary>
     /// The "Trust user" toggle inside <paramref name="row"/> — rendered for an untrusted user on the
     /// All and Active tabs. Scoped to the row because the toggle exists in several tab tables.
