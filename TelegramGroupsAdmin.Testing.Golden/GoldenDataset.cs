@@ -11,7 +11,7 @@ public static class GoldenDataset
     /// <summary>
     /// Loads the 33 canonical/*.sql fixtures FK-ordered into the target context, then
     /// runs the encrypted-column UPDATE post-step using the supplied DataProtection
-    /// provider. Used by PostgresFixture.[OneTimeSetUp] to build golden_template, and
+    /// provider. Used by GoldenTemplates.BuildAsync to build golden_template, and
     /// by GoldenReducePlanTests to exercise Reduce against canonical without depending
     /// on Phase 2's template infrastructure.
     ///
