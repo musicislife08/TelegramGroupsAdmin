@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.ContentDetection.Models;
+using TelegramGroupsAdmin.Core.Http;
 using TelegramGroupsAdmin.Core.Utilities;
 
 namespace TelegramGroupsAdmin.ContentDetection.Services;
@@ -11,12 +12,33 @@ namespace TelegramGroupsAdmin.ContentDetection.Services;
 /// Service for enriching message text with scraped URL preview content.
 /// Extracts URLs, scrapes metadata in parallel, and appends formatted previews.
 /// </summary>
+/// <remarks>
+/// The URLs come from chat messages and profile bios, so any chat member can make the server
+/// fetch one. Every fetch goes through <see cref="IPublicUrlFetcher"/>, which refuses loopback,
+/// private and other non-public targets at the connected socket. A refused or failed URL is
+/// skipped (no preview); it never fails the message being processed.
+/// </remarks>
 public partial class UrlContentScrapingService(
-    IHttpClientFactory httpClientFactory,
+    IPublicUrlFetcher urlFetcher,
     ILogger<UrlContentScrapingService> logger) : IUrlContentScrapingService
 {
-    private readonly HttpClient _httpClient = httpClientFactory.CreateClient();
     private const string Delimiter = "\n\n━━━ URL Previews ━━━\n\n";
+
+    /// <summary>
+    /// Most bytes read per URL. Only the document head is parsed (title and description meta
+    /// tags), which sits at the start of the page; anything past the cap is cut off, not refused.
+    /// </summary>
+    public const long MaxBytesPerUrl = 256 * 1024;
+
+    /// <summary>Overall deadline per URL; previews are nice-to-have and must not hold up a message.</summary>
+    public static readonly TimeSpan FetchTimeout = TimeSpan.FromSeconds(10);
+
+    private static readonly PublicUrlFetchOptions FetchOptions = new()
+    {
+        MaxBytes = MaxBytesPerUrl,
+        TruncateAtCap = true,
+        Timeout = FetchTimeout
+    };
 
     /// <summary>
     /// Source-generated regex for collapsing multiple consecutive newlines into single newlines
@@ -154,11 +176,6 @@ public partial class UrlContentScrapingService(
         if (urls == null || urls.Count == 0)
             return null;
 
-        // Configure HTTP client
-        _httpClient.Timeout = TimeSpan.FromSeconds(10);
-        _httpClient.DefaultRequestHeaders.Clear();
-        _httpClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (TelegramGroupsAdmin/1.0)");
-
         // Scrape all URLs in parallel
         var scrapeTasks = urls.Select(url => ScrapeUrlAsync(url, cancellationToken)).ToArray();
         var results = await Task.WhenAll(scrapeTasks);
@@ -217,23 +234,15 @@ public partial class UrlContentScrapingService(
     {
         try
         {
-            using var request = new HttpRequestMessage(HttpMethod.Get, url);
-            using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseContentRead, cancellationToken);
+            var fetched = await urlFetcher.FetchAsync(url, FetchOptions, cancellationToken);
 
-            if (!response.IsSuccessStatusCode)
+            if (fetched.MediaType?.Contains("html", StringComparison.OrdinalIgnoreCase) != true)
             {
-                logger.LogDebug("Failed to scrape {Url}: HTTP {StatusCode}", url, response.StatusCode);
+                logger.LogDebug("Skipping {Url}: Non-HTML content type {ContentType}", url, fetched.MediaType);
                 return new ScrapeResult(url, null);
             }
 
-            var contentType = response.Content.Headers.ContentType?.MediaType;
-            if (!contentType?.Contains("html", StringComparison.OrdinalIgnoreCase) == true)
-            {
-                logger.LogDebug("Skipping {Url}: Non-HTML content type {ContentType}", url, contentType);
-                return new ScrapeResult(url, null);
-            }
-
-            var html = await response.Content.ReadAsStringAsync(cancellationToken);
+            var html = DecodeHtml(fetched.Content, fetched.Charset);
 
             var preview = new SeoPreview
             {
@@ -245,16 +254,38 @@ public partial class UrlContentScrapingService(
 
             return new ScrapeResult(url, preview);
         }
-        catch (TaskCanceledException)
+        catch (PublicUrlFetchException ex)
         {
-            logger.LogDebug("Timeout scraping {Url}", url);
+            // Refused by the address policy, too slow, unreachable or a non-success status: the
+            // fetcher already logged a refusal at warning; the preview is simply absent.
+            logger.LogDebug("Skipping {Url}: {Kind} ({Reason})", url, ex.Kind, ex.Reason);
             return new ScrapeResult(url, null);
         }
         catch (Exception ex)
         {
+            // Includes cancellation: a preview is never worth failing the message for.
             logger.LogDebug(ex, "Failed to scrape {Url}", url);
             return new ScrapeResult(url, null);
         }
+    }
+
+    /// <summary>Names .NET can decode without an extra code-page provider (utf-8, iso-8859-1, utf-16, us-ascii, ...).</summary>
+    private static readonly HashSet<string> KnownCharsets = Encoding.GetEncodings()
+        .Select(e => e.Name)
+        .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Decodes the fetched bytes with the declared charset when .NET knows it, UTF-8 otherwise.
+    /// A truncated body may end mid-character; the decoder substitutes U+FFFD, which no head tag contains.
+    /// </summary>
+    private static string DecodeHtml(byte[] content, string? charset)
+    {
+        var name = charset?.Trim().Trim('"');
+        var encoding = !string.IsNullOrEmpty(name) && KnownCharsets.Contains(name)
+            ? Encoding.GetEncoding(name)
+            : Encoding.UTF8;
+
+        return encoding.GetString(content);
     }
 
     /// <summary>

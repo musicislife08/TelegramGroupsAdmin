@@ -54,4 +54,5 @@ public sealed record PublicUrlFetchOptions
 /// <param name="MediaType">The response's Content-Type media type, when it sent one.</param>
 /// <param name="FinalUri">The URL that answered, after any redirects.</param>
 /// <param name="Truncated">True when the body was longer than the cap and <see cref="PublicUrlFetchOptions.TruncateAtCap"/> cut it.</param>
-public sealed record PublicUrlFetchResult(byte[] Content, string? MediaType, Uri FinalUri, bool Truncated = false);
+/// <param name="Charset">The response's Content-Type charset parameter, when it sent one; for callers that decode the body as text.</param>
+public sealed record PublicUrlFetchResult(byte[] Content, string? MediaType, Uri FinalUri, bool Truncated = false, string? Charset = null);

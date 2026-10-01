@@ -113,7 +113,8 @@ public sealed class PublicUrlFetcher(
                         $"Content-Length {declared} exceeds the {options.MaxBytes}-byte cap");
 
                 var (content, truncated) = await ReadCappedAsync(response, options, timeout, ct, token);
-                return new PublicUrlFetchResult(content, response.Content.Headers.ContentType?.MediaType, current, truncated);
+                var contentType = response.Content.Headers.ContentType;
+                return new PublicUrlFetchResult(content, contentType?.MediaType, current, truncated, contentType?.CharSet);
             }
         }
     }
