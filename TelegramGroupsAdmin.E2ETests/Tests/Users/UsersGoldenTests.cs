@@ -25,6 +25,9 @@ public class UsersGoldenTests : GoldenE2ETestBase
     private const long ExpiredWarningMemberId = GoldenDatasetConstants.UsersPage.ExpiredWarningTrustedMemberId;
     private const string OwnerId = GoldenDatasetConstants.WebUsers.OwnerId;
 
+    /// <summary>Tagged through an admin note (and a tag) with no warnings: the Tagged tab's "None" case.</summary>
+    private const long NotedMemberId = GoldenDatasetConstants.TelegramUsers.TopMainChatHamAuthorId;
+
     private UsersPage _users = null!;
     private int _trustActionsBefore;
     private string _expiredWarningMemberDisplayName = string.Empty;
@@ -71,8 +74,17 @@ public class UsersGoldenTests : GoldenE2ETestBase
         _expiredWarningMemberDisplayName = TelegramDisplayName.Format(
             expiredWarned.FirstName, expiredWarned.LastName, expiredWarned.Username, ExpiredWarningMemberId);
 
+        // The Tagged tab's "None" case: a member Tagged through a note, carrying no warning at all.
+        var noted = await context.TelegramUsers.AsNoTracking()
+            .Where(u => u.TelegramUserId == NotedMemberId)
+            .Select(u => new { u.IsActive, u.IsBanned, u.Warnings })
+            .SingleAsync();
+        Assert.That(noted.IsActive && !noted.IsBanned, "the noted anchor must be an active member");
+        Assert.That(noted.Warnings, Is.Null.Or.Empty, "the noted anchor must carry no warning");
+        Assert.That(await context.AdminNotes.AnyAsync(n => n.TelegramUserId == NotedMemberId), "the noted anchor must have an admin note");
+
         // Tab counts under global scope (the Owner), mirrored from the tab definitions: the system user
-        // (id 0) is never listed; Tagged is active with a note, a tag row or any warning (expired or not);
+        // (id 0) is never listed; Tagged is active with a note, a live tag or a warning in force;
         // Banned drops bans whose expiry has passed; Kicked is inactive and not banned.
         var members = context.TelegramUsers.AsNoTracking().Where(u => u.TelegramUserId != 0);
         _allCount = await members.CountAsync();
@@ -82,11 +94,12 @@ public class UsersGoldenTests : GoldenE2ETestBase
         _kickedCount = await members.CountAsync(u => !u.IsActive && !u.IsBanned);
 
         var notedIds = await context.AdminNotes.Select(n => n.TelegramUserId).Distinct().ToHashSetAsync();
-        var taggedIds = await context.UserTags.Select(t => t.TelegramUserId).Distinct().ToHashSetAsync();
+        var taggedIds = await context.UserTags.Where(t => t.RemovedAt == null).Select(t => t.TelegramUserId).Distinct().ToHashSetAsync();
         var activeMembers = await members.Where(u => u.IsActive)
-            .Select(u => new { u.TelegramUserId, HasWarnings = u.Warnings != null && u.Warnings.Count > 0 })
+            .Select(u => new { u.TelegramUserId, u.Warnings })
             .ToListAsync();
-        _taggedCount = activeMembers.Count(u => notedIds.Contains(u.TelegramUserId) || taggedIds.Contains(u.TelegramUserId) || u.HasWarnings);
+        _taggedCount = activeMembers.Count(u => notedIds.Contains(u.TelegramUserId) || taggedIds.Contains(u.TelegramUserId)
+            || (u.Warnings?.Any(w => w.ExpiresAt == null || w.ExpiresAt > now) ?? false));
 
         Assert.That(_allCount, Is.GreaterThan(_activeCount), "All must list more than Active");
         Assert.That(_taggedCount, Is.GreaterThan(0), "Tagged must be non-empty");
@@ -198,6 +211,17 @@ public class UsersGoldenTests : GoldenE2ETestBase
         await _users.ExpectTotalUserCountAsync(_bannedCount);
         await _users.SelectTabAsync("Kicked");
         await _users.ExpectTotalUserCountAsync(_kickedCount);
+    }
+
+    [Test]
+    public async Task WarningsCell_ShowsNoneOnTaggedForANotedMemberWithoutWarnings()
+    {
+        await SearchForAsync(NotedMemberId);
+        await _users.SelectTabAsync("Tagged");
+
+        var row = _users.UserRowById(NotedMemberId);
+        await Expect(row).ToBeVisibleAsync();
+        await Expect(_users.WarningsCellOf(row)).ToHaveTextAsync("None");
     }
 
     [Test]

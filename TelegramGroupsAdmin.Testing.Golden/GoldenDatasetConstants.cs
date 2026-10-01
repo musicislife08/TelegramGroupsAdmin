@@ -243,7 +243,7 @@ public static class GoldenDatasetConstants
         /// <summary>
         /// Untouched canonical member: is_active=true, is_trusted=true, no active chat_admins row, one
         /// <c>warnings</c> entry whose ExpiresAt (2026-04-28) is in the past. Left expired so the Users
-        /// page's active-warning predicate is proven (Active renders "None"; Tagged still lists it).
+        /// page's active-warning predicate is proven (Active renders "None"; Tagged does not list it).
         /// </summary>
         public const long ExpiredWarningTrustedMemberId = 9086323729821L;
 

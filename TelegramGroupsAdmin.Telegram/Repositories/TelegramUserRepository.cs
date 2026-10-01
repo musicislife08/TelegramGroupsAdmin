@@ -438,6 +438,7 @@ public class TelegramUserRepository : ITelegramUserRepository
         CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var now = DateTimeOffset.UtcNow;
 
         // Build base queryable with filter predicate
         var query = context.TelegramUsers.AsNoTracking().Where(u => u.TelegramUserId != 0);
@@ -453,10 +454,12 @@ public class TelegramUserRepository : ITelegramUserRepository
                 query = query.Where(u => u.IsActive && !u.IsBanned);
                 break;
             case UiModels.UserListFilter.Tagged:
+                // A note, a live tag, or a warning still in force — the same active-warning rule
+                // WarningCount / HasWarnings apply, so a Tagged row never shows zero warnings by that path.
                 query = query.Where(u => u.IsActive &&
                     (context.AdminNotes.Any(n => n.TelegramUserId == u.TelegramUserId) ||
-                     context.UserTags.Any(t => t.TelegramUserId == u.TelegramUserId) ||
-                     u.Warnings!.Any()));
+                     context.UserTags.Any(t => t.TelegramUserId == u.TelegramUserId && t.RemovedAt == null) ||
+                     u.Warnings!.Any(w => w.ExpiresAt == null || w.ExpiresAt > now)));
                 break;
             case UiModels.UserListFilter.Trusted:
                 query = query.Where(u => u.IsTrusted);
@@ -668,8 +671,8 @@ public class TelegramUserRepository : ITelegramUserRepository
         var activeCount = await baseQuery.Where(u => u.IsActive && !u.IsBanned).CountAsync(cancellationToken);
         var taggedCount = await baseQuery.Where(u => u.IsActive &&
             (context.AdminNotes.Any(n => n.TelegramUserId == u.TelegramUserId) ||
-             context.UserTags.Any(t => t.TelegramUserId == u.TelegramUserId) ||
-             u.Warnings!.Any())).CountAsync(cancellationToken);
+             context.UserTags.Any(t => t.TelegramUserId == u.TelegramUserId && t.RemovedAt == null) ||
+             u.Warnings!.Any(w => w.ExpiresAt == null || w.ExpiresAt > now))).CountAsync(cancellationToken);
         var trustedCount = await baseQuery.Where(u => u.IsTrusted).CountAsync(cancellationToken);
         var bannedCount = await baseQuery.Where(u => u.IsBanned && (u.BanExpiresAt == null || u.BanExpiresAt > now)).CountAsync(cancellationToken);
         var kickedCount = await baseQuery.Where(u => !u.IsActive && !u.IsBanned).CountAsync(cancellationToken);

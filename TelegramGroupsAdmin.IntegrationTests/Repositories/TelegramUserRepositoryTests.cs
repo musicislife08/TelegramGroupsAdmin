@@ -71,6 +71,88 @@ public class TelegramUserRepositoryTests
         _repository = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
     }
 
+    /// <summary>
+    /// The Tagged tab's predicate, mirrored: active, with an admin note, a live tag or a warning in
+    /// force — the same active-warning rule WarningCount / HasWarnings apply. Computed in memory from
+    /// the clone so the repository's own query is not the oracle.
+    /// </summary>
+    private static async Task<HashSet<long>> ExpectedTaggedIdsAsync(AppDbContext ctx)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var noted = await ctx.AdminNotes.Select(n => n.TelegramUserId).Distinct().ToHashSetAsync();
+        var liveTagged = await ctx.UserTags.Where(t => t.RemovedAt == null).Select(t => t.TelegramUserId).Distinct().ToHashSetAsync();
+        var activeMembers = await ctx.TelegramUsers.AsNoTracking()
+            .Where(u => u.TelegramUserId != 0 && u.IsActive)
+            .Select(u => new { u.TelegramUserId, u.Warnings })
+            .ToListAsync();
+        return activeMembers
+            .Where(u => noted.Contains(u.TelegramUserId) || liveTagged.Contains(u.TelegramUserId)
+                        || (u.Warnings?.Any(w => w.ExpiresAt == null || w.ExpiresAt > now) ?? false))
+            .Select(u => u.TelegramUserId)
+            .ToHashSet();
+    }
+
+    private async Task GuardExpiredWarningAnchorAsync(AppDbContext ctx)
+    {
+        const long id = GoldenDatasetConstants.UsersPage.ExpiredWarningTrustedMemberId;
+        var member = await ctx.TelegramUsers.AsNoTracking().Where(u => u.TelegramUserId == id)
+            .Select(u => new { u.IsActive, u.Warnings }).SingleAsync();
+        Assert.That(member.IsActive, "the anchor must be active, so only its warning decides Tagged");
+        Assert.That(member.Warnings, Is.Not.Null.And.Not.Empty);
+        Assert.That(member.Warnings!.All(w => w.ExpiresAt < DateTimeOffset.UtcNow), "every warning of the anchor has expired");
+        Assert.That(await ctx.AdminNotes.AnyAsync(n => n.TelegramUserId == id), Is.False, "no note");
+        Assert.That(await ctx.UserTags.AnyAsync(t => t.TelegramUserId == id), Is.False, "no tag");
+    }
+
+    [Test]
+    public async Task GetUserTabCountsAsync_TaggedCount_CountsOnlyWarningsInForce()
+    {
+        await using var ctx = _testHelper!.GetDbContext();
+        await GuardExpiredWarningAnchorAsync(ctx);
+        var expected = await ExpectedTaggedIdsAsync(ctx);
+
+        var counts = await _repository!.GetUserTabCountsAsync(chatIds: GlobalScope, searchText: null);
+
+        Assert.That(counts.TaggedCount, Is.EqualTo(expected.Count),
+            "a member whose only warning has expired is not Tagged");
+    }
+
+    [Test]
+    public async Task GetPagedUsersAsync_Tagged_ExcludesAMemberWhoseOnlyWarningHasExpired()
+    {
+        await using var ctx = _testHelper!.GetDbContext();
+        await GuardExpiredWarningAnchorAsync(ctx);
+        var expected = await ExpectedTaggedIdsAsync(ctx);
+
+        var (items, totalCount) = await _repository!.GetPagedUsersAsync(
+            UiModels.UserListFilter.Tagged, skip: 0, take: 1000,
+            searchText: null, chatIds: GlobalScope, sortLabel: null, sortDescending: false);
+
+        Assert.That(items.Select(i => i.TelegramUserId), Is.EquivalentTo(expected));
+        Assert.That(totalCount, Is.EqualTo(expected.Count));
+        Assert.That(items.Select(i => i.TelegramUserId), Does.Not.Contain(GoldenDatasetConstants.UsersPage.ExpiredWarningTrustedMemberId));
+    }
+
+    [Test]
+    public async Task GetPagedUsersAsync_Tagged_IncludesAMemberWhoseWarningIsInForce()
+    {
+        const long id = GoldenDatasetConstants.UsersPage.WarnedTrustedMemberId;
+        await using var ctx = _testHelper!.GetDbContext();
+        Assert.That(await ctx.AdminNotes.AnyAsync(n => n.TelegramUserId == id), Is.False, "no note");
+        Assert.That(await ctx.UserTags.AnyAsync(t => t.TelegramUserId == id), Is.False, "no tag");
+        await GoldenDataset.Mutate(ctx).ExtendTelegramUserWarnings(id, TimeSpan.FromDays(30)).ApplyAsync();
+
+        var (items, _) = await _repository!.GetPagedUsersAsync(
+            UiModels.UserListFilter.Tagged, skip: 0, take: 1000,
+            searchText: null, chatIds: GlobalScope, sortLabel: null, sortDescending: false);
+        var counts = await _repository.GetUserTabCountsAsync(chatIds: GlobalScope, searchText: null);
+
+        var warned = items.SingleOrDefault(i => i.TelegramUserId == id);
+        Assert.That(warned, Is.Not.Null, "a warning in force makes the member Tagged");
+        Assert.That(warned!.WarningCount, Is.EqualTo(1));
+        Assert.That(counts.TaggedCount, Is.EqualTo((await ExpectedTaggedIdsAsync(ctx)).Count));
+    }
+
     private async Task SeedActiveUserAsync(long userId, string? username = null, string? firstName = null, string? lastName = null)
     {
         await using var scope = _serviceProvider!.CreateAsyncScope();
