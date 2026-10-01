@@ -76,7 +76,7 @@
                 </MudTd>
                 <MudTd DataLabel="Permission Level">
                     <MudChip T="string" Size="Size.Small" Color="@GetPermissionColor((PermissionLevel)context.PermissionLevelInt)">
-                        @((PermissionLevel)context.PermissionLevelInt).GetDisplayName()
+                        @(((PermissionLevel)context.PermissionLevelInt).GetDisplayName())
                     </MudChip>
                 </MudTd>
                 <MudTd DataLabel="Status">
