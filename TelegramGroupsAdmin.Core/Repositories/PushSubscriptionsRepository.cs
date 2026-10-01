@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using TelegramGroupsAdmin.Core.Http;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Repositories.Mappings;
 using TelegramGroupsAdmin.Data;
@@ -33,8 +34,15 @@ public class PushSubscriptionsRepository(IDbContextFactory<AppDbContext> context
         return dto?.ToModel();
     }
 
+    /// <inheritdoc />
+    /// <exception cref="PushEndpointRejectedException">
+    /// The endpoint is not https, carries userinfo, or is an IP literal in a non-public range. The
+    /// server will POST to this URL later, so it is judged before anything is stored.
+    /// </exception>
     public async Task<PushSubscription> UpsertAsync(PushSubscription subscription, CancellationToken cancellationToken = default)
     {
+        PushEndpointPolicy.EnsureAcceptable(subscription.Endpoint);
+
         await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
 
         // Check for existing subscription by user + endpoint

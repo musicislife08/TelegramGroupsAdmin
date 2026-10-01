@@ -11,6 +11,7 @@ using Polly;
 using Polly.RateLimiting;
 using TelegramGroupsAdmin.Auth;
 using TelegramGroupsAdmin.Constants;
+using TelegramGroupsAdmin.Core.Http;
 using TelegramGroupsAdmin.Data.Services;
 using TelegramGroupsAdmin.Services;
 using TelegramGroupsAdmin.Services.Notifications;
@@ -168,8 +169,11 @@ public static class ServiceCollectionExtensions
             services.AddSingleton<IBanCelebrationFanoutQueue, BanCelebrationFanoutQueue>();
             services.AddHostedService<BanCelebrationFanoutWorker>();
 
-            // Web Push browser notifications (PushServiceClient + VAPID auto-generation)
-            services.AddHttpClient<Lib.Net.Http.WebPush.PushServiceClient>();
+            // Web Push browser notifications (PushServiceClient + VAPID auto-generation).
+            // Subscription endpoints come from users' browsers, so the push client's connections
+            // run on the public-url handler: a hostname resolving to a loopback or private address
+            // is refused at the socket, and 3xx answers are not followed.
+            services.AddHttpClient<Lib.Net.Http.WebPush.PushServiceClient>().UsePublicUrlPolicy();
             services.AddHostedService<VapidKeyGenerationService>(); // Auto-generates VAPID keys on first startup
 
             // Push subscriptions repository (browser push endpoints)

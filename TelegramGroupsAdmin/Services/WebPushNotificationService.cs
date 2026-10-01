@@ -4,6 +4,7 @@ using Lib.Net.Http.WebPush.Authentication;
 using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.Constants;
 using TelegramGroupsAdmin.Core.Extensions;
+using TelegramGroupsAdmin.Core.Http;
 using TelegramGroupsAdmin.Core.Repositories;
 using TelegramGroupsAdmin.Repositories;
 using WebPushSubscription = Lib.Net.Http.WebPush.PushSubscription;
@@ -116,6 +117,18 @@ public class WebPushNotificationService : IWebPushNotificationService
 
             foreach (var subscription in subscriptions)
             {
+                // A stored endpoint is only as trustworthy as the browser that sent it. One that
+                // fails the policy now (stored before the check existed, or edited) is dropped the
+                // same way an expired subscription is, and never requested.
+                if (!PushEndpointPolicy.IsAcceptable(subscription.Endpoint, out var rejectedBecause))
+                {
+                    _logger.LogWarning(
+                        "Push subscription for {User} has a disallowed endpoint ({Reason}); removing it",
+                        user.ToLogInfo(), rejectedBecause);
+                    await _subscriptionRepository.DeleteByEndpointAsync(subscription.Endpoint, cancellationToken);
+                    continue;
+                }
+
                 try
                 {
                     var pushSubscription = new WebPushSubscription
@@ -144,6 +157,15 @@ public class WebPushNotificationService : IWebPushNotificationService
                         user.ToLogInfo());
                     await _subscriptionRepository.DeleteByEndpointAsync(subscription.Endpoint, cancellationToken);
                 }
+                catch (HttpRequestException ex) when (FindRefusal(ex) is { } refused)
+                {
+                    // The endpoint's hostname resolved to a non-public address and the guarded
+                    // handler refused to connect. DNS can be transient (a sinkhole resolver), so
+                    // the subscription is kept; the refusal is a warning worth seeing.
+                    _logger.LogWarning(
+                        "Refused to push to {User}'s subscription endpoint: {Reason}",
+                        user.ToLogInfo(), refused.Reason);
+                }
                 catch (Exception ex)
                 {
                     _logger.LogWarning(ex,
@@ -156,6 +178,16 @@ public class WebPushNotificationService : IWebPushNotificationService
         {
             _logger.LogError(ex, "Failed to send browser push notifications to {User}", user.ToLogDebug());
         }
+    }
+
+    /// <summary>A connect-time refusal arrives wrapped in the handler's HttpRequestException.</summary>
+    private static PublicUrlFetchException? FindRefusal(Exception ex)
+    {
+        for (Exception? inner = ex; inner != null; inner = inner.InnerException)
+        {
+            if (inner is PublicUrlFetchException refused) return refused;
+        }
+        return null;
     }
 
     private async Task<VapidAuthentication?> GetOrCreateVapidAuthAsync(CancellationToken cancellationToken)
