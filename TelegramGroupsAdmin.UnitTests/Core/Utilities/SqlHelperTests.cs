@@ -49,7 +49,7 @@ public class SqlHelperTests
     [TestCase("order by")]
     [TestCase("trailing\"")]
     [TestCase("\"leading")]
-    [TestCase("таблица")]
+    [TestCase("tbl_📦")]
     public void QuoteIdentifier_AnyAcceptedInput_StartsAndEndsWithDoubleQuote(string identifier)
     {
         var result = SqlHelper.QuoteIdentifier(identifier);
@@ -88,6 +88,16 @@ public class SqlHelperTests
         var result = SqlHelper.QuoteIdentifier("\"");
 
         Assert.That(result, Is.EqualTo("\"\"\"\""));
+    }
+
+    [TestCase("\"leading", "\"\"\"leading\"")]
+    [TestCase("trailing\"", "\"trailing\"\"\"")]
+    public void QuoteIdentifier_DoubleQuoteAtEitherEnd_IsDoubled(string identifier, string expected)
+    {
+        // A quote that touches the wrapper is the easiest one to leave unescaped by mistake
+        var result = SqlHelper.QuoteIdentifier(identifier);
+
+        Assert.That(result, Is.EqualTo(expected));
     }
 
     [Test]
