@@ -302,6 +302,7 @@ public class AIFeatureCardTests : MudBlazorTestContext
 
         // Assert
         Assert.That(cut.Markup, Does.Contain("Max Tokens"));
+        Assert.That(cut.Markup, Does.Contain("Minimum 100"), "helper text states the field's minimum");
     }
 
     [Test]

@@ -114,7 +114,8 @@
                              ValueChanged="@OnMaxTokensChanged"
                              Label="Max Tokens"
                              Variant="Variant.Outlined"
-                             Min="100" />
+                             Min="@MinMaxTokens"
+                             HelperText="@($"Longest response the model may return. Minimum {MinMaxTokens}.")" />
 
             <!-- Test & Save Buttons -->
             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
@@ -186,6 +187,8 @@
 </MudPaper>
 
 @code {
+    private const int MinMaxTokens = 100;
+
     [Parameter, EditorRequired] public AIFeatureType FeatureType { get; set; }
     [Parameter, EditorRequired] public AIFeatureConfig FeatureConfig { get; set; } = null!;
     [Parameter, EditorRequired] public IReadOnlyList<AIConnection> Connections { get; set; } = [];
