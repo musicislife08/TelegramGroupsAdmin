@@ -432,6 +432,10 @@ else
         {
             Snackbar.Add("Passphrase rotation in progress! Check logs for status.", Severity.Info);
         }
+
+        // The dialog can repair or delete backups even when it is then cancelled
+        if (_backupBrowser != null)
+            await _backupBrowser.LoadBackupsAsync();
     }
 
     private async Task CreateManualBackup()

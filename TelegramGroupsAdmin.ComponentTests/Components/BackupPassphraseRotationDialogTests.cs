@@ -419,7 +419,7 @@ public class BackupPassphraseRotationDialogTests : BackupPassphraseRotationDialo
 
     #region Damaged Backup Pre-check Tests
 
-    private const string RepairFieldLabel = "Original passphrase";
+    private const string RepairFieldLabel = "Earlier passphrase";
 
     private void ScanReturns(string[] wrapped, string[] unreadable) =>
         RotationService.ScanAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
@@ -507,18 +507,22 @@ public class BackupPassphraseRotationDialogTests : BackupPassphraseRotationDialo
     [Test]
     public async Task DeleteDamaged_RequiresConfirmation_ThenCallsService()
     {
-        ScanReturns(["c.tar.gz"], []);
+        // The dialog re-scans after deleting; once the delete has run, the folder scans clean.
+        // Keyed on the delete rather than call order: the shared fixture's earlier dialogs also scan.
+        var deleteRan = false;
+        RotationService.ScanAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(_ => deleteRan ? new BackupRotationScan(1, [], []) : new BackupRotationScan(1, ["c.tar.gz"], []));
         RotationService.DeleteDamagedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(1);
+            .Returns(_ => { deleteRan = true; return 1; });
         var provider = RenderDialogProvider();
         _ = OpenDialogAsync();
-        provider.WaitForAssertion(() => Assert.That(provider.Markup, Does.Contain("Delete these 1 backups")));
+        provider.WaitForAssertion(() => Assert.That(provider.Markup, Does.Contain("Delete 1 file")));
 
-        Assert.That(Button(provider, "Delete these 1 backups").GetAttribute("disabled"), Is.Not.Null,
+        Assert.That(Button(provider, "Delete 1 file").GetAttribute("disabled"), Is.Not.Null,
             "delete stays disabled until the user confirms");
 
         await CheckAsync(provider, "permanently deleted");
-        await provider.InvokeAsync(() => Button(provider, "Delete these 1 backups").Click());
+        await provider.InvokeAsync(() => Button(provider, "Delete 1 file").Click());
 
         provider.WaitForAssertion(() => Assert.That(provider.Markup, Does.Contain("What will happen")));
         await RotationService.Received(1).DeleteDamagedAsync("/data/backups",
@@ -551,8 +555,78 @@ public class BackupPassphraseRotationDialogTests : BackupPassphraseRotationDialo
         provider.WaitForAssertion(() =>
         {
             Assert.That(provider.Markup, Does.Contain("junk.tar.gz"));
-            Assert.That(provider.Markup, Does.Contain("Delete these 1 backups"));
+            Assert.That(provider.Markup, Does.Contain("Delete 1 file"));
             Assert.That(provider.Markup, Does.Not.Contain(RepairFieldLabel), "nothing to repair, only unreadable files");
+        });
+    }
+
+    [Test]
+    public void ContinueWithoutThem_IsDisabled_WhileUnreadableFilesRemain()
+    {
+        ScanReturns(["a.tar.gz"], ["junk.tar.gz"]);
+        var provider = RenderDialogProvider();
+        _ = OpenDialogAsync();
+
+        provider.WaitForAssertion(() =>
+        {
+            Assert.That(Button(provider, "Continue without them").GetAttribute("disabled"), Is.Not.Null,
+                "the rotation would fail on a file it can't read, so it can't start yet");
+            Assert.That(provider.Markup, Does.Contain("Rotation can't start"));
+        });
+    }
+
+    [Test]
+    public async Task RepairThatOpensNothing_SaysSo()
+    {
+        ScanReturns(["a.tar.gz"], []);
+        RotationService.RepairWrappedAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(new WrappedRepairResult(0, ["a.tar.gz"]));
+        var provider = RenderDialogProvider();
+        _ = OpenDialogAsync();
+        provider.WaitForAssertion(() => Assert.That(provider.Markup, Does.Contain(RepairFieldLabel)));
+
+        await EnterRepairPassphraseAsync(provider, "wrong-passphrase");
+        await provider.InvokeAsync(() => Button(provider, "Repair").Click());
+
+        provider.WaitForAssertion(() => Assert.That(provider.Markup, Does.Contain("didn't open any")));
+    }
+
+    [Test]
+    public async Task DeleteConfirmation_ResetsAfterARepairChangesTheList()
+    {
+        ScanReturns(["a.tar.gz", "c.tar.gz"], []);
+        RotationService.RepairWrappedAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(new WrappedRepairResult(1, ["c.tar.gz"]));
+        var provider = RenderDialogProvider();
+        _ = OpenDialogAsync();
+        provider.WaitForAssertion(() => Assert.That(provider.Markup, Does.Contain(RepairFieldLabel)));
+
+        await CheckAsync(provider, "permanently deleted");
+        await EnterRepairPassphraseAsync(provider, "my-setup-passphrase");
+        await provider.InvokeAsync(() => Button(provider, "Repair").Click());
+
+        provider.WaitForAssertion(() =>
+            Assert.That(Button(provider, "Delete 1 file").GetAttribute("disabled"), Is.Not.Null,
+                "the list changed, so the user must confirm again"));
+    }
+
+    [Test]
+    public async Task DeleteThatLeavesFilesBehind_StaysOnRepairAndListsThem()
+    {
+        ScanReturns(["c.tar.gz"], []); // the delete removed nothing, so every scan still finds it
+        RotationService.DeleteDamagedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(0);
+        var provider = RenderDialogProvider();
+        _ = OpenDialogAsync();
+        provider.WaitForAssertion(() => Assert.That(provider.Markup, Does.Contain("Delete 1 file")));
+
+        await CheckAsync(provider, "permanently deleted");
+        await provider.InvokeAsync(() => Button(provider, "Delete 1 file").Click());
+
+        provider.WaitForAssertion(() =>
+        {
+            Assert.That(provider.Markup, Does.Contain("c.tar.gz"));
+            Assert.That(provider.Markup, Does.Not.Contain("What will happen"));
         });
     }
 

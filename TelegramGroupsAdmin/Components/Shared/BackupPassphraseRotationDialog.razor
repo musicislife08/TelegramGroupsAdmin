@@ -26,19 +26,21 @@
                 @if (_wrappedFiles.Count > 0)
                 {
                     <MudAlert Severity="Severity.Warning" Dense="true">
-                        <strong>@_wrappedFiles.Count @(_wrappedFiles.Count == 1 ? "backup was" : "backups were") damaged by a passphrase rotation in an earlier version.</strong><br/>
-                        They can be repaired with the passphrase that was in use before your first rotation.
+                        <strong>@Plural(_wrappedFiles.Count, "backup was", "backups were") damaged by a passphrase rotation in an earlier version.</strong><br/>
+                        Each can be repaired with the passphrase that was in use when it was made.
                         Try each passphrase you have used; every backup a passphrase opens is repaired.
                     </MudAlert>
 
                     <MudTextField @bind-Value="_repairPassphrase"
                                   Label="@RepairPassphraseLabel"
-                                  HelperText="The passphrase in use before your first rotation"
+                                  HelperText="A passphrase in use when these backups were made"
                                   Variant="Variant.Outlined"
                                   InputType="@RepairInputType"
                                   Adornment="Adornment.End"
                                   AdornmentIcon="@RepairVisibilityIcon"
+                                  AdornmentAriaLabel="@(_showRepairPassphrase ? "Hide passphrase" : "Show passphrase")"
                                   OnAdornmentClick="ToggleRepairVisibility"
+                                  UserAttributes="@(new() { ["autocomplete"] = "off" })"
                                   Immediate="true"
                                   FullWidth="true" />
 
@@ -49,43 +51,46 @@
                                Disabled="@(_isProcessing || string.IsNullOrWhiteSpace(_repairPassphrase))">
                         Repair
                     </MudButton>
+                }
 
-                    @if (_lastRepairedCount is { } repaired)
-                    {
-                        <MudText Typo="Typo.body2">
-                            Repaired @repaired. Still locked: @_wrappedFiles.Count.
-                        </MudText>
-                    }
+                @if (_repairMessage is not null)
+                {
+                    <div role="status" aria-live="polite">
+                        <MudText Typo="Typo.body2">@_repairMessage</MudText>
+                    </div>
+                }
 
+                @if (_wrappedFiles.Count > 0)
+                {
                     <MudText Typo="Typo.subtitle2">Damaged backups</MudText>
-                    <MudText Typo="Typo.body2" Style="font-family: monospace; word-break: break-all;">
+                    <ul class="ma-0 pl-4" style="font-family: monospace; word-break: break-all;">
                         @foreach (var file in _wrappedFiles)
                         {
-                            @file<br/>
+                            <li>@file</li>
                         }
+                    </ul>
+                    <MudText Typo="Typo.body2">
+                        Backups you don't repair now stay unusable, but they stay repairable after the rotation.
                     </MudText>
                 }
 
                 @if (_unreadableFiles.Count > 0)
                 {
                     <MudAlert Severity="Severity.Error" Dense="true">
-                        <strong>Can't be read (will block rotation)</strong>
+                        <strong>@Plural(_unreadableFiles.Count, "file can't", "files can't") be read as a backup.</strong><br/>
+                        Rotation can't start while @(_unreadableFiles.Count == 1 ? "it is" : "they are") in the backup folder.
+                        Delete @(_unreadableFiles.Count == 1 ? "it" : "them") below, or move @(_unreadableFiles.Count == 1 ? "it" : "them") out of the backup folder and reopen this dialog.
+                        <ul class="ma-0 pl-4" style="font-family: monospace; word-break: break-all;">
+                            @foreach (var file in _unreadableFiles)
+                            {
+                                <li>@file</li>
+                            }
+                        </ul>
                     </MudAlert>
-                    <MudText Typo="Typo.body2" Style="font-family: monospace; word-break: break-all;">
-                        @foreach (var file in _unreadableFiles)
-                        {
-                            @file<br/>
-                        }
-                    </MudText>
                 }
 
-                <MudAlert Severity="Severity.Info" Dense="true">
-                    Backups you can't repair can be deleted, or left in place. The rotation skips damaged
-                    backups, but they stay unusable without the passphrase they were made with.
-                </MudAlert>
-
                 <MudCheckBox @bind-Value="_confirmDelete" Color="Color.Error" Dense="true">
-                    I understand these backups will be permanently deleted
+                    I understand the @Plural(DamagedFiles.Count, "file", "files") listed above will be permanently deleted
                 </MudCheckBox>
 
                 <MudButton Color="Color.Error"
@@ -94,7 +99,7 @@
                            OnClick="@DeleteDamagedAsync"
                            Disabled="@(!_confirmDelete || _isProcessing)"
                            FullWidth="true">
-                    Delete these @DamagedFiles.Count backups
+                    Delete @Plural(DamagedFiles.Count, "file", "files")
                 </MudButton>
             }
             else if (_step == RotationStep.Confirmation)
@@ -195,7 +200,7 @@
             <MudButton Color="Color.Primary"
                        Variant="Variant.Filled"
                        OnClick="@ContinueToConfirmation"
-                       Disabled="@_isProcessing">
+                       Disabled="@(_isProcessing || _unreadableFiles.Count > 0)">
                 Continue without them
             </MudButton>
         }
@@ -246,7 +251,7 @@
     [CascadingParameter] private WebUserIdentity? WebUser { get; set; }
     [Parameter] public string BackupDirectory { get; set; } = "/data/backups";
 
-    private const string RepairPassphraseLabel = "Original passphrase";
+    private const string RepairPassphraseLabel = "Earlier passphrase";
 
     private enum RotationStep
     {
@@ -271,15 +276,19 @@
     private List<string> _unreadableFiles = [];
     private string _repairPassphrase = string.Empty;
     private bool _showRepairPassphrase;
-    private int? _lastRepairedCount;
+    private string? _repairMessage;
     private bool _confirmDelete;
 
     private List<string> DamagedFiles => [.. _wrappedFiles, .. _unreadableFiles];
+
+    private static string Plural(int count, string one, string many) => $"{count} {(count == 1 ? one : many)}";
     private InputType RepairInputType => _showRepairPassphrase ? InputType.Text : InputType.Password;
     private string RepairVisibilityIcon => _showRepairPassphrase ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility;
     private void ToggleRepairVisibility() => _showRepairPassphrase = !_showRepairPassphrase;
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnInitializedAsync() => await ScanAsync();
+
+    private async Task ScanAsync()
     {
         try
         {
@@ -292,11 +301,13 @@
             Snackbar.Add($"Could not check existing backups: {ex.Message}", Severity.Warning);
         }
 
+        _confirmDelete = false;
         _step = DamagedFiles.Count > 0 ? RotationStep.Repair : RotationStep.Confirmation;
     }
 
     private async Task RepairAsync()
     {
+        if (_isProcessing) return;
         if (WebUser is null)
         {
             Snackbar.Add("Your session could not be verified. Please sign in again.", Severity.Error);
@@ -307,15 +318,19 @@
         try
         {
             var result = await RotationService.RepairWrappedAsync(BackupDirectory, _repairPassphrase, WebUser.Id);
-            _lastRepairedCount = result.RepairedCount;
             _wrappedFiles = [.. result.StillWrappedFiles];
             _repairPassphrase = string.Empty;
+            _confirmDelete = false;
+            _repairMessage = result.RepairedCount == 0
+                ? "That passphrase didn't open any of the remaining damaged backups. Try another one you've used."
+                : $"Repaired {Plural(result.RepairedCount, "backup", "backups")}." +
+                  (_wrappedFiles.Count > 0 ? $" {Plural(_wrappedFiles.Count, "is", "are")} still damaged; try another passphrase." : "");
+
+            if (result.RepairedCount > 0)
+                Snackbar.Add($"Repaired {Plural(result.RepairedCount, "damaged backup", "damaged backups")}.", Severity.Success);
 
             if (DamagedFiles.Count == 0)
-            {
-                Snackbar.Add($"Repaired {result.RepairedCount} damaged backup(s).", Severity.Success);
                 _step = RotationStep.Confirmation;
-            }
         }
         catch (Exception ex)
         {
@@ -329,6 +344,7 @@
 
     private async Task DeleteDamagedAsync()
     {
+        if (_isProcessing) return;
         if (WebUser is null)
         {
             Snackbar.Add("Your session could not be verified. Please sign in again.", Severity.Error);
@@ -338,11 +354,12 @@
         _isProcessing = true;
         try
         {
-            var deleted = await RotationService.DeleteDamagedAsync(BackupDirectory, DamagedFiles, WebUser.Id);
-            Snackbar.Add($"Deleted {deleted} damaged backup(s).", Severity.Success);
-            _wrappedFiles = [];
-            _unreadableFiles = [];
-            _step = RotationStep.Confirmation;
+            var requested = DamagedFiles;
+            var deleted = await RotationService.DeleteDamagedAsync(BackupDirectory, requested, WebUser.Id);
+            Snackbar.Add(deleted == requested.Count
+                    ? $"Deleted {Plural(deleted, "file", "files")}."
+                    : $"Deleted {deleted} of {requested.Count} files. The rest could not be deleted; see the logs.",
+                deleted == requested.Count ? Severity.Success : Severity.Warning);
         }
         catch (Exception ex)
         {
@@ -352,6 +369,10 @@
         {
             _isProcessing = false;
         }
+
+        // Re-check the folder: only what is really gone moves the dialog on
+        _repairMessage = null;
+        await ScanAsync();
     }
 
     private void ContinueToConfirmation() => _step = RotationStep.Confirmation;
@@ -428,6 +449,7 @@
 
     private async Task OnComplete()
     {
+        if (_isProcessing) return;
         if (!_confirmSaved)
         {
             Snackbar.Add("Please confirm you've saved the passphrase before continuing!", Severity.Warning);

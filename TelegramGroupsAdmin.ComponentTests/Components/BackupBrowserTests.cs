@@ -4,7 +4,6 @@ using Microsoft.Extensions.Logging.Abstractions;
 using MudBlazor;
 using MudBlazor.Services;
 using NSubstitute;
-using NSubstitute.ExceptionExtensions;
 using TelegramGroupsAdmin.BackgroundJobs.Services.Backup;
 using TelegramGroupsAdmin.Components.Shared;
 
@@ -50,11 +49,8 @@ public class BackupBrowserTests : BunitContext
     [Test]
     public void DamagedFile_DoesNotHideTheReadableBackups()
     {
-        var healthy = BackupFile(HealthyName, BackupFileState.Encrypted);
-        var damaged = BackupFile(DamagedName, BackupFileState.Wrapped);
-        _backupService.IsEncryptedAsync(healthy).Returns(true);
-        // What reading a damaged file does today: the archive reader throws
-        _backupService.IsEncryptedAsync(damaged).ThrowsAsync(new InvalidDataException("unsupported compression method"));
+        BackupFile(HealthyName, BackupFileState.Encrypted);
+        BackupFile(DamagedName, BackupFileState.Wrapped);
 
         var cut = Render<BackupBrowser>(p => p.Add(x => x.BackupDirectory, _directory));
 
