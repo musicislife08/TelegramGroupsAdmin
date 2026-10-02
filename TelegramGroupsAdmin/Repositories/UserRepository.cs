@@ -404,6 +404,7 @@ public class UserRepository : IUserRepository
 
         entity.Status = (DataModels.UserStatus)(int)newStatus;
         entity.IsActive = newStatus == UserStatus.Active;
+        entity.SecurityStamp = Guid.NewGuid().ToString(); // Rotate stamp in the same UPDATE to invalidate existing sessions (forced re-login)
         entity.ModifiedBy = modifiedBy;
         entity.ModifiedAt = DateTimeOffset.UtcNow;
 

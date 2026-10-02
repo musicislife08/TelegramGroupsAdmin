@@ -108,6 +108,7 @@ public class WebAdminAccountsGoldenTests : GoldenE2ETestBase
         var user = await ReadUserAsync(GoldenDatasetConstants.WebUsers.DisabledAdminId);
         Assert.That(user.Status, Is.EqualTo(UserStatus.Active));
         Assert.That(user.IsActive, Is.True);
+        Assert.That(user.SecurityStamp, Is.Not.EqualTo(GoldenDatasetConstants.WebUsers.SecurityStamp), "the stamp rotates so no session from before comes back");
     }
 
     [Test]
@@ -148,6 +149,7 @@ public class WebAdminAccountsGoldenTests : GoldenE2ETestBase
         var user = await ReadUserAsync(GoldenDatasetConstants.WebUsers.DeletedAdminId);
         Assert.That(user.Status, Is.EqualTo(UserStatus.Active));
         Assert.That(user.IsActive, Is.True);
+        Assert.That(user.SecurityStamp, Is.Not.EqualTo(GoldenDatasetConstants.WebUsers.SecurityStamp), "the stamp rotates so no session from before comes back");
     }
 
     [Test]

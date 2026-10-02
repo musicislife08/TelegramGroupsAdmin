@@ -72,4 +72,30 @@ public class SessionRevocationTests
 
         Assert.That(await validator.IsStillValidAsync(principal), Is.False, "session must be rejected once the user is disabled");
     }
+
+    [Test]
+    public async Task ValidatorKeepsRejectingAPreDisableSessionAfterReEnable()
+    {
+        var sp = await SetUpServicesAsync();
+        await using var scope = sp.CreateAsyncScope();
+        var repo = scope.ServiceProvider.GetRequiredService<IUserRepository>();
+        var validator = scope.ServiceProvider.GetRequiredService<IUserSessionValidator>();
+
+        const string userId = GoldenDatasetConstants.WebUsers.NoTotpGlobalAdminId;
+        var user = await repo.GetByIdAsync(userId);
+
+        Assert.That(user, Is.Not.Null);
+        Assert.That(user!.Status, Is.EqualTo(UserStatus.Active), "canonical anchor must be Active");
+        var principal = PrincipalFor(userId, user.SecurityStamp);
+        Assert.That(await validator.IsStillValidAsync(principal), Is.True, "session of an Active user should be valid");
+
+        await repo.UpdateStatusAsync(userId, UserStatus.Disabled, GoldenDatasetConstants.WebUsers.OwnerId);
+        await repo.UpdateStatusAsync(userId, UserStatus.Active, GoldenDatasetConstants.WebUsers.OwnerId);
+
+        // The account is usable again, but only through a fresh login: the old session stays dead.
+        var reEnabled = await repo.GetByIdAsync(userId);
+        Assert.That(reEnabled!.Status, Is.EqualTo(UserStatus.Active), "the user must be Active again");
+        Assert.That(await validator.IsStillValidAsync(principal), Is.False,
+            "a session issued before the disable must not come back when the user is enabled again");
+    }
 }

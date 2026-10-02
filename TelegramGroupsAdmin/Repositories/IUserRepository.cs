@@ -64,6 +64,7 @@ public interface IUserRepository
     Task<List<UserRecord>> GetAllIncludingDeletedAsync(CancellationToken cancellationToken = default);
     /// <summary>Updates the user's permission level. Rotates the user's security stamp in the same UPDATE, invalidating existing sessions (forced re-login).</summary>
     Task UpdatePermissionLevelAsync(string userId, int permissionLevel, string modifiedBy, CancellationToken cancellationToken = default);
+    /// <summary>Updates the user's status. Rotates the user's security stamp in the same UPDATE, invalidating existing sessions (forced re-login), so re-enabling or restoring an account never revives a session issued before.</summary>
     Task UpdateStatusAsync(string userId, UserStatus newStatus, string modifiedBy, CancellationToken cancellationToken = default);
     Task UpdateAsync(UserRecord user, CancellationToken cancellationToken = default);
 
