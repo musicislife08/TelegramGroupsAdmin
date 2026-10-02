@@ -18,6 +18,7 @@ namespace TelegramGroupsAdmin.UnitTests.AI;
 /// end to end and the options they build are captured without a network call.
 /// </summary>
 [TestFixture]
+[NonParallelizable] // Writes to and clears ChatService's static client cache
 public class ChatServiceRequestOptionsTests
 {
     private const string ConnectionId = "options-test";
