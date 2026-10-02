@@ -42,7 +42,7 @@ public static class GoldenDataset
             "SQL.canonical.07_ban_celebration_gifs.sql",
             "SQL.canonical.08_blocklist_subscriptions.sql",
             "SQL.canonical.09_prompt_versions.sql",
-            "SQL.canonical.10_recovery_codes.sql",       // EMPTY (0 rows)
+            "SQL.canonical.10_recovery_codes.sql",       // 8 rows (canonical addition 2026-10-02)
             "SQL.canonical.11_stop_words.sql",
             "SQL.canonical.12_tag_definitions.sql",
             "SQL.canonical.13_username_blacklist.sql",   // 2 rows (Exact only)

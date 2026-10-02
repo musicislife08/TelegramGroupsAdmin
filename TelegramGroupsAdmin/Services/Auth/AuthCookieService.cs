@@ -19,7 +19,7 @@ public class AuthCookieService : IAuthCookieService
     /// <summary>
     /// The name of the authentication cookie.
     /// </summary>
-    public string CookieName => "TgSpam.Auth";
+    public string CookieName => AuthenticationConstants.CookieName;
 
     public AuthCookieService(IOptionsMonitor<CookieAuthenticationOptions> cookieOptions)
     {

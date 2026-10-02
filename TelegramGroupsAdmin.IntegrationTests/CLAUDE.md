@@ -42,7 +42,7 @@ Origin: prod DB snapshot from 2026-04-30. Bootstrap pipeline (full detail in `do
 | 07 | ban_celebration_gifs | 92 | Reference data, copied whole. |
 | 08 | blocklist_subscriptions | 7 | Reference data; URLs not scrubbed (these are public blocklists). |
 | 09 | prompt_versions | 1 | Single Main Chat synthetic row; tests build version history via SUT. |
-| 10 | recovery_codes | 0 | Empty by design. |
+| 10 | recovery_codes | 8 | Canonical addition 2026-10-02: one unused set for `perfume@` (see Part 2). Empty until then because prod had none. |
 | 11 | stop_words | 17 | Reference data. |
 | 12 | tag_definitions | 7 | Reference data (6 prod-derived) + 1 synthetic `power-user` (usage_count 20) for the concurrent-decrement race test. |
 | 13 | username_blacklist | 2 | 1 enabled + 1 disabled, both Exact match. |
@@ -160,6 +160,10 @@ Recipe format: a heading, the anchor id(s), a one-line description, and "use whe
 - Email: `perfume@canonical.test`, permission_level 1, status 1, TOTP enabled, email verified
 - Edit: the only web user whose `users.totp_secret` is non-NULL. The SQL keeps the column NULL (ciphertext is key-ring bound, like `configs.api_keys`); the base32 plaintext lives in `SQL/canonical/01_users.totp_secrets.json` (user id → secret) and `GoldenDataset.LoadCanonicalAsync` protects it at load with `DataProtectionPurposes.TotpSecrets` — the purpose the app's `DataProtectionService` uses — so `TotpService` can unprotect it. A dummy 20-byte secret; it protects nothing.
 - Use when: a test needs a user with a completed TOTP setup — the Owner's Reset TOTP action (the menu item renders only with a stored secret), or a real authenticator login (`TotpHelper` + the plaintext). Constants: `GoldenDatasetConstants.WebUsers.StoredTotpGlobalAdminId` / `StoredTotpGlobalAdminEmail` / `StoredTotpGlobalAdminBase32`. Guarded by `CanonicalWebUserAnchorTests.StoredTotpAnchor_*`. Do not give owner@/admin@/ahead@ a secret: UI-login tests rely on them landing on /login/setup-2fa.
+
+#### Recovery codes: `perfume@` holds one unused set (canonical addition 2026-10-02)
+- `recovery_codes` rows 1-8, all for `StoredTotpGlobalAdminId` (`f2f2f5c2-2cd2-45a1-a272-83f59076fb40`), `used_at` NULL: the set completing TOTP setup issues. The SQL stores hashes only; row 1's plaintext is pinned.
+- Use when: a test needs an existing recovery code set, e.g. that re-issuing replaces it or that a stored code is accepted once. Constants: `GoldenDatasetConstants.WebUsers.StoredTotpGlobalAdminRecoveryCodeCount` / `StoredTotpGlobalAdminRecoveryCode`. Guarded by `LoadCanonicalAsyncTests` (exact count).
 
 #### Locked web user: `GoldenDataset.Mutate(ctx).LockWebUser(id, lockFor)` (no canonical edit)
 - A lockout is only "locked" while `locked_until` is ahead of NOW(), so canonical's frozen snapshot cannot carry one. The mutate verb sets `locked_until = NOW() + lockFor` and `failed_login_attempts = 5` (`AccountLockoutConstants.MaxFailedAttempts`) on any canonical web user — the shape `AccountLockoutService` leaves after the fifth failed login.

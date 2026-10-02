@@ -19,12 +19,6 @@ public class UserRepository : IUserRepository
         _logger = logger;
     }
 
-    public async Task<int> GetUserCountAsync(CancellationToken cancellationToken = default)
-    {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        return await context.Users.CountAsync(cancellationToken);
-    }
-
     public async Task<UserRecord?> GetByEmailAsync(string email, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
@@ -38,19 +32,6 @@ public class UserRepository : IUserRepository
         return entity?.ToModel();
     }
 
-    public async Task<UserRecord?> GetByEmailIncludingDeletedAsync(string email, CancellationToken cancellationToken = default)
-    {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var normalizedEmail = email.ToUpperInvariant();
-
-        var entity = await context.Users
-            .AsNoTracking()
-            .Where(u => u.NormalizedEmail == normalizedEmail)
-            .FirstOrDefaultAsync(cancellationToken);
-
-        return entity?.ToModel();
-    }
-
     public async Task<UserRecord?> GetByIdAsync(string userId, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
@@ -59,24 +40,6 @@ public class UserRepository : IUserRepository
             .FirstOrDefaultAsync(u => u.Id == userId, cancellationToken);
 
         return entity?.ToModel();
-    }
-
-    /// <inheritdoc/>
-    public async Task<List<UserRecord>> GetByIdsAsync(
-        IEnumerable<string> userIds,
-        CancellationToken cancellationToken = default)
-    {
-        var idList = userIds.ToList();
-        if (idList.Count == 0)
-            return [];
-
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var entities = await context.Users
-            .AsNoTracking()
-            .Where(u => idList.Contains(u.Id))
-            .ToListAsync(cancellationToken);
-
-        return entities.Select(e => e.ToModel()).ToList();
     }
 
     public async Task<string> CreateAsync(UserRecord user, CancellationToken cancellationToken = default)
@@ -210,16 +173,6 @@ public class UserRepository : IUserRepository
         await context.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task UpdateSecurityStampAsync(string userId, CancellationToken cancellationToken = default)
-    {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var entity = await context.Users.FirstOrDefaultAsync(u => u.Id == userId, cancellationToken);
-        if (entity == null) return;
-
-        entity.SecurityStamp = Guid.NewGuid().ToString();
-        await context.SaveChangesAsync(cancellationToken);
-    }
-
     public async Task UpdateTotpSecretAsync(string userId, string totpSecret, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
@@ -288,45 +241,26 @@ public class UserRepository : IUserRepository
         _logger.LogInformation("Deleted all recovery codes for user {UserId}", userId);
     }
 
-    public async Task<List<RecoveryCodeRecord>> GetRecoveryCodesAsync(string userId, CancellationToken cancellationToken = default)
+    public async Task ReplaceRecoveryCodesAsync(string userId, IReadOnlyCollection<string> codeHashes, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var entities = await context.RecoveryCodes
-            .AsNoTracking()
-            .Where(rc => rc.UserId == userId && rc.UsedAt == null)
+        var existing = await context.RecoveryCodes
+            .Where(rc => rc.UserId == userId)
             .ToListAsync(cancellationToken);
 
-        return entities.Select(e => e.ToModel()).ToList();
-    }
-
-    public async Task AddRecoveryCodesAsync(string userId, List<string> codeHashes, CancellationToken cancellationToken = default)
-    {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var entities = codeHashes.Select(codeHash => new DataModels.RecoveryCodeRecordDto
+        context.RecoveryCodes.RemoveRange(existing);
+        context.RecoveryCodes.AddRange(codeHashes.Select(codeHash => new DataModels.RecoveryCodeRecordDto
         {
             UserId = userId,
             CodeHash = codeHash,
             UsedAt = null
-        }).ToList();
+        }));
 
-        context.RecoveryCodes.AddRange(entities);
+        // One SaveChanges is one transaction: the old set is gone exactly when the new set exists
         await context.SaveChangesAsync(cancellationToken);
 
-        _logger.LogInformation("Added {Count} recovery codes for user {UserId}", codeHashes.Count, userId);
-    }
-
-    public async Task CreateRecoveryCodeAsync(string userId, string codeHash, CancellationToken cancellationToken = default)
-    {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var entity = new DataModels.RecoveryCodeRecordDto
-        {
-            UserId = userId,
-            CodeHash = codeHash,
-            UsedAt = null
-        };
-
-        context.RecoveryCodes.Add(entity);
-        await context.SaveChangesAsync(cancellationToken);
+        _logger.LogInformation("Replaced recovery codes for user {UserId}: removed {Removed}, added {Added}",
+            userId, existing.Count, codeHashes.Count);
     }
 
     public async Task<bool> UseRecoveryCodeAsync(string userId, string codeHash, CancellationToken cancellationToken = default)
@@ -414,6 +348,7 @@ public class UserRepository : IUserRepository
 
         entity.Status = (DataModels.UserStatus)(int)newStatus;
         entity.IsActive = newStatus == UserStatus.Active;
+        entity.SecurityStamp = Guid.NewGuid().ToString(); // Rotate stamp in the same UPDATE to invalidate existing sessions (forced re-login)
         entity.ModifiedBy = modifiedBy;
         entity.ModifiedAt = DateTimeOffset.UtcNow;
 

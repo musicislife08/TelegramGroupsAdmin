@@ -33,8 +33,9 @@ public class LoadCanonicalAsyncTests
         Assert.That(await ctx.WelcomeResponses.CountAsync(), Is.EqualTo(11), "welcome_responses should be exactly 11 (deliberate trim)");
         Assert.That(await ctx.BanCelebrationSubscribers.CountAsync(), Is.EqualTo(5),
             "ban_celebration_subscribers should be exactly 5 (approved canonical addition 2026-09-25)");
-        // 3 tables are intentionally EMPTY in canonical: domain_filters, recovery_codes,
-        // web_notifications.
+        Assert.That(await ctx.RecoveryCodes.CountAsync(), Is.EqualTo(GoldenDatasetConstants.WebUsers.StoredTotpGlobalAdminRecoveryCodeCount),
+            "recovery_codes should be exactly the StoredTotpGlobalAdmin set (canonical addition 2026-10-02)");
+        // 2 tables are intentionally EMPTY in canonical: domain_filters, web_notifications.
     }
 
     [Test]
