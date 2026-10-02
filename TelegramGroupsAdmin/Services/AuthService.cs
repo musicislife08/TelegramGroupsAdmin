@@ -279,7 +279,7 @@ public class AuthService(
                 registeredUser.ToLogDebug());
         }
 
-        return new RegisterResult(true, userId, null);
+        return new RegisterResult(true, userId, null, EmailVerificationRequired: emailVerificationEnabled);
     }
 
     /// <summary>

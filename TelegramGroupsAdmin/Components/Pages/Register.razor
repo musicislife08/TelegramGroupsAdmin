@@ -49,6 +49,13 @@
             <MudAlert Severity="Severity.Success" Class="mb-4">
                 @(_successMessage ?? "Account created successfully! You can now log in.")
             </MudAlert>
+            @if (_verificationRequired)
+            {
+                @* The user has to act on the message (check their inbox), so it stays on screen; they leave via this link. *@
+                <MudButton Href="/login" Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" Class="mb-4">
+                    Go to login
+                </MudButton>
+            }
         }
 
         @* Until the first-run and email state are resolved the defaults below are placeholders: render neither
@@ -139,6 +146,9 @@
 @code {
     private bool _isLoading;
     private bool _registrationSuccess;
+    // Set from the register endpoint: the account starts unverified and a verification email went out, so the
+    // page keeps its instruction on screen instead of auto-redirecting to login.
+    private bool _verificationRequired;
     private bool _isFirstRun;
     private bool _stateResolved;
     // Strict state so the note matches what the register endpoint will do: Indeterminate means AuthService
@@ -254,18 +264,26 @@
                 return;
             }
 
-            // Registration successful - show message and redirect to login
+            // Registration successful - show the message
             // The login flow handles all verification: email, TOTP setup, TOTP verify
             _successMessage = result.TryGetProperty("message", out var msg)
                 ? msg.GetString()
                 : "Account created successfully! Please log in.";
+            _verificationRequired = result.TryGetProperty("verificationRequired", out var verificationRequired)
+                && verificationRequired.ValueKind == JsonValueKind.True;
             _registrationSuccess = true;
             StateHasChanged();
+
+            if (_verificationRequired)
+            {
+                // The user must verify before logging in: leave the instruction on screen with the "Go to login" link.
+                return;
+            }
 
             // Wait for user to see the success message
             await Task.Delay(2000);
 
-            // Always redirect to login - no auto-login
+            // Redirect to login - no auto-login
             Navigation.NavigateTo("/login", forceLoad: true);
         }
         catch (Exception ex)

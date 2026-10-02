@@ -83,7 +83,7 @@ public class AuthServiceTests
 
     #region Invite path - email verification gate
 
-    [TestCase(EmailConfigurationState.Enabled, false, Description = "email service configured: account starts unverified")]
+    [TestCase(EmailConfigurationState.Enabled, false, Description = "email service configured: account starts unverified and the caller must say so")]
     [TestCase(EmailConfigurationState.Disabled, true, Description = "no email service: account starts verified (login would otherwise be impossible)")]
     public async Task RegisterAsync_WithInvite_EmailVerifiedFollowsTheGate(EmailConfigurationState state, bool expectedEmailVerified)
     {
@@ -93,11 +93,12 @@ public class AuthServiceTests
         // Act
         var result = await _service.RegisterAsync(Email, Password, InviteToken);
 
-        // Assert
+        // Assert - the result tells the caller whether to ask the user to verify: exactly when the account starts unverified
         using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.True);
             Assert.That(result.UserId, Is.EqualTo(NewUserId));
+            Assert.That(result.EmailVerificationRequired, Is.EqualTo(!expectedEmailVerified));
         }
 
         await _users.Received(1).RegisterUserWithInviteAsync(
@@ -174,11 +175,13 @@ public class AuthServiceTests
         // Act
         var result = await _service.RegisterAsync(Email, Password, inviteToken: null);
 
-        // Assert
+        // Assert. The owner path sends no verification email, so it never asks the user to verify; whether an
+        // unverified owner (Enabled) should get one is an open question — this pins today's contract, not a decision.
         using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.True);
             Assert.That(result.UserId, Is.Not.Null);
+            Assert.That(result.EmailVerificationRequired, Is.False);
         }
 
         await _users.Received(1).CreateAsync(

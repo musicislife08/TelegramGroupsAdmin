@@ -112,11 +112,16 @@ public static class AuthEndpoints
                     return Results.Json(new { success = false, error = result.ErrorMessage });
                 }
 
-                // Registration successful - always redirect to login page
+                // Registration successful - the user continues through the login page
                 // The login flow handles: email verification, TOTP setup, TOTP verification
                 // No cookies are set here - authentication only happens through the login flow
-                logger.LogInformation("Registration succeeded for {Email}, redirecting to login", request.Email);
-                return Results.Json(new { success = true, message = "Account created successfully! Please log in." });
+                // When the account starts unverified, say so: login will refuse the account until the link is followed
+                logger.LogInformation("Registration succeeded for {Email} (verification required: {VerificationRequired})",
+                    request.Email, result.EmailVerificationRequired);
+                var message = result.EmailVerificationRequired
+                    ? "Account created! We've sent a verification link to your email. Verify your address, then log in."
+                    : "Account created successfully! Please log in.";
+                return Results.Json(new { success = true, message, verificationRequired = result.EmailVerificationRequired });
             }
             catch (Exception ex)
             {
