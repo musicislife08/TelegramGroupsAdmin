@@ -254,7 +254,7 @@
         try
         {
             // NOW queue the background job to re-encrypt backups
-            await PassphraseService.RotatePassphraseAsync(BackupDirectory, _userId);
+            await PassphraseService.RotatePassphraseAsync(_newPassphrase, BackupDirectory, _userId);
 
             Snackbar.Add("Passphrase rotation started! Background job is re-encrypting your backups.", Severity.Success);
             MudDialog.Close(DialogResult.Ok(_newPassphrase));

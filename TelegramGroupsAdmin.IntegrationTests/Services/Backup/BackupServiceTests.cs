@@ -149,6 +149,7 @@ public class BackupServiceTests
         services.AddSingleton(new RecyclableMemoryStreamManager());
         services.AddScoped<IBackupService, BackupService>();
         services.AddScoped<IBackupEncryptionService, BackupEncryptionService>();
+        services.AddScoped<IBackupArchiveRotator, BackupArchiveRotator>();
         services.AddScoped<IBackupConfigurationService, BackupConfigurationService>();
         services.AddScoped<IPassphraseManagementService, PassphraseManagementService>();
         services.AddScoped<IBackupRetentionService, BackupRetentionService>();
@@ -1150,16 +1151,17 @@ public class BackupServiceTests
             Assert.That(await _backupService.IsEncryptedAsync(backupPath), Is.True, "precondition: the backup is encrypted");
             Assert.That(await ReadFirstBytesAsync(backupPath, 2), Is.EqualTo(GzipMagic), "precondition: the backup is a gzip archive");
 
+            var dataProtection = _serviceProvider!.GetRequiredService<IDataProtectionService>();
             var job = new TelegramGroupsAdmin.BackgroundJobs.Jobs.RotateBackupPassphraseJob(
-                _encryptionService!,
-                _backupService,
+                _serviceProvider!.GetRequiredService<IBackupArchiveRotator>(),
                 _passphraseService!,
+                dataProtection,
                 _serviceProvider!.GetRequiredService<IServiceScopeFactory>(),
                 Microsoft.Extensions.Logging.Abstractions.NullLogger<TelegramGroupsAdmin.BackgroundJobs.Jobs.RotateBackupPassphraseJob>.Instance,
                 new TelegramGroupsAdmin.BackgroundJobs.Metrics.JobMetrics());
 
             var payload = new TelegramGroupsAdmin.Core.JobPayloads.RotateBackupPassphrasePayload(
-                newPassphrase, backupDirectory, GoldenDatasetConstants.WebUsers.OwnerId);
+                dataProtection.Protect(newPassphrase), backupDirectory, GoldenDatasetConstants.WebUsers.OwnerId);
             var jobDataMap = new Quartz.JobDataMap
             {
                 { TelegramGroupsAdmin.Core.BackgroundJobs.JobDataKeys.PayloadJson, JsonSerializer.Serialize(payload) }
