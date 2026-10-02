@@ -9,12 +9,15 @@ using TelegramGroupsAdmin.Services;
 using TelegramGroupsAdmin.Services.Auth;
 using TelegramGroupsAdmin.Services.Email;
 using DataModels = TelegramGroupsAdmin.Data.Models;
+using TelegramModels = TelegramGroupsAdmin.Telegram.Models;
+using VerificationToken = TelegramGroupsAdmin.Telegram.Models.VerificationToken;
 
 namespace TelegramGroupsAdmin.UnitTests.Services;
 
 /// <summary>
-/// Unit tests for AuthService.RegisterAsync: the invite path and the first-run owner path, each driven by the
-/// strict email-configuration gate (Enabled / Disabled / Indeterminate).
+/// Unit tests for AuthService: RegisterAsync (the invite path and the first-run owner path, each driven by the
+/// strict email-configuration gate: Enabled / Disabled / Indeterminate), and the password changes that must end
+/// every existing session by rotating the security stamp.
 /// Uses NSubstitute for every collaborator - no database required.
 /// </summary>
 [TestFixture]
@@ -32,6 +35,7 @@ public class AuthServiceTests
     private IAuditService _auditLog = null!;
     private IEmailService _emailService = null!;
     private IFeatureAvailabilityService _features = null!;
+    private IPasswordHasher _passwordHasher = null!;
     private AuthService _service = null!;
 
     [SetUp]
@@ -43,15 +47,15 @@ public class AuthServiceTests
         _emailService = Substitute.For<IEmailService>();
         _features = Substitute.For<IFeatureAvailabilityService>();
 
-        var passwordHasher = Substitute.For<IPasswordHasher>();
-        passwordHasher.HashPassword(Password).Returns(PasswordHash);
+        _passwordHasher = Substitute.For<IPasswordHasher>();
+        _passwordHasher.HashPassword(Password).Returns(PasswordHash);
 
         _service = new AuthService(
             _users,
             _verificationTokens,
             _auditLog,
             Substitute.For<ITotpService>(),
-            passwordHasher,
+            _passwordHasher,
             _emailService,
             Substitute.For<IAccountLockoutService>(),
             _features,
@@ -256,6 +260,122 @@ public class AuthServiceTests
         await _users.DidNotReceive().RegisterUserWithInviteAsync(
             Arg.Any<string>(), Arg.Any<string>(), Arg.Any<PermissionLevel>(), Arg.Any<string?>(),
             Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
+    }
+
+    #endregion
+
+    #region Password changes end existing sessions
+
+    private const string ExistingUserId = "existing-user-id";
+    private const string OldStamp = "old-security-stamp";
+    private const string OldPasswordHash = "old-hash";
+    private const string NewPassword = "N3w-Passw0rd!";
+    private const string NewPasswordHash = "new-hash";
+    private const string ResetToken = "reset-token";
+
+    private UserRecord ExistingUser() => new(
+        WebUser: new WebUserIdentity(ExistingUserId, Email, PermissionLevel.Admin),
+        NormalizedEmail: Email.ToUpperInvariant(),
+        PasswordHash: OldPasswordHash,
+        SecurityStamp: OldStamp,
+        InvitedBy: null,
+        IsActive: true,
+        TotpSecret: null,
+        TotpEnabled: false,
+        TotpSetupStartedAt: null,
+        CreatedAt: DateTimeOffset.UtcNow.AddDays(-30),
+        LastLoginAt: null,
+        Status: UserStatus.Active,
+        ModifiedBy: null,
+        ModifiedAt: null,
+        EmailVerified: true,
+        EmailVerificationToken: null,
+        EmailVerificationTokenExpiresAt: null,
+        PasswordResetToken: null,
+        PasswordResetTokenExpiresAt: null,
+        FailedLoginAttempts: 0,
+        LockedUntil: null);
+
+    [Test]
+    public async Task ChangePasswordAsync_StoresTheNewHashAndRotatesTheSecurityStamp()
+    {
+        // Arrange
+        var user = ExistingUser();
+        _users.GetByIdAsync(ExistingUserId, Arg.Any<CancellationToken>()).Returns(user);
+        _passwordHasher.VerifyPassword(Password, OldPasswordHash).Returns(true);
+        _passwordHasher.HashPassword(NewPassword).Returns(NewPasswordHash);
+
+        // Act
+        var changed = await _service.ChangePasswordAsync(user.WebUser, Password, NewPassword);
+
+        // Assert
+        Assert.That(changed, Is.True);
+        await _users.Received(1).UpdateAsync(
+            Arg.Is<UserRecord>(u => u!.PasswordHash == NewPasswordHash
+                                    && !string.IsNullOrEmpty(u.SecurityStamp)
+                                    && u.SecurityStamp != OldStamp),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task ChangePasswordAsync_WrongCurrentPassword_WritesNothing()
+    {
+        // Arrange
+        var user = ExistingUser();
+        _users.GetByIdAsync(ExistingUserId, Arg.Any<CancellationToken>()).Returns(user);
+        _passwordHasher.VerifyPassword(Password, OldPasswordHash).Returns(false);
+
+        // Act
+        var changed = await _service.ChangePasswordAsync(user.WebUser, Password, NewPassword);
+
+        // Assert
+        Assert.That(changed, Is.False);
+        await _users.DidNotReceive().UpdateAsync(Arg.Any<UserRecord>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task ResetPasswordAsync_StoresTheNewHashRotatesTheSecurityStampAndConsumesTheToken()
+    {
+        // Arrange
+        _verificationTokens.GetValidTokenAsync(ResetToken, DataModels.TokenType.PasswordReset, Arg.Any<CancellationToken>())
+            .Returns(new VerificationToken(
+                Id: 1,
+                UserId: ExistingUserId,
+                TokenType: TelegramModels.TokenType.PasswordReset,
+                Token: ResetToken,
+                Value: null,
+                ExpiresAt: DateTimeOffset.UtcNow.AddHours(1),
+                CreatedAt: DateTimeOffset.UtcNow.AddMinutes(-5),
+                UsedAt: null));
+        _users.GetByIdAsync(ExistingUserId, Arg.Any<CancellationToken>()).Returns(ExistingUser());
+        _passwordHasher.HashPassword(NewPassword).Returns(NewPasswordHash);
+
+        // Act
+        var reset = await _service.ResetPasswordAsync(ResetToken, NewPassword);
+
+        // Assert
+        Assert.That(reset, Is.True);
+        await _users.Received(1).UpdateAsync(
+            Arg.Is<UserRecord>(u => u!.PasswordHash == NewPasswordHash
+                                    && !string.IsNullOrEmpty(u.SecurityStamp)
+                                    && u.SecurityStamp != OldStamp),
+            Arg.Any<CancellationToken>());
+        await _verificationTokens.Received(1).MarkAsUsedAsync(ResetToken, Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task ResetPasswordAsync_InvalidToken_WritesNothing()
+    {
+        // Arrange
+        _verificationTokens.GetValidTokenAsync(ResetToken, DataModels.TokenType.PasswordReset, Arg.Any<CancellationToken>())
+            .Returns((VerificationToken?)null);
+
+        // Act
+        var reset = await _service.ResetPasswordAsync(ResetToken, NewPassword);
+
+        // Assert
+        Assert.That(reset, Is.False);
+        await _users.DidNotReceive().UpdateAsync(Arg.Any<UserRecord>(), Arg.Any<CancellationToken>());
     }
 
     #endregion
