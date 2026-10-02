@@ -8,7 +8,6 @@ using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
 using TelegramGroupsAdmin.Repositories;
 using TelegramGroupsAdmin.Services.Auth;
-using TelegramGroupsAdmin.Testing.Golden;
 
 namespace TelegramGroupsAdmin.IntegrationTests.Services.Auth;
 
