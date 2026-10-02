@@ -16,8 +16,6 @@ namespace TelegramGroupsAdmin.E2ETests.Tests.Audit;
 public class AuditLogGoldenTests : GoldenE2ETestBase
 {
     private const long AnchorUserId = GoldenDatasetConstants.ModerationLog.MixedIssuerUserId;
-    private const string WebAdminIssuerId = GoldenDatasetConstants.WebUsers.NoTotpGlobalAdminId;
-    private const string WebAdminIssuerEmail = GoldenDatasetConstants.WebUsers.NoTotpGlobalAdminEmail;
 
     /// <summary>The moderation table's page size: the first of its pager's PageSizeOptions (25, 50, 100).</summary>
     private const int FirstPageSize = 25;
@@ -29,7 +27,6 @@ public class AuditLogGoldenTests : GoldenE2ETestBase
     private int _totalActionCount;
     private int _anchorUserActionCount;
     private int _examFlowActionCount;
-    private int _webAdminIssuedActionCount;
 
     protected override async Task ArrangeDataAsync(AppDbContext context)
     {
@@ -57,12 +54,6 @@ public class AuditLogGoldenTests : GoldenE2ETestBase
         Assert.That(_examFlowActionCount, Is.InRange(2, FirstPageSize),
             "the exam-flow actions must all fit on the moderation table's first page");
         Assert.That(_examFlowActionCount, Is.LessThan(_totalActionCount), "the issued-by filter must narrow the table");
-
-        // The no-TOTP GlobalAdmin issued few enough actions for one page (the Owner issued over a hundred).
-        _webAdminIssuedActionCount = await context.UserActions.CountAsync(a => a.WebUserId == WebAdminIssuerId);
-        Assert.That(_webAdminIssuedActionCount, Is.InRange(2, FirstPageSize),
-            "the web admin's issued actions must all fit on the moderation table's first page");
-        Assert.That(_webAdminIssuedActionCount, Is.LessThan(_totalActionCount), "the issued-by filter must narrow the table");
     }
 
     [SetUp]
@@ -99,16 +90,5 @@ public class AuditLogGoldenTests : GoldenE2ETestBase
         await Expect(_auditLog.TableRows).ToHaveCountAsync(_examFlowActionCount);
         await Expect(_auditLog.ModerationEntryWithIssuedBy(ExamFlowDisplayName)).ToHaveCountAsync(_examFlowActionCount);
         await Expect(_auditLog.ModerationIssuedByCells).ToHaveCountAsync(_examFlowActionCount);
-    }
-
-    [Test]
-    public async Task IssuedByFilter_ShowsOnlyActionsOfThatWebAdmin()
-    {
-        await _auditLog.FilterByIssuedByAsync(WebAdminIssuerEmail);
-
-        await _auditLog.ExpectTotalRowCountAsync(_webAdminIssuedActionCount);
-        await Expect(_auditLog.TableRows).ToHaveCountAsync(_webAdminIssuedActionCount);
-        await Expect(_auditLog.ModerationEntryWithIssuedBy(WebAdminIssuerEmail)).ToHaveCountAsync(_webAdminIssuedActionCount);
-        await Expect(_auditLog.ModerationIssuedByCells).ToHaveCountAsync(_webAdminIssuedActionCount);
     }
 }

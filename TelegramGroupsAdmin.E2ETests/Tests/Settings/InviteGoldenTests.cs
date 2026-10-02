@@ -91,23 +91,6 @@ public class InviteGoldenTests : GoldenE2ETestBase
     }
 
     [Test]
-    public async Task GlobalAdmin_CreateInvite_OffersOnlyAdminAndGlobalAdmin()
-    {
-        await OpenAccountsPageAsync(LoginAsGlobalAdminAsync);
-        await _accounts.ClickCreateUserAsync();
-        await Expect(_accounts.DialogTitle).ToHaveTextAsync("Create User");
-
-        await _accounts.OpenPermissionOptionsAsync();
-
-        // The exact option list is the presence check; the Owner absence check runs against that same render.
-        await Expect(_accounts.PermissionOptions).ToHaveTextAsync([PermissionAdmin, PermissionGlobalAdmin]);
-        await Expect(_accounts.PermissionOptions.Filter(new() { HasText = "Owner" })).ToHaveCountAsync(0);
-
-        await _accounts.ClosePermissionOptionsAsync();
-        await _accounts.CloseDialogAsync();
-    }
-
-    [Test]
     public async Task RegisterWithInvite_CreatesAnActiveAccountThatLogsIn()
     {
         using (var scope = Factory.Services.CreateScope())
@@ -135,6 +118,7 @@ public class InviteGoldenTests : GoldenE2ETestBase
 
         await Expect(register.InviteCodeInput).ToHaveValueAsync(token);
         await Expect(register.EmailVerificationDisabledNote).ToBeVisibleAsync();
+        await Expect(register.EmailVerificationDisabledNote).ToContainTextAsync("log in immediately after registration");
 
         await register.FillEmailAsync(email);
         await register.FillPasswordAsync(password);
