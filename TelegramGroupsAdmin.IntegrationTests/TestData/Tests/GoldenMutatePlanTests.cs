@@ -212,6 +212,36 @@ public class GoldenMutatePlanTests
     }
 
     [Test]
+    public async Task ShiftDetectionResultTimestamps_FailsLoudlyForAnUnknownId()
+    {
+        await using var ctx = _helper!.GetDbContext();
+        var plan = GoldenDataset.Mutate(ctx)
+            .ShiftDetectionResultTimestamps([new TimestampShift(long.MaxValue, TimeSpan.FromHours(1))]);
+
+        Assert.That(async () => await plan.ApplyAsync(), Throws.TypeOf<InvalidOperationException>());
+    }
+
+    [Test]
+    public async Task ShiftWelcomeResponseTimestamps_FailsLoudlyForAnUnknownId()
+    {
+        await using var ctx = _helper!.GetDbContext();
+        var plan = GoldenDataset.Mutate(ctx)
+            .ShiftWelcomeResponseTimestamps([new TimestampShift(long.MaxValue, TimeSpan.FromHours(1))]);
+
+        Assert.That(async () => await plan.ApplyAsync(), Throws.TypeOf<InvalidOperationException>());
+    }
+
+    [Test]
+    public async Task ShiftMessageTimestamps_FailsLoudlyForAnUnknownMessage()
+    {
+        await using var ctx = _helper!.GetDbContext();
+        var plan = GoldenDataset.Mutate(ctx)
+            .ShiftMessageTimestamps(long.MaxValue, [new TimestampShift(long.MaxValue, TimeSpan.FromHours(1))]);
+
+        Assert.That(async () => await plan.ApplyAsync(), Throws.TypeOf<InvalidOperationException>());
+    }
+
+    [Test]
     public async Task ExtendTelegramUserWarnings_MovesEveryWarningExpiryToNowPlusDuration()
     {
         const long UserId = GoldenDatasetConstants.UsersPage.WarnedTrustedMemberId;

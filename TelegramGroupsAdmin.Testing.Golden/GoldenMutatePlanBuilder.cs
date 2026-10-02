@@ -175,10 +175,14 @@ public sealed class GoldenMutatePlanBuilder
             {
                 foreach (var s in drShifts)
                 {
-                    await _context.Database.ExecuteSqlRawAsync(
+                    var rows = await _context.Database.ExecuteSqlRawAsync(
                         "UPDATE detection_results SET detected_at = date_trunc('day', NOW()) + ({0}::text)::interval WHERE id = {1}",
                         new object[] { FormatInterval(s.Offset), s.Id },
                         ct);
+                    if (rows != 1)
+                    {
+                        throw new InvalidOperationException($"ShiftDetectionResultTimestamps: expected to shift exactly one detection_results row for id {s.Id}, updated {rows}");
+                    }
                 }
             }
 
@@ -186,13 +190,17 @@ public sealed class GoldenMutatePlanBuilder
             {
                 foreach (var s in wrShifts)
                 {
-                    await _context.Database.ExecuteSqlRawAsync(
+                    var rows = await _context.Database.ExecuteSqlRawAsync(
                         "UPDATE welcome_responses " +
                         "SET responded_at = date_trunc('day', NOW()) + ({0}::text)::interval, " +
                         "    created_at   = date_trunc('day', NOW()) + ({0}::text)::interval - INTERVAL '1 minute' " +
                         "WHERE id = {1}",
                         new object[] { FormatInterval(s.Offset), s.Id },
                         ct);
+                    if (rows != 1)
+                    {
+                        throw new InvalidOperationException($"ShiftWelcomeResponseTimestamps: expected to shift exactly one welcome_responses row for id {s.Id}, updated {rows}");
+                    }
                 }
             }
 
@@ -200,11 +208,15 @@ public sealed class GoldenMutatePlanBuilder
             {
                 foreach (var (chatId, s) in msgShifts)
                 {
-                    await _context.Database.ExecuteSqlRawAsync(
+                    var rows = await _context.Database.ExecuteSqlRawAsync(
                         "UPDATE messages SET timestamp = date_trunc('day', NOW()) + ({0}::text)::interval " +
                         "WHERE chat_id = {1} AND message_id = {2}",
                         new object[] { FormatInterval(s.Offset), chatId, s.Id },
                         ct);
+                    if (rows != 1)
+                    {
+                        throw new InvalidOperationException($"ShiftMessageTimestamps: expected to shift exactly one messages row for chat {chatId} message {s.Id}, updated {rows}");
+                    }
                 }
             }
 
