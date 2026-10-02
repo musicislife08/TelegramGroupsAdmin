@@ -21,6 +21,10 @@ namespace TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 /// Update routing is handled by UpdateRouter.
 /// </summary>
 public class TelegramBotPollingHost(
+    // Sanctioned exception to the bot layering rule: this host is the one non-handler consumer of
+    // ITelegramBotClientFactory. It is infrastructure, not application-layer logic. It owns the single
+    // polling connection and needs the raw client to start receiving updates, and no IBot*Service
+    // abstraction exists for that.
     ITelegramBotClientFactory botFactory,
     IUpdateRouter updateRouter,
     ITelegramBotService botService,
