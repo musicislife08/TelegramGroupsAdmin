@@ -13,7 +13,7 @@ namespace TelegramGroupsAdmin.E2ETests.Tests.Users;
 
 /// <summary>
 /// The Users page on canonical as it is, as the Owner: the trust toggle (the one app write, and the
-/// assertion subject), the Trusted / Chat admin badges, View Details, the tab count badges and the
+/// assertion subject), the Trusted / Chat admin badges with View Details, the tab count badges and the
 /// Warnings cell for a member whose only warning has expired. Expected counts are read from this
 /// test's clone before the app starts, with the tab predicates mirrored here rather than taken
 /// from the repository.
@@ -223,21 +223,15 @@ public class UsersGoldenTests : GoldenE2ETestBase
     }
 
     [Test]
-    public async Task Badges_RenderTrustedAndChatAdminForTheMembersThatHoldThem()
+    public async Task Badges_RenderTrustedAndChatAdminForTheMembersThatHoldThem_AndViewDetailsOpensTheDialogForThatMemberAndCloses()
     {
         var admin = await SearchForAsync(ChatAdminMemberId);
         await Expect(_users.TrustedBadge(admin)).ToBeVisibleAsync();
         await Expect(_users.AdminBadge(admin)).ToBeVisibleAsync();
 
-        var trustedOnly = await SearchForAsync(ExpiredWarningMemberId);
-        await Expect(_users.TrustedBadge(trustedOnly)).ToBeVisibleAsync();
-        await Expect(_users.AdminBadge(trustedOnly)).ToHaveCountAsync(0);
-    }
-
-    [Test]
-    public async Task ViewDetails_OpensTheDialogForThatMemberAndCloses()
-    {
         var row = await SearchForAsync(ExpiredWarningMemberId);
+        await Expect(_users.TrustedBadge(row)).ToBeVisibleAsync();
+        await Expect(_users.AdminBadge(row)).ToHaveCountAsync(0);
 
         await _users.ClickViewDetailsAsync(row);
 

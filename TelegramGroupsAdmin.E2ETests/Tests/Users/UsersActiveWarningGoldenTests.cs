@@ -54,21 +54,17 @@ public class UsersActiveWarningGoldenTests : GoldenE2ETestBase
     }
 
     [Test]
-    public async Task WarningsCell_ShowsTheActiveWarningCountOnActive()
+    public async Task WarningsCell_ShowsTheActiveWarningCountOnActiveAndOnTagged()
     {
         await _users.SelectTabAsync("Active");
 
         var row = _users.UserRowById(WarnedMemberId);
         await Expect(row).ToBeVisibleAsync();
         await Expect(_users.WarningsCellOf(row)).ToHaveTextAsync(_activeWarningCount.ToString());
-    }
 
-    [Test]
-    public async Task WarningsCell_ShowsTheActiveWarningCountOnTagged()
-    {
         await _users.SelectTabAsync("Tagged");
 
-        var row = _users.UserRowById(WarnedMemberId);
+        row = _users.UserRowById(WarnedMemberId);
         await Expect(row).ToBeVisibleAsync();
         await Expect(_users.WarningsCellOf(row)).ToHaveTextAsync(_activeWarningCount.ToString());
     }
