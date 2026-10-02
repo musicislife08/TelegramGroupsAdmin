@@ -36,15 +36,13 @@ public class BanCelebrationSettingsTests : SharedAuthenticatedTestBase
         await _page.OpenAddGifDialogAsync();
 
         // Assert - dialog is visible
-        Assert.That(await _page.IsDialogVisibleAsync(), Is.True,
-            "Dialog should be open after clicking Add GIF");
+        await Expect(_page.Dialog).ToBeVisibleAsync();
 
         // Act - press Escape
         await _page.CloseDialogByEscapeAsync();
 
         // Assert - dialog is closed
-        Assert.That(await _page.IsDialogVisibleAsync(), Is.False,
-            "Dialog should close when Escape is pressed");
+        await Expect(_page.Dialog).Not.ToBeVisibleAsync();
     }
 
     [Test]
@@ -59,8 +57,7 @@ public class BanCelebrationSettingsTests : SharedAuthenticatedTestBase
         await _page.OpenAddGifDialogAsync();
 
         // Assert - dialog is visible
-        Assert.That(await _page.IsDialogVisibleAsync(), Is.True,
-            "Dialog should be open after clicking Add GIF");
+        await Expect(_page.Dialog).ToBeVisibleAsync();
 
         // Act - click backdrop (should NOT close with BackdropClick = false)
         await _page.ClickBackdropAsync();
@@ -84,15 +81,13 @@ public class BanCelebrationSettingsTests : SharedAuthenticatedTestBase
         await _page.OpenAddGifDialogAsync();
 
         // Assert - dialog is visible
-        Assert.That(await _page.IsDialogVisibleAsync(), Is.True,
-            "Dialog should be open after clicking Add GIF");
+        await Expect(_page.Dialog).ToBeVisibleAsync();
 
         // Act - click Cancel button
         await _page.CloseDialogByCancelButtonAsync();
 
         // Assert - dialog is closed
-        Assert.That(await _page.IsDialogVisibleAsync(), Is.False,
-            "Dialog should close when Cancel is clicked");
+        await Expect(_page.Dialog).Not.ToBeVisibleAsync();
     }
 
     #endregion
@@ -111,8 +106,7 @@ public class BanCelebrationSettingsTests : SharedAuthenticatedTestBase
         await _page.OpenAddGifDialogAsync();
 
         // Assert - submit button is disabled when no file selected
-        Assert.That(await _page.IsSubmitEnabledAsync(), Is.False,
-            "Submit should be disabled when no file is selected");
+        await Expect(_page.SubmitButton).ToBeDisabledAsync();
 
         // Cleanup
         await _page.CloseDialogByEscapeAsync();
@@ -131,8 +125,7 @@ public class BanCelebrationSettingsTests : SharedAuthenticatedTestBase
         await _page.SwitchToUrlTabAsync();
 
         // Assert - submit button is disabled when no URL entered
-        Assert.That(await _page.IsSubmitEnabledAsync(), Is.False,
-            "Submit should be disabled when no URL is entered");
+        await Expect(_page.SubmitButton).ToBeDisabledAsync();
 
         // Cleanup
         await _page.CloseDialogByEscapeAsync();
@@ -163,8 +156,7 @@ public class BanCelebrationSettingsTests : SharedAuthenticatedTestBase
             await _page.WaitForFileSelectedAsync("test-upload.gif");
 
             // Assert - submit button becomes enabled
-            Assert.That(await _page.IsSubmitEnabledAsync(), Is.True,
-                "Submit should be enabled after file selection");
+            await Expect(_page.SubmitButton).ToBeEnabledAsync();
 
             // Cleanup
             await _page.CloseDialogByEscapeAsync();
@@ -185,7 +177,9 @@ public class BanCelebrationSettingsTests : SharedAuthenticatedTestBase
         await _page.NavigateAsync();
         await _page.WaitForLoadAsync();
 
-        var initialCount = await _page.GetGifCountAsync();
+#pragma warning disable RS0030 // Baseline count is needed to assert the library grows by exactly one; WaitForLoadAsync synced on the table
+        var initialCount = await _page.GifRows.CountAsync();
+#pragma warning restore RS0030
 
         // Create a test GIF file with unique name
         var uniqueName = $"test-{Guid.NewGuid():N}.gif";
@@ -197,17 +191,18 @@ public class BanCelebrationSettingsTests : SharedAuthenticatedTestBase
             await _page.OpenAddGifDialogAsync();
             await _page.UploadFileAsync(testFilePath);
             await _page.WaitForFileSelectedAsync(uniqueName);
+            // Selecting a file auto-fills the name from the file name; overwrite it with the name under test.
+            var gifName = $"e2e gif {Guid.NewGuid():N}";
+            await _page.FillNameAsync(gifName);
+            await Expect(_page.NameInput).ToHaveValueAsync(gifName);
             await _page.SubmitAndWaitForCloseAsync();
 
             // Assert - snackbar shows success
-            var snackbarText = await _page.WaitForSnackbarAsync();
-            Assert.That(snackbarText, Does.Contain("added").IgnoreCase,
-                "Success snackbar should appear");
+            await Expect(_page.SnackbarWithText("GIF added successfully")).ToBeVisibleAsync();
 
-            // Assert - GIF count increased
-            var newCount = await _page.GetGifCountAsync();
-            Assert.That(newCount, Is.EqualTo(initialCount + 1),
-                "GIF count should increase by 1");
+            // Assert - the library shows the GIF under the entered name, and grew by exactly one
+            await Expect(_page.GifRow(gifName)).ToHaveCountAsync(1);
+            await Expect(_page.GifRows).ToHaveCountAsync(initialCount + 1);
         }
         finally
         {
@@ -233,18 +228,13 @@ public class BanCelebrationSettingsTests : SharedAuthenticatedTestBase
         await _page.OpenAddCaptionDialogAsync();
 
         // Assert - dialog is visible
-        Assert.That(await _page.IsDialogVisibleAsync(), Is.True,
-            "Caption dialog should be open");
+        await Expect(_page.Dialog).ToBeVisibleAsync();
 
         // Act - press Escape
         await Page.Keyboard.PressAsync("Escape");
 
-        // Wait for dialog to close
-        await Expect(Page.Locator("[role='dialog']")).Not.ToBeVisibleAsync();
-
-        // Assert - dialog is closed
-        Assert.That(await _page.IsDialogVisibleAsync(), Is.False,
-            "Caption dialog should close when Escape is pressed");
+        // Assert - dialog closes
+        await Expect(_page.Dialog).Not.ToBeVisibleAsync();
     }
 
     #endregion

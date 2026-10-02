@@ -12,6 +12,7 @@ using Telegram.Bot.Types.ReplyMarkups;
 using TelegramGroupsAdmin.Configuration.Models;
 using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Services;
+using TelegramGroupsAdmin.Core.Http;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.AI.Services;
@@ -37,6 +38,8 @@ namespace TelegramGroupsAdmin.E2ETests.Infrastructure;
 public class TestWebApplicationFactory : WebApplicationFactory<Program>
 {
     private readonly string _databaseName;
+    private readonly bool _databaseAlreadyExists;
+    private readonly string? _sharedKeysDirectory;
     private readonly TestEmailService _testEmailService;
     private string? _tempDataPath;
     private bool _databaseCreated;
@@ -62,9 +65,21 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
     // Exam evaluation mock (for controlling AI responses in exam flow tests)
     private readonly IExamEvaluationService _mockExamEvaluationService;
 
-    public TestWebApplicationFactory(string? databaseName = null)
+    /// <param name="databaseName">Database to run against; a unique name when null.</param>
+    /// <param name="databaseAlreadyExists">
+    /// When true the database was cloned by the caller (e.g. from a golden template) and
+    /// <see cref="EnsureDatabaseCreated"/> skips CREATE DATABASE.
+    /// </param>
+    /// <param name="sharedKeysDirectory">
+    /// Data-protection key ring whose key XML files are copied into this instance's key path
+    /// before the host builds, so data encrypted under that ring decrypts in the app under test.
+    /// </param>
+    public TestWebApplicationFactory(
+        string? databaseName = null, bool databaseAlreadyExists = false, string? sharedKeysDirectory = null)
     {
         _databaseName = databaseName ?? E2EFixture.GetUniqueDatabaseName();
+        _databaseAlreadyExists = databaseAlreadyExists;
+        _sharedKeysDirectory = sharedKeysDirectory;
         _testEmailService = new TestEmailService();
 
         // Configure NSubstitute mocks with safe defaults
@@ -257,6 +272,20 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
     public ICloudScannerService MockCloudScanner => _mockCloudScannerService;
 
     /// <summary>
+    /// Gets the mock bot moderation service. Every moderation call succeeds without touching Telegram
+    /// or the warnings/user_actions tables; use <c>Received()</c> to verify the intent the app dispatched.
+    /// </summary>
+    public IBotModerationService MockBotModeration => _mockBotModerationService;
+
+    /// <summary>
+    /// Loopback ports the app's public-url fetcher (Add GIF from URL) may connect to in this
+    /// instance. Empty until a test calls <see cref="LoopbackPortAllowance.AllowPort"/> for the
+    /// WireMock host it started; the production registration allows nothing and has no
+    /// configuration path to this.
+    /// </summary>
+    internal LoopbackPortAllowance PublicUrlAllowance { get; } = new();
+
+    /// <summary>
     /// Gets the connection string for this test's isolated database.
     /// </summary>
     public string ConnectionString => BuildConnectionString(_databaseName);
@@ -382,6 +411,10 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
             services.RemoveAll<IExamEvaluationService>();
             services.AddScoped<IExamEvaluationService>(_ => _mockExamEvaluationService);
 
+            // Public-url fetcher: tests serve GIFs from loopback WireMock hosts, which the
+            // production allowance (nothing) would refuse. Only the ports a test opens are allowed.
+            services.RemoveAll<IPublicUrlFetchAllowance>();
+            services.AddSingleton<IPublicUrlFetchAllowance>(PublicUrlAllowance);
         });
     }
 
@@ -392,6 +425,22 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
         // Create a temp directory for data protection keys and other files
         _tempDataPath = Path.Combine(Path.GetTempPath(), "e2e_tests", _databaseName);
         Directory.CreateDirectory(_tempDataPath);
+
+        // Seed this instance's key ring from the shared one (Program.cs persists keys to {DataPath}/keys)
+        if (_sharedKeysDirectory != null)
+        {
+            var keysDir = Directory.CreateDirectory(Path.Combine(_tempDataPath, "keys"));
+            foreach (var key in Directory.EnumerateFiles(_sharedKeysDirectory, "*.xml"))
+            {
+                File.Copy(key, Path.Combine(keysDir.FullName, Path.GetFileName(key)), overwrite: true);
+            }
+        }
+
+        if (_databaseAlreadyExists)
+        {
+            _databaseCreated = true;
+            return;
+        }
 
         // Create the test database on the shared PostgreSQL container
         // Retry with exponential backoff for transient container startup delays

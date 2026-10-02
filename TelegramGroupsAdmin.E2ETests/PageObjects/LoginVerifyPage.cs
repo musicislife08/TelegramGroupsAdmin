@@ -14,14 +14,13 @@ public class LoginVerifyPage
     // Selectors - LoginVerify.razor uses plain HTML inputs (static SSR)
     private const string CodeInput = "input#code";
     private const string SubmitButton = "button[type='submit']";
-    private const string ErrorAlert = ".alert-error";
-    private const string SuccessAlert = ".alert-success";
+    private const string ErrorAlertSelector = ".alert-error";
     private const string BackToLoginLink = "a[href='/login']";
 
     // Recovery code selectors
-    private const string UseRecoveryCodeLink = "a.recovery-link:has-text('Use a recovery code instead')";
-    private const string RecoveryCodeInput = "input#recoveryCode";
-    private const string BackToAuthenticatorLink = "a.recovery-link:has-text('Back to authenticator code')";
+    private const string UseRecoveryCodeLinkSelector = "a.recovery-link:has-text('Use a recovery code instead')";
+    private const string RecoveryCodeInputSelector = "input#recoveryCode";
+    private const string BackToAuthenticatorLinkSelector = "a.recovery-link:has-text('Back to authenticator code')";
 
     public LoginVerifyPage(IPage page)
     {
@@ -70,35 +69,8 @@ public class LoginVerifyPage
         await SubmitAsync();
     }
 
-    /// <summary>
-    /// Waits for and returns the error message text.
-    /// </summary>
-    public async Task<string?> GetErrorMessageAsync(int timeoutMs = 5000)
-    {
-        var errorLocator = _page.Locator(ErrorAlert);
-
-        try
-        {
-            await errorLocator.WaitForAsync(new LocatorWaitForOptions
-            {
-                State = WaitForSelectorState.Visible,
-                Timeout = timeoutMs
-            });
-            return await errorLocator.TextContentAsync();
-        }
-        catch (PlaywrightException)
-        {
-            return null;
-        }
-    }
-
-    /// <summary>
-    /// Checks if an error message is displayed.
-    /// </summary>
-    public async Task<bool> HasErrorMessageAsync()
-    {
-        return await _page.Locator(ErrorAlert).IsVisibleAsync();
-    }
+    /// <summary>The error alert (e.g. invalid TOTP or recovery code).</summary>
+    public ILocator ErrorAlert => _page.Locator(ErrorAlertSelector);
 
     /// <summary>
     /// Waits for redirect away from verify page (successful verification).
@@ -124,21 +96,25 @@ public class LoginVerifyPage
 
     #region Recovery Code Methods
 
-    /// <summary>
-    /// Checks if the "Use a recovery code instead" link is visible.
-    /// </summary>
-    public async Task<bool> IsUseRecoveryCodeLinkVisibleAsync()
-    {
-        return await _page.Locator(UseRecoveryCodeLink).IsVisibleAsync();
-    }
+    /// <summary>The authenticator (TOTP) code input, shown on the default verification form.</summary>
+    public ILocator TotpCodeInput => _page.Locator(CodeInput);
+
+    /// <summary>The "Use a recovery code instead" link.</summary>
+    public ILocator UseRecoveryCodeLink => _page.Locator(UseRecoveryCodeLinkSelector);
+
+    /// <summary>The recovery code input, shown after choosing to use a recovery code.</summary>
+    public ILocator RecoveryCodeInput => _page.Locator(RecoveryCodeInputSelector);
+
+    /// <summary>The "Back to authenticator code" link, shown on the recovery code form.</summary>
+    public ILocator BackToAuthenticatorLink => _page.Locator(BackToAuthenticatorLinkSelector);
 
     /// <summary>
     /// Clicks the "Use a recovery code instead" link.
     /// </summary>
     public async Task ClickUseRecoveryCodeAsync()
     {
-        await _page.ClickAsync(UseRecoveryCodeLink);
-        await Expect(_page.Locator(RecoveryCodeInput)).ToBeVisibleAsync();
+        await _page.ClickAsync(UseRecoveryCodeLinkSelector);
+        await Expect(RecoveryCodeInput).ToBeVisibleAsync();
     }
 
     /// <summary>
@@ -146,7 +122,7 @@ public class LoginVerifyPage
     /// </summary>
     public async Task WaitForRecoveryCodeFormAsync(int timeoutMs = 5000)
     {
-        await _page.WaitForSelectorAsync(RecoveryCodeInput, new PageWaitForSelectorOptions
+        await _page.WaitForSelectorAsync(RecoveryCodeInputSelector, new PageWaitForSelectorOptions
         {
             State = WaitForSelectorState.Visible,
             Timeout = timeoutMs
@@ -154,19 +130,11 @@ public class LoginVerifyPage
     }
 
     /// <summary>
-    /// Checks if the recovery code input is visible.
-    /// </summary>
-    public async Task<bool> IsRecoveryCodeInputVisibleAsync()
-    {
-        return await _page.Locator(RecoveryCodeInput).IsVisibleAsync();
-    }
-
-    /// <summary>
     /// Fills in the recovery code.
     /// </summary>
     public async Task FillRecoveryCodeAsync(string recoveryCode)
     {
-        await _page.FillAsync(RecoveryCodeInput, recoveryCode);
+        await _page.FillAsync(RecoveryCodeInputSelector, recoveryCode);
     }
 
     /// <summary>
@@ -179,19 +147,14 @@ public class LoginVerifyPage
     }
 
     /// <summary>
-    /// Clicks the "Back to authenticator code" link.
+    /// Clicks the "Back to authenticator code" link and waits for the authenticator form to render.
+    /// The link is a full navigation (static SSR page), so waiting on the TOTP input keeps later
+    /// assertions from running against the unloading recovery form.
     /// </summary>
     public async Task ClickBackToAuthenticatorAsync()
     {
-        await _page.ClickAsync(BackToAuthenticatorLink);
-    }
-
-    /// <summary>
-    /// Checks if the "Back to authenticator code" link is visible.
-    /// </summary>
-    public async Task<bool> IsBackToAuthenticatorLinkVisibleAsync()
-    {
-        return await _page.Locator(BackToAuthenticatorLink).IsVisibleAsync();
+        await _page.ClickAsync(BackToAuthenticatorLinkSelector);
+        await Expect(TotpCodeInput).ToBeVisibleAsync();
     }
 
     /// <summary>

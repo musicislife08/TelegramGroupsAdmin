@@ -33,50 +33,21 @@ public class MigrationTestHelper : IDisposable
     }
 
     /// <summary>
-    /// Builds a connection string targeting the "postgres" admin DB with pooling disabled.
-    /// Required for CREATE DATABASE … TEMPLATE, where Postgres rejects the operation if any
-    /// other backend session is connected to the source template.
-    /// </summary>
-    private static string BuildAdminConnectionString()
-    {
-        var builder = new NpgsqlConnectionStringBuilder(PostgresFixture.BaseConnectionString)
-        {
-            Database = "postgres",
-            Pooling = false,
-        };
-        return builder.ConnectionString;
-    }
-
-    /// <summary>
     /// Creates the test database by cloning the session-built `empty_template`. Per-test
     /// setup drops to ~50–150ms vs the ~250–550ms of CreateDatabaseAndApplyMigrationsAsync.
     /// Use this for true-empty consumer tests (asserting on empty state, or exercising a
     /// write SUT from clean slate).
     /// </summary>
-    public async Task CreateDatabaseFromEmptyTemplateAsync()
-    {
-        await using var connection = new NpgsqlConnection(BuildAdminConnectionString());
-        await connection.OpenAsync();
-        await using var cmd = new NpgsqlCommand(
-            $"CREATE DATABASE \"{_databaseName}\" TEMPLATE empty_template",
-            connection);
-        await cmd.ExecuteNonQueryAsync();
-    }
+    public Task CreateDatabaseFromEmptyTemplateAsync()
+        => GoldenTemplates.CloneAsync(PostgresFixture.BaseConnectionString, GoldenTemplate.Empty, _databaseName);
 
     /// <summary>
     /// Creates the test database by cloning the session-built `golden_template`. The cloned
     /// DB has full canonical data ready to use; encrypted-column ciphertext is decryptable
     /// using PostgresFixture.SharedDataProtectionProvider.
     /// </summary>
-    public async Task CreateDatabaseFromGoldenTemplateAsync()
-    {
-        await using var connection = new NpgsqlConnection(BuildAdminConnectionString());
-        await connection.OpenAsync();
-        await using var cmd = new NpgsqlCommand(
-            $"CREATE DATABASE \"{_databaseName}\" TEMPLATE golden_template",
-            connection);
-        await cmd.ExecuteNonQueryAsync();
-    }
+    public Task CreateDatabaseFromGoldenTemplateAsync()
+        => GoldenTemplates.CloneAsync(PostgresFixture.BaseConnectionString, GoldenTemplate.Golden, _databaseName);
 
     /// <summary>
     /// Gets a new AppDbContext instance connected to this test's database.
@@ -178,28 +149,8 @@ public class MigrationTestHelper : IDisposable
     /// <summary>
     /// Drops the test database. Called automatically by Dispose.
     /// </summary>
-    private async Task DropDatabaseAsync()
-    {
-        // Connect to postgres DB to drop our test database
-        var adminBuilder = new NpgsqlConnectionStringBuilder(PostgresFixture.BaseConnectionString)
-        {
-            Database = "postgres"
-        };
-
-        await using var connection = new NpgsqlConnection(adminBuilder.ConnectionString);
-        await connection.OpenAsync();
-
-        // Terminate any existing connections to the database
-        await using var terminateCmd = new NpgsqlCommand(
-            "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1",
-            connection);
-        terminateCmd.Parameters.Add(new NpgsqlParameter { Value = _databaseName });
-        await terminateCmd.ExecuteNonQueryAsync();
-
-        // Drop the database
-        await using var dropCmd = new NpgsqlCommand($"DROP DATABASE IF EXISTS \"{_databaseName}\"", connection);
-        await dropCmd.ExecuteNonQueryAsync();
-    }
+    private Task DropDatabaseAsync()
+        => GoldenTemplates.DropAsync(PostgresFixture.BaseConnectionString, _databaseName);
 
     public void Dispose()
     {

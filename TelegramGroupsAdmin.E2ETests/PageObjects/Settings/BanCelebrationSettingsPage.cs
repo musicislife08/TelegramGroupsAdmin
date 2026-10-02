@@ -21,38 +21,35 @@ public class BanCelebrationSettingsPage
     private const string AddGifButton = "button:has-text('Add GIF')";
     private const string GifTable = ".mud-paper:has-text('GIF Library') .mud-table";
     // Exclude NoRecordsContent row by requiring td with DataLabel attribute (actual data rows)
-    private const string GifTableRow = ".mud-paper:has-text('GIF Library') .mud-table-body tr:has(td[data-label])";
+    private const string GifTableRowSelector = ".mud-paper:has-text('GIF Library') .mud-table-body tr:has(td[data-label])";
 
     // Selectors - Caption Section
     private const string AddCaptionButton = "button:has-text('Add Caption')";
-    private const string CaptionTable = ".mud-paper:has-text('Caption Library') .mud-table";
     // Exclude NoRecordsContent row by requiring td with DataLabel attribute (actual data rows)
-    private const string CaptionTableRow = ".mud-paper:has-text('Caption Library') .mud-table-body tr:has(td[data-label])";
+    private const string CaptionTableRowSelector = ".mud-paper:has-text('Caption Library') .mud-table-body tr:has(td[data-label])";
 
     // Selectors - Dialog (shared)
-    private const string Dialog = "[role='dialog']";
-    private const string DialogTitle = ".mud-dialog-title";
+    private const string DialogSelector = "[role='dialog']";
+    private const string DialogTitleSelector = ".mud-dialog-title";
     private const string DialogContent = ".mud-dialog-content";
-    private const string DialogActions = ".mud-dialog-actions";
     private const string Backdrop = ".mud-overlay";
     private const string LoadingIndicator = ".mud-progress-linear";
 
     // Selectors - Add GIF Dialog
     private const string FileInput = "input[type='file']";
     private const string UrlTab = ".mud-tab:has-text('From URL')";
-    private const string UploadTab = ".mud-tab:has-text('Upload File')";
     private const string UrlInput = "input[placeholder*='example.com']";
-    private const string NameInput = ".mud-dialog input[aria-label='Name (optional)'], .mud-dialog .mud-input-slot:has-text('Name') input";
     private const string SubmitGifButton = ".mud-dialog-actions button:has-text('Add GIF')";
+    private const string SubmitCaptionButton = ".mud-dialog-actions button:has-text('Add Caption')";
     private const string CancelButton = ".mud-dialog-actions button:has-text('Cancel')";
 
     // Selectors - Duplicate Warning
-    private const string DuplicateWarning = ".mud-alert:has-text('Similar GIF')";
+    private const string DuplicateWarningSelector = ".mud-alert:has-text('Similar GIF')";
     private const string KeepBothButton = "button:has-text('Keep Both')";
     private const string CancelUploadButton = "button:has-text('Cancel Upload')";
 
     // Selectors - Snackbar
-    private const string Snackbar = ".mud-snackbar";
+    private const string SnackbarSelector = ".mud-snackbar";
 
     public BanCelebrationSettingsPage(IPage page)
     {
@@ -67,7 +64,7 @@ public class BanCelebrationSettingsPage
     public async Task NavigateAsync()
     {
         await _page.GotoAsync(PagePath);
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        await _page.WaitForInteractiveAsync();
     }
 
     /// <summary>
@@ -82,20 +79,9 @@ public class BanCelebrationSettingsPage
             Timeout = timeoutMs
         });
 
-        // Wait for loading indicator to disappear
-        var loadingIndicator = _page.Locator(LoadingIndicator);
-        try
-        {
-            await loadingIndicator.WaitForAsync(new LocatorWaitForOptions
-            {
-                State = WaitForSelectorState.Hidden,
-                Timeout = 5000
-            });
-        }
-        catch (TimeoutException)
-        {
-            // Loading indicator may have already disappeared
-        }
+        // Wait for every loading indicator (global config, GIF table, caption table) to go away.
+        // A count assertion is not strict, so it holds while several are still rendered at once.
+        await Expect(_page.Locator(LoadingIndicator)).ToHaveCountAsync(0, new() { Timeout = timeoutMs });
     }
 
     #endregion
@@ -110,35 +96,41 @@ public class BanCelebrationSettingsPage
         await _page.Locator(AddGifButton).ClickAsync();
 
         // Wait for dialog to appear
-        await _page.Locator(Dialog).WaitForAsync(new LocatorWaitForOptions
+        await _page.Locator(DialogSelector).WaitForAsync(new LocatorWaitForOptions
         {
             State = WaitForSelectorState.Visible,
             Timeout = 5000
         });
     }
 
-    /// <summary>
-    /// Checks if a dialog is currently visible.
-    /// </summary>
-    public async Task<bool> IsDialogVisibleAsync()
-    {
-        return await _page.Locator(Dialog).IsVisibleAsync();
-    }
+    /// <summary>The dialog (shared by the Add GIF and Add Caption dialogs).</summary>
+    public ILocator Dialog => _page.Locator(DialogSelector);
 
     /// <summary>
     /// Asserts that the dialog is visible using Playwright's auto-retrying Expect API.
     /// </summary>
     public async Task ExpectDialogVisibleAsync()
     {
-        await Expect(_page.Locator(Dialog)).ToBeVisibleAsync();
+        await Expect(Dialog).ToBeVisibleAsync();
     }
 
+    /// <summary>The dialog title.</summary>
+    public ILocator DialogTitle => _page.Locator(DialogTitleSelector);
+
     /// <summary>
-    /// Gets the dialog title text.
+    /// The "Name (optional)" field of whichever dialog is open (Add GIF — only the active tab's panel is
+    /// rendered — or Add Caption). MudBlazor labels the input, so the accessible name is the locator.
     /// </summary>
-    public async Task<string?> GetDialogTitleAsync()
+    public ILocator NameInput => Dialog.GetByLabel("Name (optional)");
+
+    /// <summary>
+    /// Types <paramref name="name"/> into the Name field and tabs away. The field is not Immediate,
+    /// so the bound value only commits on blur.
+    /// </summary>
+    public async Task FillNameAsync(string name)
     {
-        return await _page.Locator(DialogTitle).TextContentAsync();
+        await NameInput.FillAsync(name);
+        await NameInput.PressAsync("Tab");
     }
 
     /// <summary>
@@ -148,11 +140,11 @@ public class BanCelebrationSettingsPage
     public async Task CloseDialogByEscapeAsync()
     {
         // MudBlazor handles Escape on the dialog element — ensure it has focus
-        await _page.Locator(Dialog).ClickAsync();
+        await _page.Locator(DialogSelector).ClickAsync();
         await _page.Keyboard.PressAsync("Escape");
 
         // Wait for dialog to close
-        await _page.Locator(Dialog).WaitForAsync(new LocatorWaitForOptions
+        await _page.Locator(DialogSelector).WaitForAsync(new LocatorWaitForOptions
         {
             State = WaitForSelectorState.Hidden,
             Timeout = 5000
@@ -180,7 +172,7 @@ public class BanCelebrationSettingsPage
         await _page.Locator(CancelButton).ClickAsync();
 
         // Wait for dialog to close
-        await _page.Locator(Dialog).WaitForAsync(new LocatorWaitForOptions
+        await _page.Locator(DialogSelector).WaitForAsync(new LocatorWaitForOptions
         {
             State = WaitForSelectorState.Hidden,
             Timeout = 5000
@@ -233,19 +225,13 @@ public class BanCelebrationSettingsPage
     }
 
     /// <summary>
-    /// Switches to the Upload File tab in the dialog.
-    /// </summary>
-    public async Task SwitchToUploadTabAsync()
-    {
-        await _page.Locator(UploadTab).ClickAsync();
-    }
-
-    /// <summary>
     /// Enters a URL in the URL input field.
     /// </summary>
     public async Task EnterUrlAsync(string url)
     {
+        // Not Immediate: the bound value (which enables Add GIF) only commits on blur.
         await _page.Locator(UrlInput).FillAsync(url);
+        await _page.Locator(UrlInput).PressAsync("Tab");
     }
 
     #endregion
@@ -261,14 +247,14 @@ public class BanCelebrationSettingsPage
     }
 
     /// <summary>
-    /// Checks if the submit button is enabled.
+    /// The Add GIF submit button in the dialog actions. Disabled until a file or URL is provided.
     /// </summary>
-    public async Task<bool> IsSubmitEnabledAsync()
-    {
-        var button = _page.Locator(SubmitGifButton);
-        var isDisabled = await button.IsDisabledAsync();
-        return !isDisabled;
-    }
+    public ILocator SubmitButton => _page.Locator(SubmitGifButton);
+
+    /// <summary>
+    /// The error alert the dialog shows when adding the GIF failed (MudAlert Severity.Error).
+    /// </summary>
+    public ILocator ErrorAlert => Dialog.Locator(".mud-alert-text-error");
 
     /// <summary>
     /// Submits and waits for dialog to close (for successful uploads).
@@ -278,7 +264,7 @@ public class BanCelebrationSettingsPage
         await SubmitAsync();
 
         // Wait for dialog to close
-        await _page.Locator(Dialog).WaitForAsync(new LocatorWaitForOptions
+        await _page.Locator(DialogSelector).WaitForAsync(new LocatorWaitForOptions
         {
             State = WaitForSelectorState.Hidden,
             Timeout = 10000  // Allow time for upload processing
@@ -289,20 +275,15 @@ public class BanCelebrationSettingsPage
 
     #region Duplicate Warning
 
-    /// <summary>
-    /// Checks if the duplicate warning is visible.
-    /// </summary>
-    public async Task<bool> IsDuplicateWarningVisibleAsync()
-    {
-        return await _page.Locator(DuplicateWarning).IsVisibleAsync();
-    }
+    /// <summary>The "Similar GIF" duplicate warning alert.</summary>
+    public ILocator DuplicateWarning => _page.Locator(DuplicateWarningSelector);
 
     /// <summary>
     /// Waits for the duplicate warning to appear.
     /// </summary>
     public async Task WaitForDuplicateWarningAsync(int timeoutMs = 10000)
     {
-        await _page.Locator(DuplicateWarning).WaitForAsync(new LocatorWaitForOptions
+        await DuplicateWarning.WaitForAsync(new LocatorWaitForOptions
         {
             State = WaitForSelectorState.Visible,
             Timeout = timeoutMs
@@ -317,7 +298,7 @@ public class BanCelebrationSettingsPage
         await _page.Locator(KeepBothButton).ClickAsync();
 
         // Wait for dialog to close
-        await _page.Locator(Dialog).WaitForAsync(new LocatorWaitForOptions
+        await _page.Locator(DialogSelector).WaitForAsync(new LocatorWaitForOptions
         {
             State = WaitForSelectorState.Hidden,
             Timeout = 5000
@@ -332,7 +313,7 @@ public class BanCelebrationSettingsPage
         await _page.Locator(CancelUploadButton).ClickAsync();
 
         // Wait for dialog to close
-        await _page.Locator(Dialog).WaitForAsync(new LocatorWaitForOptions
+        await _page.Locator(DialogSelector).WaitForAsync(new LocatorWaitForOptions
         {
             State = WaitForSelectorState.Hidden,
             Timeout = 5000
@@ -343,22 +324,11 @@ public class BanCelebrationSettingsPage
 
     #region GIF List
 
-    /// <summary>
-    /// Gets the count of GIFs in the library.
-    /// </summary>
-    public async Task<int> GetGifCountAsync()
-    {
-        return await _page.Locator(GifTableRow).CountAsync();
-    }
+    /// <summary>The GIF library data rows (excludes the no-records row).</summary>
+    public ILocator GifRows => _page.Locator(GifTableRowSelector);
 
-    /// <summary>
-    /// Checks if a GIF with the given name exists in the table.
-    /// </summary>
-    public async Task<bool> GifExistsAsync(string name)
-    {
-        var row = _page.Locator(GifTableRow).Filter(new() { HasText = name });
-        return await row.CountAsync() > 0;
-    }
+    /// <summary>The GIF library row containing <paramref name="name"/>.</summary>
+    public ILocator GifRow(string name) => GifRows.Filter(new() { HasText = name });
 
     #endregion
 
@@ -372,47 +342,60 @@ public class BanCelebrationSettingsPage
         await _page.Locator(AddCaptionButton).ClickAsync();
 
         // Wait for dialog to appear
-        await _page.Locator(Dialog).WaitForAsync(new LocatorWaitForOptions
+        await _page.Locator(DialogSelector).WaitForAsync(new LocatorWaitForOptions
         {
             State = WaitForSelectorState.Visible,
             Timeout = 5000
         });
     }
 
+    /// <summary>The caption library data rows (excludes the no-records row).</summary>
+    public ILocator CaptionRows => _page.Locator(CaptionTableRowSelector);
+
+    /// <summary>The caption library row containing <paramref name="text"/>.</summary>
+    public ILocator CaptionRow(string text) => CaptionRows.Filter(new() { HasText = text });
+
+    /// <summary>The Add Caption dialog's Chat Caption field.</summary>
+    public ILocator ChatCaptionInput => Dialog.GetByLabel("Chat Caption");
+
+    /// <summary>The Add Caption dialog's DM Caption field.</summary>
+    public ILocator DmCaptionInput => Dialog.GetByLabel("DM Caption");
+
+    /// <summary>The Add Caption dialog's submit button. Disabled until both captions are filled.</summary>
+    public ILocator SubmitCaptionButtonLocator => _page.Locator(SubmitCaptionButton);
+
     /// <summary>
-    /// Gets the count of captions in the library.
+    /// Fills the Add Caption dialog. Each field is tabbed out of so its non-Immediate binding commits.
     /// </summary>
-    public async Task<int> GetCaptionCountAsync()
+    public async Task FillCaptionDialogAsync(string name, string chatText, string dmText)
     {
-        return await _page.Locator(CaptionTableRow).CountAsync();
+        await FillNameAsync(name);
+        await ChatCaptionInput.FillAsync(chatText);
+        await ChatCaptionInput.PressAsync("Tab");
+        await DmCaptionInput.FillAsync(dmText);
+        await DmCaptionInput.PressAsync("Tab");
+    }
+
+    /// <summary>Clicks Add Caption in the dialog and waits for the dialog to close.</summary>
+    public async Task SubmitCaptionAndWaitForCloseAsync()
+    {
+        await _page.Locator(SubmitCaptionButton).ClickAsync();
+        await _page.Locator(DialogSelector).WaitForAsync(new LocatorWaitForOptions
+        {
+            State = WaitForSelectorState.Hidden,
+            Timeout = 10000
+        });
     }
 
     #endregion
 
     #region Snackbar
 
-    /// <summary>
-    /// Waits for a snackbar message to appear and returns its text.
-    /// </summary>
-    public async Task<string?> WaitForSnackbarAsync(int timeoutMs = 5000)
-    {
-        var snackbar = _page.Locator(Snackbar);
-        await snackbar.WaitForAsync(new LocatorWaitForOptions
-        {
-            State = WaitForSelectorState.Visible,
-            Timeout = timeoutMs
-        });
-        return await snackbar.TextContentAsync();
-    }
+    /// <summary>The snackbar.</summary>
+    public ILocator Snackbar => _page.Locator(SnackbarSelector);
 
-    /// <summary>
-    /// Checks if a snackbar with specific text is visible.
-    /// </summary>
-    public async Task<bool> IsSnackbarVisibleWithTextAsync(string text)
-    {
-        var snackbar = _page.Locator(Snackbar).Filter(new() { HasText = text });
-        return await snackbar.IsVisibleAsync();
-    }
+    /// <summary>The snackbar(s) whose text contains <paramref name="text"/>.</summary>
+    public ILocator SnackbarWithText(string text) => Snackbar.Filter(new() { HasText = text });
 
     #endregion
 }

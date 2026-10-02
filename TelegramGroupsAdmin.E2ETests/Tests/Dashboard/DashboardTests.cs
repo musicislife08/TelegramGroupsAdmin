@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using TelegramGroupsAdmin.E2ETests.PageObjects;
 using static Microsoft.Playwright.Assertions;
 
@@ -29,9 +30,7 @@ public class DashboardTests : AuthenticatedTestBase
         await _homePage.WaitForLoadAsync();
 
         // Assert - page loaded with correct title
-        var title = await _homePage.GetPageTitleAsync();
-        Assert.That(title, Does.Contain("Dashboard").Or.Contain("Health"),
-            "Page should show dashboard title");
+        await Expect(_homePage.PageTitle).ToContainTextAsync(new Regex("Dashboard|Health"));
     }
 
     [Test]
@@ -45,8 +44,7 @@ public class DashboardTests : AuthenticatedTestBase
         await _homePage.WaitForLoadAsync();
 
         // Assert - stats section is visible
-        Assert.That(await _homePage.AreStatsVisibleAsync(), Is.True,
-            "Stats section should be visible after loading");
+        await Expect(_homePage.StatsGrid).ToBeVisibleAsync();
     }
 
     [Test]
@@ -60,22 +58,10 @@ public class DashboardTests : AuthenticatedTestBase
         await _homePage.WaitForLoadAsync();
 
         // Assert - all stat cards have values (even if 0 or N/A)
-        var totalMessages = await _homePage.GetTotalMessagesAsync();
-        var uniqueUsers = await _homePage.GetUniqueUsersAsync();
-        var imagesCount = await _homePage.GetImagesCountAsync();
-        var dataRange = await _homePage.GetDataRangeAsync();
-
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(totalMessages, Is.Not.Null.And.Not.Empty,
-                "Total Messages stat should have a value");
-            Assert.That(uniqueUsers, Is.Not.Null.And.Not.Empty,
-                "Unique Users stat should have a value");
-            Assert.That(imagesCount, Is.Not.Null.And.Not.Empty,
-                "Images stat should have a value");
-            Assert.That(dataRange, Is.Not.Null.And.Not.Empty,
-                "Data Range stat should have a value");
-        }
+        await Expect(_homePage.StatValue("Total Messages")).Not.ToBeEmptyAsync();
+        await Expect(_homePage.StatValue("Unique Users")).Not.ToBeEmptyAsync();
+        await Expect(_homePage.StatValue("Images")).Not.ToBeEmptyAsync();
+        await Expect(_homePage.StatValue("Data Range")).Not.ToBeEmptyAsync();
     }
 
     [Test]
@@ -89,9 +75,7 @@ public class DashboardTests : AuthenticatedTestBase
         await _homePage.WaitForLoadAsync();
 
         // Assert - stats should show 0 for a fresh database
-        var totalMessages = await _homePage.GetTotalMessagesAsync();
-        Assert.That(totalMessages, Is.EqualTo("0"),
-            "Fresh database should show 0 total messages");
+        await Expect(_homePage.StatValue("Total Messages")).ToHaveTextAsync("0");
     }
 
     [Test]
@@ -105,8 +89,7 @@ public class DashboardTests : AuthenticatedTestBase
         await _homePage.WaitForLoadAsync();
 
         // Assert - info alert about no messages should show
-        Assert.That(await _homePage.IsNoMessagesAlertVisibleAsync(), Is.True,
-            "Should show info alert when no messages are cached");
+        await Expect(_homePage.NoMessagesAlert).ToBeVisibleAsync();
     }
 
     [Test]
@@ -119,16 +102,9 @@ public class DashboardTests : AuthenticatedTestBase
         await _homePage.NavigateAsync();
         await _homePage.WaitForLoadAsync();
 
-        using (Assert.EnterMultipleScope())
-        {
-            // Assert - quick action buttons are visible
-            // Note: Using sequential assertions instead of Assert.Multiple because
-            // async lambdas don't work correctly with Assert.Multiple (NUnit doesn't await them)
-            Assert.That(await _homePage.IsViewMessagesButtonVisibleAsync(), Is.True,
-                "View Messages button should be visible");
-            Assert.That(await _homePage.IsRefreshButtonVisibleAsync(), Is.True,
-                "Refresh button should be visible");
-        }
+        // Assert - quick action buttons are visible
+        await Expect(_homePage.ViewMessagesButton).ToBeVisibleAsync();
+        await Expect(_homePage.RefreshButton).ToBeVisibleAsync();
     }
 
     [Test]
@@ -143,7 +119,7 @@ public class DashboardTests : AuthenticatedTestBase
         await _homePage.ClickViewMessagesAsync();
 
         // Assert - navigated to messages page
-        await Expect(Page).ToHaveURLAsync(new System.Text.RegularExpressions.Regex("/messages"));
+        await Expect(Page).ToHaveURLAsync(new Regex("/messages"));
     }
 
     [Test]
@@ -160,8 +136,7 @@ public class DashboardTests : AuthenticatedTestBase
         // Assert - loading indicator appears briefly then data reloads
         // We verify by checking that the stats are still visible after refresh
         await _homePage.WaitForLoadAsync();
-        Assert.That(await _homePage.AreStatsVisibleAsync(), Is.True,
-            "Stats should still be visible after refresh");
+        await Expect(_homePage.StatsGrid).ToBeVisibleAsync();
     }
 
     [Test]
@@ -172,7 +147,7 @@ public class DashboardTests : AuthenticatedTestBase
 
         // Assert - should redirect to login or register (first-run redirects to register)
         // The Home page checks IsFirstRunAsync() and redirects to /register if no users exist
-        await Expect(Page).ToHaveURLAsync(new System.Text.RegularExpressions.Regex("/(login|register)"));
+        await Expect(Page).ToHaveURLAsync(new Regex("/(login|register)"));
     }
 
     [Test]
@@ -187,15 +162,9 @@ public class DashboardTests : AuthenticatedTestBase
 
         // Assert - Admin sees the scoped Overview cards AND the global card shells,
         // but the global cards are greyed placeholders with no data (interim UX).
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(await _homePage.IsPendingReportsCardVisibleAsync(), Is.True,
-                "Admin should see the scoped Pending Reports card");
-            Assert.That(await _homePage.IsTotalMessagesCardVisibleAsync(), Is.True,
-                "Admin should see the global Total Messages card shell");
-            Assert.That(await _homePage.IsTotalMessagesGreyedPlaceholderAsync(), Is.True,
-                "Admin's Total Messages card should be the greyed 'GlobalAdmin only' placeholder");
-        }
+        await Expect(_homePage.StatCard("Pending Reports")).ToBeVisibleAsync();
+        await Expect(_homePage.StatPlaceholderCaption("Total Messages")).ToBeVisibleAsync();
+        await Expect(_homePage.StatValue("Total Messages")).ToHaveCountAsync(0);
     }
 
     [Test]
@@ -209,8 +178,7 @@ public class DashboardTests : AuthenticatedTestBase
         await _homePage.WaitForLoadAsync();
 
         // Assert - GlobalAdmin can view dashboard
-        Assert.That(await _homePage.AreStatsVisibleAsync(), Is.True,
-            "GlobalAdmin should be able to view dashboard stats");
+        await Expect(_homePage.StatsGrid).ToBeVisibleAsync();
     }
 
     [Test]
@@ -227,30 +195,18 @@ public class DashboardTests : AuthenticatedTestBase
         // for an Admin but are greyed placeholders with NO data, while scoped cards
         // (Pending Reports) show real values. The data-leak guarantee is that the
         // Admin sees the "GlobalAdmin only" placeholder and no numeric global value.
-        using (Assert.EnterMultipleScope())
-        {
-            // Global Total Messages card: shell present but greyed placeholder, no numeric value.
-            Assert.That(await _homePage.IsTotalMessagesCardVisibleAsync(), Is.True,
-                "Admin should see the global Total Messages card shell");
-            Assert.That(await _homePage.IsTotalMessagesGreyedPlaceholderAsync(), Is.True,
-                "Admin's Total Messages card should be the greyed 'GlobalAdmin only' placeholder");
-            Assert.That(await _homePage.GetTotalMessagesValueOrNullAsync(), Is.Null,
-                "Admin's Total Messages card must NOT show a numeric value");
+        // Each absence check follows a presence check on the same render, so it cannot pass early.
 
-            // Global Recent Activity panel: present but the greyed placeholder, not a real list.
-            Assert.That(await _homePage.IsActivityFeedVisibleAsync(), Is.True,
-                "Admin should see the Recent Activity panel shell");
-            Assert.That(await _homePage.IsActivityFeedPlaceholderAsync(), Is.True,
-                "Admin's Recent Activity panel should show the GlobalAdmin placeholder, not a real list");
-            Assert.That(await _homePage.GetActivityFeedItemCountAsync(), Is.EqualTo(0),
-                "Admin's Recent Activity panel must NOT render real activity items");
+        // Global Total Messages card: shell present but greyed placeholder, no numeric value.
+        await Expect(_homePage.StatPlaceholderCaption("Total Messages")).ToBeVisibleAsync();
+        await Expect(_homePage.StatValue("Total Messages")).ToHaveCountAsync(0);
 
-            // Scoped card shows a real value for Admin.
-            Assert.That(await _homePage.IsPendingReportsCardVisibleAsync(), Is.True,
-                "Admin should see the scoped Pending Reports card");
-            Assert.That(await _homePage.GetPendingReportsCountAsync(), Is.Not.Null.And.Not.Empty,
-                "Admin's scoped Pending Reports card should show a real value");
-        }
+        // Global Recent Activity panel: present but the greyed placeholder, not a real list.
+        await Expect(_homePage.ActivityFeedPlaceholderCaption).ToBeVisibleAsync();
+        await Expect(_homePage.ActivityFeedItems).ToHaveCountAsync(0);
+
+        // Scoped card shows a real value for Admin.
+        await Expect(_homePage.StatValue("Pending Reports")).Not.ToBeEmptyAsync();
     }
 
     [Test]
@@ -265,21 +221,13 @@ public class DashboardTests : AuthenticatedTestBase
 
         // Assert - GlobalAdmin sees the global widgets with real data (full dashboard):
         // Total Messages shows a real numeric value (not the placeholder) and Recent
-        // Activity is the real panel (not the placeholder).
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(await _homePage.IsTotalMessagesCardVisibleAsync(), Is.True,
-                "GlobalAdmin should see the global Total Messages card");
-            Assert.That(await _homePage.IsTotalMessagesGreyedPlaceholderAsync(), Is.False,
-                "GlobalAdmin's Total Messages card should NOT be the greyed placeholder");
-            Assert.That(await _homePage.GetTotalMessagesValueOrNullAsync(), Is.Not.Null.And.Not.Empty,
-                "GlobalAdmin's Total Messages card should show a real numeric value");
+        // Activity is the real panel (not the placeholder). The value/panel presence checks
+        // come first so the placeholder absence checks cannot pass before the render lands.
+        await Expect(_homePage.StatValue("Total Messages")).Not.ToBeEmptyAsync();
+        await Expect(_homePage.StatPlaceholderCaption("Total Messages")).ToHaveCountAsync(0);
 
-            Assert.That(await _homePage.IsActivityFeedVisibleAsync(), Is.True,
-                "GlobalAdmin should see the global Recent Activity panel");
-            Assert.That(await _homePage.IsActivityFeedPlaceholderAsync(), Is.False,
-                "GlobalAdmin's Recent Activity panel should be the real panel, not the placeholder");
-        }
+        await Expect(_homePage.ActivityFeedHeading).ToBeVisibleAsync();
+        await Expect(_homePage.ActivityFeedPlaceholderCaption).ToHaveCountAsync(0);
     }
 
     #region Enhanced Dashboard Tests (#173)
@@ -295,22 +243,10 @@ public class DashboardTests : AuthenticatedTestBase
         await _homePage.WaitForLoadAsync();
 
         // Assert - new stat cards have values (even if 0)
-        var spamToday = await _homePage.GetSpamTodayAsync();
-        var activeBans = await _homePage.GetActiveBansAsync();
-        var trustedUsers = await _homePage.GetTrustedUsersAsync();
-        var pendingReports = await _homePage.GetPendingReportsCountAsync();
-
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(spamToday, Is.Not.Null.And.Not.Empty,
-                      "Spam Today stat should have a value");
-            Assert.That(activeBans, Is.Not.Null.And.Not.Empty,
-                "Active Bans stat should have a value");
-            Assert.That(trustedUsers, Is.Not.Null.And.Not.Empty,
-                "Trusted Users stat should have a value");
-            Assert.That(pendingReports, Is.Not.Null.And.Not.Empty,
-                "Pending Reports stat should have a value");
-        }
+        await Expect(_homePage.StatValue("Spam Today")).Not.ToBeEmptyAsync();
+        await Expect(_homePage.StatValue("Active Bans")).Not.ToBeEmptyAsync();
+        await Expect(_homePage.StatValue("Trusted Users")).Not.ToBeEmptyAsync();
+        await Expect(_homePage.StatValue("Pending Reports")).Not.ToBeEmptyAsync();
     }
 
     [Test]
@@ -324,9 +260,7 @@ public class DashboardTests : AuthenticatedTestBase
         await _homePage.WaitForLoadAsync();
 
         // Assert
-        var pendingReports = await _homePage.GetPendingReportsCountAsync();
-        Assert.That(pendingReports, Is.EqualTo("0"),
-            "Fresh database should show 0 pending reports");
+        await Expect(_homePage.StatValue("Pending Reports")).ToHaveTextAsync("0");
     }
 
     [Test]
@@ -341,7 +275,7 @@ public class DashboardTests : AuthenticatedTestBase
         await _homePage.ClickPendingReportsCardAsync();
 
         // Assert - should navigate to reports page
-        await Expect(Page).ToHaveURLAsync(new System.Text.RegularExpressions.Regex("/reports"));
+        await Expect(Page).ToHaveURLAsync(new Regex("/reports"));
     }
 
     [Test]
@@ -355,8 +289,7 @@ public class DashboardTests : AuthenticatedTestBase
         await _homePage.WaitForLoadAsync();
 
         // Assert - Recent Activity section should be visible
-        Assert.That(await _homePage.IsActivityFeedVisibleAsync(), Is.True,
-            "Recent Activity section should be visible");
+        await Expect(_homePage.ActivityFeedHeading).ToBeVisibleAsync();
     }
 
     [Test]
@@ -370,12 +303,9 @@ public class DashboardTests : AuthenticatedTestBase
         await _homePage.WaitForLoadAsync();
 
         // Assert - Activity feed section should show but be empty
-        Assert.That(await _homePage.IsActivityFeedVisibleAsync(), Is.True,
-            "Activity feed section should be visible");
+        await Expect(_homePage.ActivityFeedHeading).ToBeVisibleAsync();
         // With no actions, the list item count should be 0
-        var itemCount = await _homePage.GetActivityFeedItemCountAsync();
-        Assert.That(itemCount, Is.EqualTo(0),
-            "Activity feed should have no items when database is empty");
+        await Expect(_homePage.ActivityFeedItems).ToHaveCountAsync(0);
     }
 
     [Test]
@@ -389,8 +319,7 @@ public class DashboardTests : AuthenticatedTestBase
         await _homePage.WaitForLoadAsync();
 
         // Assert - Review Reports button should be visible
-        Assert.That(await _homePage.IsReviewReportsButtonVisibleAsync(), Is.True,
-            "Review Reports button should be visible");
+        await Expect(_homePage.ReviewReportsButton).ToBeVisibleAsync();
     }
 
     #endregion

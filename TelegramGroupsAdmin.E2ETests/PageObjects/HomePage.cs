@@ -1,5 +1,4 @@
 using Microsoft.Playwright;
-using static Microsoft.Playwright.Assertions;
 
 namespace TelegramGroupsAdmin.E2ETests.PageObjects;
 
@@ -12,7 +11,7 @@ public class HomePage
     private readonly IPage _page;
 
     // Selectors - MudBlazor components
-    private const string PageTitle = ".mud-typography-h4";
+    private const string PageTitleSelector = ".mud-typography-h4";
     private const string LoadingIndicator = ".mud-progress-linear";
 
     public HomePage(IPage page)
@@ -26,8 +25,8 @@ public class HomePage
     public async Task NavigateAsync()
     {
         await _page.GotoAsync("/");
-        // Dashboard has interactive stats - need Blazor circuit connected
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        // Dashboard has interactive stats - need the Blazor circuit live
+        await _page.WaitForInteractiveAsync();
     }
 
     /// <summary>
@@ -43,98 +42,68 @@ public class HomePage
         });
     }
 
-    /// <summary>
-    /// Checks if the page is loading.
-    /// </summary>
-    public async Task<bool> IsLoadingAsync()
-    {
-        return await _page.Locator(LoadingIndicator).IsVisibleAsync();
-    }
+    /// <summary>The page title.</summary>
+    public ILocator PageTitle => _page.Locator(PageTitleSelector);
+
+    /// <summary>The stats section: a MudPaper with a MudGrid of stat items.</summary>
+    public ILocator StatsGrid => _page.Locator(".mud-paper .mud-grid");
+
+    /// <summary>The stat card (grid item) whose label is <paramref name="label"/>, e.g. "Total Messages".</summary>
+    public ILocator StatCard(string label) => _page.Locator(".mud-grid-item").Filter(new() { HasText = label });
 
     /// <summary>
-    /// Gets the page title text.
+    /// The numeric value (h5) of the stat card labelled <paramref name="label"/>.
+    /// Absent when the card is the greyed "GlobalAdmin only" placeholder.
     /// </summary>
-    public async Task<string?> GetPageTitleAsync()
-    {
-        return await _page.Locator(PageTitle).TextContentAsync();
-    }
+    public ILocator StatValue(string label) => StatCard(label).Locator(".mud-typography-h5");
 
     /// <summary>
-    /// Checks if the stats section is visible.
+    /// The "GlobalAdmin only" caption inside the stat card labelled <paramref name="label"/>, shown
+    /// instead of a numeric value when an Admin views a global card.
     /// </summary>
-    public async Task<bool> AreStatsVisibleAsync()
-    {
-        // Stats are in a MudPaper with MudGrid containing stat items
-        var statsGrid = _page.Locator(".mud-paper .mud-grid");
-        return await statsGrid.IsVisibleAsync();
-    }
+    public ILocator StatPlaceholderCaption(string label) => StatCard(label).GetByText(GlobalAdminOnlyCaption);
 
     /// <summary>
-    /// Gets the Total Messages stat value.
-    /// Uses Playwright's text-based locator which is more reliable for MudBlazor components.
+    /// The "View Messages" quick action. Role-based to distinguish it from the sidebar nav link.
     /// </summary>
-    public async Task<string?> GetTotalMessagesAsync()
-    {
-        // Find the grid item containing "Total Messages" text, then get the h5 value
-        var statItem = _page.Locator(".mud-grid-item").Filter(new() { HasText = "Total Messages" });
-        var value = statItem.Locator(".mud-typography-h5");
-        return await value.TextContentAsync();
-    }
+    public ILocator ViewMessagesButton => _page.GetByRole(AriaRole.Link, new() { Name = "View Messages" });
+
+    /// <summary>The "Refresh" button.</summary>
+    public ILocator RefreshButton => _page.GetByRole(AriaRole.Button, new() { Name = "Refresh" });
 
     /// <summary>
-    /// Gets the Unique Users stat value.
+    /// The "Review Reports" button. MudButton renders text in uppercase: "REVIEW REPORTS (N)".
     /// </summary>
-    public async Task<string?> GetUniqueUsersAsync()
+    public ILocator ReviewReportsButton => _page.GetByRole(AriaRole.Button, new()
     {
-        var statItem = _page.Locator(".mud-grid-item").Filter(new() { HasText = "Unique Users" });
-        var value = statItem.Locator(".mud-typography-h5");
-        return await value.TextContentAsync();
-    }
+        NameRegex = new System.Text.RegularExpressions.Regex("^REVIEW REPORTS", System.Text.RegularExpressions.RegexOptions.IgnoreCase)
+    });
+
+    /// <summary>The info alert shown when no messages are cached.</summary>
+    public ILocator NoMessagesAlert => _page.Locator(".mud-alert:has-text('hasn\\'t cached any messages')");
 
     /// <summary>
-    /// Gets the Images stat value.
+    /// The Recent Activity heading. The panel renders for every tier; for an Admin it is a placeholder.
     /// </summary>
-    public async Task<string?> GetImagesCountAsync()
-    {
-        var statItem = _page.Locator(".mud-grid-item").Filter(new() { HasText = "Images" });
-        var value = statItem.Locator(".mud-typography-h5");
-        return await value.TextContentAsync();
-    }
+    public ILocator ActivityFeedHeading => _page.Locator("text=Recent Activity");
+
+    /// <summary>The Recent Activity panel.</summary>
+    public ILocator ActivityFeedPanel => _page.Locator(".mud-paper").Filter(new() { HasText = "Recent Activity" });
+
+    /// <summary>The activity items listed in the Recent Activity panel.</summary>
+    public ILocator ActivityFeedItems => ActivityFeedPanel.Locator(".mud-list-item");
 
     /// <summary>
-    /// Gets the Data Range stat value.
+    /// The "Requires GlobalAdmin to view" caption shown in place of the activity list for an Admin.
     /// </summary>
-    public async Task<string?> GetDataRangeAsync()
-    {
-        var statItem = _page.Locator(".mud-grid-item").Filter(new() { HasText = "Data Range" });
-        var value = statItem.Locator(".mud-typography-h5");
-        return await value.TextContentAsync();
-    }
-
-    /// <summary>
-    /// Checks if the "View Messages" button is visible.
-    /// Uses role-based locator to distinguish from sidebar nav link.
-    /// </summary>
-    public async Task<bool> IsViewMessagesButtonVisibleAsync()
-    {
-        // Use GetByRole to find the button specifically (not the nav link)
-        return await _page.GetByRole(AriaRole.Link, new() { Name = "View Messages" }).IsVisibleAsync();
-    }
+    public ILocator ActivityFeedPlaceholderCaption => ActivityFeedPanel.GetByText(ActivityPlaceholderCaption);
 
     /// <summary>
     /// Clicks the "View Messages" button.
     /// </summary>
     public async Task ClickViewMessagesAsync()
     {
-        await _page.GetByRole(AriaRole.Link, new() { Name = "View Messages" }).ClickAsync();
-    }
-
-    /// <summary>
-    /// Checks if the "Refresh" button is visible.
-    /// </summary>
-    public async Task<bool> IsRefreshButtonVisibleAsync()
-    {
-        return await _page.GetByRole(AriaRole.Button, new() { Name = "Refresh" }).IsVisibleAsync();
+        await ViewMessagesButton.ClickAsync();
     }
 
     /// <summary>
@@ -142,63 +111,7 @@ public class HomePage
     /// </summary>
     public async Task ClickRefreshAsync()
     {
-        await _page.GetByRole(AriaRole.Button, new() { Name = "Refresh" }).ClickAsync();
-    }
-
-    /// <summary>
-    /// Checks if the "no messages" info alert is visible.
-    /// </summary>
-    public async Task<bool> IsNoMessagesAlertVisibleAsync()
-    {
-        var alert = _page.Locator(".mud-alert:has-text('hasn\\'t cached any messages')");
-        return await alert.IsVisibleAsync();
-    }
-
-    /// <summary>
-    /// Gets the URL the page navigated to.
-    /// </summary>
-    public string CurrentUrl => _page.Url;
-
-    #region New Dashboard Stats (#173)
-
-    /// <summary>
-    /// Gets the Spam Today stat value.
-    /// </summary>
-    public async Task<string?> GetSpamTodayAsync()
-    {
-        var statItem = _page.Locator(".mud-grid-item").Filter(new() { HasText = "Spam Today" });
-        var value = statItem.Locator(".mud-typography-h5");
-        return await value.TextContentAsync();
-    }
-
-    /// <summary>
-    /// Gets the Active Bans stat value.
-    /// </summary>
-    public async Task<string?> GetActiveBansAsync()
-    {
-        var statItem = _page.Locator(".mud-grid-item").Filter(new() { HasText = "Active Bans" });
-        var value = statItem.Locator(".mud-typography-h5");
-        return await value.TextContentAsync();
-    }
-
-    /// <summary>
-    /// Gets the Trusted Users stat value.
-    /// </summary>
-    public async Task<string?> GetTrustedUsersAsync()
-    {
-        var statItem = _page.Locator(".mud-grid-item").Filter(new() { HasText = "Trusted Users" });
-        var value = statItem.Locator(".mud-typography-h5");
-        return await value.TextContentAsync();
-    }
-
-    /// <summary>
-    /// Gets the Pending Reports count from the dashboard card.
-    /// </summary>
-    public async Task<string?> GetPendingReportsCountAsync()
-    {
-        var statItem = _page.Locator(".mud-grid-item").Filter(new() { HasText = "Pending Reports" });
-        var value = statItem.Locator(".mud-typography-h5");
-        return await value.TextContentAsync();
+        await RefreshButton.ClickAsync();
     }
 
     /// <summary>
@@ -211,120 +124,10 @@ public class HomePage
         await card.ClickAsync();
     }
 
-    /// <summary>
-    /// Checks if the Recent Activity section is visible.
-    /// Only GlobalAdmin/Owner see this panel (gated on _canSeeGlobalStats).
-    /// </summary>
-    public async Task<bool> IsActivityFeedVisibleAsync()
-    {
-        return await _page.Locator("text=Recent Activity").IsVisibleAsync();
-    }
-
-    /// <summary>
-    /// Checks if the Total Messages stat card is visible.
-    /// Only GlobalAdmin/Owner see this global stat card (gated on _canSeeGlobalStats).
-    /// </summary>
-    public async Task<bool> IsTotalMessagesCardVisibleAsync()
-    {
-        var statItem = _page.Locator(".mud-grid-item").Filter(new() { HasText = "Total Messages" });
-        return await statItem.IsVisibleAsync();
-    }
-
-    /// <summary>
-    /// Checks if the Pending Reports stat card is visible.
-    /// This scoped card is shown for all permission tiers (Admin, GlobalAdmin, Owner).
-    /// </summary>
-    public async Task<bool> IsPendingReportsCardVisibleAsync()
-    {
-        var statItem = _page.Locator(".mud-grid-item").Filter(new() { HasText = "Pending Reports" });
-        return await statItem.IsVisibleAsync();
-    }
-
     // The greyed placeholder rendered in global cards for an Admin shows this
     // caption (Home.razor) instead of a numeric value, plus a Lock icon.
     private const string GlobalAdminOnlyCaption = "GlobalAdmin only";
 
     // The Recent Activity panel placeholder caption shown for an Admin (Home.razor).
     private const string ActivityPlaceholderCaption = "Requires GlobalAdmin to view";
-
-    /// <summary>
-    /// Returns true when the Total Messages card is rendered as the greyed
-    /// "GlobalAdmin only" placeholder (Lock icon + caption, no numeric value).
-    /// Uses a web-first assertion as the sync point before reading state so the
-    /// card has rendered. The data-leak guarantee is that an Admin sees the
-    /// caption and NO <c>.mud-typography-h5</c> numeric value.
-    /// </summary>
-    public async Task<bool> IsTotalMessagesGreyedPlaceholderAsync()
-    {
-        var card = _page.Locator(".mud-grid-item").Filter(new() { HasText = "Total Messages" });
-        await Expect(card).ToBeVisibleAsync(new() { Timeout = 10000 });
-
-        var hasPlaceholderCaption =
-            await card.GetByText(GlobalAdminOnlyCaption).CountAsync() > 0;
-        var hasNumericValue = await card.Locator(".mud-typography-h5").CountAsync() > 0;
-
-        return hasPlaceholderCaption && !hasNumericValue;
-    }
-
-    /// <summary>
-    /// Returns the numeric Total Messages value (the <c>.mud-typography-h5</c>
-    /// text) when the card shows real data, or <c>null</c> when the card is
-    /// rendered as the greyed "GlobalAdmin only" placeholder (no numeric value).
-    /// </summary>
-    public async Task<string?> GetTotalMessagesValueOrNullAsync()
-    {
-        var card = _page.Locator(".mud-grid-item").Filter(new() { HasText = "Total Messages" });
-        await Expect(card).ToBeVisibleAsync(new() { Timeout = 10000 });
-
-        var value = card.Locator(".mud-typography-h5");
-        if (await value.CountAsync() == 0)
-        {
-            return null;
-        }
-
-        return await value.TextContentAsync();
-    }
-
-    /// <summary>
-    /// Returns true when the Recent Activity panel is rendered as the greyed
-    /// placeholder ("Requires GlobalAdmin to view") rather than a real activity
-    /// list. Web-first assertion is the sync point before reading state.
-    /// </summary>
-    public async Task<bool> IsActivityFeedPlaceholderAsync()
-    {
-        var panel = _page.Locator(".mud-paper").Filter(new() { HasText = "Recent Activity" });
-        await Expect(panel).ToBeVisibleAsync(new() { Timeout = 10000 });
-
-        return await panel.GetByText(ActivityPlaceholderCaption).CountAsync() > 0;
-    }
-
-    /// <summary>
-    /// Gets the count of recent activity items displayed.
-    /// </summary>
-    public async Task<int> GetActivityFeedItemCountAsync()
-    {
-        var activitySection = _page.Locator(".mud-paper").Filter(new() { HasText = "Recent Activity" });
-        var listItems = activitySection.Locator(".mud-list-item");
-        return await listItems.CountAsync();
-    }
-
-    /// <summary>
-    /// Checks if the "Review Reports" button is visible.
-    /// MudButton renders text in uppercase: "REVIEW REPORTS (N)"
-    /// </summary>
-    public async Task<bool> IsReviewReportsButtonVisibleAsync()
-    {
-        return await _page.GetByRole(AriaRole.Button, new() { NameRegex = new System.Text.RegularExpressions.Regex("^REVIEW REPORTS", System.Text.RegularExpressions.RegexOptions.IgnoreCase) }).IsVisibleAsync();
-    }
-
-    /// <summary>
-    /// Clicks the "Review Reports" button.
-    /// MudButton renders text in uppercase: "REVIEW REPORTS (N)"
-    /// </summary>
-    public async Task ClickReviewReportsAsync()
-    {
-        await _page.GetByRole(AriaRole.Button, new() { NameRegex = new System.Text.RegularExpressions.Regex("^REVIEW REPORTS", System.Text.RegularExpressions.RegexOptions.IgnoreCase) }).ClickAsync();
-    }
-
-    #endregion
 }

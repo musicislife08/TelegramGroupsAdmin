@@ -6,6 +6,7 @@
 }
 
 .telegram-layout {
+    position: relative; /* containing block for the absolutely positioned mobile panes */
     display: flex;
     height: calc(100vh - 64px - 48px); /* Account for app header (64px) and container margin (my-4 = 48px) */
     background: #0e1621;
@@ -104,6 +105,7 @@
         position: absolute;
         left: 0;
         top: 0;
+        bottom: 0; /* fill the layout: absolute panes would otherwise size to their content */
         z-index: 10;
         transition: transform 0.3s ease;
     }
@@ -117,6 +119,7 @@
         position: absolute;
         left: 0;
         top: 0;
+        bottom: 0;
         transform: translateX(100%);
         transition: transform 0.3s ease;
     }

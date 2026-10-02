@@ -7,14 +7,14 @@ This file is auto-loaded by Claude Code when working under `TelegramGroupsAdmin.
 The binding rule set lives in `.claude/rules/integration-test-data.md` and is injected automatically when you edit files in this project or a superpowers plan/spec. The short form:
 
 - A test asserts its logic against canonical rows. **Never seed a precondition** — no SUT write method (`GetOrCreateAsync`, `UpsertAsync`, `SetBanStatusAsync`, `TrustUserAsync`, …) as setup, no `ctx.<Table>.Add`, no raw `INSERT`. A SUT write appears only when that write **is** the assertion subject.
-- Canonical lacks a shape? **Do not add rows.** Find a canonical row no test or doc references and flag-edit it in place; keep the story plausible; pin it in `TestData/GoldenDatasetConstants.cs`; add a Part 2 recipe marked "(canonical edit <date>)"; guard the precondition in the test by reading the row back.
+- Canonical lacks a shape? **Do not add rows.** Find a canonical row no test or doc references and flag-edit it in place; keep the story plausible; pin it in `TelegramGroupsAdmin.Testing.Golden/GoldenDatasetConstants.cs`; add a Part 2 recipe marked "(canonical edit <date>)"; guard the precondition in the test by reading the row back.
 - Read expected counts/names at runtime, never hard-code them.
 - Hit an infrastructure problem (template build, FK, sequence, missing shape)? Escalate — never change the assertion to make it pass.
 
 ## Part 1 - Dataset orientation
 
 ### What this is
-The canonical dataset is a frozen superset of every entity type the integration suite needs to read from. Tests clone it per-method via Postgres template DBs (`MigrationTestHelper.CreateDatabaseFromGoldenTemplateAsync`) and either consume it as-is, reduce it down with `GoldenDataset.Reduce(ctx).KeepMessages(...).ApplyAsync()` (subtractive — FK CASCADE drops everything outside the allowlist), or mutate it in-place with `GoldenDataset.Mutate(ctx).ShiftDetectionResultTimestamps(...).ApplyAsync()` (NOW()-relative re-timing for windowed aggregations). Source: `TestData/SQL/canonical/*.sql` (33 files, 2,797 INSERT statements).
+The canonical dataset is a frozen superset of every entity type the integration suite needs to read from. Tests clone it per-method via Postgres template DBs (`MigrationTestHelper.CreateDatabaseFromGoldenTemplateAsync`) and either consume it as-is, reduce it down with `GoldenDataset.Reduce(ctx).KeepMessages(...).ApplyAsync()` (subtractive — FK CASCADE drops everything outside the allowlist), or mutate it in-place with `GoldenDataset.Mutate(ctx).ShiftDetectionResultTimestamps(...).ApplyAsync()` (NOW()-relative re-timing for windowed aggregations). Source: `TelegramGroupsAdmin.Testing.Golden/SQL/canonical/*.sql` (33 files, 2,797 INSERT statements).
 
 True-empty tests use `MigrationTestHelper.CreateDatabaseFromEmptyTemplateAsync` instead (post-migrate, zero rows) — cheaper than a golden clone, and the right choice when the SUT writes its own state from scratch.
 
@@ -33,10 +33,10 @@ Origin: prod DB snapshot from 2026-04-30. Bootstrap pipeline (full detail in `do
 
 | Order | Table | Rows | Notes |
 |-------|-------|------|-------|
-| 01 | users | 9 | Web users: 4 canonical fixtures + 5 prod-derived. All share one bcrypt hash. |
+| 01 | users | 9 | Web users, all 9 pinned in `GoldenDatasetConstants.WebUsers` (5 active login anchors, 1 active GlobalAdmin with a stored TOTP secret, 2 soft-deleted, 1 disabled). Canonical edits 2026-10-01: `rerun@` flag-edited to Disabled; `perfume@`'s `totp_secret` is filled at load from the plaintext fixture `01_users.totp_secrets.json` (see Part 2). All share one PBKDF2 hash. |
 | 02 | telegram_users | 335 | Anchor set after Strict-Plus prune (every row referenced by >=1 child). Two rows flag-edited 2026-09-13 for Users-tab tests (see Part 2 recipes). |
 | 03 | managed_chats | 21 | Synthetic themed names; one disambiguated duplicate via `is_deleted`. |
-| 04 | configs | 20 | `chat_id=0` global row + 19 per-chat. Encrypted JSONB columns NULL; `welcome_config` populated only on global + Main Chat. |
+| 04 | configs | 20 | `chat_id=0` global row + 19 per-chat. Encrypted JSONB columns NULL in the SQL; `api_keys` on the global row is filled at load from the plaintext fixture `04_configs.api_keys.json` (encrypted with the template-build key ring). `welcome_config` populated only on global + Main Chat. |
 | 05 | content_detection_configs | 18 | One per non-deleted managed_chat. |
 | 06 | ban_celebration_captions | 74 | Reference data, copied whole. |
 | 07 | ban_celebration_gifs | 92 | Reference data, copied whole. |
@@ -60,7 +60,7 @@ Origin: prod DB snapshot from 2026-04-30. Bootstrap pipeline (full detail in `do
 | 27 | user_tags | 12 | |
 | 28 | welcome_responses | 11 | Deliberately trimmed from 293 (Pre-3A.7 audit): no test exercised the prod-derived volume. Kept: 5 synthetics 999001..999005 (one per WelcomeResponseType, anchors `WelcomeTimeoutJobTests`), 4 prod-derived MainChat anchors (ids 73/75/94/128) for AnalyticsRepositoryTests' status-distributed shape (3 Accepted + 1 Timeout + the synthetic Denied/Left filling out the 6 analytics windows), 2 non-MainChat keepers (ids 55/121) for chat-grouping shape diversity. |
 | 29 | invites | 19 | |
-| 30 | reports | 14 | `reviewed_by` mapped via deterministic hashtext to canonical fixture emails. Ids 186-188 are synthetic pending fixtures (one user, three report types) added for join-gate cleanup tests. All six pre-existing exam (`type=2`) contexts carry `"outcome": 0`. |
+| 30 | reports | 14 | `reviewed_by` mapped via deterministic hashtext to canonical fixture emails. Ids 186-188 are synthetic pending fixtures (one user, three report types) added for join-gate cleanup tests. All six pre-existing exam (`type=2`) contexts carry `"outcome": 0`. Profile-scan (`type=3`) `context.aiSignals` restored to string arrays (canonical edit 2026-10-01; see Part 2 "Reports"). |
 | 31 | message_edits | 23 | Edit history for messages whose canonical row carries `edit_count > 0`. |
 | 32 | detection_results | 461 | Verdict events: `source`/`classification` set by `tools/convert-canonical-to-verdict-events.sql` (canonical edit 2026-09-27), which also folded the old explicit labels in as decision rows (84 added). Legacy verdict columns dropped by `DropLegacyVerdictColumns` (file regenerated without them, same rows). URL hostnames in `check_results_json` scrubbed to `canonical-spam.test`. dr 22 and 1639 appended 2026-09-28 (converted OpenAI vetoes, stored as `AddVerdictEvents` repairs them). `is_spam` is generated from `classification` (not in the file); the `message_verdicts` view is the verdict. |
 | 34 | user_actions | 993 | Bootstrap missed adding 7 synthetic ban-celebration anchor rows; see Part 2 ban-celebration note. |
@@ -68,7 +68,7 @@ Origin: prod DB snapshot from 2026-04-30. Bootstrap pipeline (full detail in `do
 | 36 | ban_celebration_subscribers | 5 | Approved canonical addition 2026-09-25 (new table — no row to flag-edit). See Part 2 "DM ban celebration subscribers". |
 
 ### What's NOT in the dataset
-- **Encrypted JSONB credentials** in `configs` (sendgrid keys, web push keys, AI provider keys) - left NULL. Populated at runtime by the app via `IDataProtectionProvider`.
+- **Encrypted JSONB credentials** in `configs` (sendgrid keys, web push keys) - left NULL. Populated at runtime by the app via `IDataProtectionProvider`. Exception: `api_keys` on the global row — `GoldenDataset.LoadCanonicalAsync` encrypts the plaintext fixture `canonical/04_configs.api_keys.json` (one dummy AI connection key, `GoldenDatasetConstants.SystemConfig`) with the session's provider, so the app under test can read it back.
 - **Media files** referenced by `messages.media_features` / local media paths - no payloads on disk.
 - **Email verification tokens, password reset tokens, locked_until timestamps** - all NULL.
 - **TOTP secrets** - NULL except where canonical fixtures need TOTP-enabled state for tests (see Part 2 scenarios).
@@ -85,6 +85,7 @@ Origin: prod DB snapshot from 2026-04-30. Bootstrap pipeline (full detail in `do
 - **Non-banned telegram_users:** first/last/username replaced with deterministic wordlist values; NULL fields stay NULL.
 - **Cross-table free-text references** (`admin_notes`, `audit_log` narrative, `reports.reviewed_by`): rewritten to point at the canonical (sanitized or rotated) name, not the prod name. The `Connected as <name> (ID: <id>)` audit pattern is rebuilt from sanitized telegram_users data; admin identities map to canonical fixture emails (`owner/admin/globaladmin@example.com`) via deterministic hashtext.
 - **URL hostnames in spam content** (`messages`, `message_translations`, `detection_results.check_results_json`): uniformly replaced with `canonical-spam.test`, paths/queries preserved verbatim. No domain exceptions (`t.me` included). This matches what the SUT actually does (hostname-only blocklist + tokenizer-based ML).
+- **Free-text JSONB fields** (`reports.context` aiReason/aiSignals, exam answers): the length-preserving lorem sanitizer rewrites string values; it also rewrote three profile-scan `aiSignals` *arrays* as single strings (shape change, not a prod shape — repaired 2026-10-01, guarded by `CanonicalReportContextShapeTests`). Check `jsonb_typeof` before trusting a sanitized JSONB value's shape.
 - **PII in spam messages:** phone numbers replaced with NANP-reserved `+15555550199` / `555-555-0199`; non-canonical emails replaced with `spam@canonical.test`. Not load-bearing for spam classifier features.
 - **LLM prompt content** (`configs.welcome_config` + `prompt_versions`): minimized to 1 global synthetic baseline + 1 Main Chat customized variant + 1 Main Chat `prompt_versions` row. The other 18 per-chat configs have `welcome_config = NULL` (fall back to global) and `invite_link = NULL`.
 - **`username_blacklist`:** trimmed to 2 rows (1 enabled-Exact + 1 disabled-Exact). Other match types (Contains/Regex/StartsWith) are not implemented in `BlacklistMatchType` / `UsernameBlacklistService.CheckDisplayNameAsync`; fixtures for those should be added when the feature ships.
@@ -93,17 +94,17 @@ Origin: prod DB snapshot from 2026-04-30. Bootstrap pipeline (full detail in `do
 For column-level details, read the per-table SQL file directly (`head -1 <file>` shows the INSERT column list, then read a row or two). Do not transcribe column lists into this document.
 
 ### Canonical anchors in code
-Test code references canonical IDs through `TestData/GoldenDatasetConstants.cs` — the single discovery surface for every ID the test suite pins to. **Magic-string UUIDs and bare numeric chat/message ids in test code are a code smell**: extend `GoldenDatasetConstants` with a named constant instead.
+Test code references canonical IDs through `TelegramGroupsAdmin.Testing.Golden/GoldenDatasetConstants.cs` — the single discovery surface for every ID the test suite pins to. **Magic-string UUIDs and bare numeric chat/message ids in test code are a code smell**: extend `GoldenDatasetConstants` with a named constant instead.
 
-Layout (`internal static class GoldenDatasetConstants` with nested static classes):
-- `WebUsers` — `OwnerId`, `AdminId` (canonical `web_users.id` UUIDs)
+Layout (`public static class GoldenDatasetConstants` with nested static classes):
+- `WebUsers` — ids and emails for the Owner, Admin, GlobalAdmin, no-TOTP GlobalAdmin, no-TOTP Admin, Deleted Admin and Deleted GlobalAdmin anchors, plus the shared `SecurityStamp` and `Password` (canonical `users.id` UUIDs)
 - `Chats` — `MainChatId`
 - `Retention` — message anchors, `MessageShifts`, `AllMessageRefs`, `ExpectedDeletionsWith30DayRetention` (consumed by `MessageHistoryRepositoryTests.CleanupExpiredAsync_*`)
 - `Analytics` — DR / WR anchors, `DetectionResultShifts`, `WelcomeResponseShifts`, `AllMessageRefs`, expected counts (consumed by `AnalyticsRepositoryTests`)
 - `Reports` — `PendingExamFailureId`, `ResolvedExamFailureId`, `AutoApprovedExamPassId`, `AutoApprovedExamPassUserId` (consumed by `ExamResultRepositoryTests`)
 - `Verdicts` — verdict-event anchors for the `message_verdicts` view, training levels, auto-trust and retention (see Part 2 "Verdict events")
 
-Promote a constant to its top-level domain class (`WebUsers`, `Chats`) once a second consumer wants it; until then, keep it under a test-domain nested class next to the tests that use it. The `GoldenDataset.cs` loader file holds the canonical *behavior* (`LoadCanonicalAsync`, `Reduce`, `Mutate`); the constants file holds canonical *data*.
+Promote a constant to its top-level domain class (`WebUsers`, `Chats`) once a second consumer wants it; until then, keep it under a test-domain nested class next to the tests that use it. The `GoldenDataset.cs` loader file (also in `TelegramGroupsAdmin.Testing.Golden`) holds the canonical *behavior* (`LoadCanonicalAsync`, `Reduce`, `Mutate`); the constants file holds canonical *data*.
 
 ## Part 2 - Scenario recipes
 
@@ -121,22 +122,48 @@ Recipe format: a heading, the anchor id(s), a one-line description, and "use whe
 #### GlobalAdmin: cross-chat elevated fixture
 - `User.Id` = `8e3a7211-d0eb-40c6-af8e-7d15bb42d10a`
 - Email: `ahead@canonical.test`, permission_level 1, status 1, TOTP enabled, invited by Owner
-- Use when: a test needs an active elevated (cross-chat) admin who is NOT the Owner (permission boundary tests). Two additional active GlobalAdmins exist in canonical (`perfume@`, `machine@`) but only this one is recipe-exposed.
+- Use when: a test needs an active elevated (cross-chat) admin who is NOT the Owner (permission boundary tests). The other active GlobalAdmins have their own recipes below: `machine@` (no TOTP) and `perfume@` (stored TOTP secret).
+
+#### GlobalAdmin without TOTP: password-login elevated fixture
+- `User.Id` = `c2674f3a-16e6-4537-9cbc-a80a0ea9c686`
+- Email: `machine@canonical.test`, permission_level 1, status 1, TOTP disabled
+- Use when: E2E or integration tests need an elevated user who logs in with password alone (no TOTP prompt). Constants: `GoldenDatasetConstants.WebUsers.NoTotpGlobalAdminId` / `NoTotpGlobalAdminEmail`. Password: `GoldenDatasetConstants.WebUsers.Password`.
+
+#### Admin without TOTP: password-login standard fixture
+- `User.Id` = `28d7aa41-5be5-43a3-a48e-7b1a4bbe5891`
+- Email: `reshoot@canonical.test`, permission_level 0, status 1, TOTP disabled
+- Use when: E2E or integration tests need a standard-permission user who logs in with password alone (no TOTP prompt). Constants: `GoldenDatasetConstants.WebUsers.NoTotpAdminId` / `NoTotpAdminEmail`.
 
 #### Admin: standard-permission fixture
 - `User.Id` = `921637d5-0f65-4c66-b143-6f057dd06a1c`
 - Email: `admin@example.com`, permission_level 0, status 1, TOTP enabled, invited by Owner
-- Use when: a test needs an authenticated user with normal permissions (most authenticated-flow tests). One additional active Admin exists in canonical (`rerun@`) but only this one is recipe-exposed.
+- Use when: a test needs an authenticated user with normal permissions (most authenticated-flow tests). The other Admin-level rows are the no-TOTP Admin (`reshoot@`, recipe below) and the disabled one (`rerun@`, status 2, recipe below).
 
 #### Deleted Admin: soft-delete fixture
 - `User.Id` = `a8dc8371-afc5-4b61-9d71-d177f2dd9ddd`
 - Email: `deleted@example.com`, status 3 (deleted), is_active false
-- Use when: a test asserts on soft-delete behavior or filters out deleted users. One additional deleted Admin exists in canonical (`reshoot@`) but only this one is recipe-exposed.
+- Use when: a test asserts on soft-delete behavior or filters out deleted users (E2E: the Restore action on the Web Admin Accounts page). The other soft-deleted row is the GlobalAdmin below.
 
 #### Deleted GlobalAdmin: soft-deleted elevated fixture
 - `User.Id` = `ba9ba542-3df6-4473-a820-578562780c57`
 - Email: `globaladmin@example.com`, permission_level 1, status 3
 - Use when: a test asserts that elevated-but-deleted users are still excluded.
+
+#### Disabled Admin: disabled-account fixture (canonical edit 2026-10-01)
+- `User.Id` = `6a66f0f6-6e59-45ac-ac5f-51a2df0c9c58`
+- Email: `rerun@canonical.test`, permission_level 0, status 2 (Disabled), is_active false, TOTP disabled, invited by Owner
+- Edit: status 3 → 2. Story: the Owner disabled the account twelve minutes after creating it (modified_by Owner, modified_at 06:12) rather than deleting it. Canonical had no Disabled web user; the two remaining soft-deleted rows (`deleted@`, `globaladmin@`) keep the soft-delete recipes intact.
+- Use when: a test needs a web user in the Disabled state — the Enable action, or the default status filter (Active + Pending + Disabled) showing a non-active row. Constants: `GoldenDatasetConstants.WebUsers.DisabledAdminId` / `DisabledAdminEmail` / `DisabledAdminStatus`. Guarded by `CanonicalWebUserAnchorTests.DisabledAnchor_IsADisabledInactiveAdmin`; E2E tests read the status back in `ArrangeDataAsync`.
+
+#### GlobalAdmin with a stored TOTP secret (canonical edit 2026-10-01)
+- `User.Id` = `f2f2f5c2-2cd2-45a1-a272-83f59076fb40`
+- Email: `perfume@canonical.test`, permission_level 1, status 1, TOTP enabled, email verified
+- Edit: the only web user whose `users.totp_secret` is non-NULL. The SQL keeps the column NULL (ciphertext is key-ring bound, like `configs.api_keys`); the base32 plaintext lives in `SQL/canonical/01_users.totp_secrets.json` (user id → secret) and `GoldenDataset.LoadCanonicalAsync` protects it at load with `DataProtectionPurposes.TotpSecrets` — the purpose the app's `DataProtectionService` uses — so `TotpService` can unprotect it. A dummy 20-byte secret; it protects nothing.
+- Use when: a test needs a user with a completed TOTP setup — the Owner's Reset TOTP action (the menu item renders only with a stored secret), or a real authenticator login (`TotpHelper` + the plaintext). Constants: `GoldenDatasetConstants.WebUsers.StoredTotpGlobalAdminId` / `StoredTotpGlobalAdminEmail` / `StoredTotpGlobalAdminBase32`. Guarded by `CanonicalWebUserAnchorTests.StoredTotpAnchor_*`. Do not give owner@/admin@/ahead@ a secret: UI-login tests rely on them landing on /login/setup-2fa.
+
+#### Locked web user: `GoldenDataset.Mutate(ctx).LockWebUser(id, lockFor)` (no canonical edit)
+- A lockout is only "locked" while `locked_until` is ahead of NOW(), so canonical's frozen snapshot cannot carry one. The mutate verb sets `locked_until = NOW() + lockFor` and `failed_login_attempts = 5` (`AccountLockoutConstants.MaxFailedAttempts`) on any canonical web user — the shape `AccountLockoutService` leaves after the fifth failed login.
+- Use when: a test needs the Locked chip / Unlock Account action (E2E) or `UserRecord.IsLocked` / `CanLogin` false. Lock an active anchor such as `NoTotpAdminId`; apply before the app starts.
 
 ### Telegram users
 
@@ -163,6 +190,11 @@ Recipe format: a heading, the anchor id(s), a one-line description, and "use whe
 - `@luminanceflagstick`, "Agnostic", `is_active=false`, `is_banned=false`, 0 messages, 2 `user_actions` (Mute "Pending welcome verification", Kick "Welcome timeout") in MainChat
 - Use when: a test needs a user who never passed the join gate (hidden from the Active tab, shown on All with the Unverified chip). Constant: `GoldenDatasetConstants.UsersPage.KickedJoinerId`.
 
+#### Mixed-issuer moderation subject (Audit Log filters)
+- `telegram_user_id` = `9704804870465`
+- Untouched canonical row with 9 `user_actions` (ids 196..245, Nov 2025): Auto-Detection (ban + deletes), three web users (Owner, the stored-TOTP GlobalAdmin, the no-TOTP GlobalAdmin: trust/untrust pairs) and a Telegram admin (`telegram_user_id` 9906913218017) — every actor kind the moderation log's Issued By column renders. Fewer rows than the moderation table's first page (25), so a filtered first page shows them all.
+- Use when: a test filters the Audit Log's Telegram Moderation Log by user and needs to prove the user column alone drives the narrowing. Constant: `GoldenDatasetConstants.ModerationLog.MixedIssuerUserId`. Issued-by anchors for the same filter (`UserActionsRepositoryIssuedByFilterTests`, `AuditLogGoldenTests`): `SystemActorIds.ExamFlow` (8 `user_actions`, rendered "Exam Flow"), the no-TOTP GlobalAdmin (`WebUsers.NoTotpGlobalAdminId`, 8 rows, rendered as its email) and the Telegram admin `ModerationLog.TelegramAdminIssuerId` (20 rows, rendered as its full name — read the names from the clone, never paste them). Counts are read from the clone at runtime.
+
 #### Trusted kicked joiner (canonical edit 2026-09-13)
 - `telegram_user_id` = `9301917046112`
 - `@tadpolesleek`, "Supply", `is_active=false`, `is_trusted=true` (flag edited in place; row is otherwise a welcome-timeout kick like the one above)
@@ -172,6 +204,25 @@ Recipe format: a heading, the anchor id(s), a one-line description, and "use whe
 - `telegram_user_id` = `9995544961449`
 - `@curveabdominal`, "Crawling", `is_active=false`, `is_banned=true`, `ban_expires_at=2026-04-30 12:56:53+00` (past), `banned_at=2026-04-30 00:56:53+00`
 - Use when: a test needs a user the Banned tab drops (expired) that every other status tab also excludes — the shape the All tab guarantees. Constant: `UsersPage.ExpiredBanUserId`.
+
+#### Users page members: trust subject, badge holders, warned members (no canonical edit — pinned unreferenced rows)
+- `UsersPage.UntrustedActiveMemberId` = `9704788798695`: `is_active=true`, `is_banned=false`, `is_trusted=false`, not a bot, no `chat_admins` row, 2 messages in one chat. The Users page trust toggle's subject (`UsersGoldenTests`): the app write IS the assertion (`is_trusted` + a `Trust` `user_actions` row by the Owner).
+- `UsersPage.ChatAdminMemberId` = `9187417286258`: trusted active member with 4 `is_active=true` `chat_admins` rows. Carries both the Chat admin and the Trusted badge — every non-bot active canonical admin is also trusted, so no canonical row proves the admin badge alone.
+- `UsersPage.WarnedTrustedMemberId` = `9685233957282` and `UsersPage.ExpiredWarningTrustedMemberId` = `9086323729821`: trusted active members, no active admin seat, one `warnings` JSONB entry each with `ExpiresAt` in April 2026 — like all three canonical warnings, expired at the snapshot. The first is the anchor for `ExtendTelegramUserWarnings` (below); the second stays expired to prove the active-warning predicate (Active renders "None"; Tagged does not list it — the Tagged tab counts notes, live tags and warnings in force only).
+- Use when: a test needs a trust toggle target, a row with the Trusted / Chat admin badge, or a member with a warning. Read-backs in the tests guard every flag.
+
+#### Warning in force: `GoldenDataset.Mutate(ctx).ExtendTelegramUserWarnings(id, expiresIn)` (no canonical edit)
+- A warning counts only while its `ExpiresAt` is ahead of NOW() (90-day default expiry), so canonical's frozen snapshot carries only expired warnings. The mutate verb sets every element's `ExpiresAt` in `telegram_users.warnings` to `NOW() + expiresIn`, leaving IssuedAt, Reason, actor and context alone; it fails loudly for a user with no warnings (that is a missing anchor, not something to invent).
+- Use when: a test needs the Warnings cell chip, `WarningCount > 0`, or `GetActiveWarningCountAsync` non-zero. Re-time `UsersPage.WarnedTrustedMemberId` and read the expected count back with the same predicate (`ExpiresAt == null || ExpiresAt > now`); apply before the app starts. Self-tests: `GoldenMutatePlanTests.ExtendTelegramUserWarnings_*`.
+
+#### Email configured: `GoldenDataset.Mutate(ctx).EnableSendGridApiKey(provider, key)` (no canonical edit)
+- Canonical's global `sendgrid_config` is enabled with a from-address, but no SendGrid key is stored in `api_keys` (encrypted columns are not in the SQL), so `IFeatureAvailabilityService.GetEmailConfigurationStateAsync` reads `Disabled`: the Login page hides the forgot-password / resend-verification links and the Register page shows the "email verification disabled" note. The mutate verb decrypts the canonical `api_keys` under `DataProtectionPurposes.ApiKeys`, adds `sendGrid`, and re-encrypts, leaving the AI connection keys and every other row alone; it fails loudly without a stored key set. Pass the key ring the app under test uses (E2E: the fixture's shared key directory, application name `TgSpamPreFilter`). The key is a dummy.
+- Use when: a test needs email read as configured (Login page links, password-reset or verification flows) without a SUT write. Self-tests: `GoldenMutatePlanTests.EnableSendGridApiKey_*`.
+
+#### Removed tag on an otherwise untagged member (canonical edit 2026-10-01)
+- `user_tags.id` = `11` (`UserTags.RemovedTagId`), `telegram_user_id` = `9579510369392` (`UserTags.RemovedTagUserId`)
+- `@parasailprojector`, "Recycler": active, trusted, not banned, no admin note, no `chat_admins` row; its only tag, "helpful-user", has `removed_at=2025-11-15 17:20:00+00` (after `added_at` 2025-10-28) and `removed_by_web_user_id` = the Owner
+- Use when: a test needs a member whose only tag is removed — Tagged/`IsTagged`/`TaggedCount` must ignore it (`TelegramUserRepositoryTests` removed-tag tests). Guarded by a read-back of `removed_at`.
 
 #### Heavily-banned spammer
 - `telegram_user_id` = `9971261287520`
@@ -260,7 +311,7 @@ Recipe format: a heading, the anchor id(s), a one-line description, and "use whe
 
 #### Global config (chat_id = 0)
 - `configs.id` = `1`, `chat_id` = `0`
-- Carries the only non-NULL global `welcome_config` baseline. All encrypted JSONB columns NULL (DataProtection injection target).
+- Carries the only non-NULL global `welcome_config` baseline. Encrypted JSONB columns NULL in the SQL (DataProtection injection target); `api_keys` is written post-load from `04_configs.api_keys.json` (`GoldenDatasetConstants.SystemConfig`).
 - Use when: a test reads global fallback configuration or exercises the encrypted-column injection path.
 
 #### Main Community per-chat config (overrides global)
@@ -289,7 +340,7 @@ Workshop Alumni (`-100059667856554`) has no `ban_celebration_config`, so its eff
 
 ### Verdict events (canonical edit 2026-09-27)
 
-`detection_results` is an append-only verdict-event log; `message_verdicts` resolves each message to its latest non-FileScan row (`detected_at DESC, id DESC`, `Unscanned` when none). The conversion is `TestData/SQL/tools/convert-canonical-to-verdict-events.sql` (provenance, not embedded; its header records how it was run). `TestData/CanonicalSlices.cs` freezes every non-chat-0 message's slice under the old model (the since-dropped explicit label table + the legacy spam/training-membership flags); `CanonicalVerdictOracleTests` checks the view against it (msg 104948 is a documented spec-mandated override to ExplicitSpam) and checks chat-0 samples separately. Anchors are in code as `GoldenDatasetConstants.Verdicts`.
+`detection_results` is an append-only verdict-event log; `message_verdicts` resolves each message to its latest non-FileScan row (`detected_at DESC, id DESC`, `Unscanned` when none). The conversion is `TelegramGroupsAdmin.Testing.Golden/SQL/tools/convert-canonical-to-verdict-events.sql` (provenance, not embedded; its header records how it was run). `TestData/CanonicalSlices.cs` freezes every non-chat-0 message's slice under the old model (the since-dropped explicit label table + the legacy spam/training-membership flags); `CanonicalVerdictOracleTests` checks the view against it (msg 104948 is a documented spec-mandated override to ExplicitSpam) and checks chat-0 samples separately. Anchors are in code as `GoldenDatasetConstants.Verdicts`.
 
 | Constant | Anchor | Verdict | Use when |
 |---|---|---|---|
@@ -329,6 +380,11 @@ Telegram message ids are only unique per chat, but no two canonical chats shared
 | `SharedMessageId` / `SharedIdChatId` | msg 14538 exists in Poultry Community (-100017608907459, its newest message, sender 9718812162815, ExplicitHam via synthetic promotion dr3325) **and** MainChat (the WORMGPT SimHash anchor) | a chat-scoped query or `(MessageId, ChatId)` join must not confuse the two rows; AI veto history exclusion (#521) |
 
 Flag-edit: Poultry Community's msg 14498 renumbered to 14538 (still after the chat's 14352; timestamp unchanged) in `19_messages.sql` (row + its `content_hash` `UPDATE`), dr3325's `message_id` in `32_detection_results.sql`, and its `CanonicalSlices` entry. Lookups of these ids by `message_id` alone are now ambiguous: always add the chat (`SimHashIntegrationTests` scopes its WORMGPT lookup to MainChat for this reason).
+
+### Reports
+
+#### Profile-scan alert `aiSignals` shape (canonical edit 2026-10-01)
+`reports` 177, 178, 180 (`type=3`, resolved, real rows) had `context.aiSignals` stored as one lorem *string*. Production writes only arrays (`ProfileScanAlertContext.AiSignals` is `string[]`, verified against prod 2026-10-01: 9 rows, all arrays); the string shape was an artifact of the bootstrap's length-preserving lorem sanitizer, and it made `ReportsRepository.GetProfileScanAlertsAsync(pendingOnly: false)` — and so the whole Reports page — throw a `JsonException` on canonical data. The three values were split on `,`/`.` into short lorem items (`["Lorem ipsum dolor sit amet", "consectetur adipiscing elit", …]`); no real-looking signals were invented. Guard: `TestData/Tests/CanonicalReportContextShapeTests` (`jsonb_typeof(context->'aiSignals')`). Pending fixture 188 already carried an array.
 
 ### Synthetic / reserved rows (do not regenerate)
 - `welcome_responses` IDs `999001..999005`: 5 status branches anchored on `(MainChat_Id=-100026957614982, user_id=9196379650113, username='canonical_user1')`. Mapping: `999001`=Pending, `999002`=Accepted, `999003`=Denied, `999004`=Timeout, `999005`=Left.

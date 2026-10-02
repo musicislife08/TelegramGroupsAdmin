@@ -450,6 +450,12 @@
 
             Snackbar.Add($"{mode} block configuration saved successfully", Severity.Success);
         }
+        catch (BlocklistSyncException ex)
+        {
+            // The rules were saved and the cache rebuilt around the failing subscriptions
+            await LoadDataAsync();
+            Snackbar.Add($"{mode} block configuration saved. {ex.Message}", Severity.Warning);
+        }
         catch (Exception ex)
         {
             Snackbar.Add($"Error saving configuration: {ex.Message}", Severity.Error);
@@ -534,6 +540,12 @@
 
             Snackbar.Add("Whitelist saved successfully", Severity.Success);
         }
+        catch (BlocklistSyncException ex)
+        {
+            // The whitelist was saved and the cache rebuilt around the failing subscriptions
+            await LoadDataAsync();
+            Snackbar.Add($"Whitelist saved. {ex.Message}", Severity.Warning);
+        }
         catch (Exception ex)
         {
             Snackbar.Add($"Error saving whitelist: {ex.Message}", Severity.Error);
@@ -588,6 +600,12 @@
             await BlocklistSync.SyncAllAsync();
             await LoadDataAsync();
             Snackbar.Add("All blocklists synced successfully", Severity.Success);
+        }
+        catch (BlocklistSyncException ex)
+        {
+            // Every other subscription was synced; only the listed ones failed
+            await LoadDataAsync();
+            Snackbar.Add($"Blocklists synced with failures. {ex.Message}", Severity.Warning);
         }
         catch (Exception ex)
         {

@@ -16,16 +16,21 @@
             <MudText Typo="Typo.body2">@User.DisplayName</MudText>
             @if (ShowBadges)
             {
+                @* MudIcon hard-codes aria-hidden="true" on its svg, so the accessible name lives on a wrapper. *@
                 @if (User.IsTrusted)
                 {
                     <MudTooltip Text="Trusted User">
-                        <MudIcon Icon="@Icons.Material.Filled.VerifiedUser" Color="Color.Success" Size="Size.Small" />
+                        <span role="img" aria-label="Trusted user" class="d-inline-flex">
+                            <MudIcon Icon="@Icons.Material.Filled.VerifiedUser" Color="Color.Success" Size="Size.Small" />
+                        </span>
                     </MudTooltip>
                 }
                 @if (User.IsAdmin)
                 {
                     <MudTooltip Text="Admin in at least one chat">
-                        <MudIcon Icon="@Icons.Material.Filled.Shield" Color="Color.Info" Size="Size.Small" />
+                        <span role="img" aria-label="Chat admin" class="d-inline-flex">
+                            <MudIcon Icon="@Icons.Material.Filled.Shield" Color="Color.Info" Size="Size.Small" />
+                        </span>
                     </MudTooltip>
                 }
                 @if (User.IsTagged)

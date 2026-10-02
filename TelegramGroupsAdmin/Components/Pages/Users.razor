@@ -79,6 +79,7 @@
                         <MudTooltip Text="@(context.IsTrusted ? "Remove Trust" : "Trust User")">
                             <MudIconButton Icon="@(context.IsTrusted ? Icons.Material.Filled.PersonOff : Icons.Material.Filled.VerifiedUser)"
                                           Size="Size.Small"
+                                          aria-label="@(context.IsTrusted ? "Untrust user" : "Trust user")"
                                           Color="@(context.IsTrusted ? Color.Default : Color.Success)"
                                           OnClick="@(() => ToggleTrust(context))" />
                         </MudTooltip>
@@ -133,6 +134,7 @@
                         <MudTooltip Text="@(context.IsTrusted ? "Remove Trust" : "Trust User")">
                             <MudIconButton Icon="@(context.IsTrusted ? Icons.Material.Filled.PersonOff : Icons.Material.Filled.VerifiedUser)"
                                           Size="Size.Small"
+                                          aria-label="@(context.IsTrusted ? "Untrust user" : "Trust user")"
                                           Color="@(context.IsTrusted ? Color.Default : Color.Success)"
                                           OnClick="@(() => ToggleTrust(context))" />
                         </MudTooltip>
@@ -166,7 +168,14 @@
                         </MudChip>
                     </MudTd>
                     <MudTd DataLabel="Warnings">
-                        <MudChip T="string" Size="Size.Small" Color="Color.Warning">@context.WarningCount</MudChip>
+                        @if (context.WarningCount > 0)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Warning">@context.WarningCount</MudChip>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">None</MudText>
+                        }
                     </MudTd>
                     <MudTd DataLabel="Last Seen">
                         <LocalTimestamp Value="@context.LastSeenAt" />

@@ -209,10 +209,41 @@ public class UserActionsRepository : IUserActionsRepository
             .Take(limit)
             .ToListAsync(cancellationToken);
 
-        return entities.Select(e => e.ToModel(
-            targetUsername: e.TargetUser?.Username,
-            targetFirstName: e.TargetUser?.FirstName,
-            targetLastName: e.TargetUser?.LastName)).ToList();
+        return await ToModelsWithIssuersAsync(context, entities, cancellationToken);
+    }
+
+    /// <summary>
+    /// Maps entities (loaded with TargetUser) to models, enriching issuers the way the Audit column renders
+    /// them: web users by email, Telegram admins by name (without this a Telegram issuer would display as "User &lt;id&gt;").
+    /// </summary>
+    private static async Task<List<UserActionRecord>> ToModelsWithIssuersAsync(
+        AppDbContext context,
+        List<Data.Models.UserActionRecordDto> entities,
+        CancellationToken cancellationToken)
+    {
+        var issuerWebUserIds = entities.Where(e => e.WebUserId != null).Select(e => e.WebUserId!).Distinct().ToList();
+        var issuerEmails = await context.Users.AsNoTracking()
+            .Where(u => issuerWebUserIds.Contains(u.Id))
+            .ToDictionaryAsync(u => u.Id, u => u.Email, cancellationToken);
+
+        var issuerTelegramIds = entities.Where(e => e.TelegramUserId != null).Select(e => e.TelegramUserId!.Value).Distinct().ToList();
+        var issuerTelegramUsers = await context.TelegramUsers.AsNoTracking()
+            .Where(t => issuerTelegramIds.Contains(t.TelegramUserId))
+            .Select(t => new { t.TelegramUserId, t.Username, t.FirstName, t.LastName })
+            .ToDictionaryAsync(t => t.TelegramUserId, t => t, cancellationToken);
+
+        return entities.Select(e =>
+        {
+            var issuer = e.TelegramUserId is { } telegramId && issuerTelegramUsers.TryGetValue(telegramId, out var found) ? found : null;
+            return e.ToModel(
+                webUserEmail: e.WebUserId != null && issuerEmails.TryGetValue(e.WebUserId, out var email) ? email : null,
+                telegramUsername: issuer?.Username,
+                telegramFirstName: issuer?.FirstName,
+                telegramLastName: issuer?.LastName,
+                targetUsername: e.TargetUser?.Username,
+                targetFirstName: e.TargetUser?.FirstName,
+                targetLastName: e.TargetUser?.LastName);
+        }).ToList();
     }
 
     public async Task<(List<UserActionRecord> Actions, int TotalCount)> GetPagedActionsAsync(
@@ -241,18 +272,30 @@ public class UserActionsRepository : IUserActionsRepository
 
         if (!string.IsNullOrEmpty(issuedByFilter))
         {
-            // Filter by issued_by using exclusive arc columns
-            // IssuedBy is stored as three columns: WebUserId, TelegramUserId, SystemIdentifier
-            // We'll filter by SystemIdentifier (case-insensitive contains)
-            // For WebUserId/TelegramUserId filtering, user would need to use exact IDs
+            // The issuer is an exclusive arc (web_user_id | telegram_user_id | system_identifier), and the
+            // Audit Log shows it as a system actor's display name, a web user's email or a Telegram
+            // admin's name. Match (case-insensitive substring) what the column shows: system display
+            // names are code constants, so a term is mapped to identifiers here rather than in SQL.
+            var pattern = $"%{issuedByFilter}%";
+            var systemIdsByDisplayName = SystemActorIds.All
+                .Where(id => Actor.SystemDisplayName(id).Contains(issuedByFilter, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
             query = query.Where(ua =>
-                (ua.SystemIdentifier != null && EF.Functions.ILike(ua.SystemIdentifier, $"%{issuedByFilter}%")));
+                (ua.SystemIdentifier != null
+                    && (systemIdsByDisplayName.Contains(ua.SystemIdentifier)
+                        || EF.Functions.ILike(ua.SystemIdentifier, pattern)))
+                || (ua.WebUserId != null
+                    && context.Users.Any(u => u.Id == ua.WebUserId && EF.Functions.ILike(u.Email, pattern)))
+                || (ua.TelegramUserId != null
+                    && context.TelegramUsers.Any(t => t.TelegramUserId == ua.TelegramUserId
+                        && (EF.Functions.ILike(((t.FirstName ?? "") + " " + (t.LastName ?? "")).Trim(), pattern)
+                            || (t.Username != null && EF.Functions.ILike(t.Username, pattern))))));
         }
 
         // Get total count for pagination
         var totalCount = await query.CountAsync(cancellationToken);
 
-        // Get page of results with user enrichment
         var entities = await query
             .Include(ua => ua.TargetUser)
             .OrderByDescending(ua => ua.IssuedAt)
@@ -260,10 +303,7 @@ public class UserActionsRepository : IUserActionsRepository
             .Take(take)
             .ToListAsync(cancellationToken);
 
-        var actions = entities.Select(e => e.ToModel(
-            targetUsername: e.TargetUser?.Username,
-            targetFirstName: e.TargetUser?.FirstName,
-            targetLastName: e.TargetUser?.LastName)).ToList();
+        var actions = await ToModelsWithIssuersAsync(context, entities, cancellationToken);
 
         return (actions, totalCount);
     }

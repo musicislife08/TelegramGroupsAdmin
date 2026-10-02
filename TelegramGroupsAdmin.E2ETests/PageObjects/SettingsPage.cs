@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Microsoft.Playwright;
 using static Microsoft.Playwright.Assertions;
 
@@ -31,8 +32,8 @@ public class SettingsPage
     /// </summary>
     public async Task WaitForLoadAsync()
     {
-        // Settings page has complex interactivity - NetworkIdle ensures Blazor SignalR circuit is established
-        await Page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        // Settings page has complex interactivity - wait for the Blazor circuit to be live
+        await Page.WaitForInteractiveAsync();
     }
 
     /// <summary>
@@ -48,23 +49,9 @@ public class SettingsPage
     }
 
     /// <summary>
-    /// Gets the page title displayed in the settings content area.
+    /// The page title displayed in the settings content area (a MudText element with Typo h4).
     /// </summary>
-    public async Task<string> GetPageTitleAsync()
-    {
-        // The title is in a MudText element with Typo h4
-        var title = Page.Locator("main .mud-text-h4, .mud-container h4, .mud-item h4").First;
-        return await title.TextContentAsync() ?? string.Empty;
-    }
-
-    /// <summary>
-    /// Checks if the settings nav menu is visible.
-    /// </summary>
-    public async Task<bool> IsNavMenuVisibleAsync()
-    {
-        var navMenu = Page.Locator(".mud-navmenu");
-        return await navMenu.IsVisibleAsync();
-    }
+    public ILocator PageTitle => Page.Locator("main .mud-text-h4, .mud-container h4, .mud-item h4").First;
 
     #region Content Detection Section
 
@@ -93,25 +80,17 @@ public class SettingsPage
     }
 
     /// <summary>
-    /// Gets the count of visible algorithm toggle switches on the Detection Algorithms page.
+    /// The algorithm toggle switches on the Detection Algorithms page (MudSwitch elements in card headers).
     /// </summary>
-    public async Task<int> GetAlgorithmToggleCountAsync()
-    {
-        // Algorithm toggles are MudSwitch elements in card headers
-        var toggles = Page.Locator(".mud-card-header .mud-switch");
-        return await toggles.CountAsync();
-    }
+    public ILocator AlgorithmToggles => Page.Locator(".mud-card-header .mud-switch");
 
     /// <summary>
-    /// Checks if a specific algorithm is enabled by its name.
+    /// The checkbox input of the enable switch on the algorithm card named <paramref name="algorithmName"/>.
+    /// Checked when the algorithm is enabled.
     /// </summary>
-    public async Task<bool> IsAlgorithmEnabledAsync(string algorithmName)
-    {
+    public ILocator AlgorithmToggleInput(string algorithmName) =>
         // Use Filter() with HasText instead of string interpolation to avoid selector injection
-        var card = Page.Locator(".mud-card").Filter(new() { HasText = algorithmName });
-        var toggle = card.Locator(".mud-switch input");
-        return await toggle.IsCheckedAsync();
-    }
+        Page.Locator(".mud-card").Filter(new() { HasText = algorithmName }).Locator(".mud-switch input");
 
     /// <summary>
     /// Toggles an algorithm by its name.
@@ -134,16 +113,22 @@ public class SettingsPage
     }
 
     /// <summary>
-    /// Gets the Training Mode toggle state.
+    /// The checkbox input of the Training Mode switch; checked when Training Mode is enabled.
     /// The toggle is inside the Global Detection Settings paper, not the nav.
     /// </summary>
-    public async Task<bool> IsTrainingModeEnabledAsync()
+    public ILocator TrainingModeToggleInput =>
+        Page.Locator(".mud-paper:has-text('Global Detection Settings')")
+            .Locator(".mud-switch:has-text('Training Mode') input");
+
+    /// <summary>Clicks the Training Mode switch on the Detection Algorithms page.</summary>
+    public async Task ToggleTrainingModeAsync()
     {
-        // Find the paper containing "Global Detection Settings" and then the Training Mode switch within it
-        var globalSettingsPaper = Page.Locator(".mud-paper:has-text('Global Detection Settings')");
-        var toggle = globalSettingsPaper.Locator(".mud-switch:has-text('Training Mode') input");
-        return await toggle.IsCheckedAsync();
+        await Page.Locator(".mud-paper:has-text('Global Detection Settings')")
+            .Locator(".mud-switch:has-text('Training Mode')").ClickAsync();
     }
+
+    /// <summary>The "Training Mode Active" chip beside the save button; rendered only while the bound config has Training Mode on.</summary>
+    public ILocator TrainingModeActiveChip => Page.Locator(".mud-chip").Filter(new() { HasText = "Training Mode Active" });
 
     #endregion
 
@@ -158,15 +143,8 @@ public class SettingsPage
         await addButton.ClickAsync();
     }
 
-    /// <summary>
-    /// Gets the count of stop words displayed in the table.
-    /// </summary>
-    public async Task<int> GetStopWordCountAsync()
-    {
-        // Count rows in the MudTable, excluding header and no-records
-        var rows = Page.Locator(".mud-table tbody tr:not(.mud-table-row-no-records)");
-        return await rows.CountAsync();
-    }
+    /// <summary>The stop words table container.</summary>
+    public ILocator StopWordsTable => Page.Locator(".mud-table-container");
 
     /// <summary>
     /// Searches for a stop word in the table. Waits for the table to reflect the filter.
@@ -182,21 +160,17 @@ public class SettingsPage
     }
 
     /// <summary>
-    /// Checks if a specific stop word is visible in the table.
+    /// The chip for stop word <paramref name="word"/> in the stop words table.
     /// </summary>
-    public async Task<bool> IsStopWordVisibleAsync(string word)
-    {
-        var wordChip = Page.Locator(".mud-table-container .mud-chip").Filter(new() { HasText = word });
-        return await wordChip.IsVisibleAsync();
-    }
+    public ILocator StopWordChip(string word) =>
+        Page.Locator(".mud-table-container .mud-chip").Filter(new() { HasText = word });
 
     /// <summary>
     /// Waits for a stop word to become visible in the table.
     /// </summary>
     public async Task WaitForStopWordVisibleAsync(string word)
     {
-        var wordChip = Page.Locator(".mud-table-container .mud-chip").Filter(new() { HasText = word });
-        await Expect(wordChip).ToBeVisibleAsync();
+        await Expect(StopWordChip(word)).ToBeVisibleAsync();
     }
 
     /// <summary>
@@ -204,8 +178,7 @@ public class SettingsPage
     /// </summary>
     public async Task WaitForStopWordHiddenAsync(string word)
     {
-        var wordChip = Page.Locator(".mud-table-container .mud-chip").Filter(new() { HasText = word });
-        await Expect(wordChip).Not.ToBeVisibleAsync();
+        await Expect(StopWordChip(word)).Not.ToBeVisibleAsync();
     }
 
     /// <summary>
@@ -244,23 +217,29 @@ public class SettingsPage
     }
 
     /// <summary>
-    /// Gets the count of training samples displayed.
+    /// The training sample rows in the MudTable, excluding header and no-records rows.
     /// </summary>
-    public async Task<int> GetTrainingSampleCountAsync()
-    {
-        // Count rows in the MudTable
-        var rows = Page.Locator(".mud-table tbody tr:not(.mud-table-row-no-records)");
-        return await rows.CountAsync();
-    }
+    public ILocator TrainingSampleRows => Page.Locator(".mud-table tbody tr:not(.mud-table-row-no-records)");
 
     /// <summary>
-    /// Checks if a training sample containing the specified text is visible.
+    /// The training sample row whose text contains <paramref name="sampleText"/>.
     /// </summary>
-    public async Task<bool> IsTrainingSampleVisibleAsync(string sampleText)
-    {
-        var cell = Page.Locator(".mud-table-container").Filter(new() { HasText = sampleText });
-        return await cell.IsVisibleAsync();
-    }
+    public ILocator TrainingSample(string sampleText) =>
+        TrainingSampleRows.Filter(new() { HasText = sampleText });
+
+    /// <summary>The SPAM/CLEAN chip in the Type cell of the row containing <paramref name="sampleText"/>.</summary>
+    public ILocator TrainingSampleTypeChip(string sampleText) =>
+        TrainingSample(sampleText).Locator("td[data-label='Type'] .mud-chip").First;
+
+    /// <summary>The Source chip of the row containing <paramref name="sampleText"/>.</summary>
+    public ILocator TrainingSampleSourceChip(string sampleText) =>
+        TrainingSample(sampleText).Locator("td[data-label='Source'] .mud-chip");
+
+    /// <summary>The Source chips of every rendered training sample row (one per row).</summary>
+    public ILocator TrainingSampleSourceChips => TrainingSampleRows.Locator("td[data-label='Source'] .mud-chip");
+
+    /// <summary>The "Showing X of Y samples" counter above the training samples table.</summary>
+    public ILocator TrainingSamplesShowingText => Page.GetByText(new Regex(@"Showing \d+ of \d+ samples"));
 
     /// <summary>
     /// Selects a type filter on the Training Samples page.
@@ -320,44 +299,29 @@ public class SettingsPage
     }
 
     /// <summary>
-    /// Gets the count of background jobs displayed in the table.
+    /// The background job rows in the jobs table.
     /// </summary>
-    public async Task<int> GetBackgroundJobCountAsync()
-    {
-        var rows = Page.Locator(".mud-table tbody tr");
-        return await rows.CountAsync();
-    }
+    public ILocator BackgroundJobRows => Page.Locator(".mud-table tbody tr");
 
     /// <summary>
-    /// Checks if a job is enabled by its display name.
+    /// The table row for the job with display name <paramref name="jobDisplayName"/>.
     /// </summary>
-    public async Task<bool> IsJobEnabledAsync(string jobDisplayName)
-    {
-        var row = Page.Locator(".mud-table tbody tr").Filter(new() { HasText = jobDisplayName });
-        var toggle = row.Locator(".mud-switch input");
-        return await toggle.IsCheckedAsync();
-    }
+    public ILocator JobRow(string jobDisplayName) => BackgroundJobRows.Filter(new() { HasText = jobDisplayName });
 
     /// <summary>
-    /// Gets the status text for a job (Enabled/Disabled).
+    /// The checkbox input of the enable switch for a job; checked when the job is enabled.
     /// </summary>
-    public async Task<string> GetJobStatusAsync(string jobDisplayName)
-    {
-        var row = Page.Locator(".mud-table tbody tr").Filter(new() { HasText = jobDisplayName });
-        var statusChip = row.Locator(".mud-chip");
-        return await statusChip.TextContentAsync() ?? string.Empty;
-    }
+    public ILocator JobToggleInput(string jobDisplayName) => JobRow(jobDisplayName).Locator(".mud-switch input");
 
     /// <summary>
-    /// Gets the schedule text for a job.
+    /// The status chip (Enabled/Disabled) for a job.
     /// </summary>
-    public async Task<string> GetJobScheduleAsync(string jobDisplayName)
-    {
-        var row = Page.Locator(".mud-table tbody tr").Filter(new() { HasText = jobDisplayName });
-        // Schedule is in the 3rd column (after Job and Status)
-        var scheduleCell = row.Locator("td").Nth(2);
-        return await scheduleCell.TextContentAsync() ?? string.Empty;
-    }
+    public ILocator JobStatusChip(string jobDisplayName) => JobRow(jobDisplayName).Locator(".mud-chip");
+
+    /// <summary>
+    /// The schedule cell for a job: the 3rd column (after Job and Status).
+    /// </summary>
+    public ILocator JobScheduleCell(string jobDisplayName) => JobRow(jobDisplayName).Locator("td").Nth(2);
 
     /// <summary>
     /// Toggles a background job by clicking its switch.
@@ -419,12 +383,12 @@ public class SettingsPage
     }
 
     /// <summary>
-    /// Waits for the snackbar to appear with a message containing the specified text.
+    /// The first MudBlazor snackbar currently shown (a save/toggle confirmation).
     /// </summary>
-    public async Task WaitForSnackbarAsync(string containsText)
-    {
-        await Expect(Page.Locator(".mud-snackbar").First).ToContainTextAsync(containsText, new() { IgnoreCase = true });
-    }
+    public ILocator Snackbar => Page.Locator(".mud-snackbar").First;
+
+    /// <summary>The snackbar whose text contains <paramref name="text"/>.</summary>
+    public ILocator SnackbarWithText(string text) => Page.Locator(".mud-snackbar").Filter(new() { HasText = text });
 
     #endregion
 
@@ -439,25 +403,22 @@ public class SettingsPage
     }
 
     /// <summary>
-    /// Gets the count of service message toggle switches.
+    /// The service message toggle switches. Uses label.mud-switch to only match actual switch
+    /// elements, not paragraphs.
     /// </summary>
-    public async Task<int> GetServiceMessageToggleCountAsync()
-    {
-        // Use label.mud-switch to only match actual switch elements, not paragraphs
-        var toggles = Page.Locator("label.mud-switch");
-        return await toggles.CountAsync();
-    }
+    public ILocator ServiceMessageToggles => Page.Locator("label.mud-switch");
 
     /// <summary>
-    /// Checks if a specific service message type is set to delete by its label text.
+    /// The switch for the service message type labelled <paramref name="labelText"/>.
     /// </summary>
-    public async Task<bool> IsServiceMessageDeletionEnabledAsync(string labelText)
-    {
-        // Use label.mud-switch to only match actual switch elements
-        var switchContainer = Page.Locator("label.mud-switch").Filter(new() { HasText = labelText });
-        var input = switchContainer.Locator("input[type='checkbox']");
-        return await input.IsCheckedAsync();
-    }
+    public ILocator ServiceMessageToggle(string labelText) => ServiceMessageToggles.Filter(new() { HasText = labelText });
+
+    /// <summary>
+    /// The checkbox input of the service message switch labelled <paramref name="labelText"/>;
+    /// checked when that message type is set to delete.
+    /// </summary>
+    public ILocator ServiceMessageToggleInput(string labelText) =>
+        ServiceMessageToggle(labelText).Locator("input[type='checkbox']");
 
     /// <summary>
     /// Toggles a service message deletion setting by its label text.
@@ -470,18 +431,18 @@ public class SettingsPage
     }
 
     /// <summary>
-    /// Clicks the Save button on the Service Messages settings page.
+    /// Clicks the "Save Configuration" button on the Service Messages settings page.
     /// </summary>
     public async Task ClickSaveServiceMessagesAsync()
     {
-        var saveButton = Page.GetByRole(AriaRole.Button, new() { Name = "Save" });
+        var saveButton = Page.GetByRole(AriaRole.Button, new() { Name = "Save Configuration" });
         await saveButton.ClickAsync();
     }
 
     /// <summary>
-    /// Verifies that all expected service message toggles are visible.
+    /// Asserts that all expected service message toggles are visible.
     /// </summary>
-    public async Task<bool> AreAllServiceMessageTogglesVisibleAsync()
+    public async Task ExpectAllServiceMessageTogglesVisibleAsync()
     {
         var expectedLabels = new[]
         {
@@ -495,13 +456,8 @@ public class SettingsPage
 
         foreach (var label in expectedLabels)
         {
-            // Use label.mud-switch to only match actual switch elements
-            var toggle = Page.Locator("label.mud-switch").Filter(new() { HasText = label });
-            if (!await toggle.IsVisibleAsync())
-                return false;
+            await Expect(ServiceMessageToggle(label)).ToBeVisibleAsync();
         }
-
-        return true;
     }
 
     #endregion
@@ -544,35 +500,25 @@ public class SettingsPage
     }
 
     /// <summary>
-    /// Fills in the Add Sample dialog and submits it.
+    /// Fills in the Add Training Sample dialog (AddTrainingSampleDialog.razor) and submits it.
+    /// The classification radios read "SPAM - …" and "CLEAN - …". The message field is a
+    /// non-Immediate MudTextField: clicking the radio blurs it, which commits the value, and the
+    /// Add Sample button (disabled while the bound text is empty) is awaited enabled before the click.
     /// </summary>
     public async Task FillAndSubmitAddSampleDialogAsync(string text, bool isSpam)
     {
-        // Wait for dialog to appear
         var dialog = Page.GetByRole(AriaRole.Dialog);
         await Expect(dialog).ToBeVisibleAsync();
 
-        // Fill in the text field
-        var textField = dialog.Locator("textarea").First;
-        await textField.FillAsync(text);
+        await dialog.GetByLabel("Message Text (Original)").FillAsync(text);
 
-        // Select spam/ham classification
-        if (isSpam)
-        {
-            var spamRadio = dialog.Locator(".mud-radio:has-text('Spam')");
-            await spamRadio.ClickAsync();
-        }
-        else
-        {
-            var hamRadio = dialog.Locator(".mud-radio:has-text('Ham')");
-            await hamRadio.ClickAsync();
-        }
+        var radio = dialog.Locator(".mud-radio").Filter(new() { HasText = isSpam ? "SPAM" : "CLEAN" });
+        await radio.ClickAsync();
 
-        // Click the Add button
-        var addButton = dialog.GetByRole(AriaRole.Button, new() { Name = "Add" });
+        var addButton = dialog.GetByRole(AriaRole.Button, new() { Name = "Add Sample" });
+        await Expect(addButton).ToBeEnabledAsync();
         await addButton.ClickAsync();
 
-        // Wait for dialog to close
         await Expect(dialog).Not.ToBeVisibleAsync();
     }
 

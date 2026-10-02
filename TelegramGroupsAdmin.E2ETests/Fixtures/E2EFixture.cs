@@ -1,4 +1,6 @@
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Playwright;
+using TelegramGroupsAdmin.Testing.Golden;
 using Testcontainers.PostgreSql;
 
 namespace TelegramGroupsAdmin.E2ETests;
@@ -20,6 +22,12 @@ public class E2EFixture
     /// Each test should create a unique database and modify this connection string.
     /// </summary>
     public static string BaseConnectionString { get; private set; } = string.Empty;
+
+    /// <summary>
+    /// Data-protection key ring the golden template was built with. Golden-test app instances
+    /// copy it into their own key path so canonical encrypted columns decrypt in the app under test.
+    /// </summary>
+    public static string SharedKeysDirectory { get; private set; } = string.Empty;
 
     /// <summary>
     /// Gets the shared Playwright instance for browser automation.
@@ -46,6 +54,15 @@ public class E2EFixture
         await _container.StartAsync();
         BaseConnectionString = _container.GetConnectionString();
         Console.WriteLine($"PostgreSQL container started: {BaseConnectionString}");
+
+        // Golden templates for GoldenE2ETestBase. The key ring is shared with every golden-test app
+        // instance so canonical encrypted columns (configs.api_keys) decrypt in the app under test.
+        SharedKeysDirectory = Path.Combine(Path.GetTempPath(), "e2e_tests", $"golden_keys_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(SharedKeysDirectory);
+        var keyRing = DataProtectionProvider.Create(
+            new DirectoryInfo(SharedKeysDirectory), b => b.SetApplicationName("TgSpamPreFilter"));
+        await GoldenTemplates.BuildAsync(BaseConnectionString, keyRing);
+        Console.WriteLine("Golden templates built");
 
         // Initialize Playwright
         _playwright = await Microsoft.Playwright.Playwright.CreateAsync();
@@ -95,6 +112,19 @@ public class E2EFixture
         {
             await _container.DisposeAsync();
             Console.WriteLine("PostgreSQL container stopped and cleaned up");
+        }
+
+        // Best-effort cleanup of the shared key ring (same policy as the factory's temp data path)
+        try
+        {
+            if (SharedKeysDirectory.Length > 0 && Directory.Exists(SharedKeysDirectory))
+            {
+                Directory.Delete(SharedKeysDirectory, recursive: true);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Warning: Shared keys directory cleanup failed for {SharedKeysDirectory}: {ex.Message}");
         }
     }
 

@@ -1,3 +1,4 @@
+using TelegramGroupsAdmin.E2ETests.PageObjects;
 using static Microsoft.Playwright.Assertions;
 
 namespace TelegramGroupsAdmin.E2ETests.Tests.Authentication;
@@ -17,7 +18,7 @@ public class AuthIdentityTests : SharedAuthenticatedTestBase
 
         // Act - navigate to any authenticated page
         await NavigateToAsync("/");
-        await Page.WaitForLoadStateAsync(Microsoft.Playwright.LoadState.NetworkIdle);
+        await Page.WaitForInteractiveAsync();
 
         // Assert - email should be visible in the app bar (rendered by MainLayout)
         var emailElement = Page.GetByText(user.Email);

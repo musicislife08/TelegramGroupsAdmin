@@ -14,15 +14,18 @@ public class SettingsPage
     // Selectors
     private const string PageTitle = ".mud-typography-h4";
     private const string LoadingIndicator = ".mud-progress-linear";
-    private const string SettingsSidebarHeading = ".mud-typography-h6:has-text('Settings')";
-    private const string AccessDeniedAlert = ".mud-alert-error";
+    private const string SettingsSidebarHeadingSelector = ".mud-typography-h6:has-text('Settings')";
+    // MudBlazor 9 renders MudAlert severity as mud-alert-{variant}-{severity}; the default Text variant
+    // gives .mud-alert-text-error (plain .mud-alert-error never matches). Settings.razor is
+    // [Authorize(GlobalAdminOrOwner)], so it has no page-level access-denied alert: its only error alert
+    // is the per-section one a non-Owner gets in place of an infrastructure section's body.
+    private const string ErrorAlertSelector = ".mud-alert-text-error";
+    private const string OwnerAccessRequiredText = "Owner access required for infrastructure settings";
 
     // Settings navigation links (in sidebar)
-    private const string GeneralSettingsLink = "a[href='/settings/system/general']";
-    private const string SecuritySettingsLink = "a[href='/settings/system/security']";
-    private const string AdminAccountsLink = "a[href='/settings/system/accounts']";
-    private const string BackgroundJobsLink = "a[href='/settings/system/jobs']";
-    private const string ContentDetectionLink = "a[href='/settings/content-detection']";
+    private const string GeneralSettingsLinkSelector = "a[href='/settings/system/general']";
+    private const string AdminAccountsLinkSelector = "a[href='/settings/system/accounts']";
+    private const string LoggingSettingsLinkSelector = "a[href='/settings/system/logging']";
 
     public SettingsPage(IPage page)
     {
@@ -42,11 +45,11 @@ public class SettingsPage
     /// </summary>
     public async Task WaitForLoadAsync()
     {
-        // Wait for either the page content or access denied message
+        // Wait for either the section title or the Owner-access-required alert that replaces a section body.
+        // Both render for a non-Owner on an infrastructure section, so take .First (WaitForAsync is strict).
         var pageContent = _page.Locator(PageTitle);
-        var accessDenied = _page.Locator(AccessDeniedAlert);
 
-        await pageContent.Or(accessDenied).WaitForAsync(new LocatorWaitForOptions
+        await pageContent.Or(OwnerAccessRequiredAlert).First.WaitForAsync(new LocatorWaitForOptions
         {
             State = WaitForSelectorState.Visible,
             Timeout = 10000
@@ -54,90 +57,40 @@ public class SettingsPage
 
         // Wait for loading indicator to disappear
         var loadingIndicator = _page.Locator(LoadingIndicator);
-        try
-        {
-            await loadingIndicator.WaitForAsync(new LocatorWaitForOptions
-            {
-                State = WaitForSelectorState.Hidden,
-                Timeout = 5000
-            });
-        }
-        catch (TimeoutException)
-        {
-            // Loading indicator may have already disappeared
-        }
+        await Expect(loadingIndicator).Not.ToBeVisibleAsync(new() { Timeout = 5000 });
 
-        // Wait for the settings sidebar heading to confirm the page body has rendered past the auth gate.
-        // The sidebar "Settings" h6 is always present for any authorised user (it lives outside the
-        // permission-gated nav links), so it is safe to wait on regardless of role.
-        var isAccessDenied = await _page.Locator(AccessDeniedAlert).IsVisibleAsync();
-        if (!isAccessDenied)
-        {
-            await Expect(_page.Locator(SettingsSidebarHeading).First).ToBeVisibleAsync(new() { Timeout = 15000 });
-        }
+        // Wait for the settings sidebar heading to confirm the page body has rendered past the auth gate,
+        // or for the Owner-access-required alert. The sidebar "Settings" h6 is always present for any
+        // authorised user (it lives outside the permission-gated nav links), so it is safe to wait on regardless of role.
+        await Expect(SettingsSidebarHeading.Or(OwnerAccessRequiredAlert).First).ToBeVisibleAsync(new() { Timeout = 15000 });
     }
 
     /// <summary>
-    /// Returns true if the settings page loaded successfully (not access denied).
+    /// The settings sidebar "Settings" heading. Present for any authorised user, outside the
+    /// permission-gated nav links, so it is a safe render sync point regardless of role.
     /// </summary>
-    public async Task<bool> IsAccessAllowedAsync()
-    {
-        var accessDenied = _page.Locator(AccessDeniedAlert);
-        var isAccessDenied = await accessDenied.IsVisibleAsync();
-        return !isAccessDenied;
-    }
+    public ILocator SettingsSidebarHeading => _page.Locator(SettingsSidebarHeadingSelector).First;
 
     /// <summary>
-    /// Returns true if access denied message is shown.
+    /// The "Owner access required for infrastructure settings" alert that Settings.razor renders in place of an
+    /// infrastructure section's body for a non-Owner (the default /settings section, General, is one). It is the
+    /// page's only error alert: an unauthorised role never reaches the page at all (the Authorize policy redirects).
     /// </summary>
-    public async Task<bool> IsAccessDeniedAsync()
-    {
-        var accessDenied = _page.Locator(AccessDeniedAlert);
-        return await accessDenied.IsVisibleAsync();
-    }
+    public ILocator OwnerAccessRequiredAlert =>
+        _page.Locator(ErrorAlertSelector).Filter(new() { HasText = OwnerAccessRequiredText });
 
     /// <summary>
-    /// Returns true if infrastructure settings links are visible (Owner only).
-    /// Uses auto-retrying assertion to avoid races after the render gate.
+    /// The General settings nav link, representative of the infrastructure settings links (Owner only).
     /// </summary>
-    public async Task<bool> AreInfrastructureSettingsVisibleAsync()
-    {
-        var generalSettings = _page.Locator(GeneralSettingsLink);
-        try
-        {
-            await Expect(generalSettings).ToBeVisibleAsync(new() { Timeout = 5000 });
-            return true;
-        }
-        catch (PlaywrightException)
-        {
-            return false;
-        }
-    }
+    public ILocator GeneralSettingsLink => _page.Locator(GeneralSettingsLinkSelector);
 
     /// <summary>
-    /// Returns true if content detection settings link is visible.
+    /// The Logging settings nav link. Rendered for every role in the (default-expanded) System group,
+    /// so it is a positive render sync for absence checks on the permission-gated System links.
     /// </summary>
-    public async Task<bool> IsContentDetectionVisibleAsync()
-    {
-        var contentDetection = _page.Locator(ContentDetectionLink);
-        return await contentDetection.IsVisibleAsync();
-    }
+    public ILocator LoggingSettingsLink => _page.Locator(LoggingSettingsLinkSelector);
 
-    /// <summary>
-    /// Returns true if admin accounts link is visible.
-    /// </summary>
-    public async Task<bool> IsAdminAccountsVisibleAsync()
-    {
-        var adminAccounts = _page.Locator(AdminAccountsLink);
-        return await adminAccounts.IsVisibleAsync();
-    }
+    /// <summary>The admin accounts nav link.</summary>
+    public ILocator AdminAccountsLink => _page.Locator(AdminAccountsLinkSelector);
 
-    /// <summary>
-    /// Gets the current URL path.
-    /// </summary>
-    public string GetCurrentPath()
-    {
-        var uri = new Uri(_page.Url);
-        return uri.AbsolutePath;
-    }
 }

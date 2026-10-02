@@ -27,9 +27,10 @@ public interface IFeatureAvailabilityService
     Task<bool> IsPasswordResetEnabledAsync();
 
     /// <summary>
-    /// Checks if email verification feature is available (requires email)
+    /// Strict email-service check for security decisions: Enabled, Disabled (genuinely not configured) or
+    /// Indeterminate (the config read threw, or stored API keys could not be decrypted). Never throws.
     /// </summary>
-    Task<bool> IsEmailVerificationEnabledAsync();
+    Task<EmailConfigurationState> GetEmailConfigurationStateAsync();
 
     /// <summary>
     /// Gets comprehensive feature status for all external services

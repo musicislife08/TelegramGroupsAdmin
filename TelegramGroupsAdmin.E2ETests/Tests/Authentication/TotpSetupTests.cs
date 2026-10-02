@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using TelegramGroupsAdmin.Constants;
 using TelegramGroupsAdmin.E2ETests.Helpers;
 using TelegramGroupsAdmin.E2ETests.Infrastructure;
@@ -64,13 +65,10 @@ public class TotpSetupTests : SharedE2ETestBase
         await _setupPage.WaitForPageAsync();
 
         // Assert - QR code should be visible
-        Assert.That(await _setupPage.IsQrCodeVisibleAsync(), Is.True,
-            "QR code should be displayed on setup page");
+        await Expect(_setupPage.QrCode).ToBeVisibleAsync();
 
-        // Verify QR code has a valid data URL
-        var qrCodeSrc = await _setupPage.GetQrCodeSrcAsync();
-        Assert.That(qrCodeSrc, Does.StartWith("data:image/png;base64,"),
-            "QR code should be a base64-encoded PNG image");
+        // Verify QR code has a valid data URL (base64-encoded PNG image)
+        await Expect(_setupPage.QrCode).ToHaveAttributeAsync("src", new Regex("^data:image/png;base64,"));
     }
 
     [Test]
@@ -91,15 +89,10 @@ public class TotpSetupTests : SharedE2ETestBase
         await _setupPage.WaitForPageAsync();
 
         // Assert - manual key should be visible
-        Assert.That(await _setupPage.IsManualKeyVisibleAsync(), Is.True,
-            "Manual entry key should be displayed for users who can't scan QR");
+        await Expect(_setupPage.ManualKey).ToBeVisibleAsync();
 
-        // Verify manual key has expected format (Base32 with spaces)
-        var manualKey = await _setupPage.GetManualKeyAsync();
-        Assert.That(manualKey, Is.Not.Null.And.Not.Empty,
-            "Manual entry key should have content");
-        Assert.That(manualKey, Does.Match(@"^[A-Z2-7\s]+$"),
-            "Manual key should be Base32 format with possible spaces");
+        // Verify manual key is non-empty and has expected format (Base32 with spaces)
+        await Expect(_setupPage.ManualKey).ToHaveTextAsync(new Regex(@"^[A-Z2-7\s]+$"));
     }
 
     [Test]
@@ -132,21 +125,16 @@ public class TotpSetupTests : SharedE2ETestBase
 
         // Assert - should show recovery codes section
         await _setupPage.WaitForRecoveryCodesAsync();
-        Assert.That(await _setupPage.IsRecoveryCodesSectionVisibleAsync(), Is.True,
-            "Recovery codes section should be visible after TOTP verification");
+        await Expect(_setupPage.RecoveryCodesSection).ToBeVisibleAsync();
 
         // Should have recovery codes per AuthenticationConstants.RecoveryCodeCount
-        var codes = await _setupPage.GetRecoveryCodesAsync();
-        Assert.That(codes.Count, Is.EqualTo(AuthenticationConstants.RecoveryCodeCount),
-            $"Should display {AuthenticationConstants.RecoveryCodeCount} recovery codes");
+        await Expect(_setupPage.RecoveryCodes).ToHaveCountAsync(AuthenticationConstants.RecoveryCodeCount);
 
-        // Each code should be a valid format (hex string per AuthenticationConstants.RecoveryCodeStringLength)
-        var expectedPattern = $@"^[a-f0-9]{{{AuthenticationConstants.RecoveryCodeStringLength}}}$";
-        foreach (var code in codes)
-        {
-            Assert.That(code, Does.Match(expectedPattern),
-                $"Recovery code '{code}' should be a {AuthenticationConstants.RecoveryCodeStringLength}-character hex string");
-        }
+        // Each code should be a valid format (hex string per AuthenticationConstants.RecoveryCodeStringLength).
+        // Surrounding whitespace is allowed because regex matching sees the raw (untrimmed) text.
+        var expectedPattern = new Regex($@"^\s*[a-f0-9]{{{AuthenticationConstants.RecoveryCodeStringLength}}}\s*$");
+        await Expect(_setupPage.RecoveryCodes).ToHaveTextAsync(
+            Enumerable.Repeat(expectedPattern, AuthenticationConstants.RecoveryCodeCount));
     }
 
     [Test]
@@ -175,14 +163,21 @@ public class TotpSetupTests : SharedE2ETestBase
         await _setupPage.VerifyAsync(totpCode);
         await _setupPage.WaitForRecoveryCodesAsync();
 
-        using (Assert.EnterMultipleScope())
-        {
-            // Assert - confirmation checkbox should be visible and unchecked by default
-            Assert.That(await _setupPage.IsConfirmCheckboxVisibleAsync(), Is.True,
-                "Confirmation checkbox should be visible");
-            Assert.That(await _setupPage.IsConfirmationCheckedAsync(), Is.False,
-                "Confirmation checkbox should be unchecked by default");
-        }
+        // Assert - confirmation checkbox should be visible and unchecked by default
+        await Expect(_setupPage.ConfirmCheckbox).ToBeVisibleAsync();
+        await Expect(_setupPage.ConfirmCheckbox).Not.ToBeCheckedAsync();
+
+        // Act - submit without confirming. The confirm form is a static SSR post with a
+        // [Range(true, true)] on Confirmed, so the server re-renders the page with a validation
+        // message instead of signing the user in.
+        await _setupPage.ClickCompleteSetupAsync();
+
+        // Assert - still on the setup page, validation message shown, form still available
+        await Expect(_setupPage.ConfirmValidationMessage)
+            .ToHaveTextAsync("You must confirm you have saved your recovery codes");
+        await Expect(Page).ToHaveURLAsync(new Regex(@"/login/setup-2fa"));
+        await Expect(_setupPage.ConfirmCheckbox).Not.ToBeCheckedAsync();
+        await Expect(_setupPage.CompleteSetupButtonLocator).ToBeVisibleAsync();
     }
 
     [Test]
@@ -240,8 +235,7 @@ public class TotpSetupTests : SharedE2ETestBase
         await _setupPage.VerifyAsync("000000");
 
         // Assert - should show error and stay on setup page
-        Assert.That(await _setupPage.HasErrorMessageAsync(), Is.True,
-            "Should display error for invalid TOTP code");
+        await Expect(_setupPage.ErrorAlert).ToBeVisibleAsync();
         await Expect(Page).ToHaveURLAsync(new System.Text.RegularExpressions.Regex("/login/setup-2fa"));
     }
 
@@ -263,9 +257,7 @@ public class TotpSetupTests : SharedE2ETestBase
         await _setupPage.WaitForPageAsync();
 
         // Assert - page should have correct title
-        var title = await _setupPage.GetPageTitleAsync();
-        Assert.That(title, Does.Contain("Two-Factor Authentication").IgnoreCase,
-            "Page title should indicate 2FA setup");
+        await Expect(_setupPage.PageTitle).ToContainTextAsync("Two-Factor Authentication", new() { IgnoreCase = true });
     }
 
     [Test]
@@ -286,7 +278,6 @@ public class TotpSetupTests : SharedE2ETestBase
         await _setupPage.WaitForPageAsync();
 
         // Assert - all setup steps should be visible
-        Assert.That(await _setupPage.AreSetupStepsVisibleAsync(), Is.True,
-            "Setup steps should be visible once page loads");
+        await Expect(_setupPage.SetupSteps).ToBeVisibleAsync();
     }
 }

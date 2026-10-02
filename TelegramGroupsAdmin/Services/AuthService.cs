@@ -197,15 +197,32 @@ public class AuthService(
         return !await userRepository.AnyUsersExistAsync(cancellationToken: cancellationToken);
     }
 
+    /// <summary>
+    /// Error returned when the email-service state cannot be determined. Registration fails closed: an account
+    /// stored as verified because a config read failed would skip verification for good. Nothing is written, so
+    /// the user can simply retry; the message names the cause without leaking invite or account details.
+    /// </summary>
+    private const string RegistrationUnavailableMessage =
+        "Registration is temporarily unavailable: the server could not determine its email service configuration. Please try again later.";
+
     public async Task<RegisterResult> RegisterAsync(string email, string password, string? inviteToken, CancellationToken cancellationToken = default)
     {
+        // Whether the new account starts verified depends on the email service; that decision must fail closed,
+        // so evaluate the strict gate once, before any lookup or write, for both registration paths.
+        var emailState = await featureAvailability.GetEmailConfigurationStateAsync();
+        if (emailState == EmailConfigurationState.Indeterminate)
+        {
+            logger.LogError("Registration for {Email} refused: email configuration state is indeterminate, so the account's verification state cannot be decided", email);
+            return new RegisterResult(false, null, RegistrationUnavailableMessage);
+        }
+
         // Check if this is first run (no users exist)
         var isFirstRun = await IsFirstRunAsync(cancellationToken);
 
         if (isFirstRun)
         {
             // First run - create owner account without invite
-            return await CreateOwnerAccountAsync(email, password, cancellationToken);
+            return await CreateOwnerAccountAsync(email, password, emailState, cancellationToken);
         }
 
         // Validate invite token for all subsequent users
@@ -223,6 +240,11 @@ public class AuthService(
             return new RegisterResult(false, null, "Email already registered");
         }
 
+        // Without an email service there is no verification link to follow and login rejects unverified
+        // accounts outright, so the account starts verified — the same rule CreateOwnerAccountAsync applies.
+        // (Indeterminate was refused above, so Disabled here means genuinely not configured.)
+        var emailVerificationEnabled = emailState == EmailConfigurationState.Enabled;
+
         // Atomic: register user (create or reactivate) + mark invite as used
         var passwordHash = passwordHasher.HashPassword(password);
         var userId = await userRepository.RegisterUserWithInviteAsync(
@@ -231,6 +253,7 @@ public class AuthService(
             inviteValidation.PermissionLevel,
             inviteValidation.InvitedBy,
             inviteToken!,
+            emailVerified: !emailVerificationEnabled,
             cancellationToken);
 
         logger.LogInformation("User registered: {Email} via invite from {InviterId}", email, inviteValidation.InvitedBy);
@@ -244,9 +267,10 @@ public class AuthService(
             cancellationToken: cancellationToken);
 
         // Send verification email if email service is configured
-        if (await featureAvailability.IsEmailVerificationEnabledAsync())
+        var verificationEmailFailed = false;
+        if (emailVerificationEnabled)
         {
-            await SendVerificationEmailAsync(userId, email, cancellationToken);
+            verificationEmailFailed = !await SendVerificationEmailAsync(userId, email, cancellationToken);
         }
         else
         {
@@ -256,13 +280,14 @@ public class AuthService(
                 registeredUser.ToLogDebug());
         }
 
-        return new RegisterResult(true, userId, null);
+        return new RegisterResult(true, userId, null,
+            EmailVerificationRequired: emailVerificationEnabled, VerificationEmailFailed: verificationEmailFailed);
     }
 
     /// <summary>
     /// Create the first user (owner) without requiring an invite.
     /// </summary>
-    private async Task<RegisterResult> CreateOwnerAccountAsync(string email, string password, CancellationToken cancellationToken)
+    private async Task<RegisterResult> CreateOwnerAccountAsync(string email, string password, EmailConfigurationState emailState, CancellationToken cancellationToken)
     {
         logger.LogInformation("First run detected - creating owner account");
 
@@ -282,7 +307,7 @@ public class AuthService(
             Status: UserStatus.Active,
             ModifiedBy: null,
             ModifiedAt: null,
-            EmailVerified: !await featureAvailability.IsEmailVerificationEnabledAsync(), // Skip verification if email not configured
+            EmailVerified: emailState == EmailConfigurationState.Disabled, // Skip verification if email not configured (Indeterminate was refused by the caller)
             EmailVerificationToken: null,
             EmailVerificationTokenExpiresAt: null,
             PasswordResetToken: null,
@@ -454,8 +479,10 @@ public class AuthService(
         return true;
     }
 
-    private async Task SendVerificationEmailAsync(string userId, string email, CancellationToken cancellationToken)
+    /// <summary>Issues a verification token and emails it. Returns false (after logging) when either step fails.</summary>
+    private async Task<bool> SendVerificationEmailAsync(string userId, string email, CancellationToken cancellationToken)
     {
+        var sent = false;
         try
         {
             // Generate verification token
@@ -482,6 +509,7 @@ public class AuthService(
                     { "BaseUrl", appOptions.Value.BaseUrl }
                 },
                 cancellationToken);
+            sent = true;
 
             logger.LogInformation("Sent verification email to {Email}", email);
 
@@ -495,9 +523,12 @@ public class AuthService(
         }
         catch (Exception ex)
         {
+            // Don't fail registration if email fails; the caller reports the failed send instead.
+            // (A failure after the send, e.g. the audit write, still counts as sent.)
             logger.LogError(ex, "Failed to send verification email to {Email}", email);
-            // Don't fail registration if email fails
         }
+
+        return sent;
     }
 
     public async Task<bool> ResendVerificationEmailAsync(string email, CancellationToken cancellationToken = default)

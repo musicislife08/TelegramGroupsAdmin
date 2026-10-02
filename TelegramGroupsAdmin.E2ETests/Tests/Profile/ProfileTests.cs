@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using TelegramGroupsAdmin.E2ETests.Infrastructure;
 using TelegramGroupsAdmin.E2ETests.PageObjects;
 using static Microsoft.Playwright.Assertions;
@@ -32,29 +33,17 @@ public class ProfileTests : SharedAuthenticatedTestBase
         await _profilePage.NavigateAsync();
 
         // Assert - page loads with correct title
-        Assert.That(await _profilePage.IsPageTitleVisibleAsync(), Is.True,
-            "Profile page title should be visible");
+        await Expect(_profilePage.PageTitle).ToBeVisibleAsync();
+        await Expect(_profilePage.PageTitle).ToHaveTextAsync("Profile Settings");
 
-        var pageTitle = await _profilePage.GetPageTitleAsync();
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(pageTitle, Is.EqualTo("Profile Settings"),
-                      "Page title should be 'Profile Settings'");
+        // Verify all sections are visible
+        await Expect(_profilePage.AccountInfoSection).ToBeVisibleAsync();
+        await Expect(_profilePage.ChangePasswordSection).ToBeVisibleAsync();
+        await Expect(_profilePage.TotpSection).ToBeVisibleAsync();
+        await Expect(_profilePage.TelegramLinkingSection).ToBeVisibleAsync();
 
-            // Verify all sections are visible
-            Assert.That(await _profilePage.IsAccountInfoSectionVisibleAsync(), Is.True,
-                "Account Information section should be visible");
-            Assert.That(await _profilePage.IsChangePasswordSectionVisibleAsync(), Is.True,
-                "Change Password section should be visible");
-            Assert.That(await _profilePage.IsTotpSectionVisibleAsync(), Is.True,
-                "TOTP section should be visible");
-            Assert.That(await _profilePage.IsTelegramLinkingSectionVisibleAsync(), Is.True,
-                "Telegram Linking section should be visible");
-
-            // Verify account info fields are populated
-            Assert.That(await _profilePage.HasAccountInfoFieldsAsync(), Is.True,
-                "All account info fields should be visible");
-        }
+        // Verify account info fields are populated
+        await _profilePage.AssertAccountInfoFieldsVisibleAsync();
     }
 
     #endregion
@@ -72,9 +61,7 @@ public class ProfileTests : SharedAuthenticatedTestBase
         await _profilePage.ClickChangePasswordButtonAsync();
 
         // Assert - should show validation error
-        var snackbar = await _profilePage.WaitForSnackbarAsync();
-        Assert.That(snackbar, Does.Contain("Please fill in all fields"),
-            "Should show 'Please fill in all fields' error");
+        await Expect(_profilePage.Snackbar).ToContainTextAsync("Please fill in all fields");
     }
 
     [Test]
@@ -91,9 +78,7 @@ public class ProfileTests : SharedAuthenticatedTestBase
             confirmPassword: "DifferentPassword456!");
 
         // Assert - should show mismatch error
-        var snackbar = await _profilePage.WaitForSnackbarAsync();
-        Assert.That(snackbar, Does.Contain("New passwords do not match"),
-            "Should show password mismatch error");
+        await Expect(_profilePage.Snackbar).ToContainTextAsync("New passwords do not match");
     }
 
     [Test]
@@ -110,9 +95,7 @@ public class ProfileTests : SharedAuthenticatedTestBase
             confirmPassword: "Short1!");
 
         // Assert - should show length error
-        var snackbar = await _profilePage.WaitForSnackbarAsync();
-        Assert.That(snackbar, Does.Contain("at least 8 characters"),
-            "Should show minimum length error");
+        await Expect(_profilePage.Snackbar).ToContainTextAsync("at least 8 characters");
     }
 
     [Test]
@@ -129,9 +112,7 @@ public class ProfileTests : SharedAuthenticatedTestBase
             confirmPassword: "NewValidPassword123!");
 
         // Assert - should show incorrect password error
-        var snackbar = await _profilePage.WaitForSnackbarAsync();
-        Assert.That(snackbar, Does.Contain("Current password is incorrect"),
-            "Should show incorrect password error");
+        await Expect(_profilePage.Snackbar).ToContainTextAsync("Current password is incorrect");
     }
 
     [Test]
@@ -150,14 +131,10 @@ public class ProfileTests : SharedAuthenticatedTestBase
             confirmPassword: newPassword);
 
         // Assert - should show success message
-        var snackbar = await _profilePage.WaitForSnackbarAsync();
-        Assert.That(snackbar, Does.Contain("Password changed successfully"),
-            "Should show password change success message");
+        await Expect(_profilePage.Snackbar).ToContainTextAsync("Password changed successfully");
 
         // Verify form fields are cleared
-        var currentPasswordValue = await _profilePage.GetCurrentPasswordValueAsync();
-        Assert.That(currentPasswordValue, Is.Empty,
-            "Current password field should be cleared after successful change");
+        await Expect(_profilePage.CurrentPasswordInput).ToHaveValueAsync("");
     }
 
     #endregion
@@ -173,16 +150,11 @@ public class ProfileTests : SharedAuthenticatedTestBase
         // Act - navigate to profile page
         await _profilePage.NavigateAsync();
 
-        using (Assert.EnterMultipleScope())
-        {
-            // Assert - TOTP section shows disabled state
-            Assert.That(await _profilePage.IsTotpDisabledAsync(), Is.True,
-                "Should show '2FA is not enabled' warning");
-            Assert.That(await _profilePage.IsEnable2FAButtonVisibleAsync(), Is.True,
-                "Enable 2FA button should be visible");
-            Assert.That(await _profilePage.IsReset2FAButtonVisibleAsync(), Is.False,
-                "Reset 2FA button should NOT be visible when TOTP is disabled");
-        }
+        // Assert - TOTP section shows disabled state. The positive checks come first so the
+        // absence check cannot pass before the TOTP section has rendered its state.
+        await _profilePage.AssertTotpDisabledAsync();
+        await Expect(_profilePage.Enable2FAButton).ToBeVisibleAsync();
+        await Expect(_profilePage.Reset2FAButton).Not.ToBeVisibleAsync();
     }
 
     [Test]
@@ -201,16 +173,11 @@ public class ProfileTests : SharedAuthenticatedTestBase
         // Act - navigate to profile page
         await _profilePage.NavigateAsync();
 
-        using (Assert.EnterMultipleScope())
-        {
-            // Assert - TOTP section shows enabled state
-            Assert.That(await _profilePage.IsTotpEnabledAsync(), Is.True,
-                "Should show '2FA is currently enabled' alert");
-            Assert.That(await _profilePage.IsReset2FAButtonVisibleAsync(), Is.True,
-                "Reset 2FA button should be visible");
-            Assert.That(await _profilePage.IsEnable2FAButtonVisibleAsync(), Is.False,
-                "Enable 2FA button should NOT be visible when TOTP is enabled");
-        }
+        // Assert - TOTP section shows enabled state. The positive checks come first so the
+        // absence check cannot pass before the TOTP section has rendered its state.
+        await _profilePage.AssertTotpEnabledAsync();
+        await Expect(_profilePage.Reset2FAButton).ToBeVisibleAsync();
+        await Expect(_profilePage.Enable2FAButton).Not.ToBeVisibleAsync();
     }
 
     [Test]
@@ -226,16 +193,10 @@ public class ProfileTests : SharedAuthenticatedTestBase
         // Wait for dialog to appear using web-first assertion
         await Expect(Page.Locator(".mud-dialog")).ToBeVisibleAsync();
 
-        using (Assert.EnterMultipleScope())
-        {
-            // Assert - dialog opens with expected elements
-            Assert.That(await _profilePage.IsTotpSetupDialogVisibleAsync(), Is.True,
-                "TOTP setup dialog should be visible");
-            Assert.That(await _profilePage.IsTotpQRCodeVisibleAsync(), Is.True,
-                "QR code should be visible in the dialog");
-            Assert.That(await _profilePage.IsTotpManualKeyVisibleAsync(), Is.True,
-                "Manual entry key section should be visible");
-        }
+        // Assert - dialog opens with expected elements
+        await Expect(_profilePage.TotpSetupDialog).ToBeVisibleAsync();
+        await Expect(_profilePage.TotpQrCode).ToBeVisibleAsync();
+        await Expect(_profilePage.TotpManualKeyText).ToBeVisibleAsync();
 
         var verificationInput = _profilePage.GetTotpVerificationCodeInput();
         await Expect(verificationInput).ToBeVisibleAsync();
@@ -257,14 +218,10 @@ public class ProfileTests : SharedAuthenticatedTestBase
         // Act - navigate to profile page
         await _profilePage.NavigateAsync();
 
-        using (Assert.EnterMultipleScope())
-        {
-            // Assert - shows no accounts message
-            Assert.That(await _profilePage.IsNoLinkedAccountsMessageVisibleAsync(), Is.True,
-                "Should show 'No Telegram accounts linked' message");
-            Assert.That(await _profilePage.IsLinkedAccountsTableVisibleAsync(), Is.False,
-                "Linked accounts table should NOT be visible when no accounts are linked");
-        }
+        // Assert - shows no accounts message (positive check first, so the table absence
+        // check below cannot pass before the section has rendered)
+        await Expect(_profilePage.NoLinkedAccountsMessage).ToBeVisibleAsync();
+        await Expect(_profilePage.LinkedAccountsTable).Not.ToBeVisibleAsync();
     }
 
     [Test]
@@ -282,14 +239,10 @@ public class ProfileTests : SharedAuthenticatedTestBase
         await Expect(tokenAlert).ToBeVisibleAsync(new() { Timeout = 5000 });
 
         // Assert - token is generated and displayed
-        Assert.That(await _profilePage.IsLinkTokenVisibleAsync(), Is.True,
-            "Link token should be visible after clicking the button");
+        await Expect(_profilePage.LinkTokenAlert).ToBeVisibleAsync();
 
-        var token = await _profilePage.GetLinkTokenValueAsync();
-        Assert.That(token, Is.Not.Null.And.Not.Empty,
-            "Generated token should not be empty");
-        Assert.That(token!.Length, Is.EqualTo(12),
-            "Generated token should be 12 characters");
+        // Generated token should be non-empty and exactly 12 characters
+        await Expect(_profilePage.LinkTokenInput).ToHaveValueAsync(new Regex("^.{12}$"));
 
         // Verify the /link command instruction is visible
         var linkCommandText = Page.GetByText("/link");
@@ -312,25 +265,14 @@ public class ProfileTests : SharedAuthenticatedTestBase
         // Act - navigate to profile page
         await _profilePage.NavigateAsync();
 
-        using (Assert.EnterMultipleScope())
-        {
-            // Assert - linked accounts table is visible
-            Assert.That(await _profilePage.IsLinkedAccountsTableVisibleAsync(), Is.True,
-                "Linked accounts table should be visible");
-            Assert.That(await _profilePage.IsNoLinkedAccountsMessageVisibleAsync(), Is.False,
-                "No accounts message should NOT be visible when accounts are linked");
-        }
+        // Assert - linked accounts table is visible (positive check first, so the message
+        // absence check below cannot pass before the section has rendered)
+        await Expect(_profilePage.LinkedAccountsTable).ToBeVisibleAsync();
+        await Expect(_profilePage.NoLinkedAccountsMessage).Not.ToBeVisibleAsync();
 
         // Verify the linked account details
-        var count = await _profilePage.GetLinkedAccountsCountAsync();
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(count, Is.EqualTo(1),
-                      "Should have exactly 1 linked account");
-
-            Assert.That(await _profilePage.HasLinkedAccountWithUsernameAsync("@testlinkeduser"), Is.True,
-                "Should show the linked account's username");
-        }
+        await Expect(_profilePage.LinkedAccountRows).ToHaveCountAsync(1);
+        await Expect(_profilePage.LinkedAccountUsernameCell("@testlinkeduser")).ToBeVisibleAsync();
     }
 
     [Test]
@@ -348,23 +290,16 @@ public class ProfileTests : SharedAuthenticatedTestBase
         await _profilePage.NavigateAsync();
 
         // Verify account is initially linked
-        Assert.That(await _profilePage.GetLinkedAccountsCountAsync(), Is.EqualTo(1),
-            "Should have 1 linked account before unlinking");
+        await Expect(_profilePage.LinkedAccountRows).ToHaveCountAsync(1);
 
         // Act - click Unlink button
         await _profilePage.ClickUnlinkButtonAsync(0);
 
         // Assert - account is unlinked
-        var snackbar = await _profilePage.WaitForSnackbarAsync();
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(snackbar, Does.Contain("unlinked successfully"),
-                      "Should show unlink success message");
+        await Expect(_profilePage.Snackbar).ToContainTextAsync("unlinked successfully");
 
-            // Verify account is removed from the table
-            Assert.That(await _profilePage.IsNoLinkedAccountsMessageVisibleAsync(), Is.True,
-                "Should show no accounts message after unlinking");
-        }
+        // Verify account is removed from the table
+        await Expect(_profilePage.NoLinkedAccountsMessage).ToBeVisibleAsync();
     }
 
     #endregion

@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using TelegramGroupsAdmin.Core.Http;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Repositories;
 using TelegramGroupsAdmin.Data;
@@ -104,6 +105,32 @@ public class NotificationRepositoriesTests
             Assert.That(result.P256dh, Is.EqualTo("BPubKey123"));
             Assert.That(result.Auth, Is.EqualTo("AuthKey456"));
         }
+    }
+
+    // The endpoint comes from the user's browser and the server will POST to it later, so a
+    // non-https or non-public-literal endpoint is refused at save time and nothing is stored.
+    [TestCase("http://push.example.com/sub/plain")]
+    [TestCase("https://127.0.0.1:5000/sub/loopback")]
+    [TestCase("https://[::1]:5000/sub/loopback6")]
+    [TestCase("https://10.0.0.1/sub/private")]
+    [TestCase("https://169.254.169.254/latest/meta-data/")]
+    [TestCase("https://user:pw@push.example.com/sub/userinfo")]
+    [TestCase("not a url")]
+    public async Task PushSubscriptions_UpsertAsync_RejectsEndpointFailingThePolicy(string endpoint)
+    {
+        var subscription = new PushSubscription
+        {
+            UserId = TestUserId1,
+            Endpoint = endpoint,
+            P256dh = "BPubKey123",
+            Auth = "AuthKey456"
+        };
+
+        var ex = Assert.ThrowsAsync<PushEndpointRejectedException>(() => _pushRepo!.UpsertAsync(subscription));
+
+        Assert.That(ex!.Message, Is.EqualTo(PushEndpointPolicy.RejectedMessage));
+        Assert.That(ex.Reason, Is.Not.Empty);
+        Assert.That(await _pushRepo!.GetByEndpointAsync(endpoint), Is.Null, "nothing may be stored");
     }
 
     [Test]

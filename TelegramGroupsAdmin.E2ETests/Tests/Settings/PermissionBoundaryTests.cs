@@ -1,3 +1,5 @@
+using static TelegramGroupsAdmin.E2ETests.PageObjects.BlazorPageExtensions;
+using System.Text.RegularExpressions;
 using Microsoft.Playwright;
 using TelegramGroupsAdmin.E2ETests.PageObjects.Settings;
 using static Microsoft.Playwright.Assertions;
@@ -40,6 +42,9 @@ public class PermissionBoundaryTests : AuthenticatedTestBase
         // Act - Check for Settings link
         var settingsLink = Page.Locator("a[href='/settings']");
 
+        // Sync on a link Admin does see so the absence check cannot pass before the nav renders
+        await Expect(Page.Locator("a[href='/reports']")).ToBeVisibleAsync();
+
         // Assert - Admin should NOT see Settings
         await Expect(settingsLink).Not.ToBeVisibleAsync();
     }
@@ -54,6 +59,9 @@ public class PermissionBoundaryTests : AuthenticatedTestBase
         // Act - Check for Audit Log link
         var auditLink = Page.Locator("a[href='/audit']");
 
+        // Sync on a link Admin does see so the absence check cannot pass before the nav renders
+        await Expect(Page.Locator("a[href='/reports']")).ToBeVisibleAsync();
+
         // Assert - Admin should NOT see Audit Log
         await Expect(auditLink).Not.ToBeVisibleAsync();
     }
@@ -67,6 +75,9 @@ public class PermissionBoundaryTests : AuthenticatedTestBase
 
         // Act - Check for Chat Management link
         var chatsLink = Page.Locator("a[href='/chats']");
+
+        // Sync on a link Admin does see so the absence check cannot pass before the nav renders
+        await Expect(Page.Locator("a[href='/reports']")).ToBeVisibleAsync();
 
         // Assert - Admin should NOT see Chat Management
         await Expect(chatsLink).Not.ToBeVisibleAsync();
@@ -129,22 +140,10 @@ public class PermissionBoundaryTests : AuthenticatedTestBase
         // Act - Try to navigate directly to Settings
         await NavigateToAsync("/settings");
 
-        // Assert - Should be denied or redirected
-        // The page should show access denied or redirect to another page
-        var currentUrl = Page.Url;
-        var isOnSettings = currentUrl.Contains("/settings");
-
-        if (isOnSettings)
-        {
-            // If still on settings, should show access denied message
-            var accessDenied = Page.GetByText("access denied", new PageGetByTextOptions { Exact = false });
-            var ownerRequired = Page.GetByText("Owner access required", new PageGetByTextOptions { Exact = false });
-            var errorAlert = Page.Locator(".mud-alert-error");
-
-            var hasAccessDenied = await accessDenied.Or(ownerRequired).Or(errorAlert).IsVisibleAsync();
-            Assert.That(hasAccessDenied, Is.True, "Admin should see access denied on Settings page");
-        }
-        // If redirected away, that's also acceptable
+        // Assert - Settings is [Authorize(GlobalAdminOrOwner)], so an Admin is always redirected away
+        // (server forbid -> /access-denied?ReturnUrl=%2Fsettings, or the router's NotAuthorized -> /login).
+        // Retry until the redirect lands; the encoded ReturnUrl does not match the pattern.
+        await Expect(Page).Not.ToHaveURLAsync(new Regex(@"/settings(?:[/?#]|$)"));
     }
 
     [Test]
@@ -156,15 +155,10 @@ public class PermissionBoundaryTests : AuthenticatedTestBase
         // Act - Try to navigate directly to Audit Log
         await NavigateToAsync("/audit");
 
-        // Assert - Should be denied or redirected
-        var currentUrl = Page.Url;
-
-        // Check if redirected to access-denied page or shows error
-        var isAccessDenied = currentUrl.Contains("/access-denied") ||
-                             await Page.GetByText("Access Denied").IsVisibleAsync();
-
-        Assert.That(isAccessDenied || !currentUrl.Contains("/audit"),
-            Is.True, "Admin should not be able to access Audit Log page");
+        // Assert - Audit is [Authorize(GlobalAdminOrOwner)], so an Admin is always redirected away
+        // (server forbid -> /access-denied?ReturnUrl=%2Faudit, or the router's NotAuthorized -> /login).
+        // Retry until the redirect lands; the encoded ReturnUrl does not match the pattern.
+        await Expect(Page).Not.ToHaveURLAsync(new Regex(@"/audit(?:[?#]|$)"));
     }
 
     [Test]
@@ -178,9 +172,12 @@ public class PermissionBoundaryTests : AuthenticatedTestBase
         await settingsPage.NavigateAsync();
         await settingsPage.WaitForLoadAsync();
 
-        // Assert - Should be able to access (no access denied)
-        var isAllowed = await settingsPage.IsAccessAllowedAsync();
-        Assert.That(isAllowed, Is.True, "GlobalAdmin should be able to access Settings page");
+        // Assert - Should be able to access: the page body rendered past the Authorize gate and the URL
+        // stayed on /settings (an unauthorised role is redirected away, see Admin_CannotAccessSettingsPage).
+        // Settings.razor has no page-level access-denied alert to check for; the per-section
+        // "Owner access required" alert is a different fact, asserted in GlobalAdmin_CannotSeeInfrastructureSettings.
+        await Expect(settingsPage.SettingsSidebarHeading).ToBeVisibleAsync();
+        await Expect(Page).ToHaveURLAsync(new Regex(@"/settings(?:[/?#]|$)"));
     }
 
     [Test]
@@ -194,9 +191,18 @@ public class PermissionBoundaryTests : AuthenticatedTestBase
         await settingsPage.NavigateAsync();
         await settingsPage.WaitForLoadAsync();
 
-        // Assert - Infrastructure settings should be hidden
-        var hasInfrastructure = await settingsPage.AreInfrastructureSettingsVisibleAsync();
-        Assert.That(hasInfrastructure, Is.False, "GlobalAdmin should NOT see infrastructure settings");
+        // Sync on the Logging link (shown to every role in the same System nav group) so the
+        // absence check cannot pass before the nav renders
+        await Expect(settingsPage.LoggingSettingsLink).ToBeVisibleAsync();
+
+        // Assert - GlobalAdmin keeps the Admin Accounts link (gated on IsGlobalAdminOrHigher)...
+        await Expect(settingsPage.AdminAccountsLink).ToBeVisibleAsync();
+
+        // ...but the Owner-only infrastructure links are hidden
+        await Expect(settingsPage.GeneralSettingsLink).Not.ToBeVisibleAsync();
+
+        // ...and the default section (General, infrastructure) shows the Owner-access-required alert in place of its body
+        await Expect(settingsPage.OwnerAccessRequiredAlert).ToBeVisibleAsync();
     }
 
     [Test]
@@ -207,7 +213,7 @@ public class PermissionBoundaryTests : AuthenticatedTestBase
 
         // Act
         await NavigateToAsync("/audit");
-        await Page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        await Page.WaitForInteractiveAsync();
 
         // Assert - Should be on audit page
         var pageTitle = Page.Locator(".mud-typography-h4");
@@ -226,8 +232,7 @@ public class PermissionBoundaryTests : AuthenticatedTestBase
         await settingsPage.WaitForLoadAsync();
 
         // Assert - Owner should see infrastructure settings
-        var hasInfrastructure = await settingsPage.AreInfrastructureSettingsVisibleAsync();
-        Assert.That(hasInfrastructure, Is.True, "Owner should see infrastructure settings");
+        await Expect(settingsPage.GeneralSettingsLink).ToBeVisibleAsync(new() { Timeout = 5000 });
     }
 
     #endregion
@@ -242,7 +247,7 @@ public class PermissionBoundaryTests : AuthenticatedTestBase
 
         // Act
         await NavigateToAsync("/reports");
-        await Page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        await Page.WaitForInteractiveAsync();
 
         // Assert - Should be able to access (page title visible)
         var pageTitle = Page.Locator(".mud-typography-h4");
@@ -257,7 +262,7 @@ public class PermissionBoundaryTests : AuthenticatedTestBase
 
         // Act
         await NavigateToAsync("/users");
-        await Page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        await Page.WaitForInteractiveAsync();
 
         // Assert - Should be able to access (page title visible)
         var pageTitle = Page.Locator(".mud-typography-h4");

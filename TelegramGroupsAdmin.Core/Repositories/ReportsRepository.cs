@@ -420,7 +420,7 @@ public class ReportsRepository : IReportsRepository
 
         // Map and sort by risk level (critical first), then by date
         return results
-            .Select(r => r.ToImpersonationAlert())
+            .Select(r => MapOrSkip(r, v => v.ToImpersonationAlert(), ReportType.ImpersonationAlert))
             .Where(r => r != null)
             .Cast<ImpersonationAlertRecord>()
             .OrderByDescending(r => r.RiskLevel)
@@ -469,7 +469,7 @@ public class ReportsRepository : IReportsRepository
             .ToListAsync(cancellationToken);
 
         return results
-            .Select(r => r.ToImpersonationAlert())
+            .Select(r => MapOrSkip(r, v => v.ToImpersonationAlert(), ReportType.ImpersonationAlert))
             .Where(r => r != null)
             .Cast<ImpersonationAlertRecord>()
             .ToList();
@@ -562,6 +562,9 @@ public class ReportsRepository : IReportsRepository
                         && r.ProfileUserId == userId)
             .ToListAsync(cancellationToken);
 
+        // No MapOrSkip here: this feeds sibling cleanup after an Allow. A skipped sibling would stay
+        // Pending and invisible in the queue while HasPendingProfileScanAlertAsync (raw JSONB) keeps
+        // holding the user at the join gate, so an unreadable row must fail the action loudly.
         return results
             .Select(r => r.ToProfileScanAlert())
             .Where(r => r != null)
@@ -587,10 +590,33 @@ public class ReportsRepository : IReportsRepository
             .ToListAsync(cancellationToken);
 
         return results
-            .Select(r => r.ToProfileScanAlert())
+            .Select(r => MapOrSkip(r, v => v.ToProfileScanAlert(), ReportType.ProfileScanAlert))
             .Where(r => r != null)
             .Cast<ProfileScanAlertRecord>()
             .ToList();
+    }
+
+    /// <summary>
+    /// Maps one enriched row for a queue list query. A row whose JSONB context no longer deserializes
+    /// is skipped with a warning naming the report (never its payload), so one malformed row cannot
+    /// fail the whole queue. Single-row lookups and per-user cleanup queries keep throwing: there the
+    /// row is the subject, or a silent skip would strand state.
+    /// </summary>
+    private TRecord? MapOrSkip<TRecord>(
+        EnrichedReportView view, Func<EnrichedReportView, TRecord?> map, ReportType type)
+        where TRecord : class
+    {
+        try
+        {
+            return map(view);
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogWarning(ex,
+                "Skipping {ReportType} report {ReportId}: its context could not be read",
+                type, view.Id);
+            return null;
+        }
     }
 
     // ============================================================
@@ -680,7 +706,7 @@ public class ReportsRepository : IReportsRepository
             .ToListAsync(cancellationToken);
 
         return results
-            .Select(r => r.ToExamResult())
+            .Select(r => MapOrSkip(r, v => v.ToExamResult(), ReportType.ExamResult))
             .Where(r => r != null)
             .Cast<ExamResultRecord>()
             .ToList();

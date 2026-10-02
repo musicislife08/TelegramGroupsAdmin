@@ -2,6 +2,8 @@
 paths:
   - "TelegramGroupsAdmin.IntegrationTests/**/*.cs"
   - "TelegramGroupsAdmin.IntegrationTests/**/*.sql"
+  - "TelegramGroupsAdmin.Testing.Golden/**/*.cs"
+  - "TelegramGroupsAdmin.Testing.Golden/**/*.sql"
   - "TelegramGroupsAdmin.E2ETests/**/*.cs"
   - "docs/superpowers/plans/**/*.md"
   - "docs/superpowers/specs/**/*.md"
@@ -9,7 +11,7 @@ paths:
 
 # Integration-test data rules (MANDATORY)
 
-The canonical dataset under `TelegramGroupsAdmin.IntegrationTests/TestData/SQL/canonical/` is
+The canonical dataset under `TelegramGroupsAdmin.Testing.Golden/SQL/canonical/` is
 **scrubbed real prod data**, cloned per test as a fresh PostgreSQL template. A test's job is to
 assert its logic against that real data. These rules apply to every integration and E2E test,
 and to every spec or plan that specifies one.
@@ -24,7 +26,7 @@ and to every spec or plan that specifies one.
   canonical row that no test or doc references (`grep -rn <id> TelegramGroupsAdmin.*Tests docs`
   → only the SQL itself) and **flag-edit it in place** so the dataset stays realistic. Keep the
   story plausible (e.g. a timed-out joiner later trusted; a 12h temp-ban whose flag was never cleared).
-- **Pin every anchor in `TestData/GoldenDatasetConstants.cs`** (nested test-domain class, XML doc on
+- **Pin every anchor in `TelegramGroupsAdmin.Testing.Golden/GoldenDatasetConstants.cs`** (nested test-domain class, XML doc on
   each constant) and add a Part 2 recipe to `TelegramGroupsAdmin.IntegrationTests/CLAUDE.md`, marked
   "(canonical edit <date>)" when a row was edited.
 - **Guard edited preconditions.** A test that relies on an edited row reads it back first and asserts

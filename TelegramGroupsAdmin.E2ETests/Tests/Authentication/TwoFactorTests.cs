@@ -90,8 +90,7 @@ public class TwoFactorTests : SharedE2ETestBase
         await _verifyPage.VerifyAsync("000000");
 
         // Assert - should show error and stay on verify page
-        Assert.That(await _verifyPage.HasErrorMessageAsync(), Is.True,
-            "Should display error for invalid TOTP code");
+        await Expect(_verifyPage.ErrorAlert).ToBeVisibleAsync();
         await Expect(Page).ToHaveURLAsync(new System.Text.RegularExpressions.Regex("/login/verify"));
     }
 

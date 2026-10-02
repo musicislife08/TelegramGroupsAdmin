@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Microsoft.Playwright;
 using static Microsoft.Playwright.Assertions;
 
@@ -16,20 +17,17 @@ public class AuditLogPage
     private const string BasePath = "/audit";
 
     // Page elements
-    private const string PageTitle = ".mud-typography-h4";
+    private const string PageTitleSelector = ".mud-typography-h4";
     private const string TabContainer = ".mud-tabs";
-    private const string TabPanel = ".mud-tab";
-    private const string ActiveTab = ".mud-tab-active";
 
     // Tables
-    private const string WebAdminTable = ".mud-tab-panel:not([hidden]) .mud-table";
-    private const string TableBody = ".mud-table-body";
     private const string TableRow = ".mud-table-body tr";
     private const string TablePager = ".mud-table-pagination";
-    private const string LoadingIndicator = ".mud-progress-linear";
 
     // Filter elements
-    private const string FilterContainer = ".mud-tab-panel:not([hidden]) .mud-paper";
+
+    // Active tab panel scope
+    private const string ActivePanel = ".mud-tab-panel:not([hidden])";
 
     public AuditLogPage(IPage page)
     {
@@ -44,8 +42,8 @@ public class AuditLogPage
     public async Task NavigateAsync()
     {
         await _page.GotoAsync(BasePath);
-        // Audit log has interactive data loading - need Blazor circuit connected
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        // Audit log has interactive data loading - need the Blazor circuit live
+        await _page.WaitForInteractiveAsync();
     }
 
     /// <summary>
@@ -54,7 +52,7 @@ public class AuditLogPage
     public async Task NavigateToTabAsync(string tabFragment)
     {
         await _page.GotoAsync($"{BasePath}#{tabFragment}");
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        await _page.WaitForInteractiveAsync();
     }
 
     /// <summary>
@@ -62,55 +60,27 @@ public class AuditLogPage
     /// </summary>
     public async Task WaitForLoadAsync()
     {
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        await _page.WaitForInteractiveAsync();
     }
 
     #endregion
 
     #region Page Title
 
-    /// <summary>
-    /// Checks if the page title is visible.
-    /// </summary>
-    public async Task<bool> IsPageTitleVisibleAsync()
-    {
-        return await _page.Locator(PageTitle).IsVisibleAsync();
-    }
-
-    /// <summary>
-    /// Gets the page title text.
-    /// </summary>
-    public async Task<string?> GetPageTitleAsync()
-    {
-        return await _page.Locator(PageTitle).TextContentAsync();
-    }
+    /// <summary>The page title.</summary>
+    public ILocator PageTitle => _page.Locator(PageTitleSelector);
 
     #endregion
 
     #region Tabs
 
-    /// <summary>
-    /// Checks if the tabs container is visible.
-    /// </summary>
-    public async Task<bool> IsTabsVisibleAsync()
-    {
-        return await _page.Locator(TabContainer).IsVisibleAsync();
-    }
+    /// <summary>The tabs container.</summary>
+    public ILocator TabsContainer => _page.Locator(TabContainer);
 
     /// <summary>
-    /// Gets the names of all visible tabs.
+    /// The tab (role="tab") with the given name. MudBlazor marks the active tab with aria-selected="true".
     /// </summary>
-    public async Task<List<string>> GetTabNamesAsync()
-    {
-        var tabs = await _page.Locator(TabPanel).AllAsync();
-        var textTasks = tabs.Select(tab => tab.TextContentAsync());
-        var texts = await Task.WhenAll(textTasks);
-
-        return texts
-            .Where(text => !string.IsNullOrEmpty(text))
-            .Select(text => text!.Trim())
-            .ToList();
-    }
+    public ILocator Tab(string tabName) => _page.GetByRole(AriaRole.Tab, new() { Name = tabName });
 
     /// <summary>
     /// Clicks a tab by its text content and waits for it to become active.
@@ -118,7 +88,7 @@ public class AuditLogPage
     /// </summary>
     public async Task SelectTabAsync(string tabName)
     {
-        var tab = _page.GetByRole(AriaRole.Tab, new() { Name = tabName });
+        var tab = Tab(tabName);
         await tab.ClickAsync();
 
         // Wait for the tab to actually become active (aria-selected="true")
@@ -128,97 +98,39 @@ public class AuditLogPage
         await WaitForLoadAsync();
     }
 
-    /// <summary>
-    /// Gets the currently active tab text.
-    /// </summary>
-    public async Task<string?> GetActiveTabNameAsync()
-    {
-        var activeTab = _page.Locator("[role='tab'][aria-selected='true']");
-        if (await activeTab.CountAsync() == 0)
-            return null;
-        return await activeTab.First.TextContentAsync();
-    }
+    /// <summary>The Web Admin Log tab.</summary>
+    public ILocator WebAdminLogTab => Tab("Web Admin Log");
 
-    /// <summary>
-    /// Checks if a tab with the given name is active.
-    /// </summary>
-    private async Task<bool> IsTabActiveAsync(string tabName)
-    {
-        var tab = _page.GetByRole(AriaRole.Tab, new() { Name = tabName });
-        var ariaSelected = await tab.GetAttributeAsync("aria-selected");
-        return ariaSelected == "true";
-    }
-
-    /// <summary>
-    /// Checks if the Web Admin Log tab is active.
-    /// </summary>
-    public Task<bool> IsWebAdminLogTabActiveAsync() => IsTabActiveAsync("Web Admin Log");
-
-    /// <summary>
-    /// Checks if the Telegram Moderation Log tab is active.
-    /// </summary>
-    public Task<bool> IsModerationLogTabActiveAsync() => IsTabActiveAsync("Telegram Moderation Log");
+    /// <summary>The Telegram Moderation Log tab.</summary>
+    public ILocator ModerationLogTab => Tab("Telegram Moderation Log");
 
     #endregion
 
     #region Web Admin Log Tab
 
+    /// <summary>The rows in the currently visible table.</summary>
+    public ILocator TableRows => _page.Locator($"{ActivePanel} {TableRow}");
+
+    /// <summary>The column header cells of the currently visible table.</summary>
+    public ILocator TableHeaders => _page.Locator($"{ActivePanel} .mud-table-head th");
+
     /// <summary>
-    /// Checks if the Web Admin Log table is visible.
+    /// The column header cell of the currently visible table whose text is exactly <paramref name="headerText"/>.
     /// </summary>
-    public async Task<bool> IsWebAdminLogTableVisibleAsync()
-    {
-        return await _page.Locator(WebAdminTable).IsVisibleAsync();
-    }
+    public ILocator TableHeader(string headerText) =>
+        TableHeaders.Filter(new() { HasTextRegex = new Regex($@"^\s*{Regex.Escape(headerText)}\s*$") });
 
     /// <summary>
-    /// Gets the count of rows in the currently visible table.
-    /// </summary>
-    public async Task<int> GetTableRowCountAsync()
-    {
-        var rows = _page.Locator($".mud-tab-panel:not([hidden]) {TableRow}");
-        return await rows.CountAsync();
-    }
-
-    /// <summary>
-    /// Gets the header text of columns in the table.
-    /// </summary>
-    public async Task<List<string>> GetTableHeadersAsync()
-    {
-        var headerCells = await _page.Locator(".mud-tab-panel:not([hidden]) .mud-table-head th").AllAsync();
-        var textTasks = headerCells.Select(cell => cell.TextContentAsync());
-        var texts = await Task.WhenAll(textTasks);
-
-        return texts
-            .Where(text => !string.IsNullOrEmpty(text))
-            .Select(text => text!.Trim())
-            .ToList();
-    }
-
-    /// <summary>
-    /// Checks if the Event Type filter select is visible.
+    /// The Event Type filter select.
     /// MudBlazor renders labels inside .mud-select elements.
     /// </summary>
-    public async Task<bool> IsEventTypeFilterVisibleAsync()
-    {
-        return await _page.Locator(".mud-select").Filter(new() { HasText = "Event Type" }).First.IsVisibleAsync();
-    }
+    public ILocator EventTypeFilter => _page.Locator(".mud-select").Filter(new() { HasText = "Event Type" }).First;
 
-    /// <summary>
-    /// Checks if the Actor filter select is visible.
-    /// </summary>
-    public async Task<bool> IsActorFilterVisibleAsync()
-    {
-        return await _page.Locator(".mud-select").Filter(new() { HasText = "Actor (Who)" }).First.IsVisibleAsync();
-    }
+    /// <summary>The Actor filter select.</summary>
+    public ILocator ActorFilter => _page.Locator(".mud-select").Filter(new() { HasText = "Actor (Who)" }).First;
 
-    /// <summary>
-    /// Checks if the Target User filter select is visible.
-    /// </summary>
-    public async Task<bool> IsTargetUserFilterVisibleAsync()
-    {
-        return await _page.Locator(".mud-select").Filter(new() { HasText = "Target User" }).First.IsVisibleAsync();
-    }
+    /// <summary>The Target User filter select.</summary>
+    public ILocator TargetUserFilter => _page.Locator(".mud-select").Filter(new() { HasText = "Target User" }).First;
 
     /// <summary>
     /// Selects an event type filter option.
@@ -226,8 +138,7 @@ public class AuditLogPage
     /// </summary>
     public async Task SelectEventTypeFilterAsync(string eventType)
     {
-        var select = _page.Locator(".mud-select").Filter(new() { HasText = "Event Type" }).First;
-        await select.ClickAsync();
+        await EventTypeFilter.ClickAsync();
 
         // Wait for popover to open
         var popover = _page.Locator(".mud-popover-open");
@@ -247,8 +158,7 @@ public class AuditLogPage
     /// </summary>
     public async Task SelectActorFilterAsync(string actorText)
     {
-        var select = _page.Locator(".mud-select").Filter(new() { HasText = "Actor (Who)" }).First;
-        await select.ClickAsync();
+        await ActorFilter.ClickAsync();
 
         // Wait for popover to open
         var popover = _page.Locator(".mud-popover-open");
@@ -280,71 +190,41 @@ public class AuditLogPage
     }
 
     /// <summary>
-    /// Gets the event type text from a specific row.
-    /// </summary>
-    public async Task<string?> GetEventTypeFromRowAsync(int rowIndex)
-    {
-        var row = _page.Locator($".mud-tab-panel:not([hidden]) {TableRow}").Nth(rowIndex);
-        var eventTypeCell = row.Locator("td[data-label='Event Type'] .mud-chip");
-        return await eventTypeCell.TextContentAsync();
-    }
-
-    /// <summary>
-    /// Checks if a log entry with specific event type text is visible.
+    /// The event type chip of the log entry whose event type contains <paramref name="eventTypeText"/>.
     /// Tests should create deterministic data so only one entry matches.
     /// </summary>
-    public async Task<bool> HasLogEntryWithEventTypeAsync(string eventTypeText)
-    {
-        var chip = _page.Locator(".mud-tab-panel:not([hidden]) td[data-label='Event Type'] .mud-chip").Filter(new() { HasText = eventTypeText });
-        return await chip.IsVisibleAsync();
-    }
+    public ILocator LogEntryWithEventType(string eventTypeText) =>
+        _page.Locator($"{ActivePanel} td[data-label='Event Type'] .mud-chip").Filter(new() { HasText = eventTypeText });
 
     /// <summary>
-    /// Checks if a log entry with specific actor text is visible.
+    /// The Actor cell of the log entry whose actor contains <paramref name="actorText"/>.
     /// Tests should create deterministic data so only one entry matches.
     /// </summary>
-    public async Task<bool> HasLogEntryWithActorAsync(string actorText)
-    {
-        var cell = _page.Locator(".mud-tab-panel:not([hidden]) td[data-label='Actor']").Filter(new() { HasText = actorText });
-        return await cell.IsVisibleAsync();
-    }
+    public ILocator LogEntryWithActor(string actorText) =>
+        _page.Locator($"{ActivePanel} td[data-label='Actor']").Filter(new() { HasText = actorText });
 
     #endregion
 
     #region Telegram Moderation Log Tab
 
-    /// <summary>
-    /// Checks if the Action Type filter select is visible (Moderation Log tab).
-    /// </summary>
-    public async Task<bool> IsActionTypeFilterVisibleAsync()
-    {
-        return await _page.Locator(".mud-select").Filter(new() { HasText = "Action Type" }).First.IsVisibleAsync();
-    }
+    /// <summary>The Action Type filter select (Moderation Log tab).</summary>
+    public ILocator ActionTypeFilter => _page.Locator(".mud-select").Filter(new() { HasText = "Action Type" }).First;
 
     /// <summary>
-    /// Checks if the Telegram User ID filter is visible (Moderation Log tab).
+    /// The Telegram User ID filter (Moderation Log tab).
     /// MudTextField uses GetByPlaceholder since the label may not be accessible.
     /// </summary>
-    public async Task<bool> IsTelegramUserIdFilterVisibleAsync()
-    {
-        return await _page.GetByPlaceholder("Enter Telegram ID").IsVisibleAsync();
-    }
+    public ILocator TelegramUserIdFilter => _page.GetByPlaceholder("Enter Telegram ID");
 
-    /// <summary>
-    /// Checks if the Issued By filter is visible (Moderation Log tab).
-    /// </summary>
-    public async Task<bool> IsIssuedByFilterVisibleAsync()
-    {
-        return await _page.GetByPlaceholder("e.g. system_bot_protection").IsVisibleAsync();
-    }
+    /// <summary>The Issued By filter (Moderation Log tab).</summary>
+    public ILocator IssuedByFilter => _page.GetByPlaceholder("e.g. Exam Flow or an admin's email");
 
     /// <summary>
     /// Selects an action type filter option.
     /// </summary>
     public async Task SelectActionTypeFilterAsync(string actionType)
     {
-        var select = _page.Locator(".mud-select").Filter(new() { HasText = "Action Type" }).First;
-        await select.ClickAsync();
+        await ActionTypeFilter.ClickAsync();
 
         // Wait for popover to open
         var popover = _page.Locator(".mud-popover-open");
@@ -360,24 +240,43 @@ public class AuditLogPage
     }
 
     /// <summary>
-    /// Fills the Telegram User ID filter.
+    /// Fills the Telegram User ID filter and commits it. The field is a non-Immediate MudTextField,
+    /// so typing alone never reaches <c>ValueChanged</c>: the value only commits on the input's
+    /// change event, which Enter raises. The table reload is awaited by the caller's Expects on the
+    /// table (nothing on the field itself distinguishes a committed value from a typed one).
     /// </summary>
     public async Task FilterByTelegramUserIdAsync(string userId)
     {
-        var input = _page.GetByPlaceholder("Enter Telegram ID");
-        await input.FillAsync(userId);
-        await WaitForLoadAsync();
+        await CommitFilterAsync(TelegramUserIdFilter, userId);
     }
 
     /// <summary>
-    /// Fills the Issued By filter.
+    /// Fills the Issued By filter and commits it (see <see cref="FilterByTelegramUserIdAsync"/>).
     /// </summary>
     public async Task FilterByIssuedByAsync(string issuedBy)
     {
-        var input = _page.GetByPlaceholder("e.g. system_bot_protection");
-        await input.FillAsync(issuedBy);
-        await WaitForLoadAsync();
+        await CommitFilterAsync(IssuedByFilter, issuedBy);
     }
+
+    private static async Task CommitFilterAsync(ILocator field, string value)
+    {
+        await field.FillAsync(value);
+        await field.PressAsync("Enter");
+    }
+
+    /// <summary>The Telegram User cells of the moderation table's current page.</summary>
+    public ILocator ModerationTelegramUserCells => _page.Locator($"{ActivePanel} td[data-label='Telegram User']");
+
+    /// <summary>The Issued By cells of the moderation table's current page.</summary>
+    public ILocator ModerationIssuedByCells => _page.Locator($"{ActivePanel} td[data-label='Issued By']");
+
+    /// <summary>
+    /// The Telegram User cells whose user id is exactly <paramref name="userId"/>: a known user renders
+    /// its display name over an "ID: 123" caption, an unknown one renders the bare id. Lookarounds
+    /// stand in for <c>\b</c>, which never matches in Playwright's regex bridge.
+    /// </summary>
+    public ILocator ModerationEntriesForTelegramUser(long userId) =>
+        ModerationTelegramUserCells.Filter(new() { HasTextRegex = new Regex($@"(?<!\d){userId}(?!\d)") });
 
     /// <summary>
     /// Clears the Action Type filter by selecting "All Actions".
@@ -388,44 +287,33 @@ public class AuditLogPage
     }
 
     /// <summary>
-    /// Gets the action type text from a specific row.
+    /// The action type chip of the moderation entry whose action type contains <paramref name="actionTypeText"/>.
     /// </summary>
-    public async Task<string?> GetActionTypeFromRowAsync(int rowIndex)
-    {
-        var row = _page.Locator($".mud-tab-panel:not([hidden]) {TableRow}").Nth(rowIndex);
-        var actionTypeCell = row.Locator("td[data-label='Action Type'] .mud-chip");
-        return await actionTypeCell.TextContentAsync();
-    }
+    public ILocator ModerationEntryWithActionType(string actionTypeText) =>
+        _page.Locator($"{ActivePanel} td[data-label='Action Type'] .mud-chip").Filter(new() { HasText = actionTypeText });
 
     /// <summary>
-    /// Checks if a moderation entry with specific action type text is visible.
+    /// The Issued By cell of the moderation entry whose issuer contains <paramref name="issuedByText"/>.
     /// </summary>
-    public async Task<bool> HasModerationEntryWithActionTypeAsync(string actionTypeText)
-    {
-        var chip = _page.Locator(".mud-tab-panel:not([hidden]) td[data-label='Action Type'] .mud-chip").Filter(new() { HasText = actionTypeText });
-        return await chip.IsVisibleAsync();
-    }
-
-    /// <summary>
-    /// Checks if a moderation entry with specific issued by text is visible.
-    /// </summary>
-    public async Task<bool> HasModerationEntryWithIssuedByAsync(string issuedByText)
-    {
-        var cell = _page.Locator(".mud-tab-panel:not([hidden]) td[data-label='Issued By']").Filter(new() { HasText = issuedByText });
-        return await cell.IsVisibleAsync();
-    }
+    public ILocator ModerationEntryWithIssuedBy(string issuedByText) =>
+        _page.Locator($"{ActivePanel} td[data-label='Issued By']").Filter(new() { HasText = issuedByText });
 
     #endregion
 
     #region Table Pagination
 
+    /// <summary>The table pager of the currently visible table.</summary>
+    public ILocator Pager => _page.Locator($"{ActivePanel} {TablePager}");
+
+    /// <summary>The pager's "1-10 of N" text of the currently visible table.</summary>
+    public ILocator PagerInformation => Pager.Locator(".mud-table-page-number-information");
+
     /// <summary>
-    /// Checks if the table pager is visible.
+    /// Asserts the visible table's pager reports exactly <paramref name="expectedTotal"/> rows in total
+    /// (the "of N" part of "1-10 of N"), retrying until the server-side data lands.
     /// </summary>
-    public async Task<bool> IsPagerVisibleAsync()
-    {
-        return await _page.Locator($".mud-tab-panel:not([hidden]) {TablePager}").IsVisibleAsync();
-    }
+    public Task ExpectTotalRowCountAsync(int expectedTotal) =>
+        Expect(PagerInformation).ToHaveTextAsync(new Regex($@"of\s+{expectedTotal}\s*$"));
 
     /// <summary>
     /// Clicks the refresh button for the current tab.
@@ -445,11 +333,6 @@ public class AuditLogPage
     /// Gets the current URL.
     /// </summary>
     public string CurrentUrl => _page.Url;
-
-    /// <summary>
-    /// Checks if we're on the audit page.
-    /// </summary>
-    public bool IsOnAuditPage => _page.Url.Contains("/audit");
 
     #endregion
 }

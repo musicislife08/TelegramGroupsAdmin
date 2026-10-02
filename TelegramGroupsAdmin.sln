@@ -24,6 +24,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TelegramGroupsAdmin.UnitTes
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TelegramGroupsAdmin.AI", "TelegramGroupsAdmin.AI\TelegramGroupsAdmin.AI.csproj", "{11A77517-9315-46E1-9DF9-A869651C313E}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TelegramGroupsAdmin.Testing.Golden", "TelegramGroupsAdmin.Testing.Golden\TelegramGroupsAdmin.Testing.Golden.csproj", "{6A271F24-5C95-4F8C-BF9F-DD71D2D50D37}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -178,6 +180,18 @@ Global
 		{11A77517-9315-46E1-9DF9-A869651C313E}.Release|x64.Build.0 = Release|Any CPU
 		{11A77517-9315-46E1-9DF9-A869651C313E}.Release|x86.ActiveCfg = Release|Any CPU
 		{11A77517-9315-46E1-9DF9-A869651C313E}.Release|x86.Build.0 = Release|Any CPU
+		{6A271F24-5C95-4F8C-BF9F-DD71D2D50D37}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6A271F24-5C95-4F8C-BF9F-DD71D2D50D37}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6A271F24-5C95-4F8C-BF9F-DD71D2D50D37}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{6A271F24-5C95-4F8C-BF9F-DD71D2D50D37}.Debug|x64.Build.0 = Debug|Any CPU
+		{6A271F24-5C95-4F8C-BF9F-DD71D2D50D37}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{6A271F24-5C95-4F8C-BF9F-DD71D2D50D37}.Debug|x86.Build.0 = Debug|Any CPU
+		{6A271F24-5C95-4F8C-BF9F-DD71D2D50D37}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6A271F24-5C95-4F8C-BF9F-DD71D2D50D37}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6A271F24-5C95-4F8C-BF9F-DD71D2D50D37}.Release|x64.ActiveCfg = Release|Any CPU
+		{6A271F24-5C95-4F8C-BF9F-DD71D2D50D37}.Release|x64.Build.0 = Release|Any CPU
+		{6A271F24-5C95-4F8C-BF9F-DD71D2D50D37}.Release|x86.ActiveCfg = Release|Any CPU
+		{6A271F24-5C95-4F8C-BF9F-DD71D2D50D37}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
