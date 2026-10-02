@@ -6,12 +6,13 @@ namespace TelegramGroupsAdmin.Telegram.Services;
 /// <summary>
 /// Factory interface for creating and caching Telegram Bot API clients.
 /// Only used by Bot Handlers layer - services and application code should use IBot*Service interfaces.
+/// The one sanctioned exception is TelegramBotPollingHost, which needs the raw client to run the polling loop.
 /// </summary>
 public interface ITelegramBotClientFactory : IDisposable
 {
     /// <summary>
     /// Get ITelegramBotClient using token loaded from database configuration.
-    /// Used by Bot Handlers for direct Telegram API access.
+    /// Used by Bot Handlers for direct Telegram API access, and by TelegramBotPollingHost to start polling.
     /// </summary>
     /// <returns>Current ITelegramBotClient instance</returns>
     Task<ITelegramBotClient> GetBotClientAsync();
