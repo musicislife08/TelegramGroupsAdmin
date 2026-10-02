@@ -40,7 +40,7 @@ public class AIProviderConfigMappingsTests
         ],
         Features = new()
         {
-            [AIFeatureType.SpamDetection] = new() { ConnectionId = "openai-prod", Model = "gpt-4o", Temperature = 0.3f, MaxTokens = 600 },
+            [AIFeatureType.SpamDetection] = new() { ConnectionId = "openai-prod", Model = "gpt-4o", MaxTokens = 600 },
             [AIFeatureType.Translation] = new() { ConnectionId = "openai-prod", Model = "gpt-4o-mini" },
             [AIFeatureType.ImageAnalysis] = new() { RequiresVision = true },
             [AIFeatureType.VideoAnalysis] = new() { RequiresVision = true },
@@ -67,7 +67,6 @@ public class AIProviderConfigMappingsTests
 
         Assert.That(roundTripped.Features, Has.Count.EqualTo(6));
         Assert.That(roundTripped.Features[AIFeatureType.SpamDetection].Model, Is.EqualTo("gpt-4o"));
-        Assert.That(roundTripped.Features[AIFeatureType.SpamDetection].Temperature, Is.EqualTo(0.3f));
         Assert.That(roundTripped.Features[AIFeatureType.SpamDetection].MaxTokens, Is.EqualTo(600));
         Assert.That(roundTripped.Features[AIFeatureType.ProfileScan].RequiresVision, Is.True);
         Assert.That(roundTripped.Features[AIFeatureType.ProfileScan].AzureDeploymentName, Is.EqualTo("vision-deploy"));
@@ -119,7 +118,7 @@ public class AIProviderConfigMappingsTests
 
         Assert.That(model.Features, Has.Count.EqualTo(6));
         Assert.That(model.Features[AIFeatureType.SpamDetection].Model, Is.EqualTo("gpt-4o"));
-        Assert.That(model.Features[AIFeatureType.SpamDetection].Temperature, Is.EqualTo(0.3f));
+        Assert.That(model.Features[AIFeatureType.SpamDetection].MaxTokens, Is.EqualTo(600));
         Assert.That(model.Features[AIFeatureType.ProfileScan].RequiresVision, Is.True);
         Assert.That(model.Connections[1].Provider, Is.EqualTo(AIProviderType.AzureOpenAI));
     }

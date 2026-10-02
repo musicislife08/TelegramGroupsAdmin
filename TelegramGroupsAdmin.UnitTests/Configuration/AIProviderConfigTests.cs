@@ -68,16 +68,6 @@ public class AIProviderConfigTests
     }
 
     [Test]
-    public void AIFeatureConfig_DefaultTemperature_Is1Point0()
-    {
-        // Act
-        var config = new AIProviderConfig();
-
-        // Assert
-        Assert.That(config.Features[AIFeatureType.SpamDetection].Temperature, Is.EqualTo(1.0f));
-    }
-
-    [Test]
     public void AIFeatureConfig_DefaultConnectionId_IsNull()
     {
         // Act
@@ -217,8 +207,7 @@ public class AIProviderConfigTests
                 {
                     ConnectionId = "openai-prod",
                     Model = "gpt-4o",
-                    MaxTokens = 1000,
-                    Temperature = 0.5f
+                    MaxTokens = 1000
                 }
             }
         };

@@ -599,12 +599,11 @@ public class ExamEvaluationServiceTests
         await _service.EvaluateAnswerAsync(
             question: "Q", userAnswer: "A", evaluationCriteria: "C", groupTopic: "T");
 
-        // Assert - verify JSON mode for structured parsing; Temperature/MaxTokens come from feature config
+        // Assert - verify JSON mode for structured parsing; MaxTokens comes from feature config
         Assert.That(capturedOptions, Is.Not.Null);
         using (Assert.EnterMultipleScope())
         {
             Assert.That(capturedOptions!.JsonMode, Is.True);
-            Assert.That(capturedOptions.Temperature, Is.Null, "Temperature should come from feature config, not hardcoded");
             Assert.That(capturedOptions.MaxTokens, Is.Null, "MaxTokens should come from feature config, not hardcoded");
         }
 

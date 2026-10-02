@@ -28,15 +28,13 @@ public class AIFeatureCardTests : MudBlazorTestContext
         string? connectionId = null,
         string model = "gpt-4o-mini",
         string? azureDeploymentName = null,
-        int maxTokens = 500,
-        float temperature = 0.7f)
+        int maxTokens = 500)
     {
         var config = new AIFeatureConfig
         {
             ConnectionId = connectionId,
             Model = model,
-            MaxTokens = maxTokens,
-            Temperature = temperature
+            MaxTokens = maxTokens
         };
         if (azureDeploymentName != null)
             config.AzureDeploymentName = azureDeploymentName;
@@ -306,7 +304,7 @@ public class AIFeatureCardTests : MudBlazorTestContext
     }
 
     [Test]
-    public void ShowsTemperatureField_WhenConnectionSelected()
+    public void DoesNotShowTemperatureField_WhenConnectionSelected()
     {
         // Arrange
         var connection = CreateConnection();
@@ -320,8 +318,12 @@ public class AIFeatureCardTests : MudBlazorTestContext
             .Add(x => x.Connections, connections)
             .Add(x => x.TestService, _mockTestService));
 
-        // Assert
-        Assert.That(cut.Markup, Does.Contain("Temperature"));
+        // Assert - temperature is not configurable; the provider default always applies
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cut.Markup, Does.Contain("Max Tokens"), "the parameters row must have rendered");
+            Assert.That(cut.Markup, Does.Not.Contain("Temperature"));
+        }
     }
 
     #endregion
