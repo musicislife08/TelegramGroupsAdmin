@@ -52,13 +52,20 @@ public class InviteGoldenTests : GoldenE2ETestBase
     }
 
     [Test]
-    public async Task Owner_CreatesInvite_ShowsTheLinkAndPersistsIt()
+    public async Task OwnerCreatesInvite_ThenRegisterWithIt_CreatesAnActiveAccountOfThePickedLevelThatLogsIn()
     {
+        using (var scope = Factory.Services.CreateScope())
+        {
+            var features = scope.ServiceProvider.GetRequiredService<IFeatureAvailabilityService>();
+            Assert.That(await features.GetEmailConfigurationStateAsync(), Is.EqualTo(EmailConfigurationState.Disabled),
+                "canonical: sendgrid_config is enabled but 04_configs.api_keys.json carries no SendGrid key — this test covers the verification-off path");
+        }
+
         await OpenAccountsPageAsync(LoginAsOwnerAsync);
         await _accounts.ClickCreateUserAsync();
         await Expect(_accounts.DialogTitle).ToHaveTextAsync("Create User");
 
-        // The Owner is offered every level; pick a non-default one so the read-back proves the choice travelled.
+        // The Owner is offered every level; pick a non-default one so the invitee's level proves the choice travelled.
         await _accounts.OpenPermissionOptionsAsync();
         await Expect(_accounts.PermissionOptions).ToHaveTextAsync([PermissionAdmin, PermissionGlobalAdmin, PermissionOwner]);
         await _accounts.SelectPermissionOptionAsync("GlobalAdmin");
@@ -73,41 +80,25 @@ public class InviteGoldenTests : GoldenE2ETestBase
         await Expect(_accounts.InviteLinkInput).ToHaveValueAsync(InviteLinks.Pattern);
         await Expect(_accounts.SnackbarWithText("Invite created successfully")).ToBeVisibleAsync();
 
-        var token = InviteLinks.TokenFrom(await InviteLinks.ReadAsync(_accounts));
-        await _accounts.ClickDoneAsync();
-
-        await using var ctx = CreateDbContext();
-        var invite = await ctx.Invites.AsNoTracking().Where(i => i.Token == token)
-            .Select(i => new { i.CreatedBy, i.PermissionLevel, i.Status, i.UsedBy, i.ExpiresAt }).SingleAsync();
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(invite.CreatedBy, Is.EqualTo(GoldenDatasetConstants.WebUsers.OwnerId));
-            Assert.That(invite.PermissionLevel, Is.EqualTo(1), "PermissionLevel.GlobalAdmin as picked in the dialog");
-            Assert.That(invite.Status, Is.EqualTo(InviteStatus.Pending));
-            Assert.That(invite.UsedBy, Is.Null);
-            Assert.That(invite.ExpiresAt, Is.EqualTo(generatedAt.AddDays(3)).Within(TimeSpan.FromMinutes(2)), "expires_at = now + the days entered");
-            Assert.That(await ctx.Invites.CountAsync(), Is.EqualTo(_canonicalInviteCount + 1), "exactly one invite row was added to canonical");
-        }
-    }
-
-    [Test]
-    public async Task RegisterWithInvite_CreatesAnActiveAccountThatLogsIn()
-    {
-        using (var scope = Factory.Services.CreateScope())
-        {
-            var features = scope.ServiceProvider.GetRequiredService<IFeatureAvailabilityService>();
-            Assert.That(await features.GetEmailConfigurationStateAsync(), Is.EqualTo(EmailConfigurationState.Disabled),
-                "canonical: sendgrid_config is enabled but 04_configs.api_keys.json carries no SendGrid key — this test covers the verification-off path");
-        }
-
-        // The Owner creates an invite with the dialog defaults (Admin, 7 days).
-        await OpenAccountsPageAsync(LoginAsOwnerAsync);
-        await _accounts.ClickCreateUserAsync();
-        await _accounts.GenerateInviteAsync();
-        await Expect(_accounts.InviteLinkInput).ToHaveValueAsync(InviteLinks.Pattern);
         var inviteLink = await InviteLinks.ReadAsync(_accounts);
         var token = InviteLinks.TokenFrom(inviteLink);
         await _accounts.ClickDoneAsync();
+
+        // The stored invite, before anyone uses it.
+        await using (var inviteContext = CreateDbContext())
+        {
+            var pending = await inviteContext.Invites.AsNoTracking().Where(i => i.Token == token)
+                .Select(i => new { i.CreatedBy, i.PermissionLevel, i.Status, i.UsedBy, i.ExpiresAt }).SingleAsync();
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(pending.CreatedBy, Is.EqualTo(GoldenDatasetConstants.WebUsers.OwnerId));
+                Assert.That(pending.PermissionLevel, Is.EqualTo(1), "PermissionLevel.GlobalAdmin as picked in the dialog");
+                Assert.That(pending.Status, Is.EqualTo(InviteStatus.Pending));
+                Assert.That(pending.UsedBy, Is.Null);
+                Assert.That(pending.ExpiresAt, Is.EqualTo(generatedAt.AddDays(3)).Within(TimeSpan.FromMinutes(2)), "expires_at = now + the days entered");
+                Assert.That(await inviteContext.Invites.CountAsync(), Is.EqualTo(_canonicalInviteCount + 1), "exactly one invite row was added to canonical");
+            }
+        }
 
         // Continue as the invitee: anonymous, following the link the Owner would send.
         await Context.ClearCookiesAsync();
@@ -141,7 +132,7 @@ public class InviteGoldenTests : GoldenE2ETestBase
             .Select(i => new { i.Status, i.UsedBy, i.ModifiedAt }).SingleAsync();
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(user.PermissionLevel, Is.EqualTo(0), "PermissionLevel.Admin from the invite");
+            Assert.That(user.PermissionLevel, Is.EqualTo(1), "PermissionLevel.GlobalAdmin from the invite");
             Assert.That(user.InvitedBy, Is.EqualTo(GoldenDatasetConstants.WebUsers.OwnerId));
             Assert.That(user.EmailVerified, Is.True, "verification is off, so the account starts verified");
             Assert.That(user.TotpEnabled, Is.True, "every new account must set up 2FA");
@@ -163,7 +154,7 @@ public class InviteGoldenTests : GoldenE2ETestBase
 }
 
 /// <summary>
-/// The verification-ON sibling of <see cref="InviteGoldenTests.RegisterWithInvite_CreatesAnActiveAccountThatLogsIn"/>:
+/// The verification-ON sibling of <see cref="InviteGoldenTests.OwnerCreatesInvite_ThenRegisterWithIt_CreatesAnActiveAccountOfThePickedLevelThatLogsIn"/>:
 /// the same canonical, plus a dummy SendGrid key (<c>EnableSendGridApiKey</c>) so the strict email gate reads
 /// email as configured. The key is never sent anywhere — the factory swaps <c>IEmailService</c> for a capturing
 /// stub, and the verification email the app hands that stub is an assertion subject here. Its own fixture
