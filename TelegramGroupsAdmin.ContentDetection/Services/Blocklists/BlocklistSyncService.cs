@@ -231,8 +231,9 @@ public class BlocklistSyncService : IBlocklistSyncService
 
     /// <summary>
     /// Download blocklist content from URL through the public-url fetcher, under <see cref="MaxBlocklistBytes"/>.
-    /// Automatically upgrades HTTP to HTTPS for security (with HTTP fallback), except when the
-    /// policy refused the HTTPS attempt — the address is the same, so HTTP would be refused too.
+    /// Automatically upgrades HTTP to HTTPS for security, falling back to HTTP only when the HTTPS
+    /// endpoint is unreachable or answers an error status. A refusal (same address, so HTTP would be
+    /// refused too), a timeout or an oversized list fails the sync instead of retrying in plaintext.
     /// </summary>
     /// <exception cref="PublicUrlFetchException">The URL was refused, too large, unreachable or answered an error.</exception>
     private async Task<string> DownloadBlocklistAsync(string url, CancellationToken cancellationToken)
@@ -253,7 +254,7 @@ public class BlocklistSyncService : IBlocklistSyncService
 
                 return httpsContent;
             }
-            catch (PublicUrlFetchException ex) when (ex.Kind != PublicUrlFetchFailure.NotAllowed)
+            catch (PublicUrlFetchException ex) when (ex.Kind is PublicUrlFetchFailure.Unreachable or PublicUrlFetchFailure.HttpStatus)
             {
                 _logger.LogWarning("HTTPS upgrade failed for {HttpsUrl} ({Reason}), falling back to insecure HTTP {HttpUrl}",
                     httpsUrl, ex.Reason, url);

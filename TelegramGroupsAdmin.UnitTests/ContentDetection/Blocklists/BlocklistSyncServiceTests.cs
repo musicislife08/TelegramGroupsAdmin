@@ -182,6 +182,43 @@ public class BlocklistSyncServiceTests
             Arg.Any<CancellationToken>());
     }
 
+    // The HTTPS upgrade falls back to plain HTTP only when the HTTPS endpoint is unreachable or answers an
+    // error status (what HttpRequestException covered before the fetcher). A slow or oversized HTTPS answer
+    // fails the sync rather than waiting out, or re-downloading, the same list in plaintext.
+    [TestCase(PublicUrlFetchFailure.Unreachable, true)]
+    [TestCase(PublicUrlFetchFailure.HttpStatus, true)]
+    [TestCase(PublicUrlFetchFailure.Timeout, false)]
+    [TestCase(PublicUrlFetchFailure.TooLarge, false)]
+    [TestCase(PublicUrlFetchFailure.NotAllowed, false)]
+    public async Task SyncSubscriptionAsync_HttpsUpgradeFailure_FallsBackToHttpOnlyWhenUnreachableOrHttpStatus(
+        PublicUrlFetchFailure httpsFailure, bool expectFallback)
+    {
+        const string httpUrl = "http://lists.example/list.txt";
+        const string httpsUrl = "https://lists.example/list.txt";
+        var fetcher = Substitute.For<IPublicUrlFetcher>();
+        fetcher.FetchAsync(httpsUrl, Arg.Any<PublicUrlFetchOptions>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromException<PublicUrlFetchResult>(new PublicUrlFetchException(httpsFailure, "https failed", "https failed")));
+        fetcher.FetchAsync(httpUrl, Arg.Any<PublicUrlFetchOptions>(), Arg.Any<CancellationToken>())
+            .Returns(new PublicUrlFetchResult(System.Text.Encoding.UTF8.GetBytes(ListBody), "text/plain", new Uri(httpUrl)));
+        var sub = Subscription(1, "Upgraded list", httpUrl);
+        Register(sub);
+        var sut = CreateService(fetcher);
+
+        if (expectFallback)
+        {
+            await sut.SyncSubscriptionAsync(sub.Id);
+            await _cache.Received(1).BulkInsertAsync(Arg.Is<List<CachedBlockedDomain>>(d => d!.Count == 2), Arg.Any<CancellationToken>());
+        }
+        else
+        {
+            Assert.ThrowsAsync<BlocklistSyncException>(() => sut.SyncSubscriptionAsync(sub.Id));
+            await _cache.DidNotReceiveWithAnyArgs().BulkInsertAsync(default!, default);
+        }
+
+        await fetcher.Received(expectFallback ? 1 : 0)
+            .FetchAsync(httpUrl, Arg.Any<PublicUrlFetchOptions>(), Arg.Any<CancellationToken>());
+    }
+
     #region Helpers
 
     private static BlocklistSubscription Subscription(long id, string name, string url) => new(
@@ -207,6 +244,18 @@ public class BlocklistSyncServiceTests
         {
             _subscriptions.GetByIdAsync(sub.Id, Arg.Any<CancellationToken>()).Returns(sub);
         }
+    }
+
+    private IBlocklistSyncService CreateService(IPublicUrlFetcher fetcher)
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton(_subscriptions);
+        services.AddSingleton(_cache);
+        services.AddSingleton(_filters);
+        var provider = services.BuildServiceProvider();
+        _disposables.Add(provider);
+        return new BlocklistSyncService(
+            provider.GetRequiredService<IServiceScopeFactory>(), fetcher, NullLogger<BlocklistSyncService>.Instance);
     }
 
     private IBlocklistSyncService CreateService(IPublicUrlFetchAllowance? allowance = null)
