@@ -1,3 +1,4 @@
+using AngleSharp.Dom;
 using Bunit;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.Extensions.DependencyInjection;
@@ -18,6 +19,7 @@ namespace TelegramGroupsAdmin.ComponentTests.Components;
 public class BackupPassphraseRotationDialogTestContext : BunitContext
 {
     protected IPassphraseManagementService PassphraseService { get; }
+    protected IBackupRotationService RotationService { get; }
     protected AuthenticationStateProvider AuthStateProvider { get; }
     protected IDialogService DialogService { get; private set; } = null!;
 
@@ -25,6 +27,7 @@ public class BackupPassphraseRotationDialogTestContext : BunitContext
     {
         // Create mocks
         PassphraseService = Substitute.For<IPassphraseManagementService>();
+        RotationService = Substitute.For<IBackupRotationService>();
         AuthStateProvider = Substitute.For<AuthenticationStateProvider>();
 
         // Setup default auth state with authenticated user
@@ -40,6 +43,8 @@ public class BackupPassphraseRotationDialogTestContext : BunitContext
 
         // Register mocks
         Services.AddSingleton(PassphraseService);
+        Services.AddSingleton(RotationService);
+        this.AddTestWebUser();
         Services.AddSingleton(AuthStateProvider);
 
         // Add MudBlazor services
@@ -85,6 +90,11 @@ public class BackupPassphraseRotationDialogTests : BackupPassphraseRotationDialo
     public void Setup()
     {
         PassphraseService.ClearReceivedCalls();
+        RotationService.ClearReceivedCalls();
+        // The fixture instance (and its substitutes) is shared by every test, so reset the default
+        // here: a clean backup directory, which opens the dialog on the confirmation step.
+        RotationService.ScanAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(new BackupRotationScan(1, [], []));
     }
 
     #region Helper Methods
@@ -403,6 +413,190 @@ public class BackupPassphraseRotationDialogTests : BackupPassphraseRotationDialo
         var passphraseField = provider.FindComponents<MudTextField<string>>()
             .Single(f => f.Instance.Label == "Custom Passphrase");
         await provider.InvokeAsync(() => passphraseField.Instance.ValueChanged.InvokeAsync(passphrase));
+    }
+
+    #endregion
+
+    #region Damaged Backup Pre-check Tests
+
+    private const string RepairFieldLabel = "Original passphrase";
+
+    private void ScanReturns(string[] wrapped, string[] unreadable) =>
+        RotationService.ScanAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(new BackupRotationScan(1, wrapped, unreadable));
+
+    private static IElement Button(IRenderedComponent<MudDialogProvider> provider, string text) =>
+        provider.FindAll("button").First(b => b.TextContent.Contains(text));
+
+    private static Task CheckAsync(IRenderedComponent<MudDialogProvider> provider, string labelText) =>
+        provider.InvokeAsync(() => provider.FindComponents<MudCheckBox<bool>>()
+            .Single(c => c.Markup.Contains(labelText)).Instance.ValueChanged.InvokeAsync(true));
+
+    private static Task EnterRepairPassphraseAsync(IRenderedComponent<MudDialogProvider> provider, string passphrase) =>
+        provider.InvokeAsync(() => provider.FindComponents<MudTextField<string>>()
+            .Single(f => f.Instance.Label == RepairFieldLabel).Instance.ValueChanged.InvokeAsync(passphrase));
+
+    [Test]
+    public void CleanScan_ShowsConfirmationStep()
+    {
+        var provider = RenderDialogProvider();
+        _ = OpenDialogAsync();
+
+        provider.WaitForAssertion(() =>
+        {
+            Assert.That(provider.Markup, Does.Contain("What will happen"));
+            Assert.That(provider.Markup, Does.Not.Contain(RepairFieldLabel));
+        });
+        RotationService.Received().ScanAsync("/data/backups", Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public void WrappedFiles_ShowRepairStep_WithCountAndPassphraseField()
+    {
+        ScanReturns(["a.tar.gz", "b.tar.gz"], []);
+        var provider = RenderDialogProvider();
+        _ = OpenDialogAsync();
+
+        provider.WaitForAssertion(() =>
+        {
+            Assert.That(provider.Markup, Does.Contain("2 backups"));
+            Assert.That(provider.Markup, Does.Contain(RepairFieldLabel));
+            Assert.That(provider.Markup, Does.Not.Contain("What will happen"));
+        });
+    }
+
+    [Test]
+    public async Task RepairAttempt_CallsServiceWithEnteredPassphrase_AndShowsRemaining()
+    {
+        ScanReturns(["a.tar.gz", "c.tar.gz"], []);
+        RotationService.RepairWrappedAsync("/data/backups", "my-setup-passphrase", Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(new WrappedRepairResult(1, ["c.tar.gz"]));
+        var provider = RenderDialogProvider();
+        _ = OpenDialogAsync();
+        provider.WaitForAssertion(() => Assert.That(provider.Markup, Does.Contain(RepairFieldLabel)));
+
+        await EnterRepairPassphraseAsync(provider, "my-setup-passphrase");
+        await provider.InvokeAsync(() => Button(provider, "Repair").Click());
+
+        provider.WaitForAssertion(() =>
+        {
+            Assert.That(provider.Markup, Does.Contain("Repaired 1"));
+            Assert.That(provider.Markup, Does.Contain("c.tar.gz"));
+            Assert.That(provider.Markup, Does.Contain(RepairFieldLabel), "the user can try another passphrase");
+        });
+        await RotationService.Received(1).RepairWrappedAsync("/data/backups", "my-setup-passphrase",
+            WebUserRenderHelper.TestWebUser.Id, Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task AllRepaired_MovesToConfirmation()
+    {
+        ScanReturns(["a.tar.gz"], []);
+        RotationService.RepairWrappedAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(new WrappedRepairResult(1, []));
+        var provider = RenderDialogProvider();
+        _ = OpenDialogAsync();
+        provider.WaitForAssertion(() => Assert.That(provider.Markup, Does.Contain(RepairFieldLabel)));
+
+        await EnterRepairPassphraseAsync(provider, "my-setup-passphrase");
+        await provider.InvokeAsync(() => Button(provider, "Repair").Click());
+
+        provider.WaitForAssertion(() => Assert.That(provider.Markup, Does.Contain("What will happen")));
+    }
+
+    [Test]
+    public async Task DeleteDamaged_RequiresConfirmation_ThenCallsService()
+    {
+        ScanReturns(["c.tar.gz"], []);
+        RotationService.DeleteDamagedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(1);
+        var provider = RenderDialogProvider();
+        _ = OpenDialogAsync();
+        provider.WaitForAssertion(() => Assert.That(provider.Markup, Does.Contain("Delete these 1 backups")));
+
+        Assert.That(Button(provider, "Delete these 1 backups").GetAttribute("disabled"), Is.Not.Null,
+            "delete stays disabled until the user confirms");
+
+        await CheckAsync(provider, "permanently deleted");
+        await provider.InvokeAsync(() => Button(provider, "Delete these 1 backups").Click());
+
+        provider.WaitForAssertion(() => Assert.That(provider.Markup, Does.Contain("What will happen")));
+        await RotationService.Received(1).DeleteDamagedAsync("/data/backups",
+            Arg.Is<IReadOnlyCollection<string>>(names => names!.SequenceEqual(new[] { "c.tar.gz" })),
+            WebUserRenderHelper.TestWebUser.Id, Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task ContinueWithoutThem_MovesToConfirmation_WithoutDeleting()
+    {
+        ScanReturns(["c.tar.gz"], []);
+        var provider = RenderDialogProvider();
+        _ = OpenDialogAsync();
+        provider.WaitForAssertion(() => Assert.That(provider.Markup, Does.Contain("Continue without them")));
+
+        await provider.InvokeAsync(() => Button(provider, "Continue without them").Click());
+
+        provider.WaitForAssertion(() => Assert.That(provider.Markup, Does.Contain("What will happen")));
+        await RotationService.DidNotReceive().DeleteDamagedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyCollection<string>>(),
+            Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public void UnreadableFiles_AreListedForDeletion()
+    {
+        ScanReturns([], ["junk.tar.gz"]);
+        var provider = RenderDialogProvider();
+        _ = OpenDialogAsync();
+
+        provider.WaitForAssertion(() =>
+        {
+            Assert.That(provider.Markup, Does.Contain("junk.tar.gz"));
+            Assert.That(provider.Markup, Does.Contain("Delete these 1 backups"));
+            Assert.That(provider.Markup, Does.Not.Contain(RepairFieldLabel), "nothing to repair, only unreadable files");
+        });
+    }
+
+    #endregion
+
+    #region Rotation Passphrase Tests
+
+    [Test]
+    public async Task Complete_PassesTheShownPassphraseToRotation()
+    {
+        string? rotatedTo = null;
+        await PassphraseService.RotatePassphraseAsync(Arg.Do<string>(p => rotatedTo = p), Arg.Any<string>(), Arg.Any<string>());
+        var provider = RenderDialogProvider();
+        _ = OpenDialogAsync();
+        provider.WaitForAssertion(() => Assert.That(provider.Markup, Does.Contain("What will happen")));
+
+        await CheckAsync(provider, "re-encrypt all existing backups");
+        await provider.InvokeAsync(() => Button(provider, "Generate New Passphrase").Click());
+        provider.WaitForAssertion(() => Assert.That(provider.Markup, Does.Contain("Your NEW Backup Encryption Passphrase")));
+        var shownMarkup = provider.Markup;
+
+        await CheckAsync(provider, "securely saved this NEW passphrase");
+        await provider.InvokeAsync(() => Button(provider, "Start Rotation").Click());
+
+        provider.WaitForAssertion(() => Assert.That(rotatedTo, Is.Not.Null));
+        Assert.That(shownMarkup, Does.Contain(rotatedTo!), "the passphrase rotated to is the one the user was shown");
+    }
+
+    [Test]
+    public async Task CustomPassphrase_IsTheOneRotatedTo()
+    {
+        const string custom = "my-own-custom-passphrase-123";
+        var provider = RenderDialogProvider();
+        _ = OpenDialogAsync();
+        provider.WaitForAssertion(() => Assert.That(provider.Markup, Does.Contain("Use custom passphrase")));
+
+        await EnterCustomPassphraseAsync(provider, custom);
+        await CheckAsync(provider, "re-encrypt all existing backups");
+        await provider.InvokeAsync(() => Button(provider, "Set Custom Passphrase").Click());
+        provider.WaitForAssertion(() => Assert.That(provider.Markup, Does.Contain("Your NEW Backup Encryption Passphrase")));
+        await CheckAsync(provider, "securely saved this NEW passphrase");
+        await provider.InvokeAsync(() => Button(provider, "Start Rotation").Click());
+
+        await PassphraseService.Received(1).RotatePassphraseAsync(custom, "/data/backups", WebUserRenderHelper.TestWebUser.Id);
     }
 
     #endregion
