@@ -20,7 +20,13 @@ namespace TelegramGroupsAdmin.E2ETests.Tests.Authentication;
 [TestFixture]
 public class SessionRevocationE2ETests : AuthenticatedTestBase
 {
-    private static readonly Regex LoginUrl = new("/(login|register)");
+    private const string AuthCookieName = "TgSpam.Auth";
+
+    // The login page itself, with or without a query string; not /login/verify or /register
+    private static readonly Regex LoginUrl = new(@"/login(?:\?|$)");
+
+    // The site root, where an authenticated session stays
+    private static readonly Regex RootUrl = new(@"^https?://[^/]+/$");
 
     /// <summary>
     /// Changing a user's permission level rotates the security stamp (forced re-login),
@@ -40,8 +46,10 @@ public class SessionRevocationE2ETests : AuthenticatedTestBase
             .AsOwner()
             .BuildAsync();
 
+        // Precondition - the session is live: the root page loads without a redirect
         await NavigateToAsync("/");
-        await Expect(Page).Not.ToHaveURLAsync(LoginUrl);
+        await Expect(Page).ToHaveURLAsync(RootUrl);
+        Assert.That(await HasAuthCookieAsync(), Is.True, "the session must start with an auth cookie");
 
         // Act - the Owner changes this user's permission level (rotates the stamp)
         using (var scope = Factory.Services.CreateScope())
@@ -54,8 +62,13 @@ public class SessionRevocationE2ETests : AuthenticatedTestBase
                 modifierPermissionLevel: (int)PermissionLevel.Owner);
         }
 
-        // Assert - the existing session no longer validates and is redirected to login
+        // Assert - the existing session no longer validates: the request is redirected to login
+        // and the rejected cookie is signed out, not just ignored
         await NavigateToAsync("/");
         await Expect(Page).ToHaveURLAsync(LoginUrl, new() { Timeout = 10000 });
+        Assert.That(await HasAuthCookieAsync(), Is.False, "the rejected session's auth cookie must be removed");
     }
+
+    private async Task<bool> HasAuthCookieAsync() =>
+        (await Context.CookiesAsync()).Any(c => c.Name == AuthCookieName);
 }
