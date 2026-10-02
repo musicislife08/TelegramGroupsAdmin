@@ -242,7 +242,8 @@ public partial class UrlContentScrapingService(
         {
             var fetched = await urlFetcher.FetchAsync(url, FetchOptions, cancellationToken);
 
-            if (fetched.MediaType?.Contains("html", StringComparison.OrdinalIgnoreCase) != true)
+            // Skip only an explicit non-HTML media type; a response with no Content-Type is still parsed
+            if (fetched.MediaType is not null && !fetched.MediaType.Contains("html", StringComparison.OrdinalIgnoreCase))
             {
                 logger.LogDebug("Skipping {Url}: Non-HTML content type {ContentType}", url, fetched.MediaType);
                 return new ScrapeResult(url, null);

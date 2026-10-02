@@ -128,6 +128,21 @@ public class UrlContentScrapingServiceTests
     }
 
     [Test]
+    public async Task EnrichMessageWithUrlPreviewsAsync_NoContentType_StillParsesThePage()
+    {
+        // Only an explicit non-HTML media type is skipped; a response that declares none is parsed.
+        var server = WireMockServer.Start();
+        _disposables.Add(server);
+        server.Given(Request.Create().WithPath("/bare").UsingGet())
+            .RespondWith(Response.Create().WithStatusCode(200).WithBody(Encoding.UTF8.GetBytes(PageHtml)));
+        var sut = CreateService(new LoopbackPortAllowance(server.Port));
+
+        var enriched = await sut.EnrichMessageWithUrlPreviewsAsync($"http://localhost:{server.Port}/bare");
+
+        Assert.That(enriched, Does.Contain("Totally Legit Offer"));
+    }
+
+    [Test]
     public async Task EnrichMessageWithUrlPreviewsAsync_HttpError_IsSkipped()
     {
         var server = WireMockServer.Start();
