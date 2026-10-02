@@ -54,11 +54,6 @@ public static class EncryptionConstants
     public const int MinimumPassphraseLengthChars = 12;
 
     /// <summary>
-    /// Encryption algorithm identifier stored in backup metadata.
-    /// </summary>
-    public const string EncryptionAlgorithm = "AES-256-GCM";
-
-    /// <summary>
     /// Plaintext chunk size in bytes for chunked AEAD streaming encryption.
     /// Each chunk is independently encrypted with AES-GCM using a derived per-chunk nonce.
     /// </summary>
