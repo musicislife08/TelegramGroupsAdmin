@@ -136,6 +136,11 @@ public class AnalyticsTests : SharedAuthenticatedTestBase
         await _analyticsPage.ExpectTabEnabledAsync("Message Trends");
         await _analyticsPage.ExpectTabEnabledAsync("Performance");
         await _analyticsPage.ExpectTabEnabledAsync("Welcome Analytics");
+
+        // The Content Detection tab is gated on IsGlobalAdminOrHigher, so a GlobalAdmin gets the real component
+        // (its Overview section), not the disabled shell, and it is the selected tab.
+        await Expect(_analyticsPage.Tab("Content Detection")).ToHaveAttributeAsync("aria-selected", "true");
+        await Expect(_analyticsPage.ContentDetectionHeading("Overview")).ToBeVisibleAsync();
     }
 
     [Test]

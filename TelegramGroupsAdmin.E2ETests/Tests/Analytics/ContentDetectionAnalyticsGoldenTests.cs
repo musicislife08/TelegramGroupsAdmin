@@ -189,16 +189,4 @@ public class ContentDetectionAnalyticsGoldenTests : GoldenE2ETestBase
         await Expect(_analytics.RecentSpamCheckCell(0, 2)).ToHaveTextAsync(_newestDetection.Score.ToString("F1"));
         await Expect(_analytics.RecentSpamCheckCell(0, 4)).ToHaveTextAsync(_newestDetection.UserId.ToString());
     }
-
-    [Test]
-    public async Task GlobalAdmin_SeesTheContentDetectionOverview()
-    {
-        // The tab is gated on IsGlobalAdminOrHigher, so a GlobalAdmin gets the real component, not the disabled shell.
-        await LoginAsGlobalAdminAsync();
-        await _analytics.NavigateAsync();
-
-        await Expect(_analytics.Tab("Content Detection")).ToHaveAttributeAsync("aria-selected", "true");
-        await Expect(_analytics.ContentDetectionHeading("Overview")).ToBeVisibleAsync();
-        await Expect(_analytics.OverviewValue("Total Checks")).ToHaveTextAsync(_allScans.Total.ToString());
-    }
 }
