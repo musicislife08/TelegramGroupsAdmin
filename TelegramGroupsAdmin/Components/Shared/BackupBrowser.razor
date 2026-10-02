@@ -1,6 +1,7 @@
 @using TelegramGroupsAdmin.BackgroundJobs.Services.Backup
 @using TelegramGroupsAdmin.Core.Models
 @inject IBackupService BackupService
+@inject IBackupArchiveRotator ArchiveRotator
 @inject IBackupRetentionService RetentionService
 @inject ISnackbar Snackbar
 @inject NavigationManager NavigationManager
@@ -16,6 +17,14 @@
                 Browse and manage backups in @BackupDirectory
             </MudText>
         </div>
+
+        @if (!_isLoading && _unreadableCount > 0)
+        {
+            <MudAlert Severity="Severity.Warning" Dense="true">
+                @_unreadableCount @(_unreadableCount == 1 ? "file in this folder can't be read as a backup" : "files in this folder can't be read as backups").
+                Open <strong>Rotate Encryption Passphrase</strong> to repair or delete @(_unreadableCount == 1 ? "it" : "them").
+            </MudAlert>
+        }
 
         @if (_isLoading)
         {
@@ -302,6 +311,7 @@
     private List<TierGroup> _tierGroups = [];
     private readonly Dictionary<string, BackupRetentionInfo> _backupRetentionInfo = new();
     private bool _isLoading;
+    private int _unreadableCount;
     private readonly RetentionConfig _retentionConfig = new(); // Default retention policy
 
     // Metadata dialog
@@ -340,27 +350,34 @@
             {
                 Directory.CreateDirectory(BackupDirectory);
                 _backups = [];
+                _unreadableCount = 0;
                 return;
             }
 
-            // Get all .tar.gz backup files
-            var files = Directory.GetFiles(BackupDirectory, "*.tar.gz")
-                .Select(async filepath =>
+            // List every readable .tar.gz backup. A damaged or foreign file is counted, not listed,
+            // so one bad file never hides the others.
+            List<BackupFileInfo> backups = [];
+            var unreadable = 0;
+            foreach (var filepath in Directory.GetFiles(BackupDirectory, "*.tar.gz"))
+            {
+                var state = await ArchiveRotator.InspectAsync(filepath);
+                if (state is not (BackupFileState.Encrypted or BackupFileState.Plain))
                 {
-                    var fileInfo = new FileInfo(filepath);
-                    var isEncrypted = await BackupService.IsEncryptedAsync(filepath);
+                    unreadable++;
+                    continue;
+                }
 
-                    return new BackupFileInfo
-                    {
-                        FilePath = filepath,
-                        CreatedAt = BackupFileInfo.ParseTimestampFromFilename(filepath),
-                        FileSizeBytes = fileInfo.Length,
-                        IsEncrypted = isEncrypted
-                    };
-                })
-                .ToList();
+                backups.Add(new BackupFileInfo
+                {
+                    FilePath = filepath,
+                    CreatedAt = BackupFileInfo.ParseTimestampFromFilename(filepath),
+                    FileSizeBytes = new FileInfo(filepath).Length,
+                    IsEncrypted = state == BackupFileState.Encrypted
+                });
+            }
 
-            _backups = (await Task.WhenAll(files))
+            _unreadableCount = unreadable;
+            _backups = backups
                 .OrderByDescending(b => b.CreatedAt)
                 .ToList();
 
