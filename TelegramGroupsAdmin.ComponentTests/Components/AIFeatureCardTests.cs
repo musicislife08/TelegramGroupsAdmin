@@ -1,4 +1,5 @@
 using Bunit;
+using MudBlazor;
 using NSubstitute;
 using TelegramGroupsAdmin.Components.Shared.ContentDetection;
 using TelegramGroupsAdmin.Configuration.Models;
@@ -322,7 +323,7 @@ public class AIFeatureCardTests : MudBlazorTestContext
         using (Assert.EnterMultipleScope())
         {
             Assert.That(cut.Markup, Does.Contain("Max Tokens"), "the parameters row must have rendered");
-            Assert.That(cut.Markup, Does.Not.Contain("Temperature"));
+            Assert.That(cut.Markup, Does.Not.Contain("Temperature").IgnoreCase);
         }
     }
 
@@ -446,6 +447,49 @@ public class AIFeatureCardTests : MudBlazorTestContext
         // Assert - Save button should be enabled after successful test
         var saveButton = cut.FindAll("button").First(b => b.TextContent.Contains("Save"));
         Assert.That(saveButton.HasAttribute("disabled"), Is.False, "Save button should be enabled after successful test");
+    }
+
+    [Test]
+    public async Task SaveButton_DisabledAgain_AfterMaxTokensChanged()
+    {
+        // Arrange - a passed test has enabled Save
+        var connection = CreateConnection();
+        var config = CreateFeatureConfig(connectionId: connection.Id, model: "gpt-4o", maxTokens: 500);
+        List<AIConnection> connections = [connection];
+
+        _mockTestService.TestFeatureAsync(
+            Arg.Any<AIFeatureType>(),
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<string?>(),
+            Arg.Any<int>(),
+            Arg.Any<CancellationToken>())
+            .Returns(FeatureTestResult.Ok("Test passed"));
+
+        var cut = Render<AIFeatureCard>(p => p
+            .Add(x => x.FeatureType, AIFeatureType.SpamDetection)
+            .Add(x => x.FeatureConfig, config)
+            .Add(x => x.Connections, connections)
+            .Add(x => x.TestService, _mockTestService));
+
+        var testButton = cut.FindAll("button").First(b => b.TextContent.Contains("Test"));
+        await cut.InvokeAsync(() => testButton.Click());
+        Assert.That(
+            cut.FindAll("button").First(b => b.TextContent.Contains("Save")).HasAttribute("disabled"),
+            Is.False, "Save must be enabled after the passed test");
+
+        // Act - change Max Tokens
+        var maxTokensField = cut.FindComponent<MudNumericField<int>>();
+        await cut.InvokeAsync(() => maxTokensField.Instance.ValueChanged.InvokeAsync(800));
+
+        // Assert - the new value is applied and the config must be re-tested before saving
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(config.MaxTokens, Is.EqualTo(800));
+            Assert.That(
+                cut.FindAll("button").First(b => b.TextContent.Contains("Save")).HasAttribute("disabled"),
+                Is.True, "Save must be disabled again after Max Tokens changes");
+        }
     }
 
     [Test]
