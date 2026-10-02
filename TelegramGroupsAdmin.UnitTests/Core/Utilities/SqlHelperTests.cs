@@ -45,11 +45,11 @@ public class SqlHelperTests
 
     #region QuoteIdentifier - Wrapping
 
-    [TestCase("user_name")]
-    [TestCase("col\"name")]
-    [TestCase("\"")]
-    [TestCase("  ")]
-    [TestCase("select")]
+    [TestCase("x")]
+    [TestCase("order by")]
+    [TestCase("trailing\"")]
+    [TestCase("\"leading")]
+    [TestCase("таблица")]
     public void QuoteIdentifier_AnyAcceptedInput_StartsAndEndsWithDoubleQuote(string identifier)
     {
         var result = SqlHelper.QuoteIdentifier(identifier);
@@ -58,7 +58,6 @@ public class SqlHelperTests
         {
             Assert.That(result, Does.StartWith("\""));
             Assert.That(result, Does.EndWith("\""));
-            Assert.That(result, Has.Length.GreaterThanOrEqualTo(identifier.Length + 2));
         }
     }
 
@@ -92,6 +91,33 @@ public class SqlHelperTests
     }
 
     [Test]
+    public void QuoteIdentifier_ConsecutiveDoubleQuotes_DoublesEachOneIndependently()
+    {
+        // Two quotes in: four escaped quotes inside the wrapper, six characters in total
+        var result = SqlHelper.QuoteIdentifier("\"\"");
+
+        Assert.That(result, Is.EqualTo("\"\"\"\"\"\""));
+    }
+
+    [Test]
+    public void QuoteIdentifier_AlreadyQuotedInput_IsQuotedAgain()
+    {
+        // No "looks quoted already" shortcut: the surrounding quotes are data and get escaped
+        var result = SqlHelper.QuoteIdentifier("\"users\"");
+
+        Assert.That(result, Is.EqualTo("\"\"\"users\"\"\""));
+    }
+
+    [Test]
+    public void QuoteIdentifier_AlreadyQuotedInjectionAttempt_IsEscapedNotPassedThrough()
+    {
+        // Starts and ends with a quote, so a pass-through shortcut would return it verbatim
+        var result = SqlHelper.QuoteIdentifier("\"a\"; DROP TABLE users; --\"");
+
+        Assert.That(result, Is.EqualTo("\"\"\"a\"\"; DROP TABLE users; --\"\"\""));
+    }
+
+    [Test]
     public void QuoteIdentifier_InjectionAttempt_CannotCloseTheIdentifierEarly()
     {
         const string malicious = "users\"; DROP TABLE users; --";
@@ -102,7 +128,8 @@ public class SqlHelperTests
         {
             Assert.That(result, Is.EqualTo("\"users\"\"; DROP TABLE users; --\""));
 
-            // Every quote inside the wrapper is part of a doubled pair, so none can terminate the identifier
+            // Structural check, independent of the exact string above: every quote inside the wrapper
+            // is part of a doubled pair, so none can terminate the identifier
             var body = result[1..^1];
             Assert.That(body.Replace("\"\"", string.Empty), Does.Not.Contain("\""));
         }
@@ -119,6 +146,19 @@ public class SqlHelperTests
         var result = SqlHelper.QuoteIdentifier("  ");
 
         Assert.That(result, Is.EqualTo("\"  \""));
+    }
+
+    [TestCase("two words", "\"two words\"")]
+    [TestCase("a;b", "\"a;b\"")]
+    [TestCase("it's", "\"it's\"")]
+    [TestCase("back\\slash", "\"back\\slash\"")]
+    [TestCase("таблица", "\"таблица\"")]
+    public void QuoteIdentifier_CharactersOtherThanDoubleQuote_AreNotEscaped(string identifier, string expected)
+    {
+        // Only the double quote is special inside a quoted identifier; everything else is literal
+        var result = SqlHelper.QuoteIdentifier(identifier);
+
+        Assert.That(result, Is.EqualTo(expected));
     }
 
     [Test]
