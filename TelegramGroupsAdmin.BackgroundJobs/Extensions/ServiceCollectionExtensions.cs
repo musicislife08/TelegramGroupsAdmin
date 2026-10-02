@@ -121,6 +121,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IBackupService, BackupService>();
         services.AddScoped<IBackupEncryptionService, BackupEncryptionService>();
         services.AddScoped<IBackupArchiveRotator, BackupArchiveRotator>();
+        services.AddScoped<IBackupRotationService, BackupRotationService>();
         services.AddScoped<IBackupConfigurationService, BackupConfigurationService>();
         services.AddScoped<IPassphraseManagementService, PassphraseManagementService>();
 
