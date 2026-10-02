@@ -133,17 +133,36 @@ public class BackupEncryptionServiceTests
             Throws.TypeOf<InvalidOperationException>().With.Message.Contains("too small"));
     }
 
-    // 55 = complete header plus three of the four end-marker bytes
     [TestCase(7)]
     [TestCase(30)]
-    [TestCase(55)]
-    public void DecryptBytes_ChunkedFileShorterThanHeaderPlusEndMarker_ThrowsTooSmall(int bytesKept)
+    [TestCase(51)]
+    public void DecryptBytes_ChunkedFileCutInsideTheHeader_ThrowsTooSmall(int bytesKept)
     {
         var truncated = EncryptChunked(string.Empty).AsSpan(0, bytesKept).ToArray();
 
         Assert.That(() => _service.DecryptBackup(truncated, Passphrase),
             Throws.TypeOf<InvalidOperationException>()
                 .With.Message.Contains($"too small (minimum {EncryptionConstants.ChunkedHeaderSize + EndMarker} bytes)"));
+    }
+
+    [Test]
+    public void DecryptBytes_CompleteHeaderButPartialEndMarker_ThrowsTruncated()
+    {
+        // 55 bytes: the whole header plus three of the four end-marker bytes
+        var truncated = EncryptChunked(string.Empty).AsSpan(0, EncryptionConstants.ChunkedHeaderSize + EndMarker - 1).ToArray();
+
+        Assert.That(() => _service.DecryptBackup(truncated, Passphrase),
+            Throws.TypeOf<InvalidOperationException>().With.Message.Contains("truncated"));
+    }
+
+    [Test]
+    public void DecryptBytes_UnsupportedVersion_IsReportedEvenWhenTheHeaderIsAlsoCutShort()
+    {
+        // Both overloads must agree: the byte[] overload hands off to the stream overload
+        byte[] input = [.. EncryptionConstants.ChunkedMagicHeader, 0x02];
+
+        Assert.That(() => _service.DecryptBackup(input, Passphrase),
+            Throws.TypeOf<InvalidOperationException>().With.Message.Contains("Unsupported chunked format version: 2"));
     }
 
     [Test]
@@ -185,7 +204,7 @@ public class BackupEncryptionServiceTests
         Assert.That(() => DecryptStream(truncated),
             Throws.TypeOf<InvalidOperationException>()
                 .With.Message.Contains("truncated")
-                .And.Message.Contains($"chunk {expectedChunk}"));
+                .And.Message.Contains($"while reading chunk {expectedChunk}"));
     }
 
     [Test]

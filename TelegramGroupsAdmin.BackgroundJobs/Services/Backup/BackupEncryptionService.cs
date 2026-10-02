@@ -99,11 +99,6 @@ public class BackupEncryptionService(ILogger<BackupEncryptionService> logger) : 
         if (encryptedBytes.AsSpan()[..EncryptionConstants.ChunkedMagicHeader.Length]
             .SequenceEqual(EncryptionConstants.ChunkedMagicHeader))
         {
-            if (encryptedBytes.Length < MinChunkedFileSize)
-            {
-                throw new InvalidOperationException($"Encrypted backup file is too small (minimum {MinChunkedFileSize} bytes)");
-            }
-
             using var cipherInput = new MemoryStream(encryptedBytes);
             using var plainOutput = new MemoryStream();
             DecryptBackup(cipherInput, plainOutput, passphrase);
@@ -409,7 +404,7 @@ public class BackupEncryptionService(ILogger<BackupEncryptionService> logger) : 
         if (bytesRead < count)
         {
             throw new InvalidOperationException(
-                $"Encrypted backup is truncated: data ended unexpectedly at chunk {chunkCounter}. The file is incomplete or corrupted.");
+                $"Encrypted backup is truncated: data ended unexpectedly while reading chunk {chunkCounter}. The file is incomplete or corrupted.");
         }
     }
 
