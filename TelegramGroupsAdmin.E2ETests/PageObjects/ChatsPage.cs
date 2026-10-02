@@ -32,7 +32,6 @@ public class ChatsPage
     private const string HealthCell = "td[data-label='Health']";
     private const string CustomConfigCell = "td[data-label='Custom Config']";
     private const string ConfigureButton = "button:has-text('Configure')";
-    private const string RefreshHealthButton = "button[title='Refresh health status']";
 
     public ChatsPage(IPage page)
     {
@@ -137,11 +136,6 @@ public class ChatsPage
     /// <summary>The table row containing <paramref name="chatName"/>.</summary>
     public ILocator ChatRow(string chatName) => _page.Locator(TableRow).Filter(new() { HasText = chatName });
 
-    /// <summary>
-    /// The chat ID caption (rendered as "ID: 123456") for a chat by its name.
-    /// </summary>
-    public ILocator ChatIdCaption(string chatName) => ChatRow(chatName).Locator($"{ChatNameCell} .mud-typography-caption");
-
     /// <summary>The chat type cell for a chat by its name.</summary>
     public ILocator ChatTypeCellFor(string chatName) => ChatRow(chatName).Locator(ChatTypeCell);
 
@@ -167,14 +161,6 @@ public class ChatsPage
     {
         await ConfigureButtonFor(chatName).ClickAsync();
         await Expect(_page.GetByRole(AriaRole.Dialog)).ToBeVisibleAsync();
-    }
-
-    /// <summary>
-    /// Clicks the Refresh health button for a chat by its name.
-    /// </summary>
-    public async Task ClickRefreshHealthAsync(string chatName)
-    {
-        await ChatRow(chatName).Locator(RefreshHealthButton).ClickAsync();
     }
 
     /// <summary>
