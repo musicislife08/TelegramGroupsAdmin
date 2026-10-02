@@ -8,9 +8,15 @@ using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
 using TelegramGroupsAdmin.Repositories;
 using TelegramGroupsAdmin.Services.Auth;
+using TelegramGroupsAdmin.Testing.Golden;
 
 namespace TelegramGroupsAdmin.IntegrationTests.Services.Auth;
 
+/// <summary>
+/// A live session must stop validating once its user is no longer Active. Anchor: the canonical
+/// no-TOTP GlobalAdmin (<see cref="GoldenDatasetConstants.WebUsers.NoTotpGlobalAdminId"/>,
+/// machine@canonical.test), which is Active with a verified email.
+/// </summary>
 [TestFixture]
 [Category("Integration")]
 public class SessionRevocationTests
@@ -28,7 +34,7 @@ public class SessionRevocationTests
     private async Task<IServiceProvider> SetUpServicesAsync()
     {
         _testHelper = new MigrationTestHelper();
-        await _testHelper.CreateDatabaseFromEmptyTemplateAsync();
+        await _testHelper.CreateDatabaseFromGoldenTemplateAsync();
 
         var services = new ServiceCollection();
         services.AddDbContextFactory<AppDbContext>(o => o.UseNpgsql(_testHelper.ConnectionString));
@@ -54,51 +60,17 @@ public class SessionRevocationTests
         var repo = scope.ServiceProvider.GetRequiredService<IUserRepository>();
         var validator = scope.ServiceProvider.GetRequiredService<IUserSessionValidator>();
 
-        var userId = await SeedActiveUserAsync(repo);
+        const string userId = GoldenDatasetConstants.WebUsers.NoTotpGlobalAdminId;
         var user = await repo.GetByIdAsync(userId);
-        var principal = PrincipalFor(userId, user!.SecurityStamp);
-        Assert.That(await validator.IsStillValidAsync(principal), Is.True);
 
-        await repo.UpdateStatusAsync(userId, UserStatus.Disabled, "admin");
-        Assert.That(await validator.IsStillValidAsync(principal), Is.False);
-    }
+        // Guard the precondition: the canonical anchor is Active, so its session starts out valid.
+        Assert.That(user, Is.Not.Null);
+        Assert.That(user!.Status, Is.EqualTo(UserStatus.Active), "canonical anchor must be Active");
+        var principal = PrincipalFor(userId, user.SecurityStamp);
+        Assert.That(await validator.IsStillValidAsync(principal), Is.True, "session of an Active user should be valid");
 
-    /// <summary>
-    /// Seeds a minimal Active + EmailVerified user via <see cref="IUserRepository.CreateAsync"/>
-    /// and returns its ID. No password hashing is needed for these validator tests —
-    /// any non-null hash string satisfies the NOT NULL constraint.
-    /// </summary>
-    private static async Task<string> SeedActiveUserAsync(IUserRepository repo)
-    {
-        var userId = Guid.NewGuid().ToString();
-        var email = $"session-test-{userId}@integration.test";
-        var now = DateTimeOffset.UtcNow;
+        await repo.UpdateStatusAsync(userId, UserStatus.Disabled, GoldenDatasetConstants.WebUsers.OwnerId);
 
-        var userRecord = new UserRecord(
-            WebUser: new WebUserIdentity(userId, email, PermissionLevel.Admin),
-            NormalizedEmail: email.ToUpperInvariant(),
-            PasswordHash: "not-a-real-hash",
-            SecurityStamp: Guid.NewGuid().ToString(),
-            InvitedBy: null,
-            IsActive: true,
-            TotpSecret: null,
-            TotpEnabled: false,
-            TotpSetupStartedAt: null,
-            CreatedAt: now,
-            LastLoginAt: null,
-            Status: UserStatus.Active,
-            ModifiedBy: null,
-            ModifiedAt: null,
-            EmailVerified: true,
-            EmailVerificationToken: null,
-            EmailVerificationTokenExpiresAt: null,
-            PasswordResetToken: null,
-            PasswordResetTokenExpiresAt: null,
-            FailedLoginAttempts: 0,
-            LockedUntil: null
-        );
-
-        await repo.CreateAsync(userRecord);
-        return userId;
+        Assert.That(await validator.IsStillValidAsync(principal), Is.False, "session must be rejected once the user is disabled");
     }
 }
