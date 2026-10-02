@@ -19,12 +19,6 @@ public class UserRepository : IUserRepository
         _logger = logger;
     }
 
-    public async Task<int> GetUserCountAsync(CancellationToken cancellationToken = default)
-    {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        return await context.Users.CountAsync(cancellationToken);
-    }
-
     public async Task<UserRecord?> GetByEmailAsync(string email, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
@@ -38,19 +32,6 @@ public class UserRepository : IUserRepository
         return entity?.ToModel();
     }
 
-    public async Task<UserRecord?> GetByEmailIncludingDeletedAsync(string email, CancellationToken cancellationToken = default)
-    {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var normalizedEmail = email.ToUpperInvariant();
-
-        var entity = await context.Users
-            .AsNoTracking()
-            .Where(u => u.NormalizedEmail == normalizedEmail)
-            .FirstOrDefaultAsync(cancellationToken);
-
-        return entity?.ToModel();
-    }
-
     public async Task<UserRecord?> GetByIdAsync(string userId, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
@@ -59,24 +40,6 @@ public class UserRepository : IUserRepository
             .FirstOrDefaultAsync(u => u.Id == userId, cancellationToken);
 
         return entity?.ToModel();
-    }
-
-    /// <inheritdoc/>
-    public async Task<List<UserRecord>> GetByIdsAsync(
-        IEnumerable<string> userIds,
-        CancellationToken cancellationToken = default)
-    {
-        var idList = userIds.ToList();
-        if (idList.Count == 0)
-            return [];
-
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var entities = await context.Users
-            .AsNoTracking()
-            .Where(u => idList.Contains(u.Id))
-            .ToListAsync(cancellationToken);
-
-        return entities.Select(e => e.ToModel()).ToList();
     }
 
     public async Task<string> CreateAsync(UserRecord user, CancellationToken cancellationToken = default)

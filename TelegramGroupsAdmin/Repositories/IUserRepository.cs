@@ -5,16 +5,8 @@ namespace TelegramGroupsAdmin.Repositories;
 /// </summary>
 public interface IUserRepository
 {
-    Task<int> GetUserCountAsync(CancellationToken cancellationToken = default);
     Task<UserRecord?> GetByEmailAsync(string email, CancellationToken cancellationToken = default);
-    Task<UserRecord?> GetByEmailIncludingDeletedAsync(string email, CancellationToken cancellationToken = default);
     Task<UserRecord?> GetByIdAsync(string userId, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Gets multiple users by their IDs in a single query.
-    /// Used for batch hydration to avoid N+1 query patterns.
-    /// </summary>
-    Task<List<UserRecord>> GetByIdsAsync(IEnumerable<string> userIds, CancellationToken cancellationToken = default);
 
     Task<string> CreateAsync(UserRecord user, CancellationToken cancellationToken = default);
 
@@ -55,6 +47,7 @@ public interface IUserRepository
     /// <summary>Resets TOTP (clears secret, timestamp, disables). Rotates the user's security stamp in the same UPDATE, invalidating existing sessions (forced re-login).</summary>
     Task ResetTotpAsync(string userId, CancellationToken cancellationToken = default);
     Task DeleteRecoveryCodesAsync(string userId, CancellationToken cancellationToken = default);
+
     /// <summary>
     /// Replaces the user's whole recovery code set with <paramref name="codeHashes"/> in one transaction.
     /// Every earlier code, used or not, stops working at the moment the new set is stored.
