@@ -12,9 +12,14 @@ namespace TelegramGroupsAdmin.Services;
 /// configured), or it is the first-run owner, which starts unverified when an email service is configured but
 /// is sent no verification email (the owner recovers through "Resend verification email" on the login page).
 /// </param>
+/// <param name="VerificationEmailFailed">
+/// True when <paramref name="EmailVerificationRequired"/> is true but sending the verification email failed, so
+/// the caller must not claim a link was sent; the user can request one through "Resend verification email".
+/// </param>
 public record RegisterResult(
     bool Success,
     string? UserId,
     string? ErrorMessage,
-    bool EmailVerificationRequired = false
+    bool EmailVerificationRequired = false,
+    bool VerificationEmailFailed = false
 );

@@ -134,6 +134,44 @@ public class AuthServiceTests
     }
 
     [Test]
+    public async Task RegisterAsync_WithInvite_WhenTheVerificationEmailSends_DoesNotReportAFailedSend()
+    {
+        // Arrange
+        EmailState(EmailConfigurationState.Enabled);
+
+        // Act
+        var result = await _service.RegisterAsync(Email, Password, InviteToken);
+
+        // Assert
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.EmailVerificationRequired, Is.True);
+            Assert.That(result.VerificationEmailFailed, Is.False);
+        }
+    }
+
+    [Test]
+    public async Task RegisterAsync_WithInvite_WhenTheVerificationEmailFails_StillRegistersButReportsTheFailedSend()
+    {
+        // Arrange - the email service is down; registration must not fail, but the caller must not claim a send
+        EmailState(EmailConfigurationState.Enabled);
+        _emailService.SendTemplatedEmailAsync(
+                Arg.Any<string>(), Arg.Any<EmailTemplate>(), Arg.Any<Dictionary<string, string>>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromException(new InvalidOperationException("SendGrid outage")));
+
+        // Act
+        var result = await _service.RegisterAsync(Email, Password, InviteToken);
+
+        // Assert
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Success, Is.True);
+            Assert.That(result.EmailVerificationRequired, Is.True);
+            Assert.That(result.VerificationEmailFailed, Is.True);
+        }
+    }
+
+    [Test]
     public async Task RegisterAsync_WithInvite_WhenTheGateIsIndeterminate_FailsClosedWithoutWriting()
     {
         // Arrange

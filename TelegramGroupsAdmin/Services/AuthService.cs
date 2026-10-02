@@ -267,9 +267,10 @@ public class AuthService(
             cancellationToken: cancellationToken);
 
         // Send verification email if email service is configured
+        var verificationEmailFailed = false;
         if (emailVerificationEnabled)
         {
-            await SendVerificationEmailAsync(userId, email, cancellationToken);
+            verificationEmailFailed = !await SendVerificationEmailAsync(userId, email, cancellationToken);
         }
         else
         {
@@ -279,7 +280,8 @@ public class AuthService(
                 registeredUser.ToLogDebug());
         }
 
-        return new RegisterResult(true, userId, null, EmailVerificationRequired: emailVerificationEnabled);
+        return new RegisterResult(true, userId, null,
+            EmailVerificationRequired: emailVerificationEnabled, VerificationEmailFailed: verificationEmailFailed);
     }
 
     /// <summary>
@@ -477,8 +479,10 @@ public class AuthService(
         return true;
     }
 
-    private async Task SendVerificationEmailAsync(string userId, string email, CancellationToken cancellationToken)
+    /// <summary>Issues a verification token and emails it. Returns false (after logging) when either step fails.</summary>
+    private async Task<bool> SendVerificationEmailAsync(string userId, string email, CancellationToken cancellationToken)
     {
+        var sent = false;
         try
         {
             // Generate verification token
@@ -505,6 +509,7 @@ public class AuthService(
                     { "BaseUrl", appOptions.Value.BaseUrl }
                 },
                 cancellationToken);
+            sent = true;
 
             logger.LogInformation("Sent verification email to {Email}", email);
 
@@ -518,9 +523,12 @@ public class AuthService(
         }
         catch (Exception ex)
         {
+            // Don't fail registration if email fails; the caller reports the failed send instead.
+            // (A failure after the send, e.g. the audit write, still counts as sent.)
             logger.LogError(ex, "Failed to send verification email to {Email}", email);
-            // Don't fail registration if email fails
         }
+
+        return sent;
     }
 
     public async Task<bool> ResendVerificationEmailAsync(string email, CancellationToken cancellationToken = default)
