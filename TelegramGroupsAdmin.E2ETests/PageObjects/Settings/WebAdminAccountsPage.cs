@@ -190,7 +190,7 @@ public class WebAdminAccountsPage
     /// </summary>
     public async Task SelectPermissionOptionAsync(string level)
     {
-        await PermissionOptions.Filter(new() { HasTextRegex = new Regex($@"^\s*{Regex.Escape(level)}\b") }).ClickAsync();
+        await PermissionOptions.Filter(new() { HasTextRegex = new Regex($@"^\s*{Regex.Escape(level)}(?=\s|-|$)") }).ClickAsync();
         await OpenPopover.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Hidden, Timeout = 5000 });
     }
 

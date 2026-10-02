@@ -172,14 +172,14 @@ public class WebAdminAccountsGoldenTests : GoldenE2ETestBase
     public async Task DisableTotp_SwitchesTheIconToWarningAndPersists()
     {
         // MudIcon Color=Success renders mud-success-text; the disabled state renders Color=Warning.
-        await Expect(_accounts.UserTotpIcon(TotpGlobalAdmin)).ToHaveClassAsync(new Regex(@"\bmud-success-text\b"));
+        await Expect(_accounts.UserTotpIcon(TotpGlobalAdmin)).ToHaveClassAsync(new Regex(@"(?:^|\s)mud-success-text(?=\s|$)"));
 
         await _accounts.OpenActionMenuForUserAsync(TotpGlobalAdmin);
         await _accounts.ClickActionMenuItemAsync("Disable TOTP");
         await _accounts.ConfirmDialogAsync();
 
         await Expect(_accounts.SnackbarWithText($"Disabled TOTP for {TotpGlobalAdmin}")).ToBeVisibleAsync();
-        await Expect(_accounts.UserTotpIcon(TotpGlobalAdmin)).ToHaveClassAsync(new Regex(@"\bmud-warning-text\b"));
+        await Expect(_accounts.UserTotpIcon(TotpGlobalAdmin)).ToHaveClassAsync(new Regex(@"(?:^|\s)mud-warning-text(?=\s|$)"));
 
         var user = await ReadUserAsync(GoldenDatasetConstants.WebUsers.GlobalAdminId);
         Assert.That(user.TotpEnabled, Is.False);
@@ -190,7 +190,7 @@ public class WebAdminAccountsGoldenTests : GoldenE2ETestBase
     public async Task ResetTotp_ClearsTheSecretAndSwitchesTheIconToWarning()
     {
         // Reset TOTP is offered only for a user with a stored secret: perfume@ is the one canonical such user.
-        await Expect(_accounts.UserTotpIcon(StoredTotpAdmin)).ToHaveClassAsync(new Regex(@"\bmud-success-text\b"));
+        await Expect(_accounts.UserTotpIcon(StoredTotpAdmin)).ToHaveClassAsync(new Regex(@"(?:^|\s)mud-success-text(?=\s|$)"));
 
         await _accounts.OpenActionMenuForUserAsync(StoredTotpAdmin);
         await _accounts.ClickActionMenuItemAsync("Reset TOTP");
@@ -198,7 +198,7 @@ public class WebAdminAccountsGoldenTests : GoldenE2ETestBase
         await _accounts.ConfirmDialogAsync();
 
         await Expect(_accounts.SnackbarWithText($"Reset TOTP for {StoredTotpAdmin}")).ToBeVisibleAsync();
-        await Expect(_accounts.UserTotpIcon(StoredTotpAdmin)).ToHaveClassAsync(new Regex(@"\bmud-warning-text\b"));
+        await Expect(_accounts.UserTotpIcon(StoredTotpAdmin)).ToHaveClassAsync(new Regex(@"(?:^|\s)mud-warning-text(?=\s|$)"));
 
         // With the secret wiped and TOTP off, the reopened menu offers Enable TOTP and no longer Reset TOTP
         // (the Enable TOTP presence check is the sync point for the absence check). The menu is left open:
