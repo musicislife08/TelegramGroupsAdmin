@@ -17,6 +17,12 @@ public enum PublicUrlFetchFailure
 
     /// <summary>The server answered with a non-success status.</summary>
     HttpStatus,
+
+    /// <summary>
+    /// A redirect hop would have left https for http. Still a refusal (<see cref="PublicUrlFetchException.NotAllowedMessage"/>
+    /// is its user-facing message), but distinguishable so a caller that was itself asked to fetch plain http can decide to.
+    /// </summary>
+    DowngradeRefused,
 }
 
 /// <summary>

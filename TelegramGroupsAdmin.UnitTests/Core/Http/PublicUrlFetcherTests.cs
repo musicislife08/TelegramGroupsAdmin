@@ -246,6 +246,35 @@ public class PublicUrlFetcherTests
     }
 
     [Test]
+    public void FetchAsync_HttpsRedirectingToHttp_IsReportedAsDowngradeRefused()
+    {
+        var factory = new StubClientFactory(new StubHandler(_ =>
+        {
+            var response = new HttpResponseMessage(HttpStatusCode.MovedPermanently);
+            response.Headers.Location = new Uri("http://example.com/b");
+            return response;
+        }));
+        var fetcher = new PublicUrlFetcher(factory, Microsoft.Extensions.Logging.Abstractions.NullLogger<PublicUrlFetcher>.Instance);
+
+        var ex = Assert.ThrowsAsync<PublicUrlFetchException>(() => fetcher.FetchAsync("https://example.com/a", OneMegabyte));
+
+        Assert.That(ex!.Kind, Is.EqualTo(PublicUrlFetchFailure.DowngradeRefused));
+        Assert.That(ex.Message, Is.EqualTo(PublicUrlFetchException.NotAllowedMessage));
+        Assert.That(ex.Reason, Does.Contain("https to http"));
+    }
+
+    private sealed class StubHandler(Func<HttpRequestMessage, HttpResponseMessage> respond) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+            => Task.FromResult(respond(request));
+    }
+
+    private sealed class StubClientFactory(HttpMessageHandler handler) : IHttpClientFactory
+    {
+        public HttpClient CreateClient(string name) => new(handler, disposeHandler: false);
+    }
+
+    [Test]
     public void FetchAsync_MoreRedirectsThanTheLimit_IsRefused()
     {
         var server = StartGifServer("/final.gif");

@@ -46,7 +46,7 @@ public sealed class PublicUrlFetcher(
         {
             // A policy refusal is a security signal worth a warning; a dead link, a slow server or
             // an oversized file is the caller's business and is reported through the exception.
-            if (ex.Kind == PublicUrlFetchFailure.NotAllowed)
+            if (ex.Kind is PublicUrlFetchFailure.NotAllowed or PublicUrlFetchFailure.DowngradeRefused)
                 logger.LogWarning("Refused to fetch URL {Url}: {Reason}", url, ex.Reason);
             else
                 logger.LogDebug("Could not fetch URL {Url}: {Reason}", url, ex.Reason);
@@ -98,7 +98,9 @@ public sealed class PublicUrlFetcher(
 
                     var next = ValidateUrl((location.IsAbsoluteUri ? location : new Uri(current, location)).AbsoluteUri);
                     if (!IsAllowedRedirect(current, next))
-                        throw Refused($"redirect from https to http ({next})");
+                        throw new PublicUrlFetchException(
+                            PublicUrlFetchFailure.DowngradeRefused, PublicUrlFetchException.NotAllowedMessage,
+                            $"redirect from https to http ({next})");
                     current = next;
                     continue;
                 }

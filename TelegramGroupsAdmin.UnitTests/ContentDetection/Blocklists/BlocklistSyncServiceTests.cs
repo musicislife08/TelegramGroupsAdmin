@@ -190,6 +190,9 @@ public class BlocklistSyncServiceTests
     [TestCase(PublicUrlFetchFailure.Timeout, false)]
     [TestCase(PublicUrlFetchFailure.TooLarge, false)]
     [TestCase(PublicUrlFetchFailure.NotAllowed, false)]
+    // The upgraded HTTPS URL redirecting back to http:// is the admin's own plaintext endpoint answering,
+    // not a policy refusal of a new target, so the configured HTTP URL is tried (through the same fetcher).
+    [TestCase(PublicUrlFetchFailure.DowngradeRefused, true)]
     public async Task SyncSubscriptionAsync_HttpsUpgradeFailure_FallsBackToHttpOnlyWhenUnreachableOrHttpStatus(
         PublicUrlFetchFailure httpsFailure, bool expectFallback)
     {
