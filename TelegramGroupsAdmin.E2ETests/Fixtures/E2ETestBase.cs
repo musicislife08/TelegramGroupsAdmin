@@ -133,13 +133,45 @@ public abstract class E2ETestBase
 
         // Safely close context resources (may be null if setup failed)
         // Note: Browser is shared via E2EFixture - don't close it here
-        if (Page != null) await Page.CloseAsync();
-        if (Context != null) await Context.CloseAsync();
-        if (Client != null) Client.Dispose();
-        if (Factory != null) await Factory.DisposeAsync();
+        // Each step is isolated: a throwing close must never skip disposing the app or dropping the
+        // golden clone. The first failure is rethrown once everything has run.
+        List<Exception>? failures = null;
+        async Task RunStepAsync(string step, Func<Task> action)
+        {
+            try
+            {
+                await action();
+            }
+            catch (Exception ex)
+            {
+                TestContext.Out.WriteLine($"Teardown step '{step}' failed: {ex.Message}");
+                (failures ??= []).Add(ex);
+            }
+        }
+
+        if (Page != null) await RunStepAsync("close page", () => Page.CloseAsync());
+        if (Context != null) await RunStepAsync("close context", () => Context.CloseAsync());
+        if (Client != null)
+        {
+            try
+            {
+                Client.Dispose();
+            }
+            catch (Exception ex)
+            {
+                TestContext.Out.WriteLine($"Teardown step 'dispose client' failed: {ex.Message}");
+                (failures ??= []).Add(ex);
+            }
+        }
+        if (Factory != null) await RunStepAsync("dispose factory", async () => await Factory.DisposeAsync());
 
         // Deliberately outside the null guard: runs even when CreateFactoryAsync threw
-        await OnFactoryDisposedAsync();
+        await RunStepAsync("drop factory resources", OnFactoryDisposedAsync);
+
+        if (failures is { Count: > 0 })
+        {
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failures[0]).Throw();
+        }
     }
 
     /// <summary>
