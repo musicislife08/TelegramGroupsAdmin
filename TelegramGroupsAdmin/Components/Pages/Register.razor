@@ -60,7 +60,7 @@
 
         @* Until the first-run and email state are resolved the defaults below are placeholders: render neither
            the note nor the invite field, so the page never flashes a note or a field that then disappears. *@
-        @if (_stateResolved && _emailState == EmailConfigurationState.Indeterminate)
+        @if (RegistrationUnavailable)
         {
             <MudAlert Severity="Severity.Warning" Class="mb-4">
                 <MudText Typo="Typo.body2">
@@ -86,7 +86,7 @@
                           @bind-Value="_inviteToken"
                           Variant="Variant.Outlined"
                           Class="mb-4"
-                          Disabled="@(_isLoading || _registrationSuccess)" />
+                          Disabled="@FormDisabled" />
         }
 
         <MudTextField T="string"
@@ -95,7 +95,7 @@
                       Variant="Variant.Outlined"
                       Class="mb-4"
                       InputType="InputType.Email"
-                      Disabled="@(_isLoading || _registrationSuccess)" />
+                      Disabled="@FormDisabled" />
 
         <MudTextField T="string"
                       Label="Password"
@@ -103,7 +103,7 @@
                       Variant="Variant.Outlined"
                       Class="mb-4"
                       InputType="InputType.Password"
-                      Disabled="@(_isLoading || _registrationSuccess)"
+                      Disabled="@FormDisabled"
                       HelperText="Minimum 8 characters with uppercase, lowercase, and number"
                       Validation="@(new Func<string, string?>(ValidatePassword))"
                       Immediate="true" />
@@ -114,7 +114,7 @@
                       Variant="Variant.Outlined"
                       Class="mb-6"
                       InputType="InputType.Password"
-                      Disabled="@(_isLoading || _registrationSuccess)"
+                      Disabled="@FormDisabled"
                       Validation="@(new Func<string, string?>(ValidateConfirmPassword))"
                       Immediate="true" />
 
@@ -122,7 +122,7 @@
                    Color="Color.Primary"
                    FullWidth="true"
                    OnClick="@(async () => await HandleRegisterAsync())"
-                   Disabled="@(_isLoading || _registrationSuccess)">
+                   Disabled="@FormDisabled">
             @if (_isLoading)
             {
                 <MudProgressCircular Size="Size.Small" Indeterminate="true" />
@@ -160,6 +160,11 @@
     private string _confirmPassword = string.Empty;
     private string? _errorMessage;
     private string? _successMessage;
+
+    // The register endpoint refuses every attempt while the email state is Indeterminate (fail closed), so the
+    // form stays disabled under the "temporarily unavailable" note rather than inviting a doomed submit.
+    private bool RegistrationUnavailable => _stateResolved && _emailState == EmailConfigurationState.Indeterminate;
+    private bool FormDisabled => _isLoading || _registrationSuccess || RegistrationUnavailable;
 
     [SupplyParameterFromQuery(Name = "invite")]
     private string? InviteQueryParam { get; set; }
