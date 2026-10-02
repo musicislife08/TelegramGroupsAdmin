@@ -313,6 +313,7 @@ Recipe format: a heading, the anchor id(s), a one-line description, and "use whe
 - `configs.id` = `1`, `chat_id` = `0`
 - Carries the only non-NULL global `welcome_config` baseline. Encrypted JSONB columns NULL in the SQL (DataProtection injection target); `api_keys` is written post-load from `04_configs.api_keys.json` (`GoldenDatasetConstants.SystemConfig`).
 - Use when: a test reads global fallback configuration or exercises the encrypted-column injection path.
+- `backup_encryption_config` deliberately keeps the legacy `Algorithm` and `Iterations` keys, which the model no longer has. Real deployments carry them until the next passphrase rotation, so the row is the anchor for tolerant-deserialization tests (`BackupEncryptionConfigStoredJsonTests`). Do not strip the keys.
 
 #### Main Community per-chat config (overrides global)
 - `configs.id` = `15`, `chat_id` = `-100026957614982`
