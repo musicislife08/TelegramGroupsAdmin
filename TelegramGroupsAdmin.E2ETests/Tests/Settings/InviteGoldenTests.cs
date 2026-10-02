@@ -113,7 +113,7 @@ public class InviteGoldenTests : GoldenE2ETestBase
         using (var scope = Factory.Services.CreateScope())
         {
             var features = scope.ServiceProvider.GetRequiredService<IFeatureAvailabilityService>();
-            Assert.That(await features.IsEmailVerificationEnabledAsync(), Is.False,
+            Assert.That(await features.GetEmailConfigurationStateAsync(), Is.EqualTo(EmailConfigurationState.Disabled),
                 "canonical: sendgrid_config is enabled but 04_configs.api_keys.json carries no SendGrid key — this test covers the verification-off path");
         }
 
@@ -207,7 +207,7 @@ public class InviteEmailVerificationGoldenTests : GoldenE2ETestBase
         using (var scope = Factory.Services.CreateScope())
         {
             var features = scope.ServiceProvider.GetRequiredService<IFeatureAvailabilityService>();
-            Assert.That(await features.IsEmailVerificationEnabledAsync(), Is.True,
+            Assert.That(await features.GetEmailConfigurationStateAsync(), Is.EqualTo(EmailConfigurationState.Enabled),
                 "the dummy SendGrid key in api_keys must make the strict email gate read Enabled — this test covers the verification-on path");
         }
 

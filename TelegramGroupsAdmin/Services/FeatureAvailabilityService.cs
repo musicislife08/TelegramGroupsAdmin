@@ -120,12 +120,6 @@ public class FeatureAvailabilityService : IFeatureAvailabilityService
         return IsEmailConfiguredAsync();
     }
 
-    public Task<bool> IsEmailVerificationEnabledAsync()
-    {
-        // Email verification requires email service
-        return IsEmailConfiguredAsync();
-    }
-
     public async Task<FeatureStatus> GetFeatureStatusAsync()
     {
         var emailConfigured = await IsEmailConfiguredAsync();
