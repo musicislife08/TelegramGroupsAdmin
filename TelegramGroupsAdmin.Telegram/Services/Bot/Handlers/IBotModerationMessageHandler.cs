@@ -9,7 +9,7 @@ namespace TelegramGroupsAdmin.Telegram.Services.Bot.Handlers;
 /// Low-level handler for moderation message operations.
 /// Owns backfill (ensuring messages exist in DB) and deletion.
 /// Named IBotModerationMessageHandler to avoid conflict with IBotMessageHandler (send/edit).
-/// This is the ONLY layer that should touch ITelegramBotClientFactory for moderation message operations.
+/// It does not use ITelegramBotClientFactory itself: its Telegram calls go through IBotMessageService.
 /// </summary>
 public interface IBotModerationMessageHandler
 {
