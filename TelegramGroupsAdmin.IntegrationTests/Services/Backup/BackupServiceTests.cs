@@ -1130,6 +1130,78 @@ public class BackupServiceTests
 
     #endregion
 
+    #region Passphrase Rotation Job Tests
+
+    /// <summary>
+    /// A backup made before a passphrase rotation must still restore after it, with the new
+    /// passphrase the rotation stored. The file must also still be a readable archive: restore,
+    /// metadata and the encrypted check all open it as gzip.
+    /// </summary>
+    [Test]
+    public async Task RotatePassphraseJob_ThenRestore_BackupMadeBeforeRotationStillRestores()
+    {
+        // Arrange - one backup, encrypted with the passphrase configured in SetUp, in its own directory
+        const string newPassphrase = "rotated-passphrase-67890";
+        var backupDirectory = Directory.CreateTempSubdirectory("tga_rotation_proof_").FullName;
+        var backupPath = Path.Combine(backupDirectory, "backup_before_rotation.tar.gz");
+        try
+        {
+            await _backupService!.ExportToFileAsync(backupPath, CancellationToken.None);
+            Assert.That(await _backupService.IsEncryptedAsync(backupPath), Is.True, "precondition: the backup is encrypted");
+            Assert.That(await ReadFirstBytesAsync(backupPath, 2), Is.EqualTo(GzipMagic), "precondition: the backup is a gzip archive");
+
+            var job = new TelegramGroupsAdmin.BackgroundJobs.Jobs.RotateBackupPassphraseJob(
+                _encryptionService!,
+                _backupService,
+                _passphraseService!,
+                _serviceProvider!.GetRequiredService<IServiceScopeFactory>(),
+                Microsoft.Extensions.Logging.Abstractions.NullLogger<TelegramGroupsAdmin.BackgroundJobs.Jobs.RotateBackupPassphraseJob>.Instance,
+                new TelegramGroupsAdmin.BackgroundJobs.Metrics.JobMetrics());
+
+            var payload = new TelegramGroupsAdmin.Core.JobPayloads.RotateBackupPassphrasePayload(
+                newPassphrase, backupDirectory, GoldenDatasetConstants.WebUsers.OwnerId);
+            var jobDataMap = new Quartz.JobDataMap
+            {
+                { TelegramGroupsAdmin.Core.BackgroundJobs.JobDataKeys.PayloadJson, JsonSerializer.Serialize(payload) }
+            };
+            var context = Substitute.For<Quartz.IJobExecutionContext>();
+            context.MergedJobDataMap.Returns(jobDataMap);
+            context.CancellationToken.Returns(CancellationToken.None);
+
+            // Act - rotate
+            await job.Execute(context);
+
+            // Assert - the stored passphrase is the new one, and the pre-rotation backup still works with it
+            Assert.That(await _passphraseService!.GetDecryptedPassphraseAsync(), Is.EqualTo(newPassphrase),
+                "the rotation should have stored the new passphrase");
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(await ReadFirstBytesAsync(backupPath, 2), Is.EqualTo(GzipMagic),
+                    "after rotation the backup must still be a gzip archive");
+                Assert.That(async () => await _backupService.GetMetadataAsync(backupPath), Throws.Nothing,
+                    "metadata must still be readable after rotation");
+                Assert.That(async () => await _backupService.RestoreAsync(backupPath), Throws.Nothing,
+                    "the backup must restore with the rotated passphrase stored in the database");
+            }
+        }
+        finally
+        {
+            Directory.Delete(backupDirectory, recursive: true);
+        }
+    }
+
+    private static readonly byte[] GzipMagic = [0x1f, 0x8b];
+
+    private static async Task<byte[]> ReadFirstBytesAsync(string path, int count)
+    {
+        await using var stream = File.OpenRead(path);
+        var buffer = new byte[count];
+        await stream.ReadExactlyAsync(buffer);
+        return buffer;
+    }
+
+    #endregion
+
     #region Passphrase Management Tests
 
     [Test]
