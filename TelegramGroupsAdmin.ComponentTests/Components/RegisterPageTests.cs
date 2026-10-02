@@ -55,4 +55,25 @@ public class RegisterPageTests : MudBlazorTestContext
             }
         });
     }
+
+    [Test]
+    public void Form_IsDisabledWhileTheStateLookupIsPending_ThenEnabledOnceItResolves()
+    {
+        var firstRun = new TaskCompletionSource<bool>();
+        _authService.IsFirstRunAsync(Arg.Any<CancellationToken>()).Returns(firstRun.Task);
+        _features.GetEmailConfigurationStateAsync().Returns(EmailConfigurationState.Enabled);
+
+        var cut = Render<Register>();
+
+        var pendingSubmit = cut.FindAll("button").Single(b => b.TextContent.Contains("Create Account"));
+        Assert.That(pendingSubmit.HasAttribute("disabled"), Is.True, "not submittable before the state resolves");
+
+        firstRun.SetResult(false);
+
+        cut.WaitForAssertion(() =>
+        {
+            var submit = cut.FindAll("button").Single(b => b.TextContent.Contains("Create Account"));
+            Assert.That(submit.HasAttribute("disabled"), Is.False, "submittable once the state has resolved");
+        });
+    }
 }

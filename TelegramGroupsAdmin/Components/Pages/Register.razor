@@ -164,7 +164,7 @@
     // The register endpoint refuses every attempt while the email state is Indeterminate (fail closed), so the
     // form stays disabled under the "temporarily unavailable" note rather than inviting a doomed submit.
     private bool RegistrationUnavailable => _stateResolved && _emailState == EmailConfigurationState.Indeterminate;
-    private bool FormDisabled => _isLoading || _registrationSuccess || RegistrationUnavailable;
+    private bool FormDisabled => !_stateResolved || _isLoading || _registrationSuccess || RegistrationUnavailable;
 
     [SupplyParameterFromQuery(Name = "invite")]
     private string? InviteQueryParam { get; set; }
