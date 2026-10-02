@@ -191,12 +191,17 @@ public class BanCelebrationSettingsTests : SharedAuthenticatedTestBase
             await _page.OpenAddGifDialogAsync();
             await _page.UploadFileAsync(testFilePath);
             await _page.WaitForFileSelectedAsync(uniqueName);
+            // Selecting a file auto-fills the name from the file name; overwrite it with the name under test.
+            var gifName = $"e2e gif {Guid.NewGuid():N}";
+            await _page.FillNameAsync(gifName);
+            await Expect(_page.NameInput).ToHaveValueAsync(gifName);
             await _page.SubmitAndWaitForCloseAsync();
 
             // Assert - snackbar shows success
-            await Expect(_page.Snackbar).ToContainTextAsync("added", new() { IgnoreCase = true });
+            await Expect(_page.SnackbarWithText("GIF added successfully")).ToBeVisibleAsync();
 
-            // Assert - GIF count increased by 1
+            // Assert - the library shows the GIF under the entered name, and grew by exactly one
+            await Expect(_page.GifRow(gifName)).ToHaveCountAsync(1);
             await Expect(_page.GifRows).ToHaveCountAsync(initialCount + 1);
         }
         finally

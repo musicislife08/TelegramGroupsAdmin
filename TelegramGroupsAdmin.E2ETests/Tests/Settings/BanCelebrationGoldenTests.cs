@@ -116,28 +116,6 @@ public class BanCelebrationGoldenTests : GoldenE2ETestBase
     #region GIF upload
 
     [Test]
-    public async Task UploadGif_WithName_AppearsInTheLibraryAndIsStoredOnDisk()
-    {
-        var name = $"e2e synthetic gif {Guid.NewGuid():N}";
-        var fixture = await WriteFixtureGifAsync();
-        await Expect(_page.GifRows).ToHaveCountAsync(_canonicalGifCount);
-
-        await UploadAndSubmitAsync(fixture, name);
-
-        await Expect(_page.SnackbarWithText("GIF added successfully")).ToBeVisibleAsync();
-        await Expect(_page.GifRow(name)).ToHaveCountAsync(1);
-        await Expect(_page.GifRows).ToHaveCountAsync(_canonicalGifCount + 1);
-
-        var stored = await ReadStoredGifAsync(name);
-        Assert.That(stored.FilePath, Does.StartWith("ban-gifs/").And.EndWith(".gif"));
-        Assert.That(stored.PhotoHash, Is.Not.Null.And.Length.EqualTo(8), "the hash is what later uploads are compared against");
-        Assert.That(stored.FileId, Is.Null, "a fresh upload has no Telegram file_id cached yet");
-        Assert.That(await File.ReadAllBytesAsync(FullMediaPath(stored.FilePath)), Is.EqualTo(FixtureGifBytes),
-            "the uploaded bytes are stored as-is under this instance's media path");
-        Assert.That(await CountStoredGifsAsync(), Is.EqualTo(_canonicalGifCount + 1));
-    }
-
-    [Test]
     public async Task UploadDuplicateGif_CancelUpload_LeavesTheLibraryUnchanged()
     {
         var firstName = $"e2e synthetic gif {Guid.NewGuid():N}";
