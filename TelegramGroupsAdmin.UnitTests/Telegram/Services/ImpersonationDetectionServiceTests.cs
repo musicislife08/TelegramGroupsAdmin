@@ -46,7 +46,7 @@ public class ImpersonationDetectionServiceTests
     [SetUp]
     public void SetUp()
     {
-        // Only create mocks for interfaces (concrete classes can't be mocked without parameterless constructor)
+        // Mocks for the dependencies ShouldCheckUserAsync reads
         _mockTelegramUserRepo = Substitute.For<ITelegramUserRepository>();
         _mockMessageHistoryRepo = Substitute.For<IMessageHistoryRepository>();
         _mockReportsRepo = Substitute.For<IReportsRepository>();
@@ -56,15 +56,13 @@ public class ImpersonationDetectionServiceTests
         _mockConfigService.GetEffectiveContentDetectionAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(new ContentDetectionConfig { FirstMessagesCount = 5 });
 
-        // Note: Full service instantiation requires concrete dependencies that can't be mocked.
-        // For service-level tests, use integration tests instead.
-        // For ShouldCheckUserAsync, we can test directly since it only uses interface dependencies.
+        // The helper wires only what ShouldCheckUserAsync needs.
         _service = CreateServiceForShouldCheckTests();
     }
 
     /// <summary>
     /// Creates a minimal service instance for ShouldCheckUserAsync tests.
-    /// Other methods require database context and concrete dependencies.
+    /// Other methods need a working database context and the moderation service, which this helper does not provide.
     /// </summary>
     private ImpersonationDetectionService CreateServiceForShouldCheckTests()
     {
@@ -84,7 +82,7 @@ public class ImpersonationDetectionServiceTests
             _mockMessageHistoryRepo,
             mockPhotoHashService,
             _mockReportsRepo,
-            null!, // ModerationActionService - not used by ShouldCheckUserAsync
+            null!, // IBotModerationService - not used by ShouldCheckUserAsync
             _mockConfigService,
             mockLogger);
     }
