@@ -36,7 +36,7 @@ namespace TelegramGroupsAdmin.IntegrationTests.Telegram.Services;
 ///
 /// Test Strategy:
 /// - Real PostgreSQL for config, GIFs, captions, ban counts, and subscribers (empty table)
-/// - Mocked ITelegramBotClientFactory and IUserNotificationService (external APIs)
+/// - Mocked IBotMessageService and IUserNotificationService (external APIs)
 /// - Tests config logic, placeholder replacement, and file_id caching
 /// </summary>
 [TestFixture]

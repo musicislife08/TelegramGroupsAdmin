@@ -839,7 +839,10 @@ public class BackupService : IBackupService
             await connection.ExecuteAsync(sql, parameters, transaction);
         }
 
-        // Recreate FK constraints that were dropped before insert
+        // Recreate FK constraints that were dropped before insert.
+        // constraint_def is deliberately not quoted: it is a full DDL clause, not an identifier.
+        // It is safe to concatenate because PostgreSQL generated it (pg_get_constraintdef) in this
+        // same transaction, above. It never comes from the backup file or from user input.
         foreach (var fk in fkConstraints)
         {
             await connection.ExecuteAsync(
