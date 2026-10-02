@@ -70,6 +70,8 @@ public class GoldenHarnessTests : GoldenE2ETestBase
         // Isolation_NextTestSeesCleanCanonical passes trivially when filtered on its own.
         await LoginAsOwnerAsync();
         await using var ctx = CreateDbContext();
+        // TEST-DATA RULE EXCEPTION: this raw write is the assertion subject, not setup: it proves
+        // per-test clone isolation (the next test must not see it). Do not copy it as a setup pattern.
         var rows = await ctx.Database.ExecuteSqlRawAsync(
             "UPDATE users SET email = 'isolation-probe@e2e.local' WHERE id = {0}",
             GoldenDatasetConstants.WebUsers.NoTotpAdminId);
