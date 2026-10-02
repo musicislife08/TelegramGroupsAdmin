@@ -525,8 +525,8 @@ public class ChatService : IChatService
     /// Generate a cache key that changes when relevant config changes.
     /// </summary>
     /// <remarks>
-    /// MaxTokens and Temperature are intentionally NOT included - they are per-request
-    /// ChatOptions, not client configuration; the client is reused across requests.
+    /// MaxTokens is intentionally NOT included - it is a per-request ChatOptions value,
+    /// not client configuration; the client is reused across requests.
     ///
     /// The API key is intentionally NOT included either. Including a secret in a long-lived
     /// static dictionary key would pin the plaintext in process memory for the app lifetime.
@@ -624,7 +624,6 @@ public class ChatService : IChatService
         return new ChatCompletionOptions
         {
             MaxTokens = options?.MaxTokens ?? featureConfig.MaxTokens,
-            Temperature = options?.Temperature ?? featureConfig.Temperature,
             JsonMode = options?.JsonMode ?? false
         };
     }
@@ -632,15 +631,17 @@ public class ChatService : IChatService
     /// <summary>
     /// Create MEAI ChatOptions from our options.
     /// </summary>
+    /// <remarks>
+    /// No sampling parameter (temperature, top_p, top_k) is ever set. Current reasoning models
+    /// reject any non-default value, and an omitted field is accepted by every provider, so the
+    /// provider default always applies.
+    /// </remarks>
     private static ChatOptions CreateChatOptions(ChatCompletionOptions? options)
     {
         var chatOptions = new ChatOptions();
 
         if (options?.MaxTokens.HasValue == true)
             chatOptions.MaxOutputTokens = options.MaxTokens.Value;
-
-        if (options?.Temperature.HasValue == true)
-            chatOptions.Temperature = options.Temperature.Value;
 
         if (options?.JsonMode == true)
             chatOptions.ResponseFormat = ChatResponseFormat.Json;

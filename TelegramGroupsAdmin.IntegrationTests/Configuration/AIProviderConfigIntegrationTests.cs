@@ -105,8 +105,7 @@ public class AIProviderConfigIntegrationTests
                 {
                     ConnectionId = "openai-main",
                     Model = "gpt-4o-mini",
-                    MaxTokens = 500,
-                    Temperature = 0.2f
+                    MaxTokens = 500
                 }
             }
         };
@@ -269,36 +268,31 @@ public class AIProviderConfigIntegrationTests
                 {
                     ConnectionId = "main",
                     Model = "gpt-4o-mini",
-                    MaxTokens = 500,
-                    Temperature = 0.2f
+                    MaxTokens = 500
                 },
                 [AIFeatureType.Translation] = new AIFeatureConfig
                 {
                     ConnectionId = "main",
                     Model = "gpt-4o",
-                    MaxTokens = 1000,
-                    Temperature = 0.3f
+                    MaxTokens = 1000
                 },
                 [AIFeatureType.ImageAnalysis] = new AIFeatureConfig
                 {
                     ConnectionId = "main",
                     Model = "gpt-4o",
-                    MaxTokens = 500,
-                    Temperature = 0.1f
+                    MaxTokens = 500
                 },
                 [AIFeatureType.VideoAnalysis] = new AIFeatureConfig
                 {
                     ConnectionId = "main",
                     Model = "gpt-4o",
-                    MaxTokens = 500,
-                    Temperature = 0.1f
+                    MaxTokens = 500
                 },
                 [AIFeatureType.PromptBuilder] = new AIFeatureConfig
                 {
                     ConnectionId = "main",
                     Model = "gpt-4o",
-                    MaxTokens = 2000,
-                    Temperature = 0.5f
+                    MaxTokens = 2000
                 }
             }
         };
@@ -315,7 +309,6 @@ public class AIProviderConfigIntegrationTests
             Assert.That(retrieved.Features[AIFeatureType.SpamDetection].MaxTokens, Is.EqualTo(500));
             Assert.That(retrieved.Features[AIFeatureType.Translation].MaxTokens, Is.EqualTo(1000));
             Assert.That(retrieved.Features[AIFeatureType.PromptBuilder].MaxTokens, Is.EqualTo(2000));
-            Assert.That(retrieved.Features[AIFeatureType.SpamDetection].Temperature, Is.EqualTo(0.2f));
         }
     }
 

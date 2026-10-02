@@ -459,7 +459,6 @@ public class VideoContentCheckV2(
 
             logger.LogDebug("VideoSpam Layer 3: Calling AI Vision API for {User}", req.User.ToLogDebug());
 
-            // Temperature uses feature config default (set in AI Integration settings)
             var result = await chatService.GetVisionCompletionAsync(
                 AIFeatureType.VideoAnalysis,
                 req.CustomPrompt ?? GetDefaultVideoPrompt(),

@@ -50,7 +50,7 @@ public class AITranslationService : IAITranslationService
 
             var options = new ChatCompletionOptions
             {
-                JsonMode = true  // Required for structured response parsing; other settings from feature config
+                JsonMode = true  // Required for structured response parsing; MaxTokens comes from the feature config
             };
 
             var result = await _chatService.GetCompletionAsync(

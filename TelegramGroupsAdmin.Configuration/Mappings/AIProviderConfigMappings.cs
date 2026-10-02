@@ -64,7 +64,6 @@ public static class AIProviderConfigMappings
             ConnectionId = data.ConnectionId,
             Model = data.Model,
             MaxTokens = data.MaxTokens,
-            Temperature = data.Temperature,
             AzureDeploymentName = data.AzureDeploymentName,
             RequiresVision = data.RequiresVision
         };
@@ -77,7 +76,6 @@ public static class AIProviderConfigMappings
             ConnectionId = model.ConnectionId,
             Model = model.Model,
             MaxTokens = model.MaxTokens,
-            Temperature = model.Temperature,
             AzureDeploymentName = model.AzureDeploymentName,
             RequiresVision = model.RequiresVision
         };

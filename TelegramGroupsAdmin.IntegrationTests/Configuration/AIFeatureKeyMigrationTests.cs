@@ -1,7 +1,14 @@
 using System.Text.Json;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Configuration.Mappings;
 using TelegramGroupsAdmin.Configuration.Models;
+using TelegramGroupsAdmin.Configuration.Repositories;
+using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Data.Models.Configs;
+using TelegramGroupsAdmin.IntegrationTests.Fixtures;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
 
 namespace TelegramGroupsAdmin.IntegrationTests.Configuration;
@@ -10,7 +17,8 @@ namespace TelegramGroupsAdmin.IntegrationTests.Configuration;
 /// Verifies the RemapAIFeatureConfigKeysToInt migration's data conversion: a configs row
 /// stored by the OLD code path (AIFeatureType keys serialized as enum NAMES) is rewritten so
 /// the features object is keyed by the enum's integer values, and survives deserialization
-/// through the int-keyed AIProviderConfigData DTO.
+/// through the int-keyed AIProviderConfigData DTO. Also verifies that such a row, which still
+/// carries the removed <c>temperature</c> key on each feature, loads through the repository.
 /// </summary>
 [TestFixture]
 public class AIFeatureKeyMigrationTests
@@ -114,6 +122,65 @@ public class AIFeatureKeyMigrationTests
             Assert.That(model.Features[AIFeatureType.SpamDetection].MaxTokens, Is.EqualTo(600));
             Assert.That(model.Features[AIFeatureType.SpamDetection].Model, Is.EqualTo("gpt-4o"));
             Assert.That(model.Features[AIFeatureType.ProfileScan].RequiresVision, Is.True);
+        }
+    }
+
+    [Test]
+    public async Task MigratedRowWithTemperatureKeys_LoadsThroughRepository_AndNextSaveDropsThem()
+    {
+        // The temperature setting was removed from the model with no migration. A row written
+        // before that still carries the key on each feature (here a non-default 0.2), and must
+        // load through the repository. The key disappears the next time the config is saved.
+        const string oldJson =
+            """{"connections":[{"id":"main","provider":0,"enabled":true}],"features":{"SpamDetection":{"model":"gpt-4o","maxTokens":600,"temperature":0.2,"requiresVision":false,"connectionId":"main","azureDeploymentName":null},"ProfileScan":{"model":"gpt-4o-mini","maxTokens":500,"temperature":1,"requiresVision":true,"connectionId":null,"azureDeploymentName":null}}}""";
+        const string featuresWithTemperatureSql =
+            """
+            SELECT count(*)
+            FROM configs c, jsonb_each(c.ai_provider_config -> 'features') AS feature
+            WHERE c.chat_id = 0 AND feature.value ? 'temperature'
+            """;
+
+        await _testHelper!.ExecuteSqlAsync(
+            $"""
+             INSERT INTO configs (chat_id, ai_provider_config, created_at, updated_at)
+             VALUES (0, '{oldJson}'::jsonb, NOW(), NOW());
+             """);
+        await _testHelper.ExecuteSqlAsync(UpSql);
+
+        // Guard the precondition: the migrated row still carries the legacy key on both features.
+        Assert.That(await _testHelper.ExecuteScalarAsync<long>(featuresWithTemperatureSql), Is.EqualTo(2));
+
+        var services = new ServiceCollection();
+        services.AddSingleton<IDataProtectionProvider>(PostgresFixture.SharedDataProtectionProvider);
+        services.AddDbContextFactory<AppDbContext>(o => o.UseNpgsql(_testHelper.ConnectionString));
+        services.AddLogging(b => b.SetMinimumLevel(LogLevel.Warning));
+        services.AddScoped<ISystemConfigRepository, SystemConfigRepository>();
+        await using var provider = services.BuildServiceProvider();
+        await using var scope = provider.CreateAsyncScope();
+        var repository = scope.ServiceProvider.GetRequiredService<ISystemConfigRepository>();
+
+        // Act - read. The repository returns null when the stored JSON fails to deserialize.
+        var config = await repository.GetAIProviderConfigAsync();
+
+        Assert.That(config, Is.Not.Null, "a stored config with temperature keys must still deserialize");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(config!.Connections.Select(c => c.Id), Is.EqualTo(new[] { "main" }));
+            Assert.That(config.Features[AIFeatureType.SpamDetection].Model, Is.EqualTo("gpt-4o"));
+            Assert.That(config.Features[AIFeatureType.SpamDetection].MaxTokens, Is.EqualTo(600));
+            Assert.That(config.Features[AIFeatureType.ProfileScan].RequiresVision, Is.True);
+        }
+
+        // Act - save what was loaded, as an admin's next Save does.
+        await repository.SaveAIProviderConfigAsync(config);
+
+        var maxTokensAfterSave = await _testHelper.ExecuteScalarAsync<int>(
+            "SELECT (ai_provider_config #>> '{features,0,maxTokens}')::int FROM configs WHERE chat_id = 0");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(await _testHelper.ExecuteScalarAsync<long>(featuresWithTemperatureSql), Is.Zero,
+                "a save must not write temperature keys back");
+            Assert.That(maxTokensAfterSave, Is.EqualTo(600), "the rest of the feature config must survive the save");
         }
     }
 }

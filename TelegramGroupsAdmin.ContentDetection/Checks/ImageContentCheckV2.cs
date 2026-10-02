@@ -376,7 +376,6 @@ public class ImageContentCheckV2(
 
         try
         {
-            // Temperature uses feature config default (set in AI Integration settings)
             var result = await chatService.GetVisionCompletionAsync(
                 AIFeatureType.ImageAnalysis,
                 req.CustomPrompt ?? GetDefaultImagePrompt(),
