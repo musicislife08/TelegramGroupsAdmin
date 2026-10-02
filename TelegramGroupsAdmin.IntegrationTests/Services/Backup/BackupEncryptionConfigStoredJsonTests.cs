@@ -85,6 +85,7 @@ public class BackupEncryptionConfigStoredJsonTests
         var storedCreatedAt = await GuardLegacyRowAndReadCreatedAtAsync();
 
         // Act - first-time setup builds a brand-new config and replaces the stored one
+        var beforeSave = DateTimeOffset.UtcNow;
         await CreatePassphraseService().SaveEncryptionConfigAsync("initial-test-passphrase");
 
         var config = await _configService.GetEncryptionConfigAsync();
@@ -93,8 +94,10 @@ public class BackupEncryptionConfigStoredJsonTests
         {
             Assert.That(await CountRowsWithLegacyKeyAsync(), Is.Zero, "a new config must not carry the legacy keys");
             Assert.That(config!.Enabled, Is.True);
-            // A new CreatedAt proves the stored config was replaced, not left in place.
-            Assert.That(config.CreatedAt, Is.GreaterThan(storedCreatedAt));
+            // A CreatedAt stamped during this call proves the stored config was replaced, not left
+            // in place. Compared with the clock, so it holds whatever date the canonical row carries.
+            Assert.That(config.CreatedAt, Is.GreaterThanOrEqualTo(beforeSave));
+            Assert.That(config.CreatedAt, Is.Not.EqualTo(storedCreatedAt));
             Assert.That(config.LastRotatedAt, Is.Null);
         }
     }
