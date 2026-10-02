@@ -122,4 +122,24 @@ public class AIProviderConfigMappingsTests
         Assert.That(model.Features[AIFeatureType.ProfileScan].RequiresVision, Is.True);
         Assert.That(model.Connections[1].Provider, Is.EqualTo(AIProviderType.AzureOpenAI));
     }
+
+    [Test]
+    public void StoredJsonWithLegacyTemperatureKey_LoadsAndIsNotWrittenBack()
+    {
+        // Rows stored before the temperature setting was removed still carry the key, including
+        // non-default values. They must load with no migration, and the next save must drop it.
+        const string stored =
+            """{"connections":[{"id":"openai-prod","provider":0,"enabled":true}],"features":{"0":{"connectionId":"openai-prod","model":"gpt-4o","maxTokens":600,"temperature":0.3,"requiresVision":false,"azureDeploymentName":null}}}""";
+
+        var model = JsonSerializer.Deserialize<AIProviderConfigData>(stored, JsonOptions)!.ToModel();
+        var resaved = JsonSerializer.Serialize(model.ToData(), JsonOptions);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(model.Features[AIFeatureType.SpamDetection].Model, Is.EqualTo("gpt-4o"));
+            Assert.That(model.Features[AIFeatureType.SpamDetection].MaxTokens, Is.EqualTo(600));
+            Assert.That(resaved, Does.Contain("\"maxTokens\":600"));
+            Assert.That(resaved, Does.Not.Contain("temperature").IgnoreCase);
+        }
+    }
 }
