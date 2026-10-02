@@ -170,11 +170,8 @@ public class WebAdminAccountsTests : AuthenticatedTestBase
         // Assert - GlobalAdmin should see Admin and GlobalAdmin options, but NOT Owner
         await _accountsPage.OpenPermissionOptionsAsync();
 
-        // Should have Admin and GlobalAdmin (also the positive render sync for the absence check below)
-        await Expect(_accountsPage.PermissionOptions.Filter(new() { HasTextRegex = new Regex("Admin") }).First).ToBeVisibleAsync();
-
-        // Should NOT see Owner option
-        await Expect(_accountsPage.PermissionOptions.Filter(new() { HasTextRegex = new Regex("Owner") })).ToHaveCountAsync(0);
+        // Exactly Admin and GlobalAdmin, in order: GlobalAdmin is offered its own level, and Owner is not offered
+        await Expect(_accountsPage.PermissionOptions).ToHaveTextAsync(["Admin - Chat-scoped moderation", "GlobalAdmin - Global moderation"]);
 
         // Cleanup
         await _accountsPage.ClosePermissionOptionsAsync();
