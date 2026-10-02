@@ -148,6 +148,12 @@ public class RegisterPage
     public ILocator EmailVerificationDisabledNote =>
         _page.Locator(WarningAlert).Filter(new() { HasText = "Email verification is currently disabled" });
 
+    /// <summary>
+    /// The "Go to login" link offered after a registration that needs email verification: on that path the page
+    /// keeps its success message on screen instead of auto-redirecting, so the user leaves through this link.
+    /// </summary>
+    public ILocator GoToLoginLink => _page.GetByRole(AriaRole.Link, new() { Name = "Go to login" });
+
     /// <summary>The "Restore from Backup" button (first-run only).</summary>
     public ILocator RestoreBackupButton => _page.Locator(RestoreBackupButtonSelector);
 

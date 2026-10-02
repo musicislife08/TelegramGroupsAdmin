@@ -240,9 +240,13 @@ public class InviteEmailVerificationGoldenTests : GoldenE2ETestBase
         await register.FillConfirmPasswordAsync(password);
         await register.SubmitAsync();
 
-        // The register endpoint returns the same message on both paths; the login flow owns verification.
-        await Expect(register.SuccessAlert).ToContainTextAsync("Account created successfully");
-        await Page.WaitForURLAsync("**/login", new() { Timeout = 10000 });
+        // Verification-on: the page tells the user to verify and stays put (no auto-redirect to /login), offering a
+        // link instead. The URL check runs against the render that already shows the link, so it is not a pre-redirect race.
+        await Expect(register.SuccessAlert).ToContainTextAsync("We've sent a verification link to your email");
+        await Expect(register.GoToLoginLink).ToBeVisibleAsync();
+        await Expect(Page).ToHaveURLAsync(new Regex("/register"));
+        await register.GoToLoginLink.ClickAsync();
+        await Expect(Page).ToHaveURLAsync(new Regex("/login$"));
 
         // Unverified, so the login is refused before any TOTP step: the page re-renders with the error and never
         // redirects to /login/setup-2fa (the URL check runs against the render that carries the error).
