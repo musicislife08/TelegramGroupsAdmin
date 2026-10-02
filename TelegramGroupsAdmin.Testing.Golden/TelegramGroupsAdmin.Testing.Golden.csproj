@@ -6,8 +6,8 @@
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    <!-- EF1002: ExecuteSqlRawAsync SQL injection warning - all SQL here is hardcoded test fixture text -->
-    <!-- slopwatch-ignore: SW005 EF1002 flags ExecuteSqlRaw with composed SQL; every statement here is fixture text built from constants, values go through {n} parameters -->
+    <!-- EF1002: ExecuteSqlRawAsync SQL injection warning - SQL here is composed in code from canonical identifiers, never from test input -->
+    <!-- slopwatch-ignore: SW005 EF1002 flags ExecuteSqlRaw with composed SQL; statements are composed from canonical table/column identifiers in code (never test input); values go through {n} parameters -->
     <NoWarn>$(NoWarn);EF1002</NoWarn>
   </PropertyGroup>
 
