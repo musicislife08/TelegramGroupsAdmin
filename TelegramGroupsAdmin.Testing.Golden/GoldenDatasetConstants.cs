@@ -771,6 +771,14 @@ public static class GoldenDatasetConstants
     /// </summary>
     public static class SystemConfig
     {
+        /// <summary>
+        /// <c>chat_id</c> of the global config row (<c>configs.id = 1</c>). Its
+        /// <c>backup_encryption_config</c> JSON deliberately keeps the legacy <c>Algorithm</c> and
+        /// <c>Iterations</c> keys the model no longer has, as real deployments do until their next
+        /// passphrase rotation. Anchor for stored-JSON tolerance tests.
+        /// </summary>
+        public const long GlobalChatId = 0;
+
         /// <summary>AI connection id carrying the canonical API key — the key under <c>aiConnectionKeys</c> in <c>04_configs.api_keys.json</c>.</summary>
         public const string OpenAiConnectionId = "openai";
 
