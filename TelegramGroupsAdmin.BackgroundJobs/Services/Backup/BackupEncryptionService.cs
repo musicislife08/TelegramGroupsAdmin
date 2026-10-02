@@ -22,7 +22,7 @@ public class BackupEncryptionService(ILogger<BackupEncryptionService> logger) : 
     /// Encrypts backup JSON bytes with passphrase-derived key (legacy single-shot format).
     /// </summary>
     /// <param name="jsonBytes">Unencrypted JSON backup data</param>
-    /// <param name="passphrase">User passphrase (min 12 chars recommended)</param>
+    /// <param name="passphrase">User passphrase (<see cref="TelegramGroupsAdmin.BackgroundJobs.Constants.EncryptionConstants.MinimumPassphraseLengthChars"/> or more characters recommended)</param>
     /// <returns>Encrypted backup with format: [header][salt][nonce][ciphertext+tag]</returns>
     public byte[] EncryptBackup(byte[] jsonBytes, string passphrase)
     {
@@ -178,7 +178,7 @@ public class BackupEncryptionService(ILogger<BackupEncryptionService> logger) : 
     /// </summary>
     /// <param name="plaintext">Stream containing unencrypted backup data</param>
     /// <param name="cipherOutput">Stream to write encrypted output to</param>
-    /// <param name="passphrase">User passphrase (min 12 chars recommended)</param>
+    /// <param name="passphrase">User passphrase (<see cref="TelegramGroupsAdmin.BackgroundJobs.Constants.EncryptionConstants.MinimumPassphraseLengthChars"/> or more characters recommended)</param>
     public void EncryptBackup(Stream plaintext, Stream cipherOutput, string passphrase)
     {
         ArgumentNullException.ThrowIfNull(plaintext);

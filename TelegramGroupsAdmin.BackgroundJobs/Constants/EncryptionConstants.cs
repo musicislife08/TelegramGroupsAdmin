@@ -54,9 +54,11 @@ public static class EncryptionConstants
     public const int KeySizeBytes = 32;
 
     /// <summary>
-    /// Minimum recommended passphrase length in characters.
+    /// Minimum recommended length, in characters, for a custom backup passphrase.
+    /// The encryption setup and passphrase rotation dialogs warn below this length.
+    /// It is a recommendation, not a hard limit: the encryption service accepts any non-empty passphrase.
     /// </summary>
-    public const int MinimumPassphraseLengthChars = 12;
+    public const int MinimumPassphraseLengthChars = 16;
 
     /// <summary>
     /// Plaintext chunk size in bytes for chunked AEAD streaming encryption.
