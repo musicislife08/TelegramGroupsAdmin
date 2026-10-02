@@ -44,7 +44,6 @@ public interface IUserRepository
         bool emailVerified,
         CancellationToken cancellationToken = default);
     Task UpdateLastLoginAsync(string userId, CancellationToken cancellationToken = default);
-    Task UpdateSecurityStampAsync(string userId, CancellationToken cancellationToken = default);
     Task UpdateTotpSecretAsync(string userId, string totpSecret, CancellationToken cancellationToken = default);
 
     /// <summary>Enables TOTP. Rotates the user's security stamp in the same UPDATE, invalidating existing sessions (forced re-login).</summary>

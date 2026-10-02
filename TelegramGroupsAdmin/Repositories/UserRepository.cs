@@ -210,16 +210,6 @@ public class UserRepository : IUserRepository
         await context.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task UpdateSecurityStampAsync(string userId, CancellationToken cancellationToken = default)
-    {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var entity = await context.Users.FirstOrDefaultAsync(u => u.Id == userId, cancellationToken);
-        if (entity == null) return;
-
-        entity.SecurityStamp = Guid.NewGuid().ToString();
-        await context.SaveChangesAsync(cancellationToken);
-    }
-
     public async Task UpdateTotpSecretAsync(string userId, string totpSecret, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);

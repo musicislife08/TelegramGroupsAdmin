@@ -47,25 +47,6 @@ public class SessionRevocationTests
         ], "test"));
 
     [Test]
-    public async Task ValidatorRejectsAfterStampRotation()
-    {
-        var sp = await SetUpServicesAsync();
-        await using var scope = sp.CreateAsyncScope();
-        var repo = scope.ServiceProvider.GetRequiredService<IUserRepository>();
-        var validator = scope.ServiceProvider.GetRequiredService<IUserSessionValidator>();
-
-        var userId = await SeedActiveUserAsync(repo);
-        var user = await repo.GetByIdAsync(userId);
-        Assert.That(user, Is.Not.Null);
-
-        var principal = PrincipalFor(userId, user!.SecurityStamp);
-        Assert.That(await validator.IsStillValidAsync(principal), Is.True, "fresh session should be valid");
-
-        await repo.UpdateSecurityStampAsync(userId);
-        Assert.That(await validator.IsStillValidAsync(principal), Is.False, "session with old stamp must be rejected");
-    }
-
-    [Test]
     public async Task ValidatorRejectsAfterDisable()
     {
         var sp = await SetUpServicesAsync();
