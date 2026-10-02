@@ -108,16 +108,13 @@
                 }
             }
 
-            <!-- Parameters -->
-            <MudStack Row="true" Spacing="2">
-                <MudNumericField T="int"
-                                 Value="@FeatureConfig.MaxTokens"
-                                 ValueChanged="@OnMaxTokensChanged"
-                                 Label="Max Tokens"
-                                 Variant="Variant.Outlined"
-                                 Min="100"
-                                 Style="flex: 1;" />
-            </MudStack>
+            <!-- Max tokens -->
+            <MudNumericField T="int"
+                             Value="@FeatureConfig.MaxTokens"
+                             ValueChanged="@OnMaxTokensChanged"
+                             Label="Max Tokens"
+                             Variant="Variant.Outlined"
+                             Min="100" />
 
             <!-- Test & Save Buttons -->
             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
