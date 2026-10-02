@@ -96,8 +96,10 @@ public sealed class PublicUrlFetcher(
                             PublicUrlFetchFailure.NotAllowed, PublicUrlFetchException.NotAllowedMessage,
                             $"HTTP {(int)response.StatusCode} redirect without a Location header");
 
-                    var next = location.IsAbsoluteUri ? location : new Uri(current, location);
-                    current = ValidateUrl(next.AbsoluteUri);
+                    var next = ValidateUrl((location.IsAbsoluteUri ? location : new Uri(current, location)).AbsoluteUri);
+                    if (!IsAllowedRedirect(current, next))
+                        throw Refused($"redirect from https to http ({next})");
+                    current = next;
                     continue;
                 }
 
@@ -118,6 +120,14 @@ public sealed class PublicUrlFetcher(
             }
         }
     }
+
+    /// <summary>
+    /// Whether a redirect hop from <paramref name="from"/> to <paramref name="to"/> may be followed.
+    /// An https -> http downgrade is refused, matching <see cref="SocketsHttpHandler"/>'s own
+    /// redirect handling, which this manual loop replaces.
+    /// </summary>
+    internal static bool IsAllowedRedirect(Uri from, Uri to)
+        => !(from.Scheme == Uri.UriSchemeHttps && to.Scheme == Uri.UriSchemeHttp);
 
     /// <summary>Scheme, userinfo and IP-literal checks; the connect callback is the authority for everything resolved.</summary>
     private static Uri ValidateUrl(string url)

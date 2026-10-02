@@ -234,6 +234,17 @@ public class PublicUrlFetcherTests
         Assert.That(ex.Reason, Does.Contain("ftp"));
     }
 
+    // A TLS origin is awkward to stand up here, so the downgrade rule is pinned on the hop check
+    // the redirect loop calls; .NET's own redirect handler never follows https -> http either.
+    [TestCase("https://example.com/a", "http://example.com/b", false)]
+    [TestCase("https://example.com/a", "https://cdn.example.com/b", true)]
+    [TestCase("http://example.com/a", "https://example.com/b", true)]
+    [TestCase("http://example.com/a", "http://cdn.example.com/b", true)]
+    public void IsAllowedRedirect_RefusesOnlyHttpsToHttpDowngrade(string from, string to, bool allowed)
+    {
+        Assert.That(PublicUrlFetcher.IsAllowedRedirect(new Uri(from), new Uri(to)), Is.EqualTo(allowed));
+    }
+
     [Test]
     public void FetchAsync_MoreRedirectsThanTheLimit_IsRefused()
     {
