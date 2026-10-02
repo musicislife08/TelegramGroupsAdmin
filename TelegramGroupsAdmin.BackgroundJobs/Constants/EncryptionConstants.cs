@@ -84,6 +84,7 @@ public static class EncryptionConstants
     /// <summary>
     /// Total header size for the chunked format:
     /// magic (7) + version (1) + salt (32) + base nonce (12) = 52 bytes.
+    /// The decryptor uses it to reject a file too short to hold a complete header.
     /// </summary>
     public const int ChunkedHeaderSize = 7 + 1 + SaltSizeBytes + NonceSizeBytes;
 }
