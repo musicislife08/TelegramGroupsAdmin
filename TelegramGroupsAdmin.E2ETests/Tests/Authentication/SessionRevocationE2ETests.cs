@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.DependencyInjection;
+using TelegramGroupsAdmin.Constants;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.E2ETests.Infrastructure;
 using TelegramGroupsAdmin.Services;
@@ -20,8 +21,6 @@ namespace TelegramGroupsAdmin.E2ETests.Tests.Authentication;
 [TestFixture]
 public class SessionRevocationE2ETests : AuthenticatedTestBase
 {
-    private const string AuthCookieName = "TgSpam.Auth";
-
     // The login page itself, with or without a query string; not /login/verify or /register
     private static readonly Regex LoginUrl = new(@"/login(?:\?|$)");
 
@@ -70,5 +69,5 @@ public class SessionRevocationE2ETests : AuthenticatedTestBase
     }
 
     private async Task<bool> HasAuthCookieAsync() =>
-        (await Context.CookiesAsync()).Any(c => c.Name == AuthCookieName);
+        (await Context.CookiesAsync()).Any(c => c.Name == AuthenticationConstants.CookieName);
 }

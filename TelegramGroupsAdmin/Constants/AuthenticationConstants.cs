@@ -6,6 +6,12 @@ namespace TelegramGroupsAdmin.Constants;
 public static class AuthenticationConstants
 {
     /// <summary>
+    /// Name of the authentication cookie. Changing it signs every user out, because browsers keep
+    /// sending the old name and the app no longer reads it.
+    /// </summary>
+    public const string CookieName = "TgSpam.Auth";
+
+    /// <summary>
     /// Authentication cookie expiration time (30 days).
     /// </summary>
     public static readonly TimeSpan CookieExpiration = TimeSpan.FromDays(30);

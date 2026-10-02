@@ -75,7 +75,7 @@ public static class ServiceCollectionExtensions
             services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
                 .AddCookie(options =>
                 {
-                    options.Cookie.Name = "TgSpam.Auth";
+                    options.Cookie.Name = AuthenticationConstants.CookieName;
                     options.Cookie.HttpOnly = true;
                     options.Cookie.SecurePolicy = environment.IsDevelopment()
                         ? CookieSecurePolicy.None
