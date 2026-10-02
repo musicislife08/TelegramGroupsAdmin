@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Core.Http;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Configuration.Models.Welcome;
 using TelegramGroupsAdmin.Configuration.Repositories;
@@ -107,7 +108,7 @@ public class BanCelebrationServiceTests
             opt.DataPath = _tempMediaPath);
 
         // Add HttpClientFactory for URL downloads
-        services.AddHttpClient();
+        services.AddPublicUrlFetcher();
 
         // Mock IVideoFrameExtractionService (not needed for these tests)
         var mockVideoService = Substitute.For<IVideoFrameExtractionService>();

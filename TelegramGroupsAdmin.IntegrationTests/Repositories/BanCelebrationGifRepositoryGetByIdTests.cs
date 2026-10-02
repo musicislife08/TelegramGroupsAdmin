@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using NSubstitute;
 using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Core.Http;
 using TelegramGroupsAdmin.ContentDetection.Services;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
@@ -32,7 +33,7 @@ public class BanCelebrationGifRepositoryGetByIdTests
         var services = new ServiceCollection();
         services.AddDbContextFactory<AppDbContext>(options => options.UseNpgsql(_testHelper.ConnectionString));
         services.AddLogging(builder => builder.AddConsole().SetMinimumLevel(LogLevel.Warning));
-        services.AddHttpClient();
+        services.AddPublicUrlFetcher();
         services.AddSingleton(Substitute.For<IVideoFrameExtractionService>());
         services.AddSingleton(Options.Create(new AppOptions { DataPath = _tempMediaPath }));
         services.AddScoped<IBanCelebrationGifRepository, BanCelebrationGifRepository>();
