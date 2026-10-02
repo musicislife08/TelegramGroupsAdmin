@@ -94,7 +94,7 @@ Tests are organized into logical groups:
 - ✅ Technical base prompt always included
 
 #### API Request Format
-- ✅ Correct JSON structure (model, messages, max_tokens, temperature, top_p)
+- ✅ Correct JSON structure (model, messages, max_tokens)
 - ✅ response_format set to "json_object"
 - ✅ System and user message roles
 - ✅ User info (ID, name) in prompt
