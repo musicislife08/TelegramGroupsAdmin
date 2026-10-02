@@ -90,7 +90,7 @@ public class ConfigRecordDto
 
     /// <summary>
     /// Backup encryption configuration (JSONB)
-    /// Metadata for backup encryption (algorithm, iterations, timestamps)
+    /// Metadata for backup encryption (enabled flag, timestamps)
     /// Note: Passphrase moved to separate passphrase_encrypted column for proper backup/restore handling
     /// Only used for global config (chat_id = 0)
     /// </summary>

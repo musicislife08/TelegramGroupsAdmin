@@ -12,12 +12,17 @@ namespace TelegramGroupsAdmin.BackgroundJobs.Services.Backup;
 /// </summary>
 public class BackupEncryptionService(ILogger<BackupEncryptionService> logger) : IBackupEncryptionService
 {
+    /// <summary>
+    /// Smallest valid chunked file: the header plus the 4-byte end-of-data marker.
+    /// The chunked counterpart of the legacy format's minimum-size check.
+    /// </summary>
+    private const int MinChunkedFileSize = EncryptionConstants.ChunkedHeaderSize + sizeof(int);
 
     /// <summary>
     /// Encrypts backup JSON bytes with passphrase-derived key (legacy single-shot format).
     /// </summary>
     /// <param name="jsonBytes">Unencrypted JSON backup data</param>
-    /// <param name="passphrase">User passphrase (min 12 chars recommended)</param>
+    /// <param name="passphrase">User passphrase (<see cref="TelegramGroupsAdmin.BackgroundJobs.Constants.EncryptionConstants.MinimumPassphraseLengthChars"/> or more characters recommended)</param>
     /// <returns>Encrypted backup with format: [header][salt][nonce][ciphertext+tag]</returns>
     public byte[] EncryptBackup(byte[] jsonBytes, string passphrase)
     {
@@ -168,7 +173,7 @@ public class BackupEncryptionService(ILogger<BackupEncryptionService> logger) : 
     /// </summary>
     /// <param name="plaintext">Stream containing unencrypted backup data</param>
     /// <param name="cipherOutput">Stream to write encrypted output to</param>
-    /// <param name="passphrase">User passphrase (min 12 chars recommended)</param>
+    /// <param name="passphrase">User passphrase (<see cref="TelegramGroupsAdmin.BackgroundJobs.Constants.EncryptionConstants.MinimumPassphraseLengthChars"/> or more characters recommended)</param>
     public void EncryptBackup(Stream plaintext, Stream cipherOutput, string passphrase)
     {
         ArgumentNullException.ThrowIfNull(plaintext);
@@ -245,6 +250,10 @@ public class BackupEncryptionService(ILogger<BackupEncryptionService> logger) : 
     /// <param name="plainOutput">Stream to write decrypted output to</param>
     /// <param name="passphrase">User passphrase used during encryption</param>
     /// <exception cref="CryptographicException">If passphrase is incorrect or data corrupted</exception>
+    /// <exception cref="InvalidOperationException">
+    /// If the stream is not a recognized encrypted backup, is too small to hold a header, or ends
+    /// before its end-of-data marker (truncated)
+    /// </exception>
     public void DecryptBackup(Stream cipherInput, Stream plainOutput, string passphrase)
     {
         ArgumentNullException.ThrowIfNull(cipherInput);
@@ -253,9 +262,14 @@ public class BackupEncryptionService(ILogger<BackupEncryptionService> logger) : 
         if (string.IsNullOrWhiteSpace(passphrase))
             throw new ArgumentException("Passphrase cannot be empty", nameof(passphrase));
 
-        // Read first 7 bytes to detect format
+        // Read first 7 bytes to detect format. A stream too short to hold a magic header is
+        // reported the same way as one with the wrong header.
         var magicBuffer = new byte[EncryptionConstants.LegacyMagicHeader.Length];
-        cipherInput.ReadExactly(magicBuffer, 0, magicBuffer.Length);
+        var magicBytesRead = cipherInput.ReadAtLeast(magicBuffer, magicBuffer.Length, throwOnEndOfStream: false);
+        if (magicBytesRead < magicBuffer.Length)
+        {
+            throw new InvalidOperationException("File does not have a recognized encrypted backup header (TGAENC or TGAEC2)");
+        }
 
         if (magicBuffer.AsSpan().SequenceEqual(EncryptionConstants.LegacyMagicHeader))
         {
@@ -273,19 +287,24 @@ public class BackupEncryptionService(ILogger<BackupEncryptionService> logger) : 
             throw new InvalidOperationException("File does not have a recognized encrypted backup header (TGAENC or TGAEC2)");
         }
 
-        // Chunked format: read version byte, salt, base nonce from header
-        var versionByte = new byte[1];
-        cipherInput.ReadExactly(versionByte, 0, 1);
-        if (versionByte[0] != EncryptionConstants.ChunkedFormatVersion)
+        // Chunked format: the rest of the header is [version (1)][salt (32)][base nonce (12)]
+        var headerRemainder = new byte[EncryptionConstants.ChunkedHeaderSize - EncryptionConstants.ChunkedMagicHeader.Length];
+        var headerBytesRead = cipherInput.ReadAtLeast(headerRemainder, headerRemainder.Length, throwOnEndOfStream: false);
+
+        // Version is checked before the short-read check, so a future layout this reader does not
+        // know is reported as unsupported rather than as too small.
+        if (headerBytesRead >= 1 && headerRemainder[0] != EncryptionConstants.ChunkedFormatVersion)
         {
-            throw new InvalidOperationException($"Unsupported chunked format version: {versionByte[0]}");
+            throw new InvalidOperationException($"Unsupported chunked format version: {headerRemainder[0]}");
         }
 
-        var salt = new byte[EncryptionConstants.SaltSizeBytes];
-        cipherInput.ReadExactly(salt, 0, salt.Length);
+        if (headerBytesRead < headerRemainder.Length)
+        {
+            throw new InvalidOperationException($"Encrypted backup file is too small (minimum {MinChunkedFileSize} bytes)");
+        }
 
-        var baseNonce = new byte[EncryptionConstants.NonceSizeBytes];
-        cipherInput.ReadExactly(baseNonce, 0, baseNonce.Length);
+        var salt = headerRemainder.AsSpan(1, EncryptionConstants.SaltSizeBytes).ToArray();
+        var baseNonce = headerRemainder.AsSpan(1 + EncryptionConstants.SaltSizeBytes, EncryptionConstants.NonceSizeBytes).ToArray();
 
         // Derive key ONCE via PBKDF2
         var key = DeriveKey(passphrase, salt);
@@ -303,7 +322,7 @@ public class BackupEncryptionService(ILogger<BackupEncryptionService> logger) : 
         while (true)
         {
             // Read 4-byte big-endian chunk length
-            cipherInput.ReadExactly(lengthBuffer, 0, 4);
+            ReadChunkBytes(cipherInput, lengthBuffer, lengthBuffer.Length, chunkCounter);
             var chunkLength = BinaryPrimitives.ReadInt32BigEndian(lengthBuffer);
 
             // Sentinel: chunk length = 0 means end of data
@@ -321,8 +340,8 @@ public class BackupEncryptionService(ILogger<BackupEncryptionService> logger) : 
 
             // Read ciphertext (chunkLength bytes) + tag (16 bytes)
             var ciphertextSlice = ciphertextBuffer.AsSpan(0, chunkLength);
-            cipherInput.ReadExactly(ciphertextBuffer, 0, chunkLength);
-            cipherInput.ReadExactly(tag, 0, EncryptionConstants.TagSizeBytes);
+            ReadChunkBytes(cipherInput, ciphertextBuffer, chunkLength, chunkCounter);
+            ReadChunkBytes(cipherInput, tag, EncryptionConstants.TagSizeBytes, chunkCounter);
 
             // Decrypt chunk
             var decryptedSlice = decryptedBuffer.AsSpan(0, chunkLength);
@@ -372,6 +391,20 @@ public class BackupEncryptionService(ILogger<BackupEncryptionService> logger) : 
         finally
         {
             input.Position = savedPosition;
+        }
+    }
+
+    /// <summary>
+    /// Reads exactly <paramref name="count"/> bytes of chunk data, or reports the backup as truncated.
+    /// A short read here means the file ended before its end-of-data marker.
+    /// </summary>
+    private static void ReadChunkBytes(Stream cipherInput, byte[] buffer, int count, long chunkCounter)
+    {
+        var bytesRead = cipherInput.ReadAtLeast(buffer.AsSpan(0, count), count, throwOnEndOfStream: false);
+        if (bytesRead < count)
+        {
+            throw new InvalidOperationException(
+                $"Encrypted backup is truncated: data ended unexpectedly while reading chunk {chunkCounter}. The file is incomplete or corrupted.");
         }
     }
 

@@ -40,6 +40,11 @@ public static class EncryptionConstants
     /// For multi-tenant or cloud-hosted deployments with user-generated passphrases,
     /// consider increasing to 600K+ iterations.
     /// </para>
+    /// <para>
+    /// This constant is the only source of the iteration count. It is not stored in the backup file
+    /// header or in the encryption config, so changing it makes every existing backup undecryptable.
+    /// A change has to come with a new format version that maps to the new count.
+    /// </para>
     /// </remarks>
     public const int Pbkdf2Iterations = 100000;
 
@@ -49,14 +54,11 @@ public static class EncryptionConstants
     public const int KeySizeBytes = 32;
 
     /// <summary>
-    /// Minimum recommended passphrase length in characters.
+    /// Minimum recommended length, in characters, for a custom backup passphrase.
+    /// The encryption setup and passphrase rotation dialogs warn below this length.
+    /// It is a recommendation, not a hard limit: the encryption service accepts any non-empty passphrase.
     /// </summary>
-    public const int MinimumPassphraseLengthChars = 12;
-
-    /// <summary>
-    /// Encryption algorithm identifier stored in backup metadata.
-    /// </summary>
-    public const string EncryptionAlgorithm = "AES-256-GCM";
+    public const int MinimumPassphraseLengthChars = 16;
 
     /// <summary>
     /// Plaintext chunk size in bytes for chunked AEAD streaming encryption.
@@ -84,6 +86,7 @@ public static class EncryptionConstants
     /// <summary>
     /// Total header size for the chunked format:
     /// magic (7) + version (1) + salt (32) + base nonce (12) = 52 bytes.
+    /// The decryptor uses it to reject a file too short to hold a complete header.
     /// </summary>
     public const int ChunkedHeaderSize = 7 + 1 + SaltSizeBytes + NonceSizeBytes;
 }

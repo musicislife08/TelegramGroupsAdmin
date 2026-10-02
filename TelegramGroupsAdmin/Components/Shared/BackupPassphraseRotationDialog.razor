@@ -1,3 +1,4 @@
+@using TelegramGroupsAdmin.BackgroundJobs.Constants
 @using TelegramGroupsAdmin.BackgroundJobs.Services.Backup
 @inject IPassphraseManagementService PassphraseService
 @inject ISnackbar Snackbar
@@ -36,7 +37,7 @@
                             {
                                 <MudTextField @bind-Value="_customPassphrase"
                                               Label="Custom Passphrase"
-                                              HelperText="Minimum 16 characters recommended. Use a strong, unique passphrase."
+                                              HelperText="@($"Minimum {EncryptionConstants.MinimumPassphraseLengthChars} characters recommended. Use a strong, unique passphrase.")"
                                               Variant="Variant.Outlined"
                                               InputType="@PassphraseInputType"
                                               Adornment="Adornment.End"
@@ -45,10 +46,10 @@
                                               Immediate="true"
                                               FullWidth="true" />
 
-                                @if (!string.IsNullOrWhiteSpace(_customPassphrase) && _customPassphrase.Length < 16)
+                                @if (!string.IsNullOrWhiteSpace(_customPassphrase) && _customPassphrase.Length < EncryptionConstants.MinimumPassphraseLengthChars)
                                 {
                                     <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-0">
-                                        Passphrase is too short. Recommend at least 16 characters for security.
+                                        Passphrase is too short. Recommend at least @EncryptionConstants.MinimumPassphraseLengthChars characters for security.
                                     </MudAlert>
                                 }
                             }

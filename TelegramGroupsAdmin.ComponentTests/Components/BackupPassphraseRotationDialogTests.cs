@@ -5,6 +5,7 @@ using MudBlazor;
 using MudBlazor.Services;
 using NSubstitute;
 using System.Security.Claims;
+using TelegramGroupsAdmin.BackgroundJobs.Constants;
 using TelegramGroupsAdmin.BackgroundJobs.Services.Backup;
 using TelegramGroupsAdmin.Components.Shared;
 
@@ -350,6 +351,58 @@ public class BackupPassphraseRotationDialogTests : BackupPassphraseRotationDialo
         {
             Assert.That(provider.Markup, Does.Not.Contain("mud-dialog-content"));
         });
+    }
+
+    #endregion
+
+    #region Custom Passphrase Length Tests
+
+    [Test]
+    public async Task CustomPassphrase_ShorterThanTheRecommendedMinimum_ShowsWarning()
+    {
+        // Arrange
+        var provider = RenderDialogProvider();
+        _ = OpenDialogAsync();
+        provider.WaitForAssertion(() => Assert.That(provider.Markup, Does.Contain("Use custom passphrase")));
+
+        // Act - switch to a custom passphrase one character short of the minimum
+        await EnterCustomPassphraseAsync(provider, new string('a', EncryptionConstants.MinimumPassphraseLengthChars - 1));
+
+        // Assert - the helper text and the warning both state the constant's value
+        provider.WaitForAssertion(() =>
+        {
+            Assert.That(provider.Markup, Does.Contain($"Minimum {EncryptionConstants.MinimumPassphraseLengthChars} characters recommended"));
+            Assert.That(provider.Markup, Does.Contain($"Recommend at least {EncryptionConstants.MinimumPassphraseLengthChars} characters"));
+        });
+    }
+
+    [Test]
+    public async Task CustomPassphrase_AtTheRecommendedMinimum_ShowsNoWarning()
+    {
+        // Arrange
+        var provider = RenderDialogProvider();
+        _ = OpenDialogAsync();
+        provider.WaitForAssertion(() => Assert.That(provider.Markup, Does.Contain("Use custom passphrase")));
+
+        // Act - a custom passphrase of exactly the minimum length
+        await EnterCustomPassphraseAsync(provider, new string('a', EncryptionConstants.MinimumPassphraseLengthChars));
+
+        // Assert - the custom field rendered, and the warning did not
+        provider.WaitForAssertion(() =>
+        {
+            Assert.That(provider.Markup, Does.Contain($"Minimum {EncryptionConstants.MinimumPassphraseLengthChars} characters recommended"));
+            Assert.That(provider.Markup, Does.Not.Contain("Passphrase is too short"));
+        });
+    }
+
+    private static async Task EnterCustomPassphraseAsync(IRenderedComponent<MudDialogProvider> provider, string passphrase)
+    {
+        var customSwitch = provider.FindComponent<MudSwitch<bool>>();
+        await provider.InvokeAsync(() => customSwitch.Instance.ValueChanged.InvokeAsync(true));
+
+        var passphraseField = provider.FindComponents<MudTextField<string>>()
+            .Single(f => f.Instance.Label == "Custom Passphrase");
+        await provider.InvokeAsync(() => passphraseField.Instance.ValueChanged.InvokeAsync(passphrase));
     }
 
     #endregion
