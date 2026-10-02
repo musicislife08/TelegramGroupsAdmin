@@ -278,45 +278,26 @@ public class UserRepository : IUserRepository
         _logger.LogInformation("Deleted all recovery codes for user {UserId}", userId);
     }
 
-    public async Task<List<RecoveryCodeRecord>> GetRecoveryCodesAsync(string userId, CancellationToken cancellationToken = default)
+    public async Task ReplaceRecoveryCodesAsync(string userId, IReadOnlyCollection<string> codeHashes, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var entities = await context.RecoveryCodes
-            .AsNoTracking()
-            .Where(rc => rc.UserId == userId && rc.UsedAt == null)
+        var existing = await context.RecoveryCodes
+            .Where(rc => rc.UserId == userId)
             .ToListAsync(cancellationToken);
 
-        return entities.Select(e => e.ToModel()).ToList();
-    }
-
-    public async Task AddRecoveryCodesAsync(string userId, List<string> codeHashes, CancellationToken cancellationToken = default)
-    {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var entities = codeHashes.Select(codeHash => new DataModels.RecoveryCodeRecordDto
+        context.RecoveryCodes.RemoveRange(existing);
+        context.RecoveryCodes.AddRange(codeHashes.Select(codeHash => new DataModels.RecoveryCodeRecordDto
         {
             UserId = userId,
             CodeHash = codeHash,
             UsedAt = null
-        }).ToList();
+        }));
 
-        context.RecoveryCodes.AddRange(entities);
+        // One SaveChanges is one transaction: the old set is gone exactly when the new set exists
         await context.SaveChangesAsync(cancellationToken);
 
-        _logger.LogInformation("Added {Count} recovery codes for user {UserId}", codeHashes.Count, userId);
-    }
-
-    public async Task CreateRecoveryCodeAsync(string userId, string codeHash, CancellationToken cancellationToken = default)
-    {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var entity = new DataModels.RecoveryCodeRecordDto
-        {
-            UserId = userId,
-            CodeHash = codeHash,
-            UsedAt = null
-        };
-
-        context.RecoveryCodes.Add(entity);
-        await context.SaveChangesAsync(cancellationToken);
+        _logger.LogInformation("Replaced recovery codes for user {UserId}: removed {Removed}, added {Added}",
+            userId, existing.Count, codeHashes.Count);
     }
 
     public async Task<bool> UseRecoveryCodeAsync(string userId, string codeHash, CancellationToken cancellationToken = default)

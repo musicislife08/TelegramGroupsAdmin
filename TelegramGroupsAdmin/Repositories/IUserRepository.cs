@@ -55,9 +55,12 @@ public interface IUserRepository
     /// <summary>Resets TOTP (clears secret, timestamp, disables). Rotates the user's security stamp in the same UPDATE, invalidating existing sessions (forced re-login).</summary>
     Task ResetTotpAsync(string userId, CancellationToken cancellationToken = default);
     Task DeleteRecoveryCodesAsync(string userId, CancellationToken cancellationToken = default);
-    Task<List<RecoveryCodeRecord>> GetRecoveryCodesAsync(string userId, CancellationToken cancellationToken = default);
-    Task AddRecoveryCodesAsync(string userId, List<string> codeHashes, CancellationToken cancellationToken = default);
-    Task CreateRecoveryCodeAsync(string userId, string codeHash, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Replaces the user's whole recovery code set with <paramref name="codeHashes"/> in one transaction.
+    /// Every earlier code, used or not, stops working at the moment the new set is stored.
+    /// </summary>
+    Task ReplaceRecoveryCodesAsync(string userId, IReadOnlyCollection<string> codeHashes, CancellationToken cancellationToken = default);
+
     Task<bool> UseRecoveryCodeAsync(string userId, string codeHash, CancellationToken cancellationToken = default);
     Task<InviteRecord?> GetInviteByTokenAsync(string token, CancellationToken cancellationToken = default);
     Task<List<UserRecord>> GetAllAsync(CancellationToken cancellationToken = default);
