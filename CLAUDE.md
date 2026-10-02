@@ -17,7 +17,7 @@ https://github.com/musicislife08/TelegramGroupsAdmin
 - ALWAYS prefer new commits over amending
 - At session start, check `git branch` — if on master/develop, switch to a feature branch
 - Use heredoc for multi-line commits: `git commit -F- <<'EOF'`
-- Release workflow (develop → master), hotfix process, and Docker tag scheme are in context-keep memory
+- Release workflow (develop → master), hotfix process, and Docker tag scheme are in Hindsight memory (`Personal` bank; recall "TelegramGroupsAdmin release workflow")
 
 ## Design Philosophy
 
@@ -36,6 +36,6 @@ Use CSharperMcp tools (`find_symbol`, `find_references`, `get_diagnostics`) inst
 - Prefer Fluent API in AppDbContext over custom SQL for schema configuration
 - Central Package Management: NuGet versions in `Directory.Packages.props`
 - No time estimates in docs or issues
-- MudBlazor v9 has breaking API changes — check context-keep memory before writing MudBlazor code
-- GitHub labels are custom — check context-keep memory before labeling issues/PRs
+- MudBlazor v9 has breaking API changes — recall Hindsight (`Personal` bank) and check the current MudBlazor docs before writing MudBlazor code
+- GitHub labels are custom — recall the label set from Hindsight (`Personal` bank) before labeling issues/PRs
 - NSubstitute 6 matcher lambdas are nullable-annotated: `Arg.Is<T>(x => x.Prop == y)` needs a null-forgiving `!` on the first dereference (`x!.Prop`). Never use `?.` instead — it makes a null argument silently compare `false` in `Returns()` configuration instead of throwing.
