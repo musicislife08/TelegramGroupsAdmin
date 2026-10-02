@@ -137,6 +137,21 @@ public static class GoldenDatasetConstants
         /// <c>canonical/01_users.totp_secrets.json</c> (a dummy 20-byte test secret; it protects nothing).
         /// </summary>
         public const string StoredTotpGlobalAdminBase32 = "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP";
+
+        /// <summary>
+        /// Number of recovery codes <see cref="StoredTotpGlobalAdminId"/> holds in
+        /// <c>canonical/10_recovery_codes.sql</c> (canonical addition 2026-10-02): one unused set of
+        /// <c>AuthenticationConstants.RecoveryCodeCount</c>, as completing TOTP setup issues. No other
+        /// canonical web user has recovery codes.
+        /// </summary>
+        public const int StoredTotpGlobalAdminRecoveryCodeCount = 8;
+
+        /// <summary>
+        /// Plaintext of one of <see cref="StoredTotpGlobalAdminId"/>'s unused recovery codes (row id 1). The
+        /// SQL stores only its hash: SHA-256 of the lowercase code, Base64-encoded, as <c>TotpService</c>
+        /// hashes it. A dummy code; it protects nothing.
+        /// </summary>
+        public const string StoredTotpGlobalAdminRecoveryCode = "7aa70a3ce3b5f515";
     }
 
     /// <summary>
