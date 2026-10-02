@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using System.Security.Cryptography;
 using Quartz;
 using TelegramGroupsAdmin.BackgroundJobs.Helpers;
 using TelegramGroupsAdmin.BackgroundJobs.Metrics;
@@ -14,14 +15,16 @@ namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
 /// <summary>
 /// Job for rotating the backup encryption passphrase. Re-encrypts the database entry inside every
 /// backup archive with the new passphrase, then stores the new passphrase only if no file failed.
-/// Backups damaged by older versions of this job (whole archive encrypted) are skipped; the rotation
-/// dialog offers to repair or delete them before the job is queued.
+/// Backups damaged by older versions of this job (whole archive encrypted) are not rotated, but their
+/// outer layer moves to the new passphrase so the rotation dialog can still repair them later.
+/// The whole run holds <see cref="BackupFileLock"/>, so no backup is written mid-rotation.
 /// </summary>
 [DisallowConcurrentExecution]
 public class RotateBackupPassphraseJob(
     IBackupArchiveRotator rotator,
     IPassphraseManagementService passphraseService,
     IDataProtectionService dataProtection,
+    BackupFileLock fileLock,
     IServiceScopeFactory scopeFactory,
     ILogger<RotateBackupPassphraseJob> logger,
     JobMetrics jobMetrics) : IJob
@@ -63,6 +66,7 @@ public class RotateBackupPassphraseJob(
 
             try
             {
+                using var heldLock = await fileLock.AcquireAsync(cancellationToken);
                 var oldPassphrase = await passphraseService.GetDecryptedPassphraseAsync();
 
                 if (!Directory.Exists(backupDirectory))
@@ -71,40 +75,44 @@ public class RotateBackupPassphraseJob(
                     Directory.CreateDirectory(backupDirectory);
                 }
 
-                var backupFiles = Directory.GetFiles(backupDirectory, "*.tar.gz");
-                logger.LogInformation("Found {Count} backup files to re-encrypt", backupFiles.Length);
+                // Classify every file before changing any, so a failure the job can predict never
+                // leaves some backups on the new passphrase while the old one stays stored.
+                List<(string Path, BackupFileState State)> backupFiles = [];
+                foreach (var path in Directory.GetFiles(backupDirectory, "*.tar.gz"))
+                    backupFiles.Add((path, await rotator.InspectAsync(path, cancellationToken)));
+
+                logger.LogInformation("Found {Count} backup files to re-encrypt", backupFiles.Count);
+
+                var unreadable = backupFiles.Where(f => f.State == BackupFileState.Unreadable).Select(f => Path.GetFileName(f.Path)).ToList();
+                if (unreadable.Count > 0)
+                {
+                    throw new InvalidOperationException(
+                        $"Cannot rotate: {unreadable.Count} file(s) in {backupDirectory} are not readable backups ({string.Join(", ", unreadable)}). " +
+                        "No backup was changed and the old passphrase is still stored. Delete or move them, then retry.");
+                }
 
                 int reencryptedCount = 0;
                 int currentCount = 0;
                 int skippedCount = 0;
                 int failedCount = 0;
 
-                foreach (var backupFile in backupFiles)
+                foreach (var (backupFile, state) in backupFiles)
                 {
                     var fileName = Path.GetFileName(backupFile);
                     try
                     {
-                        switch (await rotator.InspectAsync(backupFile, cancellationToken))
+                        if (state == BackupFileState.Wrapped)
                         {
-                            case BackupFileState.Encrypted or BackupFileState.Plain:
-                                var outcome = await rotator.ReencryptAsync(backupFile, oldPassphrase, newPassphrase, cancellationToken);
-                                if (outcome == ReencryptOutcome.AlreadyCurrent)
-                                    currentCount++;
-                                else
-                                    reencryptedCount++;
-                                break;
-
-                            case BackupFileState.Wrapped:
-                                skippedCount++;
-                                logger.LogWarning("Skipping backup {FileName}: it was damaged by an earlier rotation. " +
-                                                  "Repair or delete it from the rotation dialog", fileName);
-                                break;
-
-                            default:
-                                failedCount++;
-                                logger.LogError("❌ Backup {FileName} cannot be read as a backup archive", fileName);
-                                break;
+                            skippedCount++;
+                            await RewrapDamagedAsync(backupFile, oldPassphrase, newPassphrase, cancellationToken);
+                            continue;
                         }
+
+                        var outcome = await rotator.ReencryptAsync(backupFile, oldPassphrase, newPassphrase, cancellationToken);
+                        if (outcome == ReencryptOutcome.AlreadyCurrent)
+                            currentCount++;
+                        else
+                            reencryptedCount++;
                     }
                     catch (Exception ex) when (ex is not OperationCanceledException)
                     {
@@ -155,6 +163,26 @@ public class RotateBackupPassphraseJob(
         {
             var elapsedMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds;
             jobMetrics.RecordJobExecution(jobName, success, elapsedMs);
+        }
+    }
+
+    /// <summary>
+    /// Keeps a damaged backup repairable: its outer layer follows the stored passphrase. A file whose
+    /// outer layer is not on the old passphrase was left behind by an earlier version and stays as is.
+    /// </summary>
+    private async Task RewrapDamagedAsync(string backupFile, string oldPassphrase, string newPassphrase, CancellationToken cancellationToken)
+    {
+        var fileName = Path.GetFileName(backupFile);
+        try
+        {
+            await rotator.RewrapAsync(backupFile, oldPassphrase, newPassphrase, cancellationToken);
+            logger.LogWarning("Backup {FileName} is damaged by an earlier rotation and was not rotated. " +
+                              "Repair or delete it from the rotation dialog", fileName);
+        }
+        catch (CryptographicException)
+        {
+            logger.LogWarning("Backup {FileName} is damaged and its outer layer is not on the stored passphrase; " +
+                              "it can no longer be repaired from the app", fileName);
         }
     }
 }

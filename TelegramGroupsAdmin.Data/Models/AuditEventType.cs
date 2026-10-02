@@ -114,4 +114,10 @@ public enum AuditEventType
     BlacklistEntryDisabled = 42,
     /// <summary>Username blacklist entry notes changed</summary>
     BlacklistEntryNotesChanged = 43,
+
+    /// <summary>Backups damaged by an earlier passphrase rotation were repaired</summary>
+    BackupFilesRepaired = 44,
+
+    /// <summary>Damaged or unreadable backup files were deleted</summary>
+    BackupFilesDeleted = 45,
 }

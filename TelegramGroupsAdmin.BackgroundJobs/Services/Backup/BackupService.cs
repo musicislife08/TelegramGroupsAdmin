@@ -40,6 +40,7 @@ public class BackupService : IBackupService
     private readonly IBackupRetentionService _retentionService;
     private readonly IThumbnailService _thumbnailService;
     private readonly RecyclableMemoryStreamManager _streamManager;
+    private readonly BackupFileLock _fileLock;
     private readonly string _mediaBasePath;
     private const string CurrentVersion = "3.1"; // 3.0: tar.gz with media files; 3.1: verdict events (no training_labels)
 
@@ -59,6 +60,7 @@ public class BackupService : IBackupService
         IBackupRetentionService retentionService,
         IThumbnailService thumbnailService,
         RecyclableMemoryStreamManager streamManager,
+        BackupFileLock fileLock,
         IOptions<AppOptions> appOptions)
     {
         _dataSource = dataSource;
@@ -76,6 +78,7 @@ public class BackupService : IBackupService
         _retentionService = retentionService;
         _thumbnailService = thumbnailService;
         _streamManager = streamManager;
+        _fileLock = fileLock;
         _mediaBasePath = appOptions.Value.DataPath;
     }
 
@@ -105,6 +108,8 @@ public class BackupService : IBackupService
         string? passphraseOverride = null,
         CancellationToken cancellationToken = default)
     {
+        // Held from the passphrase read to the final move, so a rotation never runs between the two
+        using var heldLock = await _fileLock.AcquireAsync(cancellationToken);
         _logger.LogInformation("Starting full system backup export (tar.gz format, streaming to disk)");
 
         var backup = new SystemBackup

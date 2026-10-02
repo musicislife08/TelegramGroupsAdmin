@@ -197,6 +197,99 @@ public class BackupArchiveRotatorTests
             Throws.InstanceOf<CryptographicException>());
     }
 
+    [Test]
+    public async Task TryRepairWrappedAsync_PlainInner_IsRepairedWithoutTheOriginalPassphrase()
+    {
+        // The old job also wrapped unencrypted backups made before encryption was turned on.
+        var path = Wrap(PlainArchive(), NewPassphrase);
+
+        var repaired = await _rotator.TryRepairWrappedAsync(path, NewPassphrase, "any-passphrase-at-all");
+
+        var entries = ReadEntries(path);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(repaired, Is.True);
+            Assert.That(entries.ContainsKey(BackupConstants.PlainDatabaseEntryName), Is.False);
+            Assert.That(Decrypt(entries[BackupConstants.EncryptedDatabaseEntryName], NewPassphrase), Is.EqualTo(DatabaseJson));
+            Assert.That(Directory.GetFiles(_directory, "*.tmp"), Is.Empty);
+        }
+    }
+
+    [Test]
+    public async Task TryRepairWrappedAsync_WrongStoredPassphrase_LeavesFileAndNoTemp()
+    {
+        var path = Wrap(EncryptedArchive(OldPassphrase), NewPassphrase);
+        var before = await File.ReadAllBytesAsync(path);
+
+        Assert.That(async () => await _rotator.TryRepairWrappedAsync(path, "not-the-stored-passphrase", OldPassphrase),
+            Throws.InstanceOf<CryptographicException>());
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(await File.ReadAllBytesAsync(path), Is.EqualTo(before));
+            Assert.That(Directory.GetFiles(_directory, "*.tmp"), Is.Empty);
+        }
+    }
+
+    #endregion
+
+    #region Rewrap
+
+    [Test]
+    public async Task RewrapAsync_MovesTheOuterLayerToTheNewPassphrase_AndKeepsItRepairable()
+    {
+        // Setup passphrase inside, outer layer on the passphrase stored before this rotation.
+        const string setupPassphrase = "setup-passphrase-00000";
+        var path = Wrap(EncryptedArchive(setupPassphrase), OldPassphrase);
+
+        await _rotator.RewrapAsync(path, OldPassphrase, NewPassphrase);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(await _rotator.InspectAsync(path), Is.EqualTo(BackupFileState.Wrapped), "the file stays damaged until repaired");
+            Assert.That(Directory.GetFiles(_directory, "*.tmp"), Is.Empty);
+        }
+        Assert.That(await _rotator.TryRepairWrappedAsync(path, storedPassphrase: NewPassphrase, originalPassphrase: setupPassphrase), Is.True,
+            "after the rotation stores the new passphrase, the file can still be repaired");
+    }
+
+    [Test]
+    public async Task RewrapAsync_OuterNotOnOldPassphrase_Throws_AndLeavesFileUntouched()
+    {
+        var path = Wrap(EncryptedArchive(OldPassphrase), "some-other-passphrase-000");
+        var before = await File.ReadAllBytesAsync(path);
+
+        Assert.That(async () => await _rotator.RewrapAsync(path, OldPassphrase, NewPassphrase),
+            Throws.InstanceOf<CryptographicException>());
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(await File.ReadAllBytesAsync(path), Is.EqualTo(before));
+            Assert.That(Directory.GetFiles(_directory, "*.tmp"), Is.Empty);
+        }
+    }
+
+    #endregion
+
+    #region Verification
+
+    [Test]
+    public async Task ReencryptAsync_RewriteFailsVerification_LeavesOriginalAndNoTemp()
+    {
+        // No metadata entry: the rewritten copy fails verification and must never replace the original.
+        using var plain = new MemoryStream(Encoding.UTF8.GetBytes(DatabaseJson));
+        using var cipher = new MemoryStream();
+        _encryption.EncryptBackup(plain, cipher, OldPassphrase);
+        var path = BuildArchive("nometa.tar.gz", (BackupConstants.EncryptedDatabaseEntryName, cipher.ToArray()));
+        var before = await File.ReadAllBytesAsync(path);
+
+        Assert.That(async () => await _rotator.ReencryptAsync(path, OldPassphrase, NewPassphrase),
+            Throws.InvalidOperationException.With.Message.Contains("Verification"));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(await File.ReadAllBytesAsync(path), Is.EqualTo(before));
+            Assert.That(Directory.GetFiles(_directory, "*.tmp"), Is.Empty);
+        }
+    }
+
     #endregion
 
     #region Helpers

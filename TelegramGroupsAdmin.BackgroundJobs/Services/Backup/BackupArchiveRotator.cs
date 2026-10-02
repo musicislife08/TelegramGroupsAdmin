@@ -1,6 +1,5 @@
 using System.Formats.Tar;
 using System.IO.Compression;
-using System.Runtime.ExceptionServices;
 using System.Security.Cryptography;
 using Microsoft.Extensions.Logging;
 using Microsoft.IO;
@@ -63,30 +62,26 @@ public class BackupArchiveRotator(
         if (state is not (BackupFileState.Encrypted or BackupFileState.Plain))
             throw new InvalidOperationException($"Backup {Path.GetFileName(path)} is {state} and cannot be re-encrypted");
 
-        using var entry = await ReadDatabaseEntryAsync(path, cancellationToken);
         using var plaintext = streamManager.GetStream("BackupArchiveRotator.Plaintext");
-
-        if (state == BackupFileState.Plain)
+        using (var entry = await ReadDatabaseEntryAsync(path, cancellationToken))
         {
-            await entry.CopyToAsync(plaintext, cancellationToken);
-        }
-        else
-        {
-            try
+            if (state == BackupFileState.Plain)
             {
-                encryptionService.DecryptBackup(entry, plaintext, oldPassphrase);
+                await entry.CopyToAsync(plaintext, cancellationToken);
             }
-            catch (CryptographicException oldFailure)
+            else
             {
-                if (OpensWith(entry, newPassphrase))
+                try
+                {
+                    encryptionService.DecryptBackup(entry, plaintext, oldPassphrase);
+                }
+                catch (CryptographicException) when (OpensWith(entry, newPassphrase))
                 {
                     logger.LogInformation("Backup {FileName} is already on the new passphrase", Path.GetFileName(path));
                     return ReencryptOutcome.AlreadyCurrent;
                 }
-
-                ExceptionDispatchInfo.Throw(oldFailure);
             }
-        }
+        } // the ciphertext copy is released before the rewrite allocates its own
 
         await RewriteWithNewDatabaseEntryAsync(path, path, plaintext, newPassphrase, cancellationToken);
         logger.LogInformation("Re-encrypted the database entry of backup {FileName}", Path.GetFileName(path));
@@ -95,28 +90,35 @@ public class BackupArchiveRotator(
 
     public async Task<bool> TryRepairWrappedAsync(string path, string storedPassphrase, string originalPassphrase, CancellationToken cancellationToken = default)
     {
-        var innerPath = $"{path}.{Guid.NewGuid().ToString("N")[..8]}.inner.tmp";
+        var innerPath = TempPathFor(path, "inner.tmp");
         try
         {
-            await using (var wrapped = File.OpenRead(path))
-            await using (var inner = File.Create(innerPath))
-            {
-                encryptionService.DecryptBackup(wrapped, inner, storedPassphrase);
-            }
+            await DecryptFileAsync(path, innerPath, storedPassphrase);
 
-            if (await InspectAsync(innerPath, cancellationToken) != BackupFileState.Encrypted)
-                throw new InvalidOperationException($"Backup {Path.GetFileName(path)} does not contain an encrypted backup archive");
+            var innerState = await InspectAsync(innerPath, cancellationToken);
+            if (innerState is not (BackupFileState.Encrypted or BackupFileState.Plain))
+                throw new InvalidOperationException($"Backup {Path.GetFileName(path)} does not contain a readable backup archive");
 
-            using var entry = await ReadDatabaseEntryAsync(innerPath, cancellationToken);
             using var plaintext = streamManager.GetStream("BackupArchiveRotator.RepairPlaintext");
-            try
+            using (var entry = await ReadDatabaseEntryAsync(innerPath, cancellationToken))
             {
-                encryptionService.DecryptBackup(entry, plaintext, originalPassphrase);
-            }
-            catch (CryptographicException)
-            {
-                logger.LogInformation("Damaged backup {FileName} does not open with the supplied passphrase", Path.GetFileName(path));
-                return false;
+                if (innerState == BackupFileState.Plain)
+                {
+                    // An unencrypted backup the old job wrapped: no inner passphrase is needed
+                    await entry.CopyToAsync(plaintext, cancellationToken);
+                }
+                else
+                {
+                    try
+                    {
+                        encryptionService.DecryptBackup(entry, plaintext, originalPassphrase);
+                    }
+                    catch (CryptographicException)
+                    {
+                        logger.LogInformation("Damaged backup {FileName} does not open with the supplied passphrase", Path.GetFileName(path));
+                        return false;
+                    }
+                }
             }
 
             await RewriteWithNewDatabaseEntryAsync(innerPath, path, plaintext, storedPassphrase, cancellationToken);
@@ -129,6 +131,41 @@ public class BackupArchiveRotator(
         }
     }
 
+    public async Task RewrapAsync(string path, string oldPassphrase, string newPassphrase, CancellationToken cancellationToken = default)
+    {
+        var innerPath = TempPathFor(path, "inner.tmp");
+        var tempPath = TempPathFor(path, "tmp");
+        try
+        {
+            await DecryptFileAsync(path, innerPath, oldPassphrase);
+            var innerLength = new FileInfo(innerPath).Length;
+
+            await using (var inner = File.OpenRead(innerPath))
+            await using (var rewrapped = new FileStream(tempPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            {
+                encryptionService.EncryptBackup(inner, rewrapped, newPassphrase);
+            }
+
+            // Verify: the new outer layer opens with the new passphrase and gives back the same archive
+            var check = new CountingStream();
+            await using (var rewrapped = File.OpenRead(tempPath))
+            {
+                encryptionService.DecryptBackup(rewrapped, check, newPassphrase);
+            }
+
+            if (check.Length != innerLength)
+                throw new InvalidOperationException($"Verification of re-wrapped backup failed (decrypted {check.Length} of {innerLength} bytes)");
+
+            File.Move(tempPath, path, overwrite: true);
+            logger.LogInformation("Moved the outer layer of damaged backup {FileName} to the new passphrase", Path.GetFileName(path));
+        }
+        finally
+        {
+            DeleteIfExists(innerPath);
+            DeleteIfExists(tempPath);
+        }
+    }
+
     /// <summary>
     /// Writes a copy of <paramref name="sourcePath"/> with its database entry replaced by
     /// <paramref name="plaintext"/> encrypted under <paramref name="passphrase"/>, verifies the copy, and
@@ -136,20 +173,21 @@ public class BackupArchiveRotator(
     /// </summary>
     private async Task RewriteWithNewDatabaseEntryAsync(string sourcePath, string targetPath, Stream plaintext, string passphrase, CancellationToken cancellationToken)
     {
-        plaintext.Position = 0;
-        using var cipher = streamManager.GetStream("BackupArchiveRotator.Cipher");
-        encryptionService.EncryptBackup(plaintext, cipher, passphrase);
-
-        var tempPath = $"{targetPath}.{Guid.NewGuid().ToString("N")[..8]}.tmp";
+        var tempPath = TempPathFor(targetPath, "tmp");
         try
         {
-            await using (var source = File.OpenRead(sourcePath))
-            await using (var sourceGzip = new GZipStream(source, CompressionMode.Decompress))
-            using (var reader = new TarReader(sourceGzip))
-            await using (var target = new FileStream(tempPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
-            await using (var targetGzip = new GZipStream(target, CompressionLevel.Optimal))
-            await using (var writer = new TarWriter(targetGzip, leaveOpen: true))
+            using (var cipher = streamManager.GetStream("BackupArchiveRotator.Cipher"))
             {
+                plaintext.Position = 0;
+                encryptionService.EncryptBackup(plaintext, cipher, passphrase);
+
+                await using var source = File.OpenRead(sourcePath);
+                await using var sourceGzip = new GZipStream(source, CompressionMode.Decompress);
+                using var reader = new TarReader(sourceGzip);
+                await using var target = new FileStream(tempPath, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+                await using var targetGzip = new GZipStream(target, CompressionLevel.Optimal);
+                await using var writer = new TarWriter(targetGzip, leaveOpen: true);
+
                 while (await reader.GetNextEntryAsync(copyData: false, cancellationToken) is { } entry)
                 {
                     if (entry.Name is BackupConstants.EncryptedDatabaseEntryName or BackupConstants.PlainDatabaseEntryName)
@@ -166,10 +204,15 @@ public class BackupArchiveRotator(
                         await entry.DataStream.CopyToAsync(data, cancellationToken);
                     data.Position = 0;
                     await writer.WriteEntryAsync(
-                        new PaxTarEntry(entry.EntryType, entry.Name) { DataStream = data },
+                        new PaxTarEntry(entry.EntryType, entry.Name)
+                        {
+                            DataStream = data,
+                            ModificationTime = entry.ModificationTime,
+                            Mode = entry.Mode
+                        },
                         cancellationToken);
                 }
-            }
+            } // the new ciphertext is released before verification reads the file back
 
             await VerifyAsync(tempPath, passphrase, plaintext.Length, cancellationToken);
             File.Move(tempPath, targetPath, overwrite: true);
@@ -203,7 +246,7 @@ public class BackupArchiveRotator(
                 using var cipher = streamManager.GetStream("BackupArchiveRotator.VerifyCipher");
                 await entry.DataStream.CopyToAsync(cipher, cancellationToken);
                 cipher.Position = 0;
-                using var plain = streamManager.GetStream("BackupArchiveRotator.VerifyPlain");
+                var plain = new CountingStream();
                 encryptionService.DecryptBackup(cipher, plain, passphrase);
                 decryptedLength = plain.Length;
             }
@@ -215,6 +258,15 @@ public class BackupArchiveRotator(
                 $"Verification of rewritten backup failed (metadata present: {hasMetadata}, decrypted {decryptedLength} of {expectedLength} bytes)");
         }
     }
+
+    private async Task DecryptFileAsync(string sourcePath, string targetPath, string passphrase)
+    {
+        await using var source = File.OpenRead(sourcePath);
+        await using var target = new FileStream(targetPath, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+        encryptionService.DecryptBackup(source, target, passphrase);
+    }
+
+    private static string TempPathFor(string path, string suffix) => $"{path}.{Guid.NewGuid().ToString("N")[..8]}.{suffix}";
 
     private async Task<RecyclableMemoryStream> ReadDatabaseEntryAsync(string path, CancellationToken cancellationToken)
     {
@@ -261,5 +313,24 @@ public class BackupArchiveRotator(
         {
             logger.LogWarning(ex, "Failed to delete temp file {Path}", path);
         }
+    }
+
+    /// <summary>A write-only stream that keeps only the number of bytes written, for verification.</summary>
+    private sealed class CountingStream : Stream
+    {
+        private long _length;
+
+        public override bool CanRead => false;
+        public override bool CanSeek => false;
+        public override bool CanWrite => true;
+        public override long Length => _length;
+        public override long Position { get => _length; set => throw new NotSupportedException(); }
+
+        public override void Write(byte[] buffer, int offset, int count) => _length += count;
+        public override void Write(ReadOnlySpan<byte> buffer) => _length += buffer.Length;
+        public override void Flush() { }
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
     }
 }

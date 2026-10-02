@@ -147,6 +147,7 @@ public class BackupServiceTests
 
         // Add backup services (using shared extension method from BackgroundJobs library)
         services.AddSingleton(new RecyclableMemoryStreamManager());
+        services.AddSingleton<BackupFileLock>();
         services.AddScoped<IBackupService, BackupService>();
         services.AddScoped<IBackupEncryptionService, BackupEncryptionService>();
         services.AddScoped<IBackupArchiveRotator, BackupArchiveRotator>();
@@ -1156,6 +1157,7 @@ public class BackupServiceTests
                 _serviceProvider!.GetRequiredService<IBackupArchiveRotator>(),
                 _passphraseService!,
                 dataProtection,
+                _serviceProvider!.GetRequiredService<BackupFileLock>(),
                 _serviceProvider!.GetRequiredService<IServiceScopeFactory>(),
                 Microsoft.Extensions.Logging.Abstractions.NullLogger<TelegramGroupsAdmin.BackgroundJobs.Jobs.RotateBackupPassphraseJob>.Instance,
                 new TelegramGroupsAdmin.BackgroundJobs.Metrics.JobMetrics());

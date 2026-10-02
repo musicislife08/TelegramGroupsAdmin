@@ -120,6 +120,7 @@ public static class ServiceCollectionExtensions
         // Public interfaces
         services.AddScoped<IBackupService, BackupService>();
         services.AddScoped<IBackupEncryptionService, BackupEncryptionService>();
+        services.AddSingleton<BackupFileLock>();
         services.AddScoped<IBackupArchiveRotator, BackupArchiveRotator>();
         services.AddScoped<IBackupRotationService, BackupRotationService>();
         services.AddScoped<IBackupConfigurationService, BackupConfigurationService>();

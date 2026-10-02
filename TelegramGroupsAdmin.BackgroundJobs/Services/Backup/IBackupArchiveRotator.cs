@@ -31,4 +31,13 @@ public interface IBackupArchiveRotator
     /// <returns>False, with the file untouched, when <paramref name="originalPassphrase"/> does not open the entry.</returns>
     /// <exception cref="System.Security.Cryptography.CryptographicException">The stored passphrase does not open the outer layer.</exception>
     Task<bool> TryRepairWrappedAsync(string path, string storedPassphrase, string originalPassphrase, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Moves the outer layer of a <see cref="BackupFileState.Wrapped"/> backup from
+    /// <paramref name="oldPassphrase"/> to <paramref name="newPassphrase"/>, leaving the archive inside
+    /// untouched. A rotation calls this so a damaged backup's outer layer always stays on the stored
+    /// passphrase, which is what <see cref="TryRepairWrappedAsync"/> opens it with.
+    /// </summary>
+    /// <exception cref="System.Security.Cryptography.CryptographicException"><paramref name="oldPassphrase"/> does not open the outer layer.</exception>
+    Task RewrapAsync(string path, string oldPassphrase, string newPassphrase, CancellationToken cancellationToken = default);
 }

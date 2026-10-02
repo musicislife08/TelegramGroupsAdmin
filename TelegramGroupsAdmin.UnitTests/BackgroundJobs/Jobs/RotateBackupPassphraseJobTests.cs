@@ -32,6 +32,7 @@ public class RotateBackupPassphraseJobTests
     private IPassphraseManagementService _passphraseService = null!;
     private IDataProtectionService _dataProtection = null!;
     private IAuditService _auditService = null!;
+    private BackupFileLock _fileLock = null!;
     private RotateBackupPassphraseJob _job = null!;
     private string _directory = null!;
 
@@ -52,8 +53,9 @@ public class RotateBackupPassphraseJobTests
         var scopeFactory = Substitute.For<IServiceScopeFactory>();
         scopeFactory.CreateScope().Returns(scope);
 
+        _fileLock = new BackupFileLock();
         _job = new RotateBackupPassphraseJob(
-            _rotator, _passphraseService, _dataProtection, scopeFactory,
+            _rotator, _passphraseService, _dataProtection, _fileLock, scopeFactory,
             NullLogger<RotateBackupPassphraseJob>.Instance, new JobMetrics());
         _directory = Directory.CreateTempSubdirectory("tga_rotation_job_").FullName;
     }
@@ -101,6 +103,57 @@ public class RotateBackupPassphraseJobTests
         await _auditService.Received(1).LogEventAsync(
             AuditEventType.BackupPassphraseRotated, Arg.Any<Actor>(), Arg.Any<Actor?>(),
             Arg.Is<string?>(v => v!.Contains("skipped 1")), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task UnreadableFile_ChangesNoFiles()
+    {
+        BackupFile("a-healthy.tar.gz", BackupFileState.Encrypted);
+        BackupFile("b-wrapped.tar.gz", BackupFileState.Wrapped);
+        BackupFile("c-junk.tar.gz", BackupFileState.Unreadable);
+
+        Assert.That(async () => await _job.Execute(Context(Payload())), Throws.InvalidOperationException);
+        await _rotator.DidNotReceive().ReencryptAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _rotator.DidNotReceive().RewrapAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task WrappedFile_OuterLayerMovesToTheNewPassphrase()
+    {
+        var wrapped = BackupFile("wrapped.tar.gz", BackupFileState.Wrapped);
+
+        await _job.Execute(Context(Payload()));
+
+        await _rotator.Received(1).RewrapAsync(wrapped, OldPassphrase, NewPassphrase, Arg.Any<CancellationToken>());
+        await _passphraseService.Received(1).UpdateEncryptionConfigAsync(NewPassphrase);
+    }
+
+    [Test]
+    public async Task WrappedFile_WhoseOuterLayerDoesNotOpen_IsSkipped_NotFailed()
+    {
+        var wrapped = BackupFile("wrapped.tar.gz", BackupFileState.Wrapped);
+        _rotator.RewrapAsync(wrapped, OldPassphrase, NewPassphrase, Arg.Any<CancellationToken>())
+            .ThrowsAsync(new CryptographicException("outer layer"));
+
+        await _job.Execute(Context(Payload()));
+
+        await _passphraseService.Received(1).UpdateEncryptionConfigAsync(NewPassphrase);
+    }
+
+    [Test]
+    public async Task Rotation_WaitsForTheBackupFileLock()
+    {
+        BackupFile("a.tar.gz", BackupFileState.Encrypted);
+        var held = await _fileLock.AcquireAsync();
+
+        var run = _job.Execute(Context(Payload()));
+        await Task.Delay(100);
+        Assert.That(run.IsCompleted, Is.False, "a backup is being written, so the rotation must wait");
+        await _passphraseService.DidNotReceive().UpdateEncryptionConfigAsync(Arg.Any<string>());
+
+        held.Dispose();
+        await run.WaitAsync(TimeSpan.FromSeconds(5));
+        await _passphraseService.Received(1).UpdateEncryptionConfigAsync(NewPassphrase);
     }
 
     [Test]

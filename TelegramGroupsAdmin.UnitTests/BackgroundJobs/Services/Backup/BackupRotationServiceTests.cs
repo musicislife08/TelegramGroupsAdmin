@@ -23,6 +23,7 @@ public class BackupRotationServiceTests
 
     private IBackupArchiveRotator _rotator = null!;
     private IAuditService _auditService = null!;
+    private BackupFileLock _fileLock = null!;
     private BackupRotationService _service = null!;
     private string _parent = null!;
     private string _directory = null!;
@@ -42,7 +43,8 @@ public class BackupRotationServiceTests
         var scopeFactory = Substitute.For<IServiceScopeFactory>();
         scopeFactory.CreateScope().Returns(scope);
 
-        _service = new BackupRotationService(_rotator, passphraseService, scopeFactory, NullLogger<BackupRotationService>.Instance);
+        _fileLock = new BackupFileLock();
+        _service = new BackupRotationService(_rotator, passphraseService, _fileLock, scopeFactory, NullLogger<BackupRotationService>.Instance);
         _parent = Directory.CreateTempSubdirectory("tga_rotation_service_").FullName;
         _directory = Directory.CreateDirectory(Path.Combine(_parent, "backups")).FullName;
     }
@@ -119,6 +121,54 @@ public class BackupRotationServiceTests
             Assert.That(result.RepairedCount, Is.Zero);
             Assert.That(result.StillWrappedFiles, Is.EqualTo(new[] { "a.tar.gz" }));
         }
+    }
+
+    [Test]
+    public async Task RepairWrappedAsync_UnexpectedFailure_MovesOnToTheNextFile()
+    {
+        var a = BackupFile("a.tar.gz", BackupFileState.Wrapped);
+        var b = BackupFile("b.tar.gz", BackupFileState.Wrapped);
+        _rotator.TryRepairWrappedAsync(a, StoredPassphrase, OriginalPassphrase, Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException("not an archive inside"));
+        _rotator.TryRepairWrappedAsync(b, StoredPassphrase, OriginalPassphrase, Arg.Any<CancellationToken>()).Returns(true);
+
+        var result = await _service.RepairWrappedAsync(_directory, OriginalPassphrase, UserId);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.RepairedCount, Is.EqualTo(1));
+            Assert.That(result.StillWrappedFiles, Is.EqualTo(new[] { "a.tar.gz" }));
+        }
+        await _auditService.Received(1).LogEventAsync(AuditEventType.BackupFilesRepaired, Arg.Any<Actor>(),
+            Arg.Any<Actor?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task RepairWrappedAsync_WaitsForTheBackupFileLock()
+    {
+        var a = BackupFile("a.tar.gz", BackupFileState.Wrapped);
+        _rotator.TryRepairWrappedAsync(a, StoredPassphrase, OriginalPassphrase, Arg.Any<CancellationToken>()).Returns(true);
+        var held = await _fileLock.AcquireAsync();
+
+        var run = _service.RepairWrappedAsync(_directory, OriginalPassphrase, UserId);
+        await Task.Delay(100);
+        Assert.That(run.IsCompleted, Is.False);
+
+        held.Dispose();
+        var result = await run.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.That(result.RepairedCount, Is.EqualTo(1));
+    }
+
+    [Test]
+    public async Task DeleteDamagedAsync_IgnoresNamesThatAreNotBackups()
+    {
+        // A backup still being written sits next to the others as a temp file
+        var temp = BackupFile("backup_x.tar.gz.1a2b3c4d.tmp", BackupFileState.Unreadable);
+
+        var deleted = await _service.DeleteDamagedAsync(_directory, ["backup_x.tar.gz.1a2b3c4d.tmp"], UserId);
+
+        Assert.That(deleted, Is.Zero);
+        Assert.That(File.Exists(temp), Is.True);
     }
 
     [Test]
