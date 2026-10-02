@@ -8,7 +8,7 @@ namespace TelegramGroupsAdmin.Core.Http;
 /// user's behalf. Everything loopback, private, link-local (including cloud metadata),
 /// unspecified, carrier-grade NAT, multicast, discard, reserved or documentation-only is refused, in its
 /// IPv4 form, its native IPv6 form, and every IPv6 form that embeds an IPv4 address
-/// (IPv4-mapped, IPv4-compatible, NAT64 and 6to4). This is the rule the public-url HttpClient
+/// (IPv4-mapped, IPv4-translated, IPv4-compatible, NAT64 and 6to4). This is the rule the public-url HttpClient
 /// applies to the address it actually connects to, so it holds for DNS answers and redirect hops.
 /// </summary>
 public static class PublicAddressPolicy
@@ -45,6 +45,7 @@ public static class PublicAddressPolicy
         new(IPAddress.Parse("172.16.0.0"), 12, "private (172.16.0.0/12)"),
         new(IPAddress.Parse("192.0.0.0"), 24, "reserved IETF protocol assignments (192.0.0.0/24)"),
         new(IPAddress.Parse("192.0.2.0"), 24, "documentation (192.0.2.0/24)"),
+        new(IPAddress.Parse("192.88.99.0"), 24, "deprecated 6to4 relay anycast (192.88.99.0/24)"),
         new(IPAddress.Parse("192.168.0.0"), 16, "private (192.168.0.0/16)"),
         new(IPAddress.Parse("198.18.0.0"), 15, "benchmarking (198.18.0.0/15)"),
         new(IPAddress.Parse("198.51.100.0"), 24, "documentation (198.51.100.0/24)"),
@@ -66,12 +67,17 @@ public static class PublicAddressPolicy
         new(IPAddress.Parse("fec0::"), 10, "site-local (fec0::/10)"),
         new(IPAddress.Parse("ff00::"), 8, "multicast (ff00::/8)"),
         new(IPAddress.Parse("2001:db8::"), 32, "documentation (2001:db8::/32)"),
+        // Teredo (2001::/32) is deliberately NOT refused (SSRF review ruling, low risk): a Teredo address
+        // embeds the Teredo server and the client's obfuscated public NAT mapping, not a chosen destination,
+        // so there is no embedded target to judge and it is reachable only through a public Teredo relay.
     ];
 
     /// <summary>IPv6 prefixes that carry an IPv4 address; the embedded address is what gets judged.</summary>
     private static readonly (BlockedRange Prefix, int V4Offset)[] EmbeddedV4 =
     [
         (new BlockedRange(IPAddress.Parse("::ffff:0:0"), 96, "IPv4-mapped"), 12),
+        // SIIT IPv4-translated (::ffff:0:a.b.c.d, RFC 2765): embeds IPv4 at the same offset as the mapped form.
+        (new BlockedRange(IPAddress.Parse("::ffff:0:0:0"), 96, "IPv4-translated"), 12),
         (new BlockedRange(IPAddress.Parse("64:ff9b::"), 96, "NAT64"), 12),
         (new BlockedRange(IPAddress.Parse("2002::"), 16, "6to4"), 2),
         // IPv4-compatible (::a.b.c.d, deprecated): the ::/96 prefix also covers :: and ::1, which

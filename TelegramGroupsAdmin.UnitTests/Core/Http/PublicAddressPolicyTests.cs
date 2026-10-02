@@ -33,6 +33,7 @@ public class PublicAddressPolicyTests
     [TestCase("198.51.100.1", "documentation")]
     [TestCase("203.0.113.1", "documentation")]
     [TestCase("198.18.0.1", "benchmarking")]
+    [TestCase("192.88.99.1", "6to4 relay anycast")]
     // IPv6
     [TestCase("::1", "loopback")]
     [TestCase("::", "unspecified")]
@@ -59,6 +60,9 @@ public class PublicAddressPolicyTests
     [TestCase("64:ff9b::a00:1", "private")]
     [TestCase("2002:7f00:1::", "loopback")]
     [TestCase("2002:c0a8:1::", "private")]
+    [TestCase("::ffff:0:7f00:1", "loopback")]
+    [TestCase("::ffff:0:a00:1", "private")]
+    [TestCase("::ffff:0:a9fe:a9fe", "link-local")]
     public void IsPublic_NonPublicAddress_IsRefusedWithReason(string address, string expectedReason)
     {
         var isPublic = PublicAddressPolicy.IsPublic(IPAddress.Parse(address), out var reason);
@@ -82,6 +86,7 @@ public class PublicAddressPolicyTests
     [TestCase("101::1")]
     [TestCase("2001::1")]
     [TestCase("2002:808:808::")]
+    [TestCase("::ffff:0:808:808")]
     public void IsPublic_PublicAddress_IsAccepted(string address)
     {
         var isPublic = PublicAddressPolicy.IsPublic(IPAddress.Parse(address), out var reason);
