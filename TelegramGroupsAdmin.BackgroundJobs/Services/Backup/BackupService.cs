@@ -216,7 +216,7 @@ public class BackupService : IBackupService
             await using (var tarWriter = new TarWriter(gzipStream, leaveOpen: true))
             {
                 // Add metadata.json (unencrypted - readable by backup browser without passphrase)
-                var metadataEntry = new PaxTarEntry(TarEntryType.RegularFile, "metadata.json")
+                var metadataEntry = new PaxTarEntry(TarEntryType.RegularFile, BackupConstants.MetadataEntryName)
                 {
                     DataStream = new MemoryStream(metadataJson)
                 };
@@ -224,7 +224,7 @@ public class BackupService : IBackupService
                 _logger.LogDebug("Added metadata.json to archive: {Size} bytes", metadataJson.Length);
 
                 // Add encrypted database entry
-                var databaseEntry = new PaxTarEntry(TarEntryType.RegularFile, "database.json.enc")
+                var databaseEntry = new PaxTarEntry(TarEntryType.RegularFile, BackupConstants.EncryptedDatabaseEntryName)
                 {
                     DataStream = encryptedStream
                 };
@@ -236,7 +236,7 @@ public class BackupService : IBackupService
                 {
                     foreach (var gifPath in gifFiles)
                     {
-                        var entryName = $"media/ban-gifs/{Path.GetFileName(gifPath)}";
+                        var entryName = $"{BackupConstants.MediaEntryPrefix}ban-gifs/{Path.GetFileName(gifPath)}";
                         await tarWriter.WriteEntryAsync(gifPath, entryName, cancellationToken);
                     }
                     _logger.LogInformation("Added {Count} ban celebration GIFs to archive", gifFiles.Length);
@@ -404,12 +404,12 @@ public class BackupService : IBackupService
                 if (entry.DataStream == null)
                     continue;
 
-                if (entry.Name == "metadata.json")
+                if (entry.Name == BackupConstants.MetadataEntryName)
                 {
                     metadata = await JsonSerializer.DeserializeAsync<BackupMetadata>(entry.DataStream, jsonOptions);
                     _logger.LogDebug("Read metadata.json from tar stream");
                 }
-                else if (entry.Name == "database.json.enc")
+                else if (entry.Name == BackupConstants.EncryptedDatabaseEntryName)
                 {
                     using var encryptedMs = _streamManager.GetStream("BackupService.Restore.Encrypted");
                     await entry.DataStream.CopyToAsync(encryptedMs);
@@ -423,7 +423,7 @@ public class BackupService : IBackupService
                         resolvedPassphrase == passphrase ? "explicit passphrase" : "config passphrase",
                         encryptedMs.Length, decryptedMs.Length);
                 }
-                else if (entry.Name == "database.json")
+                else if (entry.Name == BackupConstants.PlainDatabaseEntryName)
                 {
                     using var ms = _streamManager.GetStream("BackupService.Restore.Unencrypted");
                     await entry.DataStream.CopyToAsync(ms);
@@ -431,7 +431,7 @@ public class BackupService : IBackupService
                     databaseData = await JsonSerializer.DeserializeAsync<Dictionary<string, List<object>>>(ms, jsonOptions);
                     _logger.LogInformation("Read unencrypted database: {Size} bytes", ms.Length);
                 }
-                else if (entry.Name.StartsWith("media/"))
+                else if (entry.Name.StartsWith(BackupConstants.MediaEntryPrefix))
                 {
                     var targetPath = Path.GetFullPath(Path.Combine(mediaTempDir.FullName, entry.Name));
                     if (!targetPath.StartsWith(mediaTempDir.FullName, StringComparison.OrdinalIgnoreCase))
@@ -921,7 +921,7 @@ public class BackupService : IBackupService
 
         while (await tarReader.GetNextEntryAsync() is { } entry)
         {
-            if (entry.Name == "metadata.json" && entry.DataStream != null)
+            if (entry.Name == BackupConstants.MetadataEntryName && entry.DataStream != null)
             {
                 using var ms = new MemoryStream();
                 await entry.DataStream.CopyToAsync(ms);
@@ -947,9 +947,9 @@ public class BackupService : IBackupService
 
         while (await tarReader.GetNextEntryAsync() is { } entry)
         {
-            if (entry.Name == "database.json.enc")
+            if (entry.Name == BackupConstants.EncryptedDatabaseEntryName)
                 return true;
-            if (entry.Name == "database.json")
+            if (entry.Name == BackupConstants.PlainDatabaseEntryName)
                 return false;
         }
 
