@@ -40,6 +40,11 @@ public static class EncryptionConstants
     /// For multi-tenant or cloud-hosted deployments with user-generated passphrases,
     /// consider increasing to 600K+ iterations.
     /// </para>
+    /// <para>
+    /// This constant is the only source of the iteration count. It is not stored in the backup file
+    /// header or in the encryption config, so changing it makes every existing backup undecryptable.
+    /// A change has to come with a new format version that maps to the new count.
+    /// </para>
     /// </remarks>
     public const int Pbkdf2Iterations = 100000;
 
