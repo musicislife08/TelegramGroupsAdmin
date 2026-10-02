@@ -74,8 +74,8 @@ public class ImpersonationDetectionServiceTests
         var mockPhotoHashService = Substitute.For<IPhotoHashService>();
         var mockLogger = Substitute.For<ILogger<ImpersonationDetectionService>>();
 
-        // These concrete classes are never used by ShouldCheckUserAsync, so we can pass nulls
-        // (they're only used by CheckUserAsync and ExecuteActionAsync)
+        // The moderation service is never used by ShouldCheckUserAsync, so we can pass null
+        // (it's only used by ExecuteActionAsync)
         return new ImpersonationDetectionService(
             mockContextFactory,
             _mockTelegramUserRepo,
@@ -85,7 +85,6 @@ public class ImpersonationDetectionServiceTests
             mockPhotoHashService,
             _mockReportsRepo,
             null!, // ModerationActionService - not used by ShouldCheckUserAsync
-            null!, // TelegramBotClientFactory - not used by ShouldCheckUserAsync
             _mockConfigService,
             mockLogger);
     }

@@ -36,7 +36,6 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
     private readonly IPhotoHashService _photoHashService;
     private readonly IReportsRepository _reportsRepository;
     private readonly IBotModerationService _moderationActionService;
-    private readonly ITelegramBotClientFactory _botClientFactory;
     private readonly IConfigService _configService;
     private readonly ILogger<ImpersonationDetectionService> _logger;
 
@@ -55,7 +54,6 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
         IPhotoHashService photoHashService,
         IReportsRepository reportsRepository,
         IBotModerationService moderationActionService,
-        ITelegramBotClientFactory botClientFactory,
         IConfigService configService,
         ILogger<ImpersonationDetectionService> logger)
     {
@@ -67,7 +65,6 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
         _photoHashService = photoHashService;
         _reportsRepository = reportsRepository;
         _moderationActionService = moderationActionService;
-        _botClientFactory = botClientFactory;
         _configService = configService;
         _logger = logger;
     }
