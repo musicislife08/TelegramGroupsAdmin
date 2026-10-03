@@ -19,6 +19,13 @@ public interface IConfigService
     ValueTask<WelcomeConfig?> GetWelcomeAsync(long chatId, CancellationToken ct = default);
     ValueTask<WelcomeConfig?> GetEffectiveWelcomeAsync(long chatId, CancellationToken ct = default);
 
+    /// <summary>
+    /// Effective "Mask flagged names" for a chat, or the global value when <paramref name="chatId"/>
+    /// is null (messages that belong to no chat, e.g. admin DMs). Independent of whether this chat
+    /// scans profiles: a name verdict belongs to the account, not the chat.
+    /// </summary>
+    ValueTask<NameMasking> GetNameMaskingAsync(long? chatId, CancellationToken ct = default);
+
     ValueTask<LogConfig?> GetLogAsync(long chatId, CancellationToken ct = default);
     ValueTask<LogConfig?> GetEffectiveLogAsync(long chatId, CancellationToken ct = default);
 

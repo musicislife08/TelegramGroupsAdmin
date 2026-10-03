@@ -94,9 +94,9 @@ public class BanCelebrationServiceTests
 
     /// <summary>
     /// Configures the substituted IConfigService to return a WelcomeConfig with the given
-    /// per-chat masking toggle and redaction text. Used by explicit-username-masking tests.
+    /// per-chat masking toggle. Used by explicit-username-masking tests.
     /// </summary>
-    private void EnableProfileScanConfig(bool maskExplicitUsername, string redactionText)
+    private void EnableProfileScanConfig(bool maskFlaggedNames)
     {
         var welcomeConfig = new WelcomeConfig
         {
@@ -106,8 +106,7 @@ public class BanCelebrationServiceTests
                 ProfileScan = new ProfileScanConfig
                 {
                     Enabled = true,
-                    MaskExplicitUsername = maskExplicitUsername,
-                    ExplicitUsernameRedactionText = redactionText
+                    MaskFlaggedNames = maskFlaggedNames
                 }
             }
         };
@@ -562,7 +561,7 @@ public class BanCelebrationServiceTests
         _mockScanRepository.GetLatestByUserIdAsync(TestUserId, Arg.Any<CancellationToken>())
             .Returns(scan);
 
-        EnableProfileScanConfig(maskExplicitUsername: true, redactionText: "[explicit username redacted]");
+        EnableProfileScanConfig(maskFlaggedNames: true);
         SeedOneGifAndOneCaption("{username} got banned!");
 
         await _sut.SendBanCelebrationAsync(
@@ -574,7 +573,7 @@ public class BanCelebrationServiceTests
         await _mockMessageService.Received(1).SendAndSaveAnimationAsync(
             TestChatId,
             Arg.Any<InputFile>(),
-            Arg.Is<TelegramMessage>(m => m!.Text.Contains("[explicit username redacted]")
+            Arg.Is<TelegramMessage>(m => m!.Text.Contains(NameRedaction.Explicit)
                                       && !m.Text.Contains(TestBannedUser.DisplayName)),
             Arg.Any<CancellationToken>());
     }
@@ -597,7 +596,7 @@ public class BanCelebrationServiceTests
         _mockScanRepository.GetLatestByUserIdAsync(TestUserId, Arg.Any<CancellationToken>())
             .Returns(scan);
 
-        EnableProfileScanConfig(maskExplicitUsername: false, redactionText: "[explicit username redacted]");
+        EnableProfileScanConfig(maskFlaggedNames: false);
         SeedOneGifAndOneCaption("{username} got banned!");
 
         await _sut.SendBanCelebrationAsync(
@@ -610,7 +609,7 @@ public class BanCelebrationServiceTests
             TestChatId,
             Arg.Any<InputFile>(),
             Arg.Is<TelegramMessage>(m => m!.Text.Contains(TestBannedUser.DisplayName)
-                                      && !m.Text.Contains("[explicit username redacted]")),
+                                      && !m.Text.Contains(NameRedaction.Explicit)),
             Arg.Any<CancellationToken>());
     }
 
@@ -620,7 +619,7 @@ public class BanCelebrationServiceTests
         _mockScanRepository.GetLatestByUserIdAsync(TestUserId, Arg.Any<CancellationToken>())
             .Returns((ProfileScanResultRecord?)null);
 
-        EnableProfileScanConfig(maskExplicitUsername: true, redactionText: "[explicit username redacted]");
+        EnableProfileScanConfig(maskFlaggedNames: true);
         SeedOneGifAndOneCaption("{username} got banned!");
 
         await _sut.SendBanCelebrationAsync(
@@ -633,44 +632,7 @@ public class BanCelebrationServiceTests
             TestChatId,
             Arg.Any<InputFile>(),
             Arg.Is<TelegramMessage>(m => m!.Text.Contains(TestBannedUser.DisplayName)
-                                      && !m.Text.Contains("[explicit username redacted]")),
-            Arg.Any<CancellationToken>());
-    }
-
-    [TestCase("")]
-    [TestCase("   ")]
-    [TestCase("\t\n")]
-    public async Task SendBanCelebrationAsync_AiFlaggedAndRedactionTextBlank_FallsBackToDefault(string blankRedactionText)
-    {
-        var scan = new ProfileScanResultRecord(
-            Id: 1,
-            UserId: TestUserId,
-            ScannedAt: DateTimeOffset.UtcNow,
-            Score: 4.5m,
-            Outcome: ProfileScanOutcome.Banned,
-            RuleScore: 0.0m,
-            AiScore: 4.5m,
-            AiReason: "explicit handle",
-            AiSignals: "explicit_handle",
-            ExplicitDisplayText: true);
-
-        _mockScanRepository.GetLatestByUserIdAsync(TestUserId, Arg.Any<CancellationToken>())
-            .Returns(scan);
-
-        EnableProfileScanConfig(maskExplicitUsername: true, redactionText: blankRedactionText);
-        SeedOneGifAndOneCaption("{username} got banned!");
-
-        await _sut.SendBanCelebrationAsync(
-            chat: TestChat,
-            bannedUser: TestBannedUser,
-            isAutoBan: true,
-            cancellationToken: CancellationToken.None);
-
-        await _mockMessageService.Received(1).SendAndSaveAnimationAsync(
-            TestChatId,
-            Arg.Any<InputFile>(),
-            Arg.Is<TelegramMessage>(m => m!.Text.Contains(ProfileScanConfig.DefaultExplicitUsernameRedactionText)
-                                      && !m.Text.Contains(TestBannedUser.DisplayName)),
+                                      && !m.Text.Contains(NameRedaction.Explicit)),
             Arg.Any<CancellationToken>());
     }
 

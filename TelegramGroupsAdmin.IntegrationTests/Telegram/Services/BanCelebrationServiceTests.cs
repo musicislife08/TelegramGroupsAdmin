@@ -511,8 +511,7 @@ public class BanCelebrationServiceTests
         // Arrange: scan row with ExplicitDisplayText=true + per-chat config with masking on.
         await SeedExplicitFlaggedScanAsync(TestUserId, explicitFlag: true);
         await EnableBanCelebration(TestChatId);
-        await SetWelcomeProfileScanMaskingAsync(maskingEnabled: true,
-            redactionText: "[explicit username redacted]");
+        await SetWelcomeProfileScanMaskingAsync(maskingEnabled: true);
         using var gifStream = CreateTestGifStream();
         await _gifRepository!.AddFromFileAsync(gifStream, "test.gif", "Test GIF");
         await _captionRepository!.AddAsync("{username} got banned!", "DM", "Test");
@@ -529,7 +528,7 @@ public class BanCelebrationServiceTests
         await _mockMessageService!.Received(1).SendAndSaveAnimationAsync(
             TestChatId,
             Arg.Any<InputFile>(),
-            Arg.Is<TelegramMessage>(m => m!.Text.Contains("[explicit username redacted]")
+            Arg.Is<TelegramMessage>(m => m!.Text.Contains(NameRedaction.Explicit)
                                       && !m.Text.Contains(TestUserName)),
             Arg.Any<CancellationToken>());
     }
@@ -540,8 +539,7 @@ public class BanCelebrationServiceTests
         // Arrange: scan row flagged, but masking disabled via config.
         await SeedExplicitFlaggedScanAsync(TestUserId, explicitFlag: true);
         await EnableBanCelebration(TestChatId);
-        await SetWelcomeProfileScanMaskingAsync(maskingEnabled: false,
-            redactionText: "[explicit username redacted]");
+        await SetWelcomeProfileScanMaskingAsync(maskingEnabled: false);
         using var gifStream = CreateTestGifStream();
         await _gifRepository!.AddFromFileAsync(gifStream, "test.gif", "Test GIF");
         await _captionRepository!.AddAsync("{username} got banned!", "DM", "Test");
@@ -558,7 +556,7 @@ public class BanCelebrationServiceTests
             TestChatId,
             Arg.Any<InputFile>(),
             Arg.Is<TelegramMessage>(m => m!.Text.Contains(TestUserName)
-                                      && !m.Text.Contains("[explicit username redacted]")),
+                                      && !m.Text.Contains(NameRedaction.Explicit)),
             Arg.Any<CancellationToken>());
     }
 
@@ -569,8 +567,7 @@ public class BanCelebrationServiceTests
         // so the service consults the scan repo and finds nothing; falls through to
         // the display name.
         await EnableBanCelebration(TestChatId);
-        await SetWelcomeProfileScanMaskingAsync(maskingEnabled: true,
-            redactionText: "[explicit username redacted]");
+        await SetWelcomeProfileScanMaskingAsync(maskingEnabled: true);
         using var gifStream = CreateTestGifStream();
         await _gifRepository!.AddFromFileAsync(gifStream, "test.gif", "Test GIF");
         await _captionRepository!.AddAsync("{username} got banned!", "DM", "Test");
@@ -587,23 +584,21 @@ public class BanCelebrationServiceTests
             TestChatId,
             Arg.Any<InputFile>(),
             Arg.Is<TelegramMessage>(m => m!.Text.Contains(TestUserName)
-                                      && !m.Text.Contains("[explicit username redacted]")),
+                                      && !m.Text.Contains(NameRedaction.Explicit)),
             Arg.Any<CancellationToken>());
     }
 
     [Test]
-    public async Task SendBanCelebrationAsync_ProfileScanDisabledButStaleFlaggedScanExists_DoesNotMaskCaption()
+    public async Task SendBanCelebrationAsync_ProfileScanDisabledButFlaggedScanExists_StillMasksCaption()
     {
-        // Arrange: an old flagged scan row exists (from when scanning was on).
+        // Arrange: a flagged scan row exists (from this or another chat's scan).
         await SeedExplicitFlaggedScanAsync(TestUserId, explicitFlag: true);
 
-        // Admin has since disabled profile scanning entirely. The child masking
-        // toggle is still at its default (true) because the UI only disables the
-        // child switch under the parent - it doesn't reset its stored value.
+        // Scanning is off in this chat, but the verdict belongs to the account and
+        // "Mask flagged names" is on, so the name is still masked.
         await EnableBanCelebration(TestChatId);
         await SetWelcomeProfileScanMaskingAsync(
             maskingEnabled: true,
-            redactionText: "[explicit username redacted]",
             profileScanEnabled: false);
         using var gifStream = CreateTestGifStream();
         await _gifRepository!.AddFromFileAsync(gifStream, "test.gif", "Test GIF");
@@ -616,13 +611,12 @@ public class BanCelebrationServiceTests
             isAutoBan: true,
             cancellationToken: CancellationToken.None);
 
-        // Assert: caption uses DisplayName, NOT the redaction text - profile scan
-        // is the parent kill-switch and overrides the stale child masking value.
+        // Assert: caption uses the redaction text, not the display name.
         await _mockMessageService!.Received(1).SendAndSaveAnimationAsync(
             TestChatId,
             Arg.Any<InputFile>(),
-            Arg.Is<TelegramMessage>(m => m!.Text.Contains(TestUserName)
-                                      && !m.Text.Contains("[explicit username redacted]")),
+            Arg.Is<TelegramMessage>(m => m!.Text.Contains(NameRedaction.Explicit)
+                                      && !m.Text.Contains(TestUserName)),
             Arg.Any<CancellationToken>());
     }
 
@@ -701,7 +695,6 @@ public class BanCelebrationServiceTests
 
     private async Task SetWelcomeProfileScanMaskingAsync(
         bool maskingEnabled,
-        string redactionText,
         bool profileScanEnabled = true)
     {
         var welcomeConfig = new WelcomeConfig
@@ -719,8 +712,7 @@ public class BanCelebrationServiceTests
                 ProfileScan = new ProfileScanConfig
                 {
                     Enabled = profileScanEnabled,
-                    MaskExplicitUsername = maskingEnabled,
-                    ExplicitUsernameRedactionText = redactionText
+                    MaskFlaggedNames = maskingEnabled
                 }
             }
         };

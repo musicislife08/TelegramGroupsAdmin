@@ -37,6 +37,12 @@ public class ConfigService(
             async factoryCt => await repository.GetEffectiveWelcomeAsync(chatId, factoryCt),
             CacheOptions, tags: ["effective_welcome"], cancellationToken: ct);
 
+    public async ValueTask<NameMasking> GetNameMaskingAsync(long? chatId, CancellationToken ct = default)
+    {
+        var welcome = await GetEffectiveWelcomeAsync(chatId ?? 0, ct);
+        return welcome?.JoinSecurity?.ProfileScan.MaskFlaggedNames == true ? NameMasking.On : NameMasking.Off;
+    }
+
     public async Task SaveWelcomeAsync(ChatIdentity chat, WelcomeConfig config, Actor initiator, CancellationToken ct = default)
     {
         await repository.SaveWelcomeAsync(chat, config, ct);

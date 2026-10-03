@@ -155,8 +155,7 @@ public static class WelcomeConfigMappings
             ScanOnJoin = data.ScanOnJoin,
             ScanOnProfileChange = data.ScanOnProfileChange,
             ScanOnFirstMessage = data.ScanOnFirstMessage,
-            MaskExplicitUsername = data.MaskExplicitUsername,
-            ExplicitUsernameRedactionText = data.ExplicitUsernameRedactionText
+            MaskFlaggedNames = data.MaskFlaggedNames
         };
     }
 
@@ -170,8 +169,7 @@ public static class WelcomeConfigMappings
             ScanOnJoin = model.ScanOnJoin,
             ScanOnProfileChange = model.ScanOnProfileChange,
             ScanOnFirstMessage = model.ScanOnFirstMessage,
-            MaskExplicitUsername = model.MaskExplicitUsername,
-            ExplicitUsernameRedactionText = model.ExplicitUsernameRedactionText
+            MaskFlaggedNames = model.MaskFlaggedNames
         };
     }
 

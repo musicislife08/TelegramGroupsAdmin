@@ -81,21 +81,15 @@ public class BanCelebrationService(
             var welcomeConfig = await configService.GetEffectiveWelcomeAsync(chat.Id, cancellationToken);
             var profileScanConfig = welcomeConfig?.JoinSecurity?.ProfileScan ?? new ProfileScanConfig();
 
-            // Honor the parent ProfileScan.Enabled kill-switch. If scans are off, don't
-            // consult stale scan rows even if MaskExplicitUsername was left on (UI disables
-            // the child switch under the parent but doesn't reset its stored value).
-            var maskingActive = profileScanConfig.Enabled && profileScanConfig.MaskExplicitUsername;
+            // Task 11 replaces this with the shared name-masking path. Until then, masking
+            // follows the effective MaskFlaggedNames setting regardless of whether this chat scans.
+            var maskingActive = profileScanConfig.MaskFlaggedNames;
             var latestScan = maskingActive
                 ? await scanRepository.GetLatestByUserIdAsync(bannedUser.Id, cancellationToken)
                 : null;
             var aiFlagged = latestScan?.ExplicitDisplayText ?? false;
             var maskUsername = maskingActive && aiFlagged;
-            // Admins can clear the redaction text field (MudTextField MaxLength is client-only).
-            // A blank value would publish a caption like " got banned!" — fall back to the default.
-            var redactionText = string.IsNullOrWhiteSpace(profileScanConfig.ExplicitUsernameRedactionText)
-                ? ProfileScanConfig.DefaultExplicitUsernameRedactionText
-                : profileScanConfig.ExplicitUsernameRedactionText;
-            var displayedName = maskUsername ? redactionText : bannedUser.DisplayName;
+            var displayedName = maskUsername ? NameRedaction.Explicit : bannedUser.DisplayName;
 
             if (maskUsername)
             {
