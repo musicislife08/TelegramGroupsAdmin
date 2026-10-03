@@ -81,10 +81,11 @@ public class ConfigServiceNameMaskingTests
     }
 
     [Test]
-    public async Task NoConfig_ReturnsOff()
+    public async Task NoConfig_ReturnsOn()
     {
+        // No stored welcome config means the defaults apply, and the default is to mask.
         _repository.GetEffectiveWelcomeAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns((WelcomeConfig?)null);
-        Assert.That(await _sut.GetNameMaskingAsync(-100), Is.EqualTo(NameMasking.Off));
+        Assert.That(await _sut.GetNameMaskingAsync(-100), Is.EqualTo(NameMasking.On));
     }
 }

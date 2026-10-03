@@ -40,7 +40,9 @@ public class ConfigService(
     public async ValueTask<NameMasking> GetNameMaskingAsync(long? chatId, CancellationToken ct = default)
     {
         var welcome = await GetEffectiveWelcomeAsync(chatId ?? 0, ct);
-        return welcome?.JoinSecurity?.ProfileScan.MaskFlaggedNames == true ? NameMasking.On : NameMasking.Off;
+        // No stored config means the defaults apply, and ProfileScanConfig defaults to masking.
+        var mask = welcome?.JoinSecurity?.ProfileScan.MaskFlaggedNames ?? new ProfileScanConfig().MaskFlaggedNames;
+        return mask ? NameMasking.On : NameMasking.Off;
     }
 
     public async Task SaveWelcomeAsync(ChatIdentity chat, WelcomeConfig config, Actor initiator, CancellationToken ct = default)
