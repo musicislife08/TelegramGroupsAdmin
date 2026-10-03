@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.IO;
 using NSubstitute;
+using TL;
 using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Core.Imaging;
 using TelegramGroupsAdmin.Core.Models;
@@ -26,6 +27,7 @@ public class ProfileScanServiceSingleFlightTests
 #pragma warning restore NUnit1032
     private ITelegramUserRepository _users = null!;
     private IUserIdentityService _identities = null!;
+    private IProfileScoringEngine _scoring = null!;
     private ServiceProvider _provider = null!;
     private ProfileScanService _sut = null!;
 
@@ -35,9 +37,14 @@ public class ProfileScanServiceSingleFlightTests
         _sessions = Substitute.For<ITelegramSessionManager>();
         _users = Substitute.For<ITelegramUserRepository>();
         _identities = Substitute.For<IUserIdentityService>();
+        _scoring = Substitute.For<IProfileScoringEngine>();
+        _scoring.ScoreAsync(default!, default!, default, default, default, default)
+            .ReturnsForAnyArgs(new ScoringResult(0m, ProfileScanOutcome.Clean, 0m, 0m, null, null));
         _provider = new ServiceCollection()
             .AddSingleton(_users)
             .AddSingleton(_identities)
+            .AddSingleton(_scoring)
+            .AddSingleton(Substitute.For<IProfileScanResultsRepository>())
             .AddSingleton(Substitute.For<IConfigService>())
             .BuildServiceProvider();
 
@@ -179,5 +186,103 @@ public class ProfileScanServiceSingleFlightTests
             KickCount: 0, BotDmEnabled: false,
             FirstSeenAt: now, LastSeenAt: now, CreatedAt: now, UpdatedAt: now,
             ProfileScannedAt: now, ProfileScanScore: 1m);
+    }
+
+    // ── Live-name observation and rescore rules (client returns a TL.User) ──
+
+    private const long LiveUserId = 7;
+
+    private static TelegramUser StoredRow(string? first, string? last = null) =>
+        new(LiveUserId, "stored_handle", first, last, null, null, null,
+            IsBot: false, IsTrusted: false, IsBanned: false, KickCount: 0, BotDmEnabled: false,
+            FirstSeenAt: DateTimeOffset.UtcNow, LastSeenAt: DateTimeOffset.UtcNow,
+            CreatedAt: DateTimeOffset.UtcNow, UpdatedAt: DateTimeOffset.UtcNow,
+            ProfileScannedAt: DateTimeOffset.UtcNow.AddMinutes(-5), ProfileScanScore: 10m,
+            PersonalChannelId: 0); // an empty TL.UserFull reports personal_channel_id 0, which is what a prior scan stored
+
+    // Resolves through the username strategy (no triggering chat), then returns the full user.
+    private IWTelegramApiClient ClientReturning(TL.User? liveUser)
+    {
+        var resolveUser = new TL.User { id = LiveUserId, access_hash = 1, username = "stored_handle" };
+        var client = Substitute.For<IWTelegramApiClient>();
+        client.Contacts_ResolveUsername("stored_handle").Returns(new Contacts_ResolvedPeer
+        {
+            peer = new PeerUser { user_id = LiveUserId },
+            users = new Dictionary<long, TL.User> { [LiveUserId] = resolveUser },
+            chats = new Dictionary<long, ChatBase>()
+        });
+        var users = new Dictionary<long, TL.User>();
+        if (liveUser is not null) users[LiveUserId] = liveUser;
+        client.Users_GetFullUser(Arg.Any<InputUserBase>()).Returns(new Users_UserFull
+        {
+            full_user = new UserFull(),
+            users = users,
+            chats = new Dictionary<long, ChatBase>()
+        });
+        _sessions.GetAnyClientAsync(Arg.Any<CancellationToken>()).Returns(client);
+        return client;
+    }
+
+    private static TL.User Live(string first, string? last = null) =>
+        new() { id = LiveUserId, access_hash = 1, first_name = first, last_name = last, username = "stored_handle" };
+
+    [Test]
+    public async Task Scan_WithLiveNames_ObservesOnceAsUserApiScanWithoutRescan()
+    {
+        _users.GetByTelegramIdAsync(LiveUserId, Arg.Any<CancellationToken>()).Returns(StoredRow("Old"));
+        ClientReturning(Live("New", "Name"));
+
+        await _sut.ScanUserProfileAsync(UserIdentity.ForTest(LiveUserId, "Old"), null, CancellationToken.None);
+
+        await _identities.Received(1).ObserveAsync(
+            Arg.Is<ObservedUser>(o => o!.Id == LiveUserId && o.FirstName == "New" && o.LastName == "Name"
+                && o.Username == "stored_handle" && o.Source == ObservationSource.UserApiScan),
+            Arg.Any<ProfileChangeContext>(), RenameRescan.None, Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task Scan_ClientReturnsNoUser_DoesNotObserve()
+    {
+        _users.GetByTelegramIdAsync(LiveUserId, Arg.Any<CancellationToken>()).Returns(StoredRow("Old"));
+        ClientReturning(null);
+
+        await _sut.ScanUserProfileAsync(UserIdentity.ForTest(LiveUserId, "Old"), null, CancellationToken.None);
+
+        await _identities.DidNotReceiveWithAnyArgs().ObserveAsync(default!, default!, default, default);
+    }
+
+    [Test]
+    public async Task Scan_RenameDiscoveredByScan_IsFullyRescoredEvenWhenRecentlyScanned()
+    {
+        // Stored row (the pre-observe snapshot) has the old name; the live name differs.
+        _users.GetByTelegramIdAsync(LiveUserId, Arg.Any<CancellationToken>()).Returns(StoredRow("Old"));
+        ClientReturning(Live("New"));
+
+        await _sut.ScanUserProfileAsync(UserIdentity.ForTest(LiveUserId, "Old"), null, CancellationToken.None);
+
+        await _scoring.ReceivedWithAnyArgs(1).ScoreAsync(default!, default!, default, default, default, default);
+    }
+
+    [Test]
+    public async Task Scan_ProfileUnchanged_ReusesCachedScore()
+    {
+        _users.GetByTelegramIdAsync(LiveUserId, Arg.Any<CancellationToken>()).Returns(StoredRow("Same"));
+        ClientReturning(Live("Same"));
+
+        var result = await _sut.ScanUserProfileAsync(UserIdentity.ForTest(LiveUserId, "Same"), null, CancellationToken.None);
+
+        await _scoring.DidNotReceiveWithAnyArgs().ScoreAsync(default!, default!, default, default, default, default);
+        Assert.That(result.Score, Is.EqualTo(10m));
+    }
+
+    [Test]
+    public async Task Scan_ProfileUnchanged_ForceRescan_IsFullyRescored()
+    {
+        _users.GetByTelegramIdAsync(LiveUserId, Arg.Any<CancellationToken>()).Returns(StoredRow("Same"));
+        ClientReturning(Live("Same"));
+
+        await _sut.ScanUserProfileAsync(UserIdentity.ForTest(LiveUserId, "Same"), null, CancellationToken.None, forceRescan: true);
+
+        await _scoring.ReceivedWithAnyArgs(1).ScoreAsync(default!, default!, default, default, default, default);
     }
 }
