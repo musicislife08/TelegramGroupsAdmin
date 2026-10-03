@@ -195,8 +195,9 @@ public class BotChatService(
                     }
                     else
                     {
-                        // User demoted from admin
-                        await chatAdminsRepo.DeactivateAsync(ChatIdentity.From(chat), UserIdentity.From(affectedUser), ct);
+                        // User demoted from admin (resolved by id: demotion does not record names)
+                        var demotedUser = await identityService.ResolveAsync(affectedUser.Id, ct);
+                        await chatAdminsRepo.DeactivateAsync(ChatIdentity.From(chat), demotedUser, ct);
                         logger.LogInformation(
                             "❌ {User} demoted from admin in {Chat}",
                             affectedUser.ToLogInfo(),
@@ -338,8 +339,9 @@ public class BotChatService(
             }
             else
             {
-                // User demoted from admin
-                await chatAdminsRepo.DeactivateAsync(ChatIdentity.From(chat), UserIdentity.From(user), ct);
+                // User demoted from admin (resolved by id: demotion does not record names)
+                var demotedUser = await identityService.ResolveAsync(user.Id, ct);
+                await chatAdminsRepo.DeactivateAsync(ChatIdentity.From(chat), demotedUser, ct);
 
                 logger.LogInformation(
                     "⬇️ INSTANT: {User} demoted from admin in {Chat}",
@@ -349,7 +351,7 @@ public class BotChatService(
                 // Phase 5.2: Notify admins about admin demotion
                 _ = notificationService.SendAdminChangedAsync(
                     chat: ChatIdentity.From(chat),
-                    user: UserIdentity.From(user),
+                    user: demotedUser,
                     promoted: false,
                     isCreator: false,
                     ct: ct);

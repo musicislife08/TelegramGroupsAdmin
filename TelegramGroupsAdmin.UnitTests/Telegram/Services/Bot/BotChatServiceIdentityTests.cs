@@ -30,6 +30,7 @@ public class BotChatServiceIdentityTests
     private IChatAdminsRepository _chatAdmins = null!;
     private ITelegramUserRepository _users = null!;
     private IUserIdentityService _identities = null!;
+    private IAdminNotificationService _notifications = null!;
     private BotChatService _sut = null!;
 
     private static readonly Chat Group = new() { Id = ChatId, Type = ChatType.Supergroup, Title = "Group" };
@@ -44,6 +45,7 @@ public class BotChatServiceIdentityTests
         _identities = Substitute.For<IUserIdentityService>();
         _identities.ObserveAsync(Arg.Any<ObservedUser>(), Arg.Any<ProfileChangeContext>(), Arg.Any<RenameRescan>(), Arg.Any<CancellationToken>())
             .Returns(ci => UserIdentity.ForTest(ci.Arg<ObservedUser>().Id, "Stored"));
+        _notifications = Substitute.For<IAdminNotificationService>();
 
         _sut = new BotChatService(
             _chatHandler,
@@ -55,7 +57,7 @@ public class BotChatServiceIdentityTests
             _users,
             _identities,
             Substitute.For<IUserActionsRepository>(),
-            Substitute.For<IAdminNotificationService>(),
+            _notifications,
             new ApiMetrics(),
             NullLogger<BotChatService>.Instance);
     }
@@ -102,6 +104,48 @@ public class BotChatServiceIdentityTests
         await _sut.HandleAdminStatusChangeAsync(update, CancellationToken.None);
 
         await _identities.DidNotReceiveWithAnyArgs().ObserveAsync(default!, default!, default, default);
+    }
+
+    [Test]
+    public async Task AdminDemotion_DeactivatesAndNotifiesWithTheIdentityResolvedById()
+    {
+        var resolved = UserIdentity.ForTest(AdminId, "Resolved");
+        _identities.ResolveAsync(AdminId, Arg.Any<CancellationToken>()).Returns(resolved);
+        var update = new ChatMemberUpdated
+        {
+            Chat = Group,
+            From = Admin,
+            Date = new DateTime(2026, 10, 3, 12, 0, 0, DateTimeKind.Utc),
+            OldChatMember = new ChatMemberAdministrator { User = Admin },
+            NewChatMember = new ChatMemberMember { User = Admin }
+        };
+
+        await _sut.HandleAdminStatusChangeAsync(update, CancellationToken.None);
+
+        await _chatAdmins.Received(1).DeactivateAsync(
+            Arg.Is<ChatIdentity>(c => c!.Id == ChatId), Arg.Is(resolved), Arg.Any<CancellationToken>());
+        await _notifications.Received(1).SendAdminChangedAsync(
+            Arg.Is<ChatIdentity>(c => c!.Id == ChatId), Arg.Is(resolved), Arg.Is(false), Arg.Is(false), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task MyChatMemberDemotion_DeactivatesTheIdentityResolvedById()
+    {
+        var resolved = UserIdentity.ForTest(AdminId, "Resolved");
+        _identities.ResolveAsync(AdminId, Arg.Any<CancellationToken>()).Returns(resolved);
+        var update = new ChatMemberUpdated
+        {
+            Chat = Group,
+            From = Admin,
+            Date = new DateTime(2026, 10, 3, 12, 0, 0, DateTimeKind.Utc),
+            OldChatMember = new ChatMemberAdministrator { User = Admin },
+            NewChatMember = new ChatMemberMember { User = Admin }
+        };
+
+        await _sut.HandleBotMembershipUpdateAsync(update, CancellationToken.None);
+
+        await _chatAdmins.Received(1).DeactivateAsync(
+            Arg.Is<ChatIdentity>(c => c!.Id == ChatId), Arg.Is(resolved), Arg.Any<CancellationToken>());
     }
 
     [Test]

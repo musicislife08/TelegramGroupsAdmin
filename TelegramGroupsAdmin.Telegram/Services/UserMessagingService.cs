@@ -1,11 +1,14 @@
 using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.ReplyMarkups;
+using TelegramGroupsAdmin.Configuration.Services;
+using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.Telegram.Services.Identity;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 
@@ -18,17 +21,23 @@ public class UserMessagingService : IUserMessagingService
     private readonly ITelegramUserRepository _telegramUserRepository;
     private readonly IBotDmService _dmService;
     private readonly IBotMessageService _messageService;
+    private readonly IUserIdentityService _identityService;
+    private readonly IConfigService _configService;
     private readonly ILogger<UserMessagingService> _logger;
 
     public UserMessagingService(
         ITelegramUserRepository telegramUserRepository,
         IBotDmService dmService,
         IBotMessageService messageService,
+        IUserIdentityService identityService,
+        IConfigService configService,
         ILogger<UserMessagingService> logger)
     {
         _telegramUserRepository = telegramUserRepository;
         _dmService = dmService;
         _messageService = messageService;
+        _identityService = identityService;
+        _configService = configService;
         _logger = logger;
     }
 
@@ -82,9 +91,11 @@ public class UserMessagingService : IUserMessagingService
             return false;
         }
 
+        var recipient = await _identityService.ResolveAsync(userId, cancellationToken);
+
         // Try DM via IBotDmService (no fallback - callers decide what happens next)
         var dmResult = await _dmService.SendDmAsync(
-            user: UserIdentity.From(user),
+            user: recipient,
             message: message,
             fallbackChatId: null,
             cancellationToken: cancellationToken);
@@ -93,14 +104,14 @@ public class UserMessagingService : IUserMessagingService
         {
             _logger.LogInformation(
                 "Sent DM to user {User}: {MessagePreview}",
-                user.ToLogInfo(userId),
+                recipient.ToLogInfo(),
                 message.Text.Length > 50 ? message.Text[..50] + "..." : message.Text);
 
             return true;
         }
 
         // DM failed (user blocked bot or error)
-        _logger.LogDebug("DM to {User} failed", user.ToLogDebug(userId));
+        _logger.LogDebug("DM to {User} failed", recipient.ToLogDebug());
         return false;
     }
 
@@ -114,13 +125,13 @@ public class UserMessagingService : IUserMessagingService
         int? replyToMessageId,
         CancellationToken cancellationToken)
     {
-        // Get user info for mention
-        var user = await _telegramUserRepository.GetByTelegramIdAsync(userId, cancellationToken);
+        var user = await _identityService.ResolveAsync(userId, cancellationToken);
 
         try
         {
-            var mentionMessage = new TelegramMessageBuilder()
-                .Mention(new UserIdentity(userId, user?.FirstName, user?.LastName, user?.Username))
+            var masking = await _configService.GetNameMaskingAsync(chat.Id, cancellationToken);
+            var mentionMessage = TelegramMessageBuilder.For(masking)
+                .Mention(user)
                 .Text(": ")
                 .Append(message)
                 .Build();
@@ -135,7 +146,7 @@ public class UserMessagingService : IUserMessagingService
 
             _logger.LogInformation(
                 "Sent chat mention to user {User} in {Chat}",
-                user.ToLogInfo(userId),
+                user.ToLogInfo(),
                 chat.ToLogInfo());
 
             return new MessageSendResult(userId, Success: true, MessageDeliveryMethod.ChatMention);
@@ -144,7 +155,7 @@ public class UserMessagingService : IUserMessagingService
         {
             _logger.LogError(ex,
                 "Failed to send chat mention to user {User} in {Chat}",
-                user.ToLogDebug(userId),
+                user.ToLogDebug(),
                 chat.ToLogDebug());
 
             return new MessageSendResult(
