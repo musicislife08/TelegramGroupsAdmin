@@ -18,10 +18,21 @@ public class UserIdentityConstructionTests
         "TelegramGroupsAdmin.Telegram/Services/Identity/UserIdentityService.cs",
     ];
 
-    // The lookbehinds keep WebUserIdentity (an unrelated web-account type) out of the match.
-    private static readonly Regex Construction = new(
-        @"new\s+(Core\.Models\.)?(?<![A-Za-z])UserIdentity\s*\(|(?<![A-Za-z])UserIdentity\.FromId\s*\(",
+    // Explicit construction, with any namespace qualification. The lookbehind keeps WebUserIdentity
+    // (an unrelated web-account type) out of the match; FromId is the id-only factory.
+    private static readonly Regex Explicit = new(
+        @"new\s+([A-Za-z_]\w*\.)*UserIdentity\s*\(|(?<![A-Za-z])UserIdentity\.FromId\s*\(",
         RegexOptions.Compiled);
+
+    // Target-typed construction (`new(...)`) never names the type, so it is caught by heuristic:
+    // a line with `new(` that either mentions UserIdentity (a declaration like `UserIdentity? x = new(`)
+    // or assigns to a member name that holds a UserIdentity (object initializers, property sets).
+    // Extend UserIdentityMembers when a new UserIdentity-typed member is introduced.
+    private static readonly Regex TargetTyped = new(
+        @"(?<![A-Za-z])UserIdentity\??\s+\w+\s*=\s*new\s*\(|\b(User|Sender|Recipient|Reporter|SuspectedUser|TargetUser|Target|Editor|ChangedBy|ReceivedSender)\s*=\s*new\s*\(",
+        RegexOptions.Compiled);
+
+    private static bool Constructs(string text) => Explicit.IsMatch(text) || TargetTyped.IsMatch(text);
 
     internal static IEnumerable<string> Violations(string repoRoot) =>
         Directory.EnumerateFiles(repoRoot, "*.*", SearchOption.AllDirectories)
@@ -31,7 +42,7 @@ public class UserIdentityConstructionTests
                         && !f.Contains("/bin/") && !f.Contains("/obj/") && !f.Contains("/Migrations/")
                         && !f.StartsWith("TelegramGroupsAdmin.Testing."))
             .Where(f => !Allowlist.Contains(f))
-            .Where(f => Construction.IsMatch(File.ReadAllText(Path.Combine(repoRoot, f))));
+            .Where(f => Constructs(File.ReadAllText(Path.Combine(repoRoot, f))));
 
     [Test]
     public void ProductionCode_BuildsUserIdentityOnlyThroughSanctionedPaths()
@@ -43,33 +54,42 @@ public class UserIdentityConstructionTests
             + string.Join(", ", violations));
     }
 
-    [Test]
-    public void Detector_FlagsConstructionOutsideAllowlist()
+    [TestCase("var u = new UserIdentity(1, null, null, null);")]
+    [TestCase("var u = new Core.Models.UserIdentity(1, null, null, null);")]
+    [TestCase("var u = new Models.UserIdentity(1, null, null, null);")]
+    [TestCase("var u = new TelegramGroupsAdmin.Core.Models.UserIdentity(1, null, null, null);")]
+    [TestCase("var u = UserIdentity.FromId(1);")]
+    [TestCase("UserIdentity x = new(1, null, null, null);")]
+    [TestCase("UserIdentity? x = new(1, null, null, null);")]
+    [TestCase("var m = new Foo { User = new(1, null, null, null) };")]
+    public void Detector_FlagsConstructionOutsideAllowlist(string code)
     {
-        var root = Path.Combine(Path.GetTempPath(), "uid-scan-" + Guid.NewGuid());
-        var file = Path.Combine(root, "TelegramGroupsAdmin.Telegram", "Bad.cs");
-        Directory.CreateDirectory(Path.GetDirectoryName(file)!);
-        File.WriteAllText(file, "var u = new UserIdentity(1, null, null, null);");
-        try
-        {
-            Assert.That(Violations(root), Is.EquivalentTo(new[] { "TelegramGroupsAdmin.Telegram/Bad.cs" }));
-        }
-        finally
-        {
-            Directory.Delete(root, recursive: true);
-        }
+        Assert.That(ViolationsFor("TelegramGroupsAdmin.Telegram/Bad.cs", code),
+            Is.EquivalentTo(new[] { "TelegramGroupsAdmin.Telegram/Bad.cs" }));
+    }
+
+    [TestCase("var u = WebUserIdentity.FromId(\"x\");")]
+    [TestCase("var u = new WebUserIdentity(\"x\");")]
+    public void Detector_IgnoresWebUserIdentity(string code)
+    {
+        Assert.That(ViolationsFor("TelegramGroupsAdmin/Ok.cs", code), Is.Empty);
     }
 
     [Test]
-    public void Detector_IgnoresWebUserIdentity()
+    public void Detector_IgnoresAllowlistedFile()
+    {
+        Assert.That(ViolationsFor(Allowlist[0], "var u = new UserIdentity(1, null, null, null);"), Is.Empty);
+    }
+
+    private static List<string> ViolationsFor(string relativePath, string code)
     {
         var root = Path.Combine(Path.GetTempPath(), "uid-scan-" + Guid.NewGuid());
-        var file = Path.Combine(root, "TelegramGroupsAdmin", "Ok.cs");
+        var file = Path.Combine(root, relativePath);
         Directory.CreateDirectory(Path.GetDirectoryName(file)!);
-        File.WriteAllText(file, "var u = WebUserIdentity.FromId(\"x\");");
+        File.WriteAllText(file, code);
         try
         {
-            Assert.That(Violations(root), Is.Empty);
+            return Violations(root).ToList();
         }
         finally
         {
