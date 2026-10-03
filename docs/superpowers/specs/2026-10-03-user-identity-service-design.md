@@ -78,9 +78,58 @@ public enum NameMasking { Off, On }   // Core; the effective "Mask flagged names
   Nothing produces `Promotional` until part 2.
 - The serialized JSON shape stays compatible: `Verdict` is a new optional member that defaults to
   `Unscanned`, so Quartz payloads queued before the change still deserialize.
-- After the migration (stage 4) there is no public constructor and no `From(...)` factory. The
-  only other ways in are `UserIdentity.ForPreview(...)` (settings-page previews) and
-  `UserIdentity.ForTest(...)` (tests), both with `Verdict = Unscanned`.
+- Identities are built in two places only: the shared row mapper (see "One view, one mapper") and
+  the service's id-only fallback. `UserIdentity.ForPreview(...)` (settings-page previews) and
+  `UserIdentity.ForTest(...)` (tests) are the other ways in. The `From(...)` factories are removed
+  (see Enforcement).
+
+### One view, one mapper
+
+Every read of a user's identity, whether through the service or a repository join, gets the same
+columns from one Postgres view, and one C# method turns them into a `UserIdentity`.
+
+```sql
+CREATE VIEW user_identities AS
+SELECT u.telegram_user_id, u.first_name, u.last_name, u.username, u.is_bot,
+       s.ai_explicit_display_text AS latest_scan_explicit   -- NULL when the user has no scan
+FROM telegram_users u
+LEFT JOIN LATERAL (
+    SELECT r.ai_explicit_display_text
+    FROM profile_scan_results r
+    WHERE r.user_id = u.telegram_user_id
+    ORDER BY r.scanned_at DESC
+    LIMIT 1
+) s ON true;
+```
+
+- The view defines which scan is "latest". It uses the existing
+  `profile_scan_results (user_id, scanned_at DESC)` index.
+- The view SQL lives as `CreateViewSql` / `DropViewSql` constants on its keyless model
+  (`UserIdentityView`), like `EnrichedReportView` and `EnrichedMessageView`.
+- `enriched_messages` and `enriched_reports` join `user_identities` instead of `telegram_users` for
+  every user they project, and expose that user's `is_bot` and `latest_scan_explicit` beside the
+  names.
+- One mapper, `UserIdentityMapping.ToIdentity(id, firstName, lastName, username, isBot,
+  latestScanExplicit)` (Core), holds the verdict rule: a bot, a system account
+  (`TelegramConstants.IsSystemUser`) or no scan → `Unscanned`; explicit → `Explicit`; otherwise
+  `Clean`. The rule stays in C# because the system-account ids live in `TelegramConstants`.
+- `ChatAdminMappings`, `MessageMappings`, `EnrichedMessageMappings`, `EnrichedReportMappings` and
+  `TelegramUserRepository.GetUserDetailAsync` build identities only through the mapper.
+- Part 2 adds `latest_scan_promotional` to the view and one line to the mapper.
+
+### Enforcement
+
+The project has two contributors, the maintainer and Claude, and Claude writes the code, so the
+enforcement is aimed at future sessions rather than outside contributors:
+
+- The `UserIdentity.From(...)` / `FromAsync` factories are deleted, so the convenient wrong path
+  no longer exists.
+- `.claude/rules/user-identity.md`, scoped to the C# projects and injected like the integration-test
+  data rule, states the rule; the root `CLAUDE.md` links it.
+- A unit test scans production `.cs` and `.razor` files for `new UserIdentity(` and
+  `UserIdentity.FromId(` and fails outside an allowlist kept in the test: the mapper, the service's
+  id-only fallback, and `UserIdentity.cs` itself. A banned-API analyzer is the upgrade path if the
+  project gains outside contributors.
 
 ### `IUserIdentityService` (Telegram adapter)
 
@@ -93,11 +142,10 @@ Task<IReadOnlyList<UserIdentity>> ResolveManyAsync(IReadOnlyCollection<long> use
 - `ObservedUser` carries the names, `IsBot`, the source (`BotUpdate`, `ChatMember`, `UserApiScan`)
   and `ObservedAt` (message `date` or `edit_date`, or the time a scan fetched the names).
 - The service is stateless; lifetime follows the existing repository pattern (`IDbContextFactory`).
-- Verdict source: the latest `profile_scan_results` row for the user id, mapping
-  `ai_explicit_display_text = true` to `Explicit`, otherwise `Clean`; no row gives `Unscanned`.
-  Bots and system accounts (777000, anonymous admin, channel sender) are `Unscanned` in part 1.
+- The service reads `user_identities` through `ITelegramUserRepository.GetIdentitiesAsync(ids)`,
+  which maps rows with the shared mapper.
 - `ResolveAsync` for an id with no row returns an id-only identity, `Unscanned`.
-- `ResolveManyAsync` uses one query for names and one for latest verdicts.
+- `ResolveManyAsync` is one query against the view.
 
 ### `ObserveAsync` and renames
 
@@ -214,18 +262,17 @@ that adapter and does not shape this design.
 
 Four stages, each a green commit series:
 
-1. Add `NameVerdict`, `NameMasking`, `BotDisplayName`, `IUserIdentityService`,
-   `GetOrUpdateAsync`, `names_observed_at` (migration), the `MaskFlaggedNames` rename and its config
-   migration, `GetNameMaskingAsync`, and `TelegramMessageBuilder.For(masking)`. `Mention` renders
-   `BotDisplayName(masking)`. Nothing enforced yet.
+1. Add `NameVerdict`, `NameMasking`, `BotDisplayName`, the `user_identities` view and its mapper,
+   `IUserIdentityService`, `GetOrUpdateAsync`, `names_observed_at` (migration), the
+   `MaskFlaggedNames` rename and its config migration, `GetNameMaskingAsync`, and
+   `TelegramMessageBuilder.For(masking)`. `Mention` renders `BotDisplayName(masking)`.
 2. Message pipeline: `ObserveAsync` first, rename handling moved into the service, one identity
    passed down. Then edited messages, callbacks, chat-member updates. Scan single-flight and the
    rename bypass.
 3. Migrate remaining sites area by area: welcome/exam, commands, moderation, notifications, jobs,
-   web UI.
-4. Remove the public `UserIdentity` constructor, the `From(...)` factories and the parameterless
-   `TelegramMessageBuilder` constructor; add `ForPreview` / `ForTest`.
-   Missed sites become compile errors.
+   web UI; the enriched views join `user_identities` and the repository mappings use the mapper.
+4. Delete the `From(...)` factories, make the parameterless `TelegramMessageBuilder` constructor
+   private, add the rule file and the scan test.
 
 ## Testing
 
@@ -233,8 +280,10 @@ Unit:
 - `BotDisplayName` per verdict with masking on and off; `Unscanned`/`Clean` show the real name;
   `Explicit` shows `[name removed: explicit]`.
 - `Mention` renders `BotDisplayName(masking)` and keeps the `TextMention` user id.
-- Service verdict mapping: the latest scan row wins; no row gives `Unscanned`; bots and system
-  accounts give `Unscanned`.
+- Mapper verdict rule: explicit → `Explicit`; not explicit → `Clean`; no scan, bot, or system
+  account → `Unscanned`.
+- Enforcement scan test: passes on the tree; fails on a fixture string containing
+  `new UserIdentity(` outside the allowlist.
 - `ProfileScanService` single-flight: two concurrent calls gated by a `TaskCompletionSource` fake
   produce one scan and the same result.
 - `ObserveAsync` swallows a repository failure and returns an `Unscanned` identity.
@@ -252,6 +301,8 @@ Integration (real Postgres, canonical data; anchors in the Canonical anchors sec
   the same new name start, `pg_stat_activity` shows both waiting on a lock (polled, no sleeps);
   after commit exactly one reports a rename, with one history row and one audit row.
 - Photo fields: a name update leaves `user_photo_path` and `photo_hash` unchanged.
+- `user_identities`: the latest of two scans wins; a user with no scan has a NULL flag; the
+  enriched views expose the flag for their users.
 - Quartz compatibility: a payload JSON in today's shape (no `Verdict`) deserializes with `Unscanned`.
 - Config migration: stored `MaskExplicitUsername` values (global and per-chat) are read back as
   `MaskFlaggedNames`.

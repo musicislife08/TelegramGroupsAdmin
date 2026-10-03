@@ -4,9 +4,9 @@
 
 **Goal:** Every Telegram user identity comes from one service that records observed names (newest observation wins) and carries a name verdict, so bot-written mentions show `[name removed: explicit]` for flagged names while logs and the UI keep the real name.
 
-**Architecture:** `UserIdentity` (Core) gains `NameVerdict` and `BotDisplayName(NameMasking)`. `IUserIdentityService` (Telegram) owns `ObserveAsync` (conditional name update + history + audit in one transaction, then an inline rescan on rename where the caller asks for one, as today) and `ResolveAsync` / `ResolveManyAsync` (names + verdict from the latest scan row). `TelegramMessageBuilder.For(NameMasking)` applies the per-chat "Mask flagged names" setting where text is written. A banned-API analyzer makes the old construction paths a build error.
+**Architecture:** `UserIdentity` (Core) gains `NameVerdict` and `BotDisplayName(NameMasking)`. A `user_identities` Postgres view (names + latest-scan flags) and one mapper are the single source for every identity read. `IUserIdentityService` (Telegram) owns `ObserveAsync` (conditional name update + history + audit in one transaction, then an inline rescan on rename where the caller asks for one, as today) and `ResolveAsync` / `ResolveManyAsync` (names + verdict from the latest scan row). `TelegramMessageBuilder.For(NameMasking)` applies the per-chat "Mask flagged names" setting where text is written. A rule file plus a source-scanning unit test keep identity construction on the sanctioned paths.
 
-**Tech Stack:** .NET 10, C# 14, EF Core 10 + PostgreSQL 18 (raw SQL via `ExecuteSqlAsync` / `SqlQuery`), Quartz.NET, NUnit, NSubstitute 6, Microsoft.CodeAnalysis.BannedApiAnalyzers.
+**Tech Stack:** .NET 10, C# 14, EF Core 10 + PostgreSQL 18 (views, raw SQL via `ExecuteSqlAsync` / `SqlQuery`), Quartz.NET, NUnit, NSubstitute 6.
 
 **Spec:** `docs/superpowers/specs/2026-10-03-user-identity-service-design.md`
 
@@ -24,11 +24,11 @@
 - Services access the DB only through repositories; UI goes through services.
 - Every project has `TreatWarningsAsErrors`; keep builds at 0 warnings.
 
-## Spec deviations (decided while planning; confirm at review)
+## Spec deviations
 
-1. **Enforcement uses the banned-API analyzer instead of deleting the constructor.** Repository mappings (`EnrichedReportMappings`, `ChatAdminMappings`, `MessageMappings`, `TelegramUserRepository`) legitimately build identities from rows, and they live in the same projects as the call sites, so `internal` cannot separate them. `RS0030` bans `UserIdentity`'s constructor and the `From(...)` factories everywhere; the identity service and the repository mapping files opt out with a `#pragma` and a reason. A new call site that skips the service is a build error, which is what the spec's stage 4 asked for.
-2. (Resolved into the spec.) Rename rescans stay inline, as today: a queued ban would be a new route into the ban cleanup logic. Only entry points that rescan (or scan anyway) record names; callbacks, reply targets and non-join chat-member updates resolve by id.
-3. **Masking keeps the profile-scan kill switch.** `GetNameMaskingAsync` returns `On` only when the effective `ProfileScan.Enabled` and `MaskFlaggedNames` are both true, matching today's `maskingActive` rule in `BanCelebrationService.cs:87`.
+1. **Masking keeps the profile-scan kill switch.** `GetNameMaskingAsync` returns `On` only when the effective `ProfileScan.Enabled` and `MaskFlaggedNames` are both true, matching today's `maskingActive` rule in `BanCelebrationService.cs:87`. (Pending the maintainer's decision.)
+
+Earlier planning decisions (inline rename rescans, the `user_identities` view, rule-plus-test enforcement) are now in the spec.
 
 ## Review Focus
 
@@ -56,10 +56,11 @@
 | `TelegramGroupsAdmin.Telegram/Models/ObservedUser.cs` (create) | observation input |
 | `TelegramGroupsAdmin.Telegram/Models/ObservedNamesResult.cs` (create) | repository result |
 | `TelegramGroupsAdmin.Telegram/Repositories/TelegramUserRepository.cs` (modify) | `GetOrUpdateAsync`, `MarkActiveAsync`; remove `GetOrCreateAsync`, `UpsertAsync` |
-| `TelegramGroupsAdmin.Telegram/Repositories/ProfileScanResultsRepository.cs` (modify) | `GetLatestByUserIdsAsync` |
+| `TelegramGroupsAdmin.Data/Models/UserIdentityView.cs` (create) + migration `AddUserIdentitiesView` | the view |
+| `TelegramGroupsAdmin.Core/Repositories/Mappings/UserIdentityMapping.cs` (create) | the one row-to-identity mapper and verdict rule |
 | `TelegramGroupsAdmin.Telegram/Services/Identity/IUserIdentityService.cs`, `UserIdentityService.cs` (create) | the service |
 | `TelegramGroupsAdmin.Telegram/Services/UserApi/ProfileScanService.cs`, `IProfileScanGate.cs`, `ProfileScanGate.cs` (modify) | single-flight, freshness bypass, observe live names |
-| `BannedSymbols.txt` (create, repo root) + csproj `AdditionalFiles` | enforcement |
+| `.claude/rules/user-identity.md`, `TelegramGroupsAdmin.UnitTests/Architecture/UserIdentityConstructionTests.cs` (create) | enforcement |
 
 ---
 
@@ -204,7 +205,7 @@ public static class NameRedaction
 }
 ```
 
-`UserIdentity.cs` (replace the record body; keep the positional constructor for now, Task 14 bans it):
+`UserIdentity.cs` (replace the record body; the positional constructor stays; Task 14's scan test limits who calls it):
 ```csharp
 using TelegramGroupsAdmin.Core.Utilities;
 
@@ -535,42 +536,90 @@ git commit -m "feat(config): replace explicit-name masking settings with MaskFla
 
 ---
 
-### Task 4: Latest verdicts for many users
+### Task 4: `user_identities` view and the shared identity mapper
 
 **Files:**
-- Modify: `TelegramGroupsAdmin.Telegram/Repositories/IProfileScanResultsRepository.cs`, `ProfileScanResultsRepository.cs`
-- Test: `TelegramGroupsAdmin.IntegrationTests/Telegram/Repositories/ProfileScanResultsRepositoryTests.cs` (existing file)
+- Create: `TelegramGroupsAdmin.Data/Models/UserIdentityView.cs`, migration `AddUserIdentitiesView`, `TelegramGroupsAdmin.Core/Repositories/Mappings/UserIdentityMapping.cs`
+- Modify: `TelegramGroupsAdmin.Data/AppDbContext.cs` (DbSet + keyless mapping next to `EnrichedReportView`, ~line 964), `TelegramGroupsAdmin.Telegram/Repositories/ITelegramUserRepository.cs`, `TelegramUserRepository.cs`
+- Test: `TelegramGroupsAdmin.UnitTests/Core/Repositories/Mappings/UserIdentityMappingTests.cs` (create), `TelegramGroupsAdmin.IntegrationTests/Telegram/Repositories/UserIdentitiesViewTests.cs` (create)
 
 **Interfaces:**
-- Produces: `Task<IReadOnlyDictionary<long, ProfileScanResultRecord>> GetLatestByUserIdsAsync(IReadOnlyCollection<long> userIds, CancellationToken cancellationToken)` — one row per user that has any scan, latest by `scanned_at`.
+- Produces:
+  - view `user_identities (telegram_user_id, first_name, last_name, username, is_bot, latest_scan_explicit)`; `latest_scan_explicit` is NULL when the user has no scan.
+  - `public static UserIdentity UserIdentityMapping.ToIdentity(long id, string? firstName, string? lastName, string? username, bool isBot, bool? latestScanExplicit)` — the only verdict rule.
+  - `Task<IReadOnlyList<UserIdentity>> ITelegramUserRepository.GetIdentitiesAsync(IReadOnlyCollection<long> userIds, CancellationToken cancellationToken = default)` — one identity per id found; ids with no row are absent.
 
-**Canonical anchors (read-only):** 9220500615182 @bagging_armado (scans 530 older, 534 newer; 534 explicit), 9063342700386 @Juvenileii (no scan rows).
+**Canonical anchors (read-only):** `ScannedTwiceExplicitUserId` 9220500615182 @bagging_armado (scans 530 older, 534 newer; 534 explicit), `UnscannedUserId` 9063342700386 @Juvenileii (no scan rows), `BotUserId` 9742468412405 @doilyemcee.
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: Write the failing tests**
 
+Unit (mapper):
 ```csharp
-    [Test]
-    public async Task GetLatestByUserIdsAsync_ReturnsLatestRowPerUser_AndOmitsUnscanned()
+[TestFixture]
+public class UserIdentityMappingTests
+{
+    [TestCase(false, true, NameVerdict.Explicit)]
+    [TestCase(false, false, NameVerdict.Clean)]
+    [TestCase(false, null, NameVerdict.Unscanned)]
+    [TestCase(true, true, NameVerdict.Unscanned)]   // bots are never judged
+    public void ToIdentity_AppliesVerdictRule(bool isBot, bool? latestScanExplicit, NameVerdict expected)
     {
-        // Guard the canonical shapes this test depends on.
-        var flagged = await _repository.GetByUserIdAsync(GoldenDatasetConstants.IdentityService.ScannedTwiceExplicitUserId, CancellationToken.None);
-        Assert.That(flagged, Has.Count.EqualTo(2));
-        var unscanned = await _repository.GetByUserIdAsync(GoldenDatasetConstants.IdentityService.UnscannedUserId, CancellationToken.None);
-        Assert.That(unscanned, Is.Empty);
+        var identity = UserIdentityMapping.ToIdentity(42, "A", null, null, isBot, latestScanExplicit);
 
-        var result = await _repository.GetLatestByUserIdsAsync(
-            [GoldenDatasetConstants.IdentityService.ScannedTwiceExplicitUserId, GoldenDatasetConstants.IdentityService.UnscannedUserId],
-            CancellationToken.None);
-
-        Assert.That(result.Keys, Is.EquivalentTo(new[] { GoldenDatasetConstants.IdentityService.ScannedTwiceExplicitUserId }));
-        Assert.That(result[GoldenDatasetConstants.IdentityService.ScannedTwiceExplicitUserId].Id, Is.EqualTo(534));
-        Assert.That(result[GoldenDatasetConstants.IdentityService.ScannedTwiceExplicitUserId].ExplicitDisplayText, Is.True);
+        Assert.That(identity.Verdict, Is.EqualTo(expected));
+        Assert.That(identity.DisplayName, Is.EqualTo("A"));
     }
+
+    [Test]
+    public void ToIdentity_SystemAccount_IsUnscanned()
+    {
+        var identity = UserIdentityMapping.ToIdentity(TelegramConstants.ServiceAccountUserId, "Telegram", null, null, false, true);
+
+        Assert.That(identity.Verdict, Is.EqualTo(NameVerdict.Unscanned));
+    }
+}
+```
+(Use the actual constant name for 777000 from `TelegramConstants`; read the file first.)
+
+Integration (view + repository):
+```csharp
+[TestFixture]
+public class UserIdentitiesViewTests : GoldenTestBase   // same base as TelegramUserRepositoryTests
+{
+    [Test]
+    public async Task GetIdentitiesAsync_LatestScanWins_UnscannedAndBotsAreUnscanned()
+    {
+        var explicitId = GoldenDatasetConstants.IdentityService.ScannedTwiceExplicitUserId;
+        var unscannedId = GoldenDatasetConstants.IdentityService.UnscannedUserId;
+        var botId = GoldenDatasetConstants.IdentityService.BotUserId;
+        await using var ctx = await CreateContextAsync();
+        Assert.That(await ctx.ProfileScanResults.CountAsync(r => r.UserId == explicitId), Is.EqualTo(2));
+        Assert.That(await ctx.ProfileScanResults.CountAsync(r => r.UserId == unscannedId), Is.Zero);
+        Assert.That((await ctx.TelegramUsers.SingleAsync(u => u.TelegramUserId == botId)).IsBot, Is.True);
+
+        var identities = await Repository.GetIdentitiesAsync([explicitId, unscannedId, botId, 1L]);
+
+        Assert.That(identities.Select(i => i.Id), Is.EquivalentTo(new[] { explicitId, unscannedId, botId }));
+        Assert.That(identities.Single(i => i.Id == explicitId).Verdict, Is.EqualTo(NameVerdict.Explicit));
+        Assert.That(identities.Single(i => i.Id == unscannedId).Verdict, Is.EqualTo(NameVerdict.Unscanned));
+        Assert.That(identities.Single(i => i.Id == botId).Verdict, Is.EqualTo(NameVerdict.Unscanned));
+    }
+
+    [Test]
+    public async Task View_ExposesNullFlagForUnscannedUser()
+    {
+        await using var ctx = await CreateContextAsync();
+
+        var row = await ctx.UserIdentities.SingleAsync(v => v.TelegramUserId == GoldenDatasetConstants.IdentityService.UnscannedUserId);
+
+        Assert.That(row.LatestScanExplicit, Is.Null);
+    }
+}
 ```
 
-Add to `GoldenDatasetConstants` (new nested class, XML doc on each):
+Add the `GoldenDatasetConstants.IdentityService` class (all anchors this plan uses) and its `IntegrationTests/CLAUDE.md` recipe now:
 ```csharp
-    /// <summary>Anchors for the user identity service tests (#552 part 1).</summary>
+    /// <summary>Anchors for the user identity service tests (#552 part 1). No canonical rows were edited.</summary>
     public static class IdentityService
     {
         /// <summary>@bagging_armado: two scans (530 older, 534 newer); 534 has ai_explicit_display_text = true. Read-only: ProfileScanResultsRepositoryTests pins it.</summary>
@@ -589,44 +638,106 @@ Add to `GoldenDatasetConstants` (new nested class, XML doc on each):
         public const long PhotoUserId = 9264989724828;
     }
 ```
-Add a "User identity service anchors" recipe to `TelegramGroupsAdmin.IntegrationTests/CLAUDE.md` listing these ids and shapes (no canonical edits).
 
-- [ ] **Step 2: Run to verify it fails**
+- [ ] **Step 2: Run to verify they fail**
 
-Run: `dotnet test TelegramGroupsAdmin.IntegrationTests --filter "FullyQualifiedName~GetLatestByUserIdsAsync"`
-Expected: build error, method missing.
+Run: `dotnet test TelegramGroupsAdmin.UnitTests --filter "FullyQualifiedName~UserIdentityMappingTests"`
+Expected: build error, mapper missing.
 
 - [ ] **Step 3: Implement**
 
+`UserIdentityView.cs`:
 ```csharp
-    public async Task<IReadOnlyDictionary<long, ProfileScanResultRecord>> GetLatestByUserIdsAsync(
-        IReadOnlyCollection<long> userIds, CancellationToken cancellationToken)
+namespace TelegramGroupsAdmin.Data.Models;
+
+/// <summary>
+/// Keyless model of the user_identities view: a user's names plus the explicit flag from their
+/// latest profile scan. Every identity read joins this view so the verdict comes from one place.
+/// </summary>
+public class UserIdentityView
+{
+    public const string CreateViewSql = """
+        CREATE VIEW user_identities AS
+        SELECT u.telegram_user_id, u.first_name, u.last_name, u.username, u.is_bot,
+               s.ai_explicit_display_text AS latest_scan_explicit
+        FROM telegram_users u
+        LEFT JOIN LATERAL (
+            SELECT r.ai_explicit_display_text
+            FROM profile_scan_results r
+            WHERE r.user_id = u.telegram_user_id
+            ORDER BY r.scanned_at DESC
+            LIMIT 1
+        ) s ON true
+        """;
+
+    public const string DropViewSql = "DROP VIEW IF EXISTS user_identities";
+
+    [Column("telegram_user_id")] public long TelegramUserId { get; set; }
+    [Column("first_name")] public string? FirstName { get; set; }
+    [Column("last_name")] public string? LastName { get; set; }
+    [Column("username")] public string? Username { get; set; }
+    [Column("is_bot")] public bool IsBot { get; set; }
+    /// <summary>NULL when the user has no profile scan.</summary>
+    [Column("latest_scan_explicit")] public bool? LatestScanExplicit { get; set; }
+}
+```
+`AppDbContext`: `public DbSet<UserIdentityView> UserIdentities => Set<UserIdentityView>();` and
+```csharp
+        // Configure UserIdentityView as keyless entity mapping to user_identities view
+        // Names + latest-scan flags: the single source for identity reads
+        modelBuilder.Entity<UserIdentityView>()
+            .HasNoKey()
+            .ToView("user_identities");
+```
+Migration: `dotnet ef migrations add AddUserIdentitiesView --project TelegramGroupsAdmin.Data --startup-project TelegramGroupsAdmin`, then set `Up` to `migrationBuilder.Sql(UserIdentityView.CreateViewSql);` and `Down` to `migrationBuilder.Sql(UserIdentityView.DropViewSql);` (same pattern as `AddContentUserIdToEnrichedReportsView`). Remove anything EF scaffolded for the view itself.
+
+`UserIdentityMapping.cs` (Core, so Core and Telegram mappings share it):
+```csharp
+namespace TelegramGroupsAdmin.Core.Repositories.Mappings;
+
+/// <summary>
+/// The one place a stored user row becomes a UserIdentity, and the one place the verdict rule lives.
+/// </summary>
+public static class UserIdentityMapping
+{
+    public static UserIdentity ToIdentity(
+        long id, string? firstName, string? lastName, string? username, bool isBot, bool? latestScanExplicit) =>
+        new(id, firstName, lastName, username)
+        {
+            Verdict = isBot || TelegramConstants.IsSystemUser(id) || latestScanExplicit is null
+                ? NameVerdict.Unscanned
+                : latestScanExplicit.Value ? NameVerdict.Explicit : NameVerdict.Clean
+        };
+
+    public static UserIdentity ToIdentity(this UserIdentityView row) =>
+        ToIdentity(row.TelegramUserId, row.FirstName, row.LastName, row.Username, row.IsBot, row.LatestScanExplicit);
+}
+```
+`TelegramUserRepository`:
+```csharp
+    public async Task<IReadOnlyList<UserIdentity>> GetIdentitiesAsync(
+        IReadOnlyCollection<long> userIds, CancellationToken cancellationToken = default)
     {
-        if (userIds.Count == 0) return new Dictionary<long, ProfileScanResultRecord>();
-
-        await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
-        var rows = await context.ProfileScanResults
+        if (userIds.Count == 0) return [];
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var rows = await context.UserIdentities
             .AsNoTracking()
-            .Where(r => userIds.Contains(r.UserId))
-            .GroupBy(r => r.UserId)
-            .Select(g => g.OrderByDescending(r => r.ScannedAt).First())
+            .Where(v => userIds.Contains(v.TelegramUserId))
             .ToListAsync(cancellationToken);
-
-        return rows.ToDictionary(r => r.UserId, r => r.ToModel());
+        return rows.Select(r => r.ToIdentity()).ToList();
     }
 ```
-Interface XML doc: "Latest scan row per user (by scanned_at). Users with no scan rows are absent."
 
-- [ ] **Step 4: Run to verify it passes**
+- [ ] **Step 4: Run to verify they pass**
 
-Run: `dotnet test TelegramGroupsAdmin.IntegrationTests --filter "FullyQualifiedName~ProfileScanResultsRepositoryTests"`
-Expected: PASS.
+Run: `dotnet build TelegramGroupsAdmin.sln && dotnet test TelegramGroupsAdmin.UnitTests --filter "FullyQualifiedName~UserIdentityMappingTests" && dotnet test TelegramGroupsAdmin.IntegrationTests --filter "FullyQualifiedName~UserIdentitiesViewTests"`
+Expected: 0 warnings; PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add -A
-git commit -m "feat(telegram): batch lookup of latest profile scan per user"
+git commit -m "feat(data): add user_identities view and the shared identity mapper"
 ```
 
 ---
@@ -936,7 +1047,7 @@ git commit -m "feat(telegram): record observed names with newest-observation-win
 - Test: `TelegramGroupsAdmin.UnitTests/Telegram/Services/Identity/UserIdentityServiceTests.cs` (create)
 
 **Interfaces:**
-- Consumes: `GetOrUpdateAsync` (Task 5), `GetLatestByUserIdsAsync` (Task 4), `ITelegramUserRepository.GetByTelegramIdAsync`, `IProfileScanGate.ScanIfEligibleAsync(…, bypassFreshness)` (Task 7 adds the parameter; do Task 7 Steps 1-4 for the gate signature first if executing out of order).
+- Consumes: `GetOrUpdateAsync` (Task 5), `GetIdentitiesAsync` (Task 4), `IProfileScanGate.ScanIfEligibleAsync(…, bypassFreshness)` (Task 7 adds the parameter; if executing in order, add the optional parameter to the gate interface and implementation in this task's Step 3 and let Task 7 add its tests).
 - Produces:
 ```csharp
 /// Whether ObserveAsync rescans the profile inline when it records a rename.
@@ -950,19 +1061,14 @@ public interface IUserIdentityService
 }
 ```
 
-Verdict mapping (one private static method, shared by all three calls):
-- system account (`TelegramConstants.IsSystemUser`) or bot → `Unscanned`
-- no scan row → `Unscanned`
-- latest row `ExplicitDisplayText` → `Explicit`, else `Clean`
-
 - [ ] **Step 1: Write the failing tests**
 
 ```csharp
 [TestFixture]
 public class UserIdentityServiceTests
 {
+    private static readonly ChatIdentity Chat = new(-100, "Chat");
     private ITelegramUserRepository _users = null!;
-    private IProfileScanResultsRepository _scans = null!;
     private IProfileScanGate _gate = null!;
     private UserIdentityService _sut = null!;
 
@@ -970,29 +1076,28 @@ public class UserIdentityServiceTests
     public void SetUp()
     {
         _users = Substitute.For<ITelegramUserRepository>();
-        _scans = Substitute.For<IProfileScanResultsRepository>();
         _gate = Substitute.For<IProfileScanGate>();
-        _scans.GetLatestByUserIdsAsync(Arg.Any<IReadOnlyCollection<long>>(), Arg.Any<CancellationToken>())
-            .Returns(new Dictionary<long, ProfileScanResultRecord>());
-        _sut = new UserIdentityService(_users, _scans, _gate, Substitute.For<ILogger<UserIdentityService>>());
+        _sut = new UserIdentityService(_users, _gate, Substitute.For<ILogger<UserIdentityService>>());
     }
 
     private static TelegramUser Row(long id, string first, bool trusted = false, bool bot = false) =>
-        TestTelegramUsers.Create(id, first, isTrusted: trusted, isBot: bot);   // existing test factory; read UnitTests for the TelegramUser test helper and use it
-
-    private static ProfileScanResultRecord Scan(long userId, bool explicitText) =>
-        new(Id: 1, UserId: userId, ScannedAt: DateTimeOffset.UtcNow, Score: 0m, Outcome: ProfileScanOutcome.Clean,
-            RuleScore: 0m, AiScore: 0m, AiReason: null, AiSignals: null, ExplicitDisplayText: explicitText);
+        TestTelegramUsers.Create(id, first, isTrusted: trusted, isBot: bot);   // use the existing TelegramUser test factory in UnitTests (grep for it); add one there if none exists
 
     private static ObservedUser Observed(long id, string first) =>
         new(id, first, null, null, IsBot: false, ObservationSource.BotUpdate, DateTimeOffset.UtcNow);
 
+    private void IdentityRow(long id, string first, NameVerdict verdict) =>
+        _users.GetIdentitiesAsync(Arg.Is<IReadOnlyCollection<long>>(ids => ids!.Contains(id)), Arg.Any<CancellationToken>())
+            .Returns([UserIdentity.ForTest(id, first, verdict: verdict)]);
+
+    private void Renamed(TelegramUser row) =>
+        _users.GetOrUpdateAsync(Arg.Any<ObservedUser>(), Arg.Any<ProfileChangeContext>(), Arg.Any<CancellationToken>())
+            .Returns(new ObservedNamesResult(row, new PreviousNames("Old", null, null)));
+
     [Test]
-    public async Task Resolve_LatestScanExplicit_GivesExplicit()
+    public async Task Resolve_ReturnsIdentityFromView()
     {
-        _users.GetByTelegramIdAsync(7, Arg.Any<CancellationToken>()).Returns(Row(7, "Bad"));
-        _scans.GetLatestByUserIdsAsync(Arg.Any<IReadOnlyCollection<long>>(), Arg.Any<CancellationToken>())
-            .Returns(new Dictionary<long, ProfileScanResultRecord> { [7] = Scan(7, explicitText: true) });
+        IdentityRow(7, "Bad", NameVerdict.Explicit);
 
         var identity = await _sut.ResolveAsync(7);
 
@@ -1001,27 +1106,9 @@ public class UserIdentityServiceTests
     }
 
     [Test]
-    public async Task Resolve_LatestScanNotExplicit_GivesClean()
-    {
-        _users.GetByTelegramIdAsync(7, Arg.Any<CancellationToken>()).Returns(Row(7, "Fine"));
-        _scans.GetLatestByUserIdsAsync(Arg.Any<IReadOnlyCollection<long>>(), Arg.Any<CancellationToken>())
-            .Returns(new Dictionary<long, ProfileScanResultRecord> { [7] = Scan(7, explicitText: false) });
-
-        Assert.That((await _sut.ResolveAsync(7)).Verdict, Is.EqualTo(NameVerdict.Clean));
-    }
-
-    [Test]
-    public async Task Resolve_NoScan_GivesUnscanned()
-    {
-        _users.GetByTelegramIdAsync(7, Arg.Any<CancellationToken>()).Returns(Row(7, "New"));
-
-        Assert.That((await _sut.ResolveAsync(7)).Verdict, Is.EqualTo(NameVerdict.Unscanned));
-    }
-
-    [Test]
     public async Task Resolve_UnknownId_GivesIdOnlyUnscanned()
     {
-        _users.GetByTelegramIdAsync(7, Arg.Any<CancellationToken>()).Returns((TelegramUser?)null);
+        _users.GetIdentitiesAsync(Arg.Any<IReadOnlyCollection<long>>(), Arg.Any<CancellationToken>()).Returns([]);
 
         var identity = await _sut.ResolveAsync(7);
 
@@ -1030,22 +1117,23 @@ public class UserIdentityServiceTests
     }
 
     [Test]
-    public async Task Resolve_Bot_GivesUnscannedEvenWithScan()
+    public async Task ResolveMany_KeepsRequestedOrder_AndFillsUnknownIds()
     {
-        _users.GetByTelegramIdAsync(7, Arg.Any<CancellationToken>()).Returns(Row(7, "Bot", bot: true));
-        _scans.GetLatestByUserIdsAsync(Arg.Any<IReadOnlyCollection<long>>(), Arg.Any<CancellationToken>())
-            .Returns(new Dictionary<long, ProfileScanResultRecord> { [7] = Scan(7, explicitText: true) });
+        _users.GetIdentitiesAsync(Arg.Any<IReadOnlyCollection<long>>(), Arg.Any<CancellationToken>())
+            .Returns([UserIdentity.ForTest(2, "B"), UserIdentity.ForTest(1, "A")]);
 
-        Assert.That((await _sut.ResolveAsync(7)).Verdict, Is.EqualTo(NameVerdict.Unscanned));
+        var result = await _sut.ResolveManyAsync([1, 2, 3]);
+
+        Assert.That(result.Select(i => i.Id), Is.EqualTo(new long[] { 1, 2, 3 }));
+        Assert.That(result[2].DisplayName, Is.EqualTo("User 3"));
+        await _users.Received(1).GetIdentitiesAsync(Arg.Any<IReadOnlyCollection<long>>(), Arg.Any<CancellationToken>());
     }
-
-    private static readonly ChatIdentity Chat = new(-100, "Chat");
 
     [Test]
     public async Task Observe_RenameOfUntrustedUser_Inline_RescansThroughGate()
     {
-        _users.GetOrUpdateAsync(Arg.Any<ObservedUser>(), Arg.Any<ProfileChangeContext>(), Arg.Any<CancellationToken>())
-            .Returns(new ObservedNamesResult(Row(7, "New"), new PreviousNames("Old", null, null)));
+        Renamed(Row(7, "New"));
+        IdentityRow(7, "New", NameVerdict.Clean);
 
         await _sut.ObserveAsync(Observed(7, "New"), new ProfileChangeContext(Chat, 5), RenameRescan.Inline);
 
@@ -1057,8 +1145,8 @@ public class UserIdentityServiceTests
     [Test]
     public async Task Observe_RenameWithRescanNone_DoesNotScan()
     {
-        _users.GetOrUpdateAsync(Arg.Any<ObservedUser>(), Arg.Any<ProfileChangeContext>(), Arg.Any<CancellationToken>())
-            .Returns(new ObservedNamesResult(Row(7, "New"), new PreviousNames("Old", null, null)));
+        Renamed(Row(7, "New"));
+        IdentityRow(7, "New", NameVerdict.Clean);
 
         await _sut.ObserveAsync(Observed(7, "New"), new ProfileChangeContext(Chat, null), RenameRescan.None);
 
@@ -1068,8 +1156,8 @@ public class UserIdentityServiceTests
     [Test]
     public async Task Observe_RenameOfTrustedUser_DoesNotScan()
     {
-        _users.GetOrUpdateAsync(Arg.Any<ObservedUser>(), Arg.Any<ProfileChangeContext>(), Arg.Any<CancellationToken>())
-            .Returns(new ObservedNamesResult(Row(7, "New", trusted: true), new PreviousNames("Old", null, null)));
+        Renamed(Row(7, "New", trusted: true));
+        IdentityRow(7, "New", NameVerdict.Unscanned);
 
         await _sut.ObserveAsync(Observed(7, "New"), new ProfileChangeContext(Chat, 5), RenameRescan.Inline);
 
@@ -1081,6 +1169,7 @@ public class UserIdentityServiceTests
     {
         _users.GetOrUpdateAsync(Arg.Any<ObservedUser>(), Arg.Any<ProfileChangeContext>(), Arg.Any<CancellationToken>())
             .Returns(new ObservedNamesResult(Row(7, "Same"), Renamed: null));
+        IdentityRow(7, "Same", NameVerdict.Clean);
 
         await _sut.ObserveAsync(Observed(7, "Same"), new ProfileChangeContext(Chat, 5), RenameRescan.Inline);
 
@@ -1088,10 +1177,23 @@ public class UserIdentityServiceTests
     }
 
     [Test]
+    public async Task Observe_AfterRescan_ReturnsNewVerdict()
+    {
+        Renamed(Row(7, "New"));
+        _users.GetIdentitiesAsync(Arg.Any<IReadOnlyCollection<long>>(), Arg.Any<CancellationToken>())
+            .Returns([UserIdentity.ForTest(7, "New", verdict: NameVerdict.Clean)],
+                     [UserIdentity.ForTest(7, "New", verdict: NameVerdict.Explicit)]);
+
+        var identity = await _sut.ObserveAsync(Observed(7, "New"), new ProfileChangeContext(Chat, 5), RenameRescan.Inline);
+
+        Assert.That(identity.Verdict, Is.EqualTo(NameVerdict.Explicit));
+    }
+
+    [Test]
     public async Task Observe_RescanThrows_StillReturnsIdentity()
     {
-        _users.GetOrUpdateAsync(Arg.Any<ObservedUser>(), Arg.Any<ProfileChangeContext>(), Arg.Any<CancellationToken>())
-            .Returns(new ObservedNamesResult(Row(7, "New"), new PreviousNames("Old", null, null)));
+        Renamed(Row(7, "New"));
+        IdentityRow(7, "New", NameVerdict.Clean);
         _gate.ScanIfEligibleAsync(default!, default, default, default, default)
             .ReturnsForAnyArgs<ProfileScanResult?>(_ => throw new InvalidOperationException("scan failed"));
 
@@ -1111,21 +1213,8 @@ public class UserIdentityServiceTests
         Assert.That(identity.DisplayName, Is.EqualTo("Seen"));
         Assert.That(identity.Verdict, Is.EqualTo(NameVerdict.Unscanned));
     }
-
-    [Test]
-    public async Task ResolveMany_OneScanQuery_ForAllIds()
-    {
-        _users.GetByTelegramIdsAsync(Arg.Any<IReadOnlyCollection<long>>(), Arg.Any<CancellationToken>())
-            .Returns([Row(1, "A"), Row(2, "B")]);
-
-        var result = await _sut.ResolveManyAsync([1, 2]);
-
-        Assert.That(result.Select(i => i.Id), Is.EquivalentTo(new long[] { 1, 2 }));
-        await _scans.Received(1).GetLatestByUserIdsAsync(Arg.Any<IReadOnlyCollection<long>>(), Arg.Any<CancellationToken>());
-    }
 }
 ```
-`ResolveManyAsync` needs `ITelegramUserRepository.GetByTelegramIdsAsync(IReadOnlyCollection<long>, CancellationToken)` returning `List<TelegramUser>`: add it to the interface and repository in this task (`Where(u => ids.Contains(u.TelegramUserId))`), with one integration test in `TelegramUserRepositoryObserveTests` using `UnscannedUserId` and `TrustedUserId`.
 
 - [ ] **Step 2: Run to verify they fail**
 
@@ -1138,12 +1227,11 @@ Expected: build error.
 namespace TelegramGroupsAdmin.Telegram.Services.Identity;
 
 /// <summary>
-/// The single way to obtain a UserIdentity. Records observed names (newest observation wins) and
-/// attaches the name verdict from the latest profile scan. Stateless.
+/// The single way to obtain a UserIdentity for bot-facing work. Records observed names (newest
+/// observation wins) and reads identities from the user_identities view. Stateless.
 /// </summary>
 public sealed class UserIdentityService(
     ITelegramUserRepository users,
-    IProfileScanResultsRepository scans,
     IProfileScanGate scanGate,
     ILogger<UserIdentityService> logger) : IUserIdentityService
 {
@@ -1159,12 +1247,10 @@ public sealed class UserIdentityService(
         {
             // Recording what we saw must never cost the update its moderation.
             logger.LogError(ex, "Failed to record observed names for user {UserId}", observed.Id);
-#pragma warning disable RS0030 // the identity service is the sanctioned constructor of UserIdentity
             return new UserIdentity(observed.Id, observed.FirstName, observed.LastName, observed.Username);
-#pragma warning restore RS0030
         }
 
-        var identity = await WithVerdictAsync(result.User, ct);
+        var identity = await ResolveAsync(observed.Id, ct);
 
         // Inline, as the message pipeline did before: a profile ban stays inside this update's
         // context and its existing cleanup path. Renames are rare, so the stall is rare.
@@ -1174,7 +1260,7 @@ public sealed class UserIdentityService(
             try
             {
                 await scanGate.ScanIfEligibleAsync(identity, context.Chat, ProfileScanTrigger.ProfileChange, ct, bypassFreshness: true);
-                identity = await WithVerdictAsync(result.User, ct);
+                identity = await ResolveAsync(observed.Id, ct);
             }
             catch (Exception ex) when (!ct.IsCancellationRequested)
             {
@@ -1185,54 +1271,22 @@ public sealed class UserIdentityService(
         return identity;
     }
 
-    public async Task<UserIdentity> ResolveAsync(long userId, CancellationToken ct = default)
-    {
-        var row = await users.GetByTelegramIdAsync(userId, ct);
-        if (row is null)
-            return UserIdentity.FromId(userId);
-        return await WithVerdictAsync(row, ct);
-    }
+    public async Task<UserIdentity> ResolveAsync(long userId, CancellationToken ct = default) =>
+        (await ResolveManyAsync([userId], ct))[0];
 
     public async Task<IReadOnlyList<UserIdentity>> ResolveManyAsync(IReadOnlyCollection<long> userIds, CancellationToken ct = default)
     {
-        var rows = await users.GetByTelegramIdsAsync(userIds, ct);
-        var latest = await scans.GetLatestByUserIdsAsync(userIds, ct);
-        var byId = rows.ToDictionary(r => r.TelegramUserId);
-        return userIds
-            .Select(id => byId.TryGetValue(id, out var row) ? Build(row, latest.GetValueOrDefault(id)) : UserIdentity.FromId(id))
-            .ToList();
-    }
-
-    private async Task<UserIdentity> WithVerdictAsync(TelegramUser row, CancellationToken ct)
-    {
-        var latest = await scans.GetLatestByUserIdsAsync([row.TelegramUserId], ct);
-        return Build(row, latest.GetValueOrDefault(row.TelegramUserId));
-    }
-
-    private static UserIdentity Build(TelegramUser row, ProfileScanResultRecord? latestScan)
-    {
-#pragma warning disable RS0030 // the identity service is the sanctioned constructor of UserIdentity
-        return new UserIdentity(row.TelegramUserId, row.FirstName, row.LastName, row.Username)
-        {
-            Verdict = VerdictFor(row, latestScan)
-        };
-#pragma warning restore RS0030
-    }
-
-    private static NameVerdict VerdictFor(TelegramUser row, ProfileScanResultRecord? latestScan)
-    {
-        if (row.IsBot || TelegramConstants.IsSystemUser(row.TelegramUserId) || latestScan is null)
-            return NameVerdict.Unscanned;
-        return latestScan.ExplicitDisplayText ? NameVerdict.Explicit : NameVerdict.Clean;
+        var found = (await users.GetIdentitiesAsync(userIds, ct)).ToDictionary(i => i.Id);
+        return userIds.Select(id => found.TryGetValue(id, out var identity) ? identity : UserIdentity.FromId(id)).ToList();
     }
 }
 ```
-(The `#pragma` lines are inert until Task 14 adds the analyzer.) Register in `TelegramGroupsAdmin.Telegram/Extensions/ServiceCollectionExtensions.cs` next to the other scoped services: `services.AddScoped<IUserIdentityService, UserIdentityService>();`. `ProfileScanService` (singleton) reaches the identity service through its own scope (Task 10), so there is no constructor cycle with `IProfileScanGate`.
+Register in `TelegramGroupsAdmin.Telegram/Extensions/ServiceCollectionExtensions.cs` next to the other scoped services: `services.AddScoped<IUserIdentityService, UserIdentityService>();`. `ProfileScanService` (singleton) reaches the identity service through its own scope (Task 10), so there is no constructor cycle with `IProfileScanGate`.
 
 - [ ] **Step 4: Run to verify they pass**
 
-Run: `dotnet test TelegramGroupsAdmin.UnitTests --filter "FullyQualifiedName~UserIdentityServiceTests" && dotnet test TelegramGroupsAdmin.IntegrationTests --filter "FullyQualifiedName~TelegramUserRepositoryObserveTests"`
-Expected: PASS.
+Run: `dotnet test TelegramGroupsAdmin.UnitTests --filter "FullyQualifiedName~UserIdentityServiceTests"`
+Expected: PASS (11 tests).
 
 - [ ] **Step 5: Commit**
 
@@ -1663,63 +1717,204 @@ Steps: failing tests → run (FAIL) → implement → `dotnet build TelegramGrou
 
 ---
 
-### Task 14: Enforce with the banned-API analyzer
+### Task 13b: Enriched views and repository mappings use `user_identities`
 
 **Files:**
-- Create: `BannedSymbols.Identity.txt` (repo root)
-- Modify: every production csproj that references Core (`TelegramGroupsAdmin`, `.Telegram`, `.BackgroundJobs`, `.ContentDetection`, `.Configuration`, `.AI`, `.Core`): add the analyzer package and the additional file; `TelegramGroupsAdmin.Telegram/Extensions/IdentityExtensions.cs` (delete the `UserIdentity` `From`/`FromAsync` overloads); `TelegramMessageBuilder.cs` (parameterless constructor becomes private)
-- Test: build only (the analyzer is the test) plus the full suite
+- Modify: `TelegramGroupsAdmin.Data/Models/EnrichedMessageView.cs` (`CreateViewSql` joins at :72, :74; add columns), `TelegramGroupsAdmin.Data/Models/EnrichedReportView.cs` (`CreateViewSql` joins at :85, :90, :95, :100; add columns)
+- Create: migration `JoinUserIdentitiesInEnrichedViews`
+- Modify mappings: `TelegramGroupsAdmin.Core/Repositories/Mappings/EnrichedReportMappings.cs:51,52,109,185`, `TelegramGroupsAdmin.Telegram/Repositories/Mappings/EnrichedMessageMappings.cs:36`, `MessageMappings.cs:26`, `ChatAdminMappings.cs:29,46`, `TelegramUserRepository.cs:912` (`GetUserDetailAsync`)
+- Test: `TelegramGroupsAdmin.IntegrationTests/Telegram/Repositories/UserIdentitiesViewTests.cs` (extend), existing mapping tests
 
-- [ ] **Step 1: Ban the symbols**
+**Interfaces:**
+- Consumes: `UserIdentityMapping.ToIdentity(...)`, `UserIdentityView` (Task 4).
+- Produces: for every user an enriched view projects, two more columns beside its names: `<prefix>is_bot` and `<prefix>latest_scan_explicit` (e.g. `is_bot`, `latest_scan_explicit` for the message author; `reply_to_is_bot`, `reply_to_latest_scan_explicit`; `suspected_is_bot`, `suspected_latest_scan_explicit`, and likewise for `target_`, `exam_user_`, `profile_user_`). Match each user's existing column prefix in the view.
 
-`BannedSymbols.Identity.txt`:
+- [ ] **Step 1: Write the failing tests**
+
+```csharp
+    [Test]
+    public async Task EnrichedReports_ProfileScanAlert_UserCarriesLatestScanFlag()
+    {
+        // Pending profile-scan alert 188's user is the canonical "Profile-scan target" (IntegrationTests/CLAUDE.md);
+        // read its user id and expected flag from the tables, then assert the mapped identity's verdict.
+        await using var ctx = await CreateContextAsync();
+        var row = await ctx.EnrichedReports.SingleAsync(r => r.Id == GoldenDatasetConstants.Reports.PendingProfileScanAlertId);
+        var expectedFlag = await ctx.UserIdentities
+            .Where(v => v.TelegramUserId == row.ProfileUserId)
+            .Select(v => v.LatestScanExplicit)
+            .SingleAsync();
+
+        Assert.That(row.ProfileUserLatestScanExplicit, Is.EqualTo(expectedFlag));
+    }
 ```
-# A UserIdentity must come from IUserIdentityService so it carries the name verdict.
-# Sanctioned exceptions (#pragma warning disable RS0030 with a reason): UserIdentityService,
-# repository mapping files that build identities from rows for the UI and logs.
-M:TelegramGroupsAdmin.Core.Models.UserIdentity.#ctor(System.Int64,System.String,System.String,System.String);Use IUserIdentityService (ObserveAsync / ResolveAsync), or UserIdentity.ForPreview / ForTest
-M:TelegramGroupsAdmin.Core.Models.UserIdentity.FromId(System.Int64);Use IUserIdentityService.ResolveAsync
-M:TelegramGroupsAdmin.Core.Models.UserIdentity.ForTest(System.Int64,System.String,System.String,System.String,TelegramGroupsAdmin.Core.Models.NameVerdict);Test-only factory
+(Adjust `ProfileUserId` / `ProfileUserLatestScanExplicit` to the view's actual column-property names after Step 3; the assertion compares the enriched view with `user_identities`, so it holds whatever the canonical value is.) Add one mapping unit test per mapping file asserting an explicit flag maps to `NameVerdict.Explicit` on the produced identity.
+
+- [ ] **Step 2: Run to verify they fail**: `dotnet test TelegramGroupsAdmin.IntegrationTests --filter "FullyQualifiedName~UserIdentitiesViewTests"` — Expected: build error (new properties missing).
+
+- [ ] **Step 3: Implement**
+
+In each `CreateViewSql`, replace `LEFT JOIN telegram_users <alias>` with `LEFT JOIN user_identities <alias>` and add `<alias>.is_bot AS <prefix>is_bot, <alias>.latest_scan_explicit AS <prefix>latest_scan_explicit` to the select list. If a view also reads `telegram_users` columns that `user_identities` lacks (e.g. `user_photo_path` in `enriched_messages`), keep the `telegram_users` join for those columns and add a second join to `user_identities` on the same id for the identity columns. Add the matching properties to the view models.
+
+Migration (`dotnet ef migrations add JoinUserIdentitiesInEnrichedViews …`):
+```csharp
+        protected override void Up(MigrationBuilder migrationBuilder)
+        {
+            migrationBuilder.Sql(EnrichedMessageView.DropViewSql);
+            migrationBuilder.Sql(EnrichedReportView.DropViewSql);
+            migrationBuilder.Sql(EnrichedMessageView.CreateViewSql);
+            migrationBuilder.Sql(EnrichedReportView.CreateViewSql);
+        }
+
+        protected override void Down(MigrationBuilder migrationBuilder)
+        {
+            // Down references the code constants, which always have the latest shape.
+            migrationBuilder.Sql(EnrichedMessageView.DropViewSql);
+            migrationBuilder.Sql(EnrichedReportView.DropViewSql);
+        }
+```
+Before writing it, check whether any other view depends on these two (`grep -rn "enriched_messages\|enriched_reports" TelegramGroupsAdmin.Data/Models/*.cs` for views selecting from them); drop and recreate dependents in the same order if so.
+
+Mappings: every `new UserIdentity(...)` / `UserIdentity.From(...)` in the listed files becomes `UserIdentityMapping.ToIdentity(id, first, last, username, isBot, latestScanExplicit)` with the view's columns. `ChatAdminMappings` (navigation to `TelegramUser` and a projection) and `GetUserDetailAsync` read from `context.UserIdentities` (join on id) instead of `telegram_users` for the identity fields.
+
+- [ ] **Step 4: Run**: `dotnet build TelegramGroupsAdmin.sln && dotnet test TelegramGroupsAdmin.UnitTests && dotnet test TelegramGroupsAdmin.IntegrationTests` — Expected: 0 warnings, PASS.
+- [ ] **Step 5: Commit** `refactor(data): enriched views and repository mappings read identities from user_identities`.
+
+---
+
+### Task 14: Enforcement — remove the factories, add the rule and the scan test
+
+**Files:**
+- Modify: `TelegramGroupsAdmin.Telegram/Extensions/IdentityExtensions.cs` (delete the `UserIdentity` `From` / `FromAsync` overloads; keep the `ChatIdentity` ones), `TelegramGroupsAdmin.Core/Utilities/TelegramMessageBuilder.cs` (parameterless constructor becomes private), root `CLAUDE.md` (one line under Critical Rules)
+- Create: `.claude/rules/user-identity.md`, `TelegramGroupsAdmin.UnitTests/Architecture/UserIdentityConstructionTests.cs`
+
+The project has two contributors and Claude writes the code, so enforcement is a rule Claude is given plus a test that fails if the rule is broken.
+
+- [ ] **Step 1: Write the failing test**
+
+```csharp
+using System.Text.RegularExpressions;
+
+namespace TelegramGroupsAdmin.UnitTests.Architecture;
+
+/// <summary>
+/// A UserIdentity that reaches bot-written text must come from IUserIdentityService or the shared
+/// row mapper, so it carries the name verdict. See .claude/rules/user-identity.md.
+/// </summary>
+[TestFixture]
+public class UserIdentityConstructionTests
+{
+    // Sanctioned constructors: the type itself, the shared row mapper, and the service's
+    // fallback when recording names fails.
+    private static readonly string[] Allowlist =
+    [
+        "TelegramGroupsAdmin.Core/Models/UserIdentity.cs",
+        "TelegramGroupsAdmin.Core/Repositories/Mappings/UserIdentityMapping.cs",
+        "TelegramGroupsAdmin.Telegram/Services/Identity/UserIdentityService.cs",
+    ];
+
+    private static readonly Regex Construction = new(@"new\s+(Core\.Models\.)?UserIdentity\s*\(|UserIdentity\.FromId\s*\(", RegexOptions.Compiled);
+
+    internal static IEnumerable<string> Violations(string repoRoot) =>
+        Directory.EnumerateFiles(repoRoot, "*.*", SearchOption.AllDirectories)
+            .Where(f => f.EndsWith(".cs") || f.EndsWith(".razor"))
+            .Select(f => Path.GetRelativePath(repoRoot, f).Replace('\\', '/'))
+            .Where(f => f.StartsWith("TelegramGroupsAdmin") && !f.Contains("Tests/") && !f.Contains("Tests.")
+                        && !f.Contains("/bin/") && !f.Contains("/obj/") && !f.Contains("/Migrations/")
+                        && !f.StartsWith("TelegramGroupsAdmin.Testing."))
+            .Where(f => !Allowlist.Contains(f))
+            .Where(f => Construction.IsMatch(File.ReadAllText(Path.Combine(repoRoot, f))));
+
+    [Test]
+    public void ProductionCode_BuildsUserIdentityOnlyThroughSanctionedPaths()
+    {
+        var violations = Violations(RepoRoot()).ToList();
+
+        Assert.That(violations, Is.Empty,
+            "Build UserIdentity through IUserIdentityService or UserIdentityMapping (see .claude/rules/user-identity.md). Offending files: "
+            + string.Join(", ", violations));
+    }
+
+    [Test]
+    public void Detector_FlagsConstructionOutsideAllowlist()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "uid-scan-" + Guid.NewGuid());
+        var file = Path.Combine(root, "TelegramGroupsAdmin.Telegram", "Bad.cs");
+        Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+        File.WriteAllText(file, "var u = new UserIdentity(1, null, null, null);");
+        try
+        {
+            Assert.That(Violations(root), Is.EquivalentTo(new[] { "TelegramGroupsAdmin.Telegram/Bad.cs" }));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    private static string RepoRoot()
+    {
+        var dir = new DirectoryInfo(TestContext.CurrentContext.TestDirectory);
+        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "TelegramGroupsAdmin.sln")))
+            dir = dir.Parent;
+        return dir?.FullName ?? throw new InvalidOperationException("Repo root not found");
+    }
+}
 ```
 
-Sanctioned uses inside the type and the service: put `#pragma warning disable RS0030 // the type's own factories` around the factory bodies in `UserIdentity.cs`, and wrap the `UserIdentity.FromId` calls in `UserIdentityService` the same way as its constructor calls. `ForPreview` stays unbanned (settings previews in Razor); its XML doc says it must never reach a real user, and a reviewer checks new uses.
-Each production csproj:
-```xml
-  <ItemGroup>
-    <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
-    </PackageReference>
-    <AdditionalFiles Include="$(MSBuildThisFileDirectory)../BannedSymbols.Identity.txt" />
-  </ItemGroup>
+- [ ] **Step 2: Run it**
+
+Run: `dotnet test TelegramGroupsAdmin.UnitTests --filter "FullyQualifiedName~UserIdentityConstructionTests"`
+Expected: `Detector_FlagsConstructionOutsideAllowlist` PASS; `ProductionCode_…` FAIL listing every site Tasks 8-13b missed (expected to be few or none). Each listed file is a missed migration: move it to the service or the mapper. Never add a file to the allowlist to make the test pass; a new allowlist entry needs the maintainer's agreement.
+
+- [ ] **Step 3: Remove the factories and the parameterless builder constructor**
+
+Delete the `UserIdentity` `From(User)`, `From(TelegramUser)`, `From(TelegramUserDto)` and `FromAsync` overloads from `IdentityExtensions`. Make `public TelegramMessageBuilder()` private so `For(...)` is the only way to create a builder. Fix the build errors this produces the same way as Step 2.
+
+- [ ] **Step 4: Add the rule**
+
+`.claude/rules/user-identity.md`:
+```markdown
+---
+paths:
+  - "TelegramGroupsAdmin*/**/*.cs"
+  - "TelegramGroupsAdmin*/**/*.razor"
+  - "docs/superpowers/plans/**/*.md"
+  - "docs/superpowers/specs/**/*.md"
+---
+
+# User identity rule (MANDATORY)
+
+- Get a `UserIdentity` from `IUserIdentityService`: `ObserveAsync` where an update shows the user's
+  current names and a rename should be rescanned (new and edited messages, joins), otherwise
+  `ResolveAsync` / `ResolveManyAsync` by id.
+- Repository code that reads users joins the `user_identities` view and builds identities only with
+  `UserIdentityMapping.ToIdentity`. Never join `telegram_users` for names that become an identity.
+- Bot-written text uses `TelegramMessageBuilder.For(await configService.GetNameMaskingAsync(chatId))`
+  (`null` for messages that belong to no chat) and `Mention(identity)` / `identity.BotDisplayName(masking)`.
+  Logs and the web UI use `identity.DisplayName`.
+- Tests use `UserIdentity.ForTest`; settings previews use `UserIdentity.ForPreview`.
+- `UserIdentityConstructionTests` fails on any other `new UserIdentity(` / `UserIdentity.FromId(`.
+  Don't extend its allowlist without the maintainer's agreement.
 ```
-(Copy the `PackageReference` block exactly as `TelegramGroupsAdmin.E2ETests.csproj:17` declares it.)
+Root `CLAUDE.md`, under Critical Rules, add:
+`- **User identities come from \`IUserIdentityService\` or the \`user_identities\` view** — full rule: \`.claude/rules/user-identity.md\`.`
+Check how the integration-test-data rule is injected by the PreToolUse hook (`grep -rn "integration-test-data" .claude/`); if the hook lists rule files explicitly, add `user-identity.md` the same way.
 
-Delete the `UserIdentity` overloads in `IdentityExtensions` (keep the `ChatIdentity` ones). Make `TelegramMessageBuilder()` private so `For(...)` is the only way to create a builder.
-
-- [ ] **Step 2: Build and read every error**
-
-Run: `dotnet build TelegramGroupsAdmin.sln 2>&1 | grep -E "RS0030|error CS" | sort -u`
-Expected: a list of remaining sites. For each:
-- production call site that was missed in Tasks 8-13 → move it to the identity service (that is the point of this task);
-- repository mapping that builds an identity from a row (`EnrichedReportMappings.cs:51,52,109,185`, `ChatAdminMappings.cs:29,46`, `EnrichedMessageMappings.cs:36`, `MessageMappings.cs:26`, `TelegramUserRepository.cs:912`, `ChatAdmin.cs:14`, `TelegramUserDetail.cs:13`) → wrap the single line in `#pragma warning disable RS0030 // row-backed identity for UI/logs; mentions resolve through IUserIdentityService` / `restore`;
-- test projects are not analyzed; they use `UserIdentity.ForTest`.
-
-- [ ] **Step 3: Full verification**
+- [ ] **Step 5: Full verification**
 
 Run: `dotnet build TelegramGroupsAdmin.sln && dotnet test TelegramGroupsAdmin.UnitTests && dotnet test TelegramGroupsAdmin.ComponentTests && dotnet test TelegramGroupsAdmin.IntegrationTests`
-Expected: 0 warnings, 0 errors, all PASS. (E2E runs in CI.)
+Expected: 0 warnings, 0 errors, all PASS (E2E runs in CI).
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add -A
-git commit -m "build: ban direct UserIdentity construction outside the identity service"
+git commit -m "build: enforce identity construction through the service and the shared mapper"
 ```
 
 ---
 
 ## Self-review notes
 
-- Spec coverage: identity type (T1), builder policy (T2), config + migration (T3), verdict source (T4), observe/rename/ordering/one transaction/photo fields (T5), service + failure handling + system accounts/bots (T6), single-flight + freshness bypass (T7), inline rename rescans (T6, T8), entry points (T8, T9), scan observes live names (T10), Mention/celebration and all area migrations (T11-T13), enforcement (T14), Quartz compatibility (T1, T13), canonical anchors (T4 constants). Follow-ups in the spec stay out of scope.
+- Spec coverage: identity type (T1), builder policy (T2), config + migration (T3), verdict source (T4), observe/rename/ordering/one transaction/photo fields (T5), service + failure handling + system accounts/bots (T6), single-flight + freshness bypass (T7), inline rename rescans (T6, T8), the user_identities view and mapper (T4, T13b), entry points (T8, T9), scan observes live names (T10), Mention/celebration and all area migrations (T11-T13), enforcement (T14), Quartz compatibility (T1, T13), canonical anchors (T4 constants), enforcement (T14). Follow-ups in the spec stay out of scope.
 - Deviations from the spec are listed at the top for confirmation at review.
