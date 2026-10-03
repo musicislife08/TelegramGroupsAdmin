@@ -50,6 +50,12 @@ public interface ITelegramUserManagementService
     /// <summary>Unbans a user from all chats.</summary>
     Task<bool> UnbanAsync(long telegramUserId, Actor unbannedBy, string? reason = null, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Resolves the user's current identity (names and name verdict) by id, for building
+    /// moderation intents from the web UI.
+    /// </summary>
+    Task<UserIdentity> ResolveIdentityAsync(long telegramUserId, CancellationToken cancellationToken = default);
+
     /// <summary>Gets the username/name change history for a user.</summary>
     Task<List<UsernameHistoryRecord>> GetNameHistoryAsync(long telegramUserId, CancellationToken cancellationToken = default);
 }

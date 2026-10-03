@@ -675,12 +675,13 @@
         try
         {
             var executor = WebUser!.ToActor();
+            var user = await UserManagementService.ResolveIdentityAsync(_userDetail.User.Id);
 
             // Call moderation service to ban the user
             var banResult = await ModerationService.BanUserAsync(
                 new BanIntent
                 {
-                    User = _userDetail.User,
+                    User = user,
                     Executor = executor,
                     Reason = "Banned from user detail dialog"
                 });
@@ -718,12 +719,13 @@
         try
         {
             var executor = WebUser!.ToActor();
+            var user = await UserManagementService.ResolveIdentityAsync(_userDetail.User.Id);
 
             // Unban the user
             var result = await ModerationService.UnbanUserAsync(
                 new UnbanIntent
                 {
-                    User = _userDetail.User,
+                    User = user,
                     Executor = executor,
                     Reason = "Unbanned from user detail dialog",
                     RestoreTrust = false
@@ -771,12 +773,13 @@
         try
         {
             var executor = WebUser!.ToActor();
+            var user = await UserManagementService.ResolveIdentityAsync(_userDetail.User.Id);
 
             // Call moderation service to temp ban the user
             var banResult = await ModerationService.TempBanUserAsync(
                 new TempBanIntent
                 {
-                    User = _userDetail.User,
+                    User = user,
                     Executor = executor,
                     Reason = tempBanResult.Reason,
                     Duration = tempBanResult.Duration
@@ -828,6 +831,7 @@
         try
         {
             var executor = WebUser!.ToActor();
+            var user = await UserManagementService.ResolveIdentityAsync(_userDetail.User.Id);
 
             // Use first chat membership as context, or global fallback
             var chat = _userDetail.ChatMemberships.FirstOrDefault()?.Identity ?? ChatIdentity.FromId(0);
@@ -836,7 +840,7 @@
             var warnResultFromService = await ModerationService.WarnUserAsync(
                 new WarnIntent
                 {
-                    User = _userDetail.User,
+                    User = user,
                     Executor = executor,
                     Reason = warnResult.Reason ?? "Warning issued via UI",
                     Chat = chat

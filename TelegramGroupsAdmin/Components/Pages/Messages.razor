@@ -22,6 +22,7 @@
 @inject IBotModerationService ModerationService
 @inject ITelegramUserMappingRepository TelegramMappingRepository
 @inject ITelegramUserRepository TelegramUserRepository
+@inject ITelegramUserManagementService UserManagementService
 @inject NavigationManager NavigationManager
 @inject ILogger<Messages> Logger
 @inject ISnackbar Snackbar
@@ -890,7 +891,7 @@
             var result = await ModerationService.MarkAsSpamAndBanAsync(
                 new SpamBanIntent
                 {
-                    User = message.User,
+                    User = await UserManagementService.ResolveIdentityAsync(message.User.Id),
                     MessageId = message.MessageId,
                     Chat = message.Chat,
                     Executor = executor,
@@ -944,7 +945,7 @@
                 var unbanResult = await ModerationService.UnbanUserAsync(
                     new UnbanIntent
                     {
-                        User = message.User,
+                        User = await UserManagementService.ResolveIdentityAsync(message.User.Id),
                         Executor = executor,
                         Reason = "False positive correction - message marked clean by admin via UI",
                         RestoreTrust = true // Restore trust to bypass future spam checks
@@ -1073,7 +1074,7 @@
             var result = await ModerationService.DeleteMessageAsync(
                 new DeleteMessageIntent
                 {
-                    User = message.User,
+                    User = await UserManagementService.ResolveIdentityAsync(message.User.Id),
                     MessageId = message.MessageId,
                     Chat = message.Chat,
                     Executor = executor,
@@ -1156,7 +1157,7 @@
             var banResult = await ModerationService.TempBanUserAsync(
                 new TempBanIntent
                 {
-                    User = message.User,
+                    User = await UserManagementService.ResolveIdentityAsync(message.User.Id),
                     Executor = executor,
                     Reason = tempBanResult.Reason,
                     Duration = tempBanResult.Duration,
@@ -1234,7 +1235,7 @@
             var warnServiceResult = await ModerationService.WarnUserAsync(
                 new WarnIntent
                 {
-                    User = message.User,
+                    User = await UserManagementService.ResolveIdentityAsync(message.User.Id),
                     Executor = executor,
                     Reason = warnResult.Reason ?? "Warning issued via UI",
                     Chat = message.Chat,
