@@ -5,7 +5,10 @@ using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
+using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.Telegram.Services.Identity;
+using TelegramGroupsAdmin.Telegram.Services.Moderation;
 
 namespace TelegramGroupsAdmin.UnitTests.Telegram.Services;
 
@@ -22,6 +25,8 @@ public class BanCallbackServiceTests
 
     private ITelegramPermissionService _permissionService = null!;
     private ITelegramUserRepository _userRepository = null!;
+    private IUserIdentityService _identities = null!;
+    private IBotModerationService _moderation = null!;
     private ServiceProvider _provider = null!;
     private BanCallbackService _service = null!;
 
@@ -30,11 +35,19 @@ public class BanCallbackServiceTests
     {
         _permissionService = Substitute.For<ITelegramPermissionService>();
         _userRepository = Substitute.For<ITelegramUserRepository>();
+        _identities = Substitute.For<IUserIdentityService>();
+        _identities.ResolveAsync(ClickerId, Arg.Any<CancellationToken>()).Returns(UserIdentity.ForTest(ClickerId, "Stored", "Admin"));
+        _moderation = Substitute.For<IBotModerationService>();
+        _moderation.BanUserAsync(Arg.Any<BanIntent>(), Arg.Any<CancellationToken>())
+            .Returns(new ModerationResult { Success = false, ErrorMessage = "test stops here" });
 
         var services = new ServiceCollection();
         services.AddScoped(_ => _permissionService);
         services.AddScoped(_ => _userRepository);
         services.AddScoped(_ => Substitute.For<IBotMessageService>());
+        services.AddScoped(_ => _identities);
+        services.AddScoped(_ => _moderation);
+        services.AddScoped(_ => Substitute.For<IChatAdminsRepository>());
         _provider = services.BuildServiceProvider();
 
         _service = new BanCallbackService(
@@ -75,5 +88,27 @@ public class BanCallbackServiceTests
         await _service.HandleCallbackAsync(Click($"ban_select:{TargetId}:10"));
 
         await _userRepository.Received(1).GetByTelegramIdAsync(TargetId, Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task HandleCallbackAsync_AdminClicker_BansAsTheResolvedClicker()
+    {
+        _permissionService.GetEffectiveLevelAsync(ChatId, ClickerId, Arg.Any<CancellationToken>())
+            .Returns(PermissionLevel.Admin);
+        _userRepository.GetByTelegramIdAsync(TargetId, Arg.Any<CancellationToken>()).Returns(new TelegramUser(
+            TelegramUserId: TargetId, Username: "target", FirstName: "Target", LastName: null,
+            UserPhotoPath: null, PhotoHash: null, PhotoFileUniqueId: null,
+            IsBot: false, IsTrusted: false, IsBanned: false, KickCount: 0, BotDmEnabled: false,
+            FirstSeenAt: DateTimeOffset.UtcNow, LastSeenAt: DateTimeOffset.UtcNow,
+            CreatedAt: DateTimeOffset.UtcNow, UpdatedAt: DateTimeOffset.UtcNow));
+
+        await _service.HandleCallbackAsync(Click($"ban_select:{TargetId}:10"));
+
+        // The executor is resolved by id, not built from the callback's names.
+        await _identities.Received(1).ResolveAsync(ClickerId, Arg.Any<CancellationToken>());
+        await _identities.DidNotReceiveWithAnyArgs().ObserveAsync(default!, default!, default, default);
+        await _moderation.Received(1).BanUserAsync(
+            Arg.Is<BanIntent>(i => i!.Executor.TelegramUserId == ClickerId && i.Executor.DisplayName == "Stored Admin"),
+            Arg.Any<CancellationToken>());
     }
 }

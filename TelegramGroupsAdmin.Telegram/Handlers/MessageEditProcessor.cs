@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
 using Telegram.Bot.Types;
+using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
 using TelegramGroupsAdmin.Core.Services;
@@ -13,6 +14,7 @@ using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Services;
+using TelegramGroupsAdmin.Telegram.Services.Identity;
 using TelegramGroupsAdmin.Configuration.Services;
 
 namespace TelegramGroupsAdmin.Telegram.Handlers;
@@ -43,6 +45,21 @@ public class MessageEditProcessor
         IServiceScope scope,
         CancellationToken cancellationToken = default)
     {
+        // An edit reports the editor's current names, dated by the edit. Recorded before anything
+        // else, and a rename is rescanned inline as for a new message. DMs are not observed: a DM
+        // rename recorded without a rescan would use the rename up before the next group message.
+        if (editedMessage.From is { } editor && editedMessage.Chat.Type != ChatType.Private)
+        {
+            var observedAt = new DateTimeOffset(
+                DateTime.SpecifyKind(editedMessage.EditDate ?? editedMessage.Date, DateTimeKind.Utc));
+            await scope.ServiceProvider.GetRequiredService<IUserIdentityService>().ObserveAsync(
+                new ObservedUser(editor.Id, editor.FirstName, editor.LastName, editor.Username,
+                    editor.IsBot, ObservationSource.BotUpdate, observedAt),
+                new ProfileChangeContext(ChatIdentity.From(editedMessage.Chat), editedMessage.MessageId),
+                RenameRescan.Inline,
+                cancellationToken);
+        }
+
         var repository = scope.ServiceProvider.GetRequiredService<IMessageHistoryRepository>();
         var editService = scope.ServiceProvider.GetRequiredService<IMessageEditService>();
         var translationService = scope.ServiceProvider.GetRequiredService<IMessageTranslationService>();

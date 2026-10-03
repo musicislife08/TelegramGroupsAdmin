@@ -61,36 +61,6 @@ public class TelegramUserRepository : ITelegramUserRepository
     }
 
     /// <inheritdoc/>
-    public async Task<UiModels.TelegramUser> GetOrCreateAsync(
-        UserIdentity user, bool isBot, CancellationToken cancellationToken = default)
-    {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var now = DateTimeOffset.UtcNow;
-        var isTrusted = TelegramConstants.IsSystemUser(user.Id);
-
-        await context.Database.ExecuteSqlAsync($"""
-            INSERT INTO telegram_users (
-                telegram_user_id, username, first_name, last_name,
-                is_bot, is_trusted, is_banned, bot_dm_enabled,
-                first_seen_at, last_seen_at, created_at, updated_at, is_active
-            ) VALUES (
-                {user.Id}, {user.Username}, {user.FirstName}, {user.LastName},
-                {isBot}, {isTrusted}, {false}, {false},
-                {now}, {now}, {now}, {now}, {false}
-            )
-            ON CONFLICT (telegram_user_id) DO NOTHING
-            """, cancellationToken);
-
-        var entity = await context.TelegramUsers
-            .AsNoTracking()
-            .FirstAsync(u => u.TelegramUserId == user.Id, cancellationToken);
-
-        _logger.LogDebug("Ensured Telegram user {User}", user.ToLogDebug());
-
-        return entity.ToModel();
-    }
-
-    /// <inheritdoc/>
     public async Task<UiModels.ObservedNamesResult> GetOrUpdateAsync(
         UiModels.ObservedUser observed, UiModels.ProfileChangeContext changeContext, CancellationToken cancellationToken = default)
     {
@@ -211,46 +181,6 @@ public class TelegramUserRepository : ITelegramUserRepository
             .Where(u => u.TelegramUserId == telegramUserId)
             .Select(u => u.UserPhotoPath)
             .FirstOrDefaultAsync(cancellationToken);
-    }
-
-    /// <summary>
-    /// Upsert (insert or update) Telegram user record using atomic PostgreSQL ON CONFLICT DO UPDATE.
-    /// Used by FetchUserPhotoJob and message processing to maintain user data.
-    /// NOTE: IsTrusted and BotDmEnabled are never updated on conflict — only set by dedicated methods.
-    /// NOTE: IsActive is hardcoded to true on conflict — sending a message definitively makes user active.
-    /// </summary>
-    public async Task UpsertAsync(UiModels.TelegramUser user, CancellationToken cancellationToken = default)
-    {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var now = DateTimeOffset.UtcNow;
-        var isTrusted = TelegramConstants.IsSystemUser(user.TelegramUserId);
-
-        await context.Database.ExecuteSqlAsync($"""
-            INSERT INTO telegram_users (
-                telegram_user_id, username, first_name, last_name,
-                user_photo_path, photo_hash, is_active, is_trusted,
-                is_bot, is_banned, bot_dm_enabled,
-                first_seen_at, last_seen_at, created_at, updated_at
-            ) VALUES (
-                {user.TelegramUserId}, {user.Username}, {user.FirstName}, {user.LastName},
-                {user.UserPhotoPath}, {user.PhotoHash}, {user.IsActive}, {isTrusted},
-                {user.IsBot}, {false}, {false},
-                {now}, {user.LastSeenAt}, {now}, {now}
-            )
-            ON CONFLICT (telegram_user_id) DO UPDATE SET
-                username = EXCLUDED.username,
-                first_name = EXCLUDED.first_name,
-                last_name = EXCLUDED.last_name,
-                user_photo_path = EXCLUDED.user_photo_path,
-                photo_hash = EXCLUDED.photo_hash,
-                is_active = true,
-                last_seen_at = EXCLUDED.last_seen_at,
-                updated_at = {now}
-            """, cancellationToken);
-
-        _logger.LogDebug(
-            "Upserted Telegram user {User}",
-            user.ToLogDebug());
     }
 
     /// <summary>

@@ -11,6 +11,7 @@ using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot.Handlers;
+using TelegramGroupsAdmin.Telegram.Services.Identity;
 
 namespace TelegramGroupsAdmin.Telegram.Services.Bot;
 
@@ -25,7 +26,7 @@ public class BotMessageService(
     IBotChatHandler chatHandler,
     IMessageHistoryRepository messageRepo,
     IMessageEditService editService,
-    ITelegramUserRepository userRepo,
+    IUserIdentityService identityService,
     ApiMetrics apiMetrics,
     ILogger<BotMessageService> logger) : IBotMessageService
 {
@@ -94,32 +95,13 @@ public class BotMessageService(
         // Get bot user info (cached in singleton IBotIdentityCache via IBotUserService)
         var botInfo = await userService.GetMeAsync(cancellationToken);
 
-        // Upsert bot to telegram_users table (ensures bot name is available for UI display)
-        var now = DateTimeOffset.UtcNow;
-        var botUser = new TelegramUser(
-            TelegramUserId: botInfo.Id,
-            Username: botInfo.Username,
-            FirstName: botInfo.FirstName,
-            LastName: botInfo.LastName,
-            UserPhotoPath: null,
-            PhotoHash: null,
-            PhotoFileUniqueId: null,
-            IsBot: true,
-            IsTrusted: false,
-            IsBanned: false,
-            KickCount: 0,
-            BotDmEnabled: false,
-            FirstSeenAt: now,
-            LastSeenAt: now,
-            CreatedAt: now,
-            UpdatedAt: now
-        );
-        await userRepo.UpsertAsync(botUser, cancellationToken);
+        // Record the bot's own names (ensures they are available for UI display). Never rescanned.
+        var botIdentity = await ObserveBotAsync(botInfo, cancellationToken);
 
         // Save to messages table (use bot info from cache, not sentMessage.From which may be null)
         var messageRecord = new MessageRecord(
             MessageId: sentMessage.MessageId,
-            User: UserIdentity.From(botInfo),
+            User: botIdentity,
             Chat: ChatIdentity.From(sentMessage.Chat),
             Timestamp: DateTimeOffset.UtcNow,
             MessageText: text,
@@ -340,32 +322,13 @@ public class BotMessageService(
         var chatInfo = await chatHandler.GetChatAsync(chatId, cancellationToken);
         apiMetrics.RecordTelegramApiCall("get_chat", success: true);
 
-        // Upsert bot to telegram_users table (ensures bot name is available for UI display)
-        var now = DateTimeOffset.UtcNow;
-        var botUser = new TelegramUser(
-            TelegramUserId: botInfo.Id,
-            Username: botInfo.Username,
-            FirstName: botInfo.FirstName,
-            LastName: botInfo.LastName,
-            UserPhotoPath: null,
-            PhotoHash: null,
-            PhotoFileUniqueId: null,
-            IsBot: true,
-            IsTrusted: false,
-            IsBanned: false,
-            KickCount: 0,
-            BotDmEnabled: false,
-            FirstSeenAt: now,
-            LastSeenAt: now,
-            CreatedAt: now,
-            UpdatedAt: now
-        );
-        await userRepo.UpsertAsync(botUser, cancellationToken);
+        // Record the bot's own names (ensures they are available for UI display). Never rescanned.
+        var botIdentity = await ObserveBotAsync(botInfo, cancellationToken);
 
         // Save to messages table
         var messageRecord = new MessageRecord(
             MessageId: messageId,
-            User: UserIdentity.From(botInfo),
+            User: botIdentity,
             Chat: ChatIdentity.From(chatInfo),
             Timestamp: DateTimeOffset.UtcNow,
             MessageText: text,
@@ -444,32 +407,13 @@ public class BotMessageService(
         // Get bot user info (cached in singleton IBotIdentityCache via IBotUserService)
         var botInfo = await userService.GetMeAsync(cancellationToken);
 
-        // Upsert bot to telegram_users table
-        var now = DateTimeOffset.UtcNow;
-        var botUser = new TelegramUser(
-            TelegramUserId: botInfo.Id,
-            Username: botInfo.Username,
-            FirstName: botInfo.FirstName,
-            LastName: botInfo.LastName,
-            UserPhotoPath: null,
-            PhotoHash: null,
-            PhotoFileUniqueId: null,
-            IsBot: true,
-            IsTrusted: false,
-            IsBanned: false,
-            KickCount: 0,
-            BotDmEnabled: false,
-            FirstSeenAt: now,
-            LastSeenAt: now,
-            CreatedAt: now,
-            UpdatedAt: now
-        );
-        await userRepo.UpsertAsync(botUser, cancellationToken);
+        // Record the bot's own names (ensures they are available for UI display). Never rescanned.
+        var botIdentity = await ObserveBotAsync(botInfo, cancellationToken);
 
         // Save to messages table with animation metadata
         var messageRecord = new MessageRecord(
             MessageId: sentMessage.MessageId,
-            User: UserIdentity.From(botInfo),
+            User: botIdentity,
             Chat: ChatIdentity.From(sentMessage.Chat),
             Timestamp: DateTimeOffset.UtcNow,
             MessageText: caption, // Caption as message text
@@ -524,5 +468,14 @@ public class BotMessageService(
             caption.Text,
             parseMode: null,
             captionEntities: caption.Entities,
+            cancellationToken);
+
+    /// <summary>Records the bot's own names as of now (GetMe has no date). Bots are never scanned.</summary>
+    private Task<UserIdentity> ObserveBotAsync(User botInfo, CancellationToken cancellationToken) =>
+        identityService.ObserveAsync(
+            new ObservedUser(botInfo.Id, botInfo.FirstName, botInfo.LastName, botInfo.Username, IsBot: true,
+                ObservationSource.BotUpdate, DateTimeOffset.UtcNow),
+            new ProfileChangeContext(Chat: null, MessageId: null),
+            RenameRescan.None,
             cancellationToken);
 }

@@ -16,6 +16,7 @@ using TelegramGroupsAdmin.Telegram.Metrics;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.Telegram.Services.Identity;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Handlers;
 using TelegramGroupsAdmin.Telegram.Services.UserApi;
@@ -32,6 +33,7 @@ public class WelcomeService(
     IConfigService configService,
     IWelcomeResponsesRepository welcomeResponsesRepository,
     ITelegramUserRepository telegramUserRepository,
+    IUserIdentityService identityService,
     IExamFlowService examFlowService,
     IImpersonationDetectionService impersonationDetectionService,
     IBotProtectionService botProtectionService,
@@ -108,6 +110,7 @@ public class WelcomeService(
                 await botProtectionService.BanBotAsync(
                     chatMemberUpdate.Chat,
                     user,
+                    new DateTimeOffset(DateTime.SpecifyKind(chatMemberUpdate.Date, DateTimeKind.Utc)),
                     "Not whitelisted and not invited by admin",
                     cancellationToken);
                 welcomeMetrics.RecordBotJoin("banned");
@@ -137,13 +140,20 @@ public class WelcomeService(
 
         try
         {
-            // Step 2: Ensure user record exists (FK constraint for audit logging)
-            var existingUser = await telegramUserRepository.GetOrCreateAsync(
-                UserIdentity.From(user), user.IsBot, cancellationToken);
+            // Step 2: Record the joiner's names (also creates the row the audit FKs need). No rename
+            // rescan here: the join flow scans the user below, on the names just recorded.
+            var userIdentity = await identityService.ObserveAsync(
+                new ObservedUser(user.Id, user.FirstName, user.LastName, user.Username, user.IsBot,
+                    ObservationSource.ChatMember,
+                    new DateTimeOffset(DateTime.SpecifyKind(chatMemberUpdate.Date, DateTimeKind.Utc))),
+                new ProfileChangeContext(ChatIdentity.From(chatMemberUpdate.Chat), MessageId: null),
+                RenameRescan.None,
+                cancellationToken);
+            var existingUser = await telegramUserRepository.GetByTelegramIdAsync(user.Id, cancellationToken);
 
             // Early-out: If user is already globally banned, apply single-chat ban and skip welcome.
             // Pre-banned status wins over any bypass — this MUST run before Step 2.5.
-            if (existingUser.IsBanned)
+            if (existingUser?.IsBanned == true)
             {
                 logger.LogInformation(
                     "Pre-banned user {User} joined {Chat} - applying ban and skipping welcome",
@@ -152,7 +162,7 @@ public class WelcomeService(
                 await moderationService.SyncBanToChatAsync(
                     new SyncBanIntent
                     {
-                        User = UserIdentity.From(user),
+                        User = userIdentity,
                         Chat = ChatIdentity.From(chatMemberUpdate.Chat),
                         Executor = Actor.AutoDetection,
                         Reason = "Lazy ban sync: User was globally banned before joining this chat",
@@ -165,7 +175,7 @@ public class WelcomeService(
             // Step 2.5: Unified privileged/trusted bypass (chat admin, web admin, or trusted user).
             // Short-circuits BEFORE mute (Step 3) — bypassed users are never muted.
             var bypassResolution = await bypassResolver.ResolveAsync(
-                UserIdentity.From(user),
+                userIdentity,
                 ChatIdentity.From(chatMemberUpdate.Chat),
                 cancellationToken);
             var bypassDecision = bypassResolution.Decision;
@@ -173,7 +183,7 @@ public class WelcomeService(
             {
                 await telegramUserRepository.ActivateAsync(user.Id, cancellationToken);
                 await auditHandler.LogWelcomeBypassAsync(
-                    UserIdentity.From(user),
+                    userIdentity,
                     ChatIdentity.From(chatMemberUpdate.Chat),
                     bypassResolution.Decision,
                     bypassResolution.ReasonDetail ?? string.Empty,
@@ -194,7 +204,7 @@ public class WelcomeService(
             var verifyingMessage = await messageService.SendAndSaveMessageAsync(
                 chatId: chatMemberUpdate.Chat.Id,
                 message: new TelegramMessageBuilder()
-                    .Mention(UserIdentity.From(user))
+                    .Mention(userIdentity)
                     .Text(" ⏳ Verifying...")
                     .Build(),
                 cancellationToken: cancellationToken);
@@ -205,8 +215,6 @@ public class WelcomeService(
             // Order: Username blacklist (instant) → CAS (fail fast) → Photo fetch → Impersonation → Profile scan
             // Trusted users skip CAS + profile scan (trust is global)
             // ═══════════════════════════════════════════════════════════════════
-
-            var userIdentity = UserIdentity.From(user);
 
             // Step 5: Username blacklist check - auto-ban blacklisted display names FIRST (instant, local DB)
             // Skip trusted users — trust is global, applied across all groups
@@ -273,7 +281,7 @@ public class WelcomeService(
                     await moderationService.BanUserAsync(
                         new BanIntent
                         {
-                            User = UserIdentity.From(user),
+                            User = userIdentity,
                             Executor = Actor.Cas,
                             Reason = reason,
                             Chat = ChatIdentity.From(chatMemberUpdate.Chat)
@@ -394,7 +402,7 @@ public class WelcomeService(
 
             // Step 9: Profile scan via User API (eligibility owned by ProfileScanGate)
             var scanResult = await profileScanGate.ScanIfEligibleAsync(
-                UserIdentity.From(user),
+                userIdentity,
                 ChatIdentity.From(chatMemberUpdate.Chat),
                 ProfileScanTrigger.Join,
                 ct: cancellationToken);
@@ -417,7 +425,7 @@ public class WelcomeService(
                 {
                     // Update verifying message — user waits for admin + welcome gate
                     var holdMessage = new TelegramMessageBuilder()
-                        .Mention(UserIdentity.From(user))
+                        .Mention(userIdentity)
                         .Text(" ⏳ Your profile is under admin review. Please wait...")
                         .Build();
                     await TryEditMessageAsync(
@@ -449,7 +457,7 @@ public class WelcomeService(
                     user.ToLogDebug());
 
                 var admissionResult = await admissionHandler.TryAdmitUserAsync(
-                    UserIdentity.From(user),
+                    userIdentity,
                     ChatIdentity.From(chatMemberUpdate.Chat),
                     Actor.WelcomeFlow,
                     ReasonSecurityPassed,
@@ -481,7 +489,7 @@ public class WelcomeService(
             // Welcome ENABLED: Update verifying message to full welcome content
             var chatInfo = await chatService.GetChatAsync(chatMemberUpdate.Chat.Id, cancellationToken);
             var chatName = chatInfo.Title ?? "this chat";
-            var welcomeMessage = WelcomeMessageBuilder.FormatWelcomeMessage(config, UserIdentity.From(user), chatName);
+            var welcomeMessage = WelcomeMessageBuilder.FormatWelcomeMessage(config, userIdentity, chatName);
 
             // Build keyboard based on welcome mode
             InlineKeyboardMarkup keyboard;
@@ -535,7 +543,7 @@ public class WelcomeService(
 
             // Step 11: Schedule timeout via Quartz.NET
             var payload = new WelcomeTimeoutPayload(
-                UserIdentity.From(user),
+                userIdentity,
                 ChatIdentity.From(chatMemberUpdate.Chat),
                 welcomeMessageId
             );
@@ -721,6 +729,10 @@ public class WelcomeService(
 
         var chatId = message.Chat.Id;
 
+        // Buttons exist only for a user observed at join seconds earlier, so the clicker is
+        // resolved by id rather than recording the callback's names.
+        var clicker = await identityService.ResolveAsync(user.Id, cancellationToken);
+
         // Check if this is an exam callback (handled separately)
         var isExamCallback = examFlowService.IsExamCallback(data);
 
@@ -763,7 +775,7 @@ public class WelcomeService(
             }
 
             // For chat buttons, send temporary warning message
-            await SendWrongUserWarningAsync(chatId, user, message.MessageId, cancellationToken);
+            await SendWrongUserWarningAsync(chatId, clicker, message.MessageId, cancellationToken);
             return;
         }
 
@@ -811,7 +823,7 @@ public class WelcomeService(
 
     private async Task SendWrongUserWarningAsync(
         long chatId,
-        User user,
+        UserIdentity user,
         int replyToMessageId,
         CancellationToken cancellationToken)
     {
@@ -820,7 +832,7 @@ public class WelcomeService(
             var warningMsg = await messageService.SendAndSaveMessageAsync(
                 chatId: chatId,
                 message: new TelegramMessageBuilder()
-                    .Mention(UserIdentity.From(user))
+                    .Mention(user)
                     .Text(", ⚠️ this button is not for you. Only the mentioned user can respond.")
                     .Build(),
                 replyParameters: new ReplyParameters { MessageId = replyToMessageId },

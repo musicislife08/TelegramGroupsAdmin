@@ -12,6 +12,7 @@ using TelegramGroupsAdmin.Telegram.Metrics;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.Telegram.Services.Identity;
 
 namespace TelegramGroupsAdmin.Telegram.Services.DmCelebrations;
 
@@ -19,6 +20,7 @@ namespace TelegramGroupsAdmin.Telegram.Services.DmCelebrations;
 public sealed class BanCelebrationSubscriptionService(
     IBanCelebrationSubscriberRepository subscriberRepository,
     ITelegramUserRepository telegramUserRepository,
+    IUserIdentityService identityService,
     IManagedChatsRepository managedChatsRepository,
     IBotMessageService messageService,
     IBotUserService userService,
@@ -33,9 +35,16 @@ public sealed class BanCelebrationSubscriptionService(
 
     public async Task<DmCelebrationSubscribeResult> SubscribeAsync(ChatIdentity chat, UserIdentity user, CancellationToken ct = default)
     {
-        // Group commands run before the message pipeline upserts the sender, so a member who has
-        // never posted has no telegram_users row yet; the subscription row's FK needs one.
-        var telegramUser = await telegramUserRepository.GetOrCreateAsync(user, isBot: false, ct);
+        // The message pipeline records the sender before routing the command, so the row the
+        // subscription's FK needs exists. It is missing only when that recording failed (logged
+        // there); with no row nothing can be saved.
+        var telegramUser = await telegramUserRepository.GetByTelegramIdAsync(user.Id, ct);
+        if (telegramUser is null)
+        {
+            logger.LogWarning("{User} has no user record; DM ban celebration subscription to {Chat} not saved",
+                user.ToLogDebug(), chat.ToLogDebug());
+            return DmCelebrationSubscribeResult.NotAllowed;
+        }
 
         // Posting the start prompt mentions the user by name; never let a banned user trigger that.
         if (telegramUser.IsBanned)
@@ -126,7 +135,7 @@ public sealed class BanCelebrationSubscriptionService(
             return;
         }
 
-        var user = UserIdentity.From(update.From);
+        var user = await identityService.ResolveAsync(update.From.Id, ct);
         await telegramUserRepository.DisableBotDmAsync(user.Id, ct);
         await RemoveAllForUserAsync(user, SubscriptionRemovalReason.Blocked, ct);
     }

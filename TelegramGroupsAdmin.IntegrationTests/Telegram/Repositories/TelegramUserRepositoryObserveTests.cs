@@ -215,6 +215,42 @@ public class TelegramUserRepositoryObserveTests
     }
 
     [Test]
+    public async Task FirstObservation_CreatesInactiveUntrustedRow()
+    {
+        // An id outside the canonical range: the insert is the assertion subject.
+        const long newUserId = 999999;
+        var at = new DateTimeOffset(2026, 10, 3, 12, 0, 0, TimeSpan.Zero);
+
+        var result = await _repository!.GetOrUpdateAsync(Observe(newUserId, "New", "Person", "new_user", at), NoContext);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Renamed, Is.Null, "a first observation is not a rename");
+            Assert.That(result.User.TelegramUserId, Is.EqualTo(newUserId));
+            Assert.That(result.User.Username, Is.EqualTo("new_user"));
+            Assert.That(result.User.FirstName, Is.EqualTo("New"));
+            Assert.That(result.User.LastName, Is.EqualTo("Person"));
+            Assert.That(result.User.IsBanned, Is.False);
+            Assert.That(result.User.IsTrusted, Is.False);
+            Assert.That(result.User.IsActive, Is.False, "new users start inactive until welcome or a message");
+            Assert.That(result.User.BotDmEnabled, Is.False);
+        });
+    }
+
+    [Test]
+    public async Task FirstObservation_OfSystemUser_IsAutoTrusted()
+    {
+        // 777000 (Telegram service account) is not in canonical, so this creates it.
+        const long systemUserId = TelegramGroupsAdmin.Core.TelegramConstants.ServiceAccountUserId;
+
+        var result = await _repository!.GetOrUpdateAsync(
+            Observe(systemUserId, "Telegram", null, null, DateTimeOffset.UtcNow), NoContext);
+
+        Assert.That(result.User.IsTrusted, Is.True,
+            "system users are auto-trusted via TelegramConstants.IsSystemUser()");
+    }
+
+    [Test]
     public async Task MarkActive_OnlyMovesLastSeenForward()
     {
         var id = GoldenDatasetConstants.IdentityService.UntrustedNoHistoryUserId;

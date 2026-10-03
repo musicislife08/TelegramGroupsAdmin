@@ -819,4 +819,20 @@ public static class GoldenDatasetConstants
         /// <summary>@raceoutnumber: not trusted; user_photo_path and photo_hash both set.</summary>
         public const long PhotoUserId = 9264989724828;
     }
+
+    /// <summary>
+    /// username_history anchors for past-name search (canonical edit 2026-10-03). Both owners are
+    /// banned spammers, so they appear under the All and Banned tabs, not Active.
+    /// </summary>
+    public static class UsernameHistory
+    {
+        /// <summary>@BryanNguyen54 "Bryan Nguyen": history row 3 records the prior names "Rsza Тилляев" and, since the 2026-10-03 edit, the prior username <see cref="PastUsername"/>.</summary>
+        public const long PastUsernameUserId = 9032620986755;
+        /// <summary>Prior username on history row 3 (flag-edited from NULL). No current name or other history row contains it.</summary>
+        public const string PastUsername = "rsza_tilla";
+        /// <summary>"Jeanette" (no username): history row 2 records the prior first name <see cref="PastFirstName"/>.</summary>
+        public const long PastFirstNameUserId = 9875141377477;
+        /// <summary>Prior first name on history row 2.</summary>
+        public const string PastFirstName = "QQQ";
+    }
 }

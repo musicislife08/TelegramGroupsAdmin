@@ -15,6 +15,7 @@ using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.DmCelebrations;
+using TelegramGroupsAdmin.Telegram.Services.Identity;
 
 namespace TelegramGroupsAdmin.UnitTests.Telegram.Services.DmCelebrations;
 
@@ -28,6 +29,7 @@ public class BanCelebrationSubscriptionServiceTests
 
     private IBanCelebrationSubscriberRepository _repository = null!;
     private ITelegramUserRepository _telegramUsers = null!;
+    private IUserIdentityService _identities = null!;
     private IManagedChatsRepository _managedChats = null!;
     private IBotMessageService _messages = null!;
     private IBotUserService _botUser = null!;
@@ -40,6 +42,8 @@ public class BanCelebrationSubscriptionServiceTests
     {
         _repository = Substitute.For<IBanCelebrationSubscriberRepository>();
         _telegramUsers = Substitute.For<ITelegramUserRepository>();
+        _identities = Substitute.For<IUserIdentityService>();
+        _identities.ResolveAsync(UserId, Arg.Any<CancellationToken>()).Returns(User);
         _managedChats = Substitute.For<IManagedChatsRepository>();
         _messages = Substitute.For<IBotMessageService>();
         _botUser = Substitute.For<IBotUserService>();
@@ -57,12 +61,12 @@ public class BanCelebrationSubscriptionServiceTests
             .Returns(new DmDeliveryResult { DmSent = true, MessageId = 1 });
 
         _sut = new BanCelebrationSubscriptionService(
-            _repository, _telegramUsers, _managedChats, _messages, _botUser, _jobs, _dm,
+            _repository, _telegramUsers, _identities, _managedChats, _messages, _botUser, _jobs, _dm,
             new PipelineMetrics(), NullLogger<BanCelebrationSubscriptionService>.Instance);
     }
 
     private void DmEnabled(bool enabled, bool isBanned = false) =>
-        _telegramUsers.GetOrCreateAsync(Arg.Is<UserIdentity>(u => u!.Id == UserId), false, Arg.Any<CancellationToken>())
+        _telegramUsers.GetByTelegramIdAsync(UserId, Arg.Any<CancellationToken>())
             .Returns(new TelegramUser(
                 TelegramUserId: UserId, Username: "kim", FirstName: "Kim", LastName: null,
                 UserPhotoPath: null, PhotoHash: null, PhotoFileUniqueId: null,
@@ -136,18 +140,33 @@ public class BanCelebrationSubscriptionServiceTests
     }
 
     [Test]
-    public async Task SubscribeAsync_EnsuresTelegramUserExistsBeforeUpsert()
+    public async Task SubscribeAsync_ReadsTheUserRowBeforeUpsert()
     {
+        // The message pipeline recorded the sender before routing the command, so the row exists.
         DmEnabled(true);
 
         await _sut.SubscribeAsync(Chat, User);
 
         Received.InOrder(() =>
         {
-            _telegramUsers.GetOrCreateAsync(Arg.Is<UserIdentity>(u => u!.Id == UserId), false, Arg.Any<CancellationToken>());
+            _telegramUsers.GetByTelegramIdAsync(UserId, Arg.Any<CancellationToken>());
             _repository.UpsertAsync(UserId, ChatId, Arg.Any<CancellationToken>());
         });
-        await _telegramUsers.DidNotReceiveWithAnyArgs().GetByTelegramIdAsync(default);
+        await _identities.DidNotReceiveWithAnyArgs().ObserveAsync(default!, default!, default, default);
+    }
+
+    [Test]
+    public async Task SubscribeAsync_NoUserRow_ReturnsNotAllowedWithoutUpsertOrPrompt()
+    {
+        // Recording the sender failed (logged by the identity service): the subscription's
+        // foreign key can't be met, so nothing is saved or posted.
+        _telegramUsers.GetByTelegramIdAsync(UserId, Arg.Any<CancellationToken>()).Returns((TelegramUser?)null);
+
+        var result = await _sut.SubscribeAsync(Chat, User);
+
+        Assert.That(result, Is.EqualTo(DmCelebrationSubscribeResult.NotAllowed));
+        await _repository.DidNotReceiveWithAnyArgs().UpsertAsync(default, default);
+        await _messages.DidNotReceiveWithAnyArgs().SendAndSaveMessageAsync(default, default(TelegramMessage)!);
     }
 
     [Test]
@@ -378,6 +397,18 @@ public class BanCelebrationSubscriptionServiceTests
 
         await _telegramUsers.Received(1).DisableBotDmAsync(UserId, Arg.Any<CancellationToken>());
         await _repository.Received(1).DeleteAllForUserAsync(UserId, Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task HandleBotMembershipUpdateAsync_PrivateChatBlocked_ResolvesUserByIdWithoutObserving()
+    {
+        _repository.DeleteAllForUserAsync(UserId, Arg.Any<CancellationToken>()).Returns(1);
+
+        await _sut.HandleBotMembershipUpdateAsync(MemberUpdate(ChatType.Private,
+            new ChatMemberMember { User = TgUser }, new ChatMemberBanned { User = TgUser }));
+
+        await _identities.Received(1).ResolveAsync(UserId, Arg.Any<CancellationToken>());
+        await _identities.DidNotReceiveWithAnyArgs().ObserveAsync(default!, default!, default, default);
     }
 
     [Test]

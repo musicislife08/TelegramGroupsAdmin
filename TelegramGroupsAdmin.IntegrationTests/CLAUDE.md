@@ -404,6 +404,16 @@ Anchors are in code as `GoldenDatasetConstants.IdentityService` (#552 part 1); a
 | `RaceUserId` | 9680301255238 @violingentleman | not trusted, active, no history; row-lock race test |
 | `PhotoUserId` | 9264989724828 @raceoutnumber | not trusted; user_photo_path and photo_hash set |
 
+### Past-name search anchors (canonical edit 2026-10-03)
+Anchors are in code as `GoldenDatasetConstants.UsernameHistory`. Both owners are banned spammers (All and Banned tabs, not Active).
+
+| Constant | Anchor | Shape |
+|---|---|---|
+| `PastUsernameUserId` / `PastUsername` | 9032620986755 @BryanNguyen54, history row 3 | prior username `rsza_tilla` (flag-edited from NULL; prior names "Rsza Тилляев" unchanged) |
+| `PastFirstNameUserId` / `PastFirstName` | 9875141377477 "Jeanette", history row 2 | prior first name `QQQ` |
+
+Use when: a search must match a user by a past name only (`TelegramUserRepositoryTests` search region). Tests read the history row and the current names back first.
+
 ### Synthetic / reserved rows (do not regenerate)
 - `welcome_responses` IDs `999001..999005`: 5 status branches anchored on `(MainChat_Id=-100026957614982, user_id=9196379650113, username='canonical_user1')`. Mapping: `999001`=Pending, `999002`=Accepted, `999003`=Denied, `999004`=Timeout, `999005`=Left.
 - `username_blacklist` IDs `999001` (`pattern='spambot_admin'`, enabled, Exact match) + `999005` (`pattern='archived_pattern'`, disabled, Exact match). No Contains/Regex/StartsWith fixtures (feature not yet implemented).

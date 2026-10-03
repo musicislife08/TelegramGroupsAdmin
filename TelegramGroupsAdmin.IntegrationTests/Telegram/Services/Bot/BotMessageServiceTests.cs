@@ -14,6 +14,8 @@ using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.Bot.Handlers;
+using TelegramGroupsAdmin.Telegram.Services.Identity;
+using TelegramGroupsAdmin.Telegram.Services.UserApi;
 
 namespace TelegramGroupsAdmin.IntegrationTests.Telegram.Services.Bot;
 
@@ -106,6 +108,10 @@ public class BotMessageServiceTests
         services.AddSingleton(_mockMessageHandler);
         services.AddSingleton(_mockUserService);
         services.AddSingleton(_mockChatHandler);
+
+        // Real identity service (records names through the real repository); no rescans.
+        services.AddSingleton(Substitute.For<IProfileScanGate>());
+        services.AddScoped<IUserIdentityService, UserIdentityService>();
 
         // Register BotMessageService
         services.AddScoped<IBotMessageService, BotMessageService>();

@@ -20,13 +20,6 @@ public interface ITelegramUserRepository
         IReadOnlyCollection<long> userIds, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Returns the existing user if found, or creates a minimal inactive record.
-    /// The returned object reflects current DB state (including IsBanned, IsTrusted, etc.).
-    /// </summary>
-    Task<UiModels.TelegramUser> GetOrCreateAsync(
-        UserIdentity user, bool isBot, CancellationToken cancellationToken = default);
-
-    /// <summary>
     /// Records an observation of a user's names. Creates a minimal inactive row for an unknown user.
     /// For a known user, the names change only when the observation is not older than the stored one
     /// (newest observation wins) and differs from it; a change writes a username_history row and a
@@ -45,7 +38,6 @@ public interface ITelegramUserRepository
     Task MarkActiveAsync(long telegramUserId, DateTimeOffset seenAt, CancellationToken cancellationToken = default);
 
     Task<string?> GetUserPhotoPathAsync(long telegramUserId, CancellationToken cancellationToken = default);
-    Task UpsertAsync(UiModels.TelegramUser user, CancellationToken cancellationToken = default);
     Task UpdateUserPhotoPathAsync(long telegramUserId, string? photoPath, string? photoHash = null, CancellationToken cancellationToken = default);
     Task UpdatePhotoFileUniqueIdAsync(long telegramUserId, string? fileUniqueId, string? photoPath, CancellationToken cancellationToken = default);
     Task<List<UiModels.TelegramUser>> GetActiveUsersAsync(int days, CancellationToken cancellationToken = default);

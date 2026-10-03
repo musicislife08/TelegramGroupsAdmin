@@ -15,6 +15,7 @@ using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.Telegram.Services.Identity;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Handlers;
 using TelegramGroupsAdmin.Telegram.Services.UserApi;
@@ -45,6 +46,7 @@ public class WelcomeServiceTests
     private IConfigService _configService = null!;
     private IWelcomeResponsesRepository _welcomeResponsesRepository = null!;
     private ITelegramUserRepository _telegramUserRepository = null!;
+    private IUserIdentityService _identities = null!;
     private IExamFlowService _examFlowService = null!;
     private IImpersonationDetectionService _impersonationDetectionService = null!;
     private IBotProtectionService _botProtectionService = null!;
@@ -103,6 +105,11 @@ public class WelcomeServiceTests
         _configService = Substitute.For<IConfigService>();
         _welcomeResponsesRepository = Substitute.For<IWelcomeResponsesRepository>();
         _telegramUserRepository = Substitute.For<ITelegramUserRepository>();
+        _identities = Substitute.For<IUserIdentityService>();
+        _identities.ObserveAsync(Arg.Any<ObservedUser>(), Arg.Any<ProfileChangeContext>(), Arg.Any<RenameRescan>(), Arg.Any<CancellationToken>())
+            .Returns(ci => { var o = ci.Arg<ObservedUser>(); return new UserIdentity(o.Id, o.FirstName, o.LastName, o.Username); });
+        _identities.ResolveAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
+            .Returns(ci => UserIdentity.FromId(ci.Arg<long>()));
         _examFlowService = Substitute.For<IExamFlowService>();
         _impersonationDetectionService = Substitute.For<IImpersonationDetectionService>();
         _botProtectionService = Substitute.For<IBotProtectionService>();
@@ -148,8 +155,7 @@ public class WelcomeServiceTests
 
         // User exists and is not banned
         _telegramUserRepository
-            .GetOrCreateAsync(
-                Arg.Any<UserIdentity>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
+            .GetByTelegramIdAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(NonBannedTelegramUser);
 
         // Bot protection allows bots by default
@@ -195,6 +201,7 @@ public class WelcomeServiceTests
             _configService,
             _welcomeResponsesRepository,
             _telegramUserRepository,
+            _identities,
             _examFlowService,
             _impersonationDetectionService,
             _botProtectionService,
@@ -300,8 +307,7 @@ public class WelcomeServiceTests
     {
         // Arrange — repository returns a globally banned user
         _telegramUserRepository
-            .GetOrCreateAsync(
-                Arg.Any<UserIdentity>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
+            .GetByTelegramIdAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(BannedTelegramUser);
 
         var update = CreateJoinUpdate();
@@ -354,7 +360,46 @@ public class WelcomeServiceTests
 
     #endregion
 
-    #region Test 3: User leaving — GetOrCreateAsync is never called
+    #region Identity: join observes, callbacks resolve
+
+    [Test]
+    public async Task HandleChatMemberUpdate_Join_ObservesJoinerWithUpdateDateWithoutRescan()
+    {
+        var update = CreateJoinUpdate();
+        update.Date = new DateTime(2026, 10, 3, 12, 0, 0, DateTimeKind.Utc);
+
+        await _sut.HandleChatMemberUpdateAsync(update, CancellationToken.None);
+
+        // RenameRescan.None: the join flow scans the user right after, on the names just recorded.
+        await _identities.Received(1).ObserveAsync(
+            Arg.Is<ObservedUser>(o => o!.Id == TestUserId
+                && o.Source == ObservationSource.ChatMember
+                && o.ObservedAt == new DateTimeOffset(2026, 10, 3, 12, 0, 0, TimeSpan.Zero)),
+            Arg.Is<ProfileChangeContext>(c => c!.Chat!.Id == TestChatId && c.MessageId == null),
+            RenameRescan.None,
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task HandleCallbackQuery_ResolvesClickerById_WithoutObserving()
+    {
+        var callback = new CallbackQuery
+        {
+            Id = "cb1",
+            Data = $"welcome_accept:{TestUserId}",
+            From = TestUser,
+            Message = new Message { Id = 42, Chat = new Chat { Id = TestChatId, Type = ChatType.Supergroup, Title = "Test Group" } }
+        };
+
+        await _sut.HandleCallbackQueryAsync(callback, CancellationToken.None);
+
+        await _identities.Received(1).ResolveAsync(TestUserId, Arg.Any<CancellationToken>());
+        await _identities.DidNotReceiveWithAnyArgs().ObserveAsync(default!, default!, default, default);
+    }
+
+    #endregion
+
+    #region Test 3: User leaving — the joiner is never observed
 
     [Test]
     public async Task HandleChatMemberUpdate_UserLeaving_HandlesLeaveNotJoin()
@@ -368,8 +413,7 @@ public class WelcomeServiceTests
         await _sut.HandleChatMemberUpdateAsync(update, CancellationToken.None);
 
         // Assert — the leave path must not attempt to fetch/create a user record
-        await _telegramUserRepository.DidNotReceive().GetOrCreateAsync(
-            Arg.Any<UserIdentity>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
+        await _identities.DidNotReceiveWithAnyArgs().ObserveAsync(default!, default!, default, default);
 
         // No mute should happen either
         await _moderationService.DidNotReceive().RestrictUserAsync(
@@ -406,8 +450,7 @@ public class WelcomeServiceTests
             Arg.Any<Chat>(), Arg.Any<User>(), Arg.Any<ChatMemberUpdated?>(), Arg.Any<CancellationToken>());
 
         // Human join path must not execute — user record must not be fetched
-        await _telegramUserRepository.DidNotReceive().GetOrCreateAsync(
-            Arg.Any<UserIdentity>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
+        await _identities.DidNotReceiveWithAnyArgs().ObserveAsync(default!, default!, default, default);
     }
 
     [Test]
@@ -436,11 +479,10 @@ public class WelcomeServiceTests
             Arg.Any<Chat>(), Arg.Any<User>(), Arg.Any<ChatMemberUpdated?>(), Arg.Any<CancellationToken>());
 
         await _botProtectionService.Received(1).BanBotAsync(
-            Arg.Any<Chat>(), Arg.Any<User>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+            Arg.Any<Chat>(), Arg.Any<User>(), Arg.Any<DateTimeOffset>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
 
         // User record path must not execute
-        await _telegramUserRepository.DidNotReceive().GetOrCreateAsync(
-            Arg.Any<UserIdentity>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
+        await _identities.DidNotReceiveWithAnyArgs().ObserveAsync(default!, default!, default, default);
     }
 
     #endregion
@@ -506,8 +548,7 @@ public class WelcomeServiceTests
         await _sut.HandleChatMemberUpdateAsync(update, CancellationToken.None);
 
         // Assert — the early-return guard must fire, nothing processed
-        await _telegramUserRepository.DidNotReceive().GetOrCreateAsync(
-            Arg.Any<UserIdentity>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
+        await _identities.DidNotReceiveWithAnyArgs().ObserveAsync(default!, default!, default, default);
 
         await _moderationService.DidNotReceive().RestrictUserAsync(
             Arg.Any<RestrictIntent>(), Arg.Any<CancellationToken>());
@@ -518,8 +559,7 @@ public class WelcomeServiceTests
     {
         // Arrange
         _telegramUserRepository
-            .GetOrCreateAsync(
-                Arg.Any<UserIdentity>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
+            .GetByTelegramIdAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(BannedTelegramUser);
 
         var update = CreateJoinUpdate();
@@ -764,7 +804,7 @@ public class WelcomeServiceTests
     {
         // Arrange — pre-banned user. Resolver should not be consulted at all.
         _telegramUserRepository
-            .GetOrCreateAsync(Arg.Any<UserIdentity>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
+            .GetByTelegramIdAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(BannedTelegramUser);
 
         // Act

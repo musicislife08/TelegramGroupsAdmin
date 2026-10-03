@@ -16,7 +16,8 @@ public interface IBotProtectionService
     Task<bool> ShouldAllowBotAsync(Chat chat, User user, ChatMemberUpdated? chatMemberUpdate = null, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Ban a bot from the chat and log the event
+    /// Ban a bot from the chat and log the event. The bot's names are recorded first, as seen at
+    /// <paramref name="seenAt"/> (the join update's date).
     /// </summary>
-    Task BanBotAsync(Chat chat, User bot, string reason, CancellationToken cancellationToken = default);
+    Task BanBotAsync(Chat chat, User bot, DateTimeOffset seenAt, string reason, CancellationToken cancellationToken = default);
 }

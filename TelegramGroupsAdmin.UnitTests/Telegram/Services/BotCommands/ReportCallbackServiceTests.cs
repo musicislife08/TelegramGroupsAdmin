@@ -10,6 +10,7 @@ using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.Telegram.Services.Identity;
 using TelegramGroupsAdmin.Telegram.Services.ReportActions;
 using ReportType = TelegramGroupsAdmin.Core.Models.ReportType;
 using ReportCallbackContext = TelegramGroupsAdmin.Telegram.Models.ReportCallbackContext;
@@ -40,6 +41,7 @@ public class ReportCallbackServiceTests
     private IBotDmService _mockDmService = null!;
     private IReportActionsService _mockReportActionsService = null!;
     private ITelegramPermissionService _mockPermissionService = null!;
+    private IUserIdentityService _mockIdentities = null!;
 
     private ReportCallbackService _service = null!;
 
@@ -69,6 +71,12 @@ public class ReportCallbackServiceTests
             .Returns(PermissionLevel.Admin);
         _mockServiceProvider.GetService(typeof(ITelegramPermissionService))
             .Returns(_mockPermissionService);
+
+        _mockIdentities = Substitute.For<IUserIdentityService>();
+        _mockIdentities.ResolveAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
+            .Returns(ci => UserIdentity.ForTest(ci.Arg<long>(), "Stored", "Admin"));
+        _mockServiceProvider.GetService(typeof(IUserIdentityService))
+            .Returns(_mockIdentities);
 
         _service = new ReportCallbackService(
             _mockLogger,
@@ -251,6 +259,23 @@ public class ReportCallbackServiceTests
 
         await _mockReportActionsService.Received(1)
             .HandleContentSpamAsync(TestReportId, Arg.Any<Actor>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task HandleCallbackAsync_ExecutorIsResolvedById_NotObserved()
+    {
+        SetupContext(ReportType.ContentReport);
+        _mockReportActionsService.HandleContentSpamAsync(TestReportId, Arg.Any<Actor>(), Arg.Any<CancellationToken>())
+            .Returns(new ReviewActionResult(true, "Spam done", "Spam"));
+
+        await _service.HandleCallbackAsync(CreateCallbackQuery(data: $"rev:{TestContextId}:0"));
+
+        await _mockIdentities.Received(1).ResolveAsync(99999, Arg.Any<CancellationToken>());
+        await _mockIdentities.DidNotReceiveWithAnyArgs().ObserveAsync(default!, default!, default, default);
+        await _mockReportActionsService.Received(1).HandleContentSpamAsync(
+            TestReportId,
+            Arg.Is<Actor>(a => a!.TelegramUserId == 99999 && a.DisplayName == "Stored Admin"),
+            Arg.Any<CancellationToken>());
     }
 
     [Test]
