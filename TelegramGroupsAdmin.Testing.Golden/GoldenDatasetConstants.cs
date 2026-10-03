@@ -800,4 +800,23 @@ public static class GoldenDatasetConstants
         /// <summary>Dummy API key stored for <see cref="OpenAiConnectionId"/> in <c>04_configs.api_keys.json</c>. Only the format matters; it is never sent anywhere.</summary>
         public const string OpenAiConnectionKey = "sk-canonical-test-key";
     }
+
+    /// <summary>Anchors for the user identity service tests (#552 part 1). No canonical rows were edited.</summary>
+    public static class IdentityService
+    {
+        /// <summary>@bagging_armado: two scans (530 older, 534 newer); 534 has ai_explicit_display_text = true. Read-only: ProfileScanResultsRepositoryTests pins it.</summary>
+        public const long ScannedTwiceExplicitUserId = 9220500615182;
+        /// <summary>@Juvenileii: not trusted, not a bot, no scan rows, profile_scanned_at NULL.</summary>
+        public const long UnscannedUserId = 9063342700386;
+        /// <summary>@doilyemcee: the canonical bot. Read-only.</summary>
+        public const long BotUserId = 9742468412405;
+        /// <summary>@pastramiherbs: not trusted, active, no username_history rows.</summary>
+        public const long UntrustedNoHistoryUserId = 9263051408340;
+        /// <summary>@starlightskinless: trusted, not an admin.</summary>
+        public const long TrustedUserId = 9006671634371;
+        /// <summary>@violingentleman: not trusted, active, no history rows. Used by the row-lock race test.</summary>
+        public const long RaceUserId = 9680301255238;
+        /// <summary>@raceoutnumber: not trusted; user_photo_path and photo_hash both set.</summary>
+        public const long PhotoUserId = 9264989724828;
+    }
 }

@@ -13,6 +13,13 @@ public interface ITelegramUserRepository
     Task<UiModels.TelegramUser?> GetByIdAsync(long telegramUserId, CancellationToken cancellationToken = default); // Alias for GetByTelegramIdAsync
 
     /// <summary>
+    /// Returns one identity per id found (names plus the verdict from the latest profile scan).
+    /// Ids with no row are absent from the result.
+    /// </summary>
+    Task<IReadOnlyList<UserIdentity>> GetIdentitiesAsync(
+        IReadOnlyCollection<long> userIds, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Returns the existing user if found, or creates a minimal inactive record.
     /// The returned object reflects current DB state (including IsBanned, IsTrusted, etc.).
     /// </summary>

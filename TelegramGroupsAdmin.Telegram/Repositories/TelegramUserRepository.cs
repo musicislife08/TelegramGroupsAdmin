@@ -4,6 +4,7 @@ using TelegramGroupsAdmin.ContentDetection.Repositories.Mappings;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Core;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Repositories.Mappings;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Telegram.Constants;
@@ -31,6 +32,18 @@ public class TelegramUserRepository : ITelegramUserRepository
     /// <summary>
     /// Get Telegram user by ID
     /// </summary>
+    public async Task<IReadOnlyList<UserIdentity>> GetIdentitiesAsync(
+        IReadOnlyCollection<long> userIds, CancellationToken cancellationToken = default)
+    {
+        if (userIds.Count == 0) return [];
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var rows = await context.UserIdentities
+            .AsNoTracking()
+            .Where(v => userIds.Contains(v.TelegramUserId))
+            .ToListAsync(cancellationToken);
+        return rows.Select(r => r.ToIdentity()).ToList();
+    }
+
     public async Task<UiModels.TelegramUser?> GetByTelegramIdAsync(long telegramUserId, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);

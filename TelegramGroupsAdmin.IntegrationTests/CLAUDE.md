@@ -391,6 +391,19 @@ Flag-edit: Poultry Community's msg 14498 renumbered to 14538 (still after the ch
 #### Profile-scan alert `aiSignals` shape (canonical edit 2026-10-01)
 `reports` 177, 178, 180 (`type=3`, resolved, real rows) had `context.aiSignals` stored as one lorem *string*. Production writes only arrays (`ProfileScanAlertContext.AiSignals` is `string[]`, verified against prod 2026-10-01: 9 rows, all arrays); the string shape was an artifact of the bootstrap's length-preserving lorem sanitizer, and it made `ReportsRepository.GetProfileScanAlertsAsync(pendingOnly: false)` — and so the whole Reports page — throw a `JsonException` on canonical data. The three values were split on `,`/`.` into short lorem items (`["Lorem ipsum dolor sit amet", "consectetur adipiscing elit", …]`); no real-looking signals were invented. Guard: `TestData/Tests/CanonicalReportContextShapeTests` (`jsonb_typeof(context->'aiSignals')`). Pending fixture 188 already carried an array.
 
+### User identity service anchors (no canonical edits)
+Anchors are in code as `GoldenDatasetConstants.IdentityService` (#552 part 1); all read-only.
+
+| Constant | Anchor | Shape |
+|---|---|---|
+| `ScannedTwiceExplicitUserId` | 9220500615182 @bagging_armado | scans 530 (older) and 534 (newer); 534 explicit |
+| `UnscannedUserId` | 9063342700386 @Juvenileii | not trusted, not a bot, no scan rows |
+| `BotUserId` | 9742468412405 @doilyemcee | the canonical bot |
+| `UntrustedNoHistoryUserId` | 9263051408340 @pastramiherbs | not trusted, active, no username_history |
+| `TrustedUserId` | 9006671634371 @starlightskinless | trusted, not an admin |
+| `RaceUserId` | 9680301255238 @violingentleman | not trusted, active, no history; row-lock race test |
+| `PhotoUserId` | 9264989724828 @raceoutnumber | not trusted; user_photo_path and photo_hash set |
+
 ### Synthetic / reserved rows (do not regenerate)
 - `welcome_responses` IDs `999001..999005`: 5 status branches anchored on `(MainChat_Id=-100026957614982, user_id=9196379650113, username='canonical_user1')`. Mapping: `999001`=Pending, `999002`=Accepted, `999003`=Denied, `999004`=Timeout, `999005`=Left.
 - `username_blacklist` IDs `999001` (`pattern='spambot_admin'`, enabled, Exact match) + `999005` (`pattern='archived_pattern'`, disabled, Exact match). No Contains/Regex/StartsWith fixtures (feature not yet implemented).
