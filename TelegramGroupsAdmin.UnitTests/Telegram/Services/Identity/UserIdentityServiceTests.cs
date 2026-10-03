@@ -166,4 +166,41 @@ public class UserIdentityServiceTests
         Assert.That(identity.DisplayName, Is.EqualTo("Seen"));
         Assert.That(identity.Verdict, Is.EqualTo(NameVerdict.Unscanned));
     }
+
+    [Test]
+    public async Task Observe_IdentityReadThrows_ReturnsObservedNamesUnscanned_AndDoesNotScan()
+    {
+        Renamed(Row(7, "New"));
+        _users.GetIdentitiesAsync(Arg.Any<IReadOnlyCollection<long>>(), Arg.Any<CancellationToken>())
+            .Returns<IReadOnlyList<UserIdentity>>(_ => throw new InvalidOperationException("db down"));
+
+        var identity = await _sut.ObserveAsync(Observed(7, "Seen"), new ProfileChangeContext(Chat, 5), RenameRescan.Inline);
+
+        Assert.That(identity.DisplayName, Is.EqualTo("Seen"));
+        Assert.That(identity.Verdict, Is.EqualTo(NameVerdict.Unscanned));
+        await _gate.DidNotReceiveWithAnyArgs().ScanIfEligibleAsync(default!, default, default, default);
+    }
+
+    [Test]
+    public async Task Observe_RenameOfBot_DoesNotScan()
+    {
+        Renamed(Row(7, "New", bot: true));
+        IdentityRow(7, "New", NameVerdict.Unscanned);
+
+        await _sut.ObserveAsync(Observed(7, "New"), new ProfileChangeContext(Chat, 5), RenameRescan.Inline);
+
+        await _gate.DidNotReceiveWithAnyArgs().ScanIfEligibleAsync(default!, default, default, default);
+    }
+
+    [Test]
+    public async Task Observe_RenameOfSystemAccount_DoesNotScan()
+    {
+        const long id = TelegramGroupsAdmin.Core.TelegramConstants.ServiceAccountUserId;
+        Renamed(Row(id, "New"));
+        IdentityRow(id, "New", NameVerdict.Unscanned);
+
+        await _sut.ObserveAsync(Observed(id, "New"), new ProfileChangeContext(Chat, 5), RenameRescan.Inline);
+
+        await _gate.DidNotReceiveWithAnyArgs().ScanIfEligibleAsync(default!, default, default, default);
+    }
 }

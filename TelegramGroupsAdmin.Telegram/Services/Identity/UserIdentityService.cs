@@ -31,7 +31,17 @@ public sealed class UserIdentityService(
             return new UserIdentity(observed.Id, observed.FirstName, observed.LastName, observed.Username);
         }
 
-        var identity = await ResolveAsync(observed.Id, ct);
+        UserIdentity identity;
+        try
+        {
+            identity = await ResolveAsync(observed.Id, ct);
+        }
+        catch (Exception ex) when (!ct.IsCancellationRequested)
+        {
+            // A failed read must not cost the update its moderation either.
+            logger.LogError(ex, "Failed to resolve identity for user {UserId} after recording names", observed.Id);
+            return new UserIdentity(observed.Id, observed.FirstName, observed.LastName, observed.Username);
+        }
 
         // Inline, as the message pipeline did before: a profile ban stays inside this update's
         // context and its existing cleanup path. Renames are rare, so the stall is rare.
