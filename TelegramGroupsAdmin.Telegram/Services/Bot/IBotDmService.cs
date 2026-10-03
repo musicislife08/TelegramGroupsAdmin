@@ -11,8 +11,8 @@ namespace TelegramGroupsAdmin.Telegram.Services.Bot;
 /// This service is in the Bot layer and can use IBotMessageHandler directly.
 ///
 /// Callers pass a <see cref="UserIdentity"/> so the service never needs to fetch the user for
-/// logging — identity flows through from the call site (build via <c>UserIdentity.FromAsync</c>
-/// when only an ID is available).
+/// logging — identity flows through from the call site (resolve it via
+/// <c>IUserIdentityService.ResolveAsync</c> when only an ID is available).
 /// </summary>
 public interface IBotDmService
 {

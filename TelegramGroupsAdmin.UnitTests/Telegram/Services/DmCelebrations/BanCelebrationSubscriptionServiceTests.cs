@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
+using TelegramGroupsAdmin.Configuration.Services;
 using Telegram.Bot.Exceptions;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
@@ -35,6 +36,7 @@ public class BanCelebrationSubscriptionServiceTests
     private IBotUserService _botUser = null!;
     private IJobScheduler _jobs = null!;
     private IBotDmService _dm = null!;
+    private IConfigService _config = null!;
     private BanCelebrationSubscriptionService _sut = null!;
 
     [SetUp]
@@ -49,6 +51,7 @@ public class BanCelebrationSubscriptionServiceTests
         _botUser = Substitute.For<IBotUserService>();
         _jobs = Substitute.For<IJobScheduler>();
         _dm = Substitute.For<IBotDmService>();
+        _config = Substitute.For<IConfigService>();
 
         _botUser.GetMeAsync(Arg.Any<CancellationToken>()).Returns(new User { Id = 1, IsBot = true, FirstName = "Bot", Username = "tga_bot" });
         _messages.SendAndSaveMessageAsync(Arg.Any<long>(), Arg.Any<TelegramMessage>(), Arg.Any<ReplyParameters?>(),
@@ -61,7 +64,7 @@ public class BanCelebrationSubscriptionServiceTests
             .Returns(new DmDeliveryResult { DmSent = true, MessageId = 1 });
 
         _sut = new BanCelebrationSubscriptionService(
-            _repository, _telegramUsers, _identities, _managedChats, _messages, _botUser, _jobs, _dm,
+            _repository, _telegramUsers, _identities, _managedChats, _messages, _botUser, _jobs, _dm, _config,
             new PipelineMetrics(), NullLogger<BanCelebrationSubscriptionService>.Instance);
     }
 
@@ -167,6 +170,23 @@ public class BanCelebrationSubscriptionServiceTests
         Assert.That(result, Is.EqualTo(DmCelebrationSubscribeResult.NotAllowed));
         await _repository.DidNotReceiveWithAnyArgs().UpsertAsync(default, default);
         await _messages.DidNotReceiveWithAnyArgs().SendAndSaveMessageAsync(default, default(TelegramMessage)!);
+    }
+
+    [Test]
+    public async Task SubscribeAsync_DmDisabled_ChatMaskingOn_PromptMasksFlaggedName()
+    {
+        // The deep-link prompt is posted in the group, so that chat's masking setting applies.
+        DmEnabled(false);
+        _config.GetNameMaskingAsync(ChatId, Arg.Any<CancellationToken>()).Returns(NameMasking.On);
+        TelegramMessage? prompt = null;
+        _messages.SendAndSaveMessageAsync(ChatId, Arg.Do<TelegramMessage>(m => prompt = m), Arg.Any<ReplyParameters?>(),
+                Arg.Any<InlineKeyboardMarkup?>(), Arg.Any<CancellationToken>())
+            .Returns(new Message { Id = 778, Chat = new Chat { Id = ChatId } });
+
+        await _sut.SubscribeAsync(Chat, UserIdentity.ForTest(UserId, "Lewd", verdict: NameVerdict.Explicit));
+
+        Assert.That(prompt!.Text, Does.StartWith(NameRedaction.Explicit));
+        Assert.That(prompt.Text, Does.Not.Contain("Lewd"));
     }
 
     [Test]

@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
+using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.JobPayloads;
@@ -26,6 +27,7 @@ public sealed class BanCelebrationSubscriptionService(
     IBotUserService userService,
     IJobScheduler jobScheduler,
     IBotDmService dmService,
+    IConfigService configService,
     PipelineMetrics pipelineMetrics,
     ILogger<BanCelebrationSubscriptionService> logger) : IBanCelebrationSubscriptionService
 {
@@ -165,7 +167,8 @@ public sealed class BanCelebrationSubscriptionService(
 
         var bot = await userService.GetMeAsync(ct);
         var link = DmCelebrationDeepLink.Build(bot.Username!, chat.Id);
-        var text = new TelegramMessageBuilder()
+        var masking = await configService.GetNameMaskingAsync(chat.Id, ct);
+        var text = TelegramMessageBuilder.For(masking)
             .Mention(user)
             .Text($", tap below so I can send you {chat.ChatName ?? "this chat"}'s ban celebrations.")
             .Build();
