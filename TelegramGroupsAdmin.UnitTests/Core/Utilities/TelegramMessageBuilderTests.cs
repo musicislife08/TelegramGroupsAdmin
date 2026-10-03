@@ -151,4 +151,29 @@ public class TelegramMessageBuilderTests
         Assert.That(msg.Text, Is.EqualTo("plain text, no tokens"));
         Assert.That(msg.Entities, Is.Empty);
     }
+
+    [Test]
+    public void Mention_masking_on_shows_label_and_keeps_user_link()
+    {
+        var user = UserIdentity.ForTest(6612345678, "Bad", "Name", verdict: NameVerdict.Explicit);
+
+        var msg = TelegramMessageBuilder.For(NameMasking.On).Text("Welcome, ").Mention(user).Build();
+
+        Assert.That(msg.Text, Is.EqualTo("Welcome, [name removed: explicit]"));
+        var e = msg.Entities.Single();
+        Assert.That(e.Type, Is.EqualTo(MessageEntityType.TextMention));
+        Assert.That(e.Offset, Is.EqualTo("Welcome, ".Length));
+        Assert.That(e.Length, Is.EqualTo("[name removed: explicit]".Length));
+        Assert.That(e.User!.Id, Is.EqualTo(6612345678));
+    }
+
+    [Test]
+    public void Mention_masking_off_shows_real_name()
+    {
+        var user = UserIdentity.ForTest(42, "Bad", "Name", verdict: NameVerdict.Explicit);
+
+        var msg = TelegramMessageBuilder.For(NameMasking.Off).Mention(user).Build();
+
+        Assert.That(msg.Text, Is.EqualTo("Bad Name"));
+    }
 }
