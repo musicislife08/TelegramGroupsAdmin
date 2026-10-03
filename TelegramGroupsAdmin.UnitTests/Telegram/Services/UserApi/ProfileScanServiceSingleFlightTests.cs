@@ -79,15 +79,19 @@ public class ProfileScanServiceSingleFlightTests
         var second = _sut.ScanUserProfileAsync(user, null, CancellationToken.None);
         await cts.CancelAsync();
         Assert.CatchAsync<OperationCanceledException>(async () => await first);
+        // Third caller arrives after the first was cancelled but before the scan finishes:
+        // it must join the still-running scan, not start a duplicate.
+        var third = _sut.ScanUserProfileAsync(user, null, CancellationToken.None);
         gate.SetResult(null);
         var result = await second;
 
-        Assert.That(result, Is.Not.Null);
+        Assert.That(result.TelegramUserId, Is.EqualTo(7));
+        Assert.That(await third, Is.SameAs(result));
         await _sessions.Received(1).GetAnyClientAsync(Arg.Any<CancellationToken>());
     }
 
     [Test]
-    public async Task BypassRequest_DoesNotJoinFreshnessEligibleScan()
+    public async Task ForceRequest_DoesNotJoinFreshnessEligibleScan()
     {
         var gate = new TaskCompletionSource<IWTelegramApiClient?>(TaskCreationOptions.RunContinuationsAsynchronously);
         _sessions.GetAnyClientAsync(Arg.Any<CancellationToken>()).Returns(_ => gate.Task);
@@ -95,7 +99,7 @@ public class ProfileScanServiceSingleFlightTests
         var user = UserIdentity.ForTest(7, "A");
 
         var plain = _sut.ScanUserProfileAsync(user, null, CancellationToken.None);
-        var bypass = _sut.ScanUserProfileAsync(user, null, CancellationToken.None, bypassFreshness: true);
+        var bypass = _sut.ScanUserProfileAsync(user, null, CancellationToken.None, forceRescan: true);
         gate.SetResult(null);
         await Task.WhenAll(plain, bypass);
 
@@ -103,12 +107,31 @@ public class ProfileScanServiceSingleFlightTests
     }
 
     [Test]
-    public async Task BypassFreshness_ScansEvenWhenRecentlyScanned()
+    public async Task ConcurrentScansFromDifferentChats_RunSeparateScans()
+    {
+        var gate = new TaskCompletionSource<IWTelegramApiClient?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _sessions.GetClientForChatAsync(Arg.Any<long>(), Arg.Any<CancellationToken>()).Returns(_ => gate.Task);
+        _users.GetByTelegramIdAsync(7, Arg.Any<CancellationToken>()).Returns((TelegramUser?)null);
+        var user = UserIdentity.ForTest(7, "A");
+
+        var a1 = _sut.ScanUserProfileAsync(user, ChatIdentity.FromId(-100), CancellationToken.None);
+        var a2 = _sut.ScanUserProfileAsync(user, ChatIdentity.FromId(-100), CancellationToken.None);
+        var b = _sut.ScanUserProfileAsync(user, ChatIdentity.FromId(-200), CancellationToken.None);
+        gate.SetResult(null);
+        await Task.WhenAll(a1, a2, b);
+
+        await _sessions.Received(1).GetClientForChatAsync(-100, Arg.Any<CancellationToken>());
+        await _sessions.Received(1).GetClientForChatAsync(-200, Arg.Any<CancellationToken>());
+        Assert.That(await a2, Is.SameAs(await a1));
+    }
+
+    [Test]
+    public async Task ForceRescan_ScansEvenWhenRecentlyScanned()
     {
         _users.GetByTelegramIdAsync(7, Arg.Any<CancellationToken>()).Returns(RecentlyScannedUser());
         _sessions.GetAnyClientAsync(Arg.Any<CancellationToken>()).Returns((IWTelegramApiClient?)null);
 
-        await _sut.ScanUserProfileAsync(UserIdentity.ForTest(7, "A"), null, CancellationToken.None, bypassFreshness: true);
+        await _sut.ScanUserProfileAsync(UserIdentity.ForTest(7, "A"), null, CancellationToken.None, forceRescan: true);
 
         await _sessions.Received(1).GetAnyClientAsync(Arg.Any<CancellationToken>());
     }

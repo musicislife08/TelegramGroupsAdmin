@@ -236,13 +236,13 @@ public class ProfileScanGateTests
     }
 
     [Test]
-    public async Task BypassFreshness_IsForwardedToScan()
+    public async Task ForceRescan_IsForwardedToScan()
     {
         SetUser(CreateUser(profileScannedAt: null));
 
         await _gate.ScanIfEligibleAsync(
             UserIdentity.ForTest(TestUserId, "Andrea"), null, ProfileScanTrigger.ProfileChange,
-            CancellationToken.None, bypassFreshness: true);
+            CancellationToken.None, forceRescan: true);
 
         await _profileScanService.Received(1).ScanUserProfileAsync(
             Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity?>(), Arg.Any<CancellationToken>(), true);

@@ -47,36 +47,52 @@ public sealed class ProfileScanService(
     /// </summary>
     private static readonly TimeSpan ScanTimeout = TimeSpan.FromSeconds(45);
 
-    // Concurrent requests for one user share one scan. The 60s freshness window alone cannot do
-    // this: profile_scanned_at is written only when a scan finishes.
-    private readonly ConcurrentDictionary<(long UserId, bool BypassFreshness), Lazy<Task<ProfileScanResult>>> _inFlight = new();
+    // Concurrent requests share one scan per (user, chat, force). The 60s freshness window alone
+    // cannot do this: profile_scanned_at is written only when a scan finishes. Chat is part of the
+    // key because the outcome is chat-specific (client choice, thresholds, alert routing); force is
+    // part of it so a forced rescan never joins a cache-eligible run (or vice versa).
+    private readonly ConcurrentDictionary<(long UserId, long? ChatId, bool ForceRescan), Lazy<Task<ProfileScanResult>>> _inFlight = new();
 
     public async Task<ProfileScanResult> ScanUserProfileAsync(
         UserIdentity user,
         ChatIdentity? triggeringChat,
         CancellationToken ct,
-        bool bypassFreshness = false)
+        bool forceRescan = false)
     {
-        // Keyed by freshness mode so a bypass request never joins a freshness-eligible run.
-        // The shared run uses CancellationToken.None (ScanTimeout bounds it) so the first
-        // caller's cancellation cannot cancel it for others; each caller's ct only stops its wait.
-        var key = (user.Id, bypassFreshness);
-        var lazy = _inFlight.GetOrAdd(key, _ => new Lazy<Task<ProfileScanResult>>(
-            () => ScanOnceAsync(user, triggeringChat, bypassFreshness, CancellationToken.None)));
+        // The shared run uses CancellationToken.None (ScanTimeout bounds it) so the first caller's
+        // cancellation cannot cancel it for others; each caller's ct only stops its own wait.
+        // Removal is tied to the run's completion, not to any caller, so a cancelled caller cannot
+        // evict a still-running scan and let a later caller start a duplicate.
+        var key = (user.Id, triggeringChat?.Id, forceRescan);
+        Lazy<Task<ProfileScanResult>> candidate = null!;
+        candidate = new Lazy<Task<ProfileScanResult>>(
+            () => RunAndRemoveAsync(key, candidate, user, triggeringChat, forceRescan));
+        var lazy = _inFlight.GetOrAdd(key, candidate);
+        return await lazy.Value.WaitAsync(ct);
+    }
+
+    private async Task<ProfileScanResult> RunAndRemoveAsync(
+        (long UserId, long? ChatId, bool ForceRescan) key,
+        Lazy<Task<ProfileScanResult>> self,
+        UserIdentity user,
+        ChatIdentity? triggeringChat,
+        bool forceRescan)
+    {
         try
         {
-            return await lazy.Value.WaitAsync(ct);
+            return await ScanOnceAsync(user, triggeringChat, forceRescan, CancellationToken.None);
         }
         finally
         {
-            _inFlight.TryRemove(new KeyValuePair<(long, bool), Lazy<Task<ProfileScanResult>>>(key, lazy));
+            // Pair removal: only ever removes this run's own entry, never a newer one.
+            _inFlight.TryRemove(new KeyValuePair<(long, long?, bool), Lazy<Task<ProfileScanResult>>>(key, self));
         }
     }
 
     private async Task<ProfileScanResult> ScanOnceAsync(
         UserIdentity user,
         ChatIdentity? triggeringChat,
-        bool bypassFreshness,
+        bool forceRescan,
         CancellationToken ct)
     {
         var startTimestamp = Stopwatch.GetTimestamp();
@@ -92,7 +108,7 @@ public sealed class ProfileScanService(
         if (existingUser != null && user.FirstName is null && user.LastName is null && user.Username is null)
             user = UserIdentity.From(existingUser);
 
-        if (!bypassFreshness && existingUser?.ProfileScannedAt is { } lastScan
+        if (!forceRescan && existingUser?.ProfileScannedAt is { } lastScan
             && DateTimeOffset.UtcNow - lastScan < ScanFreshnessWindow
             && existingUser.ProfileScanScore.HasValue)
         {
@@ -140,7 +156,7 @@ public sealed class ProfileScanService(
         // the task completes or faults — preventing ObjectDisposedException on DbContexts.
         try
         {
-            var scanTask = ScanWithOwnedScopeAsync(client, user, existingUser, triggeringChat, ct);
+            var scanTask = ScanWithOwnedScopeAsync(client, user, existingUser, triggeringChat, forceRescan, ct);
 
             var completedTask = await Task.WhenAny(scanTask, Task.Delay(ScanTimeout, CancellationToken.None));
 
@@ -185,12 +201,13 @@ public sealed class ProfileScanService(
         UserIdentity user,
         Models.TelegramUser? existingUser,
         ChatIdentity? triggeringChat,
+        bool forceRescan,
         CancellationToken ct)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
         var userRepo = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
 
-        return await ScanUserProfileCoreAsync(client, user, existingUser, triggeringChat,
+        return await ScanUserProfileCoreAsync(client, user, existingUser, triggeringChat, forceRescan,
             userRepo, scope.ServiceProvider, ct);
     }
 
@@ -199,6 +216,7 @@ public sealed class ProfileScanService(
         UserIdentity user,
         Models.TelegramUser? existingUser,
         ChatIdentity? triggeringChat,
+        bool forceRescan,
         ITelegramUserRepository userRepo,
         IServiceProvider sp,
         CancellationToken ct)
@@ -349,7 +367,8 @@ public sealed class ProfileScanService(
             ? string.Join(",", storyItems.Select(s => s.id).Order())
             : null;
 
-        if (existingUser?.ProfileScannedAt != null && existingUser.ProfileScanScore.HasValue
+        // forceRescan skips this reuse too: a rename is persisted before the rescan, so the diff sees no change.
+        if (!forceRescan && existingUser?.ProfileScannedAt != null && existingUser.ProfileScanScore.HasValue
             && !HasProfileChanged(existingUser, tlUser, bio, personalChannelId, channelTitle, channelAbout,
                 hasPinnedStories, pinnedStoryCaptions, isScam, isFake, isVerified,
                 profilePhotoId, channelPhotoId, pinnedStoryIdString))

@@ -22,7 +22,7 @@ public sealed class ProfileScanGate(
         ChatIdentity? chat,
         ProfileScanTrigger trigger,
         CancellationToken ct,
-        bool bypassFreshness = false)
+        bool forceRescan = false)
     {
         var welcomeConfig = await configService.GetEffectiveWelcomeAsync(chat?.Id ?? 0, ct: ct);
         var config = welcomeConfig?.JoinSecurity?.ProfileScan;
@@ -84,7 +84,7 @@ public sealed class ProfileScanGate(
             "Profile scan gate admitted {User} for trigger {Trigger}",
             user.ToLogDebug(), trigger);
 
-        return await profileScanService.ScanUserProfileAsync(user, chat, ct, bypassFreshness);
+        return await profileScanService.ScanUserProfileAsync(user, chat, ct, forceRescan);
     }
 
     private ProfileScanResult? Skip(string reason, UserIdentity user, ProfileScanTrigger trigger)
