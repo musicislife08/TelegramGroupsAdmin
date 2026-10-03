@@ -24,8 +24,11 @@ public interface IBanCelebrationSubscriberRepository
     /// <summary>True when the chat has at least one deliverable subscriber (bot DMs enabled, not banned).</summary>
     Task<bool> HasDeliverableSubscribersAsync(long chatId, CancellationToken ct = default);
 
-    /// <summary>Deliverable subscribers of the chat (bot DMs enabled, not banned), oldest subscription first.</summary>
-    Task<List<UserIdentity>> GetDeliverableSubscribersAsync(long chatId, CancellationToken ct = default);
+    /// <summary>
+    /// Ids of the chat's deliverable subscribers (bot DMs enabled, not banned), oldest subscription
+    /// first. Callers resolve identities through IUserIdentityService.
+    /// </summary>
+    Task<List<long>> GetDeliverableSubscriberIdsAsync(long chatId, CancellationToken ct = default);
 
     Task SetPromptAsync(long telegramUserId, long chatId, int promptMessageId, string promptDeleteJobId, CancellationToken ct = default);
 

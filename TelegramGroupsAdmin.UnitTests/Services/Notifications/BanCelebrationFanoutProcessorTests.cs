@@ -1,4 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
+using TelegramGroupsAdmin.Configuration.Services;
+using TelegramGroupsAdmin.Telegram.Services.Identity;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using TelegramGroupsAdmin.Core.Models;
@@ -26,6 +28,7 @@ public class BanCelebrationFanoutProcessorTests
     private IBanCelebrationGifRepository _gifs = null!;
     private IBanCelebrationSubscriptionService _subscriptions = null!;
     private IBotDmService _dm = null!;
+    private IUserIdentityService _identities = null!;
     private BanCelebrationFanoutProcessor _sut = null!;
 
     [SetUp]
@@ -35,20 +38,41 @@ public class BanCelebrationFanoutProcessorTests
         _gifs = Substitute.For<IBanCelebrationGifRepository>();
         _subscriptions = Substitute.For<IBanCelebrationSubscriptionService>();
         _dm = Substitute.For<IBotDmService>();
+        _identities = Substitute.For<IUserIdentityService>();
         _gifs.GetFullPath(Arg.Any<string>()).Returns(ci => "/data/media/" + ci.Arg<string>());
         _gifs.GetByIdAsync(9, Arg.Any<CancellationToken>())
             .Returns(new BanCelebrationGif { Id = 9, FilePath = "ban-gifs/9.gif", FileId = null });
 
-        var sender = new BanCelebrationDmSender(new NotificationDmDispatcher(_dm, Substitute.For<ITelegramUserRepository>()), _gifs,
+        var sender = new BanCelebrationDmSender(new NotificationDmDispatcher(_dm, Substitute.For<IUserIdentityService>(), Substitute.For<IConfigService>()), _gifs,
             NullLogger<BanCelebrationDmSender>.Instance);
-        _sut = new BanCelebrationFanoutProcessor(_subscribers, _gifs, _subscriptions, sender,
+        _sut = new BanCelebrationFanoutProcessor(_subscribers, _identities, _gifs, _subscriptions, sender,
             new PipelineMetrics(), NullLogger<BanCelebrationFanoutProcessor>.Instance);
     }
 
     private static BanCelebrationFanoutItem Item => new(Chat, "Spammer got banned!", 9);
 
-    private void Subscribers(params UserIdentity[] users) =>
-        _subscribers.GetDeliverableSubscribersAsync(ChatId, Arg.Any<CancellationToken>()).Returns(users.ToList());
+    private void Subscribers(params UserIdentity[] users)
+    {
+        var ids = users.Select(u => u.Id).ToList();
+        _subscribers.GetDeliverableSubscriberIdsAsync(ChatId, Arg.Any<CancellationToken>()).Returns(ids);
+        _identities.ResolveManyAsync(Arg.Is<IReadOnlyCollection<long>>(r => r!.SequenceEqual(ids)), Arg.Any<CancellationToken>())
+            .Returns(users.ToList());
+    }
+
+    [Test]
+    public async Task ProcessAsync_SendsToSubscriberIdentitiesResolvedById()
+    {
+        // The repository yields ids only; the recipient identity comes from the identity service.
+        var current = UserIdentity.ForTest(1L, "Current");
+        Subscribers(current);
+        DmFor(current, new DmDeliveryResult { DmSent = true });
+
+        await _sut.ProcessAsync(Item, CancellationToken.None);
+
+        await _identities.Received(1).ResolveManyAsync(
+            Arg.Is<IReadOnlyCollection<long>>(r => r!.SequenceEqual(new[] { 1L })), Arg.Any<CancellationToken>());
+        await _dm.Received(1).SendDmWithAnimationEntitiesAsync(current, Arg.Any<TelegramMessage>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
 
     private void DmFor(UserIdentity user, DmDeliveryResult result) =>
         _dm.SendDmWithAnimationEntitiesAsync(user, Arg.Any<TelegramMessage>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())

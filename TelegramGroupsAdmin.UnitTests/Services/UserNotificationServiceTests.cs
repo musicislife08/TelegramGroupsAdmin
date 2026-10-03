@@ -1,4 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
+using TelegramGroupsAdmin.Configuration.Services;
+using TelegramGroupsAdmin.Telegram.Services.Identity;
 using NSubstitute;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
@@ -27,7 +29,7 @@ public class UserNotificationServiceTests
         _gifs = Substitute.For<IBanCelebrationGifRepository>();
         _dm = Substitute.For<IBotDmService>();
         _gifs.GetFullPath(Arg.Any<string>()).Returns(ci => "/data/media/" + ci.Arg<string>());
-        var sender = new BanCelebrationDmSender(new NotificationDmDispatcher(_dm, Substitute.For<ITelegramUserRepository>()), _gifs,
+        var sender = new BanCelebrationDmSender(new NotificationDmDispatcher(_dm, Substitute.For<IUserIdentityService>(), Substitute.For<IConfigService>()), _gifs,
             NullLogger<BanCelebrationDmSender>.Instance);
         _sut = new UserNotificationService(_queue, _gifs, sender);
     }

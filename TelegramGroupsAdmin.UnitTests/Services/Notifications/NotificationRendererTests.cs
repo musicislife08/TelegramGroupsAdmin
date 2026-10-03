@@ -15,7 +15,7 @@ public class NotificationRendererTests
     {
         var payload = NotificationPayloadBuilder.Create("Alert Title").Build();
 
-        var rendered = NotificationRenderer.ToTelegramMessage(payload);
+        var rendered = NotificationRenderer.ToTelegramMessage(payload, NameMasking.Off);
 
         Assert.That(rendered.Text, Does.StartWith("Alert Title"));
         Assert.That(rendered.Entities, Has.Some.Matches<MessageEntity>(e =>
@@ -31,7 +31,7 @@ public class NotificationRendererTests
             .WithField("Chat", "MyGroup")
             .Build();
 
-        var rendered = NotificationRenderer.ToTelegramMessage(payload);
+        var rendered = NotificationRenderer.ToTelegramMessage(payload, NameMasking.Off);
 
         // Label is bold
         var labelEntity = rendered.Entities.FirstOrDefault(e =>
@@ -58,7 +58,7 @@ public class NotificationRendererTests
             .WithField("User", user)
             .Build();
 
-        var rendered = NotificationRenderer.ToTelegramMessage(payload);
+        var rendered = NotificationRenderer.ToTelegramMessage(payload, NameMasking.Off);
 
         var mention = rendered.Entities.FirstOrDefault(e =>
             e.Type == MessageEntityType.TextMention);
@@ -80,7 +80,7 @@ public class NotificationRendererTests
             .WithSection("Analysis", s => s.WithField("Score", "1.0"))
             .Build();
 
-        var rendered = NotificationRenderer.ToTelegramMessage(payload);
+        var rendered = NotificationRenderer.ToTelegramMessage(payload, NameMasking.Off);
 
         var headerEntity = rendered.Entities.FirstOrDefault(e =>
             e.Type == MessageEntityType.Bold &&
@@ -97,7 +97,7 @@ public class NotificationRendererTests
             .WithField("User", user)
             .Build();
 
-        var rendered = NotificationRenderer.ToTelegramMessage(payload);
+        var rendered = NotificationRenderer.ToTelegramMessage(payload, NameMasking.Off);
 
         var mention = rendered.Entities.Single(e =>
             e.Type == MessageEntityType.TextMention);
@@ -119,7 +119,7 @@ public class NotificationRendererTests
                 .WithText("Banned from 3 chats"))
             .Build();
 
-        var rendered = NotificationRenderer.ToTelegramMessage(payload);
+        var rendered = NotificationRenderer.ToTelegramMessage(payload, NameMasking.Off);
 
         // Verify structural ordering
         var userIdx = rendered.Text.IndexOf(alice.DisplayName, StringComparison.Ordinal);
@@ -134,32 +134,46 @@ public class NotificationRendererTests
     }
 
     [Test]
-    public void ToTelegramMessage_ReporterFromTelegramActor_RendersClickableMention()
+    public void ToTelegramMessage_UserFieldWithExplicitVerdict_MaskingOn_ShowsLabel()
     {
-        // AdminNotificationService.SendReportNotificationAsync builds a UserIdentity from an Actor
-        // using Actor.DisplayName as the UserIdentity.FirstName so TelegramDisplayName.Format
-        // returns the actor's display name via the full-name branch. The rendered TextMention
-        // needs Actor.TelegramUserId for profile linking and the displayed text at the entity's
-        // offset/length window must equal the actor's display name.
-        var reporterActor = Actor.FromTelegramUser(54321L, "alice_a", "Alice", "Anderson");
-        var reporterAsIdentity = new UserIdentity(
-            reporterActor.TelegramUserId!.Value,
-            FirstName: reporterActor.DisplayName,
-            LastName: null,
-            Username: null);
-
-        var payload = NotificationPayloadBuilder.Create("Message Reported")
-            .WithField("Reported by", reporterAsIdentity)
+        var payload = NotificationPayloadBuilder.Create("Subject")
+            .WithField("User", UserIdentity.ForTest(7, "Bad", verdict: NameVerdict.Explicit))
             .Build();
 
-        var rendered = NotificationRenderer.ToTelegramMessage(payload);
+        var rendered = NotificationRenderer.ToTelegramMessage(payload, NameMasking.On);
 
+        Assert.That(rendered.Text, Does.Contain(NameRedaction.Explicit));
+        Assert.That(rendered.Text, Does.Not.Contain("Bad"));
         var mention = rendered.Entities.Single(e => e.Type == MessageEntityType.TextMention);
-        Assert.That(mention.User, Is.Not.Null);
-        Assert.That(mention.User!.Id, Is.EqualTo(54321L));
+        Assert.That(mention.User!.Id, Is.EqualTo(7), "the masked mention still links the real account");
+    }
 
-        var span = rendered.Text.Substring(mention.Offset, mention.Length);
-        Assert.That(span, Is.EqualTo("Alice Anderson"), "mention text must equal actor display name");
+    [Test]
+    public void ToTelegramMessage_UserFieldWithExplicitVerdict_MaskingOff_ShowsRealName()
+    {
+        var payload = NotificationPayloadBuilder.Create("Subject")
+            .WithField("User", UserIdentity.ForTest(7, "Bad", verdict: NameVerdict.Explicit))
+            .Build();
+
+        var rendered = NotificationRenderer.ToTelegramMessage(payload, NameMasking.Off);
+
+        Assert.That(rendered.Text, Does.Contain("Bad"));
+        Assert.That(rendered.Text, Does.Not.Contain(NameRedaction.Explicit));
+    }
+
+    [Test]
+    public void EmailAndPlainText_UserFieldWithExplicitVerdict_KeepRealName()
+    {
+        // Only Telegram text is masked; email and web push go to admins and keep the real name.
+        var payload = NotificationPayloadBuilder.Create("Subject")
+            .WithField("User", UserIdentity.ForTest(7, "Bad", verdict: NameVerdict.Explicit))
+            .Build();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(NotificationRenderer.ToEmailHtml(payload), Does.Contain("Bad"));
+            Assert.That(NotificationRenderer.ToPlainText(payload), Does.Contain("Bad"));
+        }
     }
 
     [Test]
@@ -172,7 +186,7 @@ public class NotificationRendererTests
             .WithField("Reported by", Actor.AutoDetection.GetDisplayText())
             .Build();
 
-        var rendered = NotificationRenderer.ToTelegramMessage(payload);
+        var rendered = NotificationRenderer.ToTelegramMessage(payload, NameMasking.Off);
 
         Assert.That(rendered.Text, Does.Contain("Auto-Detection"));
         Assert.That(rendered.Entities, Has.None.Matches<MessageEntity>(e =>

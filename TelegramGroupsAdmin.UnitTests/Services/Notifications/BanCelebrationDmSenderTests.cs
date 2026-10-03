@@ -1,4 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
+using TelegramGroupsAdmin.Configuration.Services;
+using TelegramGroupsAdmin.Telegram.Services.Identity;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using TelegramGroupsAdmin.Core.Models;
@@ -26,7 +28,7 @@ public class BanCelebrationDmSenderTests
         _dm = Substitute.For<IBotDmService>();
         _gifs = Substitute.For<IBanCelebrationGifRepository>();
         _gifs.GetFullPath(Arg.Any<string>()).Returns(ci => "/data/media/" + ci.Arg<string>());
-        _sut = new BanCelebrationDmSender(new NotificationDmDispatcher(_dm, Substitute.For<ITelegramUserRepository>()), _gifs,
+        _sut = new BanCelebrationDmSender(new NotificationDmDispatcher(_dm, Substitute.For<IUserIdentityService>(), Substitute.For<IConfigService>()), _gifs,
             NullLogger<BanCelebrationDmSender>.Instance);
     }
 

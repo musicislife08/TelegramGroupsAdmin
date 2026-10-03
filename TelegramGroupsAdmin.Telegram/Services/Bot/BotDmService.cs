@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using Telegram.Bot.Exceptions;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.ReplyMarkups;
+using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
@@ -29,6 +30,7 @@ public class BotDmService(
     IPendingNotificationsRepository pendingNotificationsRepository,
     IManagedChatsRepository managedChatsRepository,
     IJobScheduler jobScheduler,
+    IConfigService configService,
     ILogger<BotDmService> logger) : IBotDmService
 {
 
@@ -110,7 +112,8 @@ public class BotDmService(
 
     /// <summary>
     /// Send fallback message in chat with optional auto-delete. The message was meant for one
-    /// user's DMs, so the group copy opens with a clickable mention telling them it's theirs.
+    /// user's DMs, so the group copy opens with a clickable mention telling them it's theirs,
+    /// named per that chat's "Mask flagged names" setting.
     /// </summary>
     private async Task<DmDeliveryResult> SendFallbackToChatAsync(
         long chatId,
@@ -119,7 +122,8 @@ public class BotDmService(
         int? autoDeleteSeconds,
         CancellationToken cancellationToken)
     {
-        message = new TelegramMessageBuilder().Mention(recipient).Text(" ").Append(message).Build();
+        var masking = await configService.GetNameMaskingAsync(chatId, cancellationToken);
+        message = TelegramMessageBuilder.For(masking).Mention(recipient).Text(" ").Append(message).Build();
 
         // Fetch chat once for logging (reuse for all logs in this method)
         var chat = await managedChatsRepository.GetByChatIdAsync(chatId, cancellationToken);

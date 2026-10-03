@@ -5,6 +5,7 @@ using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using Telegram.Bot.Exceptions;
 using Telegram.Bot.Types;
+using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.JobPayloads;
 using TelegramGroupsAdmin.Core.Models;
@@ -80,6 +81,8 @@ public class BotDmServiceTests
         // Register mocked external services
         services.AddSingleton(_mockMessageHandler);
         services.AddSingleton(_mockJobScheduler);
+        // Name masking in the fallback mention is covered by the unit tests
+        services.AddSingleton(Substitute.For<IConfigService>());
 
         // Register BotDmService
         services.AddScoped<IBotDmService, BotDmService>();

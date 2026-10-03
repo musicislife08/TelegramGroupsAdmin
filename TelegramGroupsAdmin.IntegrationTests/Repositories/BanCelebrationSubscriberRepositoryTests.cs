@@ -99,26 +99,21 @@ public class BanCelebrationSubscriberRepositoryTests
     }
 
     [Test]
-    public async Task GetDeliverableSubscribersAsync_ExcludesBannedSubscriberEvenWithDmsEnabled()
+    public async Task GetDeliverableSubscriberIdsAsync_ExcludesBannedSubscriberEvenWithDmsEnabled()
     {
         // Workshop Alumni holds a row for a banned user with DMs enabled (the ban-time removal
         // never ran). A banned user must never receive a celebration DM, whatever the row says.
-        var subscribers = await _repository.GetDeliverableSubscribersAsync(Anchors.WorkshopAlumniChatId);
+        var subscriberIds = await _repository.GetDeliverableSubscriberIdsAsync(Anchors.WorkshopAlumniChatId);
 
-        Assert.That(subscribers.Select(s => s.Id), Does.Not.Contain(Anchors.BannedSubscriberId));
+        Assert.That(subscriberIds, Does.Not.Contain(Anchors.BannedSubscriberId));
     }
 
     [Test]
-    public async Task GetDeliverableSubscribersAsync_ReturnsOnlyDmEnabledSubscribersWithIdentity()
+    public async Task GetDeliverableSubscriberIdsAsync_ReturnsOnlyDmEnabledSubscribers()
     {
-        var subscribers = await _repository.GetDeliverableSubscribersAsync(Anchors.WorkshopAlumniChatId);
+        var subscriberIds = await _repository.GetDeliverableSubscriberIdsAsync(Anchors.WorkshopAlumniChatId);
 
-        Assert.That(subscribers, Has.Count.EqualTo(1));
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(subscribers[0].Id, Is.EqualTo(Anchors.DeliverableSubscriberId));
-            Assert.That(subscribers[0].Username, Is.EqualTo("magnetismvoucher"));
-        }
+        Assert.That(subscriberIds, Is.EqualTo(new[] { Anchors.DeliverableSubscriberId }));
     }
 
     [Test]
