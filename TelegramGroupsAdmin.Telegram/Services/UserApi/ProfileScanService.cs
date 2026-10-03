@@ -47,11 +47,15 @@ public sealed class ProfileScanService(
     /// </summary>
     private static readonly TimeSpan ScanTimeout = TimeSpan.FromSeconds(45);
 
-    // Concurrent requests share one scan per (user, chat, force). The 60s freshness window alone
-    // cannot do this: profile_scanned_at is written only when a scan finishes. Chat is part of the
-    // key because the outcome is chat-specific (client choice, thresholds, alert routing); force is
-    // part of it so a forced rescan never joins a cache-eligible run (or vice versa).
-    private readonly ConcurrentDictionary<(long UserId, long? ChatId, bool ForceRescan), Lazy<Task<ProfileScanResult>>> _inFlight = new();
+    // One scan per (user, force), shared by concurrent callers. The 60s freshness window alone
+    // cannot do this: profile_scanned_at is written only when a scan finishes. Chat is deliberately
+    // not in the key: bot updates are processed one at a time and join scans run inline, so two
+    // chats' joins never overlap (the second reaches the 60s dedup path, which recomputes the
+    // outcome with its own chat's thresholds). Sharing only matters when an off-loop source
+    // (rescan job, manual rescan) overlaps a join or rename scan; there the first caller's chat
+    // decides, which is acceptable. Force is in the key so a forced rescan never joins a
+    // cache-eligible run (or vice versa).
+    private readonly ConcurrentDictionary<(long UserId, bool ForceRescan), Lazy<Task<ProfileScanResult>>> _inFlight = new();
 
     public async Task<ProfileScanResult> ScanUserProfileAsync(
         UserIdentity user,
@@ -63,7 +67,7 @@ public sealed class ProfileScanService(
         // cancellation cannot cancel it for others; each caller's ct only stops its own wait.
         // Removal is tied to the run's completion, not to any caller, so a cancelled caller cannot
         // evict a still-running scan and let a later caller start a duplicate.
-        var key = (user.Id, triggeringChat?.Id, forceRescan);
+        var key = (user.Id, forceRescan);
         Lazy<Task<ProfileScanResult>> candidate = null!;
         candidate = new Lazy<Task<ProfileScanResult>>(
             () => RunAndRemoveAsync(key, candidate, user, triggeringChat, forceRescan));
@@ -72,7 +76,7 @@ public sealed class ProfileScanService(
     }
 
     private async Task<ProfileScanResult> RunAndRemoveAsync(
-        (long UserId, long? ChatId, bool ForceRescan) key,
+        (long UserId, bool ForceRescan) key,
         Lazy<Task<ProfileScanResult>> self,
         UserIdentity user,
         ChatIdentity? triggeringChat,
@@ -85,7 +89,7 @@ public sealed class ProfileScanService(
         finally
         {
             // Pair removal: only ever removes this run's own entry, never a newer one.
-            _inFlight.TryRemove(new KeyValuePair<(long, long?, bool), Lazy<Task<ProfileScanResult>>>(key, self));
+            _inFlight.TryRemove(new KeyValuePair<(long, bool), Lazy<Task<ProfileScanResult>>>(key, self));
         }
     }
 

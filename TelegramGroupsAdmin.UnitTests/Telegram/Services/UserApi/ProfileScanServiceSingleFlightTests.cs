@@ -107,22 +107,20 @@ public class ProfileScanServiceSingleFlightTests
     }
 
     [Test]
-    public async Task ConcurrentScansFromDifferentChats_RunSeparateScans()
+    public async Task ConcurrentScansFromDifferentChats_ShareOneScan()
     {
         var gate = new TaskCompletionSource<IWTelegramApiClient?>(TaskCreationOptions.RunContinuationsAsynchronously);
         _sessions.GetClientForChatAsync(Arg.Any<long>(), Arg.Any<CancellationToken>()).Returns(_ => gate.Task);
         _users.GetByTelegramIdAsync(7, Arg.Any<CancellationToken>()).Returns((TelegramUser?)null);
         var user = UserIdentity.ForTest(7, "A");
 
-        var a1 = _sut.ScanUserProfileAsync(user, ChatIdentity.FromId(-100), CancellationToken.None);
-        var a2 = _sut.ScanUserProfileAsync(user, ChatIdentity.FromId(-100), CancellationToken.None);
+        var a = _sut.ScanUserProfileAsync(user, ChatIdentity.FromId(-100), CancellationToken.None);
         var b = _sut.ScanUserProfileAsync(user, ChatIdentity.FromId(-200), CancellationToken.None);
         gate.SetResult(null);
-        await Task.WhenAll(a1, a2, b);
+        await Task.WhenAll(a, b);
 
-        await _sessions.Received(1).GetClientForChatAsync(-100, Arg.Any<CancellationToken>());
-        await _sessions.Received(1).GetClientForChatAsync(-200, Arg.Any<CancellationToken>());
-        Assert.That(await a2, Is.SameAs(await a1));
+        await _sessions.Received(1).GetClientForChatAsync(Arg.Any<long>(), Arg.Any<CancellationToken>());
+        Assert.That(await b, Is.SameAs(await a));
     }
 
     [Test]
