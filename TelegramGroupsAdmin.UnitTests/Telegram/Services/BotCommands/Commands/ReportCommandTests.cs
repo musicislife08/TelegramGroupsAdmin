@@ -176,5 +176,60 @@ public class ReportCommandTests
             Arg.Any<CancellationToken>());
     }
 
+    private const long EarlierReporterId = 2002L;
+
+    private Message ReplyReportMessage() => new()
+    {
+        Id = TestMessageId,
+        From = new User { Id = ReporterUserId, FirstName = "Alex" },
+        Chat = new Chat { Id = TestChatId },
+        Text = "/report",
+        ReplyToMessage = new Message
+        {
+            Id = TestReplyMessageId,
+            From = new User { Id = ReportedUserId, FirstName = "Target" },
+            Chat = new Chat { Id = TestChatId },
+            Text = "spam"
+        }
+    };
+
+    private void ExistingReport(long? reportedByUserId, string? reportedByUserName) =>
+        _mockReportsRepository
+            .GetExistingPendingContentReportAsync(TestReplyMessageId, TestChatId, Arg.Any<CancellationToken>())
+            .Returns(new Report(9, TestReplyMessageId, ChatIdentity.FromId(TestChatId), 40, reportedByUserId,
+                reportedByUserName, DateTimeOffset.UtcNow, ReportStatus.Pending, null, null, null, null));
+
+    [Test]
+    public async Task AlreadyReported_FlaggedEarlierReporter_IsMentionedWithChatMasking()
+    {
+        // The stored reporter name is a snapshot; the reporter is resolved by id and masked.
+        ExistingReport(EarlierReporterId, "BadName");
+        _identities.ResolveAsync(ReportedUserId, Arg.Any<CancellationToken>())
+            .Returns(UserIdentity.ForTest(ReportedUserId, "Target"));
+        _identities.ResolveAsync(EarlierReporterId, Arg.Any<CancellationToken>())
+            .Returns(UserIdentity.ForTest(EarlierReporterId, "BadName", verdict: NameVerdict.Explicit));
+        _config.GetNameMaskingAsync(TestChatId, Arg.Any<CancellationToken>()).Returns(NameMasking.On);
+
+        var result = await _command.ExecuteAsync(ReplyReportMessage(), [], PermissionLevel.Member, Reporter);
+
+        Assert.That(result.Message.Text, Does.Contain("Reported by: " + NameRedaction.Explicit));
+        Assert.That(result.Message.Text, Does.Not.Contain("BadName"));
+        Assert.That(result.Message.Entities, Has.Some.Matches<MessageEntity>(
+            e => e.Type == MessageEntityType.TextMention && e.User!.Id == EarlierReporterId));
+    }
+
+    [Test]
+    public async Task AlreadyReported_NoReporterId_FallsBackToStoredNameOrSystem()
+    {
+        ExistingReport(reportedByUserId: null, reportedByUserName: null);
+        _identities.ResolveAsync(ReportedUserId, Arg.Any<CancellationToken>())
+            .Returns(UserIdentity.ForTest(ReportedUserId, "Target"));
+
+        var result = await _command.ExecuteAsync(ReplyReportMessage(), [], PermissionLevel.Member, Reporter);
+
+        Assert.That(result.Message.Text, Does.Contain("Reported by: System"));
+        await _identities.DidNotReceive().ResolveAsync(Arg.Is<long>(id => id != ReportedUserId), Arg.Any<CancellationToken>());
+    }
+
     private static readonly UserIdentity Reporter = UserIdentity.ForTest(ReporterUserId, "Alex", username: "alex_reporter");
 }

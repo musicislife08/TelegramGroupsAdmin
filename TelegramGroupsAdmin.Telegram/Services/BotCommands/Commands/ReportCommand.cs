@@ -61,15 +61,20 @@ public class ReportCommand(
 
         if (existingReport != null)
         {
-            var existingReporterName = existingReport.ReportedByUserName ?? "System";
+            var reply = TelegramMessageBuilder.For(masking)
+                .Text("ℹ️ This message has already been reported.")
+                .LineBreak().LineBreak()
+                .Text($"📋 Report #{existingReport.Id}")
+                .LineBreak()
+                .Text("👤 Reported by: ");
+            // The stored name is a snapshot; resolve a Telegram reporter by id so a flagged name is masked.
+            if (existingReport.ReportedByUserId is { } reporterId)
+                reply.Mention(await identityService.ResolveAsync(reporterId, cancellationToken));
+            else
+                reply.Text(existingReport.ReportedByUserName ?? "System");
+
             return new CommandResult(
-                TelegramMessageBuilder.For(masking)
-                    .Text("ℹ️ This message has already been reported.")
-                    .LineBreak().LineBreak()
-                    .Text($"📋 Report #{existingReport.Id}")
-                    .LineBreak()
-                    .Text("👤 Reported by: ")
-                    .Text(existingReporterName)
+                reply
                     .LineBreak()
                     .Text($"📅 Reported: {existingReport.ReportedAt:g}")
                     .LineBreak()
