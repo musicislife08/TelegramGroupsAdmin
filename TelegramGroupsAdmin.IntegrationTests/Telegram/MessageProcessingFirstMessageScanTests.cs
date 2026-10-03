@@ -25,6 +25,7 @@ using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.BotCommands;
+using TelegramGroupsAdmin.Telegram.Services.Identity;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
 using TelegramGroupsAdmin.Telegram.Services.UserApi;
 
@@ -166,6 +167,9 @@ public class MessageProcessingFirstMessageScanTests
         services.AddSingleton<PipelineMetrics>();
         services.AddSingleton<ChatMetrics>();
         services.AddScoped<IProfileScanGate, ProfileScanGate>();
+
+        // ── Real: the identity service the pipeline observes the sender through ──
+        services.AddScoped<IUserIdentityService, UserIdentityService>();
 
         // ── Real: concrete handlers on the pre-detection path. All take interface-only
         //    dependencies and short-circuit for a plain-text, non-command message. ──

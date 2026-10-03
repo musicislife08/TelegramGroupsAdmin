@@ -1,0 +1,165 @@
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
+using NSubstitute;
+using Telegram.Bot.Types;
+using Telegram.Bot.Types.Enums;
+using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Configuration.Services;
+using TelegramGroupsAdmin.ContentDetection.Services;
+using TelegramGroupsAdmin.Core.BackgroundJobs;
+using TelegramGroupsAdmin.Core.Imaging;
+using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Services;
+using TelegramGroupsAdmin.Telegram.Handlers;
+using TelegramGroupsAdmin.Telegram.Metrics;
+using TelegramGroupsAdmin.Telegram.Models;
+using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Telegram.Services;
+using TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.Telegram.Services.BotCommands;
+using TelegramGroupsAdmin.Telegram.Services.Identity;
+using TelegramGroupsAdmin.Telegram.Services.Moderation;
+using TelegramGroupsAdmin.Telegram.Services.UserApi;
+
+namespace TelegramGroupsAdmin.UnitTests.Telegram.Services.BackgroundServices;
+
+/// <summary>
+/// The new-message pipeline records the sender through IUserIdentityService before anything
+/// else reads the user, and marks the user active instead of upserting the row.
+/// </summary>
+[TestFixture]
+public class MessageProcessingServiceObserveTests
+{
+    private const long ChatId = -100123;
+    private const long SenderId = 7;
+
+    private ServiceProvider _provider = null!;
+    private IUserIdentityService _identities = null!;
+    private ITelegramUserRepository _users = null!;
+    private ITelegramPermissionService _permissions = null!;
+    private MessageProcessingService _sut = null!;
+
+    [SetUp]
+    public void SetUp()
+    {
+        _identities = Substitute.For<IUserIdentityService>();
+        _users = Substitute.For<ITelegramUserRepository>();
+        _permissions = Substitute.For<ITelegramPermissionService>();
+
+        _identities.ObserveAsync(Arg.Any<ObservedUser>(), Arg.Any<ProfileChangeContext>(), Arg.Any<RenameRescan>(), Arg.Any<CancellationToken>())
+            .Returns(ci => UserIdentity.ForTest(ci.Arg<ObservedUser>().Id, "A"));
+
+        var translation = Substitute.For<ITranslationHandler>();
+        translation.GetTextForDetectionAsync(Arg.Any<string?>(), Arg.Any<int>(), Arg.Any<long>(), Arg.Any<CancellationToken>())
+            .Returns(ci => new TranslationForDetectionResult(ci.ArgAt<string?>(0) ?? "", null, null));
+
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.Configure<AppOptions>(o => o.DataPath = Path.Combine(Path.GetTempPath(), $"tga-observe-{Guid.NewGuid():N}"));
+
+        services.AddSingleton(_identities);
+        services.AddSingleton(_users);
+        services.AddSingleton(_permissions);
+        services.AddSingleton(translation);
+        services.AddKeyedSingleton(CommandNames.Help, Substitute.For<IBotCommand>());
+
+        // Managed-chat lookups return null, so content detection is skipped as for an inactive chat.
+        services.AddSingleton(Substitute.For<IConfigService>());
+        services.AddSingleton(Substitute.For<IManagedChatsRepository>());
+        services.AddSingleton(Substitute.For<IChatAdminsRepository>());
+        services.AddSingleton(Substitute.For<IMessageHistoryRepository>());
+        services.AddSingleton(Substitute.For<IProfileScanGate>());
+        services.AddSingleton(Substitute.For<IJobScheduler>());
+        services.AddSingleton(Substitute.For<IImageProcessor>());
+        services.AddSingleton(Substitute.For<IBotChatService>());
+        services.AddSingleton(Substitute.For<IBotUserService>());
+        services.AddSingleton(Substitute.For<IBotMessageService>());
+        services.AddSingleton(Substitute.For<IBotMediaService>());
+        services.AddSingleton(Substitute.For<IBotModerationService>());
+        services.AddSingleton(Substitute.For<IMessageTranslationService>());
+        services.AddSingleton(Substitute.For<IUrlContentScrapingService>());
+        services.AddSingleton(Substitute.For<IExamFlowService>());
+
+        services.AddScoped<AdminMentionHandler>();
+        services.AddScoped<ImageProcessingHandler>();
+        services.AddScoped<TelegramMediaService>();
+        services.AddScoped<MediaProcessingHandler>();
+        services.AddScoped<FileScanningHandler>();
+        services.AddScoped<BackgroundJobScheduler>();
+
+        _provider = services.BuildServiceProvider();
+
+        var commandRouter = new CommandRouter(NullLogger<CommandRouter>.Instance, _provider, new PipelineMetrics());
+        var chatCache = Substitute.For<IChatCache>();
+
+        _sut = new MessageProcessingService(
+            _provider.GetRequiredService<IServiceScopeFactory>(),
+            _provider.GetRequiredService<IOptions<AppOptions>>(),
+            commandRouter,
+            chatCache,
+            _provider,
+            new PipelineMetrics(),
+            new ChatMetrics(chatCache),
+            NullLogger<MessageProcessingService>.Instance);
+    }
+
+    [TearDown]
+    public void TearDown() => _provider.Dispose();
+
+    [Test]
+    public async Task NewMessage_ObservesSenderBeforeRoutingCommands()
+    {
+        var order = new List<string>();
+        _identities.ObserveAsync(Arg.Any<ObservedUser>(), Arg.Any<ProfileChangeContext>(), Arg.Any<RenameRescan>(), Arg.Any<CancellationToken>())
+            .Returns(ci => { order.Add("observe"); return UserIdentity.ForTest(ci.Arg<ObservedUser>().Id, "A"); });
+        // The router's first dependency read once it routes a command.
+        _permissions.GetEffectiveLevelAsync(Arg.Any<long>(), Arg.Any<long>(), Arg.Any<CancellationToken>())
+            .Returns(_ => { order.Add("command"); return PermissionLevel.Member; });
+
+        await _sut.HandleNewMessageAsync(TextMessage(from: SenderId, text: "/help"), CancellationToken.None);
+
+        Assert.That(order, Is.EqualTo(new[] { "observe", "command" }));
+    }
+
+    [Test]
+    public async Task NewMessage_ObservationCarriesMessageDateAndChatContext()
+    {
+        var message = TextMessage(from: SenderId, text: "hi");
+        var expectedAt = new DateTimeOffset(DateTime.SpecifyKind(message.Date, DateTimeKind.Utc));
+
+        await _sut.HandleNewMessageAsync(message, CancellationToken.None);
+
+        await _identities.Received(1).ObserveAsync(
+            Arg.Is<ObservedUser>(o => o!.Id == SenderId && o.ObservedAt == expectedAt && o.Source == ObservationSource.BotUpdate),
+            Arg.Is<ProfileChangeContext>(c => c!.Chat!.Id == message.Chat.Id && c.MessageId == message.MessageId),
+            RenameRescan.Inline,
+            Arg.Any<CancellationToken>());
+        await _users.Received(1).MarkActiveAsync(SenderId, expectedAt, Arg.Any<CancellationToken>());
+        await _users.DidNotReceiveWithAnyArgs().UpsertAsync(default!);
+    }
+
+    [Test]
+    public async Task PrivateMessage_IsNotObserved()
+    {
+        // DMs never recorded names or rescanned before; recording a DM rename without a
+        // rescan would use the rename up before the next group message could act on it.
+        var message = TextMessage(from: SenderId, text: "hello", chatType: ChatType.Private, chatId: SenderId);
+
+        await _sut.HandleNewMessageAsync(message, CancellationToken.None);
+
+        await _identities.DidNotReceiveWithAnyArgs().ObserveAsync(default!, default!, default, default);
+        await _users.DidNotReceiveWithAnyArgs().MarkActiveAsync(default, default, default);
+    }
+
+    private static Message TextMessage(long from, string text, ChatType chatType = ChatType.Supergroup, long chatId = ChatId) => new()
+    {
+        Id = 42,
+        Date = new DateTime(2026, 10, 3, 12, 0, 0, DateTimeKind.Utc),
+        Chat = new Chat { Id = chatId, Type = chatType, Title = chatType == ChatType.Private ? null : "Group" },
+        From = new User { Id = from, FirstName = "A", IsBot = false },
+        Text = text
+    };
+}
