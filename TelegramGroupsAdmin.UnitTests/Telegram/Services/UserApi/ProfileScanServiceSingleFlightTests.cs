@@ -67,6 +67,42 @@ public class ProfileScanServiceSingleFlightTests
     }
 
     [Test]
+    public async Task CancellingFirstCaller_DoesNotCancelSharedScanForSecond()
+    {
+        var gate = new TaskCompletionSource<IWTelegramApiClient?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _sessions.GetAnyClientAsync(Arg.Any<CancellationToken>()).Returns(_ => gate.Task);
+        _users.GetByTelegramIdAsync(7, Arg.Any<CancellationToken>()).Returns((TelegramUser?)null);
+        var user = UserIdentity.ForTest(7, "A");
+        using var cts = new CancellationTokenSource();
+
+        var first = _sut.ScanUserProfileAsync(user, null, cts.Token);
+        var second = _sut.ScanUserProfileAsync(user, null, CancellationToken.None);
+        await cts.CancelAsync();
+        Assert.ThrowsAsync<OperationCanceledException>(async () => await first);
+        gate.SetResult(null);
+        var result = await second;
+
+        Assert.That(result, Is.Not.Null);
+        await _sessions.Received(1).GetAnyClientAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task BypassRequest_DoesNotJoinFreshnessEligibleScan()
+    {
+        var gate = new TaskCompletionSource<IWTelegramApiClient?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _sessions.GetAnyClientAsync(Arg.Any<CancellationToken>()).Returns(_ => gate.Task);
+        _users.GetByTelegramIdAsync(7, Arg.Any<CancellationToken>()).Returns(RecentlyScannedUser() with { ProfileScannedAt = DateTimeOffset.UtcNow.AddMinutes(-5) });
+        var user = UserIdentity.ForTest(7, "A");
+
+        var plain = _sut.ScanUserProfileAsync(user, null, CancellationToken.None);
+        var bypass = _sut.ScanUserProfileAsync(user, null, CancellationToken.None, bypassFreshness: true);
+        gate.SetResult(null);
+        await Task.WhenAll(plain, bypass);
+
+        await _sessions.Received(2).GetAnyClientAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Test]
     public async Task BypassFreshness_ScansEvenWhenRecentlyScanned()
     {
         _users.GetByTelegramIdAsync(7, Arg.Any<CancellationToken>()).Returns(RecentlyScannedUser());

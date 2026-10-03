@@ -49,7 +49,7 @@ public sealed class ProfileScanService(
 
     // Concurrent requests for one user share one scan. The 60s freshness window alone cannot do
     // this: profile_scanned_at is written only when a scan finishes.
-    private readonly ConcurrentDictionary<long, Lazy<Task<ProfileScanResult>>> _inFlight = new();
+    private readonly ConcurrentDictionary<(long UserId, bool BypassFreshness), Lazy<Task<ProfileScanResult>>> _inFlight = new();
 
     public async Task<ProfileScanResult> ScanUserProfileAsync(
         UserIdentity user,
@@ -57,15 +57,19 @@ public sealed class ProfileScanService(
         CancellationToken ct,
         bool bypassFreshness = false)
     {
-        var lazy = _inFlight.GetOrAdd(user.Id, _ => new Lazy<Task<ProfileScanResult>>(
-            () => ScanOnceAsync(user, triggeringChat, bypassFreshness, ct)));
+        // Keyed by freshness mode so a bypass request never joins a freshness-eligible run.
+        // The shared run uses CancellationToken.None (ScanTimeout bounds it) so the first
+        // caller's cancellation cannot cancel it for others; each caller's ct only stops its wait.
+        var key = (user.Id, bypassFreshness);
+        var lazy = _inFlight.GetOrAdd(key, _ => new Lazy<Task<ProfileScanResult>>(
+            () => ScanOnceAsync(user, triggeringChat, bypassFreshness, CancellationToken.None)));
         try
         {
-            return await lazy.Value;
+            return await lazy.Value.WaitAsync(ct);
         }
         finally
         {
-            _inFlight.TryRemove(new KeyValuePair<long, Lazy<Task<ProfileScanResult>>>(user.Id, lazy));
+            _inFlight.TryRemove(new KeyValuePair<(long, bool), Lazy<Task<ProfileScanResult>>>(key, lazy));
         }
     }
 
