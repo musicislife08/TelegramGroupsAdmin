@@ -165,8 +165,9 @@ Task<IReadOnlyList<UserIdentity>> ResolveManyAsync(IReadOnlyCollection<long> use
    audit row (moved here from `MessageProcessingService.cs:680-700`).
 3. After the transaction, if the caller passed `RenameRescan.Inline` and the user is untrusted and
    not a bot, run the rescan inline through `IProfileScanGate` (`ProfileScanTrigger.ProfileChange`),
-   as the message pipeline does today. A rename-triggered rescan bypasses the scan service's
-   freshness window. Callers that pass `RenameRescan.None` either scan right after anyway (join) or
+   as the message pipeline does today. A rename-triggered rescan forces a full rescore: it skips both
+   the scan service's 60s freshness window and its unchanged-profile reuse, because the new name is
+   already stored when the scan runs. Callers that pass `RenameRescan.None` either scan right after anyway (join) or
    need no scan (admins, bots, the scan itself).
 
    Rescans stay inline on purpose: part 1 is a refactor, and a profile ban that runs from a queued

@@ -1044,7 +1044,7 @@ git commit -m "feat(telegram): record observed names with newest-observation-win
 - Test: `TelegramGroupsAdmin.UnitTests/Telegram/Services/Identity/UserIdentityServiceTests.cs` (create)
 
 **Interfaces:**
-- Consumes: `GetOrUpdateAsync` (Task 5), `GetIdentitiesAsync` (Task 4), `IProfileScanGate.ScanIfEligibleAsync(…, bypassFreshness)` (Task 7 adds the parameter; if executing in order, add the optional parameter to the gate interface and implementation in this task's Step 3 and let Task 7 add its tests).
+- Consumes: `GetOrUpdateAsync` (Task 5), `GetIdentitiesAsync` (Task 4), `IProfileScanGate.ScanIfEligibleAsync(…, forceRescan)` (Task 7 adds the parameter; if executing in order, add the optional parameter to the gate interface and implementation in this task's Step 3 and let Task 7 add its tests).
 - Produces:
 ```csharp
 /// Whether ObserveAsync rescans the profile inline when it records a rename.
@@ -1136,7 +1136,7 @@ public class UserIdentityServiceTests
 
         await _gate.Received(1).ScanIfEligibleAsync(
             Arg.Is<UserIdentity>(u => u!.Id == 7), Chat, ProfileScanTrigger.ProfileChange,
-            Arg.Any<CancellationToken>(), bypassFreshness: true);
+            Arg.Any<CancellationToken>(), forceRescan: true);
     }
 
     [Test]
@@ -1256,7 +1256,7 @@ public sealed class UserIdentityService(
         {
             try
             {
-                await scanGate.ScanIfEligibleAsync(identity, context.Chat, ProfileScanTrigger.ProfileChange, ct, bypassFreshness: true);
+                await scanGate.ScanIfEligibleAsync(identity, context.Chat, ProfileScanTrigger.ProfileChange, ct, forceRescan: true);
                 identity = await ResolveAsync(observed.Id, ct);
             }
             catch (Exception ex) when (!ct.IsCancellationRequested)
@@ -1301,7 +1301,7 @@ git commit -m "feat(telegram): add user identity service"
 - Test: `TelegramGroupsAdmin.UnitTests/Telegram/Services/UserApi/ProfileScanServiceSingleFlightTests.cs` (create), existing `ProfileScanGate` tests
 
 **Interfaces:**
-- Produces: `IProfileScanService.ScanUserProfileAsync(UserIdentity user, ChatIdentity? triggeringChat, CancellationToken ct, bool bypassFreshness = false)`; `IProfileScanGate.ScanIfEligibleAsync(UserIdentity user, ChatIdentity? chat, ProfileScanTrigger trigger, CancellationToken ct, bool bypassFreshness = false)`.
+- Produces: `IProfileScanService.ScanUserProfileAsync(UserIdentity user, ChatIdentity? triggeringChat, CancellationToken ct, bool forceRescan = false)`; `IProfileScanGate.ScanIfEligibleAsync(UserIdentity user, ChatIdentity? chat, ProfileScanTrigger trigger, CancellationToken ct, bool forceRescan = false)`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1332,7 +1332,7 @@ Use the substitutes and construction the existing `ProfileScanService` unit test
             .Returns(TestTelegramUsers.Create(7, "A") with { ProfileScannedAt = DateTimeOffset.UtcNow, ProfileScanScore = 1m });
         _sessions.GetAnyClientAsync(Arg.Any<CancellationToken>()).Returns((WTelegram.Client?)null);
 
-        await _sut.ScanUserProfileAsync(UserIdentity.ForTest(7, "A"), null, CancellationToken.None, bypassFreshness: true);
+        await _sut.ScanUserProfileAsync(UserIdentity.ForTest(7, "A"), null, CancellationToken.None, forceRescan: true);
 
         await _sessions.Received(1).GetAnyClientAsync(Arg.Any<CancellationToken>());
     }
@@ -1348,12 +1348,12 @@ Use the substitutes and construction the existing `ProfileScanService` unit test
         await _sessions.DidNotReceiveWithAnyArgs().GetAnyClientAsync(default);
     }
 ```
-Gate test (existing gate test file): `ScanIfEligibleAsync(…, bypassFreshness: true)` forwards `bypassFreshness: true` to `ScanUserProfileAsync`.
+Gate test (existing gate test file): `ScanIfEligibleAsync(…, forceRescan: true)` forwards `forceRescan: true` to `ScanUserProfileAsync`.
 
 - [ ] **Step 2: Run to verify they fail**
 
 Run: `dotnet test TelegramGroupsAdmin.UnitTests --filter "FullyQualifiedName~ProfileScanServiceSingleFlightTests|FullyQualifiedName~ProfileScanGate"`
-Expected: build errors (no `bypassFreshness` parameter).
+Expected: build errors (no `forceRescan` parameter).
 
 - [ ] **Step 3: Implement**
 
@@ -1364,10 +1364,10 @@ Expected: build errors (no `bypassFreshness` parameter).
     private readonly ConcurrentDictionary<long, Lazy<Task<ProfileScanResult>>> _inFlight = new();
 
     public async Task<ProfileScanResult> ScanUserProfileAsync(
-        UserIdentity user, ChatIdentity? triggeringChat, CancellationToken ct, bool bypassFreshness = false)
+        UserIdentity user, ChatIdentity? triggeringChat, CancellationToken ct, bool forceRescan = false)
     {
         var lazy = _inFlight.GetOrAdd(user.Id, _ => new Lazy<Task<ProfileScanResult>>(
-            () => ScanOnceAsync(user, triggeringChat, bypassFreshness, ct)));
+            () => ScanOnceAsync(user, triggeringChat, forceRescan, ct)));
         try
         {
             return await lazy.Value;
@@ -1378,7 +1378,7 @@ Expected: build errors (no `bypassFreshness` parameter).
         }
     }
 ```
-Rename the current method body to `private async Task<ProfileScanResult> ScanOnceAsync(UserIdentity user, ChatIdentity? triggeringChat, bool bypassFreshness, CancellationToken ct)` and change the freshness condition at line 68 to `if (!bypassFreshness && existingUser?.ProfileScannedAt is { } lastScan && …)`. Thread `bypassFreshness` through `IProfileScanGate` / `ProfileScanGate` to `ScanUserProfileAsync`.
+Rename the current method body to `private async Task<ProfileScanResult> ScanOnceAsync(UserIdentity user, ChatIdentity? triggeringChat, bool forceRescan, CancellationToken ct)` and change the freshness condition at line 68 to `if (!forceRescan && existingUser?.ProfileScannedAt is { } lastScan && …)`. Thread `forceRescan` through `IProfileScanGate` / `ProfileScanGate` to `ScanUserProfileAsync`.
 
 - [ ] **Step 4: Run to verify they pass**
 
