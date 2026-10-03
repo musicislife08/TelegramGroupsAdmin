@@ -130,14 +130,22 @@ public class BackupRotationService(
     // Audit through a scope: IAuditService is scoped, this service is resolved from Blazor circuits and jobs alike
     private async Task AuditAsync(AuditEventType eventType, string userId, string value, CancellationToken cancellationToken)
     {
-        await using var scope = scopeFactory.CreateAsyncScope();
-        var auditService = scope.ServiceProvider.GetService<IAuditService>();
-        if (auditService == null)
+        // The files already changed: a failed audit write is logged, never allowed to hide that
+        try
         {
-            logger.LogWarning("IAuditService not available, skipping audit log");
-            return;
-        }
+            await using var scope = scopeFactory.CreateAsyncScope();
+            var auditService = scope.ServiceProvider.GetService<IAuditService>();
+            if (auditService == null)
+            {
+                logger.LogWarning("IAuditService not available, skipping audit log");
+                return;
+            }
 
-        await auditService.LogEventAsync(eventType, Actor.FromWebUser(userId), target: null, value: value, cancellationToken: cancellationToken);
+            await auditService.LogEventAsync(eventType, Actor.FromWebUser(userId), target: null, value: value, cancellationToken: cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "Audit entry could not be written: {Value}", value);
+        }
     }
 }

@@ -172,6 +172,19 @@ public class BackupRotationServiceTests
     }
 
     [Test]
+    public async Task AuditWriteFailure_DoesNotHideACompletedRepair()
+    {
+        var a = BackupFile("a.tar.gz", BackupFileState.Wrapped);
+        _rotator.TryRepairWrappedAsync(a, StoredPassphrase, OriginalPassphrase, Arg.Any<CancellationToken>()).Returns(true);
+        _auditService.LogEventAsync(Arg.Any<AuditEventType>(), Arg.Any<Actor>(), Arg.Any<Actor?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException("audit table unavailable"));
+
+        var result = await _service.RepairWrappedAsync(_directory, OriginalPassphrase, UserId);
+
+        Assert.That(result.RepairedCount, Is.EqualTo(1), "the repair happened, so the dialog must be told");
+    }
+
+    [Test]
     public async Task RepairWrappedAsync_NothingRepaired_WritesNoAudit()
     {
         var a = BackupFile("a.tar.gz", BackupFileState.Wrapped);

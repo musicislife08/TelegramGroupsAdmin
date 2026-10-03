@@ -91,28 +91,6 @@ public class RotateBackupPassphraseJob(
                         "No backup was changed and the old passphrase is still stored. Delete or move them, then retry.");
                 }
 
-                // Audit first: if anything after this fails, the cost is one extra entry,
-                // never a rotation that changed backups or the passphrase without a record.
-                var rotatable = backupFiles.Count(f => f.State is BackupFileState.Encrypted or BackupFileState.Plain);
-                var damaged = backupFiles.Count - rotatable;
-                await using (var scope = scopeFactory.CreateAsyncScope())
-                {
-                    var auditService = scope.ServiceProvider.GetService<TelegramGroupsAdmin.Core.Services.IAuditService>();
-                    if (auditService != null)
-                    {
-                        await auditService.LogEventAsync(
-                            AuditEventType.BackupPassphraseRotated,
-                            actor: Actor.FromWebUser(userId),
-                            target: null,
-                            value: $"Rotating {rotatable} backup(s) in {backupDirectory} to a new passphrase; {damaged} damaged backup(s) keep their contents",
-                            cancellationToken: cancellationToken);
-                    }
-                    else
-                    {
-                        logger.LogWarning("IAuditService not available, skipping audit log");
-                    }
-                }
-
                 int reencryptedCount = 0;
                 int currentCount = 0;
                 int skippedCount = 0;
@@ -157,6 +135,9 @@ public class RotateBackupPassphraseJob(
                     reencryptedCount, currentCount, skippedCount);
 
                 success = true;
+                await AuditRotationAsync(userId,
+                    $"Re-encrypted {reencryptedCount}, already current {currentCount}, skipped {skippedCount} damaged backup(s) in {backupDirectory}",
+                    cancellationToken);
             }
             catch (Exception ex)
             {
@@ -168,6 +149,35 @@ public class RotateBackupPassphraseJob(
         {
             var elapsedMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds;
             jobMetrics.RecordJobExecution(jobName, success, elapsedMs);
+        }
+    }
+
+    /// <summary>
+    /// Records the finished rotation. The backups and the stored passphrase have already changed, so a
+    /// failed audit write is logged rather than thrown: failing the job now would retry a completed rotation.
+    /// </summary>
+    private async Task AuditRotationAsync(string userId, string value, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await using var scope = scopeFactory.CreateAsyncScope();
+            var auditService = scope.ServiceProvider.GetService<TelegramGroupsAdmin.Core.Services.IAuditService>();
+            if (auditService == null)
+            {
+                logger.LogWarning("IAuditService not available, skipping audit log");
+                return;
+            }
+
+            await auditService.LogEventAsync(
+                AuditEventType.BackupPassphraseRotated,
+                actor: Actor.FromWebUser(userId),
+                target: null,
+                value: value,
+                cancellationToken: cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "Passphrase rotation completed but its audit entry could not be written: {Value}", value);
         }
     }
 

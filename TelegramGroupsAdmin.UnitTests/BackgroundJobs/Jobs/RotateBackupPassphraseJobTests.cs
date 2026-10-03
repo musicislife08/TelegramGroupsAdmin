@@ -102,23 +102,37 @@ public class RotateBackupPassphraseJobTests
         await _passphraseService.Received(1).UpdateEncryptionConfigAsync(NewPassphrase);
         await _auditService.Received(1).LogEventAsync(
             AuditEventType.BackupPassphraseRotated, Arg.Any<Actor>(), Arg.Any<Actor?>(),
-            Arg.Is<string?>(v => v!.Contains("1 damaged")), Arg.Any<CancellationToken>());
+            Arg.Is<string?>(v => v!.Contains("skipped 1")), Arg.Any<CancellationToken>());
     }
 
     [Test]
-    public async Task Audit_IsWrittenBeforeAnyBackupOrTheStoredPassphraseChanges()
+    public async Task Audit_IsWrittenAfterTheRotation_WithWhatHappened()
     {
         var path = BackupFile("a.tar.gz", BackupFileState.Encrypted);
+        _rotator.ReencryptAsync(path, OldPassphrase, NewPassphrase, Arg.Any<CancellationToken>())
+            .Returns(ReencryptOutcome.Reencrypted);
 
         await _job.Execute(Context(Payload()));
 
         Received.InOrder(() =>
         {
-            _auditService.LogEventAsync(AuditEventType.BackupPassphraseRotated, Arg.Any<Actor>(), Arg.Any<Actor?>(),
-                Arg.Any<string?>(), Arg.Any<CancellationToken>());
             _rotator.ReencryptAsync(path, OldPassphrase, NewPassphrase, Arg.Any<CancellationToken>());
             _passphraseService.UpdateEncryptionConfigAsync(NewPassphrase);
+            _auditService.LogEventAsync(AuditEventType.BackupPassphraseRotated, Arg.Any<Actor>(), Arg.Any<Actor?>(),
+                Arg.Is<string?>(v => v!.Contains("Re-encrypted 1")), Arg.Any<CancellationToken>());
         });
+    }
+
+    [Test]
+    public async Task AuditWriteFailure_DoesNotFailACompletedRotation()
+    {
+        BackupFile("a.tar.gz", BackupFileState.Encrypted);
+        _auditService.LogEventAsync(Arg.Any<AuditEventType>(), Arg.Any<Actor>(), Arg.Any<Actor?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException("audit table unavailable"));
+
+        Assert.That(async () => await _job.Execute(Context(Payload())), Throws.Nothing,
+            "the backups and the stored passphrase already changed; failing now would trigger a retry");
+        await _passphraseService.Received(1).UpdateEncryptionConfigAsync(NewPassphrase);
     }
 
     [Test]
