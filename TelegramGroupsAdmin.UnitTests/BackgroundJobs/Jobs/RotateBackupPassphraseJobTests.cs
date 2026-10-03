@@ -102,7 +102,23 @@ public class RotateBackupPassphraseJobTests
         await _passphraseService.Received(1).UpdateEncryptionConfigAsync(NewPassphrase);
         await _auditService.Received(1).LogEventAsync(
             AuditEventType.BackupPassphraseRotated, Arg.Any<Actor>(), Arg.Any<Actor?>(),
-            Arg.Is<string?>(v => v!.Contains("skipped 1")), Arg.Any<CancellationToken>());
+            Arg.Is<string?>(v => v!.Contains("1 damaged")), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task Audit_IsWrittenBeforeAnyBackupOrTheStoredPassphraseChanges()
+    {
+        var path = BackupFile("a.tar.gz", BackupFileState.Encrypted);
+
+        await _job.Execute(Context(Payload()));
+
+        Received.InOrder(() =>
+        {
+            _auditService.LogEventAsync(AuditEventType.BackupPassphraseRotated, Arg.Any<Actor>(), Arg.Any<Actor?>(),
+                Arg.Any<string?>(), Arg.Any<CancellationToken>());
+            _rotator.ReencryptAsync(path, OldPassphrase, NewPassphrase, Arg.Any<CancellationToken>());
+            _passphraseService.UpdateEncryptionConfigAsync(NewPassphrase);
+        });
     }
 
     [Test]

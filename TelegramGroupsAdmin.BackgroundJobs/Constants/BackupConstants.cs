@@ -11,6 +11,9 @@ public static class BackupConstants
     /// </summary>
     public const string MediaTempDirPrefix = "backup-media-";
 
+    /// <summary>File extension of a backup archive.</summary>
+    public const string BackupFileExtension = ".tar.gz";
+
     /// <summary>Tar entry holding the unencrypted backup metadata (readable without a passphrase).</summary>
     public const string MetadataEntryName = "metadata.json";
 

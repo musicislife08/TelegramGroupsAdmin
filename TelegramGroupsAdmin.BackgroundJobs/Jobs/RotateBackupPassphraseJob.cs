@@ -1,7 +1,7 @@
 using System.Diagnostics;
+using System.Security.Cryptography;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using System.Security.Cryptography;
 using Quartz;
 using TelegramGroupsAdmin.BackgroundJobs.Helpers;
 using TelegramGroupsAdmin.BackgroundJobs.Metrics;
@@ -91,6 +91,28 @@ public class RotateBackupPassphraseJob(
                         "No backup was changed and the old passphrase is still stored. Delete or move them, then retry.");
                 }
 
+                // Audit first: if anything after this fails, the cost is one extra entry,
+                // never a rotation that changed backups or the passphrase without a record.
+                var rotatable = backupFiles.Count(f => f.State is BackupFileState.Encrypted or BackupFileState.Plain);
+                var damaged = backupFiles.Count - rotatable;
+                await using (var scope = scopeFactory.CreateAsyncScope())
+                {
+                    var auditService = scope.ServiceProvider.GetService<TelegramGroupsAdmin.Core.Services.IAuditService>();
+                    if (auditService != null)
+                    {
+                        await auditService.LogEventAsync(
+                            AuditEventType.BackupPassphraseRotated,
+                            actor: Actor.FromWebUser(userId),
+                            target: null,
+                            value: $"Rotating {rotatable} backup(s) in {backupDirectory} to a new passphrase; {damaged} damaged backup(s) keep their contents",
+                            cancellationToken: cancellationToken);
+                    }
+                    else
+                    {
+                        logger.LogWarning("IAuditService not available, skipping audit log");
+                    }
+                }
+
                 int reencryptedCount = 0;
                 int currentCount = 0;
                 int skippedCount = 0;
@@ -133,23 +155,6 @@ public class RotateBackupPassphraseJob(
                 await passphraseService.UpdateEncryptionConfigAsync(newPassphrase);
                 logger.LogInformation("✅ Passphrase rotation complete: {Reencrypted} re-encrypted, {Current} already current, {Skipped} damaged skipped",
                     reencryptedCount, currentCount, skippedCount);
-
-                // Audit log the passphrase rotation (uses IServiceScopeFactory to avoid circular dependency)
-                await using var scope = scopeFactory.CreateAsyncScope();
-                var auditService = scope.ServiceProvider.GetService<TelegramGroupsAdmin.Core.Services.IAuditService>();
-                if (auditService != null)
-                {
-                    await auditService.LogEventAsync(
-                        AuditEventType.BackupPassphraseRotated,
-                        actor: Actor.FromWebUser(userId),
-                        target: null,
-                        value: $"Re-encrypted {reencryptedCount}, already current {currentCount}, skipped {skippedCount} damaged backup(s) in {backupDirectory}",
-                        cancellationToken: cancellationToken);
-                }
-                else
-                {
-                    logger.LogWarning("IAuditService not available, skipping audit log");
-                }
 
                 success = true;
             }

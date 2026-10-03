@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using TelegramGroupsAdmin.BackgroundJobs.Constants;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
 
@@ -86,7 +87,7 @@ public class BackupRotationService(
 
         foreach (var name in fileNames)
         {
-            if (Path.GetFileName(name) != name || !name.EndsWith(BackupFileExtension, StringComparison.Ordinal))
+            if (Path.GetFileName(name) != name || !name.EndsWith(BackupConstants.BackupFileExtension, StringComparison.Ordinal))
             {
                 logger.LogWarning("Refusing to delete {Name}: not a backup file name", name);
                 continue;
@@ -121,11 +122,9 @@ public class BackupRotationService(
         return deleted.Count;
     }
 
-    private const string BackupFileExtension = ".tar.gz";
-
     private static IEnumerable<string> BackupFiles(string backupDirectory) =>
         Directory.Exists(backupDirectory)
-            ? Directory.GetFiles(backupDirectory, "*" + BackupFileExtension).Order(StringComparer.Ordinal)
+            ? Directory.GetFiles(backupDirectory, "*" + BackupConstants.BackupFileExtension).Order(StringComparer.Ordinal)
             : [];
 
     // Audit through a scope: IAuditService is scoped, this service is resolved from Blazor circuits and jobs alike
