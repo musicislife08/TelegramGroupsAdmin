@@ -248,7 +248,7 @@ internal sealed class AdminNotificationService : IAdminNotificationService
         ChatIdentity? chat = null,
         CancellationToken ct = default)
     {
-        var payload = NotificationPayloadBuilder.Create($"User Banned: {user.DisplayName}")
+        var payload = NotificationPayloadBuilder.Create("User Banned")
             .WithField("User", user)
             .WithText(chat != null
                 ? $"Banned from {chat.ChatName ?? chat.Id.ToString()}"
@@ -289,7 +289,7 @@ internal sealed class AdminNotificationService : IAdminNotificationService
         var action = promoted ? "Promoted" : "Demoted";
         var role = isCreator ? "creator" : "admin";
 
-        var payload = NotificationPayloadBuilder.Create($"Admin {action}: {user.DisplayName}")
+        var payload = NotificationPayloadBuilder.Create($"Admin {action}")
             .WithField("User", user)
             .WithField("Chat", chat.ChatName ?? chat.Id.ToString())
             .WithField("Action", $"{action} as {role}")

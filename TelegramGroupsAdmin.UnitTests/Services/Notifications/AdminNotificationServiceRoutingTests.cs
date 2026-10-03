@@ -352,4 +352,54 @@ public class AdminNotificationServiceRoutingTests
 
         Assert.That(text, Does.Contain($"Reported by: {Actor.AutoDetection.GetDisplayText()}"));
     }
+
+    // ── Subjects never carry the user's name (the masked "User" field identifies them) ──
+
+    private async Task<string> CaptureDmTextAsync(ChatIdentity chat, Func<Task> send)
+    {
+        _mockConfig.GetNameMaskingAsync(Arg.Any<long?>(), Arg.Any<CancellationToken>()).Returns(NameMasking.On);
+        _mockUserRepo.GetWebUsersWithChatAccessAsync(chat.Id, Arg.Any<CancellationToken>())
+            .Returns(new List<UserRecord>());
+        _mockChatAdminsRepo.GetChatAdminsAsync(chat.Id, Arg.Any<CancellationToken>())
+            .Returns(new List<ChatAdmin> { CreateTestChatAdmin(chat.Id, telegramId: 555L) });
+        string? text = null;
+        _mockDmService.SendDmWithEntitiesAsync(
+                Arg.Any<UserIdentity>(), Arg.Any<string>(), Arg.Do<string>(t => text = t),
+                Arg.Any<IReadOnlyList<global::Telegram.Bot.Types.MessageEntity>>(), Arg.Any<CancellationToken>())
+            .Returns(new DmDeliveryResult { DmSent = true });
+
+        await send();
+
+        Assert.That(text, Is.Not.Null, "the unlinked admin should have received the DM");
+        return text!;
+    }
+
+    [Test]
+    public async Task SendBanNotificationAsync_FlaggedName_SubjectOmitsNameAndUserFieldIsMasked()
+    {
+        var chat = new ChatIdentity(-1001234567890L, "Test Chat");
+        var user = UserIdentity.ForTest(999L, "Bad", verdict: NameVerdict.Explicit);
+
+        var text = await CaptureDmTextAsync(chat, () =>
+            _service.SendBanNotificationAsync(user, Actor.AutoDetection, "spam", chat, CancellationToken.None));
+
+        Assert.That(text, Does.Contain("User Banned"));
+        Assert.That(text, Does.Contain(NameRedaction.Explicit));
+        Assert.That(text, Does.Not.Contain("Bad"));
+    }
+
+    [TestCase(true, "Admin Promoted")]
+    [TestCase(false, "Admin Demoted")]
+    public async Task SendAdminChangedAsync_FlaggedName_SubjectOmitsNameAndUserFieldIsMasked(bool promoted, string subject)
+    {
+        var chat = new ChatIdentity(-1001234567890L, "Test Chat");
+        var user = UserIdentity.ForTest(999L, "Bad", verdict: NameVerdict.Explicit);
+
+        var text = await CaptureDmTextAsync(chat, () =>
+            _service.SendAdminChangedAsync(chat, user, promoted, isCreator: false, CancellationToken.None));
+
+        Assert.That(text, Does.Contain(subject));
+        Assert.That(text, Does.Contain(NameRedaction.Explicit));
+        Assert.That(text, Does.Not.Contain("Bad"));
+    }
 }
