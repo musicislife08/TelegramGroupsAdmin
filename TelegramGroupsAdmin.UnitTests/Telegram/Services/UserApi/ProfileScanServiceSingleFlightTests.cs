@@ -78,7 +78,7 @@ public class ProfileScanServiceSingleFlightTests
         var first = _sut.ScanUserProfileAsync(user, null, cts.Token);
         var second = _sut.ScanUserProfileAsync(user, null, CancellationToken.None);
         await cts.CancelAsync();
-        Assert.ThrowsAsync<OperationCanceledException>(async () => await first);
+        Assert.CatchAsync<OperationCanceledException>(async () => await first);
         gate.SetResult(null);
         var result = await second;
 
