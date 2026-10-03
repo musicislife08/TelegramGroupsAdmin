@@ -215,6 +215,9 @@ Unit:
 - `ProfileScanService` single-flight: two concurrent calls gated by a `TaskCompletionSource` fake
   produce one scan and the same result.
 - `ObserveAsync` swallows a repository failure and returns an `Unscanned` identity.
+- Scope (substituted config service): an `Explicit` user resolved for a chat with masking off shows
+  the real name; resolved for a chat with masking on, or for no chat with the global value on, shows
+  `[name removed: explicit]`; `ResolvedForChatId` records the scope.
 
 Integration (real Postgres, canonical data; anchors in the Canonical anchors section):
 - `GetOrUpdateAsync` rename: the row changes, `username_history` and the `ProfileChange` audit row
@@ -228,8 +231,7 @@ Integration (real Postgres, canonical data; anchors in the Canonical anchors sec
 - Quartz compatibility: a payload JSON in today's shape (no `Verdict`) deserializes with `Unscanned`.
 - Config migration: stored `MaskExplicitUsername` values (global and per-chat) are read back as
   `MaskFlaggedNames`.
-- Scope: a user resolved for a chat with masking off shows the real name; the same user resolved
-  for a chat with masking on, and for no chat with the global value on, shows the label.
+
 - Pipeline: a renamed untrusted user's message updates the row before command routing and requests
   a rescan; a renamed trusted user's row is updated with no rescan.
 
@@ -248,7 +250,6 @@ subject does not leak between tests.
 | No-op and ordering | 9263051408340 @pastramiherbs | As above; observations at and before `names_observed_at`. |
 | Race (row lock) | 9680301255238 @violingentleman | Not trusted, active, no history rows. |
 | Photo fields untouched by a name update | 9264989724828 @raceoutnumber | Not trusted; `user_photo_path` and `photo_hash` both set. |
-| Scope: masking on/off per chat | 9220500615182 @bagging_armado with `Chats` anchors from `GoldenDatasetConstants` | Explicit verdict as above; the test flips the chat override as the assertion subject's input via the config service under test. |
 
 Each test reads its anchor back first and asserts the shape (trust, bot flag, scan rows, photo
 fields) so a later canonical change fails loudly. New constants go in
