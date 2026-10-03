@@ -12,6 +12,7 @@ using TelegramGroupsAdmin.Telegram.Services.ReportActions;
 using TelegramGroupsAdmin.Telegram.Services.BotCommands;
 using TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
 using TelegramGroupsAdmin.Telegram.Services.DmCelebrations;
+using TelegramGroupsAdmin.Telegram.Services.Identity;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Handlers;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Infrastructure;
@@ -76,6 +77,7 @@ public static class ServiceCollectionExtensions
             services.AddScoped<ITelegramAuthService, TelegramAuthService>();
             services.AddSingleton<IProfileScanService, ProfileScanService>();
             services.AddScoped<IProfileScanGate, ProfileScanGate>();
+            services.AddScoped<IUserIdentityService, UserIdentityService>();
             services.AddScoped<IProfileScoringEngine, ProfileScoringEngine>();
 
             // Telegram infrastructure
