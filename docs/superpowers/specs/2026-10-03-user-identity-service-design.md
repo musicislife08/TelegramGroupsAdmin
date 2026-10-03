@@ -196,6 +196,10 @@ wording.
 Telegram adapter: the name shape (first, last, username), `long` ids, `ObservedUser` sources,
 `TextMention` rendering, `IUserIdentityService` implementation.
 
+Telegram accounts have one global name, so the identity is global. Discord has per-server
+nicknames; a Discord adapter would need the name (and so the verdict) per server. That is left to
+that adapter and does not shape this design.
+
 ## Landing
 
 Four stages, each a green commit series:
