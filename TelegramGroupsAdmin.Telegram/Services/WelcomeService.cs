@@ -411,6 +411,10 @@ public class WelcomeService(
 
             if (scanResult is not null)
             {
+                // Re-resolve: the scan may have just flagged the name, and the identity observed in
+                // Step 2 predates its verdict. Everything later in this join flow uses the new one.
+                userIdentity = await identityService.ResolveAsync(user.Id, cancellationToken);
+
                 if (scanResult.Outcome == ProfileScanOutcome.Banned)
                 {
                     await TryDeleteMessageAsync(chatMemberUpdate.Chat.Id, verifyingMessageId.Value, cancellationToken);

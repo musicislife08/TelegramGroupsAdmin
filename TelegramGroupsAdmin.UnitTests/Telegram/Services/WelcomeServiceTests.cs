@@ -440,6 +440,40 @@ public class WelcomeServiceTests
     }
 
     [Test]
+    public async Task HandleChatMemberUpdate_JoinScanFlagsName_LaterJoinTextUsesReResolvedIdentity()
+    {
+        // Observed before the scan: no verdict yet. The scan flags the name; the identity
+        // resolved after it carries the Explicit verdict.
+        _identities.ObserveAsync(Arg.Any<ObservedUser>(), Arg.Any<ProfileChangeContext>(), Arg.Any<RenameRescan>(), Arg.Any<CancellationToken>())
+            .Returns(UserIdentity.ForTest(TestUserId, "Bad"));
+        _identities.ResolveAsync(TestUserId, Arg.Any<CancellationToken>())
+            .Returns(UserIdentity.ForTest(TestUserId, "Bad", verdict: NameVerdict.Explicit));
+        _configService.GetNameMaskingAsync(TestChatId, Arg.Any<CancellationToken>()).Returns(NameMasking.On);
+        _chatService.GetChatAsync(TestChatId, Arg.Any<CancellationToken>())
+            .Returns(new ChatFullInfo { Id = TestChatId, Type = ChatType.Supergroup, Title = "Test Group" });
+        _casCheckService.CheckUserAsync(Arg.Any<UserIdentity>(), Arg.Any<TelegramGroupsAdmin.Configuration.Models.Welcome.CasConfig>(), Arg.Any<CancellationToken>())
+            .Returns(new CasCheckResult(false, null));
+        _profileScanGate.ScanIfEligibleAsync(
+                Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity?>(), Arg.Any<ProfileScanTrigger>(), Arg.Any<CancellationToken>())
+            .Returns(new ProfileScanResult(TestUserId, null, null, null, null, false, null, false, false, false,
+                3m, ProfileScanOutcome.HeldForReview, "explicit name", ["explicit"], ExplicitDisplayText: true));
+
+        await _sut.HandleChatMemberUpdateAsync(CreateJoinUpdate(firstName: "Bad"), CancellationToken.None);
+
+        await _messageService.Received(1).EditAndUpdateMessageAsync(
+            TestChatId, 42,
+            Arg.Is<TelegramMessage>(m => m!.Text == NameRedaction.Explicit + " ⏳ Your profile is under admin review. Please wait..."),
+            Arg.Any<InlineKeyboardMarkup?>(), Arg.Any<CancellationToken>());
+        // The welcome message that replaces it later in the same join flow is masked too.
+        var edits = _messageService.ReceivedCalls()
+            .Where(c => c.GetMethodInfo().Name == nameof(IBotMessageService.EditAndUpdateMessageAsync))
+            .Select(c => c.GetArguments().OfType<TelegramMessage>().Single().Text)
+            .ToList();
+        Assert.That(edits, Has.Count.EqualTo(2));
+        Assert.That(edits, Has.None.Contains("Bad"));
+    }
+
+    [Test]
     public async Task HandleCallbackQuery_WrongUser_ExplicitClickerMaskingOn_WarningShowsLabel()
     {
         const long otherUserId = 444_555_666L;
