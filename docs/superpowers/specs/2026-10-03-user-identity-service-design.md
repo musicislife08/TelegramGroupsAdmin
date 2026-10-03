@@ -85,7 +85,7 @@ public enum NameMasking { Off, On }   // Core; the effective "Mask flagged names
 ### `IUserIdentityService` (Telegram adapter)
 
 ```
-Task<UserIdentity> ObserveAsync(ObservedUser observed, CancellationToken ct)
+Task<UserIdentity> ObserveAsync(ObservedUser observed, RenameRescan rescan, CancellationToken ct)
 Task<UserIdentity> ResolveAsync(long userId, CancellationToken ct)
 Task<IReadOnlyList<UserIdentity>> ResolveManyAsync(IReadOnlyCollection<long> userIds, CancellationToken ct)
 ```
@@ -115,11 +115,18 @@ Task<IReadOnlyList<UserIdentity>> ResolveManyAsync(IReadOnlyCollection<long> use
      row sees it; an observation older than the stored one is ignored.
 2. If renamed, in the same transaction: the `username_history` row and the `ProfileChange`
    audit row (moved here from `MessageProcessingService.cs:680-700`).
-3. After the transaction, for an untrusted non-bot user, request a rescan through
-   `IProfileScanGate` (`ProfileScanTrigger.ProfileChange`). The rescan is queued by default; the
-   caller can ask for it inline when the moderation decision for the current message needs the new
-   verdict (new-message path only). A rename-triggered rescan bypasses the scan service's
-   freshness window.
+3. After the transaction, if the caller passed `RenameRescan.Inline` and the user is untrusted and
+   not a bot, run the rescan inline through `IProfileScanGate` (`ProfileScanTrigger.ProfileChange`),
+   as the message pipeline does today. A rename-triggered rescan bypasses the scan service's
+   freshness window. Callers that pass `RenameRescan.None` either scan right after anyway (join) or
+   need no scan (admins, bots, the scan itself).
+
+   Rescans stay inline on purpose: part 1 is a refactor, and a profile ban that runs from a queued
+   job, outside the message's context, would be a new route into the ban cleanup logic. Renames are
+   rare, so the inline scan's stall of the serial update loop is rare too.
+
+   Whoever records a new name "uses up" the rename: the next observation sees no difference. So only
+   entry points that rescan inline (or scan anyway) record names; everything else resolves by id.
 4. Return the resolved identity.
 
 A failure to write never blocks moderation: the service logs it and returns an identity built from
@@ -150,18 +157,21 @@ message name as a rename.
 
 ### Entry points
 
-Each entry point calls `ObserveAsync` first and passes the returned identity down.
+Each entry point either records names (`ObserveAsync`) or resolves by id (`ResolveAsync`), then
+passes the identity down.
 
-| Entry point | Change |
-|---|---|
-| New message (`MessageProcessingService`) | `ObserveAsync(message.From)` first, before commands; the late upsert at :717 and the diff block at :673-715 go away. One identity is passed to commands, detection and moderation. |
-| Edited message | `ObserveAsync` with `edit_date`. |
-| Callback query | `ObserveAsync(CallbackQuery.From)`. |
-| Chat-member update | `ObserveAsync(ChatMember.User)`; the join scan then runs on current names. |
-| Commands | The caller comes from the pipeline. Reply targets (`/warn`, `/ban`, …) use `ObserveAsync(ReplyToMessage.From)`. |
-| Quartz jobs | Payloads keep their snapshot for compatibility; jobs call `ResolveAsync(payload.User.Id)` before writing anything a user sees. |
-| Web UI | `ResolveAsync` / `ResolveManyAsync` by id. |
-| `getChatMember` results (admin refresh) | `ObserveAsync`. |
+| Entry point | Call | Rename rescan |
+|---|---|---|
+| New message (`MessageProcessingService`) | `ObserveAsync(message.From)` first, before commands; the late upsert at :717 and the diff block at :673-715 go away. One identity is passed to commands, detection and moderation. | `Inline` (as today) |
+| Edited message | `ObserveAsync` with `edit_date` | `Inline` |
+| Join (chat-member update) | `ObserveAsync(NewChatMember.User)` | `None`: the join flow scans the user inline right after, on the names just recorded |
+| Other chat-member updates (leave, promote, restrict) | `ResolveAsync(id)` | n/a |
+| Callback query | `ResolveAsync(CallbackQuery.From.Id)`. Buttons exist only in the welcome flow (a user observed at join seconds earlier) and for admins. | n/a |
+| Commands | The caller comes from the pipeline. Reply targets (`/warn`, `/ban`, …) use `ResolveAsync(ReplyToMessage.From.Id)`: every message was observed when it arrived. | n/a |
+| `getChatMember` results (admin refresh), the bot's own row, bots joining | `ObserveAsync` | `None`: admins are trusted, bots are not scanned |
+| Profile scan (User API names) | `ObserveAsync`, source `UserApiScan` | `None`: it is the scan |
+| Quartz jobs | Payloads keep their snapshot for compatibility; jobs call `ResolveAsync(payload.User.Id)` before writing anything a user sees. | n/a |
+| Web UI | `ResolveAsync` / `ResolveManyAsync` by id. | n/a |
 
 ### `Mention`
 

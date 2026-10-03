@@ -4,7 +4,7 @@
 
 **Goal:** Every Telegram user identity comes from one service that records observed names (newest observation wins) and carries a name verdict, so bot-written mentions show `[name removed: explicit]` for flagged names while logs and the UI keep the real name.
 
-**Architecture:** `UserIdentity` (Core) gains `NameVerdict` and `BotDisplayName(NameMasking)`. `IUserIdentityService` (Telegram) owns `ObserveAsync` (conditional name update + history + audit in one transaction, then a queued rescan on rename) and `ResolveAsync` / `ResolveManyAsync` (names + verdict from the latest scan row). `TelegramMessageBuilder.For(NameMasking)` applies the per-chat "Mask flagged names" setting where text is written. A banned-API analyzer makes the old construction paths a build error.
+**Architecture:** `UserIdentity` (Core) gains `NameVerdict` and `BotDisplayName(NameMasking)`. `IUserIdentityService` (Telegram) owns `ObserveAsync` (conditional name update + history + audit in one transaction, then an inline rescan on rename where the caller asks for one, as today) and `ResolveAsync` / `ResolveManyAsync` (names + verdict from the latest scan row). `TelegramMessageBuilder.For(NameMasking)` applies the per-chat "Mask flagged names" setting where text is written. A banned-API analyzer makes the old construction paths a build error.
 
 **Tech Stack:** .NET 10, C# 14, EF Core 10 + PostgreSQL 18 (raw SQL via `ExecuteSqlAsync` / `SqlQuery`), Quartz.NET, NUnit, NSubstitute 6, Microsoft.CodeAnalysis.BannedApiAnalyzers.
 
@@ -27,7 +27,7 @@
 ## Spec deviations (decided while planning; confirm at review)
 
 1. **Enforcement uses the banned-API analyzer instead of deleting the constructor.** Repository mappings (`EnrichedReportMappings`, `ChatAdminMappings`, `MessageMappings`, `TelegramUserRepository`) legitimately build identities from rows, and they live in the same projects as the call sites, so `internal` cannot separate them. `RS0030` bans `UserIdentity`'s constructor and the `From(...)` factories everywhere; the identity service and the repository mapping files opt out with a `#pragma` and a reason. A new call site that skips the service is a build error, which is what the spec's stage 4 asked for.
-2. **Rename rescans are always queued.** The spec allowed inline rescans when a message's moderation decision needs the new verdict, but today's pipeline ignores the ProfileChange scan's outcome (only the first-message scan's outcome is used). Queuing everywhere removes the up-to-45s stall of the serial update loop with no lost behaviour.
+2. (Resolved into the spec.) Rename rescans stay inline, as today: a queued ban would be a new route into the ban cleanup logic. Only entry points that rescan (or scan anyway) record names; callbacks, reply targets and non-join chat-member updates resolve by id.
 3. **Masking keeps the profile-scan kill switch.** `GetNameMaskingAsync` returns `On` only when the effective `ProfileScan.Enabled` and `MaskFlaggedNames` are both true, matching today's `maskingActive` rule in `BanCelebrationService.cs:87`.
 
 ## Review Focus
@@ -58,8 +58,7 @@
 | `TelegramGroupsAdmin.Telegram/Repositories/TelegramUserRepository.cs` (modify) | `GetOrUpdateAsync`, `MarkActiveAsync`; remove `GetOrCreateAsync`, `UpsertAsync` |
 | `TelegramGroupsAdmin.Telegram/Repositories/ProfileScanResultsRepository.cs` (modify) | `GetLatestByUserIdsAsync` |
 | `TelegramGroupsAdmin.Telegram/Services/Identity/IUserIdentityService.cs`, `UserIdentityService.cs` (create) | the service |
-| `TelegramGroupsAdmin.Core/JobPayloads/ProfileChangeRescanPayload.cs`, `TelegramGroupsAdmin.BackgroundJobs/Jobs/ProfileChangeRescanJob.cs` (create) | queued rename rescan |
-| `TelegramGroupsAdmin.Telegram/Services/UserApi/ProfileScanService.cs` (modify) | single-flight, freshness bypass, observe live names |
+| `TelegramGroupsAdmin.Telegram/Services/UserApi/ProfileScanService.cs`, `IProfileScanGate.cs`, `ProfileScanGate.cs` (modify) | single-flight, freshness bypass, observe live names |
 | `BannedSymbols.txt` (create, repo root) + csproj `AdditionalFiles` | enforcement |
 
 ---
@@ -932,24 +931,22 @@ git commit -m "feat(telegram): record observed names with newest-observation-win
 ### Task 6: `IUserIdentityService`
 
 **Files:**
-- Create: `TelegramGroupsAdmin.Telegram/Services/Identity/IUserIdentityService.cs`, `UserIdentityService.cs`, `TelegramGroupsAdmin.Telegram/Services/Identity/IProfileChangeRescanQueue.cs`
+- Create: `TelegramGroupsAdmin.Telegram/Services/Identity/IUserIdentityService.cs`, `UserIdentityService.cs`, `RenameRescan.cs`
 - Modify: `TelegramGroupsAdmin.Telegram/Extensions/ServiceCollectionExtensions.cs` (register scoped)
 - Test: `TelegramGroupsAdmin.UnitTests/Telegram/Services/Identity/UserIdentityServiceTests.cs` (create)
 
 **Interfaces:**
-- Consumes: `GetOrUpdateAsync` (Task 5), `GetLatestByUserIdsAsync` (Task 4), `IChatAdminsRepository.IsAdminAsync`, `ITelegramUserRepository.GetByTelegramIdAsync`.
+- Consumes: `GetOrUpdateAsync` (Task 5), `GetLatestByUserIdsAsync` (Task 4), `ITelegramUserRepository.GetByTelegramIdAsync`, `IProfileScanGate.ScanIfEligibleAsync(…, bypassFreshness)` (Task 7 adds the parameter; do Task 7 Steps 1-4 for the gate signature first if executing out of order).
 - Produces:
 ```csharp
+/// Whether ObserveAsync rescans the profile inline when it records a rename.
+public enum RenameRescan { None = 0, Inline = 1 }
+
 public interface IUserIdentityService
 {
-    Task<UserIdentity> ObserveAsync(ObservedUser observed, ProfileChangeContext context, CancellationToken ct = default);
+    Task<UserIdentity> ObserveAsync(ObservedUser observed, ProfileChangeContext context, RenameRescan rescan, CancellationToken ct = default);
     Task<UserIdentity> ResolveAsync(long userId, CancellationToken ct = default);
     Task<IReadOnlyList<UserIdentity>> ResolveManyAsync(IReadOnlyCollection<long> userIds, CancellationToken ct = default);
-}
-
-public interface IProfileChangeRescanQueue
-{
-    Task EnqueueAsync(long userId, ChatIdentity? chat, CancellationToken ct = default);
 }
 ```
 
@@ -966,7 +963,7 @@ public class UserIdentityServiceTests
 {
     private ITelegramUserRepository _users = null!;
     private IProfileScanResultsRepository _scans = null!;
-    private IProfileChangeRescanQueue _rescans = null!;
+    private IProfileScanGate _gate = null!;
     private UserIdentityService _sut = null!;
 
     [SetUp]
@@ -974,10 +971,10 @@ public class UserIdentityServiceTests
     {
         _users = Substitute.For<ITelegramUserRepository>();
         _scans = Substitute.For<IProfileScanResultsRepository>();
-        _rescans = Substitute.For<IProfileChangeRescanQueue>();
+        _gate = Substitute.For<IProfileScanGate>();
         _scans.GetLatestByUserIdsAsync(Arg.Any<IReadOnlyCollection<long>>(), Arg.Any<CancellationToken>())
             .Returns(new Dictionary<long, ProfileScanResultRecord>());
-        _sut = new UserIdentityService(_users, _scans, _rescans, Substitute.For<ILogger<UserIdentityService>>());
+        _sut = new UserIdentityService(_users, _scans, _gate, Substitute.For<ILogger<UserIdentityService>>());
     }
 
     private static TelegramUser Row(long id, string first, bool trusted = false, bool bot = false) =>
@@ -1042,37 +1039,65 @@ public class UserIdentityServiceTests
         Assert.That((await _sut.ResolveAsync(7)).Verdict, Is.EqualTo(NameVerdict.Unscanned));
     }
 
+    private static readonly ChatIdentity Chat = new(-100, "Chat");
+
     [Test]
-    public async Task Observe_RenameOfUntrustedUser_QueuesRescan()
+    public async Task Observe_RenameOfUntrustedUser_Inline_RescansThroughGate()
     {
         _users.GetOrUpdateAsync(Arg.Any<ObservedUser>(), Arg.Any<ProfileChangeContext>(), Arg.Any<CancellationToken>())
             .Returns(new ObservedNamesResult(Row(7, "New"), new PreviousNames("Old", null, null)));
 
-        await _sut.ObserveAsync(Observed(7, "New"), new ProfileChangeContext(null, null));
+        await _sut.ObserveAsync(Observed(7, "New"), new ProfileChangeContext(Chat, 5), RenameRescan.Inline);
 
-        await _rescans.Received(1).EnqueueAsync(7, null, Arg.Any<CancellationToken>());
+        await _gate.Received(1).ScanIfEligibleAsync(
+            Arg.Is<UserIdentity>(u => u!.Id == 7), Chat, ProfileScanTrigger.ProfileChange,
+            Arg.Any<CancellationToken>(), bypassFreshness: true);
     }
 
     [Test]
-    public async Task Observe_RenameOfTrustedUser_DoesNotQueueRescan()
+    public async Task Observe_RenameWithRescanNone_DoesNotScan()
+    {
+        _users.GetOrUpdateAsync(Arg.Any<ObservedUser>(), Arg.Any<ProfileChangeContext>(), Arg.Any<CancellationToken>())
+            .Returns(new ObservedNamesResult(Row(7, "New"), new PreviousNames("Old", null, null)));
+
+        await _sut.ObserveAsync(Observed(7, "New"), new ProfileChangeContext(Chat, null), RenameRescan.None);
+
+        await _gate.DidNotReceiveWithAnyArgs().ScanIfEligibleAsync(default!, default, default, default);
+    }
+
+    [Test]
+    public async Task Observe_RenameOfTrustedUser_DoesNotScan()
     {
         _users.GetOrUpdateAsync(Arg.Any<ObservedUser>(), Arg.Any<ProfileChangeContext>(), Arg.Any<CancellationToken>())
             .Returns(new ObservedNamesResult(Row(7, "New", trusted: true), new PreviousNames("Old", null, null)));
 
-        await _sut.ObserveAsync(Observed(7, "New"), new ProfileChangeContext(null, null));
+        await _sut.ObserveAsync(Observed(7, "New"), new ProfileChangeContext(Chat, 5), RenameRescan.Inline);
 
-        await _rescans.DidNotReceiveWithAnyArgs().EnqueueAsync(default, default);
+        await _gate.DidNotReceiveWithAnyArgs().ScanIfEligibleAsync(default!, default, default, default);
     }
 
     [Test]
-    public async Task Observe_NoRename_DoesNotQueueRescan()
+    public async Task Observe_NoRename_DoesNotScan()
     {
         _users.GetOrUpdateAsync(Arg.Any<ObservedUser>(), Arg.Any<ProfileChangeContext>(), Arg.Any<CancellationToken>())
             .Returns(new ObservedNamesResult(Row(7, "Same"), Renamed: null));
 
-        await _sut.ObserveAsync(Observed(7, "Same"), new ProfileChangeContext(null, null));
+        await _sut.ObserveAsync(Observed(7, "Same"), new ProfileChangeContext(Chat, 5), RenameRescan.Inline);
 
-        await _rescans.DidNotReceiveWithAnyArgs().EnqueueAsync(default, default);
+        await _gate.DidNotReceiveWithAnyArgs().ScanIfEligibleAsync(default!, default, default, default);
+    }
+
+    [Test]
+    public async Task Observe_RescanThrows_StillReturnsIdentity()
+    {
+        _users.GetOrUpdateAsync(Arg.Any<ObservedUser>(), Arg.Any<ProfileChangeContext>(), Arg.Any<CancellationToken>())
+            .Returns(new ObservedNamesResult(Row(7, "New"), new PreviousNames("Old", null, null)));
+        _gate.ScanIfEligibleAsync(default!, default, default, default, default)
+            .ReturnsForAnyArgs<ProfileScanResult?>(_ => throw new InvalidOperationException("scan failed"));
+
+        var identity = await _sut.ObserveAsync(Observed(7, "New"), new ProfileChangeContext(Chat, 5), RenameRescan.Inline);
+
+        Assert.That(identity.Id, Is.EqualTo(7));
     }
 
     [Test]
@@ -1081,7 +1106,7 @@ public class UserIdentityServiceTests
         _users.GetOrUpdateAsync(Arg.Any<ObservedUser>(), Arg.Any<ProfileChangeContext>(), Arg.Any<CancellationToken>())
             .Returns<ObservedNamesResult>(_ => throw new InvalidOperationException("db down"));
 
-        var identity = await _sut.ObserveAsync(Observed(7, "Seen"), new ProfileChangeContext(null, null));
+        var identity = await _sut.ObserveAsync(Observed(7, "Seen"), new ProfileChangeContext(null, null), RenameRescan.Inline);
 
         Assert.That(identity.DisplayName, Is.EqualTo("Seen"));
         Assert.That(identity.Verdict, Is.EqualTo(NameVerdict.Unscanned));
@@ -1119,10 +1144,11 @@ namespace TelegramGroupsAdmin.Telegram.Services.Identity;
 public sealed class UserIdentityService(
     ITelegramUserRepository users,
     IProfileScanResultsRepository scans,
-    IProfileChangeRescanQueue rescans,
+    IProfileScanGate scanGate,
     ILogger<UserIdentityService> logger) : IUserIdentityService
 {
-    public async Task<UserIdentity> ObserveAsync(ObservedUser observed, ProfileChangeContext context, CancellationToken ct = default)
+    public async Task<UserIdentity> ObserveAsync(
+        ObservedUser observed, ProfileChangeContext context, RenameRescan rescan, CancellationToken ct = default)
     {
         ObservedNamesResult result;
         try
@@ -1138,20 +1164,25 @@ public sealed class UserIdentityService(
 #pragma warning restore RS0030
         }
 
-        if (result.Renamed is not null && !result.User.IsTrusted && !result.User.IsBot
-            && !TelegramConstants.IsSystemUser(observed.Id))
+        var identity = await WithVerdictAsync(result.User, ct);
+
+        // Inline, as the message pipeline did before: a profile ban stays inside this update's
+        // context and its existing cleanup path. Renames are rare, so the stall is rare.
+        if (rescan == RenameRescan.Inline && result.Renamed is not null
+            && !result.User.IsTrusted && !result.User.IsBot && !TelegramConstants.IsSystemUser(observed.Id))
         {
             try
             {
-                await rescans.EnqueueAsync(observed.Id, context.Chat, ct);
+                await scanGate.ScanIfEligibleAsync(identity, context.Chat, ProfileScanTrigger.ProfileChange, ct, bypassFreshness: true);
+                identity = await WithVerdictAsync(result.User, ct);
             }
             catch (Exception ex) when (!ct.IsCancellationRequested)
             {
-                logger.LogWarning(ex, "Failed to queue profile rescan after rename for user {UserId}", observed.Id);
+                logger.LogWarning(ex, "Profile rescan after rename failed for user {UserId}", observed.Id);
             }
         }
 
-        return await WithVerdictAsync(result.User, ct);
+        return identity;
     }
 
     public async Task<UserIdentity> ResolveAsync(long userId, CancellationToken ct = default)
@@ -1196,7 +1227,7 @@ public sealed class UserIdentityService(
     }
 }
 ```
-(The `#pragma` lines are inert until Task 14 adds the analyzer.) Register in `TelegramGroupsAdmin.Telegram/Extensions/ServiceCollectionExtensions.cs` next to the other scoped services: `services.AddScoped<IUserIdentityService, UserIdentityService>();`. `IProfileChangeRescanQueue` is implemented in Task 7; until then register nothing and keep the unit tests on the substitute.
+(The `#pragma` lines are inert until Task 14 adds the analyzer.) Register in `TelegramGroupsAdmin.Telegram/Extensions/ServiceCollectionExtensions.cs` next to the other scoped services: `services.AddScoped<IUserIdentityService, UserIdentityService>();`. `ProfileScanService` (singleton) reaches the identity service through its own scope (Task 10), so there is no constructor cycle with `IProfileScanGate`.
 
 - [ ] **Step 4: Run to verify they pass**
 
@@ -1212,19 +1243,18 @@ git commit -m "feat(telegram): add user identity service"
 
 ---
 
-### Task 7: Queued rename rescan and scan single-flight
+### Task 7: Scan single-flight and freshness bypass
 
 **Files:**
-- Create: `TelegramGroupsAdmin.Core/JobPayloads/ProfileChangeRescanPayload.cs`, `TelegramGroupsAdmin.BackgroundJobs/Jobs/ProfileChangeRescanJob.cs`, `TelegramGroupsAdmin.Telegram/Services/Identity/ProfileChangeRescanQueue.cs`
-- Modify: `TelegramGroupsAdmin.Core/BackgroundJobs/BackgroundJobNames.cs`, `DeduplicationKeys.cs`, `TelegramGroupsAdmin.BackgroundJobs/Extensions/ServiceCollectionExtensions.cs` (next to line 107), `TelegramGroupsAdmin.Telegram/Services/UserApi/IProfileScanService.cs`, `ProfileScanService.cs:50-92`, `IProfileScanGate.cs`, `ProfileScanGate.cs`
-- Test: `TelegramGroupsAdmin.UnitTests/Telegram/Services/UserApi/ProfileScanServiceSingleFlightTests.cs` (create), `TelegramGroupsAdmin.UnitTests/BackgroundJobs/ProfileChangeRescanJobTests.cs` (create)
+- Modify: `TelegramGroupsAdmin.Telegram/Services/UserApi/IProfileScanService.cs`, `ProfileScanService.cs:50-92`, `IProfileScanGate.cs`, `ProfileScanGate.cs`
+- Test: `TelegramGroupsAdmin.UnitTests/Telegram/Services/UserApi/ProfileScanServiceSingleFlightTests.cs` (create), existing `ProfileScanGate` tests
 
 **Interfaces:**
-- Produces: `record ProfileChangeRescanPayload(long UserId, ChatIdentity? Chat)`; `BackgroundJobNames.ProfileChangeRescan = "ProfileChangeRescan"`; `DeduplicationKeys.ProfileChangeRescan(long userId) => $"ProfileChangeRescan_{userId}"`; `IProfileScanService.ScanUserProfileAsync(UserIdentity user, ChatIdentity? triggeringChat, CancellationToken ct, bool bypassFreshness = false)`; `IProfileScanGate.ScanIfEligibleAsync(UserIdentity user, ChatIdentity? chat, ProfileScanTrigger trigger, CancellationToken ct, bool bypassFreshness = false)`.
+- Produces: `IProfileScanService.ScanUserProfileAsync(UserIdentity user, ChatIdentity? triggeringChat, CancellationToken ct, bool bypassFreshness = false)`; `IProfileScanGate.ScanIfEligibleAsync(UserIdentity user, ChatIdentity? chat, ProfileScanTrigger trigger, CancellationToken ct, bool bypassFreshness = false)`.
 
 - [ ] **Step 1: Write the failing tests**
 
-Single-flight (substitute the scan's inner work through the existing seams; if `ProfileScanService` has no seam for the core scan, add `internal Func<…>`-free extraction: move the body after the dedup check into `private Task<ProfileScanResult> RunScanAsync(...)` and test single-flight through `ScanUserProfileAsync` with an `ITelegramSessionManager` substitute whose `GetAnyClientAsync` awaits a `TaskCompletionSource` and then returns null, which yields `EmptyResult`):
+Use the substitutes and construction the existing `ProfileScanService` unit tests use (`grep -rln "new ProfileScanService(" TelegramGroupsAdmin.UnitTests`); match `_sessions` / `_users` to them. The core scan is reached through `ITelegramSessionManager`: a `GetAnyClientAsync` that awaits a `TaskCompletionSource` and then returns null yields `EmptyResult`, which is enough to observe how many scans ran.
 
 ```csharp
     [Test]
@@ -1255,28 +1285,24 @@ Single-flight (substitute the scan's inner work through the existing seams; if `
 
         await _sessions.Received(1).GetAnyClientAsync(Arg.Any<CancellationToken>());
     }
-```
-Use the substitutes and construction the existing `ProfileScanService` unit tests use (`grep -rln "new ProfileScanService(" TelegramGroupsAdmin.UnitTests`); match `_sessions` / `_users` to them.
 
-Job test: the job resolves the user and calls the gate with `ProfileScanTrigger.ProfileChange` and `bypassFreshness: true`:
-```csharp
     [Test]
-    public async Task Execute_ScansThroughGateWithFreshnessBypass()
+    public async Task WithoutBypass_RecentlyScanned_ReusesCachedScore()
     {
-        var identity = UserIdentity.ForTest(7, "A");
-        _identities.ResolveAsync(7, Arg.Any<CancellationToken>()).Returns(identity);
-        var context = JobContextWithPayload(new ProfileChangeRescanPayload(7, null)); // existing job-test helper (grep JobPayloadHelper in UnitTests)
+        _users.GetByTelegramIdAsync(7, Arg.Any<CancellationToken>())
+            .Returns(TestTelegramUsers.Create(7, "A") with { ProfileScannedAt = DateTimeOffset.UtcNow, ProfileScanScore = 1m });
 
-        await _job.Execute(context);
+        await _sut.ScanUserProfileAsync(UserIdentity.ForTest(7, "A"), null, CancellationToken.None);
 
-        await _gate.Received(1).ScanIfEligibleAsync(identity, null, ProfileScanTrigger.ProfileChange, Arg.Any<CancellationToken>(), bypassFreshness: true);
+        await _sessions.DidNotReceiveWithAnyArgs().GetAnyClientAsync(default);
     }
 ```
+Gate test (existing gate test file): `ScanIfEligibleAsync(…, bypassFreshness: true)` forwards `bypassFreshness: true` to `ScanUserProfileAsync`.
 
 - [ ] **Step 2: Run to verify they fail**
 
-Run: `dotnet test TelegramGroupsAdmin.UnitTests --filter "FullyQualifiedName~ProfileScanServiceSingleFlightTests|FullyQualifiedName~ProfileChangeRescanJobTests"`
-Expected: build errors.
+Run: `dotnet test TelegramGroupsAdmin.UnitTests --filter "FullyQualifiedName~ProfileScanServiceSingleFlightTests|FullyQualifiedName~ProfileScanGate"`
+Expected: build errors (no `bypassFreshness` parameter).
 
 - [ ] **Step 3: Implement**
 
@@ -1301,56 +1327,18 @@ Expected: build errors.
         }
     }
 ```
-Rename the current method body to `private async Task<ProfileScanResult> ScanOnceAsync(UserIdentity user, ChatIdentity? triggeringChat, bool bypassFreshness, CancellationToken ct)` and change the freshness condition at line 68 to `if (!bypassFreshness && existingUser?.ProfileScannedAt is { } lastScan && …)`. Thread `bypassFreshness` through `IProfileScanGate`/`ProfileScanGate` to `ScanUserProfileAsync`.
-
-Payload, names, dedup key as in Interfaces. Job:
-```csharp
-public sealed class ProfileChangeRescanJob(
-    ILogger<ProfileChangeRescanJob> logger,
-    IServiceScopeFactory scopeFactory) : IJob
-{
-    public async Task Execute(IJobExecutionContext context)
-    {
-        var payload = await JobPayloadHelper.TryGetPayloadAsync<ProfileChangeRescanPayload>(context, logger);
-        if (payload == null) return;
-
-        await using var scope = scopeFactory.CreateAsyncScope();
-        var identities = scope.ServiceProvider.GetRequiredService<IUserIdentityService>();
-        var gate = scope.ServiceProvider.GetRequiredService<IProfileScanGate>();
-
-        var user = await identities.ResolveAsync(payload.UserId, context.CancellationToken);
-        await gate.ScanIfEligibleAsync(user, payload.Chat, ProfileScanTrigger.ProfileChange, context.CancellationToken, bypassFreshness: true);
-    }
-}
-```
-(If other jobs inject services directly rather than a scope factory, follow them; `DeleteUserMessagesJob` injects directly.) Register next to `ServiceCollectionExtensions.cs:107`:
-`q.AddJob<ProfileChangeRescanJob>(opts => opts.WithIdentity(BackgroundJobNames.ProfileChangeRescan).StoreDurably());`
-
-Queue:
-```csharp
-public sealed class ProfileChangeRescanQueue(IJobScheduler scheduler) : IProfileChangeRescanQueue
-{
-    public Task EnqueueAsync(long userId, ChatIdentity? chat, CancellationToken ct = default) =>
-        scheduler.ScheduleJobAsync(
-            BackgroundJobNames.ProfileChangeRescan,
-            new ProfileChangeRescanPayload(userId, chat),
-            delaySeconds: 0,
-            deduplicationKey: DeduplicationKeys.ProfileChangeRescan(userId),
-            cancellationToken: ct);
-}
-```
-Register `services.AddScoped<IProfileChangeRescanQueue, ProfileChangeRescanQueue>();` next to `IUserIdentityService`.
+Rename the current method body to `private async Task<ProfileScanResult> ScanOnceAsync(UserIdentity user, ChatIdentity? triggeringChat, bool bypassFreshness, CancellationToken ct)` and change the freshness condition at line 68 to `if (!bypassFreshness && existingUser?.ProfileScannedAt is { } lastScan && …)`. Thread `bypassFreshness` through `IProfileScanGate` / `ProfileScanGate` to `ScanUserProfileAsync`.
 
 - [ ] **Step 4: Run to verify they pass**
 
-Run: `dotnet build TelegramGroupsAdmin.sln && dotnet test TelegramGroupsAdmin.UnitTests --filter "FullyQualifiedName~ProfileScan|FullyQualifiedName~ProfileChangeRescanJobTests"`
-Expected: build 0 warnings; PASS, including existing ProfileScanService and gate tests (update their mocks for the new optional parameter if NSubstitute `Received` calls need it).
+Run: `dotnet build TelegramGroupsAdmin.sln && dotnet test TelegramGroupsAdmin.UnitTests --filter "FullyQualifiedName~ProfileScan"`
+Expected: 0 warnings; PASS, including existing ProfileScanService and gate tests (update `Received` calls for the new optional parameter where NSubstitute needs it).
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add -A
-git commit -m "feat(profile-scan): queue rename rescans and share in-flight scans"
+git commit -m "fix(profile-scan): share in-flight scans and let rename rescans bypass the freshness window"
 ```
 
 ---
@@ -1372,7 +1360,7 @@ git commit -m "feat(profile-scan): queue rename rescans and share in-flight scan
     public async Task NewMessage_ObservesSenderBeforeRoutingCommands()
     {
         var order = new List<string>();
-        _identities.ObserveAsync(Arg.Any<ObservedUser>(), Arg.Any<ProfileChangeContext>(), Arg.Any<CancellationToken>())
+        _identities.ObserveAsync(Arg.Any<ObservedUser>(), Arg.Any<ProfileChangeContext>(), Arg.Any<RenameRescan>(), Arg.Any<CancellationToken>())
             .Returns(ci => { order.Add("observe"); return UserIdentity.ForTest(ci.Arg<ObservedUser>().Id, "A"); });
         _commandRouter.IsCommand(Arg.Any<Message>()).Returns(ci => { order.Add("command"); return false; });
 
@@ -1391,6 +1379,7 @@ git commit -m "feat(profile-scan): queue rename rescans and share in-flight scan
         await _identities.Received(1).ObserveAsync(
             Arg.Is<ObservedUser>(o => o!.Id == 7 && o.ObservedAt == message.Date && o.Source == ObservationSource.BotUpdate),
             Arg.Is<ProfileChangeContext>(c => c!.Chat!.Id == message.Chat.Id && c.MessageId == message.MessageId),
+            RenameRescan.Inline,
             Arg.Any<CancellationToken>());
         await _users.Received(1).MarkActiveAsync(7, Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
         await _users.DidNotReceiveWithAnyArgs().UpsertAsync(default!);
@@ -1413,6 +1402,7 @@ At the top of `HandleNewMessageAsync`, after the null checks and before command 
                 new ObservedUser(message.From!.Id, message.From.FirstName, message.From.LastName, message.From.Username,
                     message.From.IsBot, ObservationSource.BotUpdate, observedAt),
                 new ProfileChangeContext(ChatIdentity.From(message.Chat), message.MessageId),
+                RenameRescan.Inline,
                 cancellationToken);
 ```
 (If the scope is created later in the method, move this to the first point a scope exists, still before command routing; the order test pins it.)
@@ -1438,31 +1428,31 @@ git commit -m "refactor(pipeline): observe the sender first and pass one identit
 
 ---
 
-### Task 9: Edited messages, callbacks, chat-member updates; remove old writes
+### Task 9: Edited messages, joins, callbacks, chat-member updates; remove old writes
 
 **Files:**
 - Modify: `TelegramGroupsAdmin.Telegram/Handlers/MessageEditProcessor.cs`, the callback entry (`grep -rn "CallbackQuery" TelegramGroupsAdmin.Telegram/Services/UpdateRouter.cs` → its handler), `TelegramGroupsAdmin.Telegram/Services/WelcomeService.cs:80,141` (join) and `:713` (callback), `TelegramGroupsAdmin.Telegram/Services/Bot/BotChatService.cs:184,288,453`, `TelegramGroupsAdmin.Telegram/Services/DmCelebrations/BanCelebrationSubscriptionService.cs:38`, `TelegramGroupsAdmin.Telegram/Services/BotProtectionService.cs:109`, `TelegramGroupsAdmin.Telegram/Services/Bot/BotMessageService.cs:117,363,467`, `ITelegramUserRepository` / `TelegramUserRepository` (delete `GetOrCreateAsync`, `UpsertAsync`)
 - Test: update existing tests of each modified class; add one per entry point asserting `ObserveAsync` with the right `ObservationSource` and timestamp.
 
 **Interfaces:**
-- Consumes: `IUserIdentityService.ObserveAsync`.
+- Consumes: `IUserIdentityService.ObserveAsync`, `ResolveAsync`.
 
-Per entry point:
+Only entry points that rescan (or scan right after) record names; recording a new name uses up the rename, so everything else resolves by id.
 
-| Site | Observation | Timestamp |
-|---|---|---|
-| `MessageEditProcessor` | `editedMessage.From` | `edit_date` (`EditDate ?? Date`) |
-| Callback handler | `callbackQuery.From` | `DateTimeOffset.UtcNow` (callbacks carry no date) |
-| `WelcomeService` join (:80, :141 `GetOrCreateAsync`) | `chatMemberUpdate.NewChatMember.User` | `chatMemberUpdate.Date` |
-| `BotChatService` :184, :288 | `ChatMemberUpdated` user, `ObservationSource.ChatMember` | update `Date` |
-| `BotChatService` :453 (admin refresh) | `ChatMember.User` from `getChatAdministrators`, `ObservationSource.ChatMember` | `DateTimeOffset.UtcNow` |
-| `BanCelebrationSubscriptionService` :38 | `ChatMemberUpdated.From` | update `Date` |
-| `BotProtectionService` :109 | the bot `User`, `IsBot = true` | update `Date` |
-| `BotMessageService` :117/:363/:467 | the bot's own `User` (from `GetMe`), `IsBot = true` | `DateTimeOffset.UtcNow` |
+| Site | Call | Timestamp | `RenameRescan` |
+|---|---|---|---|
+| `MessageEditProcessor` | `ObserveAsync(editedMessage.From)` | `EditDate ?? Date` | `Inline` |
+| `WelcomeService` join (:80, :141 `GetOrCreateAsync`) | `ObserveAsync(chatMemberUpdate.NewChatMember.User)`, `ObservationSource.ChatMember` | `chatMemberUpdate.Date` | `None` (the join scan runs right after) |
+| Callback handlers (`WelcomeService` :713, report/ban callbacks) | `ResolveAsync(callbackQuery.From.Id)` | — | — |
+| `BotChatService` :184, :288 (chat-member changes other than join) | `ResolveAsync(id)` | — | — |
+| `BotChatService` :453 (admin refresh via `getChatAdministrators`) | `ObserveAsync(ChatMember.User)`, `ObservationSource.ChatMember` | `DateTimeOffset.UtcNow` | `None` (admins are trusted) |
+| `BanCelebrationSubscriptionService` :38 | `ResolveAsync(ChatMemberUpdated.From.Id)` | — | — |
+| `BotProtectionService` :109 | `ObserveAsync(bot User)`, `IsBot = true` | update `Date` | `None` |
+| `BotMessageService` :117/:363/:467 | `ObserveAsync(own bot User from GetMe)`, `IsBot = true` | `DateTimeOffset.UtcNow` | `None` |
 
-Each site uses the returned identity in place of the `UserIdentity.From(...)` it built before.
+For `ResolveAsync` sites with no row yet (a first-time user), `ResolveAsync` returns an id-only identity; where the old code used `GetOrCreateAsync` to guarantee the row for foreign keys, use `ObserveAsync(..., RenameRescan.None)` instead and say so in the commit message. Each site uses the returned identity in place of the `UserIdentity.From(...)` it built before.
 
-- [ ] **Step 1: Write the failing tests** — one per row above, in each class's existing test file, of this shape:
+- [ ] **Step 1: Write the failing tests** — one per row above, in each class's existing test file, asserting the call, timestamp and `RenameRescan` from the table (`ResolveAsync` rows assert `ObserveAsync` is not called), of this shape:
 
 ```csharp
     [Test]
@@ -1474,7 +1464,7 @@ Each site uses the returned identity in place of the `UserIdentity.From(...)` it
 
         await _identities.Received(1).ObserveAsync(
             Arg.Is<ObservedUser>(o => o!.Id == 7 && o.ObservedAt == new DateTimeOffset(2026, 10, 3, 12, 0, 0, TimeSpan.Zero)),
-            Arg.Any<ProfileChangeContext>(), Arg.Any<CancellationToken>());
+            Arg.Any<ProfileChangeContext>(), RenameRescan.Inline, Arg.Any<CancellationToken>());
     }
 ```
 
@@ -1519,7 +1509,7 @@ git commit -m "refactor(telegram): observe names at every entry point and drop G
         await _identities.Received(1).ResolveAsync(7, Arg.Any<CancellationToken>());
     }
 ```
-The live-names path needs a WTelegram client and is covered by reading: add the `ObserveAsync` call right after `tlUser` is fetched, guarded by `tlUser is not null`, with `ObservedAt = DateTimeOffset.UtcNow` and `new ProfileChangeContext(triggeringChat, null)`; failures are already swallowed by the service.
+The live-names path needs a WTelegram client and is covered by reading: add the `ObserveAsync` call right after `tlUser` is fetched, guarded by `tlUser is not null`, with `ObservedAt = DateTimeOffset.UtcNow`, `ObservationSource.UserApiScan`, `new ProfileChangeContext(triggeringChat, null)` and `RenameRescan.None` (the scan must not trigger itself); failures are already swallowed by the service. `ProfileScanService` is a singleton: resolve `IUserIdentityService` from the scope it already creates (`scope.ServiceProvider`), never inject it.
 
 - [ ] **Step 2: Run to verify it fails**, **Step 3: implement**, **Step 4: run** `dotnet test TelegramGroupsAdmin.UnitTests --filter "FullyQualifiedName~ProfileScan"` (Expected: PASS), **Step 5: commit** `refactor(profile-scan): resolve and record names through the identity service`.
 
@@ -1604,7 +1594,7 @@ Replace the old masking tests in `BanCelebrationServiceTests` (unit and integrat
 
 Rules:
 - The command's caller identity comes from the pipeline (`sender`, Task 8): add a `UserIdentity sender` member to the command execution context the router passes (read `CommandRouter` and `IBotCommand.ExecuteAsync`; add the parameter there once) and use it for the `Actor`/executor.
-- Reply targets and other SDK users: `await identityService.ObserveAsync(new ObservedUser(u.Id, u.FirstName, u.LastName, u.Username, u.IsBot, ObservationSource.BotUpdate, observedAt), new ProfileChangeContext(chat, null), ct)` with the replied-to message's date.
+- Reply targets and other SDK users: `await identityService.ResolveAsync(u.Id, ct)`. Every message was observed when it arrived, so the stored names are current.
 - DB lookups (`BanCommand:88,99,115`, `BanCallbackService:140`, `UserMessagingService:87,123`): `identityService.ResolveAsync(row.TelegramUserId, ct)`.
 - Detection paths that only need the id for logging may keep the pipeline's `sender` passed down (`ContentDetectionOrchestrator.RunDetectionAsync` gains a `UserIdentity sender` parameter).
 - Every `new TelegramMessageBuilder()` in these files becomes `TelegramMessageBuilder.For(await configService.GetNameMaskingAsync(chatId, ct))`; DMs use `null`.
@@ -1617,8 +1607,7 @@ Rules:
     public async Task Warn_confirmation_mentions_target_with_masking()
     {
         var target = UserIdentity.ForTest(7, "Bad", verdict: NameVerdict.Explicit);
-        _identities.ObserveAsync(Arg.Is<ObservedUser>(o => o!.Id == 7), Arg.Any<ProfileChangeContext>(), Arg.Any<CancellationToken>())
-            .Returns(target);
+        _identities.ResolveAsync(7, Arg.Any<CancellationToken>()).Returns(target);
         _config.GetNameMaskingAsync(TestChatId, Arg.Any<CancellationToken>()).Returns(NameMasking.On);
 
         var result = await _command.ExecuteAsync(WarnReplyTo(7), ["spam"], PermissionLevel.Admin, Sender);
@@ -1732,5 +1721,5 @@ git commit -m "build: ban direct UserIdentity construction outside the identity 
 
 ## Self-review notes
 
-- Spec coverage: identity type (T1), builder policy (T2), config + migration (T3), verdict source (T4), observe/rename/ordering/one transaction/photo fields (T5), service + failure handling + system accounts/bots (T6), single-flight + freshness bypass + queued rescans (T7), entry points (T8, T9), scan observes live names (T10), Mention/celebration and all area migrations (T11-T13), enforcement (T14), Quartz compatibility (T1, T13), canonical anchors (T4 constants). Follow-ups in the spec stay out of scope.
+- Spec coverage: identity type (T1), builder policy (T2), config + migration (T3), verdict source (T4), observe/rename/ordering/one transaction/photo fields (T5), service + failure handling + system accounts/bots (T6), single-flight + freshness bypass (T7), inline rename rescans (T6, T8), entry points (T8, T9), scan observes live names (T10), Mention/celebration and all area migrations (T11-T13), enforcement (T14), Quartz compatibility (T1, T13), canonical anchors (T4 constants). Follow-ups in the spec stay out of scope.
 - Deviations from the spec are listed at the top for confirmation at review.
