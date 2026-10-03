@@ -493,10 +493,16 @@ public sealed class ProfileScanService(
             ExplicitDisplayText: scoreResult.ExplicitDisplayText);
 
         // ── Step 8: Take moderation action ──
-        if (scoreResult.Outcome == ProfileScanOutcome.Banned)
-            await HandleBanAsync(user, triggeringChat, result, sp, ct);
-        else if (scoreResult.Outcome == ProfileScanOutcome.HeldForReview)
-            await CreateProfileScanAlertAsync(user, triggeringChat, result, sp, ct);
+        // Re-resolve after Step 7 persisted the scan: the caller's identity predates this scan's
+        // verdict, so a name it just flagged would otherwise reach bot-written text unmasked.
+        if (scoreResult.Outcome is ProfileScanOutcome.Banned or ProfileScanOutcome.HeldForReview)
+        {
+            var scannedUser = await sp.GetRequiredService<IUserIdentityService>().ResolveAsync(user.Id, ct);
+            if (scoreResult.Outcome == ProfileScanOutcome.Banned)
+                await HandleBanAsync(scannedUser, triggeringChat, result, sp, ct);
+            else
+                await CreateProfileScanAlertAsync(scannedUser, triggeringChat, result, sp, ct);
+        }
 
         return result;
     }

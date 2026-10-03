@@ -6,10 +6,14 @@ using TL;
 using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Core.Imaging;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Repositories;
+using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Telegram.Metrics;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.Identity;
+using TelegramGroupsAdmin.Telegram.Services.Moderation;
 using TelegramGroupsAdmin.Telegram.Services.UserApi;
 
 namespace TelegramGroupsAdmin.UnitTests.Telegram.Services.UserApi;
@@ -28,6 +32,9 @@ public class ProfileScanServiceSingleFlightTests
     private ITelegramUserRepository _users = null!;
     private IUserIdentityService _identities = null!;
     private IProfileScoringEngine _scoring = null!;
+    private IBotModerationService _moderation = null!;
+    private IReportsRepository _reports = null!;
+    private IAdminNotificationService _notifications = null!;
     private ServiceProvider _provider = null!;
     private ProfileScanService _sut = null!;
 
@@ -40,7 +47,13 @@ public class ProfileScanServiceSingleFlightTests
         _scoring = Substitute.For<IProfileScoringEngine>();
         _scoring.ScoreAsync(default!, default!, default, default, default, default)
             .ReturnsForAnyArgs(new ScoringResult(0m, ProfileScanOutcome.Clean, 0m, 0m, null, null));
+        _moderation = Substitute.For<IBotModerationService>();
+        _reports = Substitute.For<IReportsRepository>();
+        _notifications = Substitute.For<IAdminNotificationService>();
         _provider = new ServiceCollection()
+            .AddSingleton(_moderation)
+            .AddSingleton(_reports)
+            .AddSingleton(_notifications)
             .AddSingleton(_users)
             .AddSingleton(_identities)
             .AddSingleton(_scoring)
@@ -220,6 +233,7 @@ public class ProfileScanServiceSingleFlightTests
             chats = new Dictionary<long, ChatBase>()
         });
         _sessions.GetAnyClientAsync(Arg.Any<CancellationToken>()).Returns(client);
+        _sessions.GetClientForChatAsync(Arg.Any<long>(), Arg.Any<CancellationToken>()).Returns(client);
         return client;
     }
 
@@ -284,5 +298,57 @@ public class ProfileScanServiceSingleFlightTests
         await _sut.ScanUserProfileAsync(UserIdentity.ForTest(LiveUserId, "Same"), null, CancellationToken.None, forceRescan: true);
 
         await _scoring.ReceivedWithAnyArgs(1).ScoreAsync(default!, default!, default, default, default, default);
+    }
+
+    // ── Actions after scoring use the identity re-resolved after the scan persisted its verdict ──
+
+    private UserIdentity ScanFlagsNameExplicit(ProfileScanOutcome outcome)
+    {
+        _users.GetByTelegramIdAsync(LiveUserId, Arg.Any<CancellationToken>()).Returns(StoredRow("Old"));
+        ClientReturning(Live("New"));
+        _scoring.ScoreAsync(default!, default!, default, default, default, default)
+            .ReturnsForAnyArgs(new ScoringResult(4.5m, outcome, 2m, 2.5m, "explicit name", ["explicit"],
+                ExplicitDisplayText: true));
+        var flagged = UserIdentity.ForTest(LiveUserId, "New", verdict: NameVerdict.Explicit);
+        _identities.ResolveAsync(LiveUserId, Arg.Any<CancellationToken>()).Returns(flagged);
+        return flagged;
+    }
+
+    [Test]
+    public async Task Scan_BansUser_BanCarriesIdentityResolvedAfterTheScan()
+    {
+        var flagged = ScanFlagsNameExplicit(ProfileScanOutcome.Banned);
+        _moderation.BanUserAsync(Arg.Any<BanIntent>(), Arg.Any<CancellationToken>())
+            .Returns(new ModerationResult { Success = true });
+
+        await _sut.ScanUserProfileAsync(UserIdentity.ForTest(LiveUserId, "Old"), ChatIdentity.FromId(-100),
+            CancellationToken.None, forceRescan: true);
+
+        Received.InOrder(() =>
+        {
+            _users.UpdateProfileScanDataAsync(LiveUserId, Arg.Any<string?>(), Arg.Any<long?>(), Arg.Any<string?>(),
+                Arg.Any<string?>(), Arg.Any<bool>(), Arg.Any<string?>(), Arg.Any<bool>(), Arg.Any<bool>(),
+                Arg.Any<bool>(), Arg.Any<decimal>(), Arg.Any<long?>(), Arg.Any<long?>(), Arg.Any<string?>(),
+                Arg.Any<CancellationToken>());
+            _identities.ResolveAsync(LiveUserId, Arg.Any<CancellationToken>());
+        });
+        await _moderation.Received(1).BanUserAsync(
+            Arg.Is<BanIntent>(i => i!.User == flagged), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task Scan_HoldsForReview_AlertAndNotificationCarryIdentityResolvedAfterTheScan()
+    {
+        var flagged = ScanFlagsNameExplicit(ProfileScanOutcome.HeldForReview);
+        var chat = ChatIdentity.FromId(-100);
+
+        await _sut.ScanUserProfileAsync(UserIdentity.ForTest(LiveUserId, "Old"), chat,
+            CancellationToken.None, forceRescan: true);
+
+        await _reports.Received(1).InsertProfileScanAlertAsync(
+            Arg.Is<ProfileScanAlertRecord>(a => a!.User == flagged), Arg.Any<CancellationToken>());
+        await _notifications.Received(1).SendProfileScanAlertAsync(
+            chat, flagged, Arg.Any<decimal>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<long>(),
+            Arg.Any<CancellationToken>());
     }
 }
