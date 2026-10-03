@@ -579,6 +579,59 @@ public class ReportCallbackServiceTests
     }
 
     [Test]
+    public async Task HandleCallbackAsync_TextMessageWithMention_KeepsEntitiesOnEdit()
+    {
+        SetupContext(ReportType.ContentReport);
+        _mockReportActionsService.HandleContentBanAsync(TestReportId, Arg.Any<Actor>(), Arg.Any<CancellationToken>())
+            .Returns(new ReviewActionResult(true, "User banned"));
+
+        MessageEntity[] entities =
+        [
+            new() { Type = MessageEntityType.TextMention, Offset = 6, Length = 5, User = new User { Id = 42, FirstName = "Alice" } }
+        ];
+        var callback = CreateCallbackQuery(
+            data: $"rev:{TestContextId}:1",
+            messageText: "User: Alice reported",
+            entities: entities);
+
+        await _service.HandleCallbackAsync(callback);
+
+        await _mockDmService.Received(1).EditDmTextAsync(
+            TestDmChatId, TestDmMessageId,
+            Arg.Is<string>(s => s!.StartsWith("User: Alice reported") && s.Contains("User banned")),
+            replyMarkup: null,
+            entities: entities,
+            cancellationToken: Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task HandleCallbackAsync_PhotoCaptionWithMention_KeepsCaptionEntitiesOnEdit()
+    {
+        SetupContext(ReportType.ContentReport);
+        _mockReportActionsService.HandleContentBanAsync(TestReportId, Arg.Any<Actor>(), Arg.Any<CancellationToken>())
+            .Returns(new ReviewActionResult(true, "User banned"));
+
+        MessageEntity[] captionEntities =
+        [
+            new() { Type = MessageEntityType.TextMention, Offset = 6, Length = 5, User = new User { Id = 42, FirstName = "Alice" } }
+        ];
+        var callback = CreateCallbackQuery(
+            data: $"rev:{TestContextId}:1",
+            messageCaption: "User: Alice reported",
+            hasPhoto: true,
+            captionEntities: captionEntities);
+
+        await _service.HandleCallbackAsync(callback);
+
+        await _mockDmService.Received(1).EditDmCaptionAsync(
+            TestDmChatId, TestDmMessageId,
+            Arg.Is<string>(s => s!.StartsWith("User: Alice reported") && s.Contains("User banned")),
+            replyMarkup: null,
+            captionEntities: captionEntities,
+            cancellationToken: Arg.Any<CancellationToken>());
+    }
+
+    [Test]
     public async Task HandleCallbackAsync_NullMessage_SkipsMessageUpdate()
     {
         SetupContext(ReportType.ContentReport);
@@ -600,7 +653,7 @@ public class ReportCallbackServiceTests
 
         // But no DM update
         await _mockDmService.DidNotReceiveWithAnyArgs()
-            .EditDmTextAsync(default, default, default!, default, default);
+            .EditDmTextAsync(default, default, default!, default, default, default);
     }
 
     [Test]
@@ -613,6 +666,7 @@ public class ReportCallbackServiceTests
         _mockDmService.EditDmTextAsync(
                 Arg.Any<long>(), Arg.Any<int>(), Arg.Any<string>(),
                 Arg.Any<InlineKeyboardMarkup?>(),
+                Arg.Any<IReadOnlyList<MessageEntity>?>(),
                 Arg.Any<CancellationToken>())
             .ThrowsAsync(new Exception("DM edit failed"));
 
@@ -688,7 +742,9 @@ public class ReportCallbackServiceTests
         string? messageText = null,
         string? messageCaption = null,
         bool hasPhoto = false,
-        bool hasVideo = false)
+        bool hasVideo = false,
+        MessageEntity[]? entities = null,
+        MessageEntity[]? captionEntities = null)
     {
         Message? message = null;
         if (messageText != null || messageCaption != null || hasPhoto || hasVideo)
@@ -698,7 +754,9 @@ public class ReportCallbackServiceTests
                 Chat = new Chat { Id = TestDmChatId },
                 Id = TestDmMessageId,
                 Text = messageText,
+                Entities = entities,
                 Caption = messageCaption,
+                CaptionEntities = captionEntities,
                 Photo = hasPhoto ? [new PhotoSize { FileId = "photo1", FileUniqueId = "u1", Width = 100, Height = 100 }] : null,
                 Video = hasVideo ? new Video { FileId = "video1", FileUniqueId = "u2", Width = 100, Height = 100, Duration = 10 } : null
             };

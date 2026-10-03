@@ -187,6 +187,8 @@ public sealed class ReportCallbackService(
         try
         {
             var originalCaption = callbackQuery.Message.Caption ?? callbackQuery.Message.Text ?? "";
+            // Appending after the original text keeps every entity offset valid, so the
+            // original entities carry over as-is (without them, mentions lose their link)
             var updatedText = $"{originalCaption}\n\n{resultMessage}";
 
             if (callbackQuery.Message.Photo != null || callbackQuery.Message.Video != null)
@@ -196,6 +198,7 @@ public sealed class ReportCallbackService(
                     callbackQuery.Message.MessageId,
                     updatedText,
                     replyMarkup: null,
+                    captionEntities: callbackQuery.Message.CaptionEntities,
                     cancellationToken: cancellationToken);
             }
             else
@@ -205,6 +208,7 @@ public sealed class ReportCallbackService(
                     callbackQuery.Message.MessageId,
                     updatedText,
                     replyMarkup: null,
+                    entities: callbackQuery.Message.Entities,
                     cancellationToken: cancellationToken);
             }
         }
