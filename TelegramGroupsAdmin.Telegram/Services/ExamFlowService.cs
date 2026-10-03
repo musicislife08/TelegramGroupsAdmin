@@ -72,79 +72,9 @@ public class ExamFlowService : IExamFlowService
         return (sessionId, questionIndex, answerIndex);
     }
 
-    public async Task<ExamStartResult> StartExamAsync(
-        Chat chat,
-        User user,
-        WelcomeConfig config,
-        CancellationToken cancellationToken = default)
-    {
-        if (config.ExamConfig == null || !config.ExamConfig.IsValid)
-        {
-            _logger.LogWarning("Exam config not valid for {Chat}", chat.ToLogInfo());
-            return new ExamStartResult(Success: false, WelcomeMessageId: 0);
-        }
-
-        var examConfig = config.ExamConfig;
-
-        try
-        {
-            await using var scope = _serviceProvider.CreateAsyncScope();
-            var sessionRepo = scope.ServiceProvider.GetRequiredService<IExamSessionRepository>();
-
-            // Check for existing active session (handles double-trigger scenarios)
-            var existingSession = await sessionRepo.GetSessionAsync(chat.Id, user.Id, cancellationToken);
-            if (existingSession != null)
-            {
-                if (!existingSession.IsExpired)
-                {
-                    _logger.LogInformation(
-                        "User {User} already has active exam session in {Chat}, skipping duplicate creation",
-                        user.ToLogInfo(), chat.ToLogInfo());
-                    return new ExamStartResult(Success: true, WelcomeMessageId: 0);
-                }
-
-                await sessionRepo.DeleteSessionAsync(existingSession.Id, cancellationToken);
-            }
-
-            // Align expiry with welcome timeout deadline
-            var welcomeRepo = scope.ServiceProvider.GetRequiredService<IWelcomeResponsesRepository>();
-            var welcomeResponse = await welcomeRepo.GetByUserAndChatAsync(user.Id, chat.Id, cancellationToken);
-            var expiresAt = CalculateExamExpiry(welcomeResponse, config.TimeoutSeconds);
-
-            var sessionId = await sessionRepo.CreateSessionAsync(ChatIdentity.From(chat), UserIdentity.From(user), expiresAt, cancellationToken);
-
-            // Send first question to user's DM (user.Id is the DM chat ID)
-            int messageId;
-            if (examConfig.HasMcQuestions)
-            {
-                // Generate deterministic shuffle for first question
-                var shuffleState = GenerateShuffleForQuestion(sessionId, 0, examConfig.McQuestions[0].Answers.Count);
-
-                messageId = await SendMcQuestionAsync(
-                    user.Id, user, sessionId,
-                    examConfig.McQuestions[0], 0, shuffleState,
-                    examConfig.McQuestions.Count, cancellationToken);
-            }
-            else
-            {
-                // Only open-ended question
-                messageId = await SendOpenEndedQuestionAsync(
-                    user.Id, user, examConfig, cancellationToken);
-            }
-
-            return new ExamStartResult(Success: true, WelcomeMessageId: messageId);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to start exam for {User} in {Chat}",
-                user.ToLogDebug(), chat.ToLogDebug());
-            return new ExamStartResult(Success: false, WelcomeMessageId: 0);
-        }
-    }
-
     public async Task<ExamStartResult> StartExamInDmAsync(
         ChatIdentity chat,
-        User user,
+        UserIdentity user,
         long dmChatId,
         WelcomeConfig config,
         CancellationToken cancellationToken = default)
@@ -161,6 +91,8 @@ public class ExamFlowService : IExamFlowService
         {
             await using var scope = _serviceProvider.CreateAsyncScope();
             var sessionRepo = scope.ServiceProvider.GetRequiredService<IExamSessionRepository>();
+            var masking = await scope.ServiceProvider.GetRequiredService<IConfigService>()
+                .GetNameMaskingAsync(null, cancellationToken);
 
             // Check for existing active session (user clicked deep link twice, or re-joined)
             var existingSession = await sessionRepo.GetSessionAsync(chat.Id, user.Id, cancellationToken);
@@ -172,7 +104,7 @@ public class ExamFlowService : IExamFlowService
                         "User {User} already has active exam session in {Chat}, skipping duplicate creation",
                         user.ToLogInfo(), chat.ToLogInfo());
 
-                    await _dmService.SendDmAsync(UserIdentity.From(user),
+                    await _dmService.SendDmAsync(user,
                         "📝 You already have an active exam session. Please scroll up to find your current question.",
                         cancellationToken: cancellationToken);
 
@@ -188,13 +120,13 @@ public class ExamFlowService : IExamFlowService
             var welcomeResponse = await welcomeRepo.GetByUserAndChatAsync(user.Id, chat.Id, cancellationToken);
             var expiresAt = CalculateExamExpiry(welcomeResponse, config.TimeoutSeconds);
 
-            var sessionId = await sessionRepo.CreateSessionAsync(chat, UserIdentity.From(user), expiresAt, cancellationToken);
+            var sessionId = await sessionRepo.CreateSessionAsync(chat, user, expiresAt, cancellationToken);
 
             // Send exam intro (MainWelcomeMessage) first - rules/guidelines without buttons
             var chatName = chat.ChatName ?? "the group";
 
-            var introMessage = WelcomeMessageBuilder.FormatExamIntro(config, UserIdentity.From(user), chatName);
-            await _dmService.SendDmAsync(UserIdentity.From(user), introMessage, cancellationToken: cancellationToken);
+            var introMessage = WelcomeMessageBuilder.FormatExamIntro(config, user, chatName, masking);
+            await _dmService.SendDmAsync(user, introMessage, cancellationToken: cancellationToken);
 
             // Then send first question to DM
             int messageId;
@@ -206,13 +138,13 @@ public class ExamFlowService : IExamFlowService
                 messageId = await SendMcQuestionAsync(
                     dmChatId, user, sessionId,
                     examConfig.McQuestions[0], 0, shuffleState,
-                    examConfig.McQuestions.Count, cancellationToken);
+                    examConfig.McQuestions.Count, masking, cancellationToken);
             }
             else
             {
                 // Only open-ended question
                 messageId = await SendOpenEndedQuestionAsync(
-                    dmChatId, user, examConfig, cancellationToken);
+                    dmChatId, user, examConfig, masking, cancellationToken);
             }
 
             return new ExamStartResult(Success: true, WelcomeMessageId: messageId);
@@ -229,7 +161,7 @@ public class ExamFlowService : IExamFlowService
         long sessionId,
         int questionIndex,
         int answerIndex,
-        User user,
+        UserIdentity user,
         Message message,
         CancellationToken cancellationToken = default)
     {
@@ -302,6 +234,7 @@ public class ExamFlowService : IExamFlowService
 
         // Send to user's DM (in Telegram, private chat ID = user ID)
         var targetChatId = session.UserId;
+        var masking = await configService.GetNameMaskingAsync(null, cancellationToken);
 
         // Check if more MC questions
         var nextQuestionIndex = questionIndex + 1;
@@ -315,7 +248,7 @@ public class ExamFlowService : IExamFlowService
                 targetChatId, user, sessionId,
                 examConfig.McQuestions[nextQuestionIndex],
                 nextQuestionIndex, nextShuffleState,
-                examConfig.McQuestions.Count, cancellationToken);
+                examConfig.McQuestions.Count, masking, cancellationToken);
 
             return new ExamAnswerResult(ExamComplete: false, Passed: null, SentToReview: false);
         }
@@ -324,7 +257,7 @@ public class ExamFlowService : IExamFlowService
         if (examConfig.HasOpenEndedQuestion)
         {
             await SendOpenEndedQuestionAsync(
-                targetChatId, user, examConfig, cancellationToken);
+                targetChatId, user, examConfig, masking, cancellationToken);
 
             return new ExamAnswerResult(ExamComplete: false, Passed: null, SentToReview: false);
         }
@@ -345,7 +278,7 @@ public class ExamFlowService : IExamFlowService
 
     public async Task<ExamAnswerResult> HandleOpenEndedAnswerAsync(
         long chatId,
-        User user,
+        UserIdentity user,
         string answerText,
         CancellationToken cancellationToken = default)
     {
@@ -433,7 +366,7 @@ public class ExamFlowService : IExamFlowService
     private async Task<ExamAnswerResult> EvaluateAndCompleteAsync(
         ExamSession session,
         ExamConfig examConfig,
-        User user,
+        UserIdentity user,
         CancellationToken cancellationToken)
     {
         await using var scope = _serviceProvider.CreateAsyncScope();
@@ -511,7 +444,7 @@ public class ExamFlowService : IExamFlowService
         // the only source of the raw answers (#515: never destroy them unrecorded).
         var examResult = new ExamResultRecord
         {
-            User = UserIdentity.From(user),
+            User = user,
             Chat = ChatIdentity.FromId(session.ChatId),
             McAnswers = session.McAnswers,
             ShuffleState = session.ShuffleState,
@@ -534,7 +467,7 @@ public class ExamFlowService : IExamFlowService
         {
             // Execute full approval flow (same as manual approval, but with ExamFlow actor)
             var approvalResult = await ExecuteExamApprovalAsync(
-                user: UserIdentity.From(user),
+                user: user,
                 chat: ChatIdentity.FromId(session.ChatId),
                 executor: Actor.ExamFlow,
                 reason: "Passed entrance exam",
@@ -554,7 +487,7 @@ public class ExamFlowService : IExamFlowService
 
             await passNotificationService.SendExamPassNotificationAsync(
                 chat: passChat?.Identity ?? ChatIdentity.FromId(session.ChatId),
-                user: UserIdentity.From(user),
+                user: user,
                 mcCorrectCount: mcCorrectCount,
                 mcTotal: examConfig.McQuestions.Count,
                 mcScore: mcScore,
@@ -578,7 +511,7 @@ public class ExamFlowService : IExamFlowService
 
         await notificationService.SendExamFailureNotificationAsync(
             chat: failureChat?.Identity ?? ChatIdentity.FromId(session.ChatId),
-            user: UserIdentity.From(user),
+            user: user,
             mcCorrectCount: mcCorrectCount,
             mcTotal: mcTotal,
             mcScore: mcScore,
@@ -591,7 +524,7 @@ public class ExamFlowService : IExamFlowService
 
         // Send pending message to user in DM
         await _dmService.SendDmAsync(
-            UserIdentity.From(user),
+            user,
             "⏳ Your answers are being reviewed by an admin. Please wait.",
             cancellationToken: cancellationToken);
 
@@ -603,15 +536,16 @@ public class ExamFlowService : IExamFlowService
 
     private async Task<int> SendMcQuestionAsync(
         long dmChatId,
-        User user,
+        UserIdentity user,
         long sessionId,
         ExamMcQuestion question,
         int questionIndex,
         int[] shuffleOrder,
         int totalQuestions,
+        NameMasking masking,
         CancellationToken cancellationToken)
     {
-        var text = ExamMessageBuilder.FormatMcQuestion(UserIdentity.From(user), questionIndex + 1, totalQuestions, question.Question);
+        var text = ExamMessageBuilder.FormatMcQuestion(user, questionIndex + 1, totalQuestions, question.Question, masking);
 
         // Build keyboard with shuffled answers
         var buttons = new List<InlineKeyboardButton[]>();
@@ -627,20 +561,21 @@ public class ExamFlowService : IExamFlowService
         var keyboard = new InlineKeyboardMarkup(buttons);
 
         // Exam questions are always sent to DMs with keyboard
-        var result = await _dmService.SendDmWithKeyboardAsync(UserIdentity.From(user), text, keyboard, cancellationToken);
+        var result = await _dmService.SendDmWithKeyboardAsync(user, text, keyboard, cancellationToken);
         return result.MessageId ?? throw new InvalidOperationException("Failed to send exam question - no MessageId returned");
     }
 
     private async Task<int> SendOpenEndedQuestionAsync(
         long dmChatId,
-        User user,
+        UserIdentity user,
         ExamConfig examConfig,
+        NameMasking masking,
         CancellationToken cancellationToken)
     {
-        var text = ExamMessageBuilder.FormatOpenEndedQuestion(UserIdentity.From(user), examConfig.OpenEndedQuestion!);
+        var text = ExamMessageBuilder.FormatOpenEndedQuestion(user, examConfig.OpenEndedQuestion!, masking);
 
         // Exam questions are always sent to DMs (no keyboard for open-ended)
-        var result = await _dmService.SendDmAsync(UserIdentity.From(user), text, cancellationToken: cancellationToken);
+        var result = await _dmService.SendDmAsync(user, text, cancellationToken: cancellationToken);
         return result.MessageId ?? throw new InvalidOperationException("Failed to send exam question - no MessageId returned");
     }
 

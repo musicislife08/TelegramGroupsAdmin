@@ -288,7 +288,7 @@ public class ExamFlowServiceTests
     public async Task EvaluateAndComplete_Passed_PersistsPassedRecordBeforeSessionDelete()
     {
         // Arrange
-        var user = new User { Id = TestUserId, FirstName = "Test", Username = "testuser" };
+        var user = UserIdentity.ForTest(TestUserId, "Test", username: "testuser");
         var session = CreateOpenEndedSession("Because I want to learn and contribute.");
 
         _sessionRepo.GetSessionAsync(TestChatId, TestUserId, Arg.Any<CancellationToken>())
@@ -334,7 +334,7 @@ public class ExamFlowServiceTests
     public async Task EvaluateAndComplete_Failed_PersistsFailedRecordBeforeSessionDelete()
     {
         // Arrange
-        var user = new User { Id = TestUserId, FirstName = "Test", Username = "testuser" };
+        var user = UserIdentity.ForTest(TestUserId, "Test", username: "testuser");
         var session = CreateOpenEndedSession("nah");
 
         _sessionRepo.GetSessionAsync(TestChatId, TestUserId, Arg.Any<CancellationToken>())
@@ -385,7 +385,7 @@ public class ExamFlowServiceTests
     {
         // Arrange - EvaluateAnswerAsync returning null means the AI is unavailable;
         // the flow must force the result to review rather than silently pass.
-        var user = new User { Id = TestUserId, FirstName = "Test", Username = "testuser" };
+        var user = UserIdentity.ForTest(TestUserId, "Test", username: "testuser");
         var session = CreateOpenEndedSession("An answer the AI never gets to see.");
 
         _sessionRepo.GetSessionAsync(TestChatId, TestUserId, Arg.Any<CancellationToken>())

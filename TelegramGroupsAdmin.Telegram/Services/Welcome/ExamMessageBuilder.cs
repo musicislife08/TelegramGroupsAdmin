@@ -7,15 +7,15 @@ namespace TelegramGroupsAdmin.Telegram.Services.Welcome;
 /// Pure static functions for building exam messages as entity-based <see cref="TelegramMessage"/>s.
 /// The user reference is a clickable <c>text_mention</c> (works without a username), and the same
 /// builder output drives both the live DM and the config-editor preview, so the preview matches
-/// exactly what is sent.
+/// exactly what is sent. Exam text goes to DMs, so callers pass the global <see cref="NameMasking"/>.
 /// </summary>
 public static class ExamMessageBuilder
 {
     /// <summary>
     /// Builds the open-ended question message sent to users in DM.
     /// </summary>
-    public static TelegramMessage FormatOpenEndedQuestion(UserIdentity user, string question)
-        => new TelegramMessageBuilder()
+    public static TelegramMessage FormatOpenEndedQuestion(UserIdentity user, string question, NameMasking masking)
+        => TelegramMessageBuilder.For(masking)
             .Text("📝 ")
             .Mention(user)
             .Text($", please answer this question:\n\n{question}\n\nSend your answer below.")
@@ -24,8 +24,8 @@ public static class ExamMessageBuilder
     /// <summary>
     /// Builds the MC question message sent to users in DM.
     /// </summary>
-    public static TelegramMessage FormatMcQuestion(UserIdentity user, int questionNumber, int totalQuestions, string questionText)
-        => new TelegramMessageBuilder()
+    public static TelegramMessage FormatMcQuestion(UserIdentity user, int questionNumber, int totalQuestions, string questionText, NameMasking masking)
+        => TelegramMessageBuilder.For(masking)
             .Text("📝 ")
             .Mention(user)
             .Text($", Question {questionNumber}/{totalQuestions}:\n\n{questionText}")

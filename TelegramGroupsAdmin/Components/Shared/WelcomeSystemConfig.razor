@@ -635,7 +635,7 @@
     // Sample user for live previews. Mirrors ExamConfigEditor's convention so the preview renders
     // a real clickable text_mention entity (works even for usernameless users) — exactly what
     // production produces — instead of a literal "@SampleUser" string.
-    private static readonly UserIdentity SampleUser = new(0, "SampleUser", null, null);
+    private static readonly UserIdentity SampleUser = UserIdentity.ForPreview(0, "SampleUser", null, null);
 
     private TelegramMessage GetPreviewText(string? template)
     {
@@ -648,7 +648,8 @@
             template,
             SampleUser,
             "Sample Chat Group",
-            _config?.TimeoutSeconds ?? 60);
+            _config?.TimeoutSeconds ?? 60,
+            NameMasking.Off);
     }
 
     /// <summary>
@@ -662,8 +663,9 @@
             ? TelegramMessage.Plain("(empty template)")
             : WelcomeMessageBuilder.BuildBypassTemplate(
                 template,
-                new UserIdentity(0, exampleUsername, null, null),
-                "Example Chat");
+                UserIdentity.ForPreview(0, exampleUsername, null, null),
+                "Example Chat",
+                NameMasking.Off);
 
     private static TelegramMessage GetAdminBypassPreviewText(string? template)
         => GetBypassPreviewText(template, "example_admin");

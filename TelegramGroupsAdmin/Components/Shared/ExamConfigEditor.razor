@@ -365,6 +365,8 @@
     }
 
     // Preview helper methods - use ExamMessageBuilder to ensure preview matches actual messages
+    private static readonly UserIdentity SampleUser = UserIdentity.ForPreview(0, "SampleUser", null, null);
+
     private TelegramMessage GetMcQuestionPreview()
     {
         if (Config?.McQuestions == null || Config.McQuestions.Count == 0)
@@ -372,7 +374,7 @@
 
         var q = Config.McQuestions[0];
         var questionText = string.IsNullOrEmpty(q.Question) ? "(Question text)" : q.Question;
-        return ExamMessageBuilder.FormatMcQuestion(new UserIdentity(0, "SampleUser", null, null), 1, Config.McQuestions.Count, questionText);
+        return ExamMessageBuilder.FormatMcQuestion(SampleUser, 1, Config.McQuestions.Count, questionText, NameMasking.Off);
     }
 
     private string[][] GetMcAnswerButtons()
@@ -389,6 +391,6 @@
         if (string.IsNullOrEmpty(Config?.OpenEndedQuestion))
             return TelegramMessage.Plain("(No question configured)");
 
-        return ExamMessageBuilder.FormatOpenEndedQuestion(new UserIdentity(0, "SampleUser", null, null), Config.OpenEndedQuestion);
+        return ExamMessageBuilder.FormatOpenEndedQuestion(SampleUser, Config.OpenEndedQuestion, NameMasking.Off);
     }
 }

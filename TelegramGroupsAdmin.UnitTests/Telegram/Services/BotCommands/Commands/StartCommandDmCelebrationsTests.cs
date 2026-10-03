@@ -7,6 +7,7 @@ using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
 using TelegramGroupsAdmin.Telegram.Services.DmCelebrations;
+using TelegramGroupsAdmin.Telegram.Services.Identity;
 
 namespace TelegramGroupsAdmin.UnitTests.Telegram.Services.BotCommands.Commands;
 
@@ -17,12 +18,16 @@ public class StartCommandDmCelebrationsTests
     private const long UserId = 42L;
 
     private IBanCelebrationSubscriptionService _subscriptions = null!;
+    private IUserIdentityService _identities = null!;
     private StartCommand _sut = null!;
 
     [SetUp]
     public void SetUp()
     {
         _subscriptions = Substitute.For<IBanCelebrationSubscriptionService>();
+        _identities = Substitute.For<IUserIdentityService>();
+        _identities.ResolveAsync(UserId, Arg.Any<CancellationToken>())
+            .Returns(UserIdentity.ForTest(UserId, "Kim"));
         _sut = new StartCommand(
             NullLogger<StartCommand>.Instance,
             Substitute.For<IWelcomeResponsesRepository>(),
@@ -32,7 +37,8 @@ public class StartCommandDmCelebrationsTests
             Substitute.For<IBotMessageService>(),
             Substitute.For<IBotChatService>(),
             Substitute.For<IBotDmService>(),
-            _subscriptions);
+            _subscriptions,
+            _identities);
     }
 
     private static Message PrivateStart() => new()

@@ -405,6 +405,64 @@ public class WelcomeServiceTests
 
     #endregion
 
+    #region Name masking: bot text follows the chat's policy
+
+    [Test]
+    public async Task HandleChatMemberUpdate_ExplicitJoinerMaskingOn_VerifyingMessageShowsLabel()
+    {
+        _identities.ObserveAsync(Arg.Any<ObservedUser>(), Arg.Any<ProfileChangeContext>(), Arg.Any<RenameRescan>(), Arg.Any<CancellationToken>())
+            .Returns(UserIdentity.ForTest(TestUserId, "Bad", verdict: NameVerdict.Explicit));
+        _configService.GetNameMaskingAsync(TestChatId, Arg.Any<CancellationToken>()).Returns(NameMasking.On);
+
+        await _sut.HandleChatMemberUpdateAsync(CreateJoinUpdate(), CancellationToken.None);
+
+        await _messageService.Received(1).SendAndSaveMessageAsync(
+            TestChatId,
+            Arg.Is<TelegramMessage>(m => m!.Text == NameRedaction.Explicit + " ⏳ Verifying..."
+                && m.Entities.Single().User!.Id == TestUserId),
+            Arg.Any<ReplyParameters?>(), Arg.Any<InlineKeyboardMarkup?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task HandleChatMemberUpdate_ExplicitJoinerMaskingOff_VerifyingMessageShowsName()
+    {
+        _identities.ObserveAsync(Arg.Any<ObservedUser>(), Arg.Any<ProfileChangeContext>(), Arg.Any<RenameRescan>(), Arg.Any<CancellationToken>())
+            .Returns(UserIdentity.ForTest(TestUserId, "Bad", verdict: NameVerdict.Explicit));
+        _configService.GetNameMaskingAsync(TestChatId, Arg.Any<CancellationToken>()).Returns(NameMasking.Off);
+
+        await _sut.HandleChatMemberUpdateAsync(CreateJoinUpdate(), CancellationToken.None);
+
+        await _messageService.Received(1).SendAndSaveMessageAsync(
+            TestChatId,
+            Arg.Is<TelegramMessage>(m => m!.Text == "Bad ⏳ Verifying..."),
+            Arg.Any<ReplyParameters?>(), Arg.Any<InlineKeyboardMarkup?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task HandleCallbackQuery_WrongUser_ExplicitClickerMaskingOn_WarningShowsLabel()
+    {
+        const long otherUserId = 444_555_666L;
+        _identities.ResolveAsync(otherUserId, Arg.Any<CancellationToken>())
+            .Returns(UserIdentity.ForTest(otherUserId, "Bad", verdict: NameVerdict.Explicit));
+        _configService.GetNameMaskingAsync(TestChatId, Arg.Any<CancellationToken>()).Returns(NameMasking.On);
+        var callback = new CallbackQuery
+        {
+            Id = "cb1",
+            Data = $"welcome_accept:{TestUserId}",
+            From = new User { Id = otherUserId, FirstName = "Bad", IsBot = false },
+            Message = new Message { Id = 42, Chat = new Chat { Id = TestChatId, Type = ChatType.Supergroup, Title = "Test Group" } }
+        };
+
+        await _sut.HandleCallbackQueryAsync(callback, CancellationToken.None);
+
+        await _messageService.Received(1).SendAndSaveMessageAsync(
+            TestChatId,
+            Arg.Is<TelegramMessage>(m => m!.Text.StartsWith(NameRedaction.Explicit + ", ⚠️")),
+            Arg.Any<ReplyParameters?>(), Arg.Any<InlineKeyboardMarkup?>(), Arg.Any<CancellationToken>());
+    }
+
+    #endregion
+
     #region Test 3: User leaving — the joiner is never observed
 
     [Test]

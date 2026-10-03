@@ -11,21 +11,6 @@ namespace TelegramGroupsAdmin.Telegram.Services;
 public interface IExamFlowService
 {
     /// <summary>
-    /// Start an exam session for a new user.
-    /// Note: This sends questions to the group chat. Consider using StartExamInDmAsync instead.
-    /// </summary>
-    /// <param name="chat">The chat the user joined</param>
-    /// <param name="user">The user taking the exam</param>
-    /// <param name="config">Welcome config with exam settings</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Result with welcome message ID</returns>
-    Task<ExamStartResult> StartExamAsync(
-        Chat chat,
-        User user,
-        WelcomeConfig config,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>
     /// Start an exam session in user's DM (triggered via deep link)
     /// </summary>
     /// <param name="chat">The group chat where user joined</param>
@@ -36,7 +21,7 @@ public interface IExamFlowService
     /// <returns>Result with first question message ID</returns>
     Task<ExamStartResult> StartExamInDmAsync(
         ChatIdentity chat,
-        User user,
+        UserIdentity user,
         long dmChatId,
         WelcomeConfig config,
         CancellationToken cancellationToken = default);
@@ -55,7 +40,7 @@ public interface IExamFlowService
         long sessionId,
         int questionIndex,
         int answerIndex,
-        User user,
+        UserIdentity user,
         Message message,
         CancellationToken cancellationToken = default);
 
@@ -69,7 +54,7 @@ public interface IExamFlowService
     /// <returns>Result indicating exam status</returns>
     Task<ExamAnswerResult> HandleOpenEndedAnswerAsync(
         long chatId,
-        User user,
+        UserIdentity user,
         string answerText,
         CancellationToken cancellationToken = default);
 

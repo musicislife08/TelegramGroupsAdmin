@@ -9,6 +9,7 @@ using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.JobPayloads;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using static TelegramGroupsAdmin.Core.BackgroundJobs.DeduplicationKeys;
+using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Extensions;
@@ -135,6 +136,7 @@ public class WelcomeService(
         // Load welcome config from database (chat-specific or global fallback)
         var config = await configService.GetEffectiveWelcomeAsync(chatMemberUpdate.Chat.Id, cancellationToken)
                      ?? WelcomeConfig.Default;
+        var masking = await configService.GetNameMaskingAsync(chatMemberUpdate.Chat.Id, cancellationToken);
 
         // Track message ID for cleanup on ban/security failure
         int? verifyingMessageId = null;
@@ -189,7 +191,7 @@ public class WelcomeService(
                     bypassResolution.ReasonDetail ?? string.Empty,
                     cancellationToken);
                 await PostBypassAnnouncementIfConfiguredAsync(
-                    chatMemberUpdate.Chat, user, config, bypassDecision, cancellationToken);
+                    chatMemberUpdate.Chat, userIdentity, config, bypassDecision, masking, cancellationToken);
 
                 welcomeMetrics.RecordBypassOutcome(
                     bypassDecision,
@@ -198,12 +200,12 @@ public class WelcomeService(
             }
 
             // Step 3: Restrict user permissions (mute immediately - no spam window)
-            await RestrictUserPermissionsAsync(chatMemberUpdate.Chat, user, cancellationToken);
+            await RestrictUserPermissionsAsync(chatMemberUpdate.Chat, userIdentity, cancellationToken);
 
             // Step 4: Send verifying message
             var verifyingMessage = await messageService.SendAndSaveMessageAsync(
                 chatId: chatMemberUpdate.Chat.Id,
-                message: new TelegramMessageBuilder()
+                message: TelegramMessageBuilder.For(masking)
                     .Mention(userIdentity)
                     .Text(" ⏳ Verifying...")
                     .Build(),
@@ -424,7 +426,7 @@ public class WelcomeService(
                 if (scanResult.Outcome == ProfileScanOutcome.HeldForReview)
                 {
                     // Update verifying message — user waits for admin + welcome gate
-                    var holdMessage = new TelegramMessageBuilder()
+                    var holdMessage = TelegramMessageBuilder.For(masking)
                         .Mention(userIdentity)
                         .Text(" ⏳ Your profile is under admin review. Please wait...")
                         .Build();
@@ -489,7 +491,7 @@ public class WelcomeService(
             // Welcome ENABLED: Update verifying message to full welcome content
             var chatInfo = await chatService.GetChatAsync(chatMemberUpdate.Chat.Id, cancellationToken);
             var chatName = chatInfo.Title ?? "this chat";
-            var welcomeMessage = WelcomeMessageBuilder.FormatWelcomeMessage(config, userIdentity, chatName);
+            var welcomeMessage = WelcomeMessageBuilder.FormatWelcomeMessage(config, userIdentity, chatName, masking);
 
             // Build keyboard based on welcome mode
             InlineKeyboardMarkup keyboard;
@@ -630,9 +632,10 @@ public class WelcomeService(
     /// </summary>
     private async Task PostBypassAnnouncementIfConfiguredAsync(
         Chat chat,
-        User user,
+        UserIdentity user,
         WelcomeConfig config,
         BypassDecision decision,
+        NameMasking masking,
         CancellationToken cancellationToken)
     {
         // Toggle gates the entire feature — admin can kill all announcements without
@@ -678,7 +681,7 @@ public class WelcomeService(
             TrustedBypassConfig.MinAnnouncementTtlSeconds,
             config.TrustedBypass.AnnouncementTtlSeconds);
 
-        var announcementMessage = BuildBypassAnnouncementMessage(template, user, chat);
+        var announcementMessage = BuildBypassAnnouncementMessage(template, user, chat, masking);
 
         var announcement = await messageService.SendAndSaveMessageAsync(
             chatId: chat.Id,
@@ -706,12 +709,14 @@ public class WelcomeService(
     /// </summary>
     private static TelegramMessage BuildBypassAnnouncementMessage(
         string template,
-        User user,
-        Chat chat)
+        UserIdentity user,
+        Chat chat,
+        NameMasking masking)
         => WelcomeMessageBuilder.BuildBypassTemplate(
             template,
-            UserIdentity.From(user),
-            chat.Title ?? string.Empty);
+            user,
+            chat.Title ?? string.Empty,
+            masking);
 
     public async Task HandleCallbackQueryAsync(
         CallbackQuery callbackQuery,
@@ -734,7 +739,9 @@ public class WelcomeService(
 
         if (isExamCallback)
         {
-            await HandleExamCallbackAsync(callbackQuery, data, user, message, cancellationToken);
+            // The answerer is resolved by id: callbacks are not observed.
+            var answerer = await identityService.ResolveAsync(user.Id, cancellationToken);
+            await HandleExamCallbackAsync(callbackQuery, data, answerer, message, cancellationToken);
             return;
         }
 
@@ -782,12 +789,15 @@ public class WelcomeService(
         // Route to appropriate handler based on callback type
         try
         {
+            // The clicker is the joiner (validated above), observed at join; resolve by id.
+            var joiner = await identityService.ResolveAsync(user.Id, cancellationToken);
+
             switch (parsedCallback.Type)
             {
                 case WelcomeCallbackType.DmAccept:
                     await HandleDmAcceptAsync(
                         parsedCallback.ChatId!.Value,
-                        user,
+                        joiner,
                         message.Chat.Id,
                         message.MessageId,
                         cancellationToken);
@@ -801,11 +811,11 @@ public class WelcomeService(
 
                     if (parsedCallback.Type == WelcomeCallbackType.Accept)
                     {
-                        await HandleAcceptAsync(message.Chat, user, message.MessageId, config, cancellationToken);
+                        await HandleAcceptAsync(message.Chat, joiner, message.MessageId, config, cancellationToken);
                     }
                     else
                     {
-                        await HandleDenyAsync(message.Chat, user, message.MessageId, cancellationToken);
+                        await HandleDenyAsync(message.Chat, joiner, message.MessageId, cancellationToken);
                     }
                     break;
             }
@@ -829,9 +839,10 @@ public class WelcomeService(
     {
         try
         {
+            var masking = await configService.GetNameMaskingAsync(chatId, cancellationToken);
             var warningMsg = await messageService.SendAndSaveMessageAsync(
                 chatId: chatId,
-                message: new TelegramMessageBuilder()
+                message: TelegramMessageBuilder.For(masking)
                     .Mention(user)
                     .Text(", ⚠️ this button is not for you. Only the mentioned user can respond.")
                     .Build(),
@@ -861,7 +872,7 @@ public class WelcomeService(
     private async Task HandleExamCallbackAsync(
         CallbackQuery callbackQuery,
         string data,
-        User user,
+        UserIdentity user,
         Message message,
         CancellationToken cancellationToken)
     {
@@ -936,7 +947,7 @@ public class WelcomeService(
 
     private async Task RestrictUserPermissionsAsync(
         Chat chat,
-        User user,
+        UserIdentity user,
         CancellationToken cancellationToken = default)
     {
         try
@@ -945,7 +956,7 @@ public class WelcomeService(
             var result = await moderationService.RestrictUserAsync(
                 new RestrictIntent
                 {
-                    User = UserIdentity.From(user),
+                    User = user,
                     Executor = Actor.WelcomeFlow,
                     Reason = ReasonPendingVerification,
                     Duration = TimeSpan.FromDays(365),
@@ -987,7 +998,7 @@ public class WelcomeService(
     /// </summary>
     private async Task<bool> KickUserAsync(
         Chat chat,
-        User user,
+        UserIdentity user,
         string reason,
         CancellationToken cancellationToken = default)
     {
@@ -996,7 +1007,7 @@ public class WelcomeService(
             var result = await moderationService.KickUserFromChatAsync(
                 new KickIntent
                 {
-                    User = UserIdentity.From(user),
+                    User = user,
                     Chat = ChatIdentity.From(chat),
                     Executor = Actor.WelcomeFlow,
                     Reason = reason
@@ -1034,7 +1045,7 @@ public class WelcomeService(
 
     private async Task HandleAcceptAsync(
         Chat chat,
-        User user,
+        UserIdentity user,
         int welcomeMessageId,
         WelcomeConfig config,
         CancellationToken cancellationToken = default)
@@ -1094,7 +1105,7 @@ public class WelcomeService(
 
         // Step 5: Attempt admission via centralized gate (checks profile + welcome gates)
         var admissionResult = await admissionHandler.TryAdmitUserAsync(
-            UserIdentity.From(user),
+            user,
             ChatIdentity.From(chat),
             Actor.WelcomeFlow,
             ReasonCompletedWelcome,
@@ -1112,8 +1123,9 @@ public class WelcomeService(
         else
         {
             // Profile gate still pending — update welcome message to show hold status
-            var holdMessage = new TelegramMessageBuilder()
-                .Mention(UserIdentity.From(user))
+            var masking = await configService.GetNameMaskingAsync(chat.Id, cancellationToken);
+            var holdMessage = TelegramMessageBuilder.For(masking)
+                .Mention(user)
                 .Text(" ⏳ Your profile is under admin review. Please wait...")
                 .Build();
             await TryEditMessageAsync(chat.Id, welcomeMessageId, holdMessage, cancellationToken);
@@ -1126,7 +1138,7 @@ public class WelcomeService(
 
     private async Task HandleDenyAsync(
         Chat chat,
-        User user,
+        UserIdentity user,
         int welcomeMessageId,
         CancellationToken cancellationToken = default)
     {
@@ -1200,7 +1212,7 @@ public class WelcomeService(
 
     private async Task HandleDmAcceptAsync(
         long groupChatId,
-        User user,
+        UserIdentity user,
         long dmChatId,
         int buttonMessageId,
         CancellationToken cancellationToken = default)
@@ -1243,7 +1255,7 @@ public class WelcomeService(
                 groupChat.ToLogDebug());
 
             // Send error to user in DM
-            await dmDeliveryService.SendDmAsync(UserIdentity.From(user), ErrorNoWelcomeRecord, cancellationToken: cancellationToken);
+            await dmDeliveryService.SendDmAsync(user, ErrorNoWelcomeRecord, cancellationToken: cancellationToken);
             return;
         }
 
@@ -1261,7 +1273,7 @@ public class WelcomeService(
 
         // Step 5: Attempt admission via centralized gate (checks profile + welcome gates)
         var admissionResult = await admissionHandler.TryAdmitUserAsync(
-            UserIdentity.From(user),
+            user,
             ChatIdentity.From(groupChat),
             Actor.WelcomeFlow,
             ReasonCompletedWelcomeDm,
@@ -1277,12 +1289,13 @@ public class WelcomeService(
         else
         {
             // Profile gate still pending — update group message and notify user in DM
-            var holdMessage = new TelegramMessageBuilder()
-                .Mention(UserIdentity.From(user))
+            var masking = await configService.GetNameMaskingAsync(groupChatId, cancellationToken);
+            var holdMessage = TelegramMessageBuilder.For(masking)
+                .Mention(user)
                 .Text(" ⏳ Your profile is under admin review. Please wait...")
                 .Build();
             await TryEditMessageAsync(groupChatId, welcomeResponse.WelcomeMessageId, holdMessage, cancellationToken);
-            await dmDeliveryService.SendDmAsync(UserIdentity.From(user),
+            await dmDeliveryService.SendDmAsync(user,
                 "⏳ Your profile is under admin review. You'll be able to participate once approved.",
                 cancellationToken: cancellationToken);
 
@@ -1332,7 +1345,7 @@ public class WelcomeService(
             }
 
             var confirmationText = WelcomeMessageBuilder.FormatDmAcceptanceConfirmation(chatName);
-            await dmDeliveryService.SendDmAsync(UserIdentity.From(user), confirmationText, cancellationToken: cancellationToken);
+            await dmDeliveryService.SendDmAsync(user, confirmationText, cancellationToken: cancellationToken);
         }
         catch (Exception ex)
         {
@@ -1345,19 +1358,21 @@ public class WelcomeService(
 
     private async Task<DmDeliveryResult> SendRulesAsync(
         Chat chat,
-        User user,
+        UserIdentity user,
         WelcomeConfig config,
         CancellationToken cancellationToken = default)
     {
         var chatName = chat.Title ?? "this chat";
 
-        // Use extracted builder for rules confirmation message (includes footer)
-        var dmMessage = WelcomeMessageBuilder.FormatRulesConfirmation(config, UserIdentity.From(user), chatName);
+        // Use extracted builder for rules confirmation message (includes footer). DM-only text,
+        // so the global masking setting applies.
+        var masking = await configService.GetNameMaskingAsync(null, cancellationToken);
+        var dmMessage = WelcomeMessageBuilder.FormatRulesConfirmation(config, user, chatName, masking);
 
         // No chat fallback: a blocked DM must not spill the rules into the group as a
         // message addressed to a user who may already be banned or held for review.
         var result = await dmDeliveryService.SendDmAsync(
-            user: UserIdentity.From(user),
+            user: user,
             message: dmMessage,
             cancellationToken: cancellationToken);
 
@@ -1391,10 +1406,12 @@ public class WelcomeService(
 
         try
         {
-            // Cancel any active exam session
-            if (await examFlowService.HasActiveSessionAsync(ChatIdentity.From(chat), UserIdentity.From(user), cancellationToken))
+            // Cancel any active exam session. The leaver is resolved by id: a leave is not an
+            // observation of the user's names.
+            var leaver = await identityService.ResolveAsync(user.Id, cancellationToken);
+            if (await examFlowService.HasActiveSessionAsync(ChatIdentity.From(chat), leaver, cancellationToken))
             {
-                await examFlowService.CancelSessionAsync(ChatIdentity.From(chat), UserIdentity.From(user), cancellationToken);
+                await examFlowService.CancelSessionAsync(ChatIdentity.From(chat), leaver, cancellationToken);
                 logger.LogDebug(
                     "Cancelled exam session for {User} who left {Chat}",
                     user.ToLogDebug(),

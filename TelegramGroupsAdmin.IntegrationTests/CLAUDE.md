@@ -341,7 +341,7 @@ Anchors are in code as `GoldenDatasetConstants.DmCelebrations`. None of these us
 | @chummyrepair | `9306234060091` | true | none (MainChat member) | the subscribe path, where the SUT upsert is the assertion subject |
 | @ToniBaronePaul | `9782251136844` | true (and `is_banned=true`) | Workshop Alumni | a subscription row that outlived its owner's ban; "deliverable" must exclude banned users |
 
-Workshop Alumni (`-100059667856554`) has no `ban_celebration_config`, so its effective celebration config is disabled: a subscribers-only chat.
+Workshop Alumni (`-100059667856554`) has a `ban_celebration_config` that is enabled for auto and manual bans (`sendToBannedUser` true) and no `welcome_config` (the global row applies), so a celebration there both posts to the chat and fans out to its deliverable subscribers. `BanCelebrationNameMaskingTests` uses it with `ScannedTwiceExplicitUserId` for caption name masking.
 
 ### Verdict events (canonical edit 2026-09-27)
 
@@ -396,7 +396,7 @@ Anchors are in code as `GoldenDatasetConstants.IdentityService` (#552 part 1); a
 
 | Constant | Anchor | Shape |
 |---|---|---|
-| `ScannedTwiceExplicitUserId` | 9220500615182 @bagging_armado | scans 530 (older) and 534 (newer); 534 explicit |
+| `ScannedTwiceExplicitUserId` | 9220500615182 @bagging_armado | scans 530 (older) and 534 (newer); 534 explicit. Also the banned user in `BanCelebrationNameMaskingTests` (global `maskFlaggedNames` absent → true, so the caption shows the explicit label) |
 | `UnscannedUserId` | 9063342700386 @Juvenileii | not trusted, not a bot, no scan rows |
 | `BotUserId` | 9742468412405 @doilyemcee | the canonical bot |
 | `UntrustedNoHistoryUserId` | 9263051408340 @pastramiherbs | not trusted, active, no username_history |

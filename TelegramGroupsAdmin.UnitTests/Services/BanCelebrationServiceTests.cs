@@ -13,6 +13,7 @@ using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.Telegram.Services.Identity;
 using TelegramGroupsAdmin.Configuration.Services;
 
 namespace TelegramGroupsAdmin.UnitTests.Services;
@@ -34,7 +35,7 @@ public class BanCelebrationServiceTests
     private IConfigService _mockConfigService = null!;
     private IBanCelebrationGifRepository _mockGifRepository = null!;
     private IBanCelebrationCaptionRepository _mockCaptionRepository = null!;
-    private IProfileScanResultsRepository _mockScanRepository = null!;
+    private IUserIdentityService _mockIdentityService = null!;
     private IBotMessageService _mockMessageService = null!;
     private IUserActionsRepository _mockUserActionsRepository = null!;
     private IBanCelebrationSubscriberRepository _mockSubscriberRepository = null!;
@@ -49,7 +50,7 @@ public class BanCelebrationServiceTests
         _mockConfigService = Substitute.For<IConfigService>();
         _mockGifRepository = Substitute.For<IBanCelebrationGifRepository>();
         _mockCaptionRepository = Substitute.For<IBanCelebrationCaptionRepository>();
-        _mockScanRepository = Substitute.For<IProfileScanResultsRepository>();
+        _mockIdentityService = Substitute.For<IUserIdentityService>();
         _mockMessageService = Substitute.For<IBotMessageService>();
         _mockUserActionsRepository = Substitute.For<IUserActionsRepository>();
         _mockSubscriberRepository = Substitute.For<IBanCelebrationSubscriberRepository>();
@@ -75,44 +76,21 @@ public class BanCelebrationServiceTests
         _mockUserActionsRepository.GetTodaysBanCountAsync(Arg.Any<CancellationToken>())
             .Returns(0);
 
-        // Default scan repository returns no scan record - masking branch off
-        _mockScanRepository.GetLatestByUserIdAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
-            .Returns((ProfileScanResultRecord?)null);
+        // Default: the banned user resolves to the same unscanned identity the caller passed in.
+        _mockIdentityService.ResolveAsync(TestUserId, Arg.Any<CancellationToken>())
+            .Returns(TestBannedUser);
 
         _sut = new BanCelebrationService(
             _mockConfigService,
             _mockGifRepository,
             _mockCaptionRepository,
-            _mockScanRepository,
+            _mockIdentityService,
             _mockMessageService,
             _mockUserActionsRepository,
             _mockSubscriberRepository,
             _mockUserNotificationService,
             _mockLogger,
             _pipelineMetrics);
-    }
-
-    /// <summary>
-    /// Configures the substituted IConfigService to return a WelcomeConfig with the given
-    /// per-chat masking toggle. Used by explicit-username-masking tests.
-    /// </summary>
-    private void EnableProfileScanConfig(bool maskFlaggedNames)
-    {
-        var welcomeConfig = new WelcomeConfig
-        {
-            Enabled = true,
-            JoinSecurity = new JoinSecurityConfig
-            {
-                ProfileScan = new ProfileScanConfig
-                {
-                    Enabled = true,
-                    MaskFlaggedNames = maskFlaggedNames
-                }
-            }
-        };
-
-        _mockConfigService.GetEffectiveWelcomeAsync(TestChatId, Arg.Any<CancellationToken>())
-            .Returns(welcomeConfig);
     }
 
     /// <summary>
@@ -302,10 +280,14 @@ public class BanCelebrationServiceTests
         _mockCaptionRepository.ClaimNextForCycleAsync(Arg.Any<CancellationToken>()).Returns(caption);
         _mockUserActionsRepository.GetTodaysBanCountAsync(Arg.Any<CancellationToken>()).Returns(42);
 
+        // The caption uses the stored identity, not the caller's id-only copy.
+        _mockIdentityService.ResolveAsync(456, Arg.Any<CancellationToken>())
+            .Returns(UserIdentity.ForTest(456, "SpammerBob"));
+
         SetupSuccessfulSendAnimation();
 
         // Act
-        await _sut.SendBanCelebrationAsync(new ChatIdentity(123, "Test Group"), new UserIdentity(456, "SpammerBob", null, null), true);
+        await _sut.SendBanCelebrationAsync(new ChatIdentity(123, "Test Group"), UserIdentity.FromId(456), true);
 
         // Assert - Verify the caption sent to Telegram has placeholders replaced
         await _mockMessageService.Received(1).SendAndSaveAnimationAsync(
@@ -541,99 +523,64 @@ public class BanCelebrationServiceTests
 
     #endregion
 
-    #region Explicit Username Masking Tests
+    #region Name Masking Tests
 
     [Test]
-    public async Task SendBanCelebrationAsync_AiFlaggedAndMaskingOn_CaptionContainsRedactionText()
+    public async Task Celebration_ExplicitVerdictMaskingOn_CaptionShowsLabel_ChatAndFanout()
     {
-        var scan = new ProfileScanResultRecord(
-            Id: 1,
-            UserId: TestUserId,
-            ScannedAt: DateTimeOffset.UtcNow,
-            Score: 4.5m,
-            Outcome: ProfileScanOutcome.Banned,
-            RuleScore: 0.0m,
-            AiScore: 4.5m,
-            AiReason: "explicit handle",
-            AiSignals: "explicit_handle",
-            ExplicitDisplayText: true);
-
-        _mockScanRepository.GetLatestByUserIdAsync(TestUserId, Arg.Any<CancellationToken>())
-            .Returns(scan);
-
-        EnableProfileScanConfig(maskFlaggedNames: true);
+        _mockIdentityService.ResolveAsync(TestUserId, Arg.Any<CancellationToken>())
+            .Returns(UserIdentity.ForTest(TestUserId, "Bad", "User", verdict: NameVerdict.Explicit));
+        _mockConfigService.GetNameMaskingAsync(TestChatId, Arg.Any<CancellationToken>()).Returns(NameMasking.On);
+        _mockSubscriberRepository.HasDeliverableSubscribersAsync(TestChatId, Arg.Any<CancellationToken>()).Returns(true);
         SeedOneGifAndOneCaption("{username} got banned!");
 
-        await _sut.SendBanCelebrationAsync(
-            chat: TestChat,
-            bannedUser: TestBannedUser,
-            isAutoBan: true,
-            cancellationToken: CancellationToken.None);
+        await _sut.SendBanCelebrationAsync(TestChat, TestBannedUser, isAutoBan: true);
 
-        await _mockMessageService.Received(1).SendAndSaveAnimationAsync(
-            TestChatId,
-            Arg.Any<InputFile>(),
-            Arg.Is<TelegramMessage>(m => m!.Text.Contains(NameRedaction.Explicit)
-                                      && !m.Text.Contains(TestBannedUser.DisplayName)),
-            Arg.Any<CancellationToken>());
+        await _mockMessageService.Received(1).SendAndSaveAnimationAsync(TestChatId, Arg.Any<InputFile>(),
+            Arg.Is<TelegramMessage>(m => m!.Text == "[name removed: explicit] got banned!"), Arg.Any<CancellationToken>());
+        await _mockUserNotificationService.Received(1).EnqueueBanCelebrationAsync(
+            TestChat, "[name removed: explicit] got banned!", 1, Arg.Any<CancellationToken>());
     }
 
     [Test]
-    public async Task SendBanCelebrationAsync_AiFlaggedButMaskingOff_CaptionContainsDisplayName()
+    public async Task Celebration_ExplicitVerdictMaskingOff_CaptionShowsName()
     {
-        var scan = new ProfileScanResultRecord(
-            Id: 1,
-            UserId: TestUserId,
-            ScannedAt: DateTimeOffset.UtcNow,
-            Score: 4.5m,
-            Outcome: ProfileScanOutcome.Banned,
-            RuleScore: 0.0m,
-            AiScore: 4.5m,
-            AiReason: "explicit handle",
-            AiSignals: "explicit_handle",
-            ExplicitDisplayText: true);
-
-        _mockScanRepository.GetLatestByUserIdAsync(TestUserId, Arg.Any<CancellationToken>())
-            .Returns(scan);
-
-        EnableProfileScanConfig(maskFlaggedNames: false);
+        _mockIdentityService.ResolveAsync(TestUserId, Arg.Any<CancellationToken>())
+            .Returns(UserIdentity.ForTest(TestUserId, "Bad", "User", verdict: NameVerdict.Explicit));
+        _mockConfigService.GetNameMaskingAsync(TestChatId, Arg.Any<CancellationToken>()).Returns(NameMasking.Off);
         SeedOneGifAndOneCaption("{username} got banned!");
 
-        await _sut.SendBanCelebrationAsync(
-            chat: TestChat,
-            bannedUser: TestBannedUser,
-            isAutoBan: true,
-            cancellationToken: CancellationToken.None);
+        await _sut.SendBanCelebrationAsync(TestChat, TestBannedUser, isAutoBan: true);
 
-        await _mockMessageService.Received(1).SendAndSaveAnimationAsync(
-            TestChatId,
-            Arg.Any<InputFile>(),
-            Arg.Is<TelegramMessage>(m => m!.Text.Contains(TestBannedUser.DisplayName)
-                                      && !m.Text.Contains(NameRedaction.Explicit)),
-            Arg.Any<CancellationToken>());
+        await _mockMessageService.Received(1).SendAndSaveAnimationAsync(TestChatId, Arg.Any<InputFile>(),
+            Arg.Is<TelegramMessage>(m => m!.Text == "Bad User got banned!"), Arg.Any<CancellationToken>());
     }
 
     [Test]
-    public async Task SendBanCelebrationAsync_NoScanRecord_CaptionContainsDisplayName()
+    public async Task Celebration_CallerIdentityIsStale_UsesResolvedVerdict()
     {
-        _mockScanRepository.GetLatestByUserIdAsync(TestUserId, Arg.Any<CancellationToken>())
-            .Returns((ProfileScanResultRecord?)null);
-
-        EnableProfileScanConfig(maskFlaggedNames: true);
+        // The caller's identity carries no verdict; the resolved one does. Masking follows the resolve.
+        _mockIdentityService.ResolveAsync(TestUserId, Arg.Any<CancellationToken>())
+            .Returns(UserIdentity.ForTest(TestUserId, "Bad", "User", verdict: NameVerdict.Promotional));
+        _mockConfigService.GetNameMaskingAsync(TestChatId, Arg.Any<CancellationToken>()).Returns(NameMasking.On);
         SeedOneGifAndOneCaption("{username} got banned!");
 
-        await _sut.SendBanCelebrationAsync(
-            chat: TestChat,
-            bannedUser: TestBannedUser,
-            isAutoBan: true,
-            cancellationToken: CancellationToken.None);
+        await _sut.SendBanCelebrationAsync(TestChat, TestBannedUser, isAutoBan: true);
 
-        await _mockMessageService.Received(1).SendAndSaveAnimationAsync(
-            TestChatId,
-            Arg.Any<InputFile>(),
-            Arg.Is<TelegramMessage>(m => m!.Text.Contains(TestBannedUser.DisplayName)
-                                      && !m.Text.Contains(NameRedaction.Explicit)),
-            Arg.Any<CancellationToken>());
+        await _mockMessageService.Received(1).SendAndSaveAnimationAsync(TestChatId, Arg.Any<InputFile>(),
+            Arg.Is<TelegramMessage>(m => m!.Text == NameRedaction.Spam + " got banned!"), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task Celebration_UnscannedUserMaskingOn_CaptionShowsName()
+    {
+        _mockConfigService.GetNameMaskingAsync(TestChatId, Arg.Any<CancellationToken>()).Returns(NameMasking.On);
+        SeedOneGifAndOneCaption("{username} got banned!");
+
+        await _sut.SendBanCelebrationAsync(TestChat, TestBannedUser, isAutoBan: true);
+
+        await _mockMessageService.Received(1).SendAndSaveAnimationAsync(TestChatId, Arg.Any<InputFile>(),
+            Arg.Is<TelegramMessage>(m => m!.Text == "Bad User got banned!"), Arg.Any<CancellationToken>());
     }
 
     #endregion

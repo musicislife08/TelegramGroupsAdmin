@@ -39,7 +39,7 @@ public class WelcomeMessageBuilderTests
     [Test]
     public void FormatWelcomeMessage_ChatAcceptDeny_UsesMainMessage_WithMention()
     {
-        var result = WelcomeMessageBuilder.FormatWelcomeMessage(CreateConfig(), TestUser, "TestChat");
+        var result = WelcomeMessageBuilder.FormatWelcomeMessage(CreateConfig(), TestUser, "TestChat", NameMasking.Off);
 
         Assert.That(result.Text, Does.Contain("Test"));
         Assert.That(result.Text, Does.Contain("TestChat"));
@@ -50,7 +50,7 @@ public class WelcomeMessageBuilderTests
     public void FormatWelcomeMessage_DmWelcomeMode_UsesTeaserMessage()
     {
         var result = WelcomeMessageBuilder.FormatWelcomeMessage(
-            CreateConfig(mode: WelcomeMode.DmWelcome), TestUser, "TestChat");
+            CreateConfig(mode: WelcomeMode.DmWelcome), TestUser, "TestChat", NameMasking.Off);
 
         Assert.That(result.Text, Does.Contain("check your DMs"));
         Assert.That(HasMentionOf(result, 123), Is.True);
@@ -60,7 +60,7 @@ public class WelcomeMessageBuilderTests
     public void FormatWelcomeMessage_SubstitutesTimeout()
     {
         var result = WelcomeMessageBuilder.FormatWelcomeMessage(
-            CreateConfig(mainMessage: "Welcome! You have {timeout} to respond."), TestUser, "TestChat");
+            CreateConfig(mainMessage: "Welcome! You have {timeout} to respond."), TestUser, "TestChat", NameMasking.Off);
 
         // 300 seconds = "5 minutes" via Humanizer
         Assert.That(result.Text, Does.Contain("5 minutes"));
@@ -71,7 +71,7 @@ public class WelcomeMessageBuilderTests
     {
         var noUsername = new UserIdentity(999, "Friend", null, null);
 
-        var result = WelcomeMessageBuilder.FormatWelcomeMessage(CreateConfig(), noUsername, "TestChat");
+        var result = WelcomeMessageBuilder.FormatWelcomeMessage(CreateConfig(), noUsername, "TestChat", NameMasking.Off);
 
         Assert.That(result.Text, Does.Contain("Friend"));
         Assert.That(HasMentionOf(result, 999), Is.True);
@@ -81,7 +81,7 @@ public class WelcomeMessageBuilderTests
     public void FormatWelcomeMessage_UnknownToken_RendersAsLiteralText()
     {
         var result = WelcomeMessageBuilder.FormatWelcomeMessage(
-            CreateConfig(mainMessage: "Hi {usernam}!"), TestUser, "TestChat");
+            CreateConfig(mainMessage: "Hi {usernam}!"), TestUser, "TestChat", NameMasking.Off);
 
         // A mistyped placeholder is not substituted — it survives verbatim, visibly.
         Assert.That(result.Text, Is.EqualTo("Hi {usernam}!"));
@@ -91,7 +91,7 @@ public class WelcomeMessageBuilderTests
     [Test]
     public void FormatRulesConfirmation_AddsFooter_AndMentions()
     {
-        var result = WelcomeMessageBuilder.FormatRulesConfirmation(CreateConfig(), TestUser, "TestChat");
+        var result = WelcomeMessageBuilder.FormatRulesConfirmation(CreateConfig(), TestUser, "TestChat", NameMasking.Off);
 
         Assert.That(result.Text, Does.Contain("You're all set"));
         Assert.That(HasMentionOf(result, 123), Is.True);
@@ -100,7 +100,7 @@ public class WelcomeMessageBuilderTests
     [Test]
     public void FormatExamIntro_UsesMainMessage_WithMention()
     {
-        var result = WelcomeMessageBuilder.FormatExamIntro(CreateConfig(), TestUser, "TestChat");
+        var result = WelcomeMessageBuilder.FormatExamIntro(CreateConfig(), TestUser, "TestChat", NameMasking.Off);
 
         Assert.That(result.Text, Does.Contain("Test"));
         Assert.That(result.Text, Does.Contain("TestChat"));
@@ -127,7 +127,7 @@ public class WelcomeMessageBuilderTests
     {
         const string template = "Hello {username}, welcome to {chat_name}! You have {timeout} left.";
 
-        var result = WelcomeMessageBuilder.BuildFromTemplate(template, TestUser, "Test Chat", 90);
+        var result = WelcomeMessageBuilder.BuildFromTemplate(template, TestUser, "Test Chat", 90, NameMasking.Off);
 
         Assert.That(result.Text, Does.Contain("Test Chat"));
         // 90 seconds humanizes to "1 minute, 30 seconds" (precision: 2) — not the raw "90".
@@ -141,7 +141,7 @@ public class WelcomeMessageBuilderTests
     {
         var noUsername = new UserIdentity(456, "Bob", null, null);
 
-        var result = WelcomeMessageBuilder.BuildFromTemplate("Hi {username}!", noUsername, "My Group", 30);
+        var result = WelcomeMessageBuilder.BuildFromTemplate("Hi {username}!", noUsername, "My Group", 30, NameMasking.Off);
 
         Assert.That(result.Text, Does.Contain("Bob"));
         Assert.That(HasMentionOf(result, 456), Is.True);
@@ -152,7 +152,7 @@ public class WelcomeMessageBuilderTests
     {
         const string template = "{timeout} left, {username}, in {chat_name}.";
 
-        var result = WelcomeMessageBuilder.BuildFromTemplate(template, TestUser, "Speedy Group", 10);
+        var result = WelcomeMessageBuilder.BuildFromTemplate(template, TestUser, "Speedy Group", 10, NameMasking.Off);
 
         Assert.That(result.Text, Does.Contain("10 seconds"));
         Assert.That(result.Text, Does.Contain("Speedy Group"));
@@ -165,7 +165,7 @@ public class WelcomeMessageBuilderTests
     {
         const string template = "{username} is here. Say hi to {username}!";
 
-        var result = WelcomeMessageBuilder.BuildFromTemplate(template, TestUser, "Greet Chat", 60);
+        var result = WelcomeMessageBuilder.BuildFromTemplate(template, TestUser, "Greet Chat", 60, NameMasking.Off);
 
         var mentionCount = result.Entities.Count(
             e => e.Type == MessageEntityType.TextMention && e.User!.Id == 123);
@@ -177,7 +177,7 @@ public class WelcomeMessageBuilderTests
     {
         const string template = "Welcome! Please read the rules.";
 
-        var result = WelcomeMessageBuilder.BuildFromTemplate(template, TestUser, "Any Chat", 30);
+        var result = WelcomeMessageBuilder.BuildFromTemplate(template, TestUser, "Any Chat", 30, NameMasking.Off);
 
         Assert.That(result.Text, Is.EqualTo("Welcome! Please read the rules."));
         Assert.That(result.Entities, Is.Empty);
@@ -193,7 +193,7 @@ public class WelcomeMessageBuilderTests
     {
         const string template = "{username} welcomed automatically into {chat_name}.";
 
-        var result = WelcomeMessageBuilder.BuildBypassTemplate(template, TestUser, "Example Chat");
+        var result = WelcomeMessageBuilder.BuildBypassTemplate(template, TestUser, "Example Chat", NameMasking.Off);
 
         Assert.That(result.Text, Does.Contain("Test"));
         Assert.That(result.Text, Does.Contain("Example Chat"));
@@ -205,10 +205,51 @@ public class WelcomeMessageBuilderTests
     {
         const string template = "{username} joined. {timeout}";
 
-        var result = WelcomeMessageBuilder.BuildBypassTemplate(template, TestUser, "Example Chat");
+        var result = WelcomeMessageBuilder.BuildBypassTemplate(template, TestUser, "Example Chat", NameMasking.Off);
 
         // {timeout} is not a bypass variable — it falls through as literal text, visibly.
         Assert.That(result.Text, Does.Contain("{timeout}"));
         Assert.That(HasMentionOf(result, 123), Is.True);
+    }
+
+    [Test]
+    public void BuildFromTemplate_ExplicitUserWithMaskingOn_ShowsLabelAsMention()
+    {
+        var user = UserIdentity.ForTest(7, "Bad", verdict: NameVerdict.Explicit);
+
+        var msg = WelcomeMessageBuilder.BuildFromTemplate("Welcome {username}!", user, chatName: "Chat", timeoutSeconds: 60, NameMasking.On);
+
+        Assert.That(msg.Text, Is.EqualTo("Welcome [name removed: explicit]!"));
+        Assert.That(msg.Entities.Single().User!.Id, Is.EqualTo(7));
+    }
+
+    [Test]
+    public void BuildFromTemplate_ExplicitUserWithMaskingOff_ShowsName()
+    {
+        var user = UserIdentity.ForTest(7, "Bad", verdict: NameVerdict.Explicit);
+
+        var msg = WelcomeMessageBuilder.BuildFromTemplate("Welcome {username}!", user, chatName: "Chat", timeoutSeconds: 60, NameMasking.Off);
+
+        Assert.That(msg.Text, Is.EqualTo("Welcome Bad!"));
+    }
+
+    [Test]
+    public void BuildBypassTemplate_ExplicitUserWithMaskingOn_ShowsLabel()
+    {
+        var user = UserIdentity.ForTest(7, "Bad", verdict: NameVerdict.Explicit);
+
+        var msg = WelcomeMessageBuilder.BuildBypassTemplate("{username} is trusted", user, "Chat", NameMasking.On);
+
+        Assert.That(msg.Text, Is.EqualTo("[name removed: explicit] is trusted"));
+    }
+
+    [Test]
+    public void FormatRulesConfirmation_ExplicitUserWithMaskingOn_ShowsLabel()
+    {
+        var user = UserIdentity.ForTest(7, "Bad", verdict: NameVerdict.Explicit);
+
+        var msg = WelcomeMessageBuilder.FormatRulesConfirmation(CreateConfig(mainMessage: "Hi {username}"), user, "Chat", NameMasking.On);
+
+        Assert.That(msg.Text, Does.StartWith("Hi [name removed: explicit]"));
     }
 }

@@ -115,7 +115,7 @@ public partial class MessageProcessingService(
                     {
                         var result = await examFlowService.HandleOpenEndedAnswerAsync(
                             examContext.GroupChatId,
-                            message.From,
+                            dmSender,
                             message.Text,
                             cancellationToken);
 
