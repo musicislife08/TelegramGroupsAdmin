@@ -16,6 +16,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using TelegramGroupsAdmin.Telegram.Metrics;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.Telegram.Services.Identity;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
 using TL;
 using TelegramGroupsAdmin.Configuration.Services;
@@ -108,9 +109,9 @@ public sealed class ProfileScanService(
         // ── Multi-chat dedup: skip if recently scanned ──
         var existingUser = await userRepo.GetByTelegramIdAsync(user.Id, ct);
 
-        // Enrich identity from DB if caller only provided a bare ID (e.g., rescan job)
-        if (existingUser != null && user.FirstName is null && user.LastName is null && user.Username is null)
-            user = UserIdentity.From(existingUser);
+        // Enrich identity if caller only provided a bare ID (e.g., rescan job)
+        if (user.FirstName is null && user.LastName is null && user.Username is null)
+            user = await scope.ServiceProvider.GetRequiredService<IUserIdentityService>().ResolveAsync(user.Id, ct);
 
         if (!forceRescan && existingUser?.ProfileScannedAt is { } lastScan
             && DateTimeOffset.UtcNow - lastScan < ScanFreshnessWindow
@@ -250,6 +251,19 @@ public sealed class ProfileScanService(
 
         var userInfo = fullUser.full_user;
         var tlUser = fullUser.users.Values.OfType<TL.User>().FirstOrDefault(u => u.id == user.Id);
+
+        // Record the live names. existingUser is the snapshot read before this point (a detached
+        // object, not re-read), so HasProfileChanged below still compares the live names against
+        // the pre-observe row and a rename discovered here still gets a full rescore. RenameRescan.None:
+        // the scan must not trigger itself. ObserveAsync never throws except on cancellation.
+        if (tlUser is not null)
+        {
+            await sp.GetRequiredService<IUserIdentityService>().ObserveAsync(
+                new ObservedUser(tlUser.id, tlUser.first_name, tlUser.last_name, tlUser.MainUsername,
+                    tlUser.IsBot, ObservationSource.UserApiScan, DateTimeOffset.UtcNow),
+                new ProfileChangeContext(triggeringChat, null),
+                RenameRescan.None, ct);
+        }
 
         var bio = userInfo?.about;
         var personalChannelId = userInfo?.personal_channel_id;

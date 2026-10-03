@@ -8,6 +8,7 @@ using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Metrics;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Telegram.Services.Identity;
 using TelegramGroupsAdmin.Telegram.Services.UserApi;
 
 namespace TelegramGroupsAdmin.UnitTests.Telegram.Services.UserApi;
@@ -24,6 +25,7 @@ public class ProfileScanServiceSingleFlightTests
     private ITelegramSessionManager _sessions = null!;
 #pragma warning restore NUnit1032
     private ITelegramUserRepository _users = null!;
+    private IUserIdentityService _identities = null!;
     private ServiceProvider _provider = null!;
     private ProfileScanService _sut = null!;
 
@@ -32,8 +34,10 @@ public class ProfileScanServiceSingleFlightTests
     {
         _sessions = Substitute.For<ITelegramSessionManager>();
         _users = Substitute.For<ITelegramUserRepository>();
+        _identities = Substitute.For<IUserIdentityService>();
         _provider = new ServiceCollection()
             .AddSingleton(_users)
+            .AddSingleton(_identities)
             .AddSingleton(Substitute.For<IConfigService>())
             .BuildServiceProvider();
 
@@ -48,6 +52,27 @@ public class ProfileScanServiceSingleFlightTests
 
     [TearDown]
     public void TearDown() => _provider.Dispose();
+
+    [Test]
+    public async Task Scan_IdOnlyIdentity_ResolvesThroughIdentityService()
+    {
+        _identities.ResolveAsync(7, Arg.Any<CancellationToken>()).Returns(UserIdentity.ForTest(7, "Stored"));
+        _sessions.GetAnyClientAsync(Arg.Any<CancellationToken>()).Returns((IWTelegramApiClient?)null);
+
+        await _sut.ScanUserProfileAsync(UserIdentity.FromId(7), null, CancellationToken.None);
+
+        await _identities.Received(1).ResolveAsync(7, Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task Scan_IdentityWithNames_DoesNotResolve()
+    {
+        _sessions.GetAnyClientAsync(Arg.Any<CancellationToken>()).Returns((IWTelegramApiClient?)null);
+
+        await _sut.ScanUserProfileAsync(UserIdentity.ForTest(7, "A"), null, CancellationToken.None);
+
+        await _identities.DidNotReceive().ResolveAsync(Arg.Any<long>(), Arg.Any<CancellationToken>());
+    }
 
     [Test]
     public async Task ConcurrentScansForOneUser_ShareOneRun()
