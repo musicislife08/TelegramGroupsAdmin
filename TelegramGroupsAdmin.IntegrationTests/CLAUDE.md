@@ -49,7 +49,7 @@ Origin: prod DB snapshot from 2026-04-30. Bootstrap pipeline (full detail in `do
 | 14 | domain_filters | 0 | Empty by design. |
 | 17 | web_notifications | 0 | Empty by design. |
 | 18 | notification_preferences | 5 | One per active web user. |
-| 19 | messages | 409 | 100 per slice: explicit_spam, implicit_spam, explicit_ham, implicit_ham. Plus 7 SimHash test anchors appended in 3A.3 (4666, 14538, 212355, 220848, 221429, 221904, 222949) — all banned-user spam from dev DB, preserved verbatim, FK-resolved against existing canonical telegram_users and MainChat. Plus 2 messages with converted OpenAI vetoes (94, 22127) appended 2026-09-28 from prod, authored by existing non-banned canonical users (see Part 2 recipe 4h). |
+| 19 | messages | 410 | 100 per slice: explicit_spam, implicit_spam, explicit_ham, implicit_ham. Plus 7 SimHash test anchors appended in 3A.3 (4666, 14538, 212355, 220848, 221429, 221904, 222949) — all banned-user spam from dev DB, preserved verbatim, FK-resolved against existing canonical telegram_users and MainChat. Plus 2 messages with converted OpenAI vetoes (94, 22127) appended 2026-09-28 from prod, authored by existing non-banned canonical users (see Part 2 recipe 4h). Plus @bagging_armado's join message 110342 appended 2026-10-03 from prod (see Part 2 "User identity service anchors"). |
 | 20 | chat_admins | 104 | Snapshot of admin membership across all 21 chats. |
 | 21 | linked_channels | 3 | One per chat that has a linked channel. |
 | 22 | telegram_user_mappings | 3 | Cross-chat user identity links. |
@@ -260,7 +260,7 @@ Recipe format: a heading, the anchor id(s), a one-line description, and "use whe
 
 #### Workshop Alumni: secondary chat for cross-chat tests
 - `chat_id` = `-100059667856554`
-- Second-most messages (39). 5 `chat_admins` members.
+- Second-most messages (40). 5 `chat_admins` members.
 - Use when: a test needs a second active chat to pair against MainChat (`chatA` vs `chatB` patterns in MessageHistoryRepositoryTests).
 
 #### Crypto Group: most-administered chat
@@ -391,12 +391,13 @@ Flag-edit: Poultry Community's msg 14498 renumbered to 14538 (still after the ch
 #### Profile-scan alert `aiSignals` shape (canonical edit 2026-10-01)
 `reports` 177, 178, 180 (`type=3`, resolved, real rows) had `context.aiSignals` stored as one lorem *string*. Production writes only arrays (`ProfileScanAlertContext.AiSignals` is `string[]`, verified against prod 2026-10-01: 9 rows, all arrays); the string shape was an artifact of the bootstrap's length-preserving lorem sanitizer, and it made `ReportsRepository.GetProfileScanAlertsAsync(pendingOnly: false)` — and so the whole Reports page — throw a `JsonException` on canonical data. The three values were split on `,`/`.` into short lorem items (`["Lorem ipsum dolor sit amet", "consectetur adipiscing elit", …]`); no real-looking signals were invented. Guard: `TestData/Tests/CanonicalReportContextShapeTests` (`jsonb_typeof(context->'aiSignals')`). Pending fixture 188 already carried an array.
 
-### User identity service anchors (no canonical edits)
+### User identity service anchors (canonical edit 2026-10-03)
 Anchors are in code as `GoldenDatasetConstants.IdentityService` (#552 part 1); all read-only.
 
 | Constant | Anchor | Shape |
 |---|---|---|
 | `ScannedTwiceExplicitUserId` | 9220500615182 @bagging_armado | scans 530 (older) and 534 (newer); 534 explicit. Also the banned user in `BanCelebrationNameMaskingTests` (global `maskFlaggedNames` absent → true, so the caption shows the explicit label) |
+| `ExplicitAuthorMessageId` | msg 110342, Workshop Alumni | @bagging_armado's real join service message (added from prod; deleted by `ban_cleanup`). The only message whose author's latest scan is explicit, so `enriched_messages` carries `latest_scan_explicit = true` on it |
 | `UnscannedUserId` | 9063342700386 @Juvenileii | not trusted, not a bot, no scan rows |
 | `BotUserId` | 9742468412405 @doilyemcee | the canonical bot |
 | `UntrustedNoHistoryUserId` | 9263051408340 @pastramiherbs | not trusted, active, no username_history |

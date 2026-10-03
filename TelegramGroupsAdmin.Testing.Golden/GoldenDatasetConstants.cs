@@ -806,6 +806,8 @@ public static class GoldenDatasetConstants
     {
         /// <summary>@bagging_armado: two scans (530 older, 534 newer); 534 has ai_explicit_display_text = true. Read-only: ProfileScanResultsRepositoryTests pins it.</summary>
         public const long ScannedTwiceExplicitUserId = 9220500615182;
+        /// <summary>Message 110342 in Workshop Alumni: @bagging_armado's join service message (canonical edit 2026-10-03), the one message whose author's latest scan is explicit.</summary>
+        public const long ExplicitAuthorMessageId = 110342;
         /// <summary>@Juvenileii: not trusted, not a bot, no scan rows, profile_scanned_at NULL.</summary>
         public const long UnscannedUserId = 9063342700386;
         /// <summary>@doilyemcee: the canonical bot. Read-only.</summary>

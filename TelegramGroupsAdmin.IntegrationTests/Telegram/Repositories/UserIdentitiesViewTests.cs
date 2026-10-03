@@ -89,8 +89,17 @@ public class UserIdentitiesViewTests
             select new { m.LatestScanExplicit, m.IsBot, ViewFlag = v.LatestScanExplicit, ViewIsBot = v.IsBot })
             .ToListAsync();
         Assert.That(pairs, Is.Not.Empty);
+        // The explicit author's join message makes a broken join that always yields false fail here.
+        var explicitAuthorFlag = await ctx.EnrichedMessages
+            .Where(m => m.MessageId == GoldenDatasetConstants.IdentityService.ExplicitAuthorMessageId)
+            .Select(m => m.LatestScanExplicit)
+            .SingleAsync();
 
-        Assert.That(pairs.Where(p => p.LatestScanExplicit != p.ViewFlag || p.IsBot != p.ViewIsBot), Is.Empty);
+        Assert.Multiple(() =>
+        {
+            Assert.That(explicitAuthorFlag, Is.True);
+            Assert.That(pairs.Where(p => p.LatestScanExplicit != p.ViewFlag || p.IsBot != p.ViewIsBot), Is.Empty);
+        });
     }
 
     [Test]

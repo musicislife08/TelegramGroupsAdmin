@@ -33,7 +33,7 @@ public class MigrationTestHelperTemplateTests
         await helper.CreateDatabaseFromGoldenTemplateAsync();
 
         await using var ctx = helper.GetDbContext();
-        Assert.That(await ctx.Messages.CountAsync(), Is.EqualTo(409));
+        Assert.That(await ctx.Messages.CountAsync(), Is.EqualTo(410));
         Assert.That(await ctx.DetectionResults.CountAsync(), Is.EqualTo(461));
         Assert.That(await ctx.WelcomeResponses.CountAsync(), Is.EqualTo(11));
     }
