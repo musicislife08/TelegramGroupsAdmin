@@ -14,6 +14,7 @@ public interface IProfileScanService
     /// <param name="user">Identity of the Telegram user to scan.</param>
     /// <param name="triggeringChat">Chat that triggered the scan (for reports). Null for background scans.</param>
     /// <param name="ct">Cancellation token.</param>
+    /// <param name="bypassFreshness">Skip the 60s recently-scanned reuse (e.g. a rename invalidated the cached score).</param>
     /// <returns>Scan result with extracted data, score, and outcome.</returns>
-    Task<ProfileScanResult> ScanUserProfileAsync(UserIdentity user, ChatIdentity? triggeringChat, CancellationToken ct);
+    Task<ProfileScanResult> ScanUserProfileAsync(UserIdentity user, ChatIdentity? triggeringChat, CancellationToken ct, bool bypassFreshness = false);
 }

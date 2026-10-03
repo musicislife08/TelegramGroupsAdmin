@@ -12,6 +12,7 @@ using TelegramGroupsAdmin.AI.Services;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using TelegramGroupsAdmin.Telegram.Metrics;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
@@ -46,9 +47,32 @@ public sealed class ProfileScanService(
     /// </summary>
     private static readonly TimeSpan ScanTimeout = TimeSpan.FromSeconds(45);
 
+    // Concurrent requests for one user share one scan. The 60s freshness window alone cannot do
+    // this: profile_scanned_at is written only when a scan finishes.
+    private readonly ConcurrentDictionary<long, Lazy<Task<ProfileScanResult>>> _inFlight = new();
+
     public async Task<ProfileScanResult> ScanUserProfileAsync(
         UserIdentity user,
         ChatIdentity? triggeringChat,
+        CancellationToken ct,
+        bool bypassFreshness = false)
+    {
+        var lazy = _inFlight.GetOrAdd(user.Id, _ => new Lazy<Task<ProfileScanResult>>(
+            () => ScanOnceAsync(user, triggeringChat, bypassFreshness, ct)));
+        try
+        {
+            return await lazy.Value;
+        }
+        finally
+        {
+            _inFlight.TryRemove(new KeyValuePair<long, Lazy<Task<ProfileScanResult>>>(user.Id, lazy));
+        }
+    }
+
+    private async Task<ProfileScanResult> ScanOnceAsync(
+        UserIdentity user,
+        ChatIdentity? triggeringChat,
+        bool bypassFreshness,
         CancellationToken ct)
     {
         var startTimestamp = Stopwatch.GetTimestamp();
@@ -64,7 +88,7 @@ public sealed class ProfileScanService(
         if (existingUser != null && user.FirstName is null && user.LastName is null && user.Username is null)
             user = UserIdentity.From(existingUser);
 
-        if (existingUser?.ProfileScannedAt is { } lastScan
+        if (!bypassFreshness && existingUser?.ProfileScannedAt is { } lastScan
             && DateTimeOffset.UtcNow - lastScan < ScanFreshnessWindow
             && existingUser.ProfileScanScore.HasValue)
         {

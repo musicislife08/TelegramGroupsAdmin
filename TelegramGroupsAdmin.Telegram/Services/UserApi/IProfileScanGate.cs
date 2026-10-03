@@ -17,5 +17,6 @@ public interface IProfileScanGate
         UserIdentity user,
         ChatIdentity? chat,
         ProfileScanTrigger trigger,
-        CancellationToken ct);
+        CancellationToken ct,
+        bool bypassFreshness = false);
 }
