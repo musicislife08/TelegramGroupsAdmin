@@ -17,8 +17,6 @@ public sealed class TelegramMessageBuilder
     private readonly List<MessageEntity> _entities = [];
     private readonly NameMasking _masking;
 
-    public TelegramMessageBuilder() : this(NameMasking.Off) { }
-
     private TelegramMessageBuilder(NameMasking masking) => _masking = masking;
 
     /// <summary>

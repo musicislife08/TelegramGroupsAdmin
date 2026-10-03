@@ -72,7 +72,7 @@ public class BotDmServiceTests
     public async Task SendDmAsync_WithTelegramMessage_ForwardsEntitiesAndNullParseMode()
     {
         // Arrange
-        var message = new TelegramMessageBuilder().Bold("Hello").Text(" world").Build();
+        var message = TelegramMessageBuilder.For(NameMasking.Off).Bold("Hello").Text(" world").Build();
         IReadOnlyList<MessageEntity>? capturedEntities = null;
         ParseMode? capturedParseMode = ParseMode.Html; // intentionally wrong default — assert it gets null
 
@@ -106,7 +106,7 @@ public class BotDmServiceTests
     public async Task SendDmAsync_WithTelegramMessage_SendsToUserChatId()
     {
         // Arrange
-        var message = new TelegramMessageBuilder().Bold("test").Build();
+        var message = TelegramMessageBuilder.For(NameMasking.Off).Bold("test").Build();
 
         // Act
         await _service.SendDmAsync(TestUser, message);
@@ -144,7 +144,7 @@ public class BotDmServiceTests
     {
         // Arrange — the DM is refused (403), the fallback post in the group succeeds
         const long fallbackChatId = -100555L;
-        var message = new TelegramMessageBuilder().Text("You're ").Bold("in").Build();
+        var message = TelegramMessageBuilder.For(NameMasking.Off).Text("You're ").Bold("in").Build();
         string? fallbackText = null;
         IReadOnlyList<MessageEntity>? fallbackEntities = null;
 
@@ -261,7 +261,7 @@ public class BotDmServiceTests
     public async Task SendDmWithKeyboardAsync_WithTelegramMessage_ForwardsEntitiesAndNullParseMode()
     {
         // Arrange
-        var message = new TelegramMessageBuilder().Bold("Question?").Build();
+        var message = TelegramMessageBuilder.For(NameMasking.Off).Bold("Question?").Build();
         var keyboard = new InlineKeyboardMarkup(new[]
         {
             new[] { InlineKeyboardButton.WithCallbackData("Yes", "yes") }
@@ -299,7 +299,7 @@ public class BotDmServiceTests
     public async Task SendDmWithKeyboardAsync_WithTelegramMessage_ForwardsKeyboardToHandler()
     {
         // Arrange
-        var message = new TelegramMessageBuilder().Text("Pick one:").Build();
+        var message = TelegramMessageBuilder.For(NameMasking.Off).Text("Pick one:").Build();
         var keyboard = new InlineKeyboardMarkup(new[]
         {
             new[] { InlineKeyboardButton.WithCallbackData("Option A", "a") }
@@ -359,7 +359,7 @@ public class BotDmServiceTests
     public async Task SendDmWithAnimationEntitiesAsync_CachedFileId_SendsByFileIdAndReportsReturnedId()
     {
         SetupAnimationReturns("cached-id");
-        var caption = new TelegramMessageBuilder().Bold("Workshop Alumni").LineBreak().Text("banned!").Build();
+        var caption = TelegramMessageBuilder.For(NameMasking.Off).Bold("Workshop Alumni").LineBreak().Text("banned!").Build();
 
         var result = await _service.SendDmWithAnimationEntitiesAsync(TestUser, caption, "cached-id", "/nope.gif");
 

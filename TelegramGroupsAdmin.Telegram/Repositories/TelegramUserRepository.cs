@@ -973,7 +973,7 @@ public class TelegramUserRepository : ITelegramUserRepository
 
         return new UiModels.TelegramUserDetail
         {
-            User = identity?.ToIdentity() ?? UserIdentity.FromId(telegramUserId),
+            User = identity.ToIdentityOrIdOnly(telegramUserId),
             UserPhotoPath = user.UserPhotoPath,
             PhotoHash = user.PhotoHash,
             IsTrusted = user.IsTrusted,

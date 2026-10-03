@@ -128,7 +128,7 @@ public class NotificationHandler : INotificationHandler
     /// <returns>True if the notification was sent successfully.</returns>
     private async Task<bool> SendWarningNotificationAsync(UserIdentity user, int warningCount, string? reason, CancellationToken cancellationToken)
     {
-        var tm = new TelegramMessageBuilder()
+        var tm = TelegramMessageBuilder.For(NameMasking.Off) // no user mentions
             .Text("⚠️ ").Bold("Warning Issued").LineBreak()
             .LineBreak()
             .Text("You have received a warning.").LineBreak()
@@ -170,7 +170,7 @@ public class NotificationHandler : INotificationHandler
         var allChats = await _managedChatsRepository.GetAllChatsAsync(cancellationToken: cancellationToken);
         var activeChats = allChats.Where(c => c.IsActive && !c.IsDeleted).ToList();
 
-        var builder = new TelegramMessageBuilder()
+        var builder = TelegramMessageBuilder.For(NameMasking.Off) // no user mentions
             .Text("⏱️ ").Bold("You have been temporarily banned").LineBreak()
             .LineBreak()
             .Bold("Reason:").Text($" {reason ?? ""}").LineBreak()
@@ -335,7 +335,7 @@ public class NotificationHandler : INotificationHandler
     {
         try
         {
-            var builder = new TelegramMessageBuilder()
+            var builder = TelegramMessageBuilder.For(NameMasking.Off) // no user mentions
                 .Text("⚠️ ").Bold("Message Removed").LineBreak()
                 .LineBreak()
                 .Text("Your message was deleted due to security policy violations:").LineBreak()

@@ -17,6 +17,13 @@ public static class UserIdentityMapping
                 : latestScanExplicit.Value ? NameVerdict.Explicit : NameVerdict.Clean
         };
 
+    /// <summary>
+    /// Identity for a row read through a left join: the row's identity, or an id-only identity when
+    /// the user has no row.
+    /// </summary>
+    public static UserIdentity ToIdentityOrIdOnly(this UserIdentityView? row, long id) =>
+        row?.ToIdentity() ?? UserIdentity.FromId(id);
+
     public static UserIdentity ToIdentity(this UserIdentityView row) =>
         ToIdentity(row.TelegramUserId, row.FirstName, row.LastName, row.Username, row.IsBot, row.LatestScanExplicit);
 }

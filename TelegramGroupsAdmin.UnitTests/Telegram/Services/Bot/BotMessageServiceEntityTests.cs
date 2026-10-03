@@ -86,7 +86,7 @@ public class BotMessageServiceEntityTests
                 ct: Arg.Any<CancellationToken>())
             .ReturnsForAnyArgs(sentMessage);
 
-        var msg = new TelegramMessageBuilder().Bold("hi").Build();
+        var msg = TelegramMessageBuilder.For(NameMasking.Off).Bold("hi").Build();
 
         // Act
         await _service.SendAndSaveMessageAsync(42, msg);
@@ -118,7 +118,7 @@ public class BotMessageServiceEntityTests
                 ct: Arg.Any<CancellationToken>())
             .ReturnsForAnyArgs(sentMessage);
 
-        var msg = new TelegramMessageBuilder().Text("hello").Build();
+        var msg = TelegramMessageBuilder.For(NameMasking.Off).Text("hello").Build();
 
         // Act
         var result = await _service.SendAndSaveMessageAsync(42, msg);
@@ -173,7 +173,7 @@ public class BotMessageServiceEntityTests
                 ct: Arg.Any<CancellationToken>())
             .ReturnsForAnyArgs(editedMessage);
 
-        var msg = new TelegramMessageBuilder().Bold("new text").Build();
+        var msg = TelegramMessageBuilder.For(NameMasking.Off).Bold("new text").Build();
 
         // Act
         await _service.EditAndUpdateMessageAsync(chatId, messageId, msg);
@@ -223,7 +223,7 @@ public class BotMessageServiceEntityTests
                 ct: Arg.Any<CancellationToken>())
             .ReturnsForAnyArgs(sentMessage);
 
-        var captionMsg = new TelegramMessageBuilder().Bold("caption text").Build();
+        var captionMsg = TelegramMessageBuilder.For(NameMasking.Off).Bold("caption text").Build();
 
         // Act
         var result = await _service.SendAndSaveAnimationAsync(42, animation, captionMsg);
@@ -269,7 +269,7 @@ public class BotMessageServiceEntityTests
             .ReturnsForAnyArgs(new Message { Id = 99, Chat = new Chat { Id = 42 } });
         var before = DateTimeOffset.UtcNow;
 
-        await _service.SendAndSaveMessageAsync(42, new TelegramMessageBuilder().Text("hello").Build());
+        await _service.SendAndSaveMessageAsync(42, TelegramMessageBuilder.For(NameMasking.Off).Text("hello").Build());
 
         await AssertBotObserved(before, DateTimeOffset.UtcNow);
         await _messageRepo.Received(1).InsertMessageAsync(
@@ -308,7 +308,7 @@ public class BotMessageServiceEntityTests
             });
         var before = DateTimeOffset.UtcNow;
 
-        await _service.SendAndSaveAnimationAsync(42, InputFile.FromFileId("a"), new TelegramMessageBuilder().Text("c").Build());
+        await _service.SendAndSaveAnimationAsync(42, InputFile.FromFileId("a"), TelegramMessageBuilder.For(NameMasking.Off).Text("c").Build());
 
         await AssertBotObserved(before, DateTimeOffset.UtcNow);
         await _messageRepo.Received(1).InsertMessageAsync(

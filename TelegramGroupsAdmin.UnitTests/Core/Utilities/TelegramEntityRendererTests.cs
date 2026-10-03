@@ -20,7 +20,7 @@ public class TelegramEntityRendererTests
     [Test]
     public void Bold_entity_wraps_its_span_in_b_tag()
     {
-        var msg = new TelegramMessageBuilder().Text("a ").Bold("banned").Build();
+        var msg = TelegramMessageBuilder.For(NameMasking.Off).Text("a ").Bold("banned").Build();
 
         Assert.That(TelegramEntityRenderer.ToHtml(msg), Is.EqualTo("a <b>banned</b>"));
     }
@@ -28,7 +28,7 @@ public class TelegramEntityRendererTests
     [Test]
     public void Italic_and_code_and_link_render_to_expected_tags()
     {
-        var msg = new TelegramMessageBuilder()
+        var msg = TelegramMessageBuilder.For(NameMasking.Off)
             .Italic("note")
             .Text(" ")
             .Code("x=1")
@@ -44,7 +44,7 @@ public class TelegramEntityRendererTests
     [Test]
     public void Text_link_with_javascript_scheme_renders_inner_text_only()
     {
-        var msg = new TelegramMessageBuilder().Link("click me", "javascript:alert(1)").Build();
+        var msg = TelegramMessageBuilder.For(NameMasking.Off).Link("click me", "javascript:alert(1)").Build();
 
         var html = TelegramEntityRenderer.ToHtml(msg);
 
@@ -56,7 +56,7 @@ public class TelegramEntityRendererTests
     [Test]
     public void Text_link_with_data_scheme_renders_inner_text_only()
     {
-        var msg = new TelegramMessageBuilder().Link("click me", "data:text/html,<script>alert(1)</script>").Build();
+        var msg = TelegramMessageBuilder.For(NameMasking.Off).Link("click me", "data:text/html,<script>alert(1)</script>").Build();
 
         var html = TelegramEntityRenderer.ToHtml(msg);
 
@@ -69,7 +69,7 @@ public class TelegramEntityRendererTests
     public void Text_mention_renders_as_styled_span_with_display_name()
     {
         var user = new UserIdentity(12345, "Sofi", "R", "rodriguez_sofi");
-        var msg = new TelegramMessageBuilder().Text("Reported: ").Mention(user).Build();
+        var msg = TelegramMessageBuilder.For(NameMasking.Off).Text("Reported: ").Mention(user).Build();
 
         Assert.That(
             TelegramEntityRenderer.ToHtml(msg),
@@ -81,7 +81,7 @@ public class TelegramEntityRendererTests
     {
         // A user whose name contains markup must not be able to inject HTML into the preview.
         var user = new UserIdentity(1, "<script>", null, null);
-        var msg = new TelegramMessageBuilder().Mention(user).Build();
+        var msg = TelegramMessageBuilder.For(NameMasking.Off).Mention(user).Build();
 
         Assert.That(
             TelegramEntityRenderer.ToHtml(msg),
@@ -91,7 +91,7 @@ public class TelegramEntityRendererTests
     [Test]
     public void Emoji_offsets_render_correctly_because_utf16_aligns_with_dotnet_strings()
     {
-        var msg = new TelegramMessageBuilder().Text("👍 ").Bold("ok").Build();
+        var msg = TelegramMessageBuilder.For(NameMasking.Off).Text("👍 ").Bold("ok").Build();
 
         Assert.That(TelegramEntityRenderer.ToHtml(msg), Is.EqualTo("👍 <b>ok</b>"));
     }
@@ -102,7 +102,7 @@ public class TelegramEntityRendererTests
         // Round-trip: a mistyped placeholder passes through AppendTemplate as literal text,
         // then ToHtml renders it as ordinary (encoded) text — visible, not vanished.
         var user = new UserIdentity(1, "Sofi", null, "sofi");
-        var msg = new TelegramMessageBuilder()
+        var msg = TelegramMessageBuilder.For(NameMasking.Off)
             .AppendTemplate("Hi {usernam}, welcome to {chat_name}", new Dictionary<string, Action<TelegramMessageBuilder>>
             {
                 ["{username}"] = b => b.Mention(user),
@@ -152,7 +152,7 @@ public class TelegramEntityRendererTests
     public void Pre_entity_wraps_its_span_in_pre_tag()
     {
         // TelegramMessageBuilder.Pre is public, so we can use the builder here.
-        var msg = new TelegramMessageBuilder().Pre("code block").Build();
+        var msg = TelegramMessageBuilder.For(NameMasking.Off).Pre("code block").Build();
 
         Assert.That(TelegramEntityRenderer.ToHtml(msg), Is.EqualTo("<pre>code block</pre>"));
     }

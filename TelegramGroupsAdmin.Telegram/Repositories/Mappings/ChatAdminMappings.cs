@@ -28,7 +28,7 @@ public static class ChatAdminMappings
             {
                 Id = data.Id,
                 ChatId = data.ChatId,
-                User = identity?.ToIdentity() ?? UserIdentity.FromId(data.TelegramId),
+                User = identity.ToIdentityOrIdOnly(data.TelegramId),
                 IsCreator = data.IsCreator,
                 PromotedAt = data.PromotedAt,
                 LastVerifiedAt = data.LastVerifiedAt,

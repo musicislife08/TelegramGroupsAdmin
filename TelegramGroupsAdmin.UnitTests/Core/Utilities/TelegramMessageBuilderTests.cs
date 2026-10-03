@@ -12,7 +12,7 @@ public class TelegramMessageBuilderTests
     [Test]
     public void Text_only_produces_no_entities()
     {
-        var msg = new TelegramMessageBuilder().Text("hello world").Build();
+        var msg = TelegramMessageBuilder.For(NameMasking.Off).Text("hello world").Build();
         Assert.That(msg.Text, Is.EqualTo("hello world"));
         Assert.That(msg.Entities, Is.Empty);
     }
@@ -20,7 +20,7 @@ public class TelegramMessageBuilderTests
     [Test]
     public void Bold_records_offset_and_length_over_appended_text()
     {
-        var msg = new TelegramMessageBuilder().Text("a ").Bold("banned").Build();
+        var msg = TelegramMessageBuilder.For(NameMasking.Off).Text("a ").Bold("banned").Build();
         Assert.That(msg.Text, Is.EqualTo("a banned"));
         Assert.That(msg.Entities, Has.Count.EqualTo(1));
         var e = msg.Entities[0];
@@ -33,7 +33,7 @@ public class TelegramMessageBuilderTests
     public void Mention_emits_text_mention_with_embedded_user_and_display_name()
     {
         var user = new UserIdentity(12345, "Sofi", "R", "rodriguez_sofi");
-        var msg = new TelegramMessageBuilder().Text("Reported user: ").Mention(user).Build();
+        var msg = TelegramMessageBuilder.For(NameMasking.Off).Text("Reported user: ").Mention(user).Build();
         Assert.That(msg.Text, Is.EqualTo("Reported user: Sofi R"));
         Assert.That(msg.Entities, Has.Count.EqualTo(1));
         var e = msg.Entities[0];
@@ -47,7 +47,7 @@ public class TelegramMessageBuilderTests
     public void Mention_without_username_still_clickable_via_display_name()
     {
         var user = new UserIdentity(999, "NoUser", null, null);
-        var msg = new TelegramMessageBuilder().Mention(user).Build();
+        var msg = TelegramMessageBuilder.For(NameMasking.Off).Mention(user).Build();
         Assert.That(msg.Text, Is.EqualTo("NoUser"));
         Assert.That(msg.Entities[0].Type, Is.EqualTo(MessageEntityType.TextMention));
         Assert.That(msg.Entities[0].User!.Id, Is.EqualTo(999));
@@ -56,7 +56,7 @@ public class TelegramMessageBuilderTests
     [Test]
     public void Offsets_count_utf16_code_units_not_runes()
     {
-        var msg = new TelegramMessageBuilder().Text("👍 ").Bold("x").Build();
+        var msg = TelegramMessageBuilder.For(NameMasking.Off).Text("👍 ").Bold("x").Build();
         Assert.That(msg.Text, Is.EqualTo("👍 x"));
         Assert.That(msg.Entities[0].Offset, Is.EqualTo(3));
         Assert.That(msg.Entities[0].Length, Is.EqualTo(1));
@@ -65,7 +65,7 @@ public class TelegramMessageBuilderTests
     [Test]
     public void LineBreak_appends_newline()
     {
-        var msg = new TelegramMessageBuilder().Text("a").LineBreak().Text("b").Build();
+        var msg = TelegramMessageBuilder.For(NameMasking.Off).Text("a").LineBreak().Text("b").Build();
         Assert.That(msg.Text, Is.EqualTo("a\nb"));
     }
 
@@ -73,7 +73,7 @@ public class TelegramMessageBuilderTests
     public void AppendTemplate_substitutes_known_tokens_via_actions()
     {
         var user = new UserIdentity(7, "Sofi", null, "sofi");
-        var msg = new TelegramMessageBuilder()
+        var msg = TelegramMessageBuilder.For(NameMasking.Off)
             .AppendTemplate("Welcome {username} to {chat_name}!", new Dictionary<string, Action<TelegramMessageBuilder>>
             {
                 ["{username}"] = b => b.Mention(user),
@@ -95,7 +95,7 @@ public class TelegramMessageBuilderTests
     {
         // A mistyped placeholder ({usernam}) is not in the map — it must survive verbatim,
         // never be dropped, so it renders visibly for the admin to spot.
-        var msg = new TelegramMessageBuilder()
+        var msg = TelegramMessageBuilder.For(NameMasking.Off)
             .AppendTemplate("Hi {usernam}, welcome", new Dictionary<string, Action<TelegramMessageBuilder>>
             {
                 ["{username}"] = b => b.Text("Sofi"),
@@ -109,7 +109,7 @@ public class TelegramMessageBuilderTests
     [Test]
     public void AppendTemplate_matches_tokens_left_to_right_regardless_of_map_order()
     {
-        var msg = new TelegramMessageBuilder()
+        var msg = TelegramMessageBuilder.For(NameMasking.Off)
             .AppendTemplate("{b}{a}", new Dictionary<string, Action<TelegramMessageBuilder>>
             {
                 ["{a}"] = x => x.Text("A"),
@@ -125,7 +125,7 @@ public class TelegramMessageBuilderTests
     {
         // {username} and {username_extra} both match at offset 0. The greedy tie-break must pick
         // the LONGER key, so {username_extra}'s substitution wins and {username}'s never runs.
-        var msg = new TelegramMessageBuilder()
+        var msg = TelegramMessageBuilder.For(NameMasking.Off)
             .AppendTemplate("{username_extra} hi", new Dictionary<string, Action<TelegramMessageBuilder>>
             {
                 ["{username}"] = b => b.Text("SHORT"),
@@ -141,7 +141,7 @@ public class TelegramMessageBuilderTests
     [Test]
     public void AppendTemplate_with_no_tokens_emits_template_verbatim()
     {
-        var msg = new TelegramMessageBuilder()
+        var msg = TelegramMessageBuilder.For(NameMasking.Off)
             .AppendTemplate("plain text, no tokens", new Dictionary<string, Action<TelegramMessageBuilder>>
             {
                 ["{username}"] = b => b.Text("Sofi"),

@@ -1,3 +1,4 @@
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
 
 namespace TelegramGroupsAdmin.Telegram.Services.Moderation;
@@ -10,7 +11,7 @@ namespace TelegramGroupsAdmin.Telegram.Services.Moderation;
 public static class BanNotificationMessage
 {
     public static TelegramMessage Build(string chatName, string reason, int chatsAffected) =>
-        new TelegramMessageBuilder()
+        TelegramMessageBuilder.For(NameMasking.Off) // no user mentions
             .Text("🚫 ").Bold("You have been banned").LineBreak().LineBreak()
             .Bold("Chat: ").Text(chatName).LineBreak()
             .Bold("Reason: ").Text(reason).LineBreak()

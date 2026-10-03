@@ -43,7 +43,7 @@ public class HelpCommand : IBotCommand
         var publicCommands = available.Where(c => c.MinPermissionLevel < PermissionLevel.Admin).ToList();
         var adminCommands = available.Where(c => c.MinPermissionLevel >= PermissionLevel.Admin).ToList();
 
-        var builder = new TelegramMessageBuilder()
+        var builder = TelegramMessageBuilder.For(NameMasking.Off) // no user mentions
             .Text("🤖 ").Bold("TelegramGroupsAdmin Bot").LineBreak()
             .LineBreak();
 
