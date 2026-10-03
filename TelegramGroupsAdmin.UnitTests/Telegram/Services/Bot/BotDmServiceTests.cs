@@ -404,4 +404,43 @@ public class BotDmServiceTests
     }
 
     #endregion
+
+    #region EditDmTextAsync / EditDmCaptionAsync
+
+    private static readonly MessageEntity[] MentionEntities =
+    [
+        new() { Type = MessageEntityType.TextMention, Offset = 0, Length = 5, User = new User { Id = TestUser.Id, FirstName = "Alice" } }
+    ];
+
+    [Test]
+    public async Task EditDmTextAsync_ForwardsEntitiesToHandler()
+    {
+        await _service.EditDmTextAsync(TestUser.Id, 7, "Alice reported", entities: MentionEntities);
+
+        await _messageHandler.Received(1).EditTextAsync(
+            chatId: TestUser.Id,
+            messageId: 7,
+            text: "Alice reported",
+            parseMode: Arg.Any<ParseMode?>(),
+            replyMarkup: Arg.Any<InlineKeyboardMarkup?>(),
+            entities: MentionEntities,
+            ct: Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task EditDmCaptionAsync_ForwardsCaptionEntitiesToHandler()
+    {
+        await _service.EditDmCaptionAsync(TestUser.Id, 7, "Alice reported", captionEntities: MentionEntities);
+
+        await _messageHandler.Received(1).EditCaptionAsync(
+            chatId: TestUser.Id,
+            messageId: 7,
+            caption: "Alice reported",
+            parseMode: Arg.Any<ParseMode?>(),
+            replyMarkup: Arg.Any<InlineKeyboardMarkup?>(),
+            captionEntities: MentionEntities,
+            ct: Arg.Any<CancellationToken>());
+    }
+
+    #endregion
 }
