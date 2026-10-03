@@ -6,6 +6,12 @@ namespace TelegramGroupsAdmin.Data.Models;
 /// View-backed entity for enriched messages with user/chat/reply/translation data.
 /// Maps to enriched_messages PostgreSQL view.
 /// NOTE: Named *View (not *Dto) to avoid backup/restore reflection picking this up.
+/// <para>
+/// Freeze before changing: the JoinUserIdentitiesInEnrichedViews migration replays this class's live
+/// <c>CreateViewSql</c>. Before changing the definition, copy the current SQL into a frozen constant
+/// (as LegacyUserIdentityViewSql does for UserIdentityView) and point that migration at the copy, so
+/// the change cannot alter fresh-database history.
+/// </para>
 /// </summary>
 public class EnrichedMessageView
 {

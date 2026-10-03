@@ -7,6 +7,12 @@ namespace TelegramGroupsAdmin.Data.Models;
 /// Maps to enriched_reports PostgreSQL view.
 /// Eliminates N+1 queries by extracting JSONB user IDs and joining at the database level.
 /// NOTE: Named *View (not *Dto) to avoid backup/restore reflection picking this up.
+/// <para>
+/// Freeze before changing: the JoinUserIdentitiesInEnrichedViews migration replays this class's live
+/// <c>CreateViewSql</c>. Before changing the definition, copy the current SQL into a frozen constant
+/// (as LegacyUserIdentityViewSql does for UserIdentityView) and point that migration at the copy, so
+/// the change cannot alter fresh-database history.
+/// </para>
 /// </summary>
 public class EnrichedReportView
 {

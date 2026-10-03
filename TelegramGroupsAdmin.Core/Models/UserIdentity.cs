@@ -30,7 +30,8 @@ public sealed record UserIdentity(long Id, string? FirstName, string? LastName, 
         };
 
     /// <summary>
-    /// Creates an ID-only identity. Internal fallback used by FromAsync when user isn't in DB.
+    /// Creates an ID-only identity: the fallback IUserIdentityService and UserIdentityMapping use
+    /// when the user has no stored row. Everything else obtains identities from IUserIdentityService.
     /// </summary>
     public static UserIdentity FromId(long id) => new(id, null, null, null);
 

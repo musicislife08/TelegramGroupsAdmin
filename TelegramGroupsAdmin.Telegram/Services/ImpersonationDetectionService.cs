@@ -234,11 +234,11 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
     }
 
     /// <inheritdoc/>
-    public async Task ExecuteActionAsync(ImpersonationCheckResult result)
+    public async Task ExecuteActionAsync(ImpersonationCheckResult result, CancellationToken ct = default)
     {
         try
         {
-            var identities = await _identityService.ResolveManyAsync([result.SuspectedUser.Id, result.TargetUserId]);
+            var identities = await _identityService.ResolveManyAsync([result.SuspectedUser.Id, result.TargetUserId], ct);
             var suspectedUser = identities[0];
             var targetUser = identities[1];
 
@@ -257,7 +257,7 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
                 AutoBanned = result.ShouldAutoBan
             };
 
-            var alertId = await _reportsRepository.InsertImpersonationAlertAsync(alert);
+            var alertId = await _reportsRepository.InsertImpersonationAlertAsync(alert, ct);
 
             _logger.LogInformation(
                 "Created impersonation alert #{AlertId}: {SuspectedUser} → Admin ({TargetUserId}) (score: {Score})",
@@ -276,7 +276,7 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
                         Executor = executor,
                         Reason = reason,
                         Chat = ChatIdentity.From(result.DetectionChat) // Enables ban celebration
-                    });
+                    }, ct);
 
                 if (banResult.Success)
                 {

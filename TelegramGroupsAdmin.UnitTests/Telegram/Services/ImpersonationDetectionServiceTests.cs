@@ -412,11 +412,12 @@ public class ImpersonationDetectionServiceTests
     [Test]
     public async Task ExecuteActionAsync_AlertAndAutoBanCarryIdentitiesResolvedById()
     {
+        using var cts = new CancellationTokenSource();
         var suspected = UserIdentity.ForTest(TestUserId, "Current", verdict: NameVerdict.Promotional);
         var admin = UserIdentity.ForTest(TestAdminId, "Admin");
         _mockIdentities.ResolveManyAsync(
                 Arg.Is<IReadOnlyCollection<long>>(ids => ids!.SequenceEqual(new[] { TestUserId, TestAdminId })),
-                Arg.Any<CancellationToken>())
+                cts.Token)
             .Returns([suspected, admin]);
         _mockModeration.BanUserAsync(Arg.Any<BanIntent>(), Arg.Any<CancellationToken>())
             .Returns(new ModerationResult { Success = true, ChatsAffected = 1 });
@@ -430,7 +431,7 @@ public class ImpersonationDetectionServiceTests
             TargetUserId = TestAdminId,
             NameMatch = true,
             PhotoMatch = true
-        });
+        }, cts.Token);
 
         await _mockReportsRepo.Received(1).InsertImpersonationAlertAsync(
             Arg.Is<ImpersonationAlertRecord>(a => a!.SuspectedUser == suspected && a.TargetUser == admin),

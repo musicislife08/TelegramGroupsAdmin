@@ -28,5 +28,5 @@ public interface IImpersonationDetectionService
     /// <summary>
     /// Executes action based on check result (auto-ban, log alert)
     /// </summary>
-    Task ExecuteActionAsync(ImpersonationCheckResult result);
+    Task ExecuteActionAsync(ImpersonationCheckResult result, CancellationToken ct = default);
 }

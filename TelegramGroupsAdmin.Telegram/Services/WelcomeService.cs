@@ -358,7 +358,7 @@ public class WelcomeService(
                             impersonationResult.RiskLevel);
 
                         // Execute action (create alert, auto-ban if score >= 100)
-                        await impersonationDetectionService.ExecuteActionAsync(impersonationResult);
+                        await impersonationDetectionService.ExecuteActionAsync(impersonationResult, cancellationToken);
 
                         // If auto-banned (score 100), clean up and exit
                         if (impersonationResult.ShouldAutoBan)
