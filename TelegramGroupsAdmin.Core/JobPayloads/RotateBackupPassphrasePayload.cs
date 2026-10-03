@@ -4,11 +4,12 @@ namespace TelegramGroupsAdmin.Core.JobPayloads;
 /// Payload for rotating backup encryption passphrase.
 /// Re-encrypts all existing backups with a new passphrase using atomic file operations.
 /// </summary>
-/// <param name="NewPassphrase">The newly generated passphrase to use for re-encryption</param>
+/// <param name="ProtectedNewPassphrase">The new passphrase, protected with IDataProtectionService. The job store
+/// persists payloads, so the passphrase is only unprotected inside the job.</param>
 /// <param name="BackupDirectory">Directory containing backups to re-encrypt (default: /data/backups)</param>
 /// <param name="UserId">User who initiated the rotation (for audit logging) - web user GUID</param>
 public record RotateBackupPassphrasePayload(
-    string NewPassphrase,
+    string ProtectedNewPassphrase,
     string BackupDirectory,
     string UserId
 );

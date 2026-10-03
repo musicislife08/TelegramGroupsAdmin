@@ -22,7 +22,9 @@ public interface IPassphraseManagementService
     Task<string> GetDecryptedPassphraseAsync();
 
     /// <summary>
-    /// Rotates the backup passphrase and schedules re-encryption of existing backups
+    /// Schedules re-encryption of existing backups with <paramref name="newPassphrase"/>, which must be
+    /// the passphrase the user was shown and saved. The stored passphrase changes only once every backup
+    /// has been re-encrypted.
     /// </summary>
-    Task<string> RotatePassphraseAsync(string backupDirectory, string userId);
+    Task RotatePassphraseAsync(string newPassphrase, string backupDirectory, string userId);
 }
