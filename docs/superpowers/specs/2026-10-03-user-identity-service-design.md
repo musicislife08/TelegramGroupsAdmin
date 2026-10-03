@@ -60,14 +60,18 @@ public sealed record UserIdentity
     long Id, string? FirstName, string? LastName, string? Username   // Telegram-shaped, as today
     NameVerdict Verdict                                               // new
     string DisplayName      // real name: logs, web UI (unchanged)
-    string BotDisplayName   // what bot-written text shows; set by the service
-    long? ResolvedForChatId // the chat whose masking setting BotDisplayName used; null = global
+    string BotDisplayName(NameMasking masking)   // what bot-written text shows
+```
+
+```
+public enum NameMasking { Off, On }   // Core; the effective "Mask flagged names" value
 ```
 
 - `NameVerdict` (Core): `Unscanned`, `Clean`, `Promotional`, `Explicit`. Platform-neutral.
-- `BotDisplayName` is computed by the service from the verdict and the effective "Mask flagged
-  names" setting for the scope it resolved in (see Masking config), so the record holds no config
-  logic:
+- The identity is global: Telegram names and verdicts are per account, not per chat, so one
+  resolved identity is reused across chats and flows. Only the masking setting varies by chat, and
+  it is applied where the text is written (see `Mention` and Masking config).
+- `BotDisplayName(masking)` maps the verdict:
   - masking on: `Explicit` → `[name removed: explicit]`, `Promotional` → `[name removed: spam]`,
     `Unscanned` / `Clean` → `DisplayName`;
   - masking off: `DisplayName` for every verdict.
@@ -81,9 +85,9 @@ public sealed record UserIdentity
 ### `IUserIdentityService` (Telegram adapter)
 
 ```
-Task<UserIdentity> ObserveAsync(ObservedUser observed, ChatIdentity? chat, CancellationToken ct)
-Task<UserIdentity> ResolveAsync(long userId, ChatIdentity? chat, CancellationToken ct)
-Task<IReadOnlyList<UserIdentity>> ResolveManyAsync(IReadOnlyCollection<long> userIds, ChatIdentity? chat, CancellationToken ct)
+Task<UserIdentity> ObserveAsync(ObservedUser observed, CancellationToken ct)
+Task<UserIdentity> ResolveAsync(long userId, CancellationToken ct)
+Task<IReadOnlyList<UserIdentity>> ResolveManyAsync(IReadOnlyCollection<long> userIds, CancellationToken ct)
 ```
 
 - `ObservedUser` carries the names, `IsBot`, the source (`BotUpdate`, `ChatMember`, `UserApiScan`)
@@ -94,10 +98,6 @@ Task<IReadOnlyList<UserIdentity>> ResolveManyAsync(IReadOnlyCollection<long> use
   Bots and system accounts (777000, anonymous admin, channel sender) are `Unscanned` in part 1.
 - `ResolveAsync` for an id with no row returns an id-only identity, `Unscanned`.
 - `ResolveManyAsync` uses one query for names and one for latest verdicts.
-- `chat` is the scope the result will be written into: the chat for group posts, `null` for
-  messages that belong to no chat (admin notification DMs, `/start` DMs). An identity resolved for
-  one chat is not reused to write into another; cross-chat paths (multi-chat bans, celebration
-  fan-out) resolve once per chat.
 
 ### `ObserveAsync` and renames
 
@@ -165,10 +165,16 @@ Each entry point calls `ObserveAsync` first and passes the returned identity dow
 
 ### `Mention`
 
-`TelegramMessageBuilder.Mention(UserIdentity)` renders `BotDisplayName` and still emits a
-`TextMention` with the user id, so it stays clickable and still pings. Ban-celebration captions
-(plain text) substitute `BotDisplayName` for `{username}`; their own explicit-flag lookup in
-`BanCelebrationService` is removed.
+- A builder is created for a masking policy: `TelegramMessageBuilder.For(NameMasking masking)`.
+  `Mention(UserIdentity)` renders `BotDisplayName(masking)` and still emits a `TextMention` with the
+  user id, so it stays clickable and still pings.
+- Callers get the policy from `IConfigService.GetNameMaskingAsync(long? chatId)`: the chat's
+  effective value for group posts, the global value when `chatId` is null (admin notification DMs,
+  `/start` DMs).
+- Stage 4 removes the parameterless builder constructor, so every builder states its policy and a
+  forgotten one is a compile error (about 40 construction sites).
+- Ban-celebration captions (plain text) substitute `BotDisplayName(masking)` for `{username}`;
+  their own explicit-flag lookup in `BanCelebrationService` is removed.
 
 ### Masking config
 
@@ -185,7 +191,8 @@ Each entry point calls `ObserveAsync` first and passes the returned identity dow
 
 ### Platform boundary
 
-Core (platform-neutral): `NameVerdict`, `DisplayName` / `BotDisplayName`, redaction wording.
+Core (platform-neutral): `NameVerdict`, `NameMasking`, `DisplayName` / `BotDisplayName`, redaction
+wording.
 Telegram adapter: the name shape (first, last, username), `long` ids, `ObservedUser` sources,
 `TextMention` rendering, `IUserIdentityService` implementation.
 
@@ -193,15 +200,17 @@ Telegram adapter: the name shape (first, last, username), `long` ids, `ObservedU
 
 Four stages, each a green commit series:
 
-1. Add `NameVerdict`, `BotDisplayName`, `IUserIdentityService`, `GetOrUpdateAsync`,
-   `names_observed_at` (migration), the `MaskFlaggedNames` rename and its config migration. `Mention`
-   renders `BotDisplayName`. Nothing enforced yet.
+1. Add `NameVerdict`, `NameMasking`, `BotDisplayName`, `IUserIdentityService`,
+   `GetOrUpdateAsync`, `names_observed_at` (migration), the `MaskFlaggedNames` rename and its config
+   migration, `GetNameMaskingAsync`, and `TelegramMessageBuilder.For(masking)`. `Mention` renders
+   `BotDisplayName(masking)`. Nothing enforced yet.
 2. Message pipeline: `ObserveAsync` first, rename handling moved into the service, one identity
    passed down. Then edited messages, callbacks, chat-member updates. Scan single-flight and the
    rename bypass.
 3. Migrate remaining sites area by area: welcome/exam, commands, moderation, notifications, jobs,
    web UI.
-4. Remove the public constructor and the `From(...)` factories; add `ForPreview` / `ForTest`.
+4. Remove the public `UserIdentity` constructor, the `From(...)` factories and the parameterless
+   `TelegramMessageBuilder` constructor; add `ForPreview` / `ForTest`.
    Missed sites become compile errors.
 
 ## Testing
@@ -209,15 +218,16 @@ Four stages, each a green commit series:
 Unit:
 - `BotDisplayName` per verdict with masking on and off; `Unscanned`/`Clean` show the real name;
   `Explicit` shows `[name removed: explicit]`.
-- `Mention` renders `BotDisplayName` and keeps the `TextMention` user id.
+- `Mention` renders `BotDisplayName(masking)` and keeps the `TextMention` user id.
 - Service verdict mapping: the latest scan row wins; no row gives `Unscanned`; bots and system
   accounts give `Unscanned`.
 - `ProfileScanService` single-flight: two concurrent calls gated by a `TaskCompletionSource` fake
   produce one scan and the same result.
 - `ObserveAsync` swallows a repository failure and returns an `Unscanned` identity.
-- Scope (substituted config service): an `Explicit` user resolved for a chat with masking off shows
-  the real name; resolved for a chat with masking on, or for no chat with the global value on, shows
-  `[name removed: explicit]`; `ResolvedForChatId` records the scope.
+- `GetNameMaskingAsync` (substituted config): a chat override off gives `Off`; no override falls back
+  to the global value; `null` chat gives the global value.
+- One `Explicit` identity rendered by a builder with `Off` shows the real name and by a builder with
+  `On` shows `[name removed: explicit]`.
 
 Integration (real Postgres, canonical data; anchors in the Canonical anchors section):
 - `GetOrUpdateAsync` rename: the row changes, `username_history` and the `ProfileChange` audit row
