@@ -77,7 +77,7 @@ Captions support three placeholder variables that are replaced at send time:
 
 Placeholders are case-insensitive (`{Username}`, `{USERNAME}`, and `{username}` all work).
 
-**Explicit username masking:** if [Profile Scanning](08-profile-scanning.md#explicit-username-masking) flagged the banned user's display name as explicit, the chat caption substitutes the chat's configured redaction text (default `[explicit username redacted]`) for `{username}` instead of the real name. The DM version is unaffected (it already says "You"), and admin notifications always show the real name. This is on by default whenever Profile Scan is enabled for the chat; turn it off under Profile Scan settings.
+**Flagged names:** if [Profile Scanning](08-profile-scanning.md#masking-flagged-names) flagged the banned user's name, the chat caption shows `[name removed: explicit]` (or `[name removed: spam]`) for `{username}` instead of the real name, as every bot message does while **Mask flagged names** is on (the default). The DM version is unaffected (it already says "You").
 
 ### Chat vs. DM Grammar
 
@@ -257,7 +257,7 @@ Running `/dmcelebrations on` again while a prompt is open replaces it, so there 
 
 ### What Subscribers Receive
 
-- The same GIF and chat caption as the chat post (including [explicit username masking](#placeholder-variables)), headed with the **chat name** so members subscribed to several chats can tell where each one came from
+- The same GIF and chat caption as the chat post (including [flagged-name masking](#placeholder-variables)), headed with the **chat name** so members subscribed to several chats can tell where each one came from
 - A DM for **every** ban celebration in the chat. **Enable** and the **Trigger on auto-ban / manual ban** toggles control **only the chat post** -- subscribers get every celebration even when the chat post is off
 - If the chat post is off and nobody is subscribed, nothing happens and no GIF or caption is used up from the rotation
 
