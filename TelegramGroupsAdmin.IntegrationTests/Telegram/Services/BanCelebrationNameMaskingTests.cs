@@ -35,7 +35,7 @@ namespace TelegramGroupsAdmin.IntegrationTests.Telegram.Services;
 /// - User: <see cref="GoldenDatasetConstants.IdentityService.ScannedTwiceExplicitUserId"/>
 ///   (@bagging_armado, "Comdl Xbnbsprtni"); latest scan has ai_explicit_display_text = true.
 /// - Chat: <see cref="GoldenDatasetConstants.DmCelebrations.WorkshopAlumniChatId"/>; ban celebration
-///   enabled for auto bans, no chat welcome_config, so the global row's masking setting applies.
+///   enabled for auto bans (guarded), no chat welcome_config, so the global row's masking setting applies.
 ///
 /// GIF and caption repositories are substituted with one fixed item: the canonical rotation
 /// picks any of 74 captions (two lack {username}), and rotation is not this test's subject.
@@ -112,6 +112,16 @@ public class BanCelebrationNameMaskingTests
         // Guard the canonical preconditions so a later canonical edit fails loudly.
         await using (var ctx = _testHelper!.GetDbContext())
         {
+            var chatCelebration = await ctx.Configs.AsNoTracking()
+                .Where(c => c.ChatId == ChatId).Select(c => c.BanCelebrationConfig).SingleAsync();
+            using (var celebration = JsonDocument.Parse(chatCelebration!))
+            {
+                Assert.That(celebration.RootElement.GetProperty("enabled").GetBoolean(), Is.True,
+                    "Workshop Alumni's ban_celebration_config is enabled");
+                Assert.That(celebration.RootElement.GetProperty("triggerOnAutoBan").GetBoolean(), Is.True,
+                    "Workshop Alumni celebrates auto bans");
+            }
+
             var globalWelcome = await ctx.Configs.AsNoTracking()
                 .Where(c => c.ChatId == 0).Select(c => c.WelcomeConfig).SingleAsync();
             using var json = JsonDocument.Parse(globalWelcome!);
@@ -127,7 +137,8 @@ public class BanCelebrationNameMaskingTests
             Assert.That(chatWelcome, Is.Null, "the chat has no own welcome_config, so the global row applies");
 
             var latestScan = await ctx.ProfileScanResults.AsNoTracking()
-                .Where(r => r.UserId == BannedUserId).OrderByDescending(r => r.ScannedAt).FirstAsync();
+                .Where(r => r.UserId == BannedUserId)
+                .OrderByDescending(r => r.ScannedAt).ThenByDescending(r => r.Id).FirstAsync();
             Assert.That(latestScan.AiExplicitDisplayText, Is.True, "the anchor's latest scan flags the name as explicit");
         }
 

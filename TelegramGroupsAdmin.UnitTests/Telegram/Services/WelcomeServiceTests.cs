@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
+using NSubstitute.ExceptionExtensions;
 using global::Telegram.Bot.Types;
 using global::Telegram.Bot.Types.Enums;
 using global::Telegram.Bot.Types.ReplyMarkups;
@@ -459,6 +460,65 @@ public class WelcomeServiceTests
             TestChatId,
             Arg.Is<TelegramMessage>(m => m!.Text.StartsWith(NameRedaction.Explicit + ", ⚠️")),
             Arg.Any<ReplyParameters?>(), Arg.Any<InlineKeyboardMarkup?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task HandleCallbackQuery_DmAcceptHeldForReview_GroupEditUsesGroupChatMasking()
+    {
+        // The accept click happens in the DM; the hold edit goes to the group, so the group's
+        // masking applies, not the DM chat's.
+        const int welcomeMessageId = 77;
+        _identities.ResolveAsync(TestUserId, Arg.Any<CancellationToken>())
+            .Returns(UserIdentity.ForTest(TestUserId, "Bad", verdict: NameVerdict.Explicit));
+        _configService.GetNameMaskingAsync(TestChatId, Arg.Any<CancellationToken>()).Returns(NameMasking.On);
+        _configService.GetNameMaskingAsync(TestUserId, Arg.Any<CancellationToken>()).Returns(NameMasking.Off);
+        _chatService.GetChatAsync(TestChatId, Arg.Any<CancellationToken>())
+            .Returns(new ChatFullInfo { Id = TestChatId, Type = ChatType.Supergroup, Title = "Test Group" });
+        _welcomeResponsesRepository.GetByUserAndChatAsync(TestUserId, TestChatId, Arg.Any<CancellationToken>())
+            .Returns(new WelcomeResponse(
+                Id: 5, ChatId: TestChatId, UserId: TestUserId, Username: null,
+                WelcomeMessageId: welcomeMessageId, Response: WelcomeResponseType.Pending,
+                RespondedAt: DateTimeOffset.UtcNow, DmSent: true, DmFallback: false,
+                CreatedAt: DateTimeOffset.UtcNow, TimeoutJobId: null));
+        _admissionHandler.TryAdmitUserAsync(Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<Actor>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(AdmissionResult.StillWaiting);
+        var callback = new CallbackQuery
+        {
+            Id = "cb-dm",
+            Data = $"dm_accept:{TestChatId}:{TestUserId}",
+            From = new User { Id = TestUserId, FirstName = "Bad", IsBot = false },
+            Message = new Message { Id = 300, Chat = new Chat { Id = TestUserId, Type = ChatType.Private } }
+        };
+
+        await _sut.HandleCallbackQueryAsync(callback, CancellationToken.None);
+
+        await _messageService.Received(1).EditAndUpdateMessageAsync(
+            TestChatId,
+            welcomeMessageId,
+            Arg.Is<TelegramMessage>(m => m!.Text.StartsWith(NameRedaction.Explicit + " ⏳")),
+            Arg.Any<InlineKeyboardMarkup?>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task HandleCallbackQuery_ExamCallback_ResolveFails_StillAnswersCallback()
+    {
+        _examFlowService.IsExamCallback(Arg.Any<string>()).Returns(true);
+        _identities.ResolveAsync(TestUserId, Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException("db down"));
+        var callback = new CallbackQuery
+        {
+            Id = "cb-exam",
+            Data = "exam:1:0:0",
+            From = new User { Id = TestUserId, FirstName = "Test", IsBot = false },
+            Message = new Message { Id = 301, Chat = new Chat { Id = TestUserId, Type = ChatType.Private } }
+        };
+
+        Assert.DoesNotThrowAsync(() => _sut.HandleCallbackQueryAsync(callback, CancellationToken.None));
+
+        await _messageService.Received(1).AnswerCallbackAsync(
+            "cb-exam", Arg.Any<string?>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
+        await _examFlowService.DidNotReceiveWithAnyArgs().HandleMcAnswerAsync(default, default, default, default!, default!);
     }
 
     #endregion

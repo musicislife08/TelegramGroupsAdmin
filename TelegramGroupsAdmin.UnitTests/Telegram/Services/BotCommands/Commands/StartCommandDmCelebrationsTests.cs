@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
+using NSubstitute.ExceptionExtensions;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Core.Models;
@@ -19,19 +20,21 @@ public class StartCommandDmCelebrationsTests
 
     private IBanCelebrationSubscriptionService _subscriptions = null!;
     private IUserIdentityService _identities = null!;
+    private ITelegramUserRepository _users = null!;
     private StartCommand _sut = null!;
 
     [SetUp]
     public void SetUp()
     {
         _subscriptions = Substitute.For<IBanCelebrationSubscriptionService>();
+        _users = Substitute.For<ITelegramUserRepository>();
         _identities = Substitute.For<IUserIdentityService>();
         _identities.ResolveAsync(UserId, Arg.Any<CancellationToken>())
             .Returns(UserIdentity.ForTest(UserId, "Kim"));
         _sut = new StartCommand(
             NullLogger<StartCommand>.Instance,
             Substitute.For<IWelcomeResponsesRepository>(),
-            Substitute.For<ITelegramUserRepository>(),
+            _users,
             Substitute.For<IPendingNotificationsRepository>(),
             Substitute.For<IServiceProvider>(),
             Substitute.For<IBotMessageService>(),
@@ -74,5 +77,16 @@ public class StartCommandDmCelebrationsTests
 
         Assert.That(result.Message.Text, Does.Contain("Welcome to TelegramGroupsAdmin Bot"));
         await _subscriptions.DidNotReceiveWithAnyArgs().ConfirmFromStartAsync(default, default!);
+    }
+
+    [Test]
+    public async Task StartCommand_SenderResolveFails_DmsAreStillEnabled()
+    {
+        _identities.ResolveAsync(UserId, Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException("db down"));
+
+        Assert.ThrowsAsync<InvalidOperationException>(() => _sut.ExecuteAsync(PrivateStart(), [], PermissionLevel.Member));
+
+        await _users.Received(1).EnableBotDmAsync(UserId, Arg.Any<CancellationToken>());
     }
 }

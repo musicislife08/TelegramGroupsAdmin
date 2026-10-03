@@ -78,18 +78,22 @@ public class StartCommand : IBotCommand
             return new CommandResult(TelegramMessage.Empty, DeleteCommandMessage, DeleteResponseAfterSeconds); // Silently ignore /start in group chats
         }
 
+        // User started a private conversation with the bot - enable DM notifications
+        // This allows the bot to send private messages to this user in the future.
+        // Done before resolving the sender so a resolve failure cannot stop it.
+        if (message.From != null)
+        {
+            await _telegramUserRepository.EnableBotDmAsync(message.From.Id, cancellationToken);
+        }
+
         // DMs are not observed (a DM rename recorded without a rescan would use the rename up),
         // so the sender is resolved by id once and passed to every branch below.
         var sender = message.From != null
             ? await _identityService.ResolveAsync(message.From.Id, cancellationToken)
             : null;
 
-        // User started a private conversation with the bot - enable DM notifications
-        // This allows the bot to send private messages to this user in the future
         if (sender != null)
         {
-            await _telegramUserRepository.EnableBotDmAsync(sender.Id, cancellationToken);
-
             // Deliver any pending notifications
             await DeliverPendingNotificationsAsync(sender, cancellationToken);
         }

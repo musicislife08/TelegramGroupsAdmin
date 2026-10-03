@@ -739,9 +739,7 @@ public class WelcomeService(
 
         if (isExamCallback)
         {
-            // The answerer is resolved by id: callbacks are not observed.
-            var answerer = await identityService.ResolveAsync(user.Id, cancellationToken);
-            await HandleExamCallbackAsync(callbackQuery, data, answerer, message, cancellationToken);
+            await HandleExamCallbackAsync(callbackQuery, data, user, message, cancellationToken);
             return;
         }
 
@@ -872,17 +870,20 @@ public class WelcomeService(
     private async Task HandleExamCallbackAsync(
         CallbackQuery callbackQuery,
         string data,
-        UserIdentity user,
+        User from,
         Message message,
         CancellationToken cancellationToken)
     {
         logger.LogDebug(
             "Exam callback received: {Data} from {User}",
             data,
-            user.ToLogDebug());
+            from.ToLogDebug());
 
         try
         {
+            // The answerer is resolved by id: callbacks are not observed.
+            var user = await identityService.ResolveAsync(from.Id, cancellationToken);
+
             // Parse callback and handle via ExamFlowService
             var parsed = examFlowService.ParseExamCallback(data);
             if (parsed == null)
@@ -942,6 +943,16 @@ public class WelcomeService(
         catch (Exception ex)
         {
             logger.LogError(ex, "Failed to handle exam callback {Data}", data);
+
+            // Still clear the button's loading state.
+            try
+            {
+                await messageService.AnswerCallbackAsync(callbackQuery.Id, cancellationToken: cancellationToken);
+            }
+            catch (Exception answerEx)
+            {
+                logger.LogDebug(answerEx, "Failed to answer exam callback {CallbackId}", callbackQuery.Id);
+            }
         }
     }
 
