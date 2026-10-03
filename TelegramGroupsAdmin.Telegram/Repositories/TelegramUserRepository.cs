@@ -7,6 +7,8 @@ using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Repositories.Mappings;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Core.Extensions;
+using TelegramGroupsAdmin.Core.Utilities;
+using TelegramGroupsAdmin.Telegram.Helpers;
 using TelegramGroupsAdmin.Telegram.Constants;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using DataModels = TelegramGroupsAdmin.Data.Models;
@@ -86,6 +88,111 @@ public class TelegramUserRepository : ITelegramUserRepository
         _logger.LogDebug("Ensured Telegram user {User}", user.ToLogDebug());
 
         return entity.ToModel();
+    }
+
+    /// <inheritdoc/>
+    public async Task<UiModels.ObservedNamesResult> GetOrUpdateAsync(
+        UiModels.ObservedUser observed, UiModels.ProfileChangeContext changeContext, CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        var now = DateTimeOffset.UtcNow;
+        var isTrusted = TelegramConstants.IsSystemUser(observed.Id);
+
+        await context.Database.ExecuteSqlAsync($"""
+            INSERT INTO telegram_users (
+                telegram_user_id, username, first_name, last_name, names_observed_at,
+                is_bot, is_trusted, is_banned, bot_dm_enabled,
+                first_seen_at, last_seen_at, created_at, updated_at, is_active
+            ) VALUES (
+                {observed.Id}, {observed.Username}, {observed.FirstName}, {observed.LastName}, {observed.ObservedAt},
+                {observed.IsBot}, {isTrusted}, {false}, {false},
+                {now}, {now}, {now}, {now}, {false}
+            )
+            ON CONFLICT (telegram_user_id) DO NOTHING
+            """, cancellationToken);
+
+        // The FOR UPDATE row lock serializes concurrent writers. A writer that waited re-reads the
+        // committed row, so the WHERE fails for it and only the statement that changed the names
+        // returns a row. RETURNING old.* yields the names as they were before this update.
+        var previous = await context.Database.SqlQuery<PreviousNamesRow>($"""
+            UPDATE telegram_users t
+            SET first_name = {observed.FirstName},
+                last_name = {observed.LastName},
+                username = {observed.Username},
+                names_observed_at = {observed.ObservedAt},
+                updated_at = {now}
+            FROM (SELECT telegram_user_id, first_name, last_name, username
+                  FROM telegram_users WHERE telegram_user_id = {observed.Id} FOR UPDATE) old
+            WHERE t.telegram_user_id = old.telegram_user_id
+              AND (t.names_observed_at IS NULL OR {observed.ObservedAt} >= t.names_observed_at)
+              AND (t.first_name IS DISTINCT FROM {observed.FirstName}
+                   OR t.last_name IS DISTINCT FROM {observed.LastName}
+                   OR t.username IS DISTINCT FROM {observed.Username})
+            RETURNING old.first_name AS "FirstName", old.last_name AS "LastName", old.username AS "Username"
+            """).ToListAsync(cancellationToken);
+
+        UiModels.PreviousNames? renamed = null;
+        if (previous.Count == 1)
+        {
+            var old = previous[0];
+            renamed = new UiModels.PreviousNames(old.FirstName, old.LastName, old.Username);
+
+            context.UsernameHistory.Add(new DataModels.UsernameHistoryDto
+            {
+                UserId = observed.Id,
+                Username = old.Username,
+                FirstName = old.FirstName,
+                LastName = old.LastName,
+                RecordedAt = now
+            });
+
+            var reason = ProfileChangeReason.Build(renamed, observed);
+            context.UserActions.Add(new UiModels.UserActionRecord(
+                Id: 0,
+                UserId: observed.Id,
+                ActionType: UserActionType.ProfileChange,
+                MessageId: changeContext.MessageId,
+                ChatId: changeContext.Chat?.Id,
+                IssuedBy: Actor.ProfileDiffDetection,
+                IssuedAt: now,
+                ExpiresAt: null,
+                Reason: changeContext.Chat is { } chat ? AuditReason.WithChatTag(chat, reason) : reason).ToDto());
+
+            await context.SaveChangesAsync(cancellationToken);
+        }
+
+        // Advance the watermark when the names were already equal, so a later stale observation
+        // cannot overwrite them.
+        await context.Database.ExecuteSqlAsync($"""
+            UPDATE telegram_users SET names_observed_at = {observed.ObservedAt}
+            WHERE telegram_user_id = {observed.Id}
+              AND (names_observed_at IS NULL OR names_observed_at < {observed.ObservedAt})
+            """, cancellationToken);
+
+        await transaction.CommitAsync(cancellationToken);
+
+        var entity = await context.TelegramUsers.AsNoTracking()
+            .FirstAsync(u => u.TelegramUserId == observed.Id, cancellationToken);
+
+        if (renamed is not null)
+            _logger.LogDebug("Recorded rename of Telegram user {User}", entity.ToLogDebug());
+
+        return new UiModels.ObservedNamesResult(entity.ToModel(), renamed);
+    }
+
+    /// <summary>Columns returned by the rename UPDATE; names match the SQL aliases.</summary>
+    private sealed record PreviousNamesRow(string? FirstName, string? LastName, string? Username);
+
+    /// <inheritdoc/>
+    public async Task MarkActiveAsync(long telegramUserId, DateTimeOffset seenAt, CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        await context.Database.ExecuteSqlAsync($"""
+            UPDATE telegram_users
+            SET is_active = true, last_seen_at = {seenAt}, updated_at = {DateTimeOffset.UtcNow}
+            WHERE telegram_user_id = {telegramUserId}
+            """, cancellationToken);
     }
 
     /// <summary>

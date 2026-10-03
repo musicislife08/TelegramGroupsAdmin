@@ -41,6 +41,13 @@ public class TelegramUserDto
     public string? LastName { get; set; }
 
     /// <summary>
+    /// When the stored names were observed (message date, edit date, or scan fetch time).
+    /// An observation older than this never overwrites the names.
+    /// </summary>
+    [Column("names_observed_at")]
+    public DateTimeOffset? NamesObservedAt { get; set; }
+
+    /// <summary>
     /// Path to downloaded user profile photo (e.g., "user_photos/1312830442.jpg")
     /// Immediate need: Centralized photo storage for UI rendering
     /// </summary>
