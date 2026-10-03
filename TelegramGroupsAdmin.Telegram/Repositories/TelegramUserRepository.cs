@@ -30,7 +30,8 @@ public class TelegramUserRepository : ITelegramUserRepository
     }
 
     /// <summary>
-    /// Get Telegram user by ID
+    /// Returns one identity per id found, read from the user_identities view
+    /// (names plus the verdict from the latest profile scan). Ids with no row are absent.
     /// </summary>
     public async Task<IReadOnlyList<UserIdentity>> GetIdentitiesAsync(
         IReadOnlyCollection<long> userIds, CancellationToken cancellationToken = default)
@@ -44,6 +45,9 @@ public class TelegramUserRepository : ITelegramUserRepository
         return rows.Select(r => r.ToIdentity()).ToList();
     }
 
+    /// <summary>
+    /// Get Telegram user by ID
+    /// </summary>
     public async Task<UiModels.TelegramUser?> GetByTelegramIdAsync(long telegramUserId, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);

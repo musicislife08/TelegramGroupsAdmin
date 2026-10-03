@@ -17,7 +17,7 @@ public class UserIdentityView
             SELECT r.ai_explicit_display_text
             FROM profile_scan_results r
             WHERE r.user_id = u.telegram_user_id
-            ORDER BY r.scanned_at DESC
+            ORDER BY r.scanned_at DESC, r.id DESC
             LIMIT 1
         ) s ON true
         """;
