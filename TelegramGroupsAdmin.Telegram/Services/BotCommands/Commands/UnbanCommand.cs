@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
+using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
@@ -18,6 +19,7 @@ public class UnbanCommand : IBotCommand
     private readonly ILogger<UnbanCommand> _logger;
     private readonly IBotModerationService _moderationService;
     private readonly IUserIdentityService _identityService;
+    private readonly IConfigService _configService;
 
     public string Name => "unban";
     public string Description => "Remove ban from user";
@@ -30,11 +32,13 @@ public class UnbanCommand : IBotCommand
     public UnbanCommand(
         ILogger<UnbanCommand> logger,
         IBotModerationService moderationService,
-        IUserIdentityService identityService)
+        IUserIdentityService identityService,
+        IConfigService configService)
     {
         _logger = logger;
         _moderationService = moderationService;
         _identityService = identityService;
+        _configService = configService;
     }
 
     public async Task<CommandResult> ExecuteAsync(
@@ -78,9 +82,14 @@ public class UnbanCommand : IBotCommand
                 return new CommandResult(TelegramMessage.Plain($"❌ {result.ErrorMessage}"), DeleteCommandMessage, DeleteResponseAfterSeconds);
             }
 
-            var response = $"✅ User @{targetUser.Username ?? targetUser.Id.ToString()} unbanned from {result.ChatsAffected} chat(s)";
+            // The mention follows the chat's name-masking setting
+            var masking = await _configService.GetNameMaskingAsync(message.Chat.Id, cancellationToken);
+            var response = TelegramMessageBuilder.For(masking)
+                .Text("✅ User ").Mention(targetUser)
+                .Text($" unbanned from {result.ChatsAffected} chat(s)")
+                .Build();
 
-            return new CommandResult(TelegramMessage.Plain(response), DeleteCommandMessage, DeleteResponseAfterSeconds);
+            return new CommandResult(response, DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
         catch (Exception ex)
         {

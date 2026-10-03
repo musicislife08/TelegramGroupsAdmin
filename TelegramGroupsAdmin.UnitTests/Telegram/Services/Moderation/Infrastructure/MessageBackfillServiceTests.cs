@@ -51,11 +51,15 @@ public class MessageBackfillServiceTests
     }
 
     [Test]
-    public async Task Backfill_MessageWithoutSender_IsSkipped()
+    public async Task Backfill_MessageWithoutSender_IsStoredUnderUserZero()
     {
+        var unknown = UserIdentity.ForTest(0);
+        _identities.ResolveAsync(0, Arg.Any<CancellationToken>()).Returns(unknown);
+
         var backfilled = await _sut.BackfillIfMissingAsync(42, ChatId, Missed(from: null));
 
-        Assert.That(backfilled, Is.False);
-        await _messages.DidNotReceiveWithAnyArgs().InsertMessageAsync(default!, default);
+        Assert.That(backfilled, Is.True);
+        await _messages.Received(1).InsertMessageAsync(
+            Arg.Is<MessageRecord>(m => m!.User == unknown), Arg.Any<CancellationToken>());
     }
 }

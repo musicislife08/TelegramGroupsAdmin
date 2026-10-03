@@ -34,11 +34,12 @@ public sealed class UserIdentityService(
         UserIdentity identity;
         try
         {
-            identity = await ResolveAsync(observed.Id, ct);
+            identity = (await ReadManyAsync([observed.Id], ct))[0];
         }
         catch (Exception ex) when (!ct.IsCancellationRequested)
         {
-            // A failed read must not cost the update its moderation either.
+            // A failed read must not cost the update its moderation either; the observed
+            // names are better than the id-only fallback ResolveAsync would give.
             logger.LogError(ex, "Failed to resolve identity for user {UserId} after recording names", observed.Id);
             return new UserIdentity(observed.Id, observed.FirstName, observed.LastName, observed.Username);
         }
@@ -66,6 +67,21 @@ public sealed class UserIdentityService(
         (await ResolveManyAsync([userId], ct))[0];
 
     public async Task<IReadOnlyList<UserIdentity>> ResolveManyAsync(IReadOnlyCollection<long> userIds, CancellationToken ct = default)
+    {
+        try
+        {
+            return await ReadManyAsync(userIds, ct);
+        }
+        catch (Exception ex) when (!ct.IsCancellationRequested)
+        {
+            // An identity lookup must never block moderation or /start: fall back to id-only
+            // (unscanned) identities, as ObserveAsync falls back to the observed names.
+            logger.LogWarning(ex, "Failed to resolve identities for {Count} user(s); using id-only identities", userIds.Count);
+            return userIds.Select(UserIdentity.FromId).ToList();
+        }
+    }
+
+    private async Task<IReadOnlyList<UserIdentity>> ReadManyAsync(IReadOnlyCollection<long> userIds, CancellationToken ct)
     {
         var found = (await users.GetIdentitiesAsync(userIds, ct)).ToDictionary(i => i.Id);
         return userIds.Select(id => found.TryGetValue(id, out var identity) ? identity : UserIdentity.FromId(id)).ToList();

@@ -83,6 +83,43 @@ public class UserIdentityServiceTests
     }
 
     [Test]
+    public async Task Resolve_RepositoryThrows_GivesIdOnlyUnscanned()
+    {
+        _users.GetIdentitiesAsync(Arg.Any<IReadOnlyCollection<long>>(), Arg.Any<CancellationToken>())
+            .Returns<IReadOnlyList<UserIdentity>>(_ => throw new InvalidOperationException("db down"));
+
+        var identity = await _sut.ResolveAsync(7);
+
+        Assert.That(identity.Id, Is.EqualTo(7));
+        Assert.That(identity.DisplayName, Is.EqualTo("User 7"));
+        Assert.That(identity.Verdict, Is.EqualTo(NameVerdict.Unscanned));
+    }
+
+    [Test]
+    public async Task ResolveMany_RepositoryThrows_GivesOneIdOnlyIdentityPerIdInOrder()
+    {
+        _users.GetIdentitiesAsync(Arg.Any<IReadOnlyCollection<long>>(), Arg.Any<CancellationToken>())
+            .Returns<IReadOnlyList<UserIdentity>>(_ => throw new InvalidOperationException("db down"));
+
+        var result = await _sut.ResolveManyAsync([3, 1, 2]);
+
+        Assert.That(result.Select(i => i.Id), Is.EqualTo(new long[] { 3, 1, 2 }));
+        Assert.That(result.Select(i => i.DisplayName), Is.EqualTo(new[] { "User 3", "User 1", "User 2" }));
+        Assert.That(result.All(i => i.Verdict == NameVerdict.Unscanned), Is.True);
+    }
+
+    [Test]
+    public void Resolve_Cancelled_PropagatesCancellation()
+    {
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        _users.GetIdentitiesAsync(Arg.Any<IReadOnlyCollection<long>>(), Arg.Any<CancellationToken>())
+            .Returns<IReadOnlyList<UserIdentity>>(_ => throw new OperationCanceledException(cts.Token));
+
+        Assert.CatchAsync<OperationCanceledException>(() => _sut.ResolveAsync(7, cts.Token));
+    }
+
+    [Test]
     public async Task Observe_RenameOfUntrustedUser_Inline_RescansThroughGate()
     {
         Renamed(Row(7, "New"));

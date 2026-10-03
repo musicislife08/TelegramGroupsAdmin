@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
+using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
@@ -22,6 +23,7 @@ public class MuteCommand : IBotCommand
     private readonly IServiceProvider _serviceProvider;
     private readonly IBotModerationService _moderationService;
     private readonly IUserIdentityService _identityService;
+    private readonly IConfigService _configService;
 
     public string Name => "mute";
     public string Description => "Temporarily mute user with auto-unmute";
@@ -35,12 +37,14 @@ public class MuteCommand : IBotCommand
         ILogger<MuteCommand> logger,
         IServiceProvider serviceProvider,
         IBotModerationService moderationService,
-        IUserIdentityService identityService)
+        IUserIdentityService identityService,
+        IConfigService configService)
     {
         _logger = logger;
         _serviceProvider = serviceProvider;
         _moderationService = moderationService;
         _identityService = identityService;
+        _configService = configService;
     }
 
     public async Task<CommandResult> ExecuteAsync(
@@ -115,11 +119,15 @@ public class MuteCommand : IBotCommand
                 return new CommandResult(TelegramMessage.Plain($"❌ Failed to mute user: {result.ErrorMessage}"), DeleteCommandMessage, DeleteResponseAfterSeconds);
             }
 
-            // Build success message
-            var response = $"🔇 User @{targetUser.Username ?? targetUser.Id.ToString()} muted in {result.ChatsAffected} chat(s)\n" +
+            // Build success message; the mention follows the chat's name-masking setting
+            var masking = await _configService.GetNameMaskingAsync(message.Chat.Id, cancellationToken);
+            var response = TelegramMessageBuilder.For(masking)
+                .Text("🔇 User ").Mention(targetUser)
+                .Text($" muted in {result.ChatsAffected} chat(s)\n" +
                           $"Duration: {TimeSpanUtilities.FormatDuration(duration)}\n" +
                           $"Reason: {reason}\n" +
-                          $"⚠️ Will be automatically unmuted at {DateTimeOffset.UtcNow.Add(duration):yyyy-MM-dd HH:mm} UTC";
+                          $"⚠️ Will be automatically unmuted at {DateTimeOffset.UtcNow.Add(duration):yyyy-MM-dd HH:mm} UTC")
+                .Build();
 
             _logger.LogInformation(
                 "{TargetUser} muted by {Executor} in {ChatsAffected} chats for {Duration}. Reason: {Reason}",
@@ -127,7 +135,7 @@ public class MuteCommand : IBotCommand
                 sender.ToLogInfo(),
                 result.ChatsAffected, duration, reason);
 
-            return new CommandResult(TelegramMessage.Plain(response), DeleteCommandMessage, DeleteResponseAfterSeconds);
+            return new CommandResult(response, DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
         catch (Exception ex)
         {

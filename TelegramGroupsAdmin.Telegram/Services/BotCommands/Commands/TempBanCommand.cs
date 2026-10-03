@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
+using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
@@ -23,6 +24,7 @@ public class TempBanCommand : IBotCommand
     private readonly IServiceProvider _serviceProvider;
     private readonly IBotModerationService _moderationService;
     private readonly IUserIdentityService _identityService;
+    private readonly IConfigService _configService;
 
     public string Name => "tempban";
     public string Description => "Temporarily ban user with auto-unrestriction";
@@ -36,12 +38,14 @@ public class TempBanCommand : IBotCommand
         ILogger<TempBanCommand> logger,
         IServiceProvider serviceProvider,
         IBotModerationService moderationService,
-        IUserIdentityService identityService)
+        IUserIdentityService identityService,
+        IConfigService configService)
     {
         _logger = logger;
         _serviceProvider = serviceProvider;
         _moderationService = moderationService;
         _identityService = identityService;
+        _configService = configService;
     }
 
     public async Task<CommandResult> ExecuteAsync(
@@ -116,11 +120,16 @@ public class TempBanCommand : IBotCommand
                 return new CommandResult(TelegramMessage.Plain($"❌ Failed to temp ban user: {result.ErrorMessage}"), DeleteCommandMessage);
             }
 
-            // Build success message (DM notification sent by ModerationActionService)
-            var response = $"⏱️ User @{targetUser.Username ?? targetUser.Id.ToString()} temp banned from {result.ChatsAffected} chat(s)\n" +
+            // Build success message (DM notification sent by ModerationActionService);
+            // the mention follows the chat's name-masking setting
+            var masking = await _configService.GetNameMaskingAsync(message.Chat.Id, cancellationToken);
+            var response = TelegramMessageBuilder.For(masking)
+                .Text("⏱️ User ").Mention(targetUser)
+                .Text($" temp banned from {result.ChatsAffected} chat(s)\n" +
                           $"Duration: {TimeSpanUtilities.FormatDuration(duration)}\n" +
                           $"Reason: {reason}\n" +
-                          $"⚠️ Will be automatically unbanned at {DateTimeOffset.UtcNow.Add(duration):yyyy-MM-dd HH:mm} UTC";
+                          $"⚠️ Will be automatically unbanned at {DateTimeOffset.UtcNow.Add(duration):yyyy-MM-dd HH:mm} UTC")
+                .Build();
 
             _logger.LogInformation(
                 "{TargetUser} temp banned by {Executor} from {ChatsAffected} chats for {Duration}. Reason: {Reason}",
@@ -129,7 +138,7 @@ public class TempBanCommand : IBotCommand
                 result.ChatsAffected, duration, reason);
 
             // Return CommandResult with dynamic deletion time matching tempban duration
-            return new CommandResult(TelegramMessage.Plain(response), DeleteCommandMessage, (int)duration.TotalSeconds);
+            return new CommandResult(response, DeleteCommandMessage, (int)duration.TotalSeconds);
         }
         catch (Exception ex)
         {

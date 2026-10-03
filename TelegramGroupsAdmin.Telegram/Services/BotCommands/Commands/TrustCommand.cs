@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
+using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
@@ -22,6 +23,7 @@ public class TrustCommand : IBotCommand
     private readonly IServiceProvider _serviceProvider;
     private readonly IBotModerationService _moderationService;
     private readonly IUserIdentityService _identityService;
+    private readonly IConfigService _configService;
 
     public string Name => "trust";
     public string Description => "Toggle trust status (bypass spam detection)";
@@ -35,12 +37,14 @@ public class TrustCommand : IBotCommand
         ILogger<TrustCommand> logger,
         IServiceProvider serviceProvider,
         IBotModerationService moderationService,
-        IUserIdentityService identityService)
+        IUserIdentityService identityService,
+        IConfigService configService)
     {
         _logger = logger;
         _serviceProvider = serviceProvider;
         _moderationService = moderationService;
         _identityService = identityService;
+        _configService = configService;
     }
 
     public async Task<CommandResult> ExecuteAsync(
@@ -92,7 +96,8 @@ public class TrustCommand : IBotCommand
 
         // Build reason with chat context
         var chatName = message.Chat.Title ?? message.Chat.Username ?? message.Chat.Id.ToString();
-        var userDisplay = targetUser.Username ?? targetUser.Id.ToString();
+        // Confirmations mention the target following the chat's name-masking setting
+        var masking = await _configService.GetNameMaskingAsync(message.Chat.Id, cancellationToken);
 
         if (isAlreadyTrusted)
         {
@@ -122,8 +127,12 @@ public class TrustCommand : IBotCommand
                 sender.ToLogInfo(),
                 message.Chat.ToLogInfo());
 
-            return new CommandResult(TelegramMessage.Plain($"✅ User @{userDisplay} is no longer trusted\n\n" +
-                   $"This user's messages will now be subject to spam detection."), DeleteCommandMessage, DeleteResponseAfterSeconds);
+            return new CommandResult(
+                TelegramMessageBuilder.For(masking)
+                    .Text("✅ User ").Mention(targetUser).Text(" is no longer trusted").LineBreak().LineBreak()
+                    .Text("This user's messages will now be subject to spam detection.")
+                    .Build(),
+                DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
         else
         {
@@ -153,8 +162,12 @@ public class TrustCommand : IBotCommand
                 sender.ToLogInfo(),
                 message.Chat.ToLogInfo());
 
-            return new CommandResult(TelegramMessage.Plain($"✅ User @{userDisplay} marked as trusted\n\n" +
-                   $"This user's messages will bypass spam detection globally."), DeleteCommandMessage, DeleteResponseAfterSeconds);
+            return new CommandResult(
+                TelegramMessageBuilder.For(masking)
+                    .Text("✅ User ").Mention(targetUser).Text(" marked as trusted").LineBreak().LineBreak()
+                    .Text("This user's messages will bypass spam detection globally.")
+                    .Build(),
+                DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
     }
 }

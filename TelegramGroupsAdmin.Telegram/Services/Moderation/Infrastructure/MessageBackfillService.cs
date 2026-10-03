@@ -59,18 +59,11 @@ public class MessageBackfillService : IMessageBackfillService
             return false;
         }
 
-        // Like the live pipeline, a message without a sender (channel post) is not stored.
-        if (telegramMessage.From is null)
-        {
-            _logger.LogInformation(
-                "Message {MessageId} has no sender. Skipping backfill.",
-                messageId);
-            return false;
-        }
-
         try
         {
-            var author = await _identityService.ResolveAsync(telegramMessage.From.Id, cancellationToken);
+            // A message without a sender (channel post) is stored under user 0, which resolves
+            // to an id-only identity.
+            var author = await _identityService.ResolveAsync(telegramMessage.From?.Id ?? 0, cancellationToken);
             var messageRecord = new MessageRecord(
                 MessageId: messageId,
                 User: author,
