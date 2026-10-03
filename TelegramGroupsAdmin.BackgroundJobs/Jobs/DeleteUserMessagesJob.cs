@@ -6,6 +6,7 @@ using TelegramGroupsAdmin.BackgroundJobs.Metrics;
 using TelegramGroupsAdmin.Core.JobPayloads;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.Telegram.Services.Identity;
 
 namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
 
@@ -18,6 +19,7 @@ public class DeleteUserMessagesJob(
     ILogger<DeleteUserMessagesJob> logger,
     IBotMessageService messageService,
     IMessageHistoryRepository messageHistoryRepository,
+    IUserIdentityService identityService,
     JobMetrics jobMetrics) : IJob
 {
     public async Task Execute(IJobExecutionContext context)
@@ -38,10 +40,13 @@ public class DeleteUserMessagesJob(
         var startTimestamp = Stopwatch.GetTimestamp();
         var success = false;
         var deletedCount = 0;
-        var user = payload.User;
 
         try
         {
+            // The payload holds the identity captured when the job was queued; log the
+            // user's current identity
+            var user = await identityService.ResolveAsync(payload.User.Id, cancellationToken);
+
             logger.LogInformation(
                 "Starting cross-chat message cleanup for user {UserDisplay} ({UserId})",
                 user.DisplayName, user.Id);

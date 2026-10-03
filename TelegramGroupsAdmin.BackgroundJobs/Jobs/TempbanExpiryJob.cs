@@ -5,6 +5,7 @@ using TelegramGroupsAdmin.BackgroundJobs.Helpers;
 using TelegramGroupsAdmin.BackgroundJobs.Metrics;
 using TelegramGroupsAdmin.Core.JobPayloads;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.Telegram.Services.Identity;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
 
 namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
@@ -18,6 +19,7 @@ namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
 public class TempbanExpiryJob(
     ILogger<TempbanExpiryJob> logger,
     IBotModerationService moderationService,
+    IUserIdentityService identityService,
     JobMetrics jobMetrics) : IJob
 {
     public async Task Execute(IJobExecutionContext context)
@@ -41,9 +43,13 @@ public class TempbanExpiryJob(
 
         try
         {
+            // The payload holds the identity captured when the tempban was issued; act on the
+            // user's current identity
+            var user = await identityService.ResolveAsync(payload.User.Id, cancellationToken);
+
             logger.LogInformation(
                 "Processing tempban expiry for {User}. Reason: {Reason}, Expired at: {ExpiresAt}",
-                payload.User.DisplayName,
+                user.DisplayName,
                 payload.Reason,
                 payload.ExpiresAt);
 
@@ -53,7 +59,7 @@ public class TempbanExpiryJob(
                 var result = await moderationService.UnbanUserAsync(
                     new UnbanIntent
                     {
-                        User = payload.User,
+                        User = user,
                         Executor = Core.Models.Actor.TempbanExpiry,
                         Reason = $"Tempban expired (original reason: {payload.Reason})",
                         RestoreTrust = false
@@ -64,7 +70,7 @@ public class TempbanExpiryJob(
                 {
                     logger.LogInformation(
                         "Completed tempban expiry for {User}. Unbanned from {ChatsAffected} chats",
-                        payload.User.DisplayName,
+                        user.DisplayName,
                         result.ChatsAffected);
                     success = true;
                 }
@@ -72,7 +78,7 @@ public class TempbanExpiryJob(
                 {
                     logger.LogWarning(
                         "Tempban expiry partially failed for {User}: {Error}",
-                        payload.User.DisplayName,
+                        user.DisplayName,
                         result.ErrorMessage);
                     // Don't throw - partial success is acceptable for tempban expiry
                     success = true;
@@ -83,7 +89,7 @@ public class TempbanExpiryJob(
                 logger.LogError(
                     ex,
                     "Failed to process tempban expiry for {User}",
-                    payload.User.DisplayName);
+                    user.DisplayName);
                 throw; // Re-throw for retry logic and exception recording
             }
         }

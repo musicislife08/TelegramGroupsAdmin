@@ -4,10 +4,10 @@ using Quartz;
 using TelegramGroupsAdmin.BackgroundJobs.Metrics;
 using TelegramGroupsAdmin.BackgroundJobs.Services;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
-using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Models.BackgroundJobSettings;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Telegram.Services.Identity;
 using TelegramGroupsAdmin.Telegram.Services.UserApi;
 
 namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
@@ -24,6 +24,7 @@ public class ProfileRescanJob(
     ITelegramSessionManager sessionManager,
     ITelegramUserRepository userRepository,
     IProfileScanService profileScanService,
+    IUserIdentityService identityService,
     JobMetrics jobMetrics) : IJob
 {
     public async Task Execute(IJobExecutionContext context)
@@ -80,9 +81,10 @@ public class ProfileRescanJob(
                 {
                     // Look up the user's most recently active chat for alert/notification targeting
                     var chat = await userRepository.GetFirstChatForUserAsync(userId, cancellationToken);
+                    var user = await identityService.ResolveAsync(userId, cancellationToken);
 
                     var result = await profileScanService.ScanUserProfileAsync(
-                        UserIdentity.FromId(userId),
+                        user,
                         triggeringChat: chat,
                         cancellationToken);
 

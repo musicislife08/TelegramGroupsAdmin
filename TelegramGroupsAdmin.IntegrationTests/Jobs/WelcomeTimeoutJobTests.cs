@@ -15,6 +15,7 @@ using TelegramGroupsAdmin.Data.Models;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.Telegram.Services.Identity;
 using TelegramGroupsAdmin.BackgroundJobs.Metrics;
 using TelegramGroupsAdmin.Telegram.Metrics;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
@@ -63,6 +64,7 @@ public class WelcomeTimeoutJobTests
     private IBotModerationService? _mockModerationService;
     private IBotMessageService? _mockMessageService;
     private IExamSessionRepository? _mockExamSessionRepository;
+    private IUserIdentityService? _mockIdentities;
     private ILogger<WelcomeTimeoutJob>? _mockLogger;
 
     // ── helper properties ─────────────────────────────────────────────────────
@@ -90,6 +92,9 @@ public class WelcomeTimeoutJobTests
         _mockModerationService = Substitute.For<IBotModerationService>();
         _mockMessageService = Substitute.For<IBotMessageService>();
         _mockExamSessionRepository = Substitute.For<IExamSessionRepository>();
+        _mockIdentities = Substitute.For<IUserIdentityService>();
+        _mockIdentities.ResolveAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
+            .Returns(ci => UserIdentity.ForTest(ci.Arg<long>()));
         _mockLogger = Substitute.For<ILogger<WelcomeTimeoutJob>>();
     }
 
@@ -110,6 +115,7 @@ public class WelcomeTimeoutJobTests
             _mockModerationService!,
             _mockMessageService!,
             _mockExamSessionRepository!,
+            _mockIdentities!,
             new JobMetrics(),
             new WelcomeMetrics());
 
@@ -264,6 +270,32 @@ public class WelcomeTimeoutJobTests
             Assert.That(updated.RespondedAt, Is.GreaterThanOrEqualTo(beforeExecution),
                 "RespondedAt should reflect the timeout timestamp");
         }
+    }
+
+    /// <summary>
+    /// The payload carries the identity captured when the job was queued; the kick must use
+    /// the user's identity re-resolved by id (current names and verdict) instead.
+    /// </summary>
+    [Test]
+    public async Task Execute_ResolvesUserByIdBeforeKicking()
+    {
+        // Arrange — the queued snapshot is stale; the identity service has the current name
+        _mockIdentities!.ResolveAsync(WelcomeUserId, Arg.Any<CancellationToken>())
+            .Returns(UserIdentity.ForTest(WelcomeUserId, "Current"));
+        var payload = new WelcomeTimeoutPayload(
+            User: UserIdentity.ForTest(WelcomeUserId, "Stale"),
+            Chat: ChatIdentity.FromId(MainChatId),
+            WelcomeMessageId: PendingWelcomeMsgId);
+
+        // Act
+        await BuildJob().Execute(BuildJobContext(payload));
+
+        // Assert
+        await _mockModerationService!
+            .Received(1)
+            .KickUserFromChatAsync(
+                Arg.Is<KickIntent>(i => i!.User.Id == WelcomeUserId && i.User.DisplayName == "Current"),
+                Arg.Any<CancellationToken>());
     }
 
     /// <summary>

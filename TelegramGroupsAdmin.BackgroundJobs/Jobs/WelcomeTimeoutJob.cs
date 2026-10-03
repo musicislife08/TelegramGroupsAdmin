@@ -11,6 +11,7 @@ using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Telegram.Metrics;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.Telegram.Services.Identity;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
 
 namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
@@ -26,6 +27,7 @@ public class WelcomeTimeoutJob(
     IBotModerationService moderationService,
     IBotMessageService messageService,
     IExamSessionRepository examSessionRepository,
+    IUserIdentityService identityService,
     JobMetrics jobMetrics,
     WelcomeMetrics welcomeMetrics) : IJob
 {
@@ -106,6 +108,10 @@ public class WelcomeTimeoutJob(
                 payload.User.ToLogInfo(),
                 payload.Chat.ToLogInfo());
 
+            // The payload holds the identity captured when the job was queued; act on the
+            // user's current identity
+            var user = await identityService.ResolveAsync(payload.User.Id, cancellationToken);
+
             // Kick user for timeout
             var kicked = false;
             try
@@ -113,7 +119,7 @@ public class WelcomeTimeoutJob(
                 var kickResult = await moderationService.KickUserFromChatAsync(
                     new KickIntent
                     {
-                        User = payload.User,
+                        User = user,
                         Chat = payload.Chat,
                         Executor = Core.Models.Actor.WelcomeFlow,
                         Reason = "Welcome timeout"
@@ -125,14 +131,14 @@ public class WelcomeTimeoutJob(
                 {
                     logger.LogInformation(
                         "Kicked {User} from {Chat} due to welcome timeout",
-                        payload.User.ToLogInfo(),
+                        user.ToLogInfo(),
                         payload.Chat.ToLogInfo());
                 }
                 else
                 {
                     logger.LogWarning(
                         "Failed to kick {User} from {Chat}: {Error}",
-                        payload.User.ToLogInfo(),
+                        user.ToLogInfo(),
                         payload.Chat.ToLogInfo(),
                         kickResult.ErrorMessage);
                 }
@@ -142,7 +148,7 @@ public class WelcomeTimeoutJob(
                 logger.LogError(
                     ex,
                     "Failed to kick {User} from {Chat}",
-                    payload.User.ToLogInfo(),
+                    user.ToLogInfo(),
                     payload.Chat.ToLogInfo());
                 // Continue to update the response record even if kick fails
             }
@@ -181,7 +187,7 @@ public class WelcomeTimeoutJob(
 
             logger.LogInformation(
                 "Recorded welcome timeout for {User} in {Chat}",
-                payload.User.ToLogInfo(),
+                user.ToLogInfo(),
                 payload.Chat.ToLogInfo());
 
             success = true;

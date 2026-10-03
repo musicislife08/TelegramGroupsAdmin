@@ -10,9 +10,11 @@ using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.Core.JobPayloads;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.Telegram.Services.Identity;
 
 namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
 
@@ -32,7 +34,7 @@ public class FileScanJob(
     IBotMessageService messageService,
     IBotDmService dmService,
     IEnumerable<IContentCheckV2> contentChecks,
-    ITelegramUserRepository telegramUserRepository,
+    IUserIdentityService identityService,
     IMessageHistoryRepository messageHistoryRepository,
     IDetectionResultsRepository detectionResultsRepository,
     JobMetrics jobMetrics) : IJob
@@ -59,11 +61,15 @@ public class FileScanJob(
 
         try
         {
+            // The payload holds the identity captured when the job was queued; act on the
+            // user's current identity
+            var user = await identityService.ResolveAsync(payload.User.Id, cancellationToken);
+
             logger.LogInformation(
                 "Scanning file '{FileName}' ({FileSize} bytes) from {User} in {Chat} (message {MessageId})",
                 payload.FileName ?? "unknown",
                 payload.FileSize,
-                payload.User.DisplayName,
+                user.DisplayName,
                 payload.Chat.DisplayName,
                 payload.MessageId);
 
@@ -106,7 +112,7 @@ public class FileScanJob(
                 var scanRequest = new FileScanCheckRequest
                 {
                     Message = $"File attachment: {payload.FileName ?? "unknown"}",
-                    User = payload.User,
+                    User = user,
                     Chat = payload.Chat,
                     FilePath = tempFilePath,
                     FileName = payload.FileName ?? "unknown",
@@ -140,7 +146,7 @@ public class FileScanJob(
                 // Step 6: Take action if file is infected
                 if (isInfected)
                 {
-                    await HandleInfectedFileAsync(payload, scanResult, cancellationToken);
+                    await HandleInfectedFileAsync(payload, user, scanResult, cancellationToken);
                 }
             }
             catch (ApiRequestException ex) when (ex.Message.Contains("file is too big"))
@@ -161,9 +167,9 @@ public class FileScanJob(
                 logger.LogError(
                     ex,
                     "Failed to scan file for message {MessageId} ({User} in {Chat})",
-                    payload?.MessageId,
-                    payload?.User.DisplayName,
-                    payload?.Chat.DisplayName);
+                    payload.MessageId,
+                    user.DisplayName,
+                    payload.Chat.DisplayName);
 
                 // Re-throw for retry logic and exception recording
                 // Retriable scenarios: ClamAV daemon restart, VirusTotal rate limit, network timeout
@@ -202,12 +208,13 @@ public class FileScanJob(
     /// </summary>
     private async Task HandleInfectedFileAsync(
         FileScanJobPayload payload,
+        UserIdentity user,
         ContentCheckResponseV2 scanResult,
         CancellationToken cancellationToken)
     {
         logger.LogWarning(
             "INFECTED FILE DETECTED: {User} in {Chat}, message {MessageId} - {Details}",
-            payload.User.DisplayName,
+            user.DisplayName,
             payload.Chat.DisplayName,
             payload.MessageId,
             scanResult.Details);
@@ -260,7 +267,7 @@ public class FileScanJob(
         }
 
         // Notify user via DM (or fallback to chat if DM blocked)
-        await NotifyUserAsync(payload, scanResult, cancellationToken);
+        await NotifyUserAsync(payload, user, scanResult, cancellationToken);
     }
 
     /// <summary>
@@ -269,6 +276,7 @@ public class FileScanJob(
     /// </summary>
     private async Task NotifyUserAsync(
         FileScanJobPayload payload,
+        UserIdentity user,
         ContentCheckResponseV2 scanResult,
         CancellationToken cancellationToken)
     {
@@ -279,14 +287,10 @@ public class FileScanJob(
 
         try
         {
-            // Check if user has DM enabled (set when they /start the bot)
-            var telegramUser = await telegramUserRepository.GetByTelegramIdAsync(payload.User.Id, cancellationToken);
-            var canSendDm = telegramUser?.BotDmEnabled ?? false;
-
             // Try to send DM using IBotDmService with fallback to chat
             // IBotDmService handles the fallback automatically when fallbackChatId is provided
             var dmResult = await dmService.SendDmAsync(
-                payload.User,
+                user,
                 notificationText,
                 fallbackChatId: payload.Chat.Id, // Fallback to chat if DM fails
                 cancellationToken: cancellationToken);
@@ -295,7 +299,7 @@ public class FileScanJob(
             {
                 logger.LogInformation(
                     "Sent malware notification to {User} (DM: {WasDm}, Fallback: {UsedFallback})",
-                    payload.User.DisplayName,
+                    user.DisplayName,
                     dmResult.DmSent,
                     dmResult.FallbackUsed);
             }
@@ -303,21 +307,21 @@ public class FileScanJob(
             {
                 logger.LogWarning(
                     "Failed to notify {User} about infected file. Error: {Error}",
-                    payload.User.DisplayName,
+                    user.DisplayName,
                     dmResult.ErrorMessage);
             }
 
             logger.LogInformation(
                 "Sent malware notification in {Chat} (DM not available for {User})",
                 payload.Chat.DisplayName,
-                payload.User.DisplayName);
+                user.DisplayName);
         }
         catch (Exception ex)
         {
             logger.LogError(
                 ex,
                 "Failed to notify {User} about infected file (both DM and chat reply failed)",
-                payload.User.DisplayName);
+                user.DisplayName);
         }
     }
 }
