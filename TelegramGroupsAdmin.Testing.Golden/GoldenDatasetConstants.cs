@@ -818,6 +818,20 @@ public static class GoldenDatasetConstants
         public const long RaceUserId = 9680301255238;
         /// <summary>@raceoutnumber: not trusted; user_photo_path and photo_hash both set.</summary>
         public const long PhotoUserId = 9264989724828;
+        /// <summary>@calixrowen: is_active = false (a banned spammer, not trusted, not a bot). Used by the MarkActiveAsync test.</summary>
+        public const long InactiveUserId = 9332352149450;
+    }
+
+    /// <summary>Anchors for BackupService restore tests.</summary>
+    public static class Backup
+    {
+        /// <summary>
+        /// Synthetic username_blacklist row 999005 ('archived_pattern', disabled). RestoreAsync_ShouldWipeAllTablesFirst
+        /// moves it to <see cref="MovedBlacklistEntryId"/> after taking the backup (runtime UPDATE, no canonical edit).
+        /// </summary>
+        public const long BlacklistEntryId = 999005;
+        /// <summary>The key the restore-wipe test moves <see cref="BlacklistEntryId"/> to; never present in canonical.</summary>
+        public const long MovedBlacklistEntryId = 999905;
     }
 
     /// <summary>

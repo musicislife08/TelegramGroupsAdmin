@@ -403,6 +403,7 @@ Anchors are in code as `GoldenDatasetConstants.IdentityService` (#552 part 1); a
 | `TrustedUserId` | 9006671634371 @starlightskinless | trusted, not an admin |
 | `RaceUserId` | 9680301255238 @violingentleman | not trusted, active, no history; row-lock race test |
 | `PhotoUserId` | 9264989724828 @raceoutnumber | not trusted; user_photo_path and photo_hash set |
+| `InactiveUserId` | 9332352149450 @calixrowen | is_active = false (banned spammer); MarkActiveAsync test |
 
 ### Past-name search anchors (canonical edit 2026-10-03)
 Anchors are in code as `GoldenDatasetConstants.UsernameHistory`. Both owners are banned spammers (All and Banned tabs, not Active).
@@ -416,7 +417,7 @@ Use when: a search must match a user by a past name only (`TelegramUserRepositor
 
 ### Synthetic / reserved rows (do not regenerate)
 - `welcome_responses` IDs `999001..999005`: 5 status branches anchored on `(MainChat_Id=-100026957614982, user_id=9196379650113, username='canonical_user1')`. Mapping: `999001`=Pending, `999002`=Accepted, `999003`=Denied, `999004`=Timeout, `999005`=Left.
-- `username_blacklist` IDs `999001` (`pattern='spambot_admin'`, enabled, Exact match) + `999005` (`pattern='archived_pattern'`, disabled, Exact match). No Contains/Regex/StartsWith fixtures (feature not yet implemented).
+- `username_blacklist` IDs `999001` (`pattern='spambot_admin'`, enabled, Exact match) + `999005` (`pattern='archived_pattern'`, disabled, Exact match). No Contains/Regex/StartsWith fixtures (feature not yet implemented). `999005` is also `GoldenDatasetConstants.Backup.BlacklistEntryId`: `BackupServiceTests.RestoreAsync_ShouldWipeAllTablesFirst` moves it to `999905` at runtime after taking the backup.
 - `detection_results` rows with `reason='canonical_synthetic_promotion'`: 15 synthetic explicit-ham decisions (`LegacyManual` / `ExplicitHam`, folded from the old explicit label table).
 - `reports` IDs `186..188`: 3 pending (`status=0`) fixtures, all for `9465377455871`, added for join-gate cleanup tests (the golden dataset's real reports are all already resolved). `186`=ContentReport pointing at real message `(70989, -100054416618415)` so the `enriched_reports.content_user_id` join resolves; `187`=ExamResult (failure) in chat `-100054416618415`; `188`=ProfileScanAlert in chat `-100048429560480`. `188` is also the one pre-existing pending profile-scan alert `ProfileScanAlertMappingTests` must account for.
 - `reports` ID `189`: synthetic auto-approved ExamResult pass (status=1, `reviewed_by='Exam Flow'`, `action_taken='auto-approved'`, context `outcome=1`) for user `9960171136314` in MainChat, anchoring the auto-approval override tests. All six pre-existing exam contexts (`179, 181, 182, 183, 185, 187`) now carry `"outcome": 0`.

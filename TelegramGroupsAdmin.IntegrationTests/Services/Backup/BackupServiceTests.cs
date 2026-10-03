@@ -71,10 +71,9 @@ public class BackupServiceTests
     // Updated 2026-09-27: -3 legacy label/media-sample tables (DropLegacyVerdictColumns).
     private const int ExpectedBackupTableCount = 41;
 
-    // Canonical synthetic username_blacklist row ('archived_pattern', disabled) and the key
-    // RestoreAsync_ShouldWipeAllTablesFirst moves it to after taking the backup.
-    private const long CanonicalBlacklistEntryId = 999005;
-    private const long MovedBlacklistEntryId = 999905;
+    // Canonical synthetic username_blacklist row and the key RestoreAsync_ShouldWipeAllTablesFirst moves it to.
+    private const long CanonicalBlacklistEntryId = GoldenDatasetConstants.Backup.BlacklistEntryId;
+    private const long MovedBlacklistEntryId = GoldenDatasetConstants.Backup.MovedBlacklistEntryId;
 
     [SetUp]
     public async Task SetUp()

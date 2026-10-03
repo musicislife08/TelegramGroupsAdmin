@@ -202,7 +202,7 @@ public partial class MessageProcessingService(
         // Record the sender's names first, so everything below (commands, detection, moderation)
         // sees one identity. A rename is rescanned inline, keeping a profile ban inside this
         // update's cleanup path. Messages without a sender (channel posts) are not observed.
-        var observedAt = new DateTimeOffset(DateTime.SpecifyKind(message.Date, DateTimeKind.Utc));
+        var observedAt = message.Date.ToUtcOffset();
         UserIdentity? sender = null;
         if (message.From is not null)
         {

@@ -50,8 +50,7 @@ public class MessageEditProcessor
         // rename recorded without a rescan would use the rename up before the next group message.
         if (editedMessage.From is { } editor && editedMessage.Chat.Type != ChatType.Private)
         {
-            var observedAt = new DateTimeOffset(
-                DateTime.SpecifyKind(editedMessage.EditDate ?? editedMessage.Date, DateTimeKind.Utc));
+            var observedAt = (editedMessage.EditDate ?? editedMessage.Date).ToUtcOffset();
             await scope.ServiceProvider.GetRequiredService<IUserIdentityService>().ObserveAsync(
                 new ObservedUser(editor.Id, editor.FirstName, editor.LastName, editor.Username,
                     editor.IsBot, ObservationSource.BotUpdate, observedAt),

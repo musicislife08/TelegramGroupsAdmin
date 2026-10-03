@@ -244,12 +244,13 @@ public class TelegramUserRepositoryTests
         const string term = GoldenDatasetConstants.UsernameHistory.PastFirstName;
         await GuardPastNameAsync(userId, term);
 
-        var (items, _) = await _repository!.GetPagedUsersAsync(
-            UiModels.UserListFilter.All, skip: 0, take: 50,
+        var (items, totalCount) = await _repository!.GetPagedUsersAsync(
+            UiModels.UserListFilter.All, skip: 0, take: 10,
             searchText: term, chatIds: new List<long> { 0L }, // GlobalChatId ⇒ no chat filter
             sortLabel: null, sortDescending: false);
 
-        Assert.That(items.Select(u => u.TelegramUserId), Does.Contain(userId));
+        Assert.That(totalCount, Is.EqualTo(1));
+        Assert.That(items[0].TelegramUserId, Is.EqualTo(userId));
     }
 
     [Test]
@@ -366,7 +367,8 @@ public class TelegramUserRepositoryTests
 
         var results = await _repository!.SearchByNameAsync(term, limit: 10);
 
-        Assert.That(results.Select(u => u.TelegramUserId), Does.Contain(userId));
+        Assert.That(results, Has.Count.EqualTo(1));
+        Assert.That(results[0].TelegramUserId, Is.EqualTo(userId));
     }
 
     [Test]

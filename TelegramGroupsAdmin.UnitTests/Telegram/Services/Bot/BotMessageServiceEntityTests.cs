@@ -29,6 +29,7 @@ public class BotMessageServiceEntityTests
     private IMessageHistoryRepository _messageRepo = null!;
     private IMessageEditService _editService = null!;
     private IUserIdentityService _identities = null!;
+    private ITelegramUserRepository _userRepo = null!;
     private ApiMetrics _apiMetrics = null!;
     private BotMessageService _service = null!;
 
@@ -48,6 +49,7 @@ public class BotMessageServiceEntityTests
         _chatHandler = Substitute.For<IBotChatHandler>();
         _messageRepo = Substitute.For<IMessageHistoryRepository>();
         _editService = Substitute.For<IMessageEditService>();
+        _userRepo = Substitute.For<ITelegramUserRepository>();
         _identities = Substitute.For<IUserIdentityService>();
         _identities.ObserveAsync(Arg.Any<ObservedUser>(), Arg.Any<ProfileChangeContext>(), Arg.Any<RenameRescan>(), Arg.Any<CancellationToken>())
             .Returns(ci => UserIdentity.ForTest(ci.Arg<ObservedUser>().Id, "Stored Bot"));
@@ -62,6 +64,7 @@ public class BotMessageServiceEntityTests
             _messageRepo,
             _editService,
             _identities,
+            _userRepo,
             _apiMetrics,
             NullLogger<BotMessageService>.Instance);
     }
@@ -241,18 +244,23 @@ public class BotMessageServiceEntityTests
 
     #endregion
 
-    #region Bot identity — the bot's own names are recorded, never rescanned
+    #region Bot identity — the bot's own names are recorded (never rescanned) and its row marked active
 
-    private Task<UserIdentity> AssertBotObserved(DateTimeOffset before, DateTimeOffset after) =>
-        _identities.Received(1).ObserveAsync(
+    // The bot's row is also marked active with a fresh last_seen_at, as the old upsert did.
+    private async Task AssertBotObserved(DateTimeOffset before, DateTimeOffset after)
+    {
+        await _identities.Received(1).ObserveAsync(
             Arg.Is<ObservedUser>(o => o!.Id == BotUser.Id && o.IsBot && o.Username == "test_bot"
                 && o.ObservedAt >= before && o.ObservedAt <= after),
             Arg.Any<ProfileChangeContext>(),
             RenameRescan.None,
             Arg.Any<CancellationToken>());
+        await _userRepo.Received(1).MarkActiveAsync(
+            BotUser.Id, Arg.Is<DateTimeOffset>(t => t >= before && t <= after), Arg.Any<CancellationToken>());
+    }
 
     [Test]
-    public async Task SendAndSaveMessageAsync_ObservesBot_AndSavesTheReturnedIdentity()
+    public async Task SendAndSaveMessageAsync_ObservesBotMarksItActive_AndSavesTheReturnedIdentity()
     {
         _handler.SendAsync(
                 chatId: Arg.Any<long>(), text: Arg.Any<string>(), parseMode: Arg.Any<ParseMode?>(),
@@ -270,7 +278,7 @@ public class BotMessageServiceEntityTests
     }
 
     [Test]
-    public async Task SaveBotMessageAsync_ObservesBot_AndSavesTheReturnedIdentity()
+    public async Task SaveBotMessageAsync_ObservesBotMarksItActive_AndSavesTheReturnedIdentity()
     {
         _chatHandler.GetChatAsync(42, Arg.Any<CancellationToken>())
             .Returns(new ChatFullInfo { Id = 42, Type = ChatType.Supergroup, Title = "Group" });
@@ -285,7 +293,7 @@ public class BotMessageServiceEntityTests
     }
 
     [Test]
-    public async Task SendAndSaveAnimationAsync_ObservesBot_AndSavesTheReturnedIdentity()
+    public async Task SendAndSaveAnimationAsync_ObservesBotMarksItActive_AndSavesTheReturnedIdentity()
     {
         _handler.SendAnimationAsync(
                 chatId: Arg.Any<long>(), animation: Arg.Any<InputFile>(), caption: Arg.Any<string?>(),

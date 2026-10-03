@@ -253,11 +253,12 @@ public class TelegramUserRepositoryObserveTests
     [Test]
     public async Task MarkActive_OnlyMovesLastSeenForward()
     {
-        var id = GoldenDatasetConstants.IdentityService.UntrustedNoHistoryUserId;
+        var id = GoldenDatasetConstants.IdentityService.InactiveUserId;
         DateTimeOffset canonicalLastSeen;
         await using (var ctx = _testHelper!.GetDbContext())
         {
             var row = await ctx.TelegramUsers.AsNoTracking().SingleAsync(u => u.TelegramUserId == id);
+            Assert.That(row.IsActive, Is.False, "precondition: the anchor starts inactive");
             canonicalLastSeen = row.LastSeenAt;
         }
 

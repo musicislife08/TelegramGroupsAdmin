@@ -27,6 +27,7 @@ public class BotMessageService(
     IMessageHistoryRepository messageRepo,
     IMessageEditService editService,
     IUserIdentityService identityService,
+    ITelegramUserRepository userRepo,
     ApiMetrics apiMetrics,
     ILogger<BotMessageService> logger) : IBotMessageService
 {
@@ -470,12 +471,20 @@ public class BotMessageService(
             captionEntities: caption.Entities,
             cancellationToken);
 
-    /// <summary>Records the bot's own names as of now (GetMe has no date). Bots are never scanned.</summary>
-    private Task<UserIdentity> ObserveBotAsync(User botInfo, CancellationToken cancellationToken) =>
-        identityService.ObserveAsync(
+    /// <summary>
+    /// Records the bot's own names as of now (GetMe has no date; bots are never scanned) and marks
+    /// the bot's row active, as sending a message is activity.
+    /// </summary>
+    private async Task<UserIdentity> ObserveBotAsync(User botInfo, CancellationToken cancellationToken)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var identity = await identityService.ObserveAsync(
             new ObservedUser(botInfo.Id, botInfo.FirstName, botInfo.LastName, botInfo.Username, IsBot: true,
-                ObservationSource.BotUpdate, DateTimeOffset.UtcNow),
+                ObservationSource.BotUpdate, now),
             new ProfileChangeContext(Chat: null, MessageId: null),
             RenameRescan.None,
             cancellationToken);
+        await userRepo.MarkActiveAsync(botInfo.Id, now, cancellationToken);
+        return identity;
+    }
 }

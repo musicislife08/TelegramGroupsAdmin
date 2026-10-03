@@ -381,20 +381,26 @@ public class WelcomeServiceTests
     }
 
     [Test]
-    public async Task HandleCallbackQuery_ResolvesClickerById_WithoutObserving()
+    public async Task HandleCallbackQuery_WrongUser_ResolvesClickerById_WithoutObserving()
     {
+        // Someone other than the joiner taps the button: they may never have been observed.
+        const long otherUserId = 444_555_666L;
         var callback = new CallbackQuery
         {
             Id = "cb1",
             Data = $"welcome_accept:{TestUserId}",
-            From = TestUser,
+            From = new User { Id = otherUserId, FirstName = "Mallory", IsBot = false },
             Message = new Message { Id = 42, Chat = new Chat { Id = TestChatId, Type = ChatType.Supergroup, Title = "Test Group" } }
         };
 
         await _sut.HandleCallbackQueryAsync(callback, CancellationToken.None);
 
-        await _identities.Received(1).ResolveAsync(TestUserId, Arg.Any<CancellationToken>());
+        await _identities.Received(1).ResolveAsync(otherUserId, Arg.Any<CancellationToken>());
         await _identities.DidNotReceiveWithAnyArgs().ObserveAsync(default!, default!, default, default);
+        await _messageService.Received(1).SendAndSaveMessageAsync(
+            TestChatId,
+            Arg.Is<TelegramMessage>(m => m!.Entities.Any(e => e.User != null && e.User.Id == otherUserId)),
+            Arg.Any<ReplyParameters?>(), Arg.Any<InlineKeyboardMarkup?>(), Arg.Any<CancellationToken>());
     }
 
     #endregion

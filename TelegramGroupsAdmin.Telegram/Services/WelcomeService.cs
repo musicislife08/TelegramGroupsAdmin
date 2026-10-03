@@ -80,6 +80,7 @@ public class WelcomeService(
         var oldStatus = chatMemberUpdate.OldChatMember.Status;
         var newStatus = chatMemberUpdate.NewChatMember.Status;
         var user = chatMemberUpdate.NewChatMember.User;
+        var seenAt = chatMemberUpdate.Date.ToUtcOffset();
 
         // Handle user leaving (Member/Restricted → Left)
         if (oldStatus is ChatMemberStatus.Member or ChatMemberStatus.Restricted &&
@@ -110,7 +111,7 @@ public class WelcomeService(
                 await botProtectionService.BanBotAsync(
                     chatMemberUpdate.Chat,
                     user,
-                    new DateTimeOffset(DateTime.SpecifyKind(chatMemberUpdate.Date, DateTimeKind.Utc)),
+                    seenAt,
                     "Not whitelisted and not invited by admin",
                     cancellationToken);
                 welcomeMetrics.RecordBotJoin("banned");
@@ -144,8 +145,7 @@ public class WelcomeService(
             // rescan here: the join flow scans the user below, on the names just recorded.
             var userIdentity = await identityService.ObserveAsync(
                 new ObservedUser(user.Id, user.FirstName, user.LastName, user.Username, user.IsBot,
-                    ObservationSource.ChatMember,
-                    new DateTimeOffset(DateTime.SpecifyKind(chatMemberUpdate.Date, DateTimeKind.Utc))),
+                    ObservationSource.ChatMember, seenAt),
                 new ProfileChangeContext(ChatIdentity.From(chatMemberUpdate.Chat), MessageId: null),
                 RenameRescan.None,
                 cancellationToken);
@@ -729,10 +729,6 @@ public class WelcomeService(
 
         var chatId = message.Chat.Id;
 
-        // Buttons exist only for a user observed at join seconds earlier, so the clicker is
-        // resolved by id rather than recording the callback's names.
-        var clicker = await identityService.ResolveAsync(user.Id, cancellationToken);
-
         // Check if this is an exam callback (handled separately)
         var isExamCallback = examFlowService.IsExamCallback(data);
 
@@ -775,6 +771,10 @@ public class WelcomeService(
             }
 
             // For chat buttons, send temporary warning message
+            // The clicker is by definition not the joiner, so they may never have been observed;
+            // resolve by id (an unknown clicker gets an id-only identity) rather than recording
+            // the callback's names, which would use up a rename without a rescan.
+            var clicker = await identityService.ResolveAsync(user.Id, cancellationToken);
             await SendWrongUserWarningAsync(chatId, clicker, message.MessageId, cancellationToken);
             return;
         }

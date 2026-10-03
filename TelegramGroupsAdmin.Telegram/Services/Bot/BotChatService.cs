@@ -183,7 +183,7 @@ public class BotChatService(
                     if (isNowAdmin)
                     {
                         // User promoted to admin - record the user first (chat_admins FK needs the row)
-                        await ObserveChatMemberAsync(affectedUser, chat, ToUtc(myChatMember.Date), ct);
+                        await ObserveChatMemberAsync(affectedUser, chat, myChatMember.Date.ToUtcOffset(), ct);
 
                         var isCreator = newStatus == ChatMemberStatus.Creator;
                         await chatAdminsRepo.UpsertAsync(chat.Id, affectedUser.Id, isCreator, cancellationToken: ct);
@@ -287,7 +287,7 @@ public class BotChatService(
             if (isNowAdmin)
             {
                 // User promoted to admin - record the user first (chat_admins FK needs the row)
-                var promotedUser = await ObserveChatMemberAsync(user, chat, ToUtc(chatMemberUpdate.Date), ct);
+                var promotedUser = await ObserveChatMemberAsync(user, chat, chatMemberUpdate.Date.ToUtcOffset(), ct);
 
                 var isCreator = newStatus == ChatMemberStatus.Creator;
                 await chatAdminsRepo.UpsertAsync(chat.Id, user.Id, isCreator, ct);
@@ -539,8 +539,6 @@ public class BotChatService(
             new ProfileChangeContext(chat, MessageId: null),
             RenameRescan.None,
             ct);
-
-    private static DateTimeOffset ToUtc(DateTime date) => new(DateTime.SpecifyKind(date, DateTimeKind.Utc));
 
     /// <summary>
     /// Refresh admin cache for all active managed chats.
