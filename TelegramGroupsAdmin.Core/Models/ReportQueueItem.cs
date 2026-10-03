@@ -1,7 +1,7 @@
 namespace TelegramGroupsAdmin.Core.Models;
 
 /// <summary>
-/// Unified model for reports queue (combines spam reports, impersonation alerts, and exam failures)
+/// Unified model for reports queue (combines spam reports, impersonation alerts, and exam results)
 /// Enables card-based UI that displays all review types in a single chronological stream
 /// </summary>
 public record ReportQueueItem
@@ -11,10 +11,10 @@ public record ReportQueueItem
     public required int Priority { get; init; } // Higher = more urgent
     public required bool IsPending { get; init; }
 
-    // One of Report, ImpersonationAlertRecord, ExamFailureRecord, or ProfileScanAlertRecord is populated
+    // One of Report, ImpersonationAlertRecord, ExamResultRecord, or ProfileScanAlertRecord is populated
     public Report? SpamReport { get; init; }
     public ImpersonationAlertRecord? ImpersonationAlert { get; init; }
-    public ExamFailureRecord? ExamFailure { get; init; }
+    public ExamResultRecord? ExamResult { get; init; }
     public ProfileScanAlertRecord? ProfileScanAlert { get; init; }
 
     // Common display properties

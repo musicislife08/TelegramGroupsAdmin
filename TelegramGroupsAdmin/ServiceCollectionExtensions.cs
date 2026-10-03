@@ -11,8 +11,10 @@ using Polly;
 using Polly.RateLimiting;
 using TelegramGroupsAdmin.Auth;
 using TelegramGroupsAdmin.Constants;
+using TelegramGroupsAdmin.Core.Http;
 using TelegramGroupsAdmin.Data.Services;
 using TelegramGroupsAdmin.Services;
+using TelegramGroupsAdmin.Services.Notifications;
 
 namespace TelegramGroupsAdmin;
 
@@ -73,7 +75,7 @@ public static class ServiceCollectionExtensions
             services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
                 .AddCookie(options =>
                 {
-                    options.Cookie.Name = "TgSpam.Auth";
+                    options.Cookie.Name = AuthenticationConstants.CookieName;
                     options.Cookie.HttpOnly = true;
                     options.Cookie.SecurePolicy = environment.IsDevelopment()
                         ? CookieSecurePolicy.None
@@ -155,12 +157,20 @@ public static class ServiceCollectionExtensions
             services.AddScoped<Services.Email.IEmailService, Services.Email.SendGridEmailService>();
 
             // Notification services (User notification preferences with Telegram DM, Email, and Web Push channels)
-            services.AddScoped<INotificationService, NotificationService>();
+            services.AddScoped<NotificationDmDispatcher>(); // Shared payload → Telegram DM path (admin + user notifications)
+            services.AddScoped<IAdminNotificationService, AdminNotificationService>();
             services.AddScoped<IWebPushNotificationService, WebPushNotificationService>();
             services.AddScoped<INotificationStateService, NotificationStateService>(); // Blazor state for notification bell
 
+            // User-facing notifications (opt-in DMs) — DM ban celebrations fan out via a single-reader channel
+            services.AddScoped<BanCelebrationDmSender>();
+            services.AddScoped<IUserNotificationService, UserNotificationService>();
+            services.AddScoped<BanCelebrationFanoutProcessor>();
+            services.AddSingleton<IBanCelebrationFanoutQueue, BanCelebrationFanoutQueue>();
+            services.AddHostedService<BanCelebrationFanoutWorker>();
+
             // Web Push browser notifications (PushServiceClient + VAPID auto-generation)
-            services.AddHttpClient<Lib.Net.Http.WebPush.PushServiceClient>();
+            services.AddWebPushClient();
             services.AddHostedService<VapidKeyGenerationService>(); // Auto-generates VAPID keys on first startup
 
             // Push subscriptions repository (browser push endpoints)
@@ -168,6 +178,9 @@ public static class ServiceCollectionExtensions
 
             // Message context adapter for spam detection library
             services.AddScoped<TelegramGroupsAdmin.ContentDetection.Services.IMessageContextProvider, MessageContextAdapter>();
+
+            // Training Data page — add/edit/remove all route through verdict-event decisions
+            services.AddScoped<TelegramGroupsAdmin.Services.TrainingData.ITrainingDataService, TelegramGroupsAdmin.Services.TrainingData.TrainingDataService>();
 
             // Media refetch services (Phase 4.X: Re-download missing media after restore)
             services.AddSingleton<TelegramGroupsAdmin.Telegram.Services.Media.IMediaRefetchQueueService, TelegramGroupsAdmin.Telegram.Services.Media.MediaRefetchQueueService>();
@@ -193,6 +206,19 @@ public static class ServiceCollectionExtensions
                 MaximumLargePoolFreeBytes = 256 * 1024 * 1024
             }));
 
+            return services;
+        }
+
+        /// <summary>
+        /// Registers the Web Push client. Subscription endpoints come from users' browsers, so
+        /// the client's connections run on the public-url handler: a hostname resolving to a
+        /// loopback or private address is refused at the socket, 3xx answers are not followed,
+        /// and HTTP/3 (QUIC, which bypasses the connect callback) is never negotiated. Separate
+        /// so tests can resolve the production client rather than a copy of this registration.
+        /// </summary>
+        public IServiceCollection AddWebPushClient()
+        {
+            services.AddHttpClient<Lib.Net.Http.WebPush.PushServiceClient>().UsePublicUrlPolicy();
             return services;
         }
 
@@ -279,6 +305,7 @@ public static class ServiceCollectionExtensions
 
             // Analytics repositories (consolidated in main app)
             services.AddScoped<TelegramGroupsAdmin.Repositories.IAnalyticsRepository, TelegramGroupsAdmin.Repositories.AnalyticsRepository>();
+            services.AddScoped<TelegramGroupsAdmin.Repositories.IMessageStatsRepository, TelegramGroupsAdmin.Repositories.MessageStatsRepository>();
             services.AddScoped<TelegramGroupsAdmin.Repositories.IMessageStatsService, TelegramGroupsAdmin.Repositories.MessageStatsService>();
 
             return services;

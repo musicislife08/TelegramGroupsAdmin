@@ -2,9 +2,7 @@ using System.Text.Json;
 using Dapper;
 using Microsoft.Extensions.Logging;
 using Npgsql;
-using TelegramGroupsAdmin.BackgroundJobs.Constants;
 using TelegramGroupsAdmin.Configuration.Models;
-using TelegramGroupsAdmin.Core.Security;
 using TelegramGroupsAdmin.Data.Services;
 using TelegramGroupsAdmin.Core.JobPayloads;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
@@ -77,19 +75,16 @@ public class PassphraseManagementService : IPassphraseManagementService
     }
 
     /// <summary>
-    /// Rotates the backup passphrase and schedules re-encryption of existing backups
+    /// Schedules re-encryption of existing backups with <paramref name="newPassphrase"/>, the passphrase
+    /// the user was shown and saved. The passphrase is protected before it enters the job payload.
     /// </summary>
-    public async Task<string> RotatePassphraseAsync(string backupDirectory, string userId)
+    public async Task RotatePassphraseAsync(string newPassphrase, string backupDirectory, string userId)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(newPassphrase);
+
         _logger.LogInformation("Initiating passphrase rotation for user {UserId}", userId);
 
-        // Generate new passphrase (6 words = 77.5 bits entropy)
-        var newPassphrase = PassphraseGenerator.Generate();
-
-        _logger.LogInformation("Generated new passphrase, queuing re-encryption job");
-
-        // Queue background job to re-encrypt all backups
-        var payload = new RotateBackupPassphrasePayload(newPassphrase, backupDirectory, userId);
+        var payload = new RotateBackupPassphrasePayload(EncryptPassphrase(newPassphrase), backupDirectory, userId);
 
         var jobId = await _jobScheduler.ScheduleJobAsync(
             BackgroundJobNames.RotateBackupPassphrase,
@@ -97,9 +92,6 @@ public class PassphraseManagementService : IPassphraseManagementService
             delaySeconds: 0); // Execute immediately
 
         _logger.LogInformation("Passphrase rotation job queued successfully (JobId: {JobId})", jobId);
-
-        // Return the new passphrase so user can save it
-        return newPassphrase;
     }
 
     // Private helper methods
@@ -114,8 +106,6 @@ public class PassphraseManagementService : IPassphraseManagementService
         return new BackupEncryptionConfig
         {
             Enabled = true,
-            Algorithm = EncryptionConstants.EncryptionAlgorithm,
-            Iterations = EncryptionConstants.Pbkdf2Iterations,
             CreatedAt = DateTimeOffset.UtcNow,
             LastRotatedAt = null  // First setup
         };

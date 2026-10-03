@@ -82,6 +82,13 @@ public class UserDetailDialogTests : MudBlazorTestContext
             .Returns(Task.FromResult(new List<TagDefinition>()));
     }
 
+    [SetUp]
+    public async Task SetUp()
+    {
+        // Clear previously rendered components so each test starts with a fresh DOM.
+        await DisposeComponentsAsync();
+    }
+
     private IRenderedComponent<MudDialogProvider> RenderDialogProvider()
     {
         var provider = Render<MudDialogProvider>();

@@ -10,24 +10,6 @@ namespace TelegramGroupsAdmin.Telegram.Constants;
 public static class SpamDetectionConstants
 {
     // ============================================================
-    // TRAINING DATA QUALITY THRESHOLDS
-    // These ensure only high-quality samples enter the training dataset.
-    // Not admin-configurable - changing these affects ML model quality.
-    // ============================================================
-
-    /// <summary>
-    /// Minimum OpenAI score required for training data (V2 scale: 4.25)
-    /// Used in DetermineIfTrainingWorthy to filter high-quality samples
-    /// </summary>
-    public const double OpenAIConfidentThreshold = 4.25;
-
-    /// <summary>
-    /// Minimum total score required for training data (V2 scale: 4.0)
-    /// Prevents low-quality auto-detections from polluting training dataset
-    /// </summary>
-    public const double TrainingConfidenceThreshold = 4.0;
-
-    // ============================================================
     // JOB SCHEDULING CONSTANTS
     // Timing parameters for background cleanup jobs.
     // Not admin-configurable - these are race condition mitigations.
@@ -45,28 +27,4 @@ public static class SpamDetectionConstants
     /// </summary>
     public static readonly TimeSpan CleanupJobDeduplicationWindow = TimeSpan.FromSeconds(30);
 
-    // ============================================================
-    // MANUAL SPAM CLASSIFICATION CONSTANTS
-    // Used by TrainingHandler when moderators mark messages as spam.
-    // ============================================================
-
-    /// <summary>
-    /// Detection source identifier for manual moderator actions
-    /// </summary>
-    public const string ManualDetectionSource = "manual";
-
-    /// <summary>
-    /// Detection method identifier for manual moderator actions
-    /// </summary>
-    public const string ManualDetectionMethod = "Manual";
-
-    /// <summary>
-    /// Reason text for manual spam classification by moderator
-    /// </summary>
-    public const string ManualSpamReason = "Marked as spam by moderator";
-
-    /// <summary>
-    /// Reason text for auto-detected spam classification by the detection pipeline
-    /// </summary>
-    public const string AutoDetectedSpamReason = "Auto-detected spam";
 }

@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using NSubstitute;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.ContentDetection.Services;
+using TelegramGroupsAdmin.Core.Http;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Data.Models;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
@@ -66,8 +67,10 @@ public class BanCelebrationGifRepositoryTests
         services.Configure<AppOptions>(opt =>
             opt.DataPath = _tempMediaPath);
 
-        // Add HttpClientFactory for URL downloads
-        services.AddHttpClient();
+        // URL downloads go through the public-url fetcher, which refuses loopback unless the test's
+        // own DI opens the WireMock port (there is no configuration path to this in the app).
+        services.AddSingleton<IPublicUrlFetchAllowance>(new LoopbackPortAllowance(_mockServer.Port));
+        services.AddPublicUrlFetcher();
 
         // Mock IVideoFrameExtractionService for video conversion tests
         _mockVideoService = Substitute.For<IVideoFrameExtractionService>();
@@ -841,6 +844,43 @@ public class BanCelebrationGifRepositoryTests
         // Verify FFmpeg conversion was NOT called (real GIF needs no conversion)
         await _mockVideoService!.DidNotReceive().ConvertVideoToGifAsync(
             Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>());
+    }
+
+    #endregion
+
+    #region AddFromUrlAsync - Non-public targets are refused
+
+    [Test]
+    public async Task AddFromUrlAsync_LoopbackPortOutsideTheAllowance_WritesNothing()
+    {
+        // The fixture's allowance opens only _mockServer's port; any other loopback port is what
+        // production sees for every loopback target: refused at connect time, nothing stored.
+        var listener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+        listener.Start();
+        var otherPort = ((System.Net.IPEndPoint)listener.LocalEndpoint).Port;
+        listener.Stop();
+        var url = $"http://127.0.0.1:{otherPort}/anim.gif";
+
+        var ex = Assert.ThrowsAsync<PublicUrlFetchException>(() => _repository!.AddFromUrlAsync(url, "Refused"));
+
+        Assert.That(ex!.Message, Is.EqualTo(PublicUrlFetchException.NotAllowedMessage));
+        Assert.That(ex.Message, Does.Not.Contain("127.0.0.1"), "the user-facing message names no address");
+        Assert.That(await _repository!.GetAllAsync(), Is.Empty, "no row is written for a refused URL");
+        Assert.That(Directory.GetFiles(Path.Combine(_tempMediaPath, "media", "ban-gifs")), Is.Empty,
+            "no file is written for a refused URL");
+        await _mockVideoService!.DidNotReceive().ConvertVideoToGifAsync(
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task AddFromUrlAsync_PrivateAddressLiteral_WritesNothing()
+    {
+        var ex = Assert.ThrowsAsync<PublicUrlFetchException>(
+            () => _repository!.AddFromUrlAsync("http://169.254.169.254/latest/meta-data/anim.gif", "Metadata"));
+
+        Assert.That(ex!.Message, Is.EqualTo(PublicUrlFetchException.NotAllowedMessage));
+        Assert.That(await _repository!.GetAllAsync(), Is.Empty);
+        Assert.That(Directory.GetFiles(Path.Combine(_tempMediaPath, "media", "ban-gifs")), Is.Empty);
     }
 
     #endregion

@@ -91,6 +91,7 @@ public class SpamCommand : IBotCommand
                 Chat = ChatIdentity.From(message.Chat),
                 MessageId = spamMessage.MessageId,
                 Executor = executor,
+                Source = VerdictSource.SpamCommand,
                 Reason = reason,
                 TelegramMessage = spamMessage // Pass for backfill if message not in database
             },

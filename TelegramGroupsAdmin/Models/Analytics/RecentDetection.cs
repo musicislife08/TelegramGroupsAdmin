@@ -9,7 +9,7 @@ public class RecentDetection
     public long Id { get; set; }
     public int MessageId { get; set; }
     public DateTimeOffset DetectedAt { get; set; }
-    public string DetectionSource { get; set; } = string.Empty;
+    public VerdictSource Source { get; set; }
     public string DetectionMethod { get; set; } = string.Empty;
     public bool IsSpam { get; set; }
     public double Score { get; set; }
@@ -23,7 +23,6 @@ public class RecentDetection
     public long UserId { get; set; }
     public string? MessageText { get; set; }
     public string? ContentHash { get; set; }
-    public double NetScore { get; set; }
     public string? CheckResultsJson { get; set; }
     public int EditVersion { get; set; }
 

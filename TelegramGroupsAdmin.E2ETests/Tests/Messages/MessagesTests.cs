@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using TelegramGroupsAdmin.E2ETests.Infrastructure;
 using TelegramGroupsAdmin.E2ETests.PageObjects;
 using static Microsoft.Playwright.Assertions;
@@ -31,8 +32,7 @@ public class MessagesTests : SharedAuthenticatedTestBase
         await _messagesPage.WaitForLoadAsync();
 
         // Assert - page layout is visible
-        Assert.That(await _messagesPage.IsLayoutVisibleAsync(), Is.True,
-            "Messages page layout should be visible");
+        await Expect(_messagesPage.Layout).ToBeVisibleAsync();
     }
 
     [Test]
@@ -46,12 +46,8 @@ public class MessagesTests : SharedAuthenticatedTestBase
         await _messagesPage.WaitForLoadAsync();
 
         // Assert - sidebar is visible with correct title
-        Assert.That(await _messagesPage.IsSidebarVisibleAsync(), Is.True,
-            "Chat sidebar should be visible");
-
-        var sidebarTitle = await _messagesPage.GetSidebarTitleAsync();
-        Assert.That(sidebarTitle, Is.EqualTo("Chats"),
-            "Sidebar title should be 'Chats'");
+        await Expect(_messagesPage.Sidebar).ToBeVisibleAsync();
+        await Expect(_messagesPage.SidebarTitle).ToHaveTextAsync("Chats");
     }
 
     [Test]
@@ -65,12 +61,8 @@ public class MessagesTests : SharedAuthenticatedTestBase
         await _messagesPage.WaitForLoadAsync();
 
         // Assert - empty state shows "Select a chat" message
-        Assert.That(await _messagesPage.IsEmptyStateVisibleAsync(), Is.True,
-            "Empty state should be visible when no chat is selected");
-
-        var emptyText = await _messagesPage.GetEmptyStateTextAsync();
-        Assert.That(emptyText, Does.Contain("Select a chat"),
-            "Empty state should prompt user to select a chat");
+        await Expect(_messagesPage.EmptyState).ToBeVisibleAsync();
+        await Expect(_messagesPage.EmptyStateText).ToContainTextAsync("Select a chat");
     }
 
     [Test]
@@ -84,12 +76,10 @@ public class MessagesTests : SharedAuthenticatedTestBase
         await _messagesPage.WaitForLoadAsync();
 
         // Assert - "no chats available" message in sidebar
-        Assert.That(await _messagesPage.IsNoChatsSidebarVisibleAsync(), Is.True,
-            "Should show 'no chats available' when database has no chats");
+        await Expect(_messagesPage.NoChatsSidebar).ToBeVisibleAsync();
 
-        var chatCount = await _messagesPage.GetChatCountAsync();
-        Assert.That(chatCount, Is.EqualTo(0),
-            "Chat count should be 0 when no chats exist");
+        // Absence check follows the positive empty-state check above, so the sidebar has rendered
+        await Expect(_messagesPage.ChatItems).ToHaveCountAsync(0);
     }
 
     [Test]
@@ -113,15 +103,9 @@ public class MessagesTests : SharedAuthenticatedTestBase
         await _messagesPage.WaitForLoadAsync();
 
         // Assert - chats are displayed in sidebar
-        var chatCount = await _messagesPage.GetChatCountAsync();
-        Assert.That(chatCount, Is.EqualTo(2),
-            "Should display 2 chats in sidebar");
-
-        var chatNames = await _messagesPage.GetChatNamesAsync();
-        Assert.That(chatNames, Does.Contain("Alpha Chat"),
-            "Should display 'Alpha Chat'");
-        Assert.That(chatNames, Does.Contain("Beta Chat"),
-            "Should display 'Beta Chat'");
+        await Expect(_messagesPage.ChatItems).ToHaveCountAsync(2);
+        await Expect(_messagesPage.ChatTitleNamed("Alpha Chat")).ToBeVisibleAsync();
+        await Expect(_messagesPage.ChatTitleNamed("Beta Chat")).ToBeVisibleAsync();
     }
 
     [Test]
@@ -150,14 +134,12 @@ public class MessagesTests : SharedAuthenticatedTestBase
         await _messagesPage.SearchChatsAsync("Alpha");
 
         // Assert - only Alpha chats should be visible
-        var chatCount = await _messagesPage.GetChatCountAsync();
-        Assert.That(chatCount, Is.EqualTo(2),
-            "Should only show 2 chats matching 'Alpha'");
+        await Expect(_messagesPage.ChatItems).ToHaveCountAsync(2);
+        await Expect(_messagesPage.ChatTitleNamed("Alpha Group")).ToBeVisibleAsync();
+        await Expect(_messagesPage.ChatTitleNamed("Alpha Team")).ToBeVisibleAsync();
 
-        var chatNames = await _messagesPage.GetChatNamesAsync();
-        Assert.That(chatNames, Does.Contain("Alpha Group"));
-        Assert.That(chatNames, Does.Contain("Alpha Team"));
-        Assert.That(chatNames, Does.Not.Contain("Beta Channel"));
+        // Absence check follows the filtered count above, so the filter has already been applied
+        await Expect(_messagesPage.ChatTitleNamed("Beta Channel")).ToHaveCountAsync(0);
     }
 
     [Test]
@@ -180,15 +162,12 @@ public class MessagesTests : SharedAuthenticatedTestBase
 
         // Search to filter, then clear
         await _messagesPage.SearchChatsAsync("Developers");
-        var filteredCount = await _messagesPage.GetChatCountAsync();
-        Assert.That(filteredCount, Is.EqualTo(1), "Should show 1 chat when filtering for 'Developers'");
+        await Expect(_messagesPage.ChatItems).ToHaveCountAsync(1);
 
         await _messagesPage.ClearChatSearchAsync();
 
         // Assert - all chats visible again
-        var chatCount = await _messagesPage.GetChatCountAsync();
-        Assert.That(chatCount, Is.EqualTo(2),
-            "Should show all 2 chats when search is cleared");
+        await Expect(_messagesPage.ChatItems).ToHaveCountAsync(2);
     }
 
     [Test]
@@ -210,15 +189,10 @@ public class MessagesTests : SharedAuthenticatedTestBase
         // Wait for Blazor re-render to apply .active class
         await _messagesPage.WaitForChatViewActiveAsync();
 
-        using (Assert.EnterMultipleScope())
-        {
-            // Assert - chat view becomes active
-            Assert.That(await _messagesPage.IsChatViewActiveAsync(), Is.True,
-                "Chat view should be active after selecting a chat");
-
-            Assert.That(await _messagesPage.IsMessagesContainerVisibleAsync(), Is.True,
-                "Messages container should be visible");
-        }
+        // Assert - chat view becomes active for the clicked chat and shows the messages container
+        await Expect(_messagesPage.ActiveChatView).ToBeVisibleAsync();
+        await Expect(_messagesPage.SelectedChatTitle).ToHaveTextAsync("Test Group");
+        await Expect(_messagesPage.MessagesContainer).ToBeVisibleAsync();
     }
 
     [Test]
@@ -236,16 +210,11 @@ public class MessagesTests : SharedAuthenticatedTestBase
         await _messagesPage.WaitForLoadAsync();
         await _messagesPage.SelectChatByNameAsync("Empty Chat");
 
-        // Wait for loading to complete
-        await Page.WaitForTimeoutAsync(500);
-
         // Assert - "no messages" state visible
-        Assert.That(await _messagesPage.IsNoMessagesStateVisibleAsync(), Is.True,
-            "Should show 'no messages' empty state for chat without messages");
+        await Expect(_messagesPage.NoMessagesState).ToBeVisibleAsync();
 
-        var messageCount = await _messagesPage.GetMessageCountAsync();
-        Assert.That(messageCount, Is.EqualTo(0),
-            "Message count should be 0 for empty chat");
+        // Absence check follows the positive "no messages" check above, so the chat has rendered
+        await Expect(_messagesPage.MessageBubbles).ToHaveCountAsync(0);
     }
 
     [Test]
@@ -285,12 +254,8 @@ public class MessagesTests : SharedAuthenticatedTestBase
         await _messagesPage.WaitForLoadAsync();
         await _messagesPage.SelectChatByNameAsync("Active Chat");
 
-        // Assert - wait for messages to appear using Playwright's auto-retry assertions
+        // Assert - at least one message is displayed (auto-retrying until messages render)
         await Expect(_messagesPage.MessageBubbles.First).ToBeVisibleAsync();
-
-        var messageCount = await _messagesPage.GetMessageCountAsync();
-        Assert.That(messageCount, Is.GreaterThan(0),
-            "Should display messages for chat with messages");
     }
 
     [Test]
@@ -300,7 +265,7 @@ public class MessagesTests : SharedAuthenticatedTestBase
         await Page.GotoAsync("/messages");
 
         // Assert - should redirect to login or register
-        await Expect(Page).ToHaveURLAsync(new System.Text.RegularExpressions.Regex("/(login|register)"));
+        await Expect(Page).ToHaveURLAsync(new Regex("/(login|register)"));
     }
 
     [Test]
@@ -314,8 +279,7 @@ public class MessagesTests : SharedAuthenticatedTestBase
         await _messagesPage.WaitForLoadAsync();
 
         // Assert - Admin can view messages page
-        Assert.That(await _messagesPage.IsLayoutVisibleAsync(), Is.True,
-            "Admin should be able to view messages page");
+        await Expect(_messagesPage.Layout).ToBeVisibleAsync();
     }
 
     [Test]
@@ -329,8 +293,7 @@ public class MessagesTests : SharedAuthenticatedTestBase
         await _messagesPage.WaitForLoadAsync();
 
         // Assert - GlobalAdmin can view messages page
-        Assert.That(await _messagesPage.IsLayoutVisibleAsync(), Is.True,
-            "GlobalAdmin should be able to view messages page");
+        await Expect(_messagesPage.Layout).ToBeVisibleAsync();
     }
 
     [Test]
@@ -352,9 +315,7 @@ public class MessagesTests : SharedAuthenticatedTestBase
         await _messagesPage.WaitForLoadAsync();
 
         // Assert - GlobalAdmin sees all chats
-        var chatCount = await _messagesPage.GetChatCountAsync();
-        Assert.That(chatCount, Is.EqualTo(2),
-            "GlobalAdmin should see all chats");
+        await Expect(_messagesPage.ChatItems).ToHaveCountAsync(2);
     }
 
     [Test]
@@ -380,9 +341,7 @@ public class MessagesTests : SharedAuthenticatedTestBase
         await _messagesPage.WaitForLoadAsync();
 
         // Assert - Owner sees all chats
-        var chatCount = await _messagesPage.GetChatCountAsync();
-        Assert.That(chatCount, Is.EqualTo(3),
-            "Owner should see all chats");
+        await Expect(_messagesPage.ChatItems).ToHaveCountAsync(3);
     }
 
     [Test]
@@ -399,12 +358,9 @@ public class MessagesTests : SharedAuthenticatedTestBase
         await _messagesPage.NavigateAsync(chatId: chat.ChatId);
         await _messagesPage.WaitForLoadAsync();
 
-        // Wait for chat to be selected
-        await Page.WaitForTimeoutAsync(500);
-
-        // Assert - chat is auto-selected
-        Assert.That(await _messagesPage.IsChatViewActiveAsync(), Is.True,
-            "Chat should be auto-selected when chatId is in query string");
+        // Assert - the chat named in the query string is auto-selected
+        await Expect(_messagesPage.ActiveChatView).ToBeVisibleAsync();
+        await Expect(_messagesPage.SelectedChatTitle).ToHaveTextAsync("Target Chat");
     }
 
     #region User Detail Dialog Tests (#107)
@@ -435,12 +391,8 @@ public class MessagesTests : SharedAuthenticatedTestBase
         await _messagesPage.WaitForUserDetailDialogAsync();
 
         // Assert - dialog opens with correct title
-        Assert.That(await _messagesPage.IsUserDetailDialogVisibleAsync(), Is.True,
-            "User detail dialog should be visible after clicking username");
-
-        var dialogTitle = await _messagesPage.GetUserDetailDialogTitleAsync();
-        Assert.That(dialogTitle, Does.Contain("User Details"),
-            "Dialog should have 'User Details' title");
+        await Expect(_messagesPage.UserDetailDialog).ToBeVisibleAsync();
+        await Expect(_messagesPage.UserDetailDialogTitle).ToContainTextAsync("User Details");
     }
 
     [Test]
@@ -477,8 +429,7 @@ public class MessagesTests : SharedAuthenticatedTestBase
 
         // Assert - dialog shows user info (wait for async content load)
         // Use Playwright's Expect with auto-retry for async content
-        var dialog = Page.GetByRole(Microsoft.Playwright.AriaRole.Dialog);
-        await Expect(dialog).ToContainTextAsync("SpecificUser", new() { Timeout = 5000 });
+        await Expect(_messagesPage.UserDetailDialog).ToContainTextAsync("SpecificUser", new() { Timeout = 5000 });
     }
 
     [Test]
@@ -505,16 +456,14 @@ public class MessagesTests : SharedAuthenticatedTestBase
 
         await _messagesPage.ClickUsernameInMessageAsync();
         await _messagesPage.WaitForUserDetailDialogAsync();
-        Assert.That(await _messagesPage.IsUserDetailDialogVisibleAsync(), Is.True,
-            "Dialog should be open before pressing Escape");
+        await Expect(_messagesPage.UserDetailDialog).ToBeVisibleAsync();
 
         // Press Escape to close
         await _messagesPage.CloseUserDetailDialogByEscapeAsync();
         await _messagesPage.WaitForUserDetailDialogHiddenAsync();
 
         // Assert - dialog closed
-        Assert.That(await _messagesPage.IsUserDetailDialogVisibleAsync(), Is.False,
-            "Dialog should close when Escape is pressed");
+        await Expect(_messagesPage.UserDetailDialog).Not.ToBeVisibleAsync();
     }
 
     [Test]
@@ -541,16 +490,14 @@ public class MessagesTests : SharedAuthenticatedTestBase
 
         await _messagesPage.ClickUsernameInMessageAsync();
         await _messagesPage.WaitForUserDetailDialogAsync();
-        Assert.That(await _messagesPage.IsUserDetailDialogVisibleAsync(), Is.True,
-            "Dialog should be open before clicking close button");
+        await Expect(_messagesPage.UserDetailDialog).ToBeVisibleAsync();
 
         // Click close button
         await _messagesPage.CloseUserDetailDialogByButtonAsync();
         await _messagesPage.WaitForUserDetailDialogHiddenAsync();
 
         // Assert - dialog closed
-        Assert.That(await _messagesPage.IsUserDetailDialogVisibleAsync(), Is.False,
-            "Dialog should close when close button is clicked");
+        await Expect(_messagesPage.UserDetailDialog).Not.ToBeVisibleAsync();
     }
 
     #endregion

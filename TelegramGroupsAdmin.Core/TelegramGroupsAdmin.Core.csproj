@@ -10,6 +10,9 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="TelegramGroupsAdmin.ComponentTests" />
+    <InternalsVisibleTo Include="TelegramGroupsAdmin.UnitTests" />
+    <InternalsVisibleTo Include="TelegramGroupsAdmin.IntegrationTests" />
+    <InternalsVisibleTo Include="TelegramGroupsAdmin.E2ETests" />
   </ItemGroup>
 
   <ItemGroup>
@@ -18,7 +21,8 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Http" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
-    <PackageReference Include="SixLabors.ImageSharp" />
+    <PackageReference Include="SkiaSharp" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" />
     <PackageReference Include="System.IO.Hashing" />
     <PackageReference Include="Telegram.Bot" />
   </ItemGroup>

@@ -113,8 +113,9 @@ public class TelegramApiClient : ITelegramApiClient
         string? caption = null,
         ParseMode? parseMode = null,
         InlineKeyboardMarkup? replyMarkup = null,
+        IReadOnlyList<MessageEntity>? captionEntities = null,
         CancellationToken ct = default)
-        => _client.EditMessageCaption(chatId, messageId, caption: caption, parseMode: parseMode ?? default, replyMarkup: replyMarkup, cancellationToken: ct);
+        => _client.EditMessageCaption(chatId, messageId, caption: caption, parseMode: parseMode ?? default, captionEntities: captionEntities, replyMarkup: replyMarkup, cancellationToken: ct);
 
     public Task DeleteMessageAsync(long chatId, int messageId, CancellationToken ct = default)
         => _client.DeleteMessage(chatId, messageId, ct);

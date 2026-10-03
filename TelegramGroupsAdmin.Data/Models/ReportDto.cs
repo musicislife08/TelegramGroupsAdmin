@@ -5,7 +5,7 @@ namespace TelegramGroupsAdmin.Data.Models;
 
 /// <summary>
 /// EF Core entity for reports table (unified report queue).
-/// Handles Report, ImpersonationAlert, and ExamFailure types.
+/// Handles Report, ImpersonationAlert, and ExamResult types.
 /// </summary>
 [Table("reports")]
 public class ReportDto
@@ -17,7 +17,7 @@ public class ReportDto
 
     /// <summary>
     /// Discriminator for report type. Repository maps to domain enum.
-    /// 0=ContentReport, 1=ImpersonationAlert, 2=ExamFailure
+    /// 0=ContentReport, 1=ImpersonationAlert, 2=ExamResult
     /// </summary>
     [Column("type")]
     public short Type { get; set; }
@@ -28,7 +28,7 @@ public class ReportDto
     [Column("context")]
     public string? Context { get; set; }
 
-    // === ContentReport-specific fields (0 for ImpersonationAlert/ExamFailure) ===
+    // === ContentReport-specific fields (0 for ImpersonationAlert/ExamResult) ===
 
     [Column("message_id")]
     public int MessageId { get; set; }

@@ -71,24 +71,6 @@ public class TelegramUserRepository : ITelegramUserRepository
         return entity.ToModel();
     }
 
-    /// <inheritdoc/>
-    public async Task<List<UiModels.TelegramUser>> GetByTelegramIdsAsync(
-        IEnumerable<long> telegramIds,
-        CancellationToken cancellationToken = default)
-    {
-        var idList = telegramIds.ToList();
-        if (idList.Count == 0)
-            return [];
-
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var entities = await context.TelegramUsers
-            .AsNoTracking()
-            .Where(u => idList.Contains(u.TelegramUserId))
-            .ToListAsync(cancellationToken);
-
-        return entities.Select(e => e.ToModel()).ToList();
-    }
-
     /// <summary>
     /// Get user photo path by Telegram user ID (fast lookup for UI rendering)
     /// </summary>
@@ -370,6 +352,7 @@ public class TelegramUserRepository : ITelegramUserRepository
 
         // Query 7: Users with tags
         var usersWithTags = await context.UserTags
+            .Where(t => t.RemovedAt == null)
             .Select(t => t.TelegramUserId)
             .Distinct()
             .ToHashSetAsync(cancellationToken);
@@ -438,6 +421,7 @@ public class TelegramUserRepository : ITelegramUserRepository
         CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var now = DateTimeOffset.UtcNow;
 
         // Build base queryable with filter predicate
         var query = context.TelegramUsers.AsNoTracking().Where(u => u.TelegramUserId != 0);
@@ -445,17 +429,23 @@ public class TelegramUserRepository : ITelegramUserRepository
         // Apply tab filter
         switch (filter)
         {
+            case UiModels.UserListFilter.All:
+                // No status predicate — the guaranteed-visible view. Base filter (system user),
+                // chat scope, and search still apply below.
+                break;
             case UiModels.UserListFilter.Active:
                 query = query.Where(u => u.IsActive && !u.IsBanned);
                 break;
             case UiModels.UserListFilter.Tagged:
+                // A note, a live tag, or a warning still in force — the same active-warning rule
+                // WarningCount / HasWarnings apply, so a Tagged row never shows zero warnings by that path.
                 query = query.Where(u => u.IsActive &&
                     (context.AdminNotes.Any(n => n.TelegramUserId == u.TelegramUserId) ||
-                     context.UserTags.Any(t => t.TelegramUserId == u.TelegramUserId) ||
-                     u.Warnings!.Any()));
+                     context.UserTags.Any(t => t.TelegramUserId == u.TelegramUserId && t.RemovedAt == null) ||
+                     u.Warnings!.Any(w => w.ExpiresAt == null || w.ExpiresAt > now)));
                 break;
             case UiModels.UserListFilter.Trusted:
-                query = query.Where(u => u.IsActive && u.IsTrusted);
+                query = query.Where(u => u.IsTrusted);
                 break;
             case UiModels.UserListFilter.Kicked:
                 query = query.Where(u => !u.IsActive && !u.IsBanned);
@@ -510,6 +500,7 @@ public class TelegramUserRepository : ITelegramUserRepository
                 LastName = u.LastName,
                 UserPhotoPath = u.UserPhotoPath,
                 IsTrusted = u.IsTrusted,
+                IsActive = u.IsActive,
                 IsBanned = u.IsBanned,
                 LastSeenAt = u.LastSeenAt,
                 ProfileScanScore = u.ProfileScanScore,
@@ -600,7 +591,7 @@ public class TelegramUserRepository : ITelegramUserRepository
             .ToHashSetAsync(cancellationToken);
 
         var taggedUserIds = await context.UserTags
-            .Where(t => bannedUserIds.Contains(t.TelegramUserId))
+            .Where(t => bannedUserIds.Contains(t.TelegramUserId) && t.RemovedAt == null)
             .Select(t => t.TelegramUserId)
             .Union(context.AdminNotes
                 .Where(n => bannedUserIds.Contains(n.TelegramUserId))
@@ -658,18 +649,20 @@ public class TelegramUserRepository : ITelegramUserRepository
             baseQuery = ApplySearchFilter(baseQuery, context, search);
         }
 
-        // Run 5 count queries sequentially (DbContext is not thread-safe)
+        // Run 6 count queries sequentially (DbContext is not thread-safe)
+        var allCount = await baseQuery.CountAsync(cancellationToken);
         var activeCount = await baseQuery.Where(u => u.IsActive && !u.IsBanned).CountAsync(cancellationToken);
         var taggedCount = await baseQuery.Where(u => u.IsActive &&
             (context.AdminNotes.Any(n => n.TelegramUserId == u.TelegramUserId) ||
-             context.UserTags.Any(t => t.TelegramUserId == u.TelegramUserId) ||
-             u.Warnings!.Any())).CountAsync(cancellationToken);
-        var trustedCount = await baseQuery.Where(u => u.IsActive && u.IsTrusted).CountAsync(cancellationToken);
+             context.UserTags.Any(t => t.TelegramUserId == u.TelegramUserId && t.RemovedAt == null) ||
+             u.Warnings!.Any(w => w.ExpiresAt == null || w.ExpiresAt > now))).CountAsync(cancellationToken);
+        var trustedCount = await baseQuery.Where(u => u.IsTrusted).CountAsync(cancellationToken);
         var bannedCount = await baseQuery.Where(u => u.IsBanned && (u.BanExpiresAt == null || u.BanExpiresAt > now)).CountAsync(cancellationToken);
         var kickedCount = await baseQuery.Where(u => !u.IsActive && !u.IsBanned).CountAsync(cancellationToken);
 
         return new UiModels.UserTabCounts
         {
+            AllCount = allCount,
             ActiveCount = activeCount,
             TaggedCount = taggedCount,
             TrustedCount = trustedCount,
@@ -739,7 +732,7 @@ public class TelegramUserRepository : ITelegramUserRepository
 
         // Users with tags
         var usersWithTags = await context.UserTags
-            .Where(t => userIds.Contains(t.TelegramUserId))
+            .Where(t => userIds.Contains(t.TelegramUserId) && t.RemovedAt == null)
             .Select(t => t.TelegramUserId)
             .Distinct()
             .ToHashSetAsync(cancellationToken);
@@ -797,7 +790,7 @@ public class TelegramUserRepository : ITelegramUserRepository
             // Tagged count (users with notes or tags for tracking)
             TaggedCount = await context.TelegramUsers
                 .Where(u => context.AdminNotes.Any(n => n.TelegramUserId == u.TelegramUserId)
-                    || context.UserTags.Any(t => t.TelegramUserId == u.TelegramUserId))
+                    || context.UserTags.Any(t => t.TelegramUserId == u.TelegramUserId && t.RemovedAt == null))
                 .CountAsync(cancellationToken),
 
             // Notes count (Phase 4.12)
@@ -877,7 +870,7 @@ public class TelegramUserRepository : ITelegramUserRepository
         // Get detection history (join through messages to filter by user)
         var detectionHistory = await (
             from dr in context.DetectionResults
-            join m in context.Messages on dr.MessageId equals m.MessageId
+            join m in context.Messages on new { dr.MessageId, dr.ChatId } equals new { m.MessageId, m.ChatId }
             where m.UserId == telegramUserId
             select dr
         )

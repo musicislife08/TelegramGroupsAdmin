@@ -192,9 +192,9 @@ namespace TelegramGroupsAdmin.Data.Migrations
             // ──────────────────────────────────────────────────────────────
             // Step 7: Recreate views with V2 column names
             // ──────────────────────────────────────────────────────────────
-            migrationBuilder.Sql(EnrichedDetectionView.CreateViewSql);
-            migrationBuilder.Sql(HourlyDetectionStatsView.CreateViewSql);
-            migrationBuilder.Sql(DetectionAccuracyView.CreateViewSql);
+            migrationBuilder.Sql(LegacyDetectionViewSql.EnrichedDetections);
+            migrationBuilder.Sql(LegacyDetectionViewSql.HourlyDetectionStats);
+            migrationBuilder.Sql(LegacyDetectionViewSql.DetectionAccuracy);
         }
 
         /// <inheritdoc />

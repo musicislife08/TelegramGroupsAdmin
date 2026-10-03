@@ -14,11 +14,10 @@ public class ResetPasswordPage
     // Selectors - MudBlazor components
     // MudAlert generates classes like .mud-alert-text-error, .mud-alert-text-success
     private const string PageTitle = ".mud-typography-h4";
-    private const string ErrorAlert = ".mud-alert-text-error";
-    private const string SuccessAlert = ".mud-alert-text-success";
+    private const string ErrorAlertSelector = ".mud-alert-text-error";
+    private const string SuccessAlertSelector = ".mud-alert-text-success";
     private const string SignInLink = "a[href='/login']";
-    private const string RequestNewLinkButton = "a[href='/forgot-password']";
-    private const string LoadingIndicator = ".mud-progress-circular";
+    private const string RequestNewLinkButtonSelector = "a[href='/forgot-password']";
 
     public ResetPasswordPage(IPage page)
     {
@@ -79,14 +78,6 @@ public class ResetPasswordPage
     }
 
     /// <summary>
-    /// Checks if the password form is visible (indicates valid token).
-    /// </summary>
-    public async Task<bool> IsFormVisibleAsync()
-    {
-        return await NewPasswordInput.IsVisibleAsync();
-    }
-
-    /// <summary>
     /// Fills the new password field.
     /// </summary>
     public async Task FillNewPasswordAsync(string password)
@@ -135,7 +126,7 @@ public class ResetPasswordPage
     /// </summary>
     public async Task WaitForSuccessAsync(int timeoutMs = 10000)
     {
-        await _page.WaitForSelectorAsync(SuccessAlert, new PageWaitForSelectorOptions
+        await _page.WaitForSelectorAsync(SuccessAlertSelector, new PageWaitForSelectorOptions
         {
             State = WaitForSelectorState.Visible,
             Timeout = timeoutMs
@@ -153,77 +144,19 @@ public class ResetPasswordPage
         });
     }
 
-    /// <summary>
-    /// Checks if a success message is displayed.
-    /// </summary>
-    public async Task<bool> HasSuccessMessageAsync()
+    /// <summary>Clicks the "Sign In" link (an interactive page: the live circuit must be up first).</summary>
+    public async Task ClickSignInLinkAsync()
     {
-        return await _page.Locator(SuccessAlert).IsVisibleAsync();
+        await _page.WaitForInteractiveAsync();
+        await _page.ClickAsync(SignInLink);
     }
 
-    /// <summary>
-    /// Gets the success message text.
-    /// </summary>
-    public async Task<string?> GetSuccessMessageAsync()
-    {
-        var successLocator = _page.Locator(SuccessAlert);
-        if (!await successLocator.IsVisibleAsync())
-            return null;
+    /// <summary>The success alert shown after the password is reset.</summary>
+    public ILocator SuccessAlert => _page.Locator(SuccessAlertSelector);
 
-        return await successLocator.TextContentAsync();
-    }
+    /// <summary>The error alert (e.g. mismatched/short password, invalid or missing token).</summary>
+    public ILocator ErrorAlert => _page.Locator(ErrorAlertSelector);
 
-    /// <summary>
-    /// Checks if an error message is displayed.
-    /// </summary>
-    public async Task<bool> HasErrorMessageAsync()
-    {
-        return await _page.Locator(ErrorAlert).IsVisibleAsync();
-    }
-
-    /// <summary>
-    /// Gets the error message text.
-    /// </summary>
-    public async Task<string?> GetErrorMessageAsync(int timeoutMs = 5000)
-    {
-        var errorLocator = _page.Locator(ErrorAlert);
-
-        try
-        {
-            await errorLocator.WaitForAsync(new LocatorWaitForOptions
-            {
-                State = WaitForSelectorState.Visible,
-                Timeout = timeoutMs
-            });
-            return await errorLocator.TextContentAsync();
-        }
-        catch (PlaywrightException)
-        {
-            return null;
-        }
-    }
-
-    /// <summary>
-    /// Gets the page title text.
-    /// </summary>
-    public async Task<string?> GetPageTitleAsync()
-    {
-        return await _page.Locator(PageTitle).TextContentAsync();
-    }
-
-    /// <summary>
-    /// Checks if the "Request New Link" button is visible (indicates invalid/missing token).
-    /// </summary>
-    public async Task<bool> IsRequestNewLinkVisibleAsync()
-    {
-        return await _page.Locator(RequestNewLinkButton).IsVisibleAsync();
-    }
-
-    /// <summary>
-    /// Checks if the form is in loading state.
-    /// </summary>
-    public async Task<bool> IsLoadingAsync()
-    {
-        return await _page.Locator(LoadingIndicator).IsVisibleAsync();
-    }
+    /// <summary>The "Request New Link" button, shown when the token is invalid or missing.</summary>
+    public ILocator RequestNewLinkButton => _page.Locator(RequestNewLinkButtonSelector);
 }

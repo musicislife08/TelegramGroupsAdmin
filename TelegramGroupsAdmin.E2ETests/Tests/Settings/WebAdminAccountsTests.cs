@@ -1,4 +1,6 @@
+using System.Text.RegularExpressions;
 using TelegramGroupsAdmin.E2ETests.PageObjects.Settings;
+using static Microsoft.Playwright.Assertions;
 
 namespace TelegramGroupsAdmin.E2ETests.Tests.Settings;
 
@@ -32,13 +34,11 @@ public class WebAdminAccountsTests : AuthenticatedTestBase
         await _accountsPage.WaitForLoadAsync();
 
         // Assert - User table should be visible with headers
-        Assert.That(await _accountsPage.IsUserTableVisibleAsync(), Is.True,
-            "User table should be visible");
+        await Expect(_accountsPage.UserTable).ToBeVisibleAsync();
 
-        var headers = await _accountsPage.GetTableHeadersAsync();
-        Assert.That(headers, Does.Contain("Email"));
-        Assert.That(headers, Does.Contain("Permission Level"));
-        Assert.That(headers, Does.Contain("Status"));
+        await Expect(_accountsPage.TableHeader("Email")).ToBeVisibleAsync();
+        await Expect(_accountsPage.TableHeader("Permission Level")).ToBeVisibleAsync();
+        await Expect(_accountsPage.TableHeader("Status")).ToBeVisibleAsync();
     }
 
     [Test]
@@ -52,8 +52,7 @@ public class WebAdminAccountsTests : AuthenticatedTestBase
         await _accountsPage.WaitForLoadAsync();
 
         // Assert - User table should be visible
-        Assert.That(await _accountsPage.IsUserTableVisibleAsync(), Is.True,
-            "User table should be visible for Owner");
+        await Expect(_accountsPage.UserTable).ToBeVisibleAsync();
     }
 
     [Test]
@@ -67,9 +66,7 @@ public class WebAdminAccountsTests : AuthenticatedTestBase
         await _accountsPage.WaitForLoadAsync();
 
         // Assert - At least one user should be displayed
-        var userCount = await _accountsPage.GetUserCountAsync();
-        Assert.That(userCount, Is.GreaterThanOrEqualTo(1),
-            "At least the current user should be displayed");
+        await Expect(_accountsPage.UserRows.First).ToBeVisibleAsync();
     }
 
     #endregion
@@ -87,8 +84,7 @@ public class WebAdminAccountsTests : AuthenticatedTestBase
         await _accountsPage.WaitForLoadAsync();
 
         // Assert
-        Assert.That(await _accountsPage.IsCreateUserButtonVisibleAsync(), Is.True,
-            "GlobalAdmin should see Create User button");
+        await Expect(_accountsPage.CreateUserButton).ToBeVisibleAsync();
     }
 
     [Test]
@@ -102,8 +98,7 @@ public class WebAdminAccountsTests : AuthenticatedTestBase
         await _accountsPage.WaitForLoadAsync();
 
         // Assert
-        Assert.That(await _accountsPage.IsManageInvitesButtonVisibleAsync(), Is.True,
-            "GlobalAdmin should see Manage Invites button");
+        await Expect(_accountsPage.ManageInvitesButton).ToBeVisibleAsync();
     }
 
     [Test]
@@ -116,14 +111,9 @@ public class WebAdminAccountsTests : AuthenticatedTestBase
         await _accountsPage.NavigateAsync();
         await _accountsPage.WaitForLoadAsync();
 
-        using (Assert.EnterMultipleScope())
-        {
-            // Assert
-            Assert.That(await _accountsPage.IsCreateUserButtonVisibleAsync(), Is.True,
-                "Owner should see Create User button");
-            Assert.That(await _accountsPage.IsManageInvitesButtonVisibleAsync(), Is.True,
-                "Owner should see Manage Invites button");
-        }
+        // Assert
+        await Expect(_accountsPage.CreateUserButton).ToBeVisibleAsync();
+        await Expect(_accountsPage.ManageInvitesButton).ToBeVisibleAsync();
     }
 
     #endregion
@@ -141,8 +131,7 @@ public class WebAdminAccountsTests : AuthenticatedTestBase
         await _accountsPage.WaitForLoadAsync();
 
         // Assert
-        Assert.That(await _accountsPage.IsStatusFilterVisibleAsync(), Is.True,
-            "Status filter should be visible");
+        await Expect(_accountsPage.StatusFilter).ToBeVisibleAsync();
     }
 
     #endregion
@@ -161,12 +150,10 @@ public class WebAdminAccountsTests : AuthenticatedTestBase
         await _accountsPage.ClickCreateUserAsync();
 
         // Assert
-        Assert.That(await _accountsPage.IsDialogOpenAsync(), Is.True,
-            "Create User dialog should open");
+        await Expect(_accountsPage.Dialog).ToBeVisibleAsync();
 
-        var dialogTitle = await _accountsPage.GetDialogTitleAsync();
-        Assert.That(dialogTitle, Does.Contain("Create User").Or.Contain("Invite"),
-            "Dialog title should indicate user creation");
+        // Dialog title should indicate user creation
+        await Expect(_accountsPage.DialogTitle).ToContainTextAsync(new Regex("Create User|Invite"));
     }
 
     [Test]
@@ -181,20 +168,13 @@ public class WebAdminAccountsTests : AuthenticatedTestBase
         await _accountsPage.ClickCreateUserAsync();
 
         // Assert - GlobalAdmin should see Admin and GlobalAdmin options, but NOT Owner
-        var options = await _accountsPage.GetPermissionOptionsAsync();
+        await _accountsPage.OpenPermissionOptionsAsync();
 
-        using (Assert.EnterMultipleScope())
-        {
-            // Should have Admin and GlobalAdmin
-            Assert.That(options.Any(o => o.Contains("Admin")), Is.True,
-                "GlobalAdmin should see Admin option");
-
-            // Should NOT see Owner option
-            Assert.That(options.Any(o => o == "Owner" || o.Contains("Owner")), Is.False,
-                "GlobalAdmin should NOT see Owner option");
-        }
+        // Exactly Admin and GlobalAdmin, in order: GlobalAdmin is offered its own level, and Owner is not offered
+        await Expect(_accountsPage.PermissionOptions).ToHaveTextAsync(["Admin - Chat-scoped moderation", "GlobalAdmin - Global moderation"]);
 
         // Cleanup
+        await _accountsPage.ClosePermissionOptionsAsync();
         await _accountsPage.CloseDialogAsync();
     }
 
@@ -210,17 +190,13 @@ public class WebAdminAccountsTests : AuthenticatedTestBase
         await _accountsPage.ClickCreateUserAsync();
 
         // Assert - Owner should see all options including Owner
-        var options = await _accountsPage.GetPermissionOptionsAsync();
+        await _accountsPage.OpenPermissionOptionsAsync();
 
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(options.Any(o => o.Contains("Admin")), Is.True,
-                      "Owner should see Admin option");
-            Assert.That(options.Any(o => o.Contains("Owner")), Is.True,
-                "Owner should see Owner option");
-        }
+        await Expect(_accountsPage.PermissionOptions.Filter(new() { HasTextRegex = new Regex("Admin") }).First).ToBeVisibleAsync();
+        await Expect(_accountsPage.PermissionOptions.Filter(new() { HasTextRegex = new Regex("Owner") }).First).ToBeVisibleAsync();
 
         // Cleanup
+        await _accountsPage.ClosePermissionOptionsAsync();
         await _accountsPage.CloseDialogAsync();
     }
 
@@ -240,12 +216,10 @@ public class WebAdminAccountsTests : AuthenticatedTestBase
         await _accountsPage.ClickManageInvitesAsync();
 
         // Assert
-        Assert.That(await _accountsPage.IsDialogOpenAsync(), Is.True,
-            "Manage Invites dialog should open");
+        await Expect(_accountsPage.Dialog).ToBeVisibleAsync();
 
-        var dialogTitle = await _accountsPage.GetDialogTitleAsync();
-        Assert.That(dialogTitle, Does.Contain("Invite"),
-            "Dialog title should mention invites");
+        // Dialog title should mention invites
+        await Expect(_accountsPage.DialogTitle).ToContainTextAsync("Invite");
     }
 
     #endregion

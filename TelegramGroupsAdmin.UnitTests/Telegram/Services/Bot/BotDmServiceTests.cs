@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
+using Telegram.Bot.Exceptions;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
@@ -131,6 +132,59 @@ public class BotDmServiceTests
 
     #endregion
 
+    #region SendDmAsync — 403 fallback to chat
+
+    [Test]
+    public async Task SendDmAsync_DmBlockedWithFallbackChat_PostsFallbackThatMentionsRecipient()
+    {
+        // Arrange — the DM is refused (403), the fallback post in the group succeeds
+        const long fallbackChatId = -100555L;
+        var message = new TelegramMessageBuilder().Text("You're ").Bold("in").Build();
+        string? fallbackText = null;
+        IReadOnlyList<MessageEntity>? fallbackEntities = null;
+
+        _messageHandler
+            .SendAsync(
+                chatId: TestUser.Id,
+                text: Arg.Any<string>(),
+                parseMode: Arg.Any<ParseMode?>(),
+                replyParameters: Arg.Any<ReplyParameters?>(),
+                replyMarkup: Arg.Any<InlineKeyboardMarkup?>(),
+                entities: Arg.Any<IReadOnlyList<MessageEntity>?>(),
+                ct: Arg.Any<CancellationToken>())
+            .Returns<Message>(_ => throw new ApiRequestException("Forbidden: bot was blocked by the user", 403));
+        _messageHandler
+            .SendAsync(
+                chatId: fallbackChatId,
+                text: Arg.Do<string>(t => fallbackText = t),
+                parseMode: Arg.Any<ParseMode?>(),
+                replyParameters: Arg.Any<ReplyParameters?>(),
+                replyMarkup: Arg.Any<InlineKeyboardMarkup?>(),
+                entities: Arg.Do<IReadOnlyList<MessageEntity>?>(e => fallbackEntities = e),
+                ct: Arg.Any<CancellationToken>())
+            .Returns(new Message { Id = 7, Chat = new Chat { Id = fallbackChatId } });
+
+        // Act
+        var result = await _service.SendDmAsync(TestUser, message, fallbackChatId);
+
+        // Assert — a group post is for one user, so it opens with a clickable mention of them,
+        // and the original entities are shifted past the mention
+        var mention = TelegramDisplayName.Format(TestUser.FirstName, TestUser.LastName, TestUser.Username, TestUser.Id);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.FallbackUsed, Is.True);
+            Assert.That(fallbackText, Is.EqualTo($"{mention} You're in"));
+            Assert.That(fallbackEntities, Has.Count.EqualTo(2));
+            Assert.That(fallbackEntities![0].Type, Is.EqualTo(MessageEntityType.TextMention));
+            Assert.That(fallbackEntities[0].User!.Id, Is.EqualTo(TestUser.Id));
+            Assert.That(fallbackEntities[0].Offset, Is.Zero);
+            Assert.That(fallbackEntities[1].Type, Is.EqualTo(MessageEntityType.Bold));
+            Assert.That(fallbackEntities[1].Offset, Is.EqualTo(mention.Length + " You're ".Length));
+        }
+    }
+
+    #endregion
+
     #region SendDmWithKeyboardAsync — TelegramMessage overload
 
     [Test]
@@ -212,6 +266,180 @@ public class BotDmServiceTests
 
         // Assert
         await _userRepository.Received(1).EnableBotDmAsync(TestUser.Id, Arg.Any<CancellationToken>());
+    }
+
+    #endregion
+
+    #region SendDmWithAnimationEntitiesAsync
+
+    private void SetupAnimationReturns(string returnedFileId) =>
+        _messageHandler
+            .SendAnimationAsync(
+                Arg.Any<long>(), Arg.Any<InputFile>(), Arg.Any<string?>(), Arg.Any<ParseMode?>(),
+                Arg.Any<ReplyParameters?>(), Arg.Any<InlineKeyboardMarkup?>(),
+                Arg.Any<IReadOnlyList<MessageEntity>?>(), Arg.Any<CancellationToken>())
+            .Returns(new Message
+            {
+                Id = 7,
+                Chat = new Chat { Id = TestUser.Id },
+                Animation = new Animation { FileId = returnedFileId, FileUniqueId = "u1" }
+            });
+
+    [Test]
+    public async Task SendDmWithAnimationEntitiesAsync_CachedFileId_SendsByFileIdAndReportsReturnedId()
+    {
+        SetupAnimationReturns("cached-id");
+        var caption = new TelegramMessageBuilder().Bold("Workshop Alumni").LineBreak().Text("banned!").Build();
+
+        var result = await _service.SendDmWithAnimationEntitiesAsync(TestUser, caption, "cached-id", "/nope.gif");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.DmSent, Is.True);
+            Assert.That(result.Blocked, Is.False);
+            Assert.That(result.AnimationFileId, Is.EqualTo("cached-id"));
+        }
+        await _messageHandler.Received(1).SendAnimationAsync(
+            TestUser.Id,
+            Arg.Is<InputFile>(f => f is InputFileId && ((InputFileId)f).Id == "cached-id"),
+            caption.Text, Arg.Any<ParseMode?>(), Arg.Any<ReplyParameters?>(), Arg.Any<InlineKeyboardMarkup?>(),
+            caption.Entities, Arg.Any<CancellationToken>());
+        await _userRepository.Received(1).EnableBotDmAsync(TestUser.Id, Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task SendDmWithAnimationEntitiesAsync_Forbidden_ReportsBlockedDisablesDmAndDoesNotQueue()
+    {
+        _messageHandler
+            .SendAnimationAsync(
+                Arg.Any<long>(), Arg.Any<InputFile>(), Arg.Any<string?>(), Arg.Any<ParseMode?>(),
+                Arg.Any<ReplyParameters?>(), Arg.Any<InlineKeyboardMarkup?>(),
+                Arg.Any<IReadOnlyList<MessageEntity>?>(), Arg.Any<CancellationToken>())
+            .Returns<Message>(_ => throw new ApiRequestException("Forbidden: bot was blocked by the user", 403));
+
+        var result = await _service.SendDmWithAnimationEntitiesAsync(TestUser, TelegramMessage.Plain("x"), "cached-id", null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.DmSent, Is.False);
+            Assert.That(result.Blocked, Is.True);
+            Assert.That(result.Failed, Is.True);
+        }
+        await _userRepository.Received(1).DisableBotDmAsync(TestUser.Id, Arg.Any<CancellationToken>());
+        await _pendingNotificationsRepository.DidNotReceiveWithAnyArgs().AddPendingNotificationAsync(default, default!, default!, default);
+    }
+
+    [Test]
+    public async Task SendDmWithAnimationEntitiesAsync_NonForbiddenApiError_FailsWithoutBlocking()
+    {
+        _messageHandler
+            .SendAnimationAsync(
+                Arg.Any<long>(), Arg.Any<InputFile>(), Arg.Any<string?>(), Arg.Any<ParseMode?>(),
+                Arg.Any<ReplyParameters?>(), Arg.Any<InlineKeyboardMarkup?>(),
+                Arg.Any<IReadOnlyList<MessageEntity>?>(), Arg.Any<CancellationToken>())
+            .Returns<Message>(_ => throw new ApiRequestException("Bad Request: message caption is too long", 400));
+
+        var result = await _service.SendDmWithAnimationEntitiesAsync(TestUser, TelegramMessage.Plain("x"), "cached-id", null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.DmSent, Is.False);
+            Assert.That(result.Failed, Is.True);
+            Assert.That(result.Blocked, Is.False);
+        }
+        await _userRepository.DidNotReceiveWithAnyArgs().DisableBotDmAsync(default);
+    }
+
+    [Test]
+    public async Task SendDmWithAnimationEntitiesAsync_StaleFileId_RetriesWithUploadAndReportsNewId()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"anim_{Guid.NewGuid():N}.gif");
+        await File.WriteAllBytesAsync(path, [0x47, 0x49, 0x46]);
+        try
+        {
+            _messageHandler
+                .SendAnimationAsync(
+                    Arg.Any<long>(), Arg.Is<InputFile>(f => f is InputFileId), Arg.Any<string?>(), Arg.Any<ParseMode?>(),
+                    Arg.Any<ReplyParameters?>(), Arg.Any<InlineKeyboardMarkup?>(),
+                    Arg.Any<IReadOnlyList<MessageEntity>?>(), Arg.Any<CancellationToken>())
+                .Returns<Message>(_ => throw new ApiRequestException("Bad Request: wrong file identifier/HTTP URL specified", 400));
+            _messageHandler
+                .SendAnimationAsync(
+                    Arg.Any<long>(), Arg.Is<InputFile>(f => f is InputFileStream), Arg.Any<string?>(), Arg.Any<ParseMode?>(),
+                    Arg.Any<ReplyParameters?>(), Arg.Any<InlineKeyboardMarkup?>(),
+                    Arg.Any<IReadOnlyList<MessageEntity>?>(), Arg.Any<CancellationToken>())
+                .Returns(new Message
+                {
+                    Id = 8,
+                    Chat = new Chat { Id = TestUser.Id },
+                    Animation = new Animation { FileId = "fresh-id", FileUniqueId = "u2" }
+                });
+
+            var result = await _service.SendDmWithAnimationEntitiesAsync(TestUser, TelegramMessage.Plain("x"), "stale-id", path);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(result.DmSent, Is.True);
+                Assert.That(result.AnimationFileId, Is.EqualTo("fresh-id"));
+            }
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Test]
+    public async Task SendDmWithAnimationEntitiesAsync_NoFileIdAndMissingFile_FailsWithoutCallingTelegram()
+    {
+        var result = await _service.SendDmWithAnimationEntitiesAsync(TestUser, TelegramMessage.Plain("x"), null, "/does/not/exist.gif");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.DmSent, Is.False);
+            Assert.That(result.Failed, Is.True);
+            Assert.That(result.Blocked, Is.False);
+        }
+        await _messageHandler.DidNotReceiveWithAnyArgs().SendAnimationAsync(default, default!);
+    }
+
+    #endregion
+
+    #region EditDmTextAsync / EditDmCaptionAsync
+
+    private static readonly MessageEntity[] MentionEntities =
+    [
+        new() { Type = MessageEntityType.TextMention, Offset = 0, Length = 5, User = new User { Id = TestUser.Id, FirstName = "Alice" } }
+    ];
+
+    [Test]
+    public async Task EditDmTextAsync_ForwardsEntitiesToHandler()
+    {
+        await _service.EditDmTextAsync(TestUser.Id, 7, "Alice reported", entities: MentionEntities);
+
+        await _messageHandler.Received(1).EditTextAsync(
+            chatId: TestUser.Id,
+            messageId: 7,
+            text: "Alice reported",
+            parseMode: Arg.Any<ParseMode?>(),
+            replyMarkup: Arg.Any<InlineKeyboardMarkup?>(),
+            entities: MentionEntities,
+            ct: Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task EditDmCaptionAsync_ForwardsCaptionEntitiesToHandler()
+    {
+        await _service.EditDmCaptionAsync(TestUser.Id, 7, "Alice reported", captionEntities: MentionEntities);
+
+        await _messageHandler.Received(1).EditCaptionAsync(
+            chatId: TestUser.Id,
+            messageId: 7,
+            caption: "Alice reported",
+            parseMode: Arg.Any<ParseMode?>(),
+            replyMarkup: Arg.Any<InlineKeyboardMarkup?>(),
+            captionEntities: MentionEntities,
+            ct: Arg.Any<CancellationToken>());
     }
 
     #endregion

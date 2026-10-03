@@ -349,6 +349,8 @@
         NotificationEventType.ChatAdminChanged => "Chat Admin Changed (Owners)",
         NotificationEventType.ChatHealthWarning => "Chat Health Warning (Owners)",
         NotificationEventType.BackupFailed => "Backup Failed (Owners)",
+        NotificationEventType.ExamFailed => "Exam Failed (Needs Review)",
+        NotificationEventType.ExamPassed => "Exam Passed (Auto-Admitted)",
         _ => eventType.ToString()
     };
 
@@ -362,6 +364,8 @@
         NotificationEventType.ChatAdminChanged => Color.Info,
         NotificationEventType.ChatHealthWarning => Color.Warning,
         NotificationEventType.BackupFailed => Color.Error,
+        NotificationEventType.ExamFailed => Color.Warning,
+        NotificationEventType.ExamPassed => Color.Success,
         _ => Color.Default
     };
 

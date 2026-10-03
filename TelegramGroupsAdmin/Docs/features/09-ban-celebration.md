@@ -1,6 +1,6 @@
 # Ban Celebration
 
-When a spammer gets banned, why not make it memorable? The **Ban Celebration** feature posts a random celebratory GIF with a witty caption to the chat every time a user is banned. Optionally, it can also send the celebration directly to the banned user via DM for maximum impact.
+When a spammer gets banned, why not make it memorable? The **Ban Celebration** feature posts a random celebratory GIF with a witty caption to the chat every time a user is banned. Optionally, it can also send the celebration directly to the banned user via DM for maximum impact, and members can [subscribe](#dm-subscribers) to receive every celebration in their own DMs.
 
 GIFs and captions are drawn from a shared library and paired randomly, with a shuffle-bag algorithm ensuring every item is shown before any repeats.
 
@@ -8,7 +8,7 @@ GIFs and captions are drawn from a shared library and paired randomly, with a sh
 
 ### Celebration Flow
 
-When a ban occurs (automatic or manual), the system checks configuration, selects a random GIF and caption, replaces placeholder variables, and sends the result to the chat.
+When a ban occurs (automatic or manual), the system checks configuration, selects a random GIF and caption, replaces placeholder variables, and sends the result to the chat. The diagram below covers the chat post; [DM subscribers](#dm-subscribers) get the same celebration independently of the chat toggles.
 
 ```mermaid
 flowchart TD
@@ -48,7 +48,7 @@ Ban celebrations use a **shuffle-bag** (Fisher-Yates shuffle) to select GIFs and
 
 **Result:** If you have 10 GIFs and 10 captions, you will see all 10 GIFs and all 10 captions before any repeats. Since GIFs and captions are paired independently, you get up to 100 unique combinations before patterns emerge.
 
-The shuffle-bag state is held in a **singleton cache** (`BanCelebrationCache`) that persists across requests for the lifetime of the application. The cache is thread-safe and handles race conditions gracefully.
+The shuffle-bag state is **persisted in the database**, not held in memory: each GIF/caption row has a `dispensed_at` column, and a Postgres advisory lock (`pg_advisory_xact_lock`) guards each claim so concurrent bans can't dispense the same row twice. When every row in a cycle has been dispensed, the next claim starts a fresh cycle by clearing the stamps and reshuffling.
 
 ---
 
@@ -76,6 +76,8 @@ Captions support three placeholder variables that are replaced at send time:
 | `{bancount}` | Today's count | Today's count | Total bans across all chats today (resets at midnight) |
 
 Placeholders are case-insensitive (`{Username}`, `{USERNAME}`, and `{username}` all work).
+
+**Explicit username masking:** if [Profile Scanning](08-profile-scanning.md#explicit-username-masking) flagged the banned user's display name as explicit, the chat caption substitutes the chat's configured redaction text (default `[explicit username redacted]`) for `{username}` instead of the real name. The DM version is unaffected (it already says "You"), and admin notifications always show the real name. This is on by default whenever Profile Scan is enabled for the chat; turn it off under Profile Scan settings.
 
 ### Chat vs. DM Grammar
 
@@ -109,7 +111,7 @@ Individual chats can override the global defaults. Navigate to **Chat Management
 
 Per-chat settings include:
 
-- **Enable/Disable** -- Master toggle for this specific chat
+- **Enable/Disable** -- Turns the chat post on or off for this specific chat (does not affect [DM subscribers](#dm-subscribers))
 - **Trigger on auto-ban** -- Override the global auto-ban trigger setting
 - **Trigger on manual ban** -- Override the global manual ban trigger setting
 - **Send DM to banned user** -- Override the global DM setting
@@ -221,9 +223,58 @@ DM delivery requires **all** of the following:
 ### DM Delivery Details
 
 - The DM caption uses `{username}` replaced with `You` for direct address
-- Media is sent as a video (for `.mp4` and `.gif` files) or photo (for other formats)
+- The GIF is sent as an **animation**, reusing the cached Telegram `file_id` when there is one (see [File ID Caching](#file-id-caching)), so it is not re-uploaded for every DM
 - DM failures are handled silently -- if the user has blocked the bot or never started it, the celebration still posts to the chat
-- DM delivery sends directly to the user. If the direct send fails (e.g., user blocked the bot), it falls back to the pending notification system with a 30-day expiry
+- There is no fallback: a DM that cannot be delivered (e.g., the user blocked the bot) is **not** queued in the pending notification system, so nobody gets a stale celebration replayed later
+
+---
+
+## DM Subscribers
+
+Any member of a chat can opt in to receive that chat's ban celebrations as a private message from the bot. This suits chats where some members love the celebrations and others would rather not see them: an admin can turn the chat post off and members who want the celebrations still get them in their DMs.
+
+### Subscribing and Unsubscribing
+
+Members run the command **in the group** they want celebrations from:
+
+| Command | Result |
+|---------|--------|
+| `/dmcelebrations on` | Subscribes you to this chat's ban celebrations |
+| `/dmcelebrations off` | Unsubscribes you from this chat |
+| `/dmcelebrations` | Shows whether you are subscribed in this chat |
+
+The command message is deleted and the bot's reply is removed after 30 seconds. Running the command in a private chat with the bot, or while posting as the group or a channel (anonymous admin), is refused -- subscribing from inside the group is what proves membership.
+
+### Starting the Bot
+
+Telegram only lets a bot DM users who have started a conversation with it. If you haven't (or you blocked the bot), `/dmcelebrations on` still saves your subscription and posts a short prompt in the group that mentions you, with an **Open a chat with me** button:
+
+1. Tap the button -- Telegram opens a private chat with the bot and shows **Start** (or **Restart** if you blocked it)
+2. Tap **Start** -- the bot confirms "You're all set" in the DM and deletes the prompt from the group
+3. If you don't tap it, the prompt deletes itself after **60 seconds**. Your subscription stays; DMs begin whenever you start the bot by any route
+
+Running `/dmcelebrations on` again while a prompt is open replaces it, so there is never more than one prompt per member per chat.
+
+### What Subscribers Receive
+
+- The same GIF and chat caption as the chat post (including [explicit username masking](#placeholder-variables)), headed with the **chat name** so members subscribed to several chats can tell where each one came from
+- A DM for **every** ban celebration in the chat. **Enable** and the **Trigger on auto-ban / manual ban** toggles control **only the chat post** -- subscribers get every celebration even when the chat post is off
+- If the chat post is off and nobody is subscribed, nothing happens and no GIF or caption is used up from the rotation
+
+DMs are sent one at a time in the background, paced to stay under Telegram's rate limits. The first DM uploads the GIF and every later one reuses the cached `file_id`.
+
+### When a Subscription Is Removed
+
+| Event | Removes |
+|-------|---------|
+| `/dmcelebrations off` | That chat's subscription |
+| Leaving the chat or being kicked | That chat's subscription |
+| Being banned | All of the user's subscriptions (before the celebration, so a banned user never gets a celebration of their own ban) |
+| Blocking the bot | All of the user's subscriptions |
+
+Blocking the bot is the way to stop every celebration DM at once. Unblocking it does not restore old subscriptions -- run `/dmcelebrations on` again in each chat.
+
+There is no admin control over subscriptions and no web UI for them.
 
 ---
 
@@ -266,6 +317,13 @@ This is useful for verifying that your captions render correctly and that GIF + 
 - **User blocked bot** -- If the user blocked the bot, DM delivery fails silently
 - **DM toggle** -- Verify the "Send celebration to banned user via DM" toggle is enabled
 
+### Subscriber not getting celebration DMs
+
+- **Bot not started** -- The subscriber must have started a conversation with the bot. Run `/dmcelebrations on` in the group again and tap the button in the prompt
+- **Blocked the bot** -- Blocking removes every subscription; after unblocking, run `/dmcelebrations on` again in each chat
+- **Left or banned** -- Leaving, being kicked, or being banned removes the subscription
+- **Library empty** -- Both GIFs and captions are required, even when the chat post is off
+
 ### Duplicate GIF warning on upload
 
 - The system uses perceptual hashing to detect visually similar GIFs (87.5% similarity threshold)
@@ -275,7 +333,6 @@ This is useful for verifying that your captions render correctly and that GIF + 
 ### Same GIF or caption appearing frequently
 
 - **Small library** -- With only 2-3 GIFs, repeats will be noticeable even with the shuffle bag. Add more variety to the library
-- **Application restart** -- The shuffle-bag state is in-memory. After a restart, bags are repopulated from scratch with a new random order
 
 ---
 

@@ -65,6 +65,18 @@ public sealed class ReportCallbackService(
         var reportType = context.ReportType;
         var executorUser = callbackQuery.From;
 
+        // The DM was sent to whoever was an admin then; act only if the clicker is still one now.
+        var permissionService = scope.ServiceProvider.GetRequiredService<ITelegramPermissionService>();
+        var level = await permissionService.GetEffectiveLevelAsync(context.ChatId, executorUser.Id, cancellationToken);
+        if (level < PermissionLevel.Admin)
+        {
+            logger.LogWarning(
+                "Review callback {ContextId} rejected: {Executor} is {Level} in chat {ChatId}, not an admin",
+                contextId, executorUser.ToLogInfo(), level, context.ChatId);
+            await UpdateMessageWithResultAsync(callbackQuery, "You no longer have permission to act on this report", dmService, cancellationToken);
+            return;
+        }
+
         logger.LogInformation(
             "Review callback: Type={ReportType}, Action={ActionInt}, ReviewId={ReviewId}, ChatId={ChatId}, UserId={UserId}, Executor={Executor}",
             reportType, actionInt, reviewId, context.ChatId, context.UserId, executorUser.ToLogInfo());
@@ -94,7 +106,7 @@ public sealed class ReportCallbackService(
         {
             ReportType.ContentReport => await RouteContentReportAsync(reviewId, actionInt, executor, cancellationToken),
             ReportType.ImpersonationAlert => await RouteImpersonationAsync(reviewId, actionInt, executor, cancellationToken),
-            ReportType.ExamFailure => await RouteExamAsync(reviewId, actionInt, executor, cancellationToken),
+            ReportType.ExamResult => await RouteExamAsync(reviewId, actionInt, executor, cancellationToken),
             ReportType.ProfileScanAlert => await RouteProfileScanAsync(reviewId, actionInt, executor, cancellationToken),
             _ => new ReviewActionResult(false, $"Unknown review type: {reportType}")
         };
@@ -103,7 +115,7 @@ public sealed class ReportCallbackService(
     private async Task<ReviewActionResult> RouteContentReportAsync(
         long reviewId, int actionInt, Actor executor, CancellationToken cancellationToken)
     {
-        if (actionInt < 0 || actionInt > (int)ReportAction.Dismiss)
+        if (actionInt < 0 || actionInt > (int)ReportAction.Clean)
             return new ReviewActionResult(false, "Invalid action");
 
         return (ReportAction)actionInt switch
@@ -112,6 +124,7 @@ public sealed class ReportCallbackService(
             ReportAction.Ban => await reportActionsService.HandleContentBanAsync(reviewId, executor, cancellationToken: cancellationToken),
             ReportAction.Warn => await reportActionsService.HandleContentWarnAsync(reviewId, executor, cancellationToken: cancellationToken),
             ReportAction.Dismiss => await reportActionsService.HandleContentDismissAsync(reviewId, executor, cancellationToken: cancellationToken),
+            ReportAction.Clean => await reportActionsService.HandleContentCleanAsync(reviewId, executor, cancellationToken: cancellationToken),
             _ => new ReviewActionResult(false, "Unknown action")
         };
     }
@@ -134,7 +147,7 @@ public sealed class ReportCallbackService(
     private async Task<ReviewActionResult> RouteExamAsync(
         long reviewId, int actionInt, Actor executor, CancellationToken cancellationToken)
     {
-        if (actionInt < 0 || actionInt > (int)ExamAction.DenyAndBan)
+        if (actionInt < 0 || actionInt > (int)ExamAction.Dismiss)
             return new ReviewActionResult(false, "Invalid action");
 
         return (ExamAction)actionInt switch
@@ -142,6 +155,7 @@ public sealed class ReportCallbackService(
             ExamAction.Approve => await reportActionsService.HandleExamApproveAsync(reviewId, executor, cancellationToken: cancellationToken),
             ExamAction.Deny => await reportActionsService.HandleExamDenyAsync(reviewId, executor, cancellationToken: cancellationToken),
             ExamAction.DenyAndBan => await reportActionsService.HandleExamDenyAndBanAsync(reviewId, executor, cancellationToken: cancellationToken),
+            ExamAction.Dismiss => await reportActionsService.HandleExamDismissAsync(reviewId, executor, cancellationToken: cancellationToken),
             _ => new ReviewActionResult(false, "Unknown action")
         };
     }
@@ -173,6 +187,8 @@ public sealed class ReportCallbackService(
         try
         {
             var originalCaption = callbackQuery.Message.Caption ?? callbackQuery.Message.Text ?? "";
+            // Appending after the original text keeps every entity offset valid, so the
+            // original entities carry over as-is (without them, mentions lose their link)
             var updatedText = $"{originalCaption}\n\n{resultMessage}";
 
             if (callbackQuery.Message.Photo != null || callbackQuery.Message.Video != null)
@@ -182,6 +198,7 @@ public sealed class ReportCallbackService(
                     callbackQuery.Message.MessageId,
                     updatedText,
                     replyMarkup: null,
+                    captionEntities: callbackQuery.Message.CaptionEntities,
                     cancellationToken: cancellationToken);
             }
             else
@@ -191,6 +208,7 @@ public sealed class ReportCallbackService(
                     callbackQuery.Message.MessageId,
                     updatedText,
                     replyMarkup: null,
+                    entities: callbackQuery.Message.Entities,
                     cancellationToken: cancellationToken);
             }
         }

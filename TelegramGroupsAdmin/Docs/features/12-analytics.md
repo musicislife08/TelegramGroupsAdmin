@@ -2,7 +2,9 @@
 
 The Analytics page gives you a bird's-eye view of how your spam detection is performing across all your groups. Navigate to **Analytics** in the sidebar to access it.
 
-Use the date range selector (Last 7 / 30 / 90 Days) at the top to adjust the reporting window.
+Most tabs offer a date range selector (Last 7 / 30 Days, and Last 90 Days on Welcome Analytics) to adjust the reporting window; Content Detection always shows the last 30 days.
+
+**Who sees what:** GlobalAdmin and Owner accounts see every tab. Admin-level accounts can use **Message Trends**, which is scoped to their own chats; the global tabs (Content Detection, Performance, Welcome Analytics) appear but are disabled, and the global cards on the home dashboard are greyed out with no numbers. See [Web User Management](../admin/01-web-user-management.md#permission-levels).
 
 ## Content Detection
 

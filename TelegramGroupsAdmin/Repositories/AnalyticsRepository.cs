@@ -100,10 +100,11 @@ public class AnalyticsRepository : IAnalyticsRepository
 
         // Join spam detections with subsequent user actions (ban/warn)
         var responseTimes = await (
-            from dr in context.DetectionResults
+            from dr in context.DetectionResults.ContentScanSpam()
             where dr.DetectedAt >= startDate && dr.DetectedAt <= endDate
-            where dr.IsSpam
-            join ua in context.UserActions on dr.MessageId equals ua.MessageId
+            join ua in context.UserActions
+                on new { MessageId = (int?)dr.MessageId, ChatId = (long?)dr.ChatId }
+                equals new { ua.MessageId, ua.ChatId }
             where ua.ActionType == (int)UserActionType.Ban ||
                   ua.ActionType == (int)UserActionType.Warn
             where ua.IssuedAt >= dr.DetectedAt // Action after detection
@@ -170,27 +171,34 @@ public class AnalyticsRepository : IAnalyticsRepository
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         // Fetch all detection results with JSON in date range
-        var allDetections = await context.DetectionResults
+        var allDetections = await context.DetectionResults.ContentScans()
             .Where(dr => dr.DetectedAt >= startDate && dr.DetectedAt <= endDate)
-            .Where(dr => dr.DetectionSource != "manual") // Exclude manual reviews
             .Where(dr => dr.CheckResultsJson != null) // Only rows with individual check data
             .Select(dr => new
             {
                 dr.Id,
+                dr.ChatId,
                 dr.MessageId,
                 dr.CheckResultsJson,
-                dr.IsSpam
+                IsSpam = VerdictClassifications.SpamValues.Contains(dr.Classification)
             })
             .AsNoTracking()
             .ToListAsync(cancellationToken);
 
-        // Use DetectionAccuracyView for FP/FN lookups (eliminates expensive correlated sub-queries)
-        var accuracyLookup = await context.DetectionAccuracy
+        // Use DetectionAccuracyView for FP/FN lookups (eliminates expensive correlated sub-queries).
+        // Keyed on (chat, message): message ids are only unique per chat, and a message can have
+        // several flagged scans (edit re-scans) - a message counts as FP/FN if any of its scans was.
+        var flaggedScans = await context.DetectionAccuracy
             .AsNoTracking()
             .Where(v => v.DetectedAt >= startDate && v.DetectedAt <= endDate)
             .Where(v => v.IsFalsePositive || v.IsFalseNegative) // Only need records with corrections
-            .Select(v => new { v.MessageId, v.IsFalsePositive, v.IsFalseNegative })
-            .ToDictionaryAsync(v => v.MessageId, cancellationToken);
+            .Select(v => new { v.ChatId, v.MessageId, v.IsFalsePositive, v.IsFalseNegative })
+            .ToListAsync(cancellationToken);
+        var accuracyLookup = flaggedScans
+            .GroupBy(v => (v.ChatId, v.MessageId))
+            .ToDictionary(
+                g => g.Key,
+                g => (IsFalsePositive: g.Any(v => v.IsFalsePositive), IsFalseNegative: g.Any(v => v.IsFalseNegative)));
 
         // Parse JSON and aggregate per-algorithm stats
         var algorithmStats = new Dictionary<string, AlgorithmStatsAccumulator>();
@@ -198,9 +206,9 @@ public class AnalyticsRepository : IAnalyticsRepository
         foreach (var detection in allDetections)
         {
             var checks = ParseCheckResults(detection.CheckResultsJson, detection.Id);
-            accuracyLookup.TryGetValue(detection.MessageId, out var accuracy);
-            var isFalsePositive = accuracy?.IsFalsePositive ?? false;
-            var isFalseNegative = accuracy?.IsFalseNegative ?? false;
+            accuracyLookup.TryGetValue((detection.ChatId, detection.MessageId), out var accuracy);
+            var isFalsePositive = accuracy.IsFalsePositive;
+            var isFalseNegative = accuracy.IsFalseNegative;
 
             foreach (var check in checks)
             {
@@ -282,9 +290,9 @@ public class AnalyticsRepository : IAnalyticsRepository
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         // Fetch detection results (database does filtering)
-        var detections = await context.DetectionResults
+        var detections = await context.DetectionResults.ContentScans()
             .Where(dr => dr.DetectedAt >= startDate && dr.DetectedAt <= endDate)
-            .Select(dr => new { dr.DetectedAt, dr.IsSpam })
+            .Select(dr => new { dr.DetectedAt, IsSpam = VerdictClassifications.SpamValues.Contains(dr.Classification) })
             .AsNoTracking()
             .ToListAsync(cancellationToken);
 
@@ -670,9 +678,8 @@ public class AnalyticsRepository : IAnalyticsRepository
 
         // Fetch detection results for the full period
         // Note: AsNoTracking not needed since we're projecting to value types (DateTimeOffset)
-        var detections = await context.DetectionResults
+        var detections = await context.DetectionResults.ContentScanSpam()
             .Where(dr => dr.DetectedAt >= minDateUtc && dr.DetectedAt < maxDateUtc)
-            .Where(dr => dr.IsSpam)
             .Select(dr => dr.DetectedAt)
             .ToListAsync(cancellationToken);
 

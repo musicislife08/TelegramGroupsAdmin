@@ -283,17 +283,12 @@ public class TotpService(
 
     public async Task<IReadOnlyList<string>> GenerateRecoveryCodesAsync(WebUserIdentity user, CancellationToken cancellationToken = default)
     {
-        var codes = new List<string>();
-
-        // Generate recovery codes
+        var codes = new List<string>(AuthenticationConstants.RecoveryCodeCount);
         for (var i = 0; i < AuthenticationConstants.RecoveryCodeCount; i++)
-        {
-            var code = GenerateRecoveryCode();
-            codes.Add(code);
+            codes.Add(GenerateRecoveryCode());
 
-            var codeHash = HashRecoveryCode(code);
-            await userRepository.CreateRecoveryCodeAsync(user.Id, codeHash, cancellationToken);
-        }
+        // Replace, never append: a code from an earlier set must stop working once a new set is issued
+        await userRepository.ReplaceRecoveryCodesAsync(user.Id, codes.Select(HashRecoveryCode).ToList(), cancellationToken);
 
         logger.LogInformation("Generated {Count} recovery codes for {User}", codes.Count, user.ToLogInfo());
         return codes.AsReadOnly();

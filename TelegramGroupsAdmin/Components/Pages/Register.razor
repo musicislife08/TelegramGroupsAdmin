@@ -49,9 +49,27 @@
             <MudAlert Severity="Severity.Success" Class="mb-4">
                 @(_successMessage ?? "Account created successfully! You can now log in.")
             </MudAlert>
+            @if (_verificationRequired)
+            {
+                @* The user has to act on the message (check their inbox), so it stays on screen; they leave via this link. *@
+                <MudButton Href="/login" Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" Class="mb-4">
+                    Go to login
+                </MudButton>
+            }
         }
 
-        @if (!_isFirstRun && !_isEmailVerificationEnabled)
+        @* Until the first-run and email state are resolved the defaults below are placeholders: render neither
+           the note nor the invite field, so the page never flashes a note or a field that then disappears. *@
+        @if (RegistrationUnavailable)
+        {
+            <MudAlert Severity="Severity.Warning" Class="mb-4">
+                <MudText Typo="Typo.body2">
+                    <strong>Note:</strong> Registration is temporarily unavailable: the server could not determine its
+                    email service configuration. Please try again later or contact your administrator.
+                </MudText>
+            </MudAlert>
+        }
+        else if (_stateResolved && !_isFirstRun && _emailState == EmailConfigurationState.Disabled)
         {
             <MudAlert Severity="Severity.Warning" Class="mb-4">
                 <MudText Typo="Typo.body2">
@@ -61,14 +79,14 @@
             </MudAlert>
         }
 
-        @if (!_isFirstRun)
+        @if (_stateResolved && !_isFirstRun)
         {
             <MudTextField T="string"
                           Label="Invite Code"
                           @bind-Value="_inviteToken"
                           Variant="Variant.Outlined"
                           Class="mb-4"
-                          Disabled="@(_isLoading || _registrationSuccess)" />
+                          Disabled="@FormDisabled" />
         }
 
         <MudTextField T="string"
@@ -77,7 +95,7 @@
                       Variant="Variant.Outlined"
                       Class="mb-4"
                       InputType="InputType.Email"
-                      Disabled="@(_isLoading || _registrationSuccess)" />
+                      Disabled="@FormDisabled" />
 
         <MudTextField T="string"
                       Label="Password"
@@ -85,7 +103,7 @@
                       Variant="Variant.Outlined"
                       Class="mb-4"
                       InputType="InputType.Password"
-                      Disabled="@(_isLoading || _registrationSuccess)"
+                      Disabled="@FormDisabled"
                       HelperText="Minimum 8 characters with uppercase, lowercase, and number"
                       Validation="@(new Func<string, string?>(ValidatePassword))"
                       Immediate="true" />
@@ -96,7 +114,7 @@
                       Variant="Variant.Outlined"
                       Class="mb-6"
                       InputType="InputType.Password"
-                      Disabled="@(_isLoading || _registrationSuccess)"
+                      Disabled="@FormDisabled"
                       Validation="@(new Func<string, string?>(ValidateConfirmPassword))"
                       Immediate="true" />
 
@@ -104,7 +122,7 @@
                    Color="Color.Primary"
                    FullWidth="true"
                    OnClick="@(async () => await HandleRegisterAsync())"
-                   Disabled="@(_isLoading || _registrationSuccess)">
+                   Disabled="@FormDisabled">
             @if (_isLoading)
             {
                 <MudProgressCircular Size="Size.Small" Indeterminate="true" />
@@ -128,14 +146,25 @@
 @code {
     private bool _isLoading;
     private bool _registrationSuccess;
+    // Set from the register endpoint: the account starts unverified and a verification email went out, so the
+    // page keeps its instruction on screen instead of auto-redirecting to login.
+    private bool _verificationRequired;
     private bool _isFirstRun;
-    private bool _isEmailVerificationEnabled;
+    private bool _stateResolved;
+    // Strict state so the note matches what the register endpoint will do: Indeterminate means AuthService
+    // refuses registration (fail closed), so the page must not promise an immediate login.
+    private EmailConfigurationState _emailState = EmailConfigurationState.Enabled;
     private string _inviteToken = string.Empty;
     private string _email = string.Empty;
     private string _password = string.Empty; // Initialized as empty, never null
     private string _confirmPassword = string.Empty;
     private string? _errorMessage;
     private string? _successMessage;
+
+    // The register endpoint refuses every attempt while the email state is Indeterminate (fail closed), so the
+    // form stays disabled under the "temporarily unavailable" note rather than inviting a doomed submit.
+    private bool RegistrationUnavailable => _stateResolved && _emailState == EmailConfigurationState.Indeterminate;
+    private bool FormDisabled => !_stateResolved || _isLoading || _registrationSuccess || RegistrationUnavailable;
 
     [SupplyParameterFromQuery(Name = "invite")]
     private string? InviteQueryParam { get; set; }
@@ -174,7 +203,8 @@
     protected override async Task OnInitializedAsync()
     {
         _isFirstRun = await AuthService.IsFirstRunAsync();
-        _isEmailVerificationEnabled = await FeatureAvailability.IsEmailVerificationEnabledAsync();
+        _emailState = await FeatureAvailability.GetEmailConfigurationStateAsync();
+        _stateResolved = true;
 
         if (!string.IsNullOrEmpty(InviteQueryParam))
         {
@@ -239,18 +269,26 @@
                 return;
             }
 
-            // Registration successful - show message and redirect to login
+            // Registration successful - show the message
             // The login flow handles all verification: email, TOTP setup, TOTP verify
             _successMessage = result.TryGetProperty("message", out var msg)
                 ? msg.GetString()
                 : "Account created successfully! Please log in.";
+            _verificationRequired = result.TryGetProperty("verificationRequired", out var verificationRequired)
+                && verificationRequired.ValueKind == JsonValueKind.True;
             _registrationSuccess = true;
             StateHasChanged();
+
+            if (_verificationRequired)
+            {
+                // The user must verify before logging in: leave the instruction on screen with the "Go to login" link.
+                return;
+            }
 
             // Wait for user to see the success message
             await Task.Delay(2000);
 
-            // Always redirect to login - no auto-login
+            // Redirect to login - no auto-login
             Navigation.NavigateTo("/login", forceLoad: true);
         }
         catch (Exception ex)

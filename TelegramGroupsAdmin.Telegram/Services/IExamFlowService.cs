@@ -109,14 +109,14 @@ public interface IExamFlowService
     /// </summary>
     /// <param name="user">Identity of the user being approved</param>
     /// <param name="chat">Identity of the chat where the exam was taken</param>
-    /// <param name="examFailureId">ID of the exam failure record</param>
+    /// <param name="examResultId">ID of the exam result record</param>
     /// <param name="executor">Actor performing the approval</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Result indicating success or failure</returns>
-    Task<ModerationResult> ApproveExamFailureAsync(
+    Task<ModerationResult> ApproveExamResultAsync(
         UserIdentity user,
         ChatIdentity chat,
-        long examFailureId,
+        long examResultId,
         Actor executor,
         CancellationToken cancellationToken = default);
 
@@ -133,7 +133,7 @@ public interface IExamFlowService
     /// </param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Result indicating success or failure</returns>
-    Task<ModerationResult> DenyExamFailureAsync(
+    Task<ModerationResult> DenyExamResultAsync(
         UserIdentity user,
         ChatIdentity chat,
         Actor executor,
@@ -153,7 +153,7 @@ public interface IExamFlowService
     /// </param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Result indicating success or failure</returns>
-    Task<ModerationResult> DenyAndBanExamFailureAsync(
+    Task<ModerationResult> DenyAndBanExamResultAsync(
         UserIdentity user,
         ChatIdentity chat,
         Actor executor,

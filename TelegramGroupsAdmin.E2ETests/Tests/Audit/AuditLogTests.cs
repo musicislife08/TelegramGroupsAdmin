@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.E2ETests.Infrastructure;
 using TelegramGroupsAdmin.E2ETests.PageObjects;
@@ -34,19 +35,11 @@ public class AuditLogTests : SharedAuthenticatedTestBase
         await _auditLogPage.NavigateAsync();
 
         // Assert - page loads successfully with title visible
-        Assert.That(await _auditLogPage.IsPageTitleVisibleAsync(), Is.True,
-            "Audit Log page title should be visible for GlobalAdmin");
+        await Expect(_auditLogPage.PageTitle).ToBeVisibleAsync();
+        await Expect(_auditLogPage.PageTitle).ToHaveTextAsync("Audit Log");
 
-        var pageTitle = await _auditLogPage.GetPageTitleAsync();
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(pageTitle, Is.EqualTo("Audit Log"),
-                      "Page title should be 'Audit Log'");
-
-            // Verify tabs are visible
-            Assert.That(await _auditLogPage.IsTabsVisibleAsync(), Is.True,
-                "Tab container should be visible");
-        }
+        // Verify tabs are visible
+        await Expect(_auditLogPage.TabsContainer).ToBeVisibleAsync();
     }
 
     [Test]
@@ -57,25 +50,15 @@ public class AuditLogTests : SharedAuthenticatedTestBase
 
         // Act - try to navigate to audit page
         await Page.GotoAsync("/audit");
-        await Page.WaitForLoadStateAsync(Microsoft.Playwright.LoadState.NetworkIdle);
 
-        // Assert - Admin should be blocked from accessing the page
+        // Assert - Admin should be blocked from accessing the page.
+        // Admin is redirected away from /audit (server-side forbid -> /access-denied?ReturnUrl=%2Faudit,
+        // or the router's NotAuthorized -> /login). Wait for that navigation to land first so the
+        // absence check below cannot pass before the redirect/render completes.
+        await Expect(Page).Not.ToHaveURLAsync(new Regex(@"/audit(?:[?#]|$)"));
+
         // The page should NOT show the audit log content
-        var hasAuditLogTitle = await Page.Locator(".mud-typography-h4:has-text('Audit Log')").IsVisibleAsync();
-
-        Assert.That(hasAuditLogTitle, Is.False,
-            "Admin should not be able to access the Audit Log page - title should not be visible");
-
-        // Check we're either redirected or see an access denied state
-        // Blazor may show "Not Authorized" or redirect to another page
-        var url = Page.Url;
-        var notOnAuditPage = !url.Contains("/audit") ||
-                             await Page.GetByText("Not Authorized").IsVisibleAsync() ||
-                             await Page.GetByText("Access Denied").IsVisibleAsync() ||
-                             await Page.GetByText("not authorized", new() { Exact = false }).IsVisibleAsync();
-
-        Assert.That(notOnAuditPage || !hasAuditLogTitle, Is.True,
-            "Admin should be blocked from audit page - either redirected or shown access denied");
+        await Expect(_auditLogPage.PageTitle).Not.ToBeVisibleAsync();
     }
 
     #endregion
@@ -101,28 +84,20 @@ public class AuditLogTests : SharedAuthenticatedTestBase
         // Act - navigate to audit page
         await _auditLogPage.NavigateAsync();
 
-        using (Assert.EnterMultipleScope())
-        {
-            // Assert - Web Admin Log tab is active by default
-            Assert.That(await _auditLogPage.IsWebAdminLogTabActiveAsync(), Is.True,
-                "Web Admin Log tab should be active by default");
+        // Assert - Web Admin Log tab is active by default
+        await Expect(_auditLogPage.WebAdminLogTab).ToHaveAttributeAsync("aria-selected", "true");
 
-            // Verify filters are visible
-            Assert.That(await _auditLogPage.IsEventTypeFilterVisibleAsync(), Is.True,
-                "Event Type filter should be visible");
-            Assert.That(await _auditLogPage.IsActorFilterVisibleAsync(), Is.True,
-                "Actor filter should be visible");
-            Assert.That(await _auditLogPage.IsTargetUserFilterVisibleAsync(), Is.True,
-                "Target User filter should be visible");
-        }
+        // Verify filters are visible
+        await Expect(_auditLogPage.EventTypeFilter).ToBeVisibleAsync();
+        await Expect(_auditLogPage.ActorFilter).ToBeVisibleAsync();
+        await Expect(_auditLogPage.TargetUserFilter).ToBeVisibleAsync();
 
         // Verify table headers - the Web Admin Log shows these columns
-        var headers = await _auditLogPage.GetTableHeadersAsync();
-        Assert.That(headers, Does.Contain("Timestamp"), "Should have Timestamp column");
-        Assert.That(headers, Does.Contain("Event Type"), "Should have Event Type column");
-        Assert.That(headers, Does.Contain("Actor"), "Should have Actor column");
-        Assert.That(headers, Does.Contain("Target"), "Should have Target column");
-        Assert.That(headers, Does.Contain("Details"), "Should have Details column");
+        await Expect(_auditLogPage.TableHeader("Timestamp")).ToHaveCountAsync(1);
+        await Expect(_auditLogPage.TableHeader("Event Type")).ToHaveCountAsync(1);
+        await Expect(_auditLogPage.TableHeader("Actor")).ToHaveCountAsync(1);
+        await Expect(_auditLogPage.TableHeader("Target")).ToHaveCountAsync(1);
+        await Expect(_auditLogPage.TableHeader("Details")).ToHaveCountAsync(1);
     }
 
     [Test]
@@ -148,34 +123,26 @@ public class AuditLogTests : SharedAuthenticatedTestBase
         var tableRowOrEmpty = Page.Locator(".mud-table-container tr, .mud-table-container td:has-text('No records')");
         await Expect(tableRowOrEmpty.First).ToBeVisibleAsync(new() { Timeout = 10000 });
 
-        var initialRowCount = await _auditLogPage.GetTableRowCountAsync();
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(initialRowCount, Is.EqualTo(2),
-                      "Should have exactly 2 audit log entries (one Login, one UserRegistered)");
+        // Should have exactly 2 audit log entries (one Login, one UserRegistered)
+        await Expect(_auditLogPage.TableRows).ToHaveCountAsync(2);
 
-            // Verify the Event Type filter dropdown exists
-            Assert.That(await _auditLogPage.IsEventTypeFilterVisibleAsync(), Is.True,
-                "Event Type filter should be visible");
-        }
+        // Verify the Event Type filter dropdown exists
+        await Expect(_auditLogPage.EventTypeFilter).ToBeVisibleAsync();
 
         // Filter by Login event type
         await _auditLogPage.SelectEventTypeFilterAsync("Login");
 
         // Wait for the table to show exactly 1 row (the filtered Login event)
-        var filteredRows = Page.Locator(".mud-tab-panel:not([hidden]) .mud-table-body tr");
-        await Expect(filteredRows).ToHaveCountAsync(1, new() { Timeout = 10000 });
+        await Expect(_auditLogPage.TableRows).ToHaveCountAsync(1, new() { Timeout = 10000 });
 
         // Verify the event type chip shows Login
-        var hasLoginEvent = await _auditLogPage.HasLogEntryWithEventTypeAsync("Login");
-        Assert.That(hasLoginEvent, Is.True, "Should show Login event after filtering");
+        await Expect(_auditLogPage.LogEntryWithEventType("Login")).ToBeVisibleAsync();
 
         // Clear filter and verify we see all events again
         await _auditLogPage.ClearEventTypeFilterAsync();
 
         // Wait for the table to show 2 rows (both Login and UserRegistered)
-        var tableRows = Page.Locator(".mud-tab-panel:not([hidden]) .mud-table-body tr");
-        await Expect(tableRows).ToHaveCountAsync(2, new() { Timeout = 10000 });
+        await Expect(_auditLogPage.TableRows).ToHaveCountAsync(2, new() { Timeout = 10000 });
     }
 
     [Test]
@@ -201,20 +168,14 @@ public class AuditLogTests : SharedAuthenticatedTestBase
         var tableRowOrEmpty = Page.Locator(".mud-table-container tr, .mud-table-container td:has-text('No records')");
         await Expect(tableRowOrEmpty.First).ToBeVisibleAsync(new() { Timeout = 10000 });
 
-        var initialRowCount = await _auditLogPage.GetTableRowCountAsync();
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(initialRowCount, Is.EqualTo(2),
-                      "Should have exactly 2 audit log entries (one per actor)");
+        // Should have exactly 2 audit log entries (one per actor)
+        await Expect(_auditLogPage.TableRows).ToHaveCountAsync(2);
 
-            // Verify the Actor filter dropdown exists
-            Assert.That(await _auditLogPage.IsActorFilterVisibleAsync(), Is.True,
-                "Actor filter should be visible");
-        }
+        // Verify the Actor filter dropdown exists
+        await Expect(_auditLogPage.ActorFilter).ToBeVisibleAsync();
 
         // Open the Actor filter dropdown
-        var actorSelect = Page.Locator(".mud-select").Filter(new() { HasText = "Actor (Who)" }).First;
-        await actorSelect.ClickAsync();
+        await _auditLogPage.ActorFilter.ClickAsync();
 
         var popover = Page.Locator(".mud-popover-open");
         await Expect(popover).ToBeVisibleAsync();
@@ -228,19 +189,16 @@ public class AuditLogTests : SharedAuthenticatedTestBase
         await Expect(popover).Not.ToBeVisibleAsync();
 
         // Wait for the table to show exactly 1 row (the owner's entry)
-        var filteredRows = Page.Locator(".mud-tab-panel:not([hidden]) .mud-table-body tr");
-        await Expect(filteredRows).ToHaveCountAsync(1, new() { Timeout = 10000 });
+        await Expect(_auditLogPage.TableRows).ToHaveCountAsync(1, new() { Timeout = 10000 });
 
         // Verify the Actor column shows the owner's email
-        var hasOwnerEntry = await _auditLogPage.HasLogEntryWithActorAsync(owner.Email);
-        Assert.That(hasOwnerEntry, Is.True, "Should show entry from the selected actor");
+        await Expect(_auditLogPage.LogEntryWithActor(owner.Email)).ToBeVisibleAsync();
 
         // Clear filter and verify we see all events again
         await _auditLogPage.ClearActorFilterAsync();
 
         // Wait for the table to show 2 rows (one from each actor)
-        var tableRows = Page.Locator(".mud-tab-panel:not([hidden]) .mud-table-body tr");
-        await Expect(tableRows).ToHaveCountAsync(2, new() { Timeout = 10000 });
+        await Expect(_auditLogPage.TableRows).ToHaveCountAsync(2, new() { Timeout = 10000 });
     }
 
     #endregion
@@ -269,34 +227,25 @@ public class AuditLogTests : SharedAuthenticatedTestBase
         await _auditLogPage.NavigateAsync();
         await _auditLogPage.SelectTabAsync("Telegram Moderation Log");
 
-        using (Assert.EnterMultipleScope())
-        {
-            // Assert - Telegram Moderation Log tab is now active
-            Assert.That(await _auditLogPage.IsModerationLogTabActiveAsync(), Is.True,
-                "Telegram Moderation Log tab should be active after clicking");
+        // Assert - Telegram Moderation Log tab is now active
+        await Expect(_auditLogPage.ModerationLogTab).ToHaveAttributeAsync("aria-selected", "true");
 
-            // Verify moderation log filters are visible
-            Assert.That(await _auditLogPage.IsActionTypeFilterVisibleAsync(), Is.True,
-                "Action Type filter should be visible");
-            Assert.That(await _auditLogPage.IsTelegramUserIdFilterVisibleAsync(), Is.True,
-                "Telegram User ID filter should be visible");
-            Assert.That(await _auditLogPage.IsIssuedByFilterVisibleAsync(), Is.True,
-                "Issued By filter should be visible");
-        }
+        // Verify moderation log filters are visible
+        await Expect(_auditLogPage.ActionTypeFilter).ToBeVisibleAsync();
+        await Expect(_auditLogPage.TelegramUserIdFilter).ToBeVisibleAsync();
+        await Expect(_auditLogPage.IssuedByFilter).ToBeVisibleAsync();
 
         // Wait for the Moderation Log table to be fully loaded (6 columns: Timestamp, Action Type, Telegram User, Issued By, Reason, Expires At)
         // Using exact count prevents flaky behavior from tab transition where both panels might briefly match
-        var tableHeaders = Page.Locator(".mud-tab-panel:not([hidden]) .mud-table-head th");
-        await Expect(tableHeaders).ToHaveCountAsync(6, new() { Timeout = 10000 });
+        await Expect(_auditLogPage.TableHeaders).ToHaveCountAsync(6, new() { Timeout = 10000 });
 
         // Verify table has the right headers for moderation log
-        var headers = await _auditLogPage.GetTableHeadersAsync();
-        Assert.That(headers, Does.Contain("Timestamp"), "Should have Timestamp column");
-        Assert.That(headers, Does.Contain("Action Type"), "Should have Action Type column");
-        Assert.That(headers, Does.Contain("Telegram User"), "Should have Telegram User column");
-        Assert.That(headers, Does.Contain("Issued By"), "Should have Issued By column");
-        Assert.That(headers, Does.Contain("Reason"), "Should have Reason column");
-        Assert.That(headers, Does.Contain("Expires At"), "Should have Expires At column");
+        await Expect(_auditLogPage.TableHeader("Timestamp")).ToHaveCountAsync(1);
+        await Expect(_auditLogPage.TableHeader("Action Type")).ToHaveCountAsync(1);
+        await Expect(_auditLogPage.TableHeader("Telegram User")).ToHaveCountAsync(1);
+        await Expect(_auditLogPage.TableHeader("Issued By")).ToHaveCountAsync(1);
+        await Expect(_auditLogPage.TableHeader("Reason")).ToHaveCountAsync(1);
+        await Expect(_auditLogPage.TableHeader("Expires At")).ToHaveCountAsync(1);
     }
 
     [Test]
@@ -331,36 +280,35 @@ public class AuditLogTests : SharedAuthenticatedTestBase
         await _auditLogPage.NavigateToTabAsync("telegram");
 
         // Wait for table to be visible (prevents flaky timing issues)
-        var tableRows = Page.Locator(".mud-tab-panel:not([hidden]) .mud-table-body tr");
-        await Expect(tableRows.First).ToBeVisibleAsync(new() { Timeout = 10000 });
+        await Expect(_auditLogPage.TableRows.First).ToBeVisibleAsync(new() { Timeout = 10000 });
 
-        // Verify we have entries before filtering
-        var initialRowCount = await _auditLogPage.GetTableRowCountAsync();
-        Assert.That(initialRowCount, Is.GreaterThan(0),
-            "Should have moderation log entries before filtering");
+        // Verify we have entries before filtering (the Expect above already proved at least one row).
+        // The initial count is read (not merely asserted) because the cleared-filter check below
+        // waits for the table to return to it.
+#pragma warning disable RS0030 // Value is reused below as the cleared-filter expectation; synced by the Expect above
+        var initialRowCount = await _auditLogPage.TableRows.CountAsync();
+#pragma warning restore RS0030
 
         // Filter by Ban action type
         await _auditLogPage.SelectActionTypeFilterAsync("Ban");
 
-        // Assert - should only show Ban actions
-        var filteredRowCount = await _auditLogPage.GetTableRowCountAsync();
-        Assert.That(filteredRowCount, Is.GreaterThan(0),
-            "Should have Ban actions after filtering");
+        // Assert - should only show Ban actions (at least one row, and a Ban entry is shown)
+        await Expect(_auditLogPage.TableRows.First).ToBeVisibleAsync();
+        await Expect(_auditLogPage.ModerationEntryWithActionType("Ban")).ToBeVisibleAsync();
 
-        // All visible actions should be Ban type
-        if (filteredRowCount > 0)
-        {
-            var hasBanEntry = await _auditLogPage.HasModerationEntryWithActionTypeAsync("Ban");
-            Assert.That(hasBanEntry, Is.True, "Should show Ban entries after filtering");
-        }
+#pragma warning disable RS0030 // Compared against the cleared count below (not expressible as an Expect); synced by the Expects above
+        var filteredRowCount = await _auditLogPage.TableRows.CountAsync();
+#pragma warning restore RS0030
 
         // Clear filter and verify we see more entries
         await _auditLogPage.ClearActionTypeFilterAsync();
 
         // Wait for table to show at least the initial row count (Expect retries until condition met)
-        await Expect(tableRows).ToHaveCountAsync(initialRowCount, new() { Timeout = 5000 });
+        await Expect(_auditLogPage.TableRows).ToHaveCountAsync(initialRowCount, new() { Timeout = 5000 });
 
-        var clearedRowCount = await _auditLogPage.GetTableRowCountAsync();
+        // The ToHaveCountAsync above proved the cleared table shows initialRowCount rows,
+        // so that is the cleared row count compared here.
+        var clearedRowCount = initialRowCount;
         Assert.That(clearedRowCount, Is.GreaterThanOrEqualTo(filteredRowCount),
             "Should show all actions when filter is cleared");
     }
@@ -387,23 +335,18 @@ public class AuditLogTests : SharedAuthenticatedTestBase
         await _auditLogPage.NavigateAsync();
 
         // Assert - verify entry details are shown
-        var rowCount = await _auditLogPage.GetTableRowCountAsync();
-        Assert.That(rowCount, Is.GreaterThan(0),
-            "Should have audit log entries");
+        // Should have audit log entries
+        await Expect(_auditLogPage.TableRows.First).ToBeVisibleAsync();
 
         // Check that the page displays the details
         // The details column shows the Value field
         await Expect(Page.Locator($"td[data-label='Details']:has-text('{detailsText}')")).ToBeVisibleAsync();
 
         // Also verify the event type chip is correct
-        var hasPermissionChangedEvent = await _auditLogPage.HasLogEntryWithEventTypeAsync("Permission Changed");
-        Assert.That(hasPermissionChangedEvent, Is.True,
-            "Should show Permission Changed event type");
+        await Expect(_auditLogPage.LogEntryWithEventType("Permission Changed")).ToBeVisibleAsync();
 
         // Verify actor column shows the user
-        var hasActorEntry = await _auditLogPage.HasLogEntryWithActorAsync(owner.Email);
-        Assert.That(hasActorEntry, Is.True,
-            "Should show the actor's email in the Actor column");
+        await Expect(_auditLogPage.LogEntryWithActor(owner.Email)).ToBeVisibleAsync();
     }
 
     #endregion

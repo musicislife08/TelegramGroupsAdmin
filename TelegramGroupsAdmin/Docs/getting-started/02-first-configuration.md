@@ -82,7 +82,7 @@ Navigate to **Settings** → **Content Detection** → **Detection Algorithms** 
 **Why enable it**: Fast (~12ms), catches known spammers, no configuration needed
 
 **How to configure**:
-- Enable the checkbox
+- This isn't on the Detection Algorithms page — go to **Settings** → **Welcome** → **Join Security** and enable the **CAS** checkbox there instead
 - No additional configuration required
 
 #### 3. Invisible Character Detection ✓
@@ -102,7 +102,7 @@ Navigate to **Settings** → **Content Detection** → **Detection Algorithms** 
 **Why enable it**: Catches phishing links and malware, uses 540K+ domain blocklists
 
 **How to configure**:
-- Enable the checkbox
+- This isn't a single checkbox on the Detection Algorithms page — URL filtering is its own page at **Settings** → **Content Detection** → **URL Filtering**, and file malware scanning is its own page at **Settings** → **Content Detection** → **File Scanning** (ClamAV + VirusTotal)
 - We'll configure URL blocklists in Step 3
 
 ### Algorithms to Enable Later
@@ -112,8 +112,8 @@ Navigate to **Settings** → **Content Detection** → **Detection Algorithms** 
 - ❌ **Similarity Detection (TF-IDF)** - Needs 100+ spam samples
 - ❌ **Naive Bayes Classifier** - Needs 50+ spam + 50+ ham samples
 - ❌ **Spacing Detection** - Works but less reliable initially
-- ❌ **Translation** - Requires OpenAI API key
-- ❌ **OpenAI Verification** - Requires OpenAI API key (but very powerful once enabled)
+- ❌ **Translation** - Requires an AI provider connection
+- ❌ **OpenAI Verification** - Requires an AI provider connection (but very powerful once enabled)
 
 **Remember**: Click **Save All Changes** at the bottom of the page!
 
@@ -277,10 +277,9 @@ For each detection:
 2. **Check which algorithms flagged it** - Review the breakdown
 3. **Make a decision**:
    - **Delete as Spam** - If it's actually spam (trains ML algorithms)
-   - **Dismiss** - If it's a false positive (also trains ML)
-   - **Dismiss** - If you're unsure (doesn't train)
+   - **Dismiss** - If it's a false positive or you're unsure (neutral, does not train ML)
 
-**Important**: Your feedback is critical! Every "Delete as Spam" or "Dismiss" trains the machine learning algorithms to get smarter.
+**Important**: Your feedback is critical! Every "Delete as Spam" decision trains the machine learning algorithms to get smarter. Use "Dismiss" when you're unsure — it doesn't train the model either way.
 
 ### How Many to Review
 
@@ -345,7 +344,7 @@ flowchart TD
 
     F --> H{Manual Review}
     H -->|Delete as Spam| I[Ban User]
-    H -->|Dismiss| J[Allow + Train ML]
+    H -->|Dismiss| J[Allow, No Training]
 
     style E fill:#ff6b6b
     style F fill:#ffd93d

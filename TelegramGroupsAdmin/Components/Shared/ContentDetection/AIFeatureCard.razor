@@ -108,24 +108,14 @@
                 }
             }
 
-            <!-- Parameters -->
-            <MudStack Row="true" Spacing="2">
-                <MudNumericField T="int"
-                                 Value="@FeatureConfig.MaxTokens"
-                                 ValueChanged="@OnMaxTokensChanged"
-                                 Label="Max Tokens"
-                                 Variant="Variant.Outlined"
-                                 Min="100"
-                                 Style="flex: 1;" />
-                <MudNumericField T="float"
-                                 Value="@FeatureConfig.Temperature"
-                                 ValueChanged="@OnTemperatureChanged"
-                                 Label="Temperature"
-                                 Variant="Variant.Outlined"
-                                 Min="0.0f" Max="2.0f" Step="0.1f"
-                                 Format="F1"
-                                 Style="flex: 1;" />
-            </MudStack>
+            <!-- Max tokens -->
+            <MudNumericField T="int"
+                             Value="@FeatureConfig.MaxTokens"
+                             ValueChanged="@OnMaxTokensChanged"
+                             Label="Max Tokens"
+                             Variant="Variant.Outlined"
+                             Min="@MinMaxTokens"
+                             HelperText="@($"Longest response the model may return. Minimum {MinMaxTokens}.")" />
 
             <!-- Test & Save Buttons -->
             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
@@ -197,6 +187,8 @@
 </MudPaper>
 
 @code {
+    private const int MinMaxTokens = 100;
+
     [Parameter, EditorRequired] public AIFeatureType FeatureType { get; set; }
     [Parameter, EditorRequired] public AIFeatureConfig FeatureConfig { get; set; } = null!;
     [Parameter, EditorRequired] public IReadOnlyList<AIConnection> Connections { get; set; } = [];
@@ -288,12 +280,6 @@
     private void OnMaxTokensChanged(int value)
     {
         FeatureConfig.MaxTokens = value;
-        _testResult = null; // Clear test result - config changed, must re-test
-    }
-
-    private void OnTemperatureChanged(float value)
-    {
-        FeatureConfig.Temperature = value;
         _testResult = null; // Clear test result - config changed, must re-test
     }
 

@@ -1,6 +1,10 @@
 bin/
 obj/
-.claude/
+# Claude Code: project config (settings.json, rules, hooks, agents, commands) is committed;
+# only personal and runtime files are ignored.
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
+.claude/worktrees/
 # Workaround: dotnet-ef 10.0.2-10.0.3 creates literal backslash paths on macOS/Linux
 # See https://github.com/dotnet/efcore/issues/37506 — fixed in 10.0.4
 **/bin\\*

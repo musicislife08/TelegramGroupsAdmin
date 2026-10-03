@@ -12,6 +12,7 @@ using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
+using TelegramGroupsAdmin.Telegram.Services.Moderation.Handlers;
 using TelegramGroupsAdmin.Telegram.Services.ReportActions;
 using Report = TelegramGroupsAdmin.Core.Models.Report;
 using ModerationResult = TelegramGroupsAdmin.Telegram.Services.Moderation.ModerationResult;
@@ -36,6 +37,7 @@ public class ContentReportHandlerTests
     private IAuditService _mockAuditService = null!;
     private IBotMessageService _mockBotMessageService = null!;
     private IReportCallbackContextRepository _mockCallbackContextRepo = null!;
+    private ITrainingHandler _trainingHandler = null!;
 
     private ContentReportHandler _handler = null!;
 
@@ -48,6 +50,7 @@ public class ContentReportHandlerTests
         _mockAuditService = Substitute.For<IAuditService>();
         _mockBotMessageService = Substitute.For<IBotMessageService>();
         _mockCallbackContextRepo = Substitute.For<IReportCallbackContextRepository>();
+        _trainingHandler = Substitute.For<ITrainingHandler>();
 
         // Default: TryUpdateStatusAsync succeeds
         _mockReportsRepo.TryUpdateStatusAsync(
@@ -61,6 +64,7 @@ public class ContentReportHandlerTests
             _mockModerationService,
             _mockAuditService,
             _mockBotMessageService,
+            _trainingHandler,
             NullLogger<ContentReportHandler>.Instance);
     }
 
@@ -99,6 +103,7 @@ public class ContentReportHandlerTests
                 i!.User.Id == TestUserId &&
                 i.MessageId == TestMessageId &&
                 i.Chat.Id == TestChatId &&
+                i.Source == VerdictSource.ReviewSpam &&
                 i.Reason.Contains($"Report #{TestReportId}")),
             Arg.Any<CancellationToken>());
     }
@@ -399,6 +404,22 @@ public class ContentReportHandlerTests
     #region DismissAsync Tests
 
     [Test]
+    public async Task DismissAsync_Success_LeavesVerdictUnchanged()
+    {
+        var report = CreateTestReport();
+        _mockReportsRepo.GetContentReportAsync(TestReportId, Arg.Any<CancellationToken>())
+            .Returns(report);
+
+        var result = await _handler.DismissAsync(TestReportId, TestExecutor, "not actionable", CancellationToken.None);
+
+        Assert.That(result.Success, Is.True);
+        await _trainingHandler.DidNotReceiveWithAnyArgs().CreateHamSampleAsync(
+            default, default!, default!, default, default!, default);
+        await _trainingHandler.DidNotReceiveWithAnyArgs().CreateSpamSampleAsync(
+            default, default!, default!, default, default!, default);
+    }
+
+    [Test]
     public async Task DismissAsync_Success_DismissesReportWithoutModeration()
     {
         var report = CreateTestReport();
@@ -481,6 +502,84 @@ public class ContentReportHandlerTests
         var result = await _handler.DismissAsync(TestReportId, TestExecutor, null, CancellationToken.None);
 
         Assert.That(result.Success, Is.True);
+    }
+
+    #endregion
+
+    #region CleanAsync Tests
+
+    [Test]
+    public async Task CleanAsync_Success_RecordsReviewCleanDecisionAndMarksReviewed()
+    {
+        var report = CreateTestReport();
+        SetupReportAndMessage(report, CreateTestMessage());
+
+        var result = await _handler.CleanAsync(TestReportId, TestExecutor, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Success, Is.True);
+            Assert.That(result.ActionName, Is.EqualTo("Clean"));
+        }
+        await _trainingHandler.Received(1).CreateHamSampleAsync(
+            TestMessageId, report.Chat, TestExecutor, VerdictSource.ReviewClean,
+            $"Report #{TestReportId} - marked clean", Arg.Any<CancellationToken>());
+        await _mockReportsRepo.Received(1).TryUpdateStatusAsync(
+            TestReportId, ReportStatus.Reviewed, TestReviewerEmail,
+            "clean", "Message marked clean", Arg.Any<CancellationToken>());
+        await _mockModerationService.DidNotReceiveWithAnyArgs().BanUserAsync(default!, default);
+    }
+
+    [Test]
+    public async Task CleanAsync_Success_RepliesToReportedMessageAndDeletesReportCommand()
+    {
+        var reportCommandMessageId = 999;
+        SetupReportAndMessage(CreateTestReport(reportCommandMessageId: reportCommandMessageId), CreateTestMessage());
+
+        await _handler.CleanAsync(TestReportId, TestExecutor, CancellationToken.None);
+
+        await _mockBotMessageService.Received(1).SendAndSaveMessageAsync(
+            TestChatId,
+            Arg.Is<string>(s => s!.Contains("reviewed")),
+            parseMode: ParseMode.None,
+            replyParameters: Arg.Is<ReplyParameters>(r => r!.MessageId == TestMessageId),
+            cancellationToken: Arg.Any<CancellationToken>());
+        await _mockBotMessageService.Received(1).DeleteAndMarkMessageAsync(
+            TestChatId, reportCommandMessageId,
+            deletionSource: "report_reviewed",
+            cancellationToken: Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public void CleanAsync_DecisionFails_LeavesReportPending()
+    {
+        SetupReportAndMessage(CreateTestReport(), CreateTestMessage());
+        _trainingHandler.CreateHamSampleAsync(
+                Arg.Any<int>(), Arg.Any<ChatIdentity>(), Arg.Any<Actor>(), Arg.Any<VerdictSource>(),
+                Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException("db down"));
+
+        Assert.ThrowsAsync<InvalidOperationException>(() =>
+            _handler.CleanAsync(TestReportId, TestExecutor, CancellationToken.None));
+        _mockReportsRepo.DidNotReceiveWithAnyArgs().TryUpdateStatusAsync(default, default, default!, default!, default, default);
+    }
+
+    [Test]
+    public async Task CleanAsync_ReportAlreadyHandled_DoesNotRecordDecision()
+    {
+        var handled = CreateTestReport() with
+        {
+            Status = ReportStatus.Reviewed, ReviewedBy = "OtherAdmin",
+            ReviewedAt = DateTimeOffset.UtcNow.AddMinutes(-5), ActionTaken = "spam"
+        };
+        _mockReportsRepo.GetContentReportAsync(TestReportId, Arg.Any<CancellationToken>())
+            .Returns(handled);
+
+        var result = await _handler.CleanAsync(TestReportId, TestExecutor, CancellationToken.None);
+
+        Assert.That(result.IsAlreadyHandled, Is.True);
+        await _trainingHandler.DidNotReceiveWithAnyArgs().CreateHamSampleAsync(
+            default, default!, default!, default, default!, default);
     }
 
     #endregion

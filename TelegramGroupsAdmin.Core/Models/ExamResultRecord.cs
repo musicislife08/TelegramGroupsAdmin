@@ -1,0 +1,67 @@
+namespace TelegramGroupsAdmin.Core.Models;
+
+/// <summary>
+/// Domain model for completed entrance exam reviews (pass or fail).
+/// Created when a user completes the entrance exam; failures need admin review.
+/// </summary>
+public record ExamResultRecord
+{
+    public long Id { get; init; }
+
+    /// <summary>
+    /// User's multiple choice answers.
+    /// Key = question index, Value = selected answer letter (A, B, C, D)
+    /// </summary>
+    public Dictionary<int, string>? McAnswers { get; init; }
+
+    /// <summary>
+    /// Shuffle state for each question (maps display position to original answer index).
+    /// Key = question index, Value = array of original indices in display order.
+    /// Example: [2, 0, 1, 3] means position 0 (A) shows original answer 2, position 1 (B) shows original answer 0 (correct), etc.
+    /// </summary>
+    public Dictionary<int, int[]>? ShuffleState { get; init; }
+
+    /// <summary>
+    /// User's response to the open-ended question (if configured).
+    /// </summary>
+    public string? OpenEndedAnswer { get; init; }
+
+    /// <summary>
+    /// Percentage score achieved (0-100).
+    /// </summary>
+    public int Score { get; init; }
+
+    /// <summary>
+    /// Passing threshold that was configured (0-100).
+    /// </summary>
+    public int PassingThreshold { get; init; }
+
+    /// <summary>
+    /// AI evaluation result for open-ended question (if applicable).
+    /// </summary>
+    public string? AiEvaluation { get; init; }
+
+    /// <summary>ActionTaken sentinel for a pass record no human has touched yet.</summary>
+    public const string AutoApprovedActionTaken = "auto-approved";
+
+    /// <summary>Final exam outcome (from JSONB context).</summary>
+    public ExamOutcome Outcome { get; init; }
+
+    /// <summary>
+    /// When the exam was completed.
+    /// </summary>
+    public DateTimeOffset CompletedAt { get; init; }
+
+    /// <summary>
+    /// Admin review status and metadata.
+    /// </summary>
+    public string? ReviewedBy { get; init; }
+    public DateTimeOffset? ReviewedAt { get; init; }
+    public string? ActionTaken { get; init; }
+    public string? AdminNotes { get; init; }
+
+    // Identity objects (populated from view joins on read path)
+    public required UserIdentity User { get; init; }
+    public required ChatIdentity Chat { get; init; }
+    public string? UserPhotoPath { get; init; }
+}

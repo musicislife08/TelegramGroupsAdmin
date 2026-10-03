@@ -457,9 +457,6 @@ public class WelcomeService(
 
                 if (admissionResult == AdmissionResult.Admitted)
                 {
-                    // Mark user as active (security passed, no welcome flow)
-                    await telegramUserRepository.ActivateAsync(user.Id, cancellationToken);
-
                     // Delete verifying message
                     await TryDeleteMessageAsync(chatMemberUpdate.Chat.Id, verifyingMessageId.Value, cancellationToken);
 
@@ -1097,7 +1094,6 @@ public class WelcomeService(
 
         if (admissionResult == AdmissionResult.Admitted)
         {
-            await telegramUserRepository.ActivateAsync(user.Id, cancellationToken);
             await TryDeleteMessageAsync(chat.Id, welcomeMessageId, cancellationToken);
             welcomeMetrics.RecordWelcomeOutcome("admitted", durationMs);
         }
@@ -1263,7 +1259,6 @@ public class WelcomeService(
 
         if (admissionResult == AdmissionResult.Admitted)
         {
-            await telegramUserRepository.ActivateAsync(user.Id, cancellationToken);
             await TryDeleteMessageAsync(groupChatId, welcomeResponse.WelcomeMessageId, cancellationToken);
             welcomeMetrics.RecordWelcomeOutcome("admitted", durationMs);
         }

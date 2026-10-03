@@ -34,6 +34,7 @@
 
   <ItemGroup>
     <Using Include="NUnit.Framework" />
+    <Using Include="TelegramGroupsAdmin.Testing.Golden" />
   </ItemGroup>
 
   <ItemGroup>
@@ -42,11 +43,7 @@
     <ProjectReference Include="..\TelegramGroupsAdmin.ContentDetection\TelegramGroupsAdmin.ContentDetection.csproj" />
     <ProjectReference Include="..\TelegramGroupsAdmin.Telegram\TelegramGroupsAdmin.Telegram.csproj" />
     <ProjectReference Include="..\TelegramGroupsAdmin\TelegramGroupsAdmin.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <!-- Canonical SQL fixtures (auto-embedded; canonical/*.sql is FK-ordered by filename prefix). -->
-    <EmbeddedResource Include="TestData\SQL\**\*.sql" />
+    <ProjectReference Include="..\TelegramGroupsAdmin.Testing.Golden\TelegramGroupsAdmin.Testing.Golden.csproj" />
   </ItemGroup>
 
   <ItemGroup>

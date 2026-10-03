@@ -186,16 +186,18 @@ public partial class ContentDetectionEngineV2 : IContentDetectionEngine
                     return vetoedResult;
                 }
 
-                // AI confirmed spam - AI score is the sole authority for action determination
-                // Pipeline scores served as a gate to trigger the veto; AI verdict drives the action
-                LogAIConfirmedSpam(_logger, request.User.ToLogDebug(), vetoResultV2.Score);
-
+                // AI verdict: the AI score replaces the pipeline aggregate and follows the same
+                // threshold rule as the pipeline, so the verdict always agrees with the action.
+                var aiIsSpam = vetoResultV2.Score >= config.ReviewQueueThreshold;
+                LogAIVerdict(_logger, request.User.ToLogDebug(), vetoResultV2.Score, aiIsSpam);
                 var confirmedResult = pipelineResult with
                 {
                     CheckResults = updatedCheckResults,
-                    IsSpam = true,
+                    IsSpam = aiIsSpam,
                     TotalScore = vetoResultV2.Score,
-                    PrimaryReason = $"AI confirmed spam: {vetoResultV2.Details} (score: {vetoResultV2.Score:F1})",
+                    PrimaryReason = aiIsSpam
+                        ? $"AI confirmed spam: {vetoResultV2.Details} (score: {vetoResultV2.Score:F1})"
+                        : $"AI below review threshold: {vetoResultV2.Details} (score: {vetoResultV2.Score:F1})",
                     RecommendedAction = DetermineActionFromScore(vetoResultV2.Score, config.AutoBanThreshold, config.ReviewQueueThreshold),
                     RequiresAIConfirmation = false
                 };
@@ -336,6 +338,7 @@ public partial class ContentDetectionEngineV2 : IContentDetectionEngine
                 Message = originalRequest.Message ?? "",
                 User = originalRequest.User,
                 Chat = originalRequest.Chat,
+                MessageId = originalRequest.MessageId,
                 CancellationToken = cancellationToken
             },
 
@@ -344,6 +347,7 @@ public partial class ContentDetectionEngineV2 : IContentDetectionEngine
                 Message = originalRequest.Message ?? "",
                 User = originalRequest.User,
                 Chat = originalRequest.Chat,
+                MessageId = originalRequest.MessageId,
                 MinMessageLength = config.MinMessageLength,
                 CancellationToken = cancellationToken
             },
@@ -355,6 +359,7 @@ public partial class ContentDetectionEngineV2 : IContentDetectionEngine
                 Message = originalRequest.Message ?? "",
                 User = originalRequest.User,
                 Chat = originalRequest.Chat,
+                MessageId = originalRequest.MessageId,
                 MinMessageLength = config.MinMessageLength,
                 SimilarityThreshold = config.Similarity.Threshold,
                 CancellationToken = cancellationToken
@@ -365,6 +370,7 @@ public partial class ContentDetectionEngineV2 : IContentDetectionEngine
                 Message = originalRequest.Message ?? "",
                 User = originalRequest.User,
                 Chat = originalRequest.Chat,
+                MessageId = originalRequest.MessageId,
                 SuspiciousRatioThreshold = config.Spacing.ShortWordRatioThreshold,
                 ShortWordLength = config.Spacing.ShortWordLength,
                 MinWordsCount = config.Spacing.MinWordsCount,
@@ -376,6 +382,7 @@ public partial class ContentDetectionEngineV2 : IContentDetectionEngine
                 Message = originalRequest.Message ?? "",
                 User = originalRequest.User,
                 Chat = originalRequest.Chat,
+                MessageId = originalRequest.MessageId,
                 CancellationToken = cancellationToken
             },
 
@@ -384,6 +391,7 @@ public partial class ContentDetectionEngineV2 : IContentDetectionEngine
                 Message = originalRequest.Message ?? "",
                 User = originalRequest.User,
                 Chat = originalRequest.Chat,
+                MessageId = originalRequest.MessageId,
                 Urls = originalRequest.Urls ?? [],
                 VirusTotalApiKey = _spamDetectionOptions.ApiKey,
                 CancellationToken = cancellationToken
@@ -394,6 +402,7 @@ public partial class ContentDetectionEngineV2 : IContentDetectionEngine
                 Message = originalRequest.Message ?? "",
                 User = originalRequest.User,
                 Chat = originalRequest.Chat,
+                MessageId = originalRequest.MessageId,
                 Urls = originalRequest.Urls ?? [],
                 CancellationToken = cancellationToken
             },
@@ -403,6 +412,7 @@ public partial class ContentDetectionEngineV2 : IContentDetectionEngine
                 Message = originalRequest.Message ?? "",
                 User = originalRequest.User,
                 Chat = originalRequest.Chat,
+                MessageId = originalRequest.MessageId,
                 PhotoFileId = originalRequest.PhotoFileId ?? "",
                 PhotoLocalPath = originalRequest.PhotoLocalPath,
                 CustomPrompt = null,
@@ -414,6 +424,7 @@ public partial class ContentDetectionEngineV2 : IContentDetectionEngine
                 Message = originalRequest.Message ?? "",
                 User = originalRequest.User,
                 Chat = originalRequest.Chat,
+                MessageId = originalRequest.MessageId,
                 VideoLocalPath = originalRequest.VideoLocalPath ?? "",
                 CustomPrompt = null,
                 CancellationToken = cancellationToken
@@ -424,6 +435,7 @@ public partial class ContentDetectionEngineV2 : IContentDetectionEngine
                 Message = originalRequest.Message ?? "",
                 User = originalRequest.User,
                 Chat = originalRequest.Chat,
+                MessageId = originalRequest.MessageId,
                 CancellationToken = cancellationToken
             },
 
@@ -445,6 +457,7 @@ public partial class ContentDetectionEngineV2 : IContentDetectionEngine
             Message = originalRequest.Message ?? "",
             User = originalRequest.User,
             Chat = originalRequest.Chat,
+            MessageId = originalRequest.MessageId,
             SystemPrompt = systemPrompt, // From prompt_versions table (null = use default)
             HasSpamFlags = originalRequest.HasSpamFlags,
             MinMessageLength = config.MinMessageLength,

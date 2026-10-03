@@ -16,7 +16,7 @@ public class EnrichedReportView
     /// SQL to create the enriched_reports view. Referenced by migrations.
     /// Joins reports with all related entities based on report type:
     /// - managed_chats (chat name for all types)
-    /// - telegram_users (suspected/target user for ImpersonationAlert, user for ExamFailure)
+    /// - telegram_users (suspected/target user for ImpersonationAlert, user for ExamResult)
     /// - users (reviewer email)
     /// </summary>
     public const string CreateViewSql = """
@@ -56,7 +56,7 @@ public class EnrichedReportView
             target.last_name AS target_last_name,
             target.user_photo_path AS target_photo_path,
 
-            -- ExamFailure: User (type = 2)
+            -- ExamResult: User (type = 2)
             exam_user.telegram_user_id AS exam_user_id,
             exam_user.username AS exam_username,
             exam_user.first_name AS exam_first_name,
@@ -91,7 +91,7 @@ public class EnrichedReportView
             ON r.type = 1
             AND target.telegram_user_id = (r.context->>'targetUserId')::bigint
 
-        -- ExamFailure user (only for type = 2)
+        -- ExamResult user (only for type = 2)
         LEFT JOIN telegram_users exam_user
             ON r.type = 2
             AND exam_user.telegram_user_id = (r.context->>'userId')::bigint
@@ -214,7 +214,7 @@ public class EnrichedReportView
 
     #endregion
 
-    #region ExamFailure: User (type = 2)
+    #region ExamResult: User (type = 2)
 
     [Column("exam_user_id")]
     public long? ExamUserId { get; set; }

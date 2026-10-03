@@ -22,78 +22,41 @@ public class MLTrainingDataRepository(
 
     public async Task<List<TrainingSample>> GetSpamSamplesAsync(CancellationToken cancellationToken = default)
     {
-        // Explicit spam labels (admin decisions override auto-detection)
-        // Note: OrderByDescending ensures deterministic results when multiple translations exist
-        var explicitSpam = await context.TrainingLabels
-            .AsNoTracking()
-            .Where(tl => tl.Label == (short)TrainingLabel.Spam)
-            .Join(context.Messages,
-                  tl => new { tl.MessageId, tl.ChatId },
-                  m => new { m.MessageId, m.ChatId },
-                  (tl, m) => new { tl, m })
-            .GroupJoin(context.MessageTranslations.Where(mt => mt.EditId == null),
-                       x => new { MessageId = (int?)x.m.MessageId, ChatId = (long?)x.m.ChatId },
-                       mt => new { mt.MessageId, mt.ChatId },
-                       (x, mts) => new { x.tl, x.m, mt = mts.OrderByDescending(t => t.TranslatedAt).FirstOrDefault() })
-            .Select(x => new
-            {
-                Text = x.mt != null ? x.mt.TranslatedText : x.m.MessageText,
-                x.tl.MessageId,
-                x.tl.ChatId,
-                x.tl.LabeledByUserId,
-                x.tl.LabeledAt
-            })
-            .Where(x => x.Text != null && x.Text.Length > MLConstants.MinTextLength)
-            .ToListAsync(cancellationToken);
+        // Current verdict per message (latest event wins): ExplicitSpam and ImplicitSpam train as spam.
+        var spamRows = await (
+            from v in context.MessageVerdicts.AsNoTracking()
+            where VerdictClassifications.TrainingSpamValues.Contains(v.Classification)
+            join dr in context.DetectionResults.AsNoTracking() on v.VerdictId equals (long?)dr.Id
+            join m in context.Messages.AsNoTracking() on new { v.MessageId, v.ChatId } equals new { m.MessageId, m.ChatId }
+            let mt = context.MessageTranslations
+                .Where(t => t.MessageId == m.MessageId && t.ChatId == m.ChatId && t.EditId == null)
+                .OrderByDescending(t => t.TranslatedAt)
+                .FirstOrDefault()
+            let text = mt != null ? mt.TranslatedText : m.MessageText
+            where text != null && text.Length > MLConstants.MinTextLength
+            select new { Text = text, m.MessageId, m.ChatId, v.Classification, dr.TelegramUserId, dr.DetectedAt }
+        ).ToListAsync(cancellationToken);
 
-        // Implicit spam (high-confidence auto, not corrected) - use passed-in labeled IDs to avoid duplicate query
-        var implicitSpam = await context.DetectionResults
-            .AsNoTracking()
-            .Where(dr => dr.IsSpam && dr.UsedForTraining && !context.TrainingLabels.Any(tl => tl.MessageId == dr.MessageId && tl.ChatId == dr.ChatId))
-            .Join(context.Messages,
-                  dr => new { dr.MessageId, dr.ChatId },
-                  m => new { m.MessageId, m.ChatId },
-                  (dr, m) => m)
-            .GroupJoin(context.MessageTranslations.Where(mt => mt.EditId == null),
-                       m => new { MessageId = (int?)m.MessageId, ChatId = (long?)m.ChatId },
-                       mt => new { mt.MessageId, mt.ChatId },
-                       (m, mts) => new { m, mt = mts.OrderByDescending(t => t.TranslatedAt).FirstOrDefault() })
-            .Select(x => new
-            {
-                Text = x.mt != null ? x.mt.TranslatedText : x.m.MessageText,
-                x.m.MessageId,
-                x.m.ChatId
-            })
-            .Where(x => x.Text != null && x.Text.Length > MLConstants.MinTextLength)
-            .ToListAsync(cancellationToken);
-
-        // Convert to domain models using collection expressions
-        List<TrainingSample> samples = [
-            ..explicitSpam.Select(x => new TrainingSample
+        List<TrainingSample> samples = [.. spamRows.Select(x =>
+        {
+            var isExplicit = x.Classification == (int)VerdictClassification.ExplicitSpam;
+            return new TrainingSample
             {
                 Text = x.Text!,
                 Label = TrainingLabel.Spam,
-                Source = TrainingSampleSource.Explicit,
+                Source = isExplicit ? TrainingSampleSource.Explicit : TrainingSampleSource.Implicit,
                 MessageId = x.MessageId,
                 ChatId = x.ChatId,
-                LabeledByUserId = x.LabeledByUserId,
-                LabeledAt = x.LabeledAt
-            }),
-            ..implicitSpam.Select(x => new TrainingSample
-            {
-                Text = x.Text!,
-                Label = TrainingLabel.Spam,
-                Source = TrainingSampleSource.Implicit,
-                MessageId = x.MessageId,
-                ChatId = x.ChatId,
-                LabeledByUserId = null,
-                LabeledAt = null
-            })
-        ];
+                LabeledByUserId = isExplicit ? x.TelegramUserId : null,
+                LabeledAt = isExplicit ? x.DetectedAt : null
+            };
+        })];
 
         logger.LogInformation(
             "Loaded {Count} spam training samples ({Explicit} explicit + {Implicit} implicit)",
-            samples.Count, explicitSpam.Count, implicitSpam.Count);
+            samples.Count,
+            samples.Count(s => s.Source == TrainingSampleSource.Explicit),
+            samples.Count(s => s.Source == TrainingSampleSource.Implicit));
 
         // Training-time deduplication: Remove near-duplicate spam samples to prevent model bias
         return DeduplicateSamples(samples, "spam");
@@ -109,28 +72,20 @@ public class MLTrainingDataRepository(
         // Solving for H: H = S * (1-0.3)/0.3 = S * 2.33
         var dynamicHamCap = (int)(spamCount * MLConstants.HamMultiplier);
 
-        // Explicit ham labels (admin corrections) - ALWAYS included, fetch all then dedupe
-        var explicitHamRaw = await context.TrainingLabels
-            .AsNoTracking()
-            .Where(tl => tl.Label == (short)TrainingLabel.Ham)
-            .Join(context.Messages,
-                  tl => new { tl.MessageId, tl.ChatId },
-                  m => new { m.MessageId, m.ChatId },
-                  (tl, m) => new { tl, m })
-            .GroupJoin(context.MessageTranslations.Where(mt => mt.EditId == null),
-                       x => new { MessageId = (int?)x.m.MessageId, ChatId = (long?)x.m.ChatId },
-                       mt => new { mt.MessageId, mt.ChatId },
-                       (x, mts) => new { x.tl, x.m, mt = mts.OrderByDescending(t => t.TranslatedAt).FirstOrDefault() })
-            .Select(x => new
-            {
-                Text = x.mt != null ? x.mt.TranslatedText : x.m.MessageText,
-                x.tl.MessageId,
-                x.tl.ChatId,
-                x.tl.LabeledByUserId,
-                x.tl.LabeledAt
-            })
-            .Where(x => x.Text != null && x.Text.Length > MLConstants.MinTextLength)
-            .ToListAsync(cancellationToken);
+        // Explicit ham (current verdict, latest event wins) - ALWAYS included, fetch all then dedupe
+        var explicitHamRaw = await (
+            from v in context.MessageVerdicts.AsNoTracking()
+            where v.Classification == (int)VerdictClassification.ExplicitHam
+            join dr in context.DetectionResults.AsNoTracking() on v.VerdictId equals (long?)dr.Id
+            join m in context.Messages.AsNoTracking() on new { v.MessageId, v.ChatId } equals new { m.MessageId, m.ChatId }
+            let mt = context.MessageTranslations
+                .Where(t => t.MessageId == m.MessageId && t.ChatId == m.ChatId && t.EditId == null)
+                .OrderByDescending(t => t.TranslatedAt)
+                .FirstOrDefault()
+            let text = mt != null ? mt.TranslatedText : m.MessageText
+            where text != null && text.Length > MLConstants.MinTextLength
+            select new { Text = text, m.MessageId, m.ChatId, dr.TelegramUserId, dr.DetectedAt }
+        ).ToListAsync(cancellationToken);
 
         // Convert explicit ham to samples for deduplication
         var explicitHamSamples = explicitHamRaw.Select(x => new TrainingSample
@@ -140,8 +95,8 @@ public class MLTrainingDataRepository(
             Source = TrainingSampleSource.Explicit,
             MessageId = x.MessageId,
             ChatId = x.ChatId,
-            LabeledByUserId = x.LabeledByUserId,
-            LabeledAt = x.LabeledAt
+            LabeledByUserId = x.TelegramUserId,
+            LabeledAt = x.DetectedAt
         }).ToList();
 
         // Deduplicate explicit ham FIRST, then cap
@@ -172,13 +127,13 @@ public class MLTrainingDataRepository(
 
         // Implicit ham: fetch a capped set of candidates from the database, dedupe in memory, then cap
         // Over-fetch by 3x to account for SimHash deduplication removing ~30-50% of samples
-        // Uses ix_messages_text_length expression index for efficient sorting
-        // NOT EXISTS correlated subqueries use composite (MessageId, ChatId) to prevent cross-chat data leakage
+        // Current verdict per message (latest event wins): ImplicitHam and Unscanned train as ham.
         var implicitHamRaw = await (
-            from m in context.Messages.AsNoTracking()
-            where !context.TrainingLabels.Any(tl => tl.MessageId == m.MessageId && tl.ChatId == m.ChatId)
-               && !context.DetectionResults.Any(dr => dr.MessageId == m.MessageId && dr.ChatId == m.ChatId && dr.IsSpam)
-               && m.DeletedAt == null  // Message-level filter (better signal than user-level ban)
+            from v in context.MessageVerdicts.AsNoTracking()
+            where v.Classification == (int)VerdictClassification.ImplicitHam
+               || v.Classification == (int)VerdictClassification.Unscanned
+            join m in context.Messages.AsNoTracking() on new { v.MessageId, v.ChatId } equals new { m.MessageId, m.ChatId }
+            where m.DeletedAt == null  // Message-level filter (better signal than user-level ban)
             from mt in context.MessageTranslations
                 .Where(mt => mt.MessageId == m.MessageId && mt.ChatId == m.ChatId && mt.EditId == null)
                 .DefaultIfEmpty()

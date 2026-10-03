@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using TelegramGroupsAdmin.E2ETests.Infrastructure;
 using TelegramGroupsAdmin.E2ETests.PageObjects;
 using static Microsoft.Playwright.Assertions;
@@ -32,12 +33,8 @@ public class UsersTests : SharedAuthenticatedTestBase
         await _usersPage.WaitForLoadAsync();
 
         // Assert - page title is visible
-        Assert.That(await _usersPage.IsPageTitleVisibleAsync(), Is.True,
-            "Users page title should be visible");
-
-        var pageTitle = await _usersPage.GetPageTitleAsync();
-        Assert.That(pageTitle, Is.EqualTo("Telegram Users"),
-            "Page title should be 'Telegram Users'");
+        await Expect(_usersPage.PageTitle).ToBeVisibleAsync();
+        await Expect(_usersPage.PageTitle).ToHaveTextAsync("Telegram Users");
     }
 
     [Test]
@@ -51,8 +48,7 @@ public class UsersTests : SharedAuthenticatedTestBase
         await _usersPage.WaitForLoadAsync();
 
         // Assert - page title is visible
-        Assert.That(await _usersPage.IsPageTitleVisibleAsync(), Is.True,
-            "Owner should be able to view users page");
+        await Expect(_usersPage.PageTitle).ToBeVisibleAsync();
     }
 
     [Test]
@@ -62,7 +58,7 @@ public class UsersTests : SharedAuthenticatedTestBase
         await Page.GotoAsync("/users");
 
         // Assert - should redirect to login or register
-        await Expect(Page).ToHaveURLAsync(new System.Text.RegularExpressions.Regex("/(login|register)"));
+        await Expect(Page).ToHaveURLAsync(new Regex("/(login|register)"));
     }
 
     [Test]
@@ -77,12 +73,8 @@ public class UsersTests : SharedAuthenticatedTestBase
         await _usersPage.WaitForLoadAsync();
 
         // Assert - page title is visible (Admin can access)
-        Assert.That(await _usersPage.IsPageTitleVisibleAsync(), Is.True,
-            "Users page title should be visible for Admin");
-
-        var pageTitle = await _usersPage.GetPageTitleAsync();
-        Assert.That(pageTitle, Is.EqualTo("Telegram Users"),
-            "Page title should be 'Telegram Users'");
+        await Expect(_usersPage.PageTitle).ToBeVisibleAsync();
+        await Expect(_usersPage.PageTitle).ToHaveTextAsync("Telegram Users");
     }
 
     [Test]
@@ -96,8 +88,7 @@ public class UsersTests : SharedAuthenticatedTestBase
         await _usersPage.WaitForLoadAsync();
 
         // Assert - tabs are visible
-        Assert.That(await _usersPage.IsTabsVisibleAsync(), Is.True,
-            "Tabs should be visible on Users page");
+        await Expect(_usersPage.Tabs).ToBeVisibleAsync();
     }
 
     [Test]
@@ -111,20 +102,13 @@ public class UsersTests : SharedAuthenticatedTestBase
         await _usersPage.WaitForLoadAsync();
 
         // Assert - expected tabs exist (tabs are uppercase)
-        var tabNames = await _usersPage.GetTabNamesAsync();
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(tabNames.Any(t => t.Contains("ACTIVE", StringComparison.OrdinalIgnoreCase)),
-                      "Should have 'Active' tab");
-            Assert.That(tabNames.Any(t => t.Contains("TAGGED", StringComparison.OrdinalIgnoreCase)),
-                "Should have 'Tagged' tab");
-            Assert.That(tabNames.Any(t => t.Contains("TRUSTED", StringComparison.OrdinalIgnoreCase)),
-                "Should have 'Trusted' tab");
-            Assert.That(tabNames.Any(t => t.Contains("BANNED", StringComparison.OrdinalIgnoreCase)),
-                "Should have 'Banned' tab");
-            Assert.That(tabNames.Any(t => t.Contains("KICKED", StringComparison.OrdinalIgnoreCase)),
-                "Should have 'Kicked' tab");
-        }
+        // 'All' should be the first tab
+        await Expect(_usersPage.TabHeaders.First).ToContainTextAsync(new Regex("ALL"), new() { IgnoreCase = true });
+        await Expect(_usersPage.TabHeader("ACTIVE")).ToBeVisibleAsync();
+        await Expect(_usersPage.TabHeader("TAGGED")).ToBeVisibleAsync();
+        await Expect(_usersPage.TabHeader("TRUSTED")).ToBeVisibleAsync();
+        await Expect(_usersPage.TabHeader("BANNED")).ToBeVisibleAsync();
+        await Expect(_usersPage.TabHeader("KICKED")).ToBeVisibleAsync();
     }
 
     [Test]
@@ -138,9 +122,7 @@ public class UsersTests : SharedAuthenticatedTestBase
         await _usersPage.WaitForLoadAsync();
 
         // Assert - total count should be 0
-        var totalCount = await _usersPage.GetTotalUserCountAsync();
-        Assert.That(totalCount, Is.EqualTo(0),
-            "Total user count should be 0 when no Telegram users exist");
+        await _usersPage.ExpectTotalUserCountAsync(0);
     }
 
     [Test]
@@ -184,9 +166,7 @@ public class UsersTests : SharedAuthenticatedTestBase
         await _usersPage.WaitForLoadAsync();
 
         // Assert - users are displayed
-        var totalCount = await _usersPage.GetTotalUserCountAsync();
-        Assert.That(totalCount, Is.GreaterThanOrEqualTo(2),
-            "Should display at least 2 users");
+        await _usersPage.ExpectTotalUserCountAtLeastAsync(2);
     }
 
     [Test]
@@ -236,9 +216,9 @@ public class UsersTests : SharedAuthenticatedTestBase
         var developerRow = Page.Locator(".mud-table-body tr:has-text('Developer')");
         await Expect(developerRow).ToBeVisibleAsync(new() { Timeout = 10000 });
 
-        var displayedNames = await _usersPage.GetUserDisplayNamesAsync();
-        Assert.That(displayedNames.Any(n => n.Contains("Developer")), Is.True,
-            "Should display users matching 'Developer'");
+        // Should display users matching 'Developer' (case-sensitive, as before)
+        await Expect(_usersPage.UserDisplayNames.Filter(new() { HasTextRegex = new Regex("Developer") }).First)
+            .ToBeVisibleAsync();
     }
 
     [Test]
@@ -281,6 +261,8 @@ public class UsersTests : SharedAuthenticatedTestBase
         await _usersPage.NavigateAsync();
         await _usersPage.WaitForLoadAsync();
 
+        // Sync on the table's data having loaded before reading the baseline total
+        await Expect(_usersPage.UserRows.First).ToBeVisibleAsync();
         var initialCount = await _usersPage.GetTotalUserCountAsync();
 
         // Search and then clear
@@ -296,9 +278,7 @@ public class UsersTests : SharedAuthenticatedTestBase
         await _usersPage.WaitForLoadAsync();
 
         // Assert - all users visible again
-        var finalCount = await _usersPage.GetTotalUserCountAsync();
-        Assert.That(finalCount, Is.EqualTo(initialCount),
-            "Should show all users when search is cleared");
+        await _usersPage.ExpectTotalUserCountAsync(initialCount);
     }
 
     [Test]
@@ -314,11 +294,8 @@ public class UsersTests : SharedAuthenticatedTestBase
         // Switch to Tagged tab
         await _usersPage.SelectTabAsync("Tagged");
 
-        // Assert - can verify tab content changes
-        var displayedCount = await _usersPage.GetDisplayedUserCountAsync();
-        // Tagged users list may be empty initially
-        Assert.That(displayedCount, Is.GreaterThanOrEqualTo(0),
-            "Tagged tab should display user list (may be empty)");
+        // Assert - Tagged tab displays its user list (may be empty)
+        await Expect(_usersPage.UserTables.First).ToBeVisibleAsync();
     }
 
     [Test]
@@ -334,10 +311,8 @@ public class UsersTests : SharedAuthenticatedTestBase
         // Switch to Kicked tab
         await _usersPage.SelectTabAsync("Kicked");
 
-        // Assert - Kicked tab displays (may be empty)
-        var displayedCount = await _usersPage.GetDisplayedUserCountAsync();
-        Assert.That(displayedCount, Is.GreaterThanOrEqualTo(0),
-            "Kicked tab should display user list (may be empty)");
+        // Assert - Kicked tab displays its user list (may be empty)
+        await Expect(_usersPage.UserTables.First).ToBeVisibleAsync();
     }
 
     [Test]
@@ -367,10 +342,18 @@ public class UsersTests : SharedAuthenticatedTestBase
         await _usersPage.NavigateAsync();
         await _usersPage.WaitForLoadAsync();
 
-        // Assert - user info is displayed
-        var displayedNames = await _usersPage.GetUserDisplayNamesAsync();
-        Assert.That(displayedNames.Count, Is.GreaterThan(0),
-            "Should display user rows with names");
+        // Assert - the seeded user's row is listed on the default (All) tab
+        await Expect(_usersPage.UserRow("Info User")).ToBeVisibleAsync();
+
+        // Switch to the Active tab, which shows per-user Chats and Status columns
+        await _usersPage.SelectTabAsync("Active");
+        await Expect(_usersPage.UserRow("Info User")).ToBeVisibleAsync();
+
+        // Chats = number of distinct chats the user has messaged in (one seeded message, one chat)
+        await Expect(_usersPage.UserChatsCell("Info User")).ToHaveTextAsync(new Regex(@"^\s*1\s*$"));
+
+        // Status = Clean (not trusted, banned, warned or tagged); the chip prefixes a status icon
+        await Expect(_usersPage.UserStatusChip("Info User")).ToContainTextAsync("Clean");
     }
 
     [Test]
@@ -418,9 +401,7 @@ public class UsersTests : SharedAuthenticatedTestBase
         await _usersPage.WaitForLoadAsync();
 
         // Assert - GlobalAdmin sees users from all chats
-        var totalCount = await _usersPage.GetTotalUserCountAsync();
-        Assert.That(totalCount, Is.GreaterThanOrEqualTo(2),
-            "GlobalAdmin should see users from all chats");
+        await _usersPage.ExpectTotalUserCountAtLeastAsync(2);
     }
 
     [Test]
@@ -451,8 +432,6 @@ public class UsersTests : SharedAuthenticatedTestBase
         await _usersPage.WaitForLoadAsync();
 
         // Assert
-        var totalCount = await _usersPage.GetTotalUserCountAsync();
-        Assert.That(totalCount, Is.GreaterThanOrEqualTo(1),
-            "Owner should see all users");
+        await _usersPage.ExpectTotalUserCountAtLeastAsync(1);
     }
 }

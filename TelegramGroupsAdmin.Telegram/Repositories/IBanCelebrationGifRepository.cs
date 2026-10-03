@@ -18,6 +18,11 @@ public interface IBanCelebrationGifRepository
     Task<BanCelebrationGif?> GetRandomAsync(CancellationToken ct = default);
 
     /// <summary>
+    /// Gets a GIF by id, or null if it no longer exists
+    /// </summary>
+    Task<BanCelebrationGif?> GetByIdAsync(int id, CancellationToken ct = default);
+
+    /// <summary>
     /// Claims the next GIF in the current rotation cycle: picks a random GIF not yet dispensed,
     /// marks it dispensed, and returns it. When the cycle is exhausted, starts a fresh cycle —
     /// holding back the GIF dispensed last so it cannot repeat immediately — and claims from it.
@@ -33,8 +38,13 @@ public interface IBanCelebrationGifRepository
     Task<BanCelebrationGif> AddFromFileAsync(Stream fileStream, string fileName, string? name, CancellationToken ct = default);
 
     /// <summary>
-    /// Adds a new GIF from a URL (downloads and stores locally)
+    /// Adds a new GIF from a URL (downloads and stores locally). The download goes through the
+    /// public-url fetcher: only http/https to public addresses, at most
+    /// <see cref="BanCelebrationGif.MaxFileBytes"/>.
     /// </summary>
+    /// <exception cref="Core.Http.PublicUrlFetchException">
+    /// The URL was refused or could not be fetched; nothing is written. The message is safe to show.
+    /// </exception>
     Task<BanCelebrationGif> AddFromUrlAsync(string url, string? name, CancellationToken ct = default);
 
     /// <summary>

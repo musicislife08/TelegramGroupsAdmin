@@ -211,6 +211,10 @@ if (args.Contains("--migrate-only") || args.Contains("--migrate"))
     Environment.Exit(0);
 }
 
+// Refill perceptual hashes cleared by the v1-to-v2 hash migration (#523).
+// Runs before the bot starts so detection is at full strength immediately.
+await app.RunPhotoHashRehashAsync();
+
 // Check for --backup flag to create encrypted backup (requires --passphrase)
 // Runs before ML training since backup doesn't need the classifier
 if (args.Contains("--backup"))

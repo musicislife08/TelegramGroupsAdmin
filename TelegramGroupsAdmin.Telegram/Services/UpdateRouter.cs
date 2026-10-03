@@ -5,6 +5,7 @@ using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.Telegram.Services.DmCelebrations;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 
@@ -38,6 +39,7 @@ public class UpdateRouter(
         var reportCallbackService = services.GetRequiredService<IReportCallbackService>();
         var messageService = services.GetRequiredService<IBotMessageService>();
         var healthOrchestrator = services.GetRequiredService<IChatHealthRefreshOrchestrator>();
+        var celebrationSubscriptions = services.GetRequiredService<IBanCelebrationSubscriptionService>();
 
         // Handle bot's chat member status changes (added/removed from chats)
         if (update.MyChatMember is { } myChatMember)
@@ -49,6 +51,10 @@ public class UpdateRouter(
 
             // Trigger immediate health check when bot status changes
             await healthOrchestrator.RefreshHealthForChatAsync(ChatIdentity.From(myChatMember.Chat), cancellationToken);
+
+            // Private-chat block/unblock of the bot (blocking drops DM celebration subscriptions).
+            // Runs last so a subscription DB error cannot skip the health refresh.
+            await celebrationSubscriptions.HandleBotMembershipUpdateAsync(myChatMember, cancellationToken);
             return;
         }
 
@@ -66,6 +72,10 @@ public class UpdateRouter(
 
             // Handle joins/leaves (welcome system)
             await welcomeService.HandleChatMemberUpdateAsync(chatMember, cancellationToken);
+
+            // Leaving or being kicked drops that chat's DM celebration subscription. Runs after the
+            // welcome system so a subscription DB error cannot skip welcome leave cleanup.
+            await celebrationSubscriptions.HandleChatMemberUpdateAsync(chatMember, cancellationToken);
             return;
         }
 

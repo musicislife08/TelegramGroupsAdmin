@@ -15,6 +15,10 @@ You don't need to configure anything — this happens automatically for every ba
 - All messages from the banned user across all your groups
 - Only messages within the last 48 hours (Telegram's API limit for message deletion)
 - Older messages remain visible but the user is still banned from all groups
+- Every open report about that user — profile scan alerts, exam reviews, impersonation alerts, and content reports — is closed in **all** chats, so you don't have to dismiss them one by one
+- Any welcome or verification message still waiting on that user (for example "Your profile is under admin review") is removed from the chat
+
+A **kick** does the same report and welcome-message cleanup, but only for the chat the user was kicked from. Cleanup runs after the ban or kick has already succeeded on Telegram, so a cleanup hiccup can never undo a ban.
 
 ## Where to See It
 

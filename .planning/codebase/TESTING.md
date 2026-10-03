@@ -229,7 +229,7 @@ public static class GoldenDataset
 
 **Location:**
 - `TelegramGroupsAdmin.IntegrationTests/TestData/GoldenDataset.cs` - Centralized test data constants and seeding
-- `TelegramGroupsAdmin.IntegrationTests/TestData/SQL/` - Embedded SQL scripts for data seeding:
+- `TelegramGroupsAdmin.Testing.Golden/SQL/` - Embedded SQL scripts for data seeding:
   - `00_base_telegram_users.sql`, `01_base_web_users.sql`, etc.
   - ML training data: `11_training_full.sql` (20 spam + 20 ham)
   - Unbalanced data: `20_unbalanced_100_20.sql`, `21_unbalanced_20_100.sql`

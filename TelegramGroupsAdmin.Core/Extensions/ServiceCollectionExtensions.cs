@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using TelegramGroupsAdmin.Core.Http;
 using TelegramGroupsAdmin.Core.Metrics;
 using TelegramGroupsAdmin.Core.Repositories;
 using TelegramGroupsAdmin.Core.Services;
@@ -16,6 +17,10 @@ public static class ServiceCollectionExtensions
 
         // Utility services
         services.AddSingleton<SimHashService>(); // SimHash fingerprinting for O(1) deduplication
+
+        // Guarded HttpClient for URLs that come from users or admins (public addresses only).
+        // The allowance stays NoFetchAllowance here; only a test host registers another.
+        services.AddPublicUrlFetcher();
 
         // Audit services
         services.AddScoped<IAuditLogRepository, AuditLogRepository>();

@@ -1,5 +1,4 @@
 using Microsoft.Playwright;
-using static Microsoft.Playwright.Assertions;
 
 namespace TelegramGroupsAdmin.E2ETests.PageObjects;
 
@@ -12,13 +11,13 @@ public class RegisterPage
     private readonly IPage _page;
 
     // MudBlazor components use labels - Playwright's GetByLabel works well
-    // MudAlert uses specific classes for severity
-    private const string ErrorAlert = ".mud-alert-error, .mud-alert-filled-error";
-    private const string SuccessAlert = ".mud-alert-success, .mud-alert-filled-success";
-    private const string InfoAlert = ".mud-alert-info, .mud-alert-filled-info";
-    private const string WarningAlert = ".mud-alert-warning, .mud-alert-filled-warning";
+    // MudAlert (MudBlazor 9) renders its severity as mud-alert-{variant}-{severity}; Register.razor
+    // uses the default Text variant, so plain .mud-alert-{severity} never matches.
+    private const string ErrorAlertSelector = ".mud-alert-text-error, .mud-alert-filled-error, .mud-alert-outlined-error";
+    private const string SuccessAlertSelector = ".mud-alert-text-success, .mud-alert-filled-success, .mud-alert-outlined-success";
+    private const string WarningAlert = ".mud-alert-text-warning, .mud-alert-filled-warning, .mud-alert-outlined-warning";
     private const string SignInLink = "a[href='/login']";
-    private const string RestoreBackupButton = "button:has-text('Restore from Backup')";
+    private const string RestoreBackupButtonSelector = "button:has-text('Restore from Backup')";
 
     public RegisterPage(IPage page)
     {
@@ -28,10 +27,19 @@ public class RegisterPage
     /// <summary>
     /// Navigates to the register page.
     /// </summary>
-    public async Task NavigateAsync()
+    public Task NavigateAsync() => NavigateToAsync("/register");
+
+    /// <summary>
+    /// Navigates to an invite link as the app generates it (<c>{BaseUri}register?invite={token}</c>);
+    /// the page copies the <c>invite</c> query value into the Invite Code field.
+    /// </summary>
+    public Task NavigateToInviteLinkAsync(string inviteLink) => NavigateToAsync(inviteLink);
+
+    private async Task NavigateToAsync(string url)
     {
-        // NetworkIdle ensures SignalR connection is established for this interactive Blazor page
-        await _page.GotoAsync("/register", new PageGotoOptions { WaitUntil = WaitUntilState.NetworkIdle });
+        // Interactive Blazor page: wait for the live circuit before interacting
+        await _page.GotoAsync(url);
+        await _page.WaitForInteractiveAsync();
         // Wait for MudBlazor to fully render - wait for the Create Account button
         await _page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "Create Account" }).WaitForAsync();
     }
@@ -114,114 +122,40 @@ public class RegisterPage
         await SubmitAsync();
     }
 
-    /// <summary>
-    /// Waits for and returns the error message text.
-    /// Returns null if no error message appears within the timeout.
-    /// </summary>
-    public async Task<string?> GetErrorMessageAsync(int timeoutMs = 5000)
-    {
-        var errorLocator = _page.Locator(ErrorAlert);
+    /// <summary>The error alert.</summary>
+    public ILocator ErrorAlert => _page.Locator(ErrorAlertSelector);
 
-        try
-        {
-            await errorLocator.WaitForAsync(new LocatorWaitForOptions
-            {
-                State = WaitForSelectorState.Visible,
-                Timeout = timeoutMs
-            });
-            return await errorLocator.TextContentAsync();
-        }
-        catch (PlaywrightException)
-        {
-            return null;
-        }
-    }
+    /// <summary>The success alert.</summary>
+    public ILocator SuccessAlert => _page.Locator(SuccessAlertSelector);
 
     /// <summary>
-    /// Waits for and returns the success message text.
-    /// Returns null if no success message appears within the timeout.
-    /// </summary>
-    public async Task<string?> GetSuccessMessageAsync(int timeoutMs = 5000)
-    {
-        var successLocator = _page.Locator(SuccessAlert);
-
-        try
-        {
-            await successLocator.WaitForAsync(new LocatorWaitForOptions
-            {
-                State = WaitForSelectorState.Visible,
-                Timeout = timeoutMs
-            });
-            return await successLocator.TextContentAsync();
-        }
-        catch (PlaywrightException)
-        {
-            return null;
-        }
-    }
-
-    /// <summary>
-    /// Checks if error message is displayed.
-    /// </summary>
-    public async Task<bool> HasErrorMessageAsync()
-    {
-        return await _page.Locator(ErrorAlert).IsVisibleAsync();
-    }
-
-    /// <summary>
-    /// Checks if success message is displayed.
-    /// </summary>
-    public async Task<bool> HasSuccessMessageAsync()
-    {
-        return await _page.Locator(SuccessAlert).IsVisibleAsync();
-    }
-
-    /// <summary>
-    /// Checks if this is first-run mode (no invite code required).
-    /// First run shows "Setup Owner Account" title.
-    ///
-    /// Uses Playwright's Expect() with auto-retry to handle Blazor async state changes.
+    /// The "Setup Owner Account" title, shown only in first-run mode (no invite code required).
     /// The page initially renders with default _isFirstRun=false, then OnInitializedAsync()
-    /// updates the state causing a re-render with the correct title.
+    /// updates the state causing a re-render with this title, so assert on it with a retrying Expect.
     /// </summary>
-    public async Task<bool> IsFirstRunModeAsync()
-    {
-        try
-        {
-            await Expect(_page.GetByText("Setup Owner Account")).ToBeVisibleAsync();
-            return true;
-        }
-        catch (PlaywrightException)
-        {
-            return false;
-        }
-    }
+    public ILocator FirstRunTitle => _page.GetByText("Setup Owner Account");
+
+    /// <summary>The invite code field (hidden in first-run mode).</summary>
+    public ILocator InviteCodeField => _page.Locator(".mud-input-control:has-text('Invite Code')");
+
+    /// <summary>The Invite Code input itself (assert its value with Expect; the invite link pre-fills it).</summary>
+    public ILocator InviteCodeInput => _page.GetByLabel("Invite Code");
 
     /// <summary>
-    /// Checks if the invite code field is visible.
+    /// The warning shown on a non-first-run register page when email verification is disabled
+    /// (no email service configured): the account can log in straight after registration.
     /// </summary>
-    public async Task<bool> IsInviteCodeVisibleAsync()
-    {
-        // Check if the Invite Code label text is visible on the page
-        return await _page.Locator(".mud-input-control:has-text('Invite Code')").IsVisibleAsync();
-    }
+    public ILocator EmailVerificationDisabledNote =>
+        _page.Locator(WarningAlert).Filter(new() { HasText = "Email verification is currently disabled" });
 
     /// <summary>
-    /// Checks if the restore backup button is visible (first-run only).
-    /// Uses Playwright's Expect() with auto-retry for Blazor async rendering.
+    /// The "Go to login" link offered after a registration that needs email verification: on that path the page
+    /// keeps its success message on screen instead of auto-redirecting, so the user leaves through this link.
     /// </summary>
-    public async Task<bool> IsRestoreBackupAvailableAsync()
-    {
-        try
-        {
-            await Expect(_page.Locator(RestoreBackupButton)).ToBeVisibleAsync();
-            return true;
-        }
-        catch (PlaywrightException)
-        {
-            return false;
-        }
-    }
+    public ILocator GoToLoginLink => _page.GetByRole(AriaRole.Link, new() { Name = "Go to login" });
+
+    /// <summary>The "Restore from Backup" button (first-run only).</summary>
+    public ILocator RestoreBackupButton => _page.Locator(RestoreBackupButtonSelector);
 
     /// <summary>
     /// Clicks the Sign In link to navigate to login.
@@ -242,26 +176,4 @@ public class RegisterPage
         });
     }
 
-    /// <summary>
-    /// Waits for the loading spinner to appear (form submission started).
-    /// </summary>
-    public async Task WaitForLoadingAsync()
-    {
-        await _page.GetByText("Creating Account...").WaitForAsync(new LocatorWaitForOptions
-        {
-            Timeout = 5000
-        });
-    }
-
-    /// <summary>
-    /// Waits for the loading spinner to disappear (form submission complete).
-    /// </summary>
-    public async Task WaitForLoadingCompleteAsync(int timeoutMs = 10000)
-    {
-        await _page.GetByText("Creating Account...").WaitForAsync(new LocatorWaitForOptions
-        {
-            State = WaitForSelectorState.Hidden,
-            Timeout = timeoutMs
-        });
-    }
 }

@@ -8,6 +8,19 @@ namespace TelegramGroupsAdmin.Endpoints;
 
 public static class AuthEndpoints
 {
+    /// <summary>
+    /// The register endpoint's success copy. It says a verification link was sent only when the send succeeded.
+    /// </summary>
+    internal static string RegistrationSuccessMessage(RegisterResult result)
+        => result switch
+        {
+            { EmailVerificationRequired: true, VerificationEmailFailed: true } =>
+                "Account created, but we couldn't send the verification email. Use \"Resend verification email\" on the login page, then verify your address before logging in.",
+            { EmailVerificationRequired: true } =>
+                "Account created! We've sent a verification link to your email. Verify your address, then log in.",
+            _ => "Account created successfully! Please log in."
+        };
+
     public static IEndpointRouteBuilder MapAuthEndpoints(this IEndpointRouteBuilder endpoints)
     {
         endpoints.MapPost("/api/auth/login", async (
@@ -112,11 +125,14 @@ public static class AuthEndpoints
                     return Results.Json(new { success = false, error = result.ErrorMessage });
                 }
 
-                // Registration successful - always redirect to login page
+                // Registration successful - the user continues through the login page
                 // The login flow handles: email verification, TOTP setup, TOTP verification
                 // No cookies are set here - authentication only happens through the login flow
-                logger.LogInformation("Registration succeeded for {Email}, redirecting to login", request.Email);
-                return Results.Json(new { success = true, message = "Account created successfully! Please log in." });
+                // When the account starts unverified, say so: login will refuse the account until the link is followed
+                logger.LogInformation("Registration succeeded for {Email} (verification required: {VerificationRequired})",
+                    request.Email, result.EmailVerificationRequired);
+                var message = RegistrationSuccessMessage(result);
+                return Results.Json(new { success = true, message, verificationRequired = result.EmailVerificationRequired });
             }
             catch (Exception ex)
             {

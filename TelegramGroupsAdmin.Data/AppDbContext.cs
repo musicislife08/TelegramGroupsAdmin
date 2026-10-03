@@ -1,3 +1,4 @@
+using System.Text.Json;
 using AppAny.Quartz.EntityFrameworkCore.Migrations;
 using AppAny.Quartz.EntityFrameworkCore.Migrations.PostgreSQL;
 using Microsoft.EntityFrameworkCore;
@@ -23,6 +24,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<HourlyDetectionStatsView> HourlyDetectionStats => Set<HourlyDetectionStatsView>();
     public DbSet<WelcomeResponseSummaryView> WelcomeResponseSummary => Set<WelcomeResponseSummaryView>();
     public DbSet<DetectionAccuracyView> DetectionAccuracy => Set<DetectionAccuracyView>();
+    public DbSet<MessageVerdictView> MessageVerdicts => Set<MessageVerdictView>();
 
     // User and auth tables
     public DbSet<UserRecordDto> Users => Set<UserRecordDto>();
@@ -51,12 +53,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
     // Spam detection tables
     public DbSet<StopWordDto> StopWords => Set<StopWordDto>();
-    // NOTE: TrainingSamples removed in Phase 2.2 - training data comes from detection_results.used_for_training
-    public DbSet<TrainingLabelDto> TrainingLabels => Set<TrainingLabelDto>();
     public DbSet<ContentDetectionConfigRecordDto> ContentDetectionConfigs => Set<ContentDetectionConfigRecordDto>();
     public DbSet<PromptVersionDto> PromptVersions => Set<PromptVersionDto>();
-    public DbSet<ImageTrainingSampleDto> ImageTrainingSamples => Set<ImageTrainingSampleDto>();
-    public DbSet<VideoTrainingSampleDto> VideoTrainingSamples => Set<VideoTrainingSampleDto>();
 
     // URL filtering tables (Phase 4.13)
     public DbSet<BlocklistSubscriptionDto> BlocklistSubscriptions => Set<BlocklistSubscriptionDto>();
@@ -69,6 +67,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     // Ban celebration tables
     public DbSet<BanCelebrationGifDto> BanCelebrationGifs => Set<BanCelebrationGifDto>();
     public DbSet<BanCelebrationCaptionDto> BanCelebrationCaptions => Set<BanCelebrationCaptionDto>();
+    public DbSet<BanCelebrationSubscriberDto> BanCelebrationSubscribers => Set<BanCelebrationSubscriberDto>();
 
     // Welcome system (Phase 4.4)
     public DbSet<WelcomeResponseDto> WelcomeResponses => Set<WelcomeResponseDto>();
@@ -107,7 +106,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.Entity<ManagedChatRecordDto>().Property(mc => mc.ChatId).ValueGeneratedNever();
         modelBuilder.Entity<TelegramLinkTokenRecordDto>().Property(t => t.Token).ValueGeneratedNever();
         modelBuilder.Entity<InviteRecordDto>().Property(i => i.Token).ValueGeneratedNever();
-        modelBuilder.Entity<TrainingLabelDto>().HasKey(tl => new { tl.MessageId, tl.ChatId });
+        modelBuilder.Entity<BanCelebrationSubscriberDto>().HasKey(s => new { s.TelegramUserId, s.ChatId });
 
         // Configure relationships
         ConfigureRelationships(modelBuilder);
@@ -139,10 +138,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .HasForeignKey(d => new { d.MessageId, d.ChatId })
             .OnDelete(DeleteBehavior.Cascade);
 
-        // Configure is_spam as computed column (PostgreSQL: net_score > 0)
+        // is_spam: the coarse spam/ham split, generated from classification only (VerdictClassifications.Spam).
         modelBuilder.Entity<DetectionResultRecordDto>()
             .Property(d => d.IsSpam)
-            .HasComputedColumnSql("(net_score > 0)", stored: true);
+            .HasComputedColumnSql($"(classification IN ({VerdictSql.SpamClassifications}))", stored: true);
 
         // Messages → MessageEdits (one-to-many)
         modelBuilder.Entity<MessageEditRecordDto>()
@@ -384,11 +383,22 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 "CK_user_actions_message_chat_null_consistency",
                 "(message_id IS NULL) OR (chat_id IS NOT NULL)"));
 
-        // DetectionResults: Exactly one actor must be non-null
-        modelBuilder.Entity<DetectionResultRecordDto>()
-            .ToTable(t => t.HasCheckConstraint(
+        // DetectionResults: exactly one actor must be non-null; classification is a stored
+        // VerdictClassification (never Unscanned); each source allows only its classifications.
+        modelBuilder.Entity<DetectionResultRecordDto>().ToTable(t =>
+        {
+            t.HasCheckConstraint(
                 "CK_detection_results_exclusive_actor",
-                "(web_user_id IS NOT NULL)::int + (telegram_user_id IS NOT NULL)::int + (system_identifier IS NOT NULL)::int = 1"));
+                "(web_user_id IS NOT NULL)::int + (telegram_user_id IS NOT NULL)::int + (system_identifier IS NOT NULL)::int = 1");
+            t.HasCheckConstraint("CK_detection_results_classification", "classification IN (0, 1, 2, 3, 4, 5)");
+            t.HasCheckConstraint("CK_detection_results_source_classification", """
+                (source IN (10, 11, 13, 14) AND classification = 0)
+                OR (source IN (12, 19) AND classification = 1)
+                OR (source IN (16, 18, 99) AND classification IN (0, 1))
+                OR (source IN (1, 17) AND classification IN (4, 5))
+                OR (source = 0 AND classification IN (2, 3, 4, 5))
+                """);
+        });
 
         // StopWords: Exactly one actor must be non-null
         modelBuilder.Entity<StopWordDto>()
@@ -422,12 +432,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 "(target_web_user_id IS NULL AND target_telegram_user_id IS NULL AND target_system_identifier IS NULL) OR " +
                 "((target_web_user_id IS NOT NULL)::int + (target_telegram_user_id IS NOT NULL)::int + (target_system_identifier IS NOT NULL)::int = 1)"));
 
-        // ImageTrainingSamples: Exactly one actor must be non-null
-        modelBuilder.Entity<ImageTrainingSampleDto>()
-            .ToTable(t => t.HasCheckConstraint(
-                "CK_image_training_exclusive_actor",
-                "(marked_by_web_user_id IS NOT NULL)::int + (marked_by_telegram_user_id IS NOT NULL)::int + (marked_by_system_identifier IS NOT NULL)::int = 1"));
-
         // MessageTranslations: Exactly one of (message_id+chat_id, edit_id) must be non-null
         modelBuilder.Entity<MessageTranslationDto>()
             .ToTable(t => t.HasCheckConstraint(
@@ -446,39 +450,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .WithMany()
             .HasForeignKey(mt => mt.EditId)
             .OnDelete(DeleteBehavior.Cascade);
-
-        // ImageTrainingSamples relationships
-        modelBuilder.Entity<ImageTrainingSampleDto>()
-            .HasOne(its => its.Message)
-            .WithMany()
-            .HasForeignKey(its => new { its.MessageId, its.ChatId })
-            .OnDelete(DeleteBehavior.Cascade);
-
-        // VideoTrainingSamples: Exactly one actor must be non-null
-        modelBuilder.Entity<VideoTrainingSampleDto>()
-            .ToTable(t => t.HasCheckConstraint(
-                "CK_video_training_exclusive_actor",
-                "(marked_by_web_user_id IS NOT NULL)::int + (marked_by_telegram_user_id IS NOT NULL)::int + (marked_by_system_identifier IS NOT NULL)::int = 1"));
-
-        // VideoTrainingSamples relationships
-        modelBuilder.Entity<VideoTrainingSampleDto>()
-            .HasOne(vts => vts.Message)
-            .WithMany()
-            .HasForeignKey(vts => new { vts.MessageId, vts.ChatId })
-            .OnDelete(DeleteBehavior.Cascade);
-
-        // Actor System Foreign Keys (web user, telegram user, system identifier)
-        modelBuilder.Entity<ImageTrainingSampleDto>()
-            .HasOne<UserRecordDto>()
-            .WithMany()
-            .HasForeignKey(its => its.MarkedByWebUserId)
-            .OnDelete(DeleteBehavior.SetNull);
-
-        modelBuilder.Entity<ImageTrainingSampleDto>()
-            .HasOne<TelegramUserDto>()
-            .WithMany()
-            .HasForeignKey(its => its.MarkedByTelegramUserId)
-            .OnDelete(DeleteBehavior.SetNull);
 
         // TelegramSessions → Users (many-to-one)
         modelBuilder.Entity<TelegramSessionDto>()
@@ -502,31 +473,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .OnDelete(DeleteBehavior.Cascade);
 
         // ============================================================================
-        // TrainingLabels Configuration (ML.NET SDCA Refactor)
-        // Explicit spam/ham labels for ML training (separate from detection_results)
-        // ============================================================================
-
-        // TrainingLabels: label must be 0 (Spam) or 1 (Ham)
-        modelBuilder.Entity<TrainingLabelDto>()
-            .ToTable(t => t.HasCheckConstraint(
-                "CK_training_labels_label",
-                "label IN (0, 1)"));
-
-        // TrainingLabels → Messages (CASCADE delete when message is deleted)
-        modelBuilder.Entity<TrainingLabelDto>()
-            .HasOne(tl => tl.Message)
-            .WithMany()
-            .HasForeignKey(tl => new { tl.MessageId, tl.ChatId })
-            .OnDelete(DeleteBehavior.Cascade);
-
-        // TrainingLabels → TelegramUsers (SET NULL when user is deleted)
-        modelBuilder.Entity<TrainingLabelDto>()
-            .HasOne(tl => tl.LabeledByUser)
-            .WithMany()
-            .HasForeignKey(tl => tl.LabeledByUserId)
-            .OnDelete(DeleteBehavior.SetNull);
-
-        // ============================================================================
         // Username Blacklist Configuration
         // Stores display name patterns that trigger auto-ban on join
         // ============================================================================
@@ -541,6 +487,20 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 .HasFilter("enabled = true")
                 .HasDatabaseName("IX_username_blacklist_unique_enabled_pattern");
         });
+
+        // BanCelebrationSubscribers → TelegramUsers / ManagedChats (cascade: a subscription
+        // cannot outlive the user or the chat it refers to)
+        modelBuilder.Entity<BanCelebrationSubscriberDto>()
+            .HasOne(s => s.TelegramUser)
+            .WithMany()
+            .HasForeignKey(s => s.TelegramUserId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<BanCelebrationSubscriberDto>()
+            .HasOne(s => s.ManagedChat)
+            .WithMany()
+            .HasForeignKey(s => s.ChatId)
+            .OnDelete(DeleteBehavior.Cascade);
 
     }
 
@@ -574,8 +534,18 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         // DetectionResults indexes
         modelBuilder.Entity<DetectionResultRecordDto>()
             .HasIndex(dr => dr.DetectedAt);
+
+        // message_verdicts picks the latest row per (chat_id, message_id)
         modelBuilder.Entity<DetectionResultRecordDto>()
-            .HasIndex(dr => dr.UsedForTraining);
+            .HasIndex(dr => new { dr.ChatId, dr.MessageId, dr.DetectedAt, dr.Id })
+            .IsDescending(false, false, true, true)
+            .HasDatabaseName("ix_detection_results_verdict_latest");
+        modelBuilder.Entity<DetectionResultRecordDto>()
+            .HasIndex(dr => dr.Classification)
+            .HasDatabaseName("ix_detection_results_classification");
+        modelBuilder.Entity<DetectionResultRecordDto>()
+            .HasIndex(dr => dr.Source)
+            .HasDatabaseName("ix_detection_results_source");
 
         // Performance indexes for veto queries and analytics
         modelBuilder.Entity<DetectionResultRecordDto>()
@@ -584,21 +554,12 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.Entity<DetectionResultRecordDto>()
             .HasIndex(dr => new { dr.IsSpam, dr.DetectedAt })
             .HasDatabaseName("ix_detection_results_is_spam_detected_at");
-        modelBuilder.Entity<DetectionResultRecordDto>()
-            .HasIndex(dr => dr.DetectionSource)
-            .HasDatabaseName("ix_detection_results_detection_source");
 
         // GIN index for JSONB check_results_json column (ML-5 performance analytics)
         modelBuilder.Entity<DetectionResultRecordDto>()
             .HasIndex(dr => dr.CheckResultsJson)
             .HasMethod("gin")
             .HasDatabaseName("ix_detection_results_check_results_json_gin");
-
-        // TrainingLabels indexes (ML.NET SDCA Refactor)
-        modelBuilder.Entity<TrainingLabelDto>()
-            .HasIndex(tl => tl.Label);
-        modelBuilder.Entity<TrainingLabelDto>()
-            .HasIndex(tl => new { tl.Label, tl.LabeledAt });
 
         // UserActions indexes
         modelBuilder.Entity<UserActionRecordDto>()
@@ -732,22 +693,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.Entity<PendingNotificationRecordDto>()
             .HasIndex(pn => new { pn.NotificationType, pn.CreatedAt });
 
-        // ImageTrainingSamples indexes
-        modelBuilder.Entity<ImageTrainingSampleDto>()
-            .HasIndex(its => new { its.MessageId, its.ChatId })
-            .IsUnique();  // One training sample per message
-        modelBuilder.Entity<ImageTrainingSampleDto>()
-            .HasIndex(its => new { its.IsSpam, its.MarkedAt });  // Filter spam/ham + sort by date
-
-        // VideoTrainingSamples indexes
-        modelBuilder.Entity<VideoTrainingSampleDto>()
-            .HasIndex(vts => new { vts.MessageId, vts.ChatId })
-            .IsUnique();  // One training sample per message
-        modelBuilder.Entity<VideoTrainingSampleDto>()
-            .HasIndex(vts => new { vts.IsSpam, vts.MarkedAt });  // Filter spam/ham + sort by date
-        // Note: No index on photo_hash - Hamming distance similarity requires full table scan anyway
-        // Note: No simple is_spam index - low cardinality boolean, sequential scan is faster
-
         // PushSubscriptions indexes (Web Push API browser subscriptions)
         modelBuilder.Entity<PushSubscriptionDto>()
             .HasIndex(ps => ps.UserId);  // Get all subscriptions for a user
@@ -813,6 +758,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.Entity<BanCelebrationCaptionDto>()
             .HasIndex(c => c.CreatedAt)
             .HasDatabaseName("ix_ban_celebration_captions_created_at");
+
+        // BanCelebrationSubscribers index — fan-out reads subscribers by chat
+        modelBuilder.Entity<BanCelebrationSubscriberDto>()
+            .HasIndex(s => s.ChatId);
     }
 
     private static void ConfigureValueConversions(ModelBuilder modelBuilder)
@@ -843,7 +792,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .HasColumnType("jsonb");
 
         // Partial unique index: Only ONE pending ContentReport per message (prevents duplicate reports)
-        // ExamFailures and ImpersonationAlerts don't have message IDs, so exclude them
+        // ExamResults and ImpersonationAlerts don't have message IDs, so exclude them
         modelBuilder.Entity<ReportDto>()
             .HasIndex(r => new { r.MessageId, r.ChatId })
             .HasFilter("status = 0 AND type = 0")
@@ -906,6 +855,13 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.Entity<MessageRecordDto>()
             .Property(m => m.ContentCheckSkipReason)
             .HasDefaultValue(ContentCheckSkipReason.NotSkipped);
+
+        // Messages: media_features is the MediaFeaturesDto JSON contract (polymorphic on "type")
+        modelBuilder.Entity<MessageRecordDto>()
+            .Property(m => m.MediaFeatures)
+            .HasConversion(
+                v => v == null ? null : JsonSerializer.Serialize(v, MediaFeaturesJson.Options),
+                s => s == null ? null : JsonSerializer.Deserialize<MediaFeaturesDto>(s, MediaFeaturesJson.Options));
 
         // TelegramUsers: Set database defaults for boolean columns
         // Required for raw SQL inserts in tests and data migrations
@@ -990,14 +946,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .IsUnique()
             .HasDatabaseName("idx_configs_chat_specific");
 
-        // Configure image_training_samples table
-        modelBuilder.Entity<ImageTrainingSampleDto>()
-            .ToTable("image_training_samples");
-
-        // Configure video_training_samples table
-        modelBuilder.Entity<VideoTrainingSampleDto>()
-            .ToTable("video_training_samples");
-
         // Configure RawAlgorithmPerformanceStatsDto as keyless entity for SqlQuery support (Phase 5)
         // This is a query-only DTO for algorithm performance analytics
         // Not mapped to any table/view - used only for raw SQL query results
@@ -1040,6 +988,11 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.Entity<DetectionAccuracyView>()
             .HasNoKey()
             .ToView("detection_accuracy");
+
+        // message_verdicts: one current verdict per message (latest event wins)
+        modelBuilder.Entity<MessageVerdictView>()
+            .HasNoKey()
+            .ToView("message_verdicts");
 
         // ============================================================================
         // Content Detection Config JSON Mapping (Issue #252)

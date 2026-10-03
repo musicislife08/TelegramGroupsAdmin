@@ -697,7 +697,7 @@ public partial class MessageProcessingService(
                     IssuedBy: Actor.ProfileDiffDetection,
                     IssuedAt: DateTimeOffset.UtcNow,
                     ExpiresAt: null,
-                    Reason: changeReason), cancellationToken);
+                    Reason: AuditReason.WithChatTag(ChatIdentity.From(message.Chat), changeReason)), cancellationToken);
 
                 try
                 {

@@ -13,6 +13,7 @@ public interface IReportActionsService
     Task<ReviewActionResult> HandleContentBanAsync(long reportId, Actor executor, CancellationToken cancellationToken = default);
     Task<ReviewActionResult> HandleContentWarnAsync(long reportId, Actor executor, CancellationToken cancellationToken = default);
     Task<ReviewActionResult> HandleContentDismissAsync(long reportId, Actor executor, string? reason = null, CancellationToken cancellationToken = default);
+    Task<ReviewActionResult> HandleContentCleanAsync(long reportId, Actor executor, CancellationToken cancellationToken = default);
 
     // Profile scan actions
     Task<ReviewActionResult> HandleProfileScanBanAsync(long alertId, Actor executor, CancellationToken cancellationToken = default);
@@ -28,4 +29,5 @@ public interface IReportActionsService
     Task<ReviewActionResult> HandleExamApproveAsync(long examId, Actor executor, CancellationToken cancellationToken = default);
     Task<ReviewActionResult> HandleExamDenyAsync(long examId, Actor executor, CancellationToken cancellationToken = default);
     Task<ReviewActionResult> HandleExamDenyAndBanAsync(long examId, Actor executor, CancellationToken cancellationToken = default);
+    Task<ReviewActionResult> HandleExamDismissAsync(long examId, Actor executor, CancellationToken cancellationToken = default);
 }

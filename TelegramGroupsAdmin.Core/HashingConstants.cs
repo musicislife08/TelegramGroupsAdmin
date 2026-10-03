@@ -24,6 +24,13 @@ public static class HashingConstants
     public const int PhotoHashByteCount = 8;
 
     /// <summary>
+    /// Bits per byte, used when packing the photo hash bit grid into bytes.
+    /// Distinct from <see cref="PhotoHashByteCount"/>, which happens to share the
+    /// value 8 but means something else entirely.
+    /// </summary>
+    public const int BitsPerByte = 8;
+
+    /// <summary>
     /// Number of bits in SimHash fingerprints (64 bits).
     /// SimHash produces 64-bit fingerprints for text similarity detection.
     /// </summary>

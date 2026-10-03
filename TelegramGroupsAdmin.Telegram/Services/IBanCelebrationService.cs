@@ -16,7 +16,7 @@ public interface IBanCelebrationService
     /// <param name="bannedUser">Identity of the banned user</param>
     /// <param name="isAutoBan">True if this was an automatic spam detection ban, false if manual</param>
     /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>True if celebration was sent, false if skipped (disabled/no content/error)</returns>
+    /// <returns>True if the celebration was posted to the chat or queued for DM subscribers, false if skipped (disabled/no content/error)</returns>
     Task<bool> SendBanCelebrationAsync(
         ChatIdentity chat,
         UserIdentity bannedUser,

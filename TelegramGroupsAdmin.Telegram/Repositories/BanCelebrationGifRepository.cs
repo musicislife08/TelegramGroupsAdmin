@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.ContentDetection.Services;
+using TelegramGroupsAdmin.Core.Http;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Data.Models;
@@ -21,23 +22,22 @@ public class BanCelebrationGifRepository : IBanCelebrationGifRepository
     private readonly IVideoFrameExtractionService _videoService;
     private readonly ILogger<BanCelebrationGifRepository> _logger;
     private readonly string _mediaBasePath;
-    private readonly HttpClient _httpClient;
+    private readonly IPublicUrlFetcher _urlFetcher;
 
     private const string GifSubdirectory = "ban-gifs";
-    private const long MaxDownloadSize = 50 * 1024 * 1024; // 50 MB — matches file upload limit and Telegram API ceiling
 
     public BanCelebrationGifRepository(
         IDbContextFactory<AppDbContext> contextFactory,
         IVideoFrameExtractionService videoService,
         IOptions<AppOptions> appOptions,
-        IHttpClientFactory httpClientFactory,
+        IPublicUrlFetcher urlFetcher,
         ILogger<BanCelebrationGifRepository> logger)
     {
         _contextFactory = contextFactory;
         _videoService = videoService;
         _logger = logger;
         _mediaBasePath = Path.Combine(appOptions.Value.DataPath, "media");
-        _httpClient = httpClientFactory.CreateClient();
+        _urlFetcher = urlFetcher;
 
         // Ensure the ban-gifs directory exists
         var gifDir = Path.Combine(_mediaBasePath, GifSubdirectory);
@@ -67,6 +67,13 @@ public class BanCelebrationGifRepository : IBanCelebrationGifRepository
             .OrderBy(_ => EF.Functions.Random())
             .FirstOrDefaultAsync(ct);
 
+        return dto?.ToModel();
+    }
+
+    public async Task<BanCelebrationGif?> GetByIdAsync(int id, CancellationToken ct = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(ct);
+        var dto = await context.BanCelebrationGifs.AsNoTracking().FirstOrDefaultAsync(g => g.Id == id, ct);
         return dto?.ToModel();
     }
 
@@ -209,51 +216,32 @@ public class BanCelebrationGifRepository : IBanCelebrationGifRepository
 
         _logger.LogInformation("Downloading ban celebration GIF from URL: {Url}", url);
 
-        // Download the file with size limit matching file upload (50 MB)
-        using var response = await _httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct);
-        response.EnsureSuccessStatusCode();
-
-        var contentLength = response.Content.Headers.ContentLength;
-        if (contentLength > MaxDownloadSize)
-            throw new InvalidOperationException(
-                $"File too large: {contentLength} bytes exceeds {MaxDownloadSize / (1024 * 1024)} MB limit");
+        // The fetcher is the SSRF guard: http/https only, public addresses only (judged at the
+        // socket, so DNS answers and redirect hops are covered), capped at the upload limit while
+        // streaming. It throws before anything is written, and logs the reason itself.
+        var fetched = await _urlFetcher.FetchAsync(url, BanCelebrationGif.MaxFileBytes, ct);
 
         // Determine extension from content type or URL.
         // Any video/* content type is treated as .mp4 for FFmpeg conversion,
         // since Giphy and similar services may serve video from .gif URLs.
         var extension = ".gif";
-        var contentType = response.Content.Headers.ContentType?.MediaType;
+        var contentType = fetched.MediaType;
         if (contentType != null && contentType.StartsWith("video/", StringComparison.OrdinalIgnoreCase))
         {
             extension = ".mp4";
         }
         else if (contentType is not "image/gif")
         {
-            // Unknown or missing content type — check URL extension
-            var urlExtension = Path.GetExtension(new Uri(url).AbsolutePath).ToLowerInvariant();
+            // Unknown or missing content type — check the extension of the URL that answered
+            var urlExtension = Path.GetExtension(fetched.FinalUri.AbsolutePath).ToLowerInvariant();
             if (MediaUtilities.VideoExtensions.Contains(urlExtension))
                 extension = urlExtension;
             else if (urlExtension is ".gif")
                 extension = ".gif";
         }
 
-        // Copy to a size-capped MemoryStream (guards against servers that omit Content-Length)
-        await using var downloadStream = await response.Content.ReadAsStreamAsync(ct);
-        using var cappedStream = new MemoryStream();
-        var buffer = new byte[81920];
-        long totalRead = 0;
-        int bytesRead;
-        while ((bytesRead = await downloadStream.ReadAsync(buffer, ct)) > 0)
-        {
-            totalRead += bytesRead;
-            if (totalRead > MaxDownloadSize)
-                throw new InvalidOperationException(
-                    $"Download exceeded {MaxDownloadSize / (1024 * 1024)} MB limit");
-            cappedStream.Write(buffer, 0, bytesRead);
-        }
-
-        cappedStream.Position = 0;
-        return await AddFromFileAsync(cappedStream, $"download{extension}", name, ct);
+        using var downloaded = new MemoryStream(fetched.Content, writable: false);
+        return await AddFromFileAsync(downloaded, $"download{extension}", name, ct);
     }
 
     public async Task DeleteAsync(int id, CancellationToken ct = default)

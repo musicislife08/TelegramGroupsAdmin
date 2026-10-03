@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Welcome;
@@ -80,7 +81,7 @@ public class AuditHandler : IAuditHandler
     public async Task LogDeleteAsync(int messageId, ChatIdentity chat, UserIdentity user, Actor executor, CancellationToken cancellationToken = default)
     {
         // userId is required for FK constraint to telegram_users (TargetUser navigation)
-        var record = CreateRecord(user.Id, UserActionType.Delete, executor, null, messageId: messageId, chatId: chat.Id);
+        var record = CreateRecord(user.Id, UserActionType.Delete, executor, null, messageId: messageId, chat: chat);
         await _userActionsRepository.InsertAsync(record, cancellationToken);
 
         _logger.LogDebug(
@@ -91,7 +92,7 @@ public class AuditHandler : IAuditHandler
     /// <inheritdoc />
     public async Task LogRestrictAsync(UserIdentity user, ChatIdentity? chat, Actor executor, string? reason, CancellationToken cancellationToken = default)
     {
-        var record = CreateRecord(user.Id, UserActionType.Mute, executor, reason, chatId: chat?.Id);
+        var record = CreateRecord(user.Id, UserActionType.Mute, executor, reason, chat: chat);
         await _userActionsRepository.InsertAsync(record, cancellationToken);
 
         _logger.LogDebug(
@@ -102,7 +103,7 @@ public class AuditHandler : IAuditHandler
     /// <inheritdoc />
     public async Task LogRestorePermissionsAsync(UserIdentity user, ChatIdentity chat, Actor executor, string? reason, CancellationToken cancellationToken = default)
     {
-        var record = CreateRecord(user.Id, UserActionType.RestorePermissions, executor, reason, chatId: chat.Id);
+        var record = CreateRecord(user.Id, UserActionType.RestorePermissions, executor, reason, chat: chat);
         await _userActionsRepository.InsertAsync(record, cancellationToken);
 
         _logger.LogDebug(
@@ -113,7 +114,7 @@ public class AuditHandler : IAuditHandler
     /// <inheritdoc />
     public async Task LogKickAsync(UserIdentity user, ChatIdentity chat, Actor executor, string? reason, CancellationToken cancellationToken = default)
     {
-        var record = CreateRecord(user.Id, UserActionType.Kick, executor, reason, chatId: chat.Id);
+        var record = CreateRecord(user.Id, UserActionType.Kick, executor, reason, chat: chat);
         await _userActionsRepository.InsertAsync(record, cancellationToken);
 
         _logger.LogDebug(
@@ -129,7 +130,7 @@ public class AuditHandler : IAuditHandler
         string reasonDetail,
         CancellationToken cancellationToken = default)
     {
-        var record = CreateRecord(user.Id, UserActionType.WelcomeBypass, Actor.WelcomeBypass, reasonDetail, chatId: chat.Id);
+        var record = CreateRecord(user.Id, UserActionType.WelcomeBypass, Actor.WelcomeBypass, reasonDetail, chat: chat);
         await _userActionsRepository.InsertAsync(record, cancellationToken);
 
         _logger.LogDebug(
@@ -143,7 +144,7 @@ public class AuditHandler : IAuditHandler
         Actor executor,
         string? reason,
         int? messageId = null,
-        long? chatId = null,
+        ChatIdentity? chat = null,
         DateTimeOffset? expiresAt = null)
     {
         return new UserActionRecord(
@@ -151,11 +152,11 @@ public class AuditHandler : IAuditHandler
             UserId: userId,
             ActionType: actionType,
             MessageId: messageId,
-            ChatId: chatId,
+            ChatId: chat?.Id,
             IssuedBy: executor,
             IssuedAt: DateTimeOffset.UtcNow,
             ExpiresAt: expiresAt,
-            Reason: reason);
+            Reason: AuditReason.WithChatTag(chat, reason));
     }
 
     private void LogRecorded(UserActionType actionType, UserIdentity user, Actor executor)

@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using TelegramGroupsAdmin.Core.Utilities;
+using TelegramGroupsAdmin.IntegrationTests.TestData;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
 
 namespace TelegramGroupsAdmin.IntegrationTests.Deduplication;
@@ -160,7 +161,9 @@ public class SimHashIntegrationTests
     public async Task SimHash_DistinguishesDifferentGroups_InDedupTestData()
     {
         // Canonical anchors: 4 banned-user spam messages from 4 distinct topical
-        // categories. All in MainChat (-100026957614982). Pairwise Hamming
+        // categories (Pharma in chat -100055570785509, the rest in MainChat). Message ids are only
+        // unique per chat: WormGptSpamId is also Poultry Community's newest message, so that lookup
+        // is chat-scoped (canonical edit 2026-09-30). Pairwise Hamming
         // distances verified ≥ 30 (probed via dev-DB bit_count, see commit notes).
         const int PharmaSpamId = 20849;     // Ivermectin/Hydroxychloroquine
         const int ShopifySpamId = 4666;     // Shopify & Payment Gateway services
@@ -174,7 +177,7 @@ public class SimHashIntegrationTests
         // Get representative messages from different topics
         var pharmaSpam = await context.Messages.Where(m => m.MessageId == PharmaSpamId).Select(m => m.MessageText).FirstAsync();
         var shopifySpam = await context.Messages.Where(m => m.MessageId == ShopifySpamId).Select(m => m.MessageText).FirstAsync();
-        var wormGptSpam = await context.Messages.Where(m => m.MessageId == WormGptSpamId).Select(m => m.MessageText).FirstAsync();
+        var wormGptSpam = await context.Messages.Where(m => m.MessageId == WormGptSpamId && m.ChatId == GoldenDatasetConstants.Chats.MainChatId).Select(m => m.MessageText).FirstAsync();
         var investmentSpam = await context.Messages.Where(m => m.MessageId == InvestmentSpamId).Select(m => m.MessageText).FirstAsync();
 
         // Act: Compute cross-topic distances

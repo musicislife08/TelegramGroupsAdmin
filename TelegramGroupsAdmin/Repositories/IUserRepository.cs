@@ -5,16 +5,8 @@ namespace TelegramGroupsAdmin.Repositories;
 /// </summary>
 public interface IUserRepository
 {
-    Task<int> GetUserCountAsync(CancellationToken cancellationToken = default);
     Task<UserRecord?> GetByEmailAsync(string email, CancellationToken cancellationToken = default);
-    Task<UserRecord?> GetByEmailIncludingDeletedAsync(string email, CancellationToken cancellationToken = default);
     Task<UserRecord?> GetByIdAsync(string userId, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Gets multiple users by their IDs in a single query.
-    /// Used for batch hydration to avoid N+1 query patterns.
-    /// </summary>
-    Task<List<UserRecord>> GetByIdsAsync(IEnumerable<string> userIds, CancellationToken cancellationToken = default);
 
     Task<string> CreateAsync(UserRecord user, CancellationToken cancellationToken = default);
 
@@ -29,6 +21,10 @@ public interface IUserRepository
     /// <param name="permissionLevel">Permission level from invite</param>
     /// <param name="invitedBy">ID of user who created the invite</param>
     /// <param name="inviteToken">The invite token to mark as used</param>
+    /// <param name="emailVerified">
+    /// Initial <c>email_verified</c> state: false when a verification email follows, true when email
+    /// verification is disabled (no email service) so the account can log in straight away.
+    /// </param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>The user's ID (new or existing)</returns>
     Task<string> RegisterUserWithInviteAsync(
@@ -37,9 +33,9 @@ public interface IUserRepository
         PermissionLevel permissionLevel,
         string? invitedBy,
         string inviteToken,
+        bool emailVerified,
         CancellationToken cancellationToken = default);
     Task UpdateLastLoginAsync(string userId, CancellationToken cancellationToken = default);
-    Task UpdateSecurityStampAsync(string userId, CancellationToken cancellationToken = default);
     Task UpdateTotpSecretAsync(string userId, string totpSecret, CancellationToken cancellationToken = default);
 
     /// <summary>Enables TOTP. Rotates the user's security stamp in the same UPDATE, invalidating existing sessions (forced re-login).</summary>
@@ -51,15 +47,20 @@ public interface IUserRepository
     /// <summary>Resets TOTP (clears secret, timestamp, disables). Rotates the user's security stamp in the same UPDATE, invalidating existing sessions (forced re-login).</summary>
     Task ResetTotpAsync(string userId, CancellationToken cancellationToken = default);
     Task DeleteRecoveryCodesAsync(string userId, CancellationToken cancellationToken = default);
-    Task<List<RecoveryCodeRecord>> GetRecoveryCodesAsync(string userId, CancellationToken cancellationToken = default);
-    Task AddRecoveryCodesAsync(string userId, List<string> codeHashes, CancellationToken cancellationToken = default);
-    Task CreateRecoveryCodeAsync(string userId, string codeHash, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Replaces the user's whole recovery code set with <paramref name="codeHashes"/> in one transaction.
+    /// Every earlier code, used or not, stops working at the moment the new set is stored.
+    /// </summary>
+    Task ReplaceRecoveryCodesAsync(string userId, IReadOnlyCollection<string> codeHashes, CancellationToken cancellationToken = default);
+
     Task<bool> UseRecoveryCodeAsync(string userId, string codeHash, CancellationToken cancellationToken = default);
     Task<InviteRecord?> GetInviteByTokenAsync(string token, CancellationToken cancellationToken = default);
     Task<List<UserRecord>> GetAllAsync(CancellationToken cancellationToken = default);
     Task<List<UserRecord>> GetAllIncludingDeletedAsync(CancellationToken cancellationToken = default);
     /// <summary>Updates the user's permission level. Rotates the user's security stamp in the same UPDATE, invalidating existing sessions (forced re-login).</summary>
     Task UpdatePermissionLevelAsync(string userId, int permissionLevel, string modifiedBy, CancellationToken cancellationToken = default);
+    /// <summary>Updates the user's status. Rotates the user's security stamp in the same UPDATE, invalidating existing sessions (forced re-login), so re-enabling or restoring an account never revives a session issued before.</summary>
     Task UpdateStatusAsync(string userId, UserStatus newStatus, string modifiedBy, CancellationToken cancellationToken = default);
     Task UpdateAsync(UserRecord user, CancellationToken cancellationToken = default);
 

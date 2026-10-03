@@ -1,3 +1,4 @@
+using TelegramGroupsAdmin.Core.Models;
 using UiModels = TelegramGroupsAdmin.Telegram.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Repositories;
@@ -29,15 +30,39 @@ public interface IMessageHistoryRepository
         long telegramUserId,
         CancellationToken cancellationToken = default);
 
-    // SimHash deduplication
     /// <summary>
-    /// Check if a similar SimHash exists in training data (detection_results with used_for_training=true OR training_labels).
-    /// Uses COALESCE(translation.hash, message.hash) to prefer translated text hash.
+    /// Gets the most recent messages in a chat along with each message's current verdict
+    /// (message_verdicts view), newest first. Used to build AI veto history context so
+    /// admin-corrected and sub-threshold-allowed messages are not shown as spam exemplars.
+    /// <paramref name="excludeMessageId"/> (the message under evaluation) is left out before the
+    /// window is taken, so the AI never sees its own row as history and still gets <paramref name="count"/> others.
     /// </summary>
-    /// <param name="hash">The SimHash to compare against</param>
-    /// <param name="isSpam">True to search spam training data, false for ham</param>
-    /// <param name="maxDistance">Maximum Hamming distance to consider similar (default 10 = ~84% similarity)</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>True if a similar hash exists in training data</returns>
-    Task<bool> HasSimilarTrainingHashAsync(long hash, bool isSpam, int maxDistance = 10, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<UiModels.RecentMessageVerdict>> GetRecentMessagesWithVerdictAsync(
+        long chatId,
+        int count,
+        int? excludeMessageId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Gets the current verdict (never a FileScan) for each requested message, keyed by message ID,
+    /// for message-badge display. Messages with no verdict row are omitted.
+    /// </summary>
+    Task<Dictionary<int, UiModels.ContentCheckRecord>> GetCurrentContentChecksAsync(
+        long chatId,
+        IReadOnlyCollection<int> messageIds,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Stores the perceptual-hash features of a message's photo/video on the message. No-op when the
+    /// message is not stored.
+    /// </summary>
+    Task SetMediaFeaturesAsync(int messageId, long chatId, MediaFeatures features, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Gets messages whose current verdict is curated, that have no media features yet, and that
+    /// carry a photo path or a video/animation/video-note path (startup media-feature backfill),
+    /// newest decision first (stable order, so <paramref name="offset"/> pages past candidates the
+    /// caller could not recover). A photo message reports <see cref="UiModels.MediaType.Photo"/>.
+    /// </summary>
+    Task<IReadOnlyList<UiModels.MediaBackfillCandidate>> GetMediaFeatureBackfillCandidatesAsync(int limit, int offset, CancellationToken cancellationToken = default);
 }

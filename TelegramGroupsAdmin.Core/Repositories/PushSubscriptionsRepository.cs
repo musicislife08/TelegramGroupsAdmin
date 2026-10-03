@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using TelegramGroupsAdmin.Core.Http;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Repositories.Mappings;
 using TelegramGroupsAdmin.Data;
@@ -8,7 +10,9 @@ namespace TelegramGroupsAdmin.Core.Repositories;
 /// <summary>
 /// Repository for managing browser push notification subscriptions
 /// </summary>
-public class PushSubscriptionsRepository(IDbContextFactory<AppDbContext> contextFactory)
+public class PushSubscriptionsRepository(
+    IDbContextFactory<AppDbContext> contextFactory,
+    ILogger<PushSubscriptionsRepository> logger)
     : IPushSubscriptionsRepository
 {
     public async Task<IReadOnlyList<PushSubscription>> GetByUserIdAsync(string userId, CancellationToken cancellationToken = default)
@@ -33,8 +37,21 @@ public class PushSubscriptionsRepository(IDbContextFactory<AppDbContext> context
         return dto?.ToModel();
     }
 
+    /// <inheritdoc />
+    /// <exception cref="PushEndpointRejectedException">
+    /// The endpoint is not https, carries userinfo, or is an IP literal in a non-public range. The
+    /// server will POST to this URL later, so it is judged before anything is stored.
+    /// </exception>
     public async Task<PushSubscription> UpsertAsync(PushSubscription subscription, CancellationToken cancellationToken = default)
     {
+        if (!PushEndpointPolicy.IsAcceptable(subscription.Endpoint, out var rejectedBecause))
+        {
+            // The user sees RejectedMessage; the address only goes to the log.
+            logger.LogWarning("Rejected push subscription endpoint for user {UserId}: {Reason}",
+                subscription.UserId, rejectedBecause);
+            throw new PushEndpointRejectedException(rejectedBecause);
+        }
+
         await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
 
         // Check for existing subscription by user + endpoint

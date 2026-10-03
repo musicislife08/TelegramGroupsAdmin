@@ -105,9 +105,9 @@ public class ExamReviewCardTests : ExamReviewCardTestContext
     #region Helper Methods
 
     /// <summary>
-    /// Creates an ExamFailureRecord with realistic test data.
+    /// Creates an ExamResultRecord with realistic test data.
     /// </summary>
-    private static ExamFailureRecord CreateExamFailure(
+    private static ExamResultRecord CreateExamResult(
         long id = 1,
         long chatId = -1001234567890,
         long userId = 7123456789,
@@ -125,7 +125,7 @@ public class ExamReviewCardTests : ExamReviewCardTestContext
         string? userLastName = "User",
         string? chatName = "Test Group")
     {
-        return new ExamFailureRecord
+        return new ExamResultRecord
         {
             Id = id,
             McAnswers = mcAnswers ?? new Dictionary<int, string> { { 0, "A" }, { 1, "B" } },
@@ -138,7 +138,7 @@ public class ExamReviewCardTests : ExamReviewCardTestContext
             Score = score,
             PassingThreshold = passingThreshold,
             AiEvaluation = aiEvaluation,
-            FailedAt = DateTimeOffset.UtcNow.AddHours(-2),
+            CompletedAt = DateTimeOffset.UtcNow.AddHours(-2),
             ReviewedBy = reviewedBy,
             ReviewedAt = reviewedAt,
             ActionTaken = actionTaken,
@@ -156,7 +156,7 @@ public class ExamReviewCardTests : ExamReviewCardTestContext
     {
         // Arrange & Act
         var cut = Render<ExamReviewCard>(p => p
-            .Add(x => x.ExamFailure, CreateExamFailure()));
+            .Add(x => x.ExamResult, CreateExamResult()));
 
         // Assert
         Assert.That(cut.Markup, Does.Contain("Exam Review"));
@@ -167,7 +167,7 @@ public class ExamReviewCardTests : ExamReviewCardTestContext
     {
         // Arrange & Act
         var cut = Render<ExamReviewCard>(p => p
-            .Add(x => x.ExamFailure, CreateExamFailure(
+            .Add(x => x.ExamResult, CreateExamResult(
                 userFirstName: "John",
                 userLastName: "Doe")));
 
@@ -180,7 +180,7 @@ public class ExamReviewCardTests : ExamReviewCardTestContext
     {
         // Arrange & Act
         var cut = Render<ExamReviewCard>(p => p
-            .Add(x => x.ExamFailure, CreateExamFailure(userName: "johndoe")));
+            .Add(x => x.ExamResult, CreateExamResult(userName: "johndoe")));
 
         // Assert
         Assert.That(cut.Markup, Does.Contain("@johndoe"));
@@ -191,7 +191,7 @@ public class ExamReviewCardTests : ExamReviewCardTestContext
     {
         // Arrange & Act
         var cut = Render<ExamReviewCard>(p => p
-            .Add(x => x.ExamFailure, CreateExamFailure(userName: null)));
+            .Add(x => x.ExamResult, CreateExamResult(userName: null)));
 
         // Assert
         Assert.That(cut.Markup, Does.Contain("No username").IgnoreCase);
@@ -202,7 +202,7 @@ public class ExamReviewCardTests : ExamReviewCardTestContext
     {
         // Arrange & Act
         var cut = Render<ExamReviewCard>(p => p
-            .Add(x => x.ExamFailure, CreateExamFailure(userId: 123456789)));
+            .Add(x => x.ExamResult, CreateExamResult(userId: 123456789)));
 
         // Assert
         Assert.That(cut.Markup, Does.Contain("ID: 123456789"));
@@ -213,7 +213,7 @@ public class ExamReviewCardTests : ExamReviewCardTestContext
     {
         // Arrange & Act
         var cut = Render<ExamReviewCard>(p => p
-            .Add(x => x.ExamFailure, CreateExamFailure(chatName: "My Test Group")));
+            .Add(x => x.ExamResult, CreateExamResult(chatName: "My Test Group")));
 
         // Assert
         Assert.That(cut.Markup, Does.Contain("My Test Group"));
@@ -228,7 +228,7 @@ public class ExamReviewCardTests : ExamReviewCardTestContext
     {
         // Arrange & Act
         var cut = Render<ExamReviewCard>(p => p
-            .Add(x => x.ExamFailure, CreateExamFailure(reviewedAt: null)));
+            .Add(x => x.ExamResult, CreateExamResult(reviewedAt: null)));
 
         // Assert
         Assert.That(cut.Markup, Does.Contain("Pending"));
@@ -239,7 +239,7 @@ public class ExamReviewCardTests : ExamReviewCardTestContext
     {
         // Arrange & Act
         var cut = Render<ExamReviewCard>(p => p
-            .Add(x => x.ExamFailure, CreateExamFailure(
+            .Add(x => x.ExamResult, CreateExamResult(
                 reviewedAt: DateTimeOffset.UtcNow,
                 reviewedBy: "admin@test.com",
                 actionTaken: "approved")));
@@ -257,7 +257,7 @@ public class ExamReviewCardTests : ExamReviewCardTestContext
     {
         // Arrange & Act
         var cut = Render<ExamReviewCard>(p => p
-            .Add(x => x.ExamFailure, CreateExamFailure()));
+            .Add(x => x.ExamResult, CreateExamResult()));
 
         // Assert
         Assert.That(cut.Markup, Does.Contain("Multiple Choice"));
@@ -268,7 +268,7 @@ public class ExamReviewCardTests : ExamReviewCardTestContext
     {
         // Arrange & Act
         var cut = Render<ExamReviewCard>(p => p
-            .Add(x => x.ExamFailure, CreateExamFailure(score: 75)));
+            .Add(x => x.ExamResult, CreateExamResult(score: 75)));
 
         // Assert
         Assert.That(cut.Markup, Does.Contain("75%"));
@@ -279,7 +279,7 @@ public class ExamReviewCardTests : ExamReviewCardTestContext
     {
         // Arrange & Act
         var cut = Render<ExamReviewCard>(p => p
-            .Add(x => x.ExamFailure, CreateExamFailure(passingThreshold: 80)));
+            .Add(x => x.ExamResult, CreateExamResult(passingThreshold: 80)));
 
         // Assert
         Assert.That(cut.Markup, Does.Contain("80%"));
@@ -290,7 +290,7 @@ public class ExamReviewCardTests : ExamReviewCardTestContext
     {
         // Arrange & Act
         var cut = Render<ExamReviewCard>(p => p
-            .Add(x => x.ExamFailure, CreateExamFailure(score: 85, passingThreshold: 80)));
+            .Add(x => x.ExamResult, CreateExamResult(score: 85, passingThreshold: 80)));
 
         // Assert
         Assert.That(cut.Markup, Does.Contain("Passed"));
@@ -301,7 +301,7 @@ public class ExamReviewCardTests : ExamReviewCardTestContext
     {
         // Arrange & Act
         var cut = Render<ExamReviewCard>(p => p
-            .Add(x => x.ExamFailure, CreateExamFailure(score: 50, passingThreshold: 80)));
+            .Add(x => x.ExamResult, CreateExamResult(score: 50, passingThreshold: 80)));
 
         // Assert
         Assert.That(cut.Markup, Does.Contain("Failed"));
@@ -316,7 +316,7 @@ public class ExamReviewCardTests : ExamReviewCardTestContext
     {
         // Arrange & Act
         var cut = Render<ExamReviewCard>(p => p
-            .Add(x => x.ExamFailure, CreateExamFailure(
+            .Add(x => x.ExamResult, CreateExamResult(
                 openEndedAnswer: "I want to learn about technology")));
 
         // Assert
@@ -328,7 +328,7 @@ public class ExamReviewCardTests : ExamReviewCardTestContext
     {
         // Arrange & Act
         var cut = Render<ExamReviewCard>(p => p
-            .Add(x => x.ExamFailure, CreateExamFailure(
+            .Add(x => x.ExamResult, CreateExamResult(
                 openEndedAnswer: "I am interested in tech discussions")));
 
         // Assert
@@ -344,7 +344,7 @@ public class ExamReviewCardTests : ExamReviewCardTestContext
     {
         // Arrange & Act
         var cut = Render<ExamReviewCard>(p => p
-            .Add(x => x.ExamFailure, CreateExamFailure(
+            .Add(x => x.ExamResult, CreateExamResult(
                 openEndedAnswer: "I want to join",
                 aiEvaluation: "The answer shows genuine interest in the topic")));
 
@@ -358,7 +358,7 @@ public class ExamReviewCardTests : ExamReviewCardTestContext
     {
         // Arrange & Act
         var cut = Render<ExamReviewCard>(p => p
-            .Add(x => x.ExamFailure, CreateExamFailure(
+            .Add(x => x.ExamResult, CreateExamResult(
                 openEndedAnswer: "I want to join",
                 aiEvaluation: "PASS - The answer demonstrates understanding")));
 
@@ -372,7 +372,7 @@ public class ExamReviewCardTests : ExamReviewCardTestContext
     {
         // Arrange & Act
         var cut = Render<ExamReviewCard>(p => p
-            .Add(x => x.ExamFailure, CreateExamFailure(
+            .Add(x => x.ExamResult, CreateExamResult(
                 openEndedAnswer: "idk",
                 aiEvaluation: "FAIL - Response is too short and generic")));
 
@@ -386,7 +386,7 @@ public class ExamReviewCardTests : ExamReviewCardTestContext
     {
         // Arrange & Act
         var cut = Render<ExamReviewCard>(p => p
-            .Add(x => x.ExamFailure, CreateExamFailure(
+            .Add(x => x.ExamResult, CreateExamResult(
                 openEndedAnswer: "I want to join",
                 aiEvaluation: null)));
 
@@ -403,7 +403,7 @@ public class ExamReviewCardTests : ExamReviewCardTestContext
     {
         // Arrange & Act
         var cut = Render<ExamReviewCard>(p => p
-            .Add(x => x.ExamFailure, CreateExamFailure(reviewedAt: null)));
+            .Add(x => x.ExamResult, CreateExamResult(reviewedAt: null)));
 
         // Assert
         Assert.That(cut.Markup, Does.Contain("Approve"));
@@ -416,7 +416,7 @@ public class ExamReviewCardTests : ExamReviewCardTestContext
     {
         // Arrange & Act
         var cut = Render<ExamReviewCard>(p => p
-            .Add(x => x.ExamFailure, CreateExamFailure(
+            .Add(x => x.ExamResult, CreateExamResult(
                 reviewedAt: DateTimeOffset.UtcNow,
                 reviewedBy: "admin@test.com",
                 actionTaken: "approved")));
@@ -435,7 +435,7 @@ public class ExamReviewCardTests : ExamReviewCardTestContext
     {
         // Arrange & Act
         var cut = Render<ExamReviewCard>(p => p
-            .Add(x => x.ExamFailure, CreateExamFailure(
+            .Add(x => x.ExamResult, CreateExamResult(
                 reviewedAt: DateTimeOffset.UtcNow,
                 reviewedBy: "admin@test.com",
                 actionTaken: "approved")));
@@ -449,7 +449,7 @@ public class ExamReviewCardTests : ExamReviewCardTestContext
     {
         // Arrange & Act
         var cut = Render<ExamReviewCard>(p => p
-            .Add(x => x.ExamFailure, CreateExamFailure(
+            .Add(x => x.ExamResult, CreateExamResult(
                 reviewedAt: DateTimeOffset.UtcNow,
                 reviewedBy: "admin@test.com",
                 actionTaken: "denied")));
@@ -466,12 +466,12 @@ public class ExamReviewCardTests : ExamReviewCardTestContext
     public async Task InvokesOnAction_WhenApproveClicked()
     {
         // Arrange
-        (ExamFailureRecord failure, ExamAction action)? receivedAction = null;
-        var failure = CreateExamFailure(reviewedAt: null);
+        ExamCardAction? receivedAction = null;
+        var failure = CreateExamResult(reviewedAt: null);
 
         var cut = Render<ExamReviewCard>(p => p
-            .Add(x => x.ExamFailure, failure)
-            .Add(x => x.OnAction, EventCallback.Factory.Create<(ExamFailureRecord, ExamAction)>(
+            .Add(x => x.ExamResult, failure)
+            .Add(x => x.OnAction, EventCallback.Factory.Create<ExamCardAction>(
                 this, args => receivedAction = args)));
 
         // Act
@@ -482,8 +482,8 @@ public class ExamReviewCardTests : ExamReviewCardTestContext
         Assert.That(receivedAction, Is.Not.Null);
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(receivedAction!.Value.action, Is.EqualTo(ExamAction.Approve));
-            Assert.That(receivedAction!.Value.failure.Id, Is.EqualTo(failure.Id));
+            Assert.That(receivedAction!.Action, Is.EqualTo(ExamAction.Approve));
+            Assert.That(receivedAction!.ExamResult.Id, Is.EqualTo(failure.Id));
         }
     }
 
@@ -491,12 +491,12 @@ public class ExamReviewCardTests : ExamReviewCardTestContext
     public async Task InvokesOnAction_WhenDenyClicked()
     {
         // Arrange
-        (ExamFailureRecord failure, ExamAction action)? receivedAction = null;
-        var failure = CreateExamFailure(reviewedAt: null);
+        ExamCardAction? receivedAction = null;
+        var failure = CreateExamResult(reviewedAt: null);
 
         var cut = Render<ExamReviewCard>(p => p
-            .Add(x => x.ExamFailure, failure)
-            .Add(x => x.OnAction, EventCallback.Factory.Create<(ExamFailureRecord, ExamAction)>(
+            .Add(x => x.ExamResult, failure)
+            .Add(x => x.OnAction, EventCallback.Factory.Create<ExamCardAction>(
                 this, args => receivedAction = args)));
 
         // Act
@@ -506,19 +506,19 @@ public class ExamReviewCardTests : ExamReviewCardTestContext
 
         // Assert
         Assert.That(receivedAction, Is.Not.Null);
-        Assert.That(receivedAction!.Value.action, Is.EqualTo(ExamAction.Deny));
+        Assert.That(receivedAction!.Action, Is.EqualTo(ExamAction.Deny));
     }
 
     [Test]
     public async Task InvokesOnAction_WhenDenyAndBanClicked()
     {
         // Arrange
-        (ExamFailureRecord failure, ExamAction action)? receivedAction = null;
-        var failure = CreateExamFailure(reviewedAt: null);
+        ExamCardAction? receivedAction = null;
+        var failure = CreateExamResult(reviewedAt: null);
 
         var cut = Render<ExamReviewCard>(p => p
-            .Add(x => x.ExamFailure, failure)
-            .Add(x => x.OnAction, EventCallback.Factory.Create<(ExamFailureRecord, ExamAction)>(
+            .Add(x => x.ExamResult, failure)
+            .Add(x => x.OnAction, EventCallback.Factory.Create<ExamCardAction>(
                 this, args => receivedAction = args)));
 
         // Act
@@ -527,7 +527,66 @@ public class ExamReviewCardTests : ExamReviewCardTestContext
 
         // Assert
         Assert.That(receivedAction, Is.Not.Null);
-        Assert.That(receivedAction!.Value.action, Is.EqualTo(ExamAction.DenyAndBan));
+        Assert.That(receivedAction!.Action, Is.EqualTo(ExamAction.DenyAndBan));
+    }
+
+    [Test]
+    public void PassedRecord_AutoApproved_ShowsDismissDenyDenyBan_NoApprove()
+    {
+        // Arrange & Act
+        var record = CreateExamResult() with
+        {
+            Outcome = ExamOutcome.Passed,
+            ReviewedAt = DateTimeOffset.UtcNow,
+            ReviewedBy = "Exam Flow",
+            ActionTaken = ExamResultRecord.AutoApprovedActionTaken
+        };
+
+        var cut = Render<ExamReviewCard>(p => p
+            .Add(x => x.ExamResult, record));
+
+        // Assert
+        var buttons = cut.FindAll("button").Select(b => b.TextContent.Trim()).ToList();
+        Assert.That(buttons, Does.Contain("Dismiss"));
+        Assert.That(buttons, Does.Contain("Deny"));
+        Assert.That(buttons, Does.Contain("Deny + Ban"));
+        Assert.That(buttons, Does.Not.Contain("Approve"));
+    }
+
+    [Test]
+    public void FailedRecord_Pending_NeverShowsDismiss()
+    {
+        // Arrange & Act
+        var record = CreateExamResult() with { Outcome = ExamOutcome.Failed };
+
+        var cut = Render<ExamReviewCard>(p => p
+            .Add(x => x.ExamResult, record));
+
+        // Assert
+        var buttons = cut.FindAll("button").Select(b => b.TextContent.Trim()).ToList();
+        Assert.That(buttons, Does.Contain("Approve"));
+        Assert.That(buttons, Does.Not.Contain("Dismiss"), "a failed exam is never dismissible");
+    }
+
+    [Test]
+    public void PassedRecord_AlreadyOverridden_ShowsActionTextOnly()
+    {
+        // Arrange & Act
+        var record = CreateExamResult() with
+        {
+            Outcome = ExamOutcome.Passed,
+            ReviewedAt = DateTimeOffset.UtcNow,
+            ReviewedBy = "admin@test.com",
+            ActionTaken = "dismissed (auto-admit acknowledged)"
+        };
+
+        var cut = Render<ExamReviewCard>(p => p
+            .Add(x => x.ExamResult, record));
+
+        // Assert
+        Assert.That(cut.FindAll("button").Select(b => b.TextContent.Trim()),
+            Does.Not.Contain("Dismiss").And.Not.Contain("Deny"));
+        Assert.That(cut.Markup, Does.Contain("dismissed (auto-admit acknowledged)"));
     }
 
     #endregion
@@ -539,7 +598,7 @@ public class ExamReviewCardTests : ExamReviewCardTestContext
     {
         // Arrange & Act
         var cut = Render<ExamReviewCard>(p => p
-            .Add(x => x.ExamFailure, CreateExamFailure()));
+            .Add(x => x.ExamResult, CreateExamResult()));
 
         // Assert
         Assert.That(cut.Markup, Does.Contain("Context"));
@@ -573,7 +632,7 @@ public class ExamReviewCardTests : ExamReviewCardTestContext
 
         // Act
         var cut = Render<ExamReviewCard>(p => p
-            .Add(x => x.ExamFailure, CreateExamFailure()));
+            .Add(x => x.ExamResult, CreateExamResult()));
 
         // Assert
         Assert.That(cut.Markup, Does.Contain("trusted").IgnoreCase);
@@ -585,7 +644,7 @@ public class ExamReviewCardTests : ExamReviewCardTestContext
         // Arrange - Default mock returns null user, which is not trusted
         // Act
         var cut = Render<ExamReviewCard>(p => p
-            .Add(x => x.ExamFailure, CreateExamFailure()));
+            .Add(x => x.ExamResult, CreateExamResult()));
 
         // Assert
         Assert.That(cut.Markup, Does.Contain("Not trusted").Or.Contain("not trusted"));
@@ -622,7 +681,7 @@ public class ExamReviewCardTests : ExamReviewCardTestContext
 
         // Act
         var cut = Render<ExamReviewCard>(p => p
-            .Add(x => x.ExamFailure, CreateExamFailure()));
+            .Add(x => x.ExamResult, CreateExamResult()));
 
         // Assert
         Assert.That(cut.Markup, Does.Contain("Member of:").Or.Contain("Other Group"));
@@ -634,7 +693,7 @@ public class ExamReviewCardTests : ExamReviewCardTestContext
         // Arrange - Default mock returns empty list
         // Act
         var cut = Render<ExamReviewCard>(p => p
-            .Add(x => x.ExamFailure, CreateExamFailure()));
+            .Add(x => x.ExamResult, CreateExamResult()));
 
         // Assert
         Assert.That(cut.Markup, Does.Contain("Not in other managed groups"));
@@ -649,7 +708,7 @@ public class ExamReviewCardTests : ExamReviewCardTestContext
     {
         // Arrange & Act
         var cut = Render<ExamReviewCard>(p => p
-            .Add(x => x.ExamFailure, CreateExamFailure(reviewedAt: null)));
+            .Add(x => x.ExamResult, CreateExamResult(reviewedAt: null)));
 
         // Assert - Pending cards have warning border-left
         var card = cut.Find(".mud-card");
@@ -661,7 +720,7 @@ public class ExamReviewCardTests : ExamReviewCardTestContext
     {
         // Arrange & Act
         var cut = Render<ExamReviewCard>(p => p
-            .Add(x => x.ExamFailure, CreateExamFailure(
+            .Add(x => x.ExamResult, CreateExamResult(
                 reviewedAt: DateTimeOffset.UtcNow,
                 reviewedBy: "admin",
                 actionTaken: "approved")));
@@ -681,7 +740,7 @@ public class ExamReviewCardTests : ExamReviewCardTestContext
     {
         // Arrange & Act
         var cut = Render<ExamReviewCard>(p => p
-            .Add(x => x.ExamFailure, CreateExamFailure()));
+            .Add(x => x.ExamResult, CreateExamResult()));
 
         // Assert - Should show MudAvatar with person icon placeholder
         var avatars = cut.FindAll(".mud-avatar");
@@ -696,11 +755,11 @@ public class ExamReviewCardTests : ExamReviewCardTestContext
     public void HasCardContainer()
     {
         // Arrange
-        var failure = CreateExamFailure();
+        var failure = CreateExamResult();
 
         // Act
         var cut = Render<ExamReviewCard>(p => p
-            .Add(x => x.ExamFailure, failure));
+            .Add(x => x.ExamResult, failure));
 
         // Assert
         Assert.That(cut.Markup, Does.Contain("mud-card"));
@@ -710,11 +769,11 @@ public class ExamReviewCardTests : ExamReviewCardTestContext
     public void HasCardHeader()
     {
         // Arrange
-        var failure = CreateExamFailure();
+        var failure = CreateExamResult();
 
         // Act
         var cut = Render<ExamReviewCard>(p => p
-            .Add(x => x.ExamFailure, failure));
+            .Add(x => x.ExamResult, failure));
 
         // Assert
         Assert.That(cut.Markup, Does.Contain("mud-card-header"));
@@ -724,11 +783,11 @@ public class ExamReviewCardTests : ExamReviewCardTestContext
     public void HasCardContent()
     {
         // Arrange
-        var failure = CreateExamFailure();
+        var failure = CreateExamResult();
 
         // Act
         var cut = Render<ExamReviewCard>(p => p
-            .Add(x => x.ExamFailure, failure));
+            .Add(x => x.ExamResult, failure));
 
         // Assert
         Assert.That(cut.Markup, Does.Contain("mud-card-content"));
@@ -738,11 +797,11 @@ public class ExamReviewCardTests : ExamReviewCardTestContext
     public void HasCardActions()
     {
         // Arrange
-        var failure = CreateExamFailure();
+        var failure = CreateExamResult();
 
         // Act
         var cut = Render<ExamReviewCard>(p => p
-            .Add(x => x.ExamFailure, failure));
+            .Add(x => x.ExamResult, failure));
 
         // Assert
         Assert.That(cut.Markup, Does.Contain("mud-card-actions"));

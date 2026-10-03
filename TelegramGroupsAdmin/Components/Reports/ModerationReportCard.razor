@@ -88,42 +88,53 @@
             <MudAlert Severity="Severity.Warning">Message not found in cache</MudAlert>
         }
     </MudCardContent>
-    <MudCardActions>
+    <MudCardActions Class="flex-wrap gap-2">
         @if (Report.Status == ReportStatus.Pending)
         {
             <MudButton Variant="Variant.Filled"
                        Color="Color.Error"
                        StartIcon="@Icons.Material.Filled.Block"
-                       OnClick="@OnMarkSpam"
+                       OnClick="@(() => InvokeActionAsync(ReportAction.Spam))"
                        Disabled="@_actionInProgress">
                 Delete as Spam
             </MudButton>
-            <MudButton Variant="Variant.Filled"
-                       Color="Color.Warning"
+            <MudButton Variant="Variant.Outlined"
+                       Color="Color.Error"
                        StartIcon="@Icons.Material.Filled.Gavel"
-                       OnClick="@OnBan"
+                       OnClick="@(() => InvokeActionAsync(ReportAction.Ban))"
                        Disabled="@_actionInProgress">
                 Ban User
             </MudButton>
             <MudButton Variant="Variant.Filled"
                        Color="Color.Warning"
                        StartIcon="@Icons.Material.Filled.Warning"
-                       OnClick="@OnWarn"
+                       OnClick="@(() => InvokeActionAsync(ReportAction.Warn))"
                        Disabled="@_actionInProgress">
                 Warn
             </MudButton>
-            <MudButton Variant="Variant.Outlined"
-                       Color="Color.Default"
-                       StartIcon="@Icons.Material.Filled.Close"
-                       OnClick="@OnDismiss"
-                       Disabled="@_actionInProgress">
-                Dismiss
-            </MudButton>
+            <MudTooltip Text="Not spam: keep the message and teach the filter it is clean">
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Success"
+                           StartIcon="@Icons.Material.Filled.CheckCircle"
+                           OnClick="@(() => InvokeActionAsync(ReportAction.Clean))"
+                           Disabled="@_actionInProgress">
+                    Mark Clean
+                </MudButton>
+            </MudTooltip>
+            <MudTooltip Text="Acknowledge without changing anything; the filter learns nothing">
+                <MudButton Variant="Variant.Outlined"
+                           Color="Color.Default"
+                           StartIcon="@Icons.Material.Filled.Close"
+                           OnClick="@(() => InvokeActionAsync(ReportAction.Dismiss))"
+                           Disabled="@_actionInProgress">
+                    Dismiss
+                </MudButton>
+            </MudTooltip>
         }
         else
         {
             <MudText Typo="Typo.body2" Color="Color.Secondary">
-                Action taken: @Report.ActionTaken
+                Action taken: @ActionTakenText(Report.ActionTaken)
             </MudText>
         }
 
@@ -206,33 +217,23 @@
         return null;
     }
 
-    private async Task OnMarkSpam()
+    private async Task InvokeActionAsync(ReportAction action)
     {
         _actionInProgress = true;
-        try { await OnAction.InvokeAsync((Report, ReportAction.Spam)); }
+        try { await OnAction.InvokeAsync((Report, action)); }
         finally { _actionInProgress = false; }
     }
 
-    private async Task OnBan()
+    private static string ActionTakenText(string? action) => action switch
     {
-        _actionInProgress = true;
-        try { await OnAction.InvokeAsync((Report, ReportAction.Ban)); }
-        finally { _actionInProgress = false; }
-    }
-
-    private async Task OnWarn()
-    {
-        _actionInProgress = true;
-        try { await OnAction.InvokeAsync((Report, ReportAction.Warn)); }
-        finally { _actionInProgress = false; }
-    }
-
-    private async Task OnDismiss()
-    {
-        _actionInProgress = true;
-        try { await OnAction.InvokeAsync((Report, ReportAction.Dismiss)); }
-        finally { _actionInProgress = false; }
-    }
+        "spam" => "Deleted as spam",
+        "ban" => "User banned",
+        "warn" => "User warned",
+        "clean" => "Marked clean",
+        "dismiss" => "Dismissed",
+        null or "" => "None",
+        _ => action
+    };
 
     private string GetReportedUserDisplay()
     {

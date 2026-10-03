@@ -42,7 +42,7 @@ public class ReportCleanupHandlerTests
     {
         _reportsRepository
             .GetPendingForUserAsync(TestUser.Id, null, Arg.Any<CancellationToken>())
-            .Returns([Report(1, ReportType.ExamFailure), Report(2, ReportType.ProfileScanAlert)]);
+            .Returns([Report(1, ReportType.ExamResult), Report(2, ReportType.ProfileScanAlert)]);
         _reportsRepository
             .TryUpdateStatusAsync(Arg.Any<long>(), Arg.Any<ReportStatus>(), Arg.Any<string>(),
                 Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
@@ -63,7 +63,7 @@ public class ReportCleanupHandlerTests
     {
         _reportsRepository
             .GetPendingForUserAsync(TestUser.Id, null, Arg.Any<CancellationToken>())
-            .Returns([Report(1, ReportType.ProfileScanAlert), Report(2, ReportType.ExamFailure)]);
+            .Returns([Report(1, ReportType.ProfileScanAlert), Report(2, ReportType.ExamResult)]);
         _reportsRepository
             .TryUpdateStatusAsync(Arg.Any<long>(), Arg.Any<ReportStatus>(), Arg.Any<string>(),
                 Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
@@ -83,7 +83,7 @@ public class ReportCleanupHandlerTests
     {
         _reportsRepository
             .GetPendingForUserAsync(TestUser.Id, null, Arg.Any<CancellationToken>())
-            .Returns([Report(1, ReportType.ExamFailure)]);
+            .Returns([Report(1, ReportType.ExamResult)]);
         _reportsRepository
             .TryUpdateStatusAsync(Arg.Any<long>(), Arg.Any<ReportStatus>(), Arg.Any<string>(),
                 Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())

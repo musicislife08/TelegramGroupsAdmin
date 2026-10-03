@@ -1,3 +1,7 @@
+using System.Formats.Tar;
+using System.IO.Compression;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -67,7 +71,9 @@ public class BackupServiceTests
     // Tables with DTOs that BackupService can export (excludes __EFMigrationsHistory,
     // file_scan_quota, ticker.*). Updated 2026-04-09: +file_scan_results (FileScanResultDto rename).
     // Updated 2026-05-27: +username_blacklist (UsernameBlacklistEntryDto now discovered via [Table] attribute).
-    private const int ExpectedBackupTableCount = 43;
+    // Updated 2026-09-25: +ban_celebration_subscribers (DM ban celebrations).
+    // Updated 2026-09-27: -3 legacy label/media-sample tables (DropLegacyVerdictColumns).
+    private const int ExpectedBackupTableCount = 41;
 
     // Synthetic outside-canonical-range ID used by RestoreAsync_ShouldWipeAllTablesFirst
     private const long SyntheticExtraUserId = 7777777777777L;
@@ -128,7 +134,7 @@ public class BackupServiceTests
         // Add mock services (BackupService dependencies)
         services.AddSingleton<IBotDmService, MockBotDmService>();
         services.AddSingleton<IDataProtectionService, MockDataProtectionService>();
-        services.AddSingleton<INotificationService, MockNotificationService>();
+        services.AddSingleton<IAdminNotificationService, MockNotificationService>();
         services.AddSingleton(Substitute.For<TelegramGroupsAdmin.Telegram.Services.IThumbnailService>());
 
         // Add IJobScheduler mock (required by PassphraseManagementService)
@@ -141,8 +147,10 @@ public class BackupServiceTests
 
         // Add backup services (using shared extension method from BackgroundJobs library)
         services.AddSingleton(new RecyclableMemoryStreamManager());
+        services.AddSingleton<BackupFileLock>();
         services.AddScoped<IBackupService, BackupService>();
         services.AddScoped<IBackupEncryptionService, BackupEncryptionService>();
+        services.AddScoped<IBackupArchiveRotator, BackupArchiveRotator>();
         services.AddScoped<IBackupConfigurationService, BackupConfigurationService>();
         services.AddScoped<IPassphraseManagementService, PassphraseManagementService>();
         services.AddScoped<IBackupRetentionService, BackupRetentionService>();
@@ -208,7 +216,7 @@ public class BackupServiceTests
             Assert.That(metadata, Is.Not.Null);
             using (Assert.EnterMultipleScope())
             {
-                Assert.That(metadata.Version, Is.EqualTo("3.0"));
+                Assert.That(metadata.Version, Is.EqualTo("3.1"));
                 Assert.That(metadata.TableCount, Is.GreaterThan(0));
             }
         }
@@ -691,7 +699,7 @@ public class BackupServiceTests
             Assert.That(metadata, Is.Not.Null);
             using (Assert.EnterMultipleScope())
             {
-                Assert.That(metadata.Version, Is.EqualTo("3.0"));
+                Assert.That(metadata.Version, Is.EqualTo("3.1"));
                 Assert.That(metadata.TableCount, Is.EqualTo(ExpectedBackupTableCount));
                 Assert.That(metadata.CreatedAt, Is.LessThanOrEqualTo(DateTimeOffset.UtcNow));
             }
@@ -714,7 +722,7 @@ public class BackupServiceTests
 
             // Assert
             Assert.That(metadata, Is.Not.Null);
-            Assert.That(metadata.Version, Is.EqualTo("3.0"));
+            Assert.That(metadata.Version, Is.EqualTo("3.1"));
         }
         finally
         {
@@ -928,6 +936,274 @@ public class BackupServiceTests
         }
     }
 
+    /// <summary>
+    /// messages.media_features is a polymorphic jsonb contract: jsonb moves "type" after "hash" on read,
+    /// and the restore insert must keep the "type" discriminator, or the restored row cannot be read.
+    /// Anchor: <see cref="GoldenDatasetConstants.Verdicts.PhotoFeaturesMsgId"/> (canonical edit 2026-09-27).
+    /// </summary>
+    [Test]
+    public async Task ExportAndRestore_ShouldPreserveMediaFeatures()
+    {
+        byte[] originalHash;
+        await using (var context = _testHelper!.GetDbContext())
+        {
+            // guard the canonical edit
+            var original = await context.Messages.SingleAsync(m => m.MessageId == GoldenDatasetConstants.Verdicts.PhotoFeaturesMsgId
+                && m.ChatId == GoldenDatasetConstants.Chats.MainChatId);
+            Assert.That(original.MediaFeatures, Is.TypeOf<Data.Models.PhotoFeaturesDto>());
+            originalHash = ((Data.Models.PhotoFeaturesDto)original.MediaFeatures!).Hash;
+        }
+
+        var backupPath = await ExportBackupToTempFileAsync();
+        try
+        {
+            await _backupService!.RestoreAsync(backupPath);
+
+            await using var context = _testHelper.GetDbContext();
+            var restored = await context.Messages.SingleAsync(m => m.MessageId == GoldenDatasetConstants.Verdicts.PhotoFeaturesMsgId
+                && m.ChatId == GoldenDatasetConstants.Chats.MainChatId);
+            Assert.That(restored.MediaFeatures, Is.TypeOf<Data.Models.PhotoFeaturesDto>()
+                .With.Property(nameof(Data.Models.PhotoFeaturesDto.Hash)).EqualTo(originalHash));
+        }
+        finally
+        {
+            File.Delete(backupPath);
+        }
+    }
+
+    #endregion
+
+    #region Backup Format Migration Tests
+
+    /// <summary>
+    /// A 3.0 backup (legacy detection_results columns, training_labels, media sample tables) restores
+    /// into the 3.1 schema: rows get source/classification, is_spam is generated (never written),
+    /// labels fold into decisions and the identity sequence clears the new ids.
+    /// The 3.0 backup is built from the exported canonical backup: its detection_results are replaced by
+    /// synthetic 3.0-shaped rows on canonical messages (backup fixtures are infrastructure data).
+    /// </summary>
+    [Test]
+    public async Task RestoreAsync_Version30Backup_MigratesVerdictsIntoTheCurrentSchema()
+    {
+        var exportedPath = await ExportBackupToTempFileAsync();
+        var legacyPath = Path.Combine(Path.GetTempPath(), $"test_backup_v30_{Guid.NewGuid():N}.tar.gz");
+        try
+        {
+            var messages = await WriteVersion30BackupAsync(exportedPath, legacyPath);
+
+            await _backupService!.RestoreAsync(legacyPath);
+
+            await using var context = _testHelper!.GetDbContext();
+            var rows = await context.DetectionResults.AsNoTracking().OrderBy(d => d.Id).ToListAsync();
+            var sequenceValue = await _testHelper.ExecuteScalarAsync<long>(
+                "SELECT last_value FROM pg_sequences WHERE sequencename = pg_get_serial_sequence('detection_results', 'id')::regclass::text");
+
+            DetectionResultRow Only(int index) => rows.Where(r => r.MessageId == messages[index].MessageId && r.ChatId == messages[index].ChatId)
+                .Select(r => new DetectionResultRow(r.Source, r.Classification, r.IsSpam, r.SystemIdentifier, r.TelegramUserId)).Single();
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(rows, Has.Count.EqualTo(6), "3 legacy rows + 1 TrainingExclude + 2 folded labels (the matched ham label is not duplicated)");
+                Assert.That(Only(0), Is.EqualTo(new DetectionResultRow(0, 2, true, "auto_detection", null)), "trained content scan above threshold → ImplicitSpam");
+                Assert.That(Only(1), Is.EqualTo(new DetectionResultRow(12, 1, false, null, CanonicalTopHamAuthorId)),
+                    "WebMarkHam; the legacy is_spam = true is ignored, is_spam is generated from classification");
+                Assert.That(rows.Where(r => r.MessageId == messages[2].MessageId && r.ChatId == messages[2].ChatId)
+                        .Select(r => new DetectionResultRow(r.Source, r.Classification, r.IsSpam, r.SystemIdentifier, r.TelegramUserId)),
+                    Is.EquivalentTo(new[]
+                    {
+                        new DetectionResultRow(18, 0, true, "tg-spam-import", null),
+                        new DetectionResultRow(17, 4, true, "tg-spam-import", null)
+                    }), "unused import keeps its actor on the TrainingExclude backfill");
+                Assert.That(Only(3), Is.EqualTo(new DetectionResultRow(99, 1, false, "unknown", null)), "unattributed ham label satisfies the actor CHECK");
+                Assert.That(Only(4), Is.EqualTo(new DetectionResultRow(10, 0, true, "auto_detection", null)), "unattributed spam label → AutoBan");
+                Assert.That(sequenceValue, Is.GreaterThanOrEqualTo(rows.Max(r => r.Id)), "identity sequence reset past the migrated ids");
+            }
+        }
+        finally
+        {
+            File.Delete(exportedPath);
+            File.Delete(legacyPath);
+        }
+    }
+
+    private sealed record DetectionResultRow(int Source, int Classification, bool IsSpam, string? SystemIdentifier, long? TelegramUserId);
+
+    /// <summary>
+    /// Rewrites an exported (current-format, encrypted) backup as a 3.0 backup with an unencrypted database.json:
+    /// version 3.0, legacy detection_results rows on the first five canonical MainChat messages, training_labels
+    /// and the retired media sample tables. Returns the five messages used.
+    /// </summary>
+    private async Task<List<(int MessageId, long ChatId)>> WriteVersion30BackupAsync(string exportedPath, string legacyPath)
+    {
+        JsonObject? metadata = null;
+        JsonObject? data = null;
+        await using (var input = File.OpenRead(exportedPath))
+        await using (var gzip = new GZipStream(input, CompressionMode.Decompress))
+        {
+            using var tar = new TarReader(gzip);
+            while (await tar.GetNextEntryAsync() is { DataStream: not null } entry)
+            {
+                using var buffer = new MemoryStream();
+                await entry.DataStream.CopyToAsync(buffer);
+                if (entry.Name == "metadata.json")
+                    metadata = JsonNode.Parse(buffer.ToArray())!.AsObject();
+                else if (entry.Name == "database.json.enc")
+                    data = JsonNode.Parse(_encryptionService!.DecryptBackup(buffer.ToArray(), "test-passphrase-12345"))!.AsObject();
+            }
+        }
+
+        Assert.That(metadata, Is.Not.Null);
+        Assert.That(data, Is.Not.Null);
+
+        // MainChat messages: chat 0 would turn a manual row into a TrainingDataPage row.
+        var messages = data!["messages"]!.AsArray()
+            .Select(m => (MessageId: m!["message_id"]!.GetValue<int>(), ChatId: m["chat_id"]!.GetValue<long>()))
+            .Where(m => m.ChatId == CanonicalMainChatId)
+            .Take(5)
+            .ToList();
+        Assert.That(messages, Has.Count.EqualTo(5));
+
+        JsonObject Legacy(long id, int index, string detectionSource, bool isSpam, double netScore, bool usedForTraining,
+            string reason, long? telegramUserId, string? systemIdentifier, string? checks) => new()
+        {
+            ["id"] = id,
+            ["message_id"] = messages[index].MessageId,
+            ["chat_id"] = messages[index].ChatId,
+            ["detected_at"] = "2026-01-10T12:00:00.5+00:00",
+            ["detection_source"] = detectionSource,
+            ["detection_method"] = "Legacy",
+            ["is_spam"] = isSpam,
+            ["score"] = Math.Abs(netScore),
+            ["net_score"] = netScore,
+            ["used_for_training"] = usedForTraining,
+            ["reason"] = reason,
+            ["web_user_id"] = null,
+            ["telegram_user_id"] = telegramUserId,
+            ["system_identifier"] = systemIdentifier,
+            ["check_results_json"] = checks,
+            ["edit_version"] = 0
+        };
+
+        JsonObject Label(int index, int label, long? labeledBy) => new()
+        {
+            ["message_id"] = messages[index].MessageId,
+            ["chat_id"] = messages[index].ChatId,
+            ["label"] = label,
+            ["labeled_by_user_id"] = labeledBy,
+            ["labeled_at"] = "2026-01-11T00:00:00+00:00",
+            ["reason"] = null,
+            ["audit_log_id"] = null
+        };
+
+        data["detection_results"] = new JsonArray(
+            Legacy(1001, 0, "auto", true, 3.0, true, "Spam detected", null, "auto_detection",
+                """{"Checks": [{"Score": 3.0, "CheckName": 2, "Abstained": false}]}"""),
+            Legacy(1002, 1, "manual", true, -5.0, true, "Manually marked as ham (not spam) by admin", CanonicalTopHamAuthorId, null, null),
+            Legacy(1003, 2, "tg-spam-import", true, -1.0, false, "Imported (label - spam)", null, "tg-spam-import", null));
+        data["training_labels"] = new JsonArray(
+            Label(1, 1, CanonicalTopHamAuthorId),
+            Label(3, 1, null),
+            Label(4, 0, null));
+        data["image_training_samples"] = new JsonArray();
+        data["video_training_samples"] = new JsonArray();
+
+        var tables = metadata!["tables"]!.AsArray();
+        foreach (var legacyTable in new[] { "training_labels", "image_training_samples", "video_training_samples" })
+            tables.Add(legacyTable);
+        metadata["table_count"] = tables.Count;
+        metadata["version"] = "3.0";
+
+        await using (var output = File.Create(legacyPath))
+        await using (var gzip = new GZipStream(output, CompressionLevel.Fastest))
+        await using (var tar = new TarWriter(gzip, leaveOpen: true))
+        {
+            await tar.WriteEntryAsync(new PaxTarEntry(TarEntryType.RegularFile, "metadata.json")
+            {
+                DataStream = new MemoryStream(JsonSerializer.SerializeToUtf8Bytes(metadata))
+            });
+            await tar.WriteEntryAsync(new PaxTarEntry(TarEntryType.RegularFile, "database.json")
+            {
+                DataStream = new MemoryStream(JsonSerializer.SerializeToUtf8Bytes(data))
+            });
+        }
+
+        return messages;
+    }
+
+    #endregion
+
+    #region Passphrase Rotation Job Tests
+
+    /// <summary>
+    /// A backup made before a passphrase rotation must still restore after it, with the new
+    /// passphrase the rotation stored. The file must also still be a readable archive: restore,
+    /// metadata and the encrypted check all open it as gzip.
+    /// </summary>
+    [Test]
+    public async Task RotatePassphraseJob_ThenRestore_BackupMadeBeforeRotationStillRestores()
+    {
+        // Arrange - one backup, encrypted with the passphrase configured in SetUp, in its own directory
+        const string newPassphrase = "rotated-passphrase-67890";
+        var backupDirectory = Directory.CreateTempSubdirectory("tga_rotation_proof_").FullName;
+        var backupPath = Path.Combine(backupDirectory, "backup_before_rotation.tar.gz");
+        try
+        {
+            await _backupService!.ExportToFileAsync(backupPath, CancellationToken.None);
+            Assert.That(await _backupService.IsEncryptedAsync(backupPath), Is.True, "precondition: the backup is encrypted");
+            Assert.That(await ReadFirstBytesAsync(backupPath, 2), Is.EqualTo(GzipMagic), "precondition: the backup is a gzip archive");
+
+            var dataProtection = _serviceProvider!.GetRequiredService<IDataProtectionService>();
+            var job = new TelegramGroupsAdmin.BackgroundJobs.Jobs.RotateBackupPassphraseJob(
+                _serviceProvider!.GetRequiredService<IBackupArchiveRotator>(),
+                _passphraseService!,
+                dataProtection,
+                _serviceProvider!.GetRequiredService<BackupFileLock>(),
+                _serviceProvider!.GetRequiredService<IServiceScopeFactory>(),
+                Microsoft.Extensions.Logging.Abstractions.NullLogger<TelegramGroupsAdmin.BackgroundJobs.Jobs.RotateBackupPassphraseJob>.Instance,
+                new TelegramGroupsAdmin.BackgroundJobs.Metrics.JobMetrics());
+
+            var payload = new TelegramGroupsAdmin.Core.JobPayloads.RotateBackupPassphrasePayload(
+                dataProtection.Protect(newPassphrase), backupDirectory, GoldenDatasetConstants.WebUsers.OwnerId);
+            var jobDataMap = new Quartz.JobDataMap
+            {
+                { TelegramGroupsAdmin.Core.BackgroundJobs.JobDataKeys.PayloadJson, JsonSerializer.Serialize(payload) }
+            };
+            var context = Substitute.For<Quartz.IJobExecutionContext>();
+            context.MergedJobDataMap.Returns(jobDataMap);
+            context.CancellationToken.Returns(CancellationToken.None);
+
+            // Act - rotate
+            await job.Execute(context);
+
+            // Assert - the stored passphrase is the new one, and the pre-rotation backup still works with it
+            Assert.That(await _passphraseService!.GetDecryptedPassphraseAsync(), Is.EqualTo(newPassphrase),
+                "the rotation should have stored the new passphrase");
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(await ReadFirstBytesAsync(backupPath, 2), Is.EqualTo(GzipMagic),
+                    "after rotation the backup must still be a gzip archive");
+                Assert.That(async () => await _backupService.GetMetadataAsync(backupPath), Throws.Nothing,
+                    "metadata must still be readable after rotation");
+                Assert.That(async () => await _backupService.RestoreAsync(backupPath), Throws.Nothing,
+                    "the backup must restore with the rotated passphrase stored in the database");
+            }
+        }
+        finally
+        {
+            Directory.Delete(backupDirectory, recursive: true);
+        }
+    }
+
+    private static readonly byte[] GzipMagic = [0x1f, 0x8b];
+
+    private static async Task<byte[]> ReadFirstBytesAsync(string path, int count)
+    {
+        await using var stream = File.OpenRead(path);
+        var buffer = new byte[count];
+        await stream.ReadExactlyAsync(buffer);
+        return buffer;
+    }
+
     #endregion
 
     #region Passphrase Management Tests
@@ -1026,6 +1302,7 @@ public class BackupServiceTests
             int messageId,
             string text,
             InlineKeyboardMarkup? replyMarkup = null,
+            IReadOnlyList<MessageEntity>? entities = null,
             CancellationToken cancellationToken = default)
             => Task.FromResult(TelegramTestFactory.CreateMessage(messageId: messageId));
 
@@ -1034,6 +1311,7 @@ public class BackupServiceTests
             int messageId,
             string? caption,
             InlineKeyboardMarkup? replyMarkup = null,
+            IReadOnlyList<MessageEntity>? captionEntities = null,
             CancellationToken cancellationToken = default)
             => Task.FromResult(TelegramTestFactory.CreateMessage(messageId: messageId));
 
@@ -1073,15 +1351,6 @@ public class BackupServiceTests
             CancellationToken cancellationToken = default)
             => Task.FromResult(SuccessResult);
 
-        public Task<DmDeliveryResult> SendDmWithMediaEntitiesAsync(
-            UserIdentity user,
-            string notificationType,
-            TelegramMessage message,
-            string? photoPath = null,
-            string? videoPath = null,
-            CancellationToken cancellationToken = default)
-            => Task.FromResult(SuccessResult);
-
         public Task<DmDeliveryResult> SendDmWithMediaAndKeyboardEntitiesAsync(
             UserIdentity user,
             string notificationType,
@@ -1090,6 +1359,14 @@ public class BackupServiceTests
             string? photoPath = null,
             string? videoPath = null,
             InlineKeyboardMarkup? keyboard = null,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult(SuccessResult);
+
+        public Task<DmDeliveryResult> SendDmWithAnimationEntitiesAsync(
+            UserIdentity user,
+            TelegramMessage caption,
+            string? fileId,
+            string? filePath,
             CancellationToken cancellationToken = default)
             => Task.FromResult(SuccessResult);
     }
@@ -1106,7 +1383,7 @@ public class BackupServiceTests
     /// <summary>
     /// Mock Notification service
     /// </summary>
-    private class MockNotificationService : INotificationService
+    private class MockNotificationService : IAdminNotificationService
     {
         private static readonly Dictionary<string, bool> EmptyResults = new();
 
@@ -1114,7 +1391,8 @@ public class BackupServiceTests
         public Task<Dictionary<string, bool>> SendSpamBanNotificationAsync(ChatIdentity chat, UserIdentity user, Actor? bannedBy, double netScore, double score, string? detectionReason, int chatsAffected, bool messageDeleted, int messageId, string? messagePreview, string? photoPath, string? videoPath, CancellationToken ct = default) => Task.FromResult(EmptyResults);
         public Task<Dictionary<string, bool>> SendReportNotificationAsync(ChatIdentity chat, UserIdentity reportedUser, Actor reporter, string messagePreview, string? photoPath, long reportId, ReportType reportType, CancellationToken ct = default) => Task.FromResult(EmptyResults);
         public Task<Dictionary<string, bool>> SendProfileScanAlertAsync(ChatIdentity chat, UserIdentity user, decimal score, string signals, string? aiReason, long reportId, CancellationToken ct = default) => Task.FromResult(EmptyResults);
-        public Task<Dictionary<string, bool>> SendExamFailureNotificationAsync(ChatIdentity chat, UserIdentity user, int mcCorrectCount, int mcTotal, int mcScore, int mcPassingThreshold, string? openEndedQuestion, string? openEndedAnswer, string? aiReasoning, long examFailureId, CancellationToken ct = default) => Task.FromResult(EmptyResults);
+        public Task<Dictionary<string, bool>> SendExamFailureNotificationAsync(ChatIdentity chat, UserIdentity user, int mcCorrectCount, int mcTotal, int mcScore, int mcPassingThreshold, string? openEndedQuestion, string? openEndedAnswer, string? aiReasoning, long examResultId, CancellationToken ct = default) => Task.FromResult(EmptyResults);
+        public Task<Dictionary<string, bool>> SendExamPassNotificationAsync(ChatIdentity chat, UserIdentity user, int mcCorrectCount, int mcTotal, int mcScore, int mcPassingThreshold, string? openEndedQuestion, string? openEndedAnswer, string? aiReasoning, long examResultId, CancellationToken ct = default) => Task.FromResult(EmptyResults);
         public Task<Dictionary<string, bool>> SendBanNotificationAsync(UserIdentity user, Actor executor, string? reason, ChatIdentity? chat = null, CancellationToken ct = default) => Task.FromResult(EmptyResults);
         public Task<Dictionary<string, bool>> SendMalwareDetectedAsync(ChatIdentity chat, UserIdentity user, string malwareDetails, CancellationToken ct = default) => Task.FromResult(EmptyResults);
         public Task<Dictionary<string, bool>> SendAdminChangedAsync(ChatIdentity chat, UserIdentity user, bool promoted, bool isCreator, CancellationToken ct = default) => Task.FromResult(EmptyResults);

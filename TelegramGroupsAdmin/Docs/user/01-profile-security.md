@@ -128,9 +128,9 @@ flowchart TD
 
 **Each code**:
 - Can be used once
-- 8 characters long
+- 16 characters long
 - Valid until used
-- You get 10 codes initially
+- You get 8 codes initially
 
 **How to use**:
 1. Login with email + password
@@ -141,7 +141,7 @@ flowchart TD
 **Regenerate codes**:
 - Profile → Two-Factor Authentication → **Regenerate Backup Codes**
 - Old codes invalidated
-- 10 new codes generated
+- 8 new codes generated
 
 ### Disabling 2FA
 
@@ -179,12 +179,12 @@ Link your Telegram account to receive direct message notifications from the bot.
 
 1. Navigate to **Profile** → **Telegram Account Linking**
 2. Click **Generate Link Token** button
-3. A 6-character code appears (e.g., `ABC123`)
+3. A 12-character code appears (e.g., `AbC123xYz789`)
 4. Code valid for **15 minutes**
 5. Open Telegram on your phone/computer
 6. Find your TelegramGroupsAdmin bot (search by username)
 7. Start a chat with the bot (click **Start** if first time)
-8. Send this command: `/link ABC123` (replace with your actual code)
+8. Send this command: `/link AbC123xYz789` (replace with your actual code)
 9. Bot replies: "Account linked successfully!"
 10. Refresh Profile page to see linked account
 
@@ -240,62 +240,46 @@ You can link **multiple Telegram accounts** to one web account:
 
 ## Notification Preferences
 
-Configure what notifications you receive via Telegram DM.
+Configure what notifications you receive, and through which channel.
 
-### Notification Types
+### Channels
 
-**Spam Detection Alerts**:
-- Notified when high-confidence spam is detected
-- Includes message preview and spam score
-- Can be noisy in active groups
+Preferences are organized as tabs, one per delivery channel:
 
-**Moderation Reports**:
-- Notified when new reports enter review queue
-- Summary of pending reports
-- Daily digest option
+- **Telegram DM** - Requires a linked Telegram account (see above)
+- **Email** - Supports optional digest batching so you get one email instead of many
+- **Web Push** - Powers the notification bell in the top navigation bar
 
-**System Alerts**:
-- Bot disconnected
-- Health check failures
-- Configuration changes by other admins
-
-**Mention Notifications**:
-- When you're mentioned in audit log
-- When another admin responds to your report review
-
-[Screenshot: Notification preferences checkboxes]
+Each channel has its own set of per-event checkboxes, so you can enable spam alerts on Telegram DM but only receive backup failures by email, for example.
 
 ### Configuring Preferences
 
 **To configure**:
 
 1. Profile → Notification Preferences
-2. Check/uncheck notification types
-3. Set frequency:
-   - Instant (realtime)
-   - Hourly digest
-   - Daily digest
-4. Set quiet hours (optional)
-   - Don't notify between 10 PM - 8 AM
-5. Click **Save Preferences**
+2. Select a channel tab (Telegram DM, Email, or Web Push)
+3. Check/uncheck the event types you want on that channel
+4. On the Email tab, optionally set a **Digest Interval (minutes)** — `0` sends immediately, any other value batches notifications into a periodic digest
+5. Changes save automatically per channel
 
-**Recommendation**:
-- Enable: System Alerts, Mention Notifications
-- Disable: Spam Detection Alerts (unless small group)
-- Use Daily Digest for Moderation Reports
+For the full list of event types and who receives each one, see **[Notifications](../features/18-dm-notifications.md)**.
 
 ---
 
 ## Account Security Settings
 
-### Session Management (Future Feature)
+### Sessions and Automatic Sign-Out
 
-View and manage active sessions:
-- See all devices you're logged in from
-- Last activity timestamp for each session
-- Revoke sessions remotely
+Logging out ends the current browser session. In addition, every session you have open is automatically signed out when any of these happen:
 
-**Currently**: No session management UI, logout revokes current session only
+- You change or reset your password
+- You enable, disable, or reset two-factor authentication
+- An administrator changes your permission level
+- An administrator disables your account
+
+Open pages re-check your account against the server every two minutes, so a revoked session is signed out within that window even if you never navigate; a fresh page load is checked immediately. Just log in again — your data and settings are unaffected.
+
+**Future feature**: a session list (devices, last activity) with the ability to revoke individual sessions. There is no session management UI yet.
 
 ### Login History (Future Feature)
 

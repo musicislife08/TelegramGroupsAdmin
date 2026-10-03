@@ -8,6 +8,9 @@ public sealed record SpamBanIntent : ModerationIntent
     public required int MessageId { get; init; }
     public required ChatIdentity Chat { get; init; }
 
+    /// <summary>What caused this ban's verdict event (AutoBan, WebMarkSpam, SpamCommand, ReviewSpam).</summary>
+    public required VerdictSource Source { get; init; }
+
     /// <summary>
     /// Optional Telegram Message object for rich notification content.
     /// </summary>

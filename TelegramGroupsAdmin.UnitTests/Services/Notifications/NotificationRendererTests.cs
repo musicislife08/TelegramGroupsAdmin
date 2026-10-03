@@ -136,7 +136,7 @@ public class NotificationRendererTests
     [Test]
     public void ToTelegramMessage_ReporterFromTelegramActor_RendersClickableMention()
     {
-        // NotificationService.SendReportNotificationAsync builds a UserIdentity from an Actor
+        // AdminNotificationService.SendReportNotificationAsync builds a UserIdentity from an Actor
         // using Actor.DisplayName as the UserIdentity.FirstName so TelegramDisplayName.Format
         // returns the actor's display name via the full-name branch. The rendered TextMention
         // needs Actor.TelegramUserId for profile linking and the displayed text at the entity's
@@ -166,7 +166,7 @@ public class NotificationRendererTests
     public void ToTelegramMessage_ReporterFromSystemActor_RendersPlainTextNotClickable()
     {
         // Automated reporter (Auto-Detection, CAS, etc.) should NOT render as a clickable mention.
-        // NotificationService calls builder.WithField("Reported by", actor.GetDisplayText()) for
+        // AdminNotificationService calls builder.WithField("Reported by", actor.GetDisplayText()) for
         // non-Telegram actor types, which produces a plain label+value field.
         var payload = NotificationPayloadBuilder.Create("Message Reported")
             .WithField("Reported by", Actor.AutoDetection.GetDisplayText())

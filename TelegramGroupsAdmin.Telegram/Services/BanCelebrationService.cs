@@ -1,5 +1,4 @@
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Models.Welcome;
@@ -7,6 +6,7 @@ using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
+using TelegramGroupsAdmin.Telegram.Helpers;
 using TelegramGroupsAdmin.Telegram.Metrics;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
@@ -17,7 +17,9 @@ namespace TelegramGroupsAdmin.Telegram.Services;
 
 /// <summary>
 /// Service for posting celebratory GIFs when users are banned.
-/// Sends GIF + caption to chat, optionally DMs the banned user.
+/// Posts to the chat when enabled and the trigger flags allow it, and queues delivery to the
+/// chat's DM subscribers regardless of the chat post (subscribers get every celebration).
+/// Optionally DMs the banned user directly.
 /// Rotation is database-backed: each repository claims and stamps the next unclaimed row
 /// atomically, then fetches it, so every GIF/caption is shown before any repeats, newly added
 /// items are claimable immediately, and the rotation survives restarts.
@@ -29,14 +31,12 @@ public class BanCelebrationService(
     IBanCelebrationCaptionRepository captionRepository,
     IProfileScanResultsRepository scanRepository,
     IBotMessageService messageService,
-    IBotDmService dmDeliveryService,
     IUserActionsRepository userActionsRepository,
-    IOptions<AppOptions> appOptions,
+    IBanCelebrationSubscriberRepository subscriberRepository,
+    IUserNotificationService userNotificationService,
     ILogger<BanCelebrationService> logger,
     PipelineMetrics pipelineMetrics) : IBanCelebrationService
 {
-    private readonly string _mediaBasePath = Path.Combine(appOptions.Value.DataPath, "media");
-
     public async Task<bool> SendBanCelebrationAsync(
         ChatIdentity chat,
         UserIdentity bannedUser,
@@ -45,33 +45,21 @@ public class BanCelebrationService(
     {
         try
         {
-            // Get the effective config for this chat (merges global + chat-specific)
-            var config = await configService.GetEffectiveBanCelebrationAsync(chat.Id, cancellationToken);
+            var config = await configService.GetEffectiveBanCelebrationAsync(chat.Id, cancellationToken)
+                         ?? BanCelebrationConfig.Default;
 
-            // Use default config if none exists
-            config ??= BanCelebrationConfig.Default;
+            // The chat post honours Enabled + the trigger flags; DM subscribers get every celebration.
+            var triggerAllowed = isAutoBan ? config.TriggerOnAutoBan : config.TriggerOnManualBan;
+            var postToChat = config.Enabled && triggerAllowed;
+            var hasSubscribers = await subscriberRepository.HasDeliverableSubscribersAsync(chat.Id, cancellationToken);
 
-            // Check if feature is enabled
-            if (!config.Enabled)
+            // Rotation claims are durable DB stamps: never claim for a celebration nobody will see.
+            if (!postToChat && !hasSubscribers)
             {
-                logger.LogDebug("Ban celebration disabled for chat {ChatId}", chat.Id);
+                logger.LogDebug("Ban celebration skipped for {Chat}: chat post off and no DM subscribers", chat.ToLogDebug());
                 return false;
             }
 
-            // Check trigger type
-            if (isAutoBan && !config.TriggerOnAutoBan)
-            {
-                logger.LogDebug("Ban celebration skipped for auto-ban in chat {ChatId} (auto-ban trigger disabled)", chat.Id);
-                return false;
-            }
-
-            if (!isAutoBan && !config.TriggerOnManualBan)
-            {
-                logger.LogDebug("Ban celebration skipped for manual ban in chat {ChatId} (manual ban trigger disabled)", chat.Id);
-                return false;
-            }
-
-            // Get next GIF from shuffle bag (guarantees all shown before repeats)
             var gif = await GetNextGifAsync(cancellationToken);
             if (gif == null)
             {
@@ -79,7 +67,6 @@ public class BanCelebrationService(
                 return false;
             }
 
-            // Get next caption from shuffle bag
             var caption = await GetNextCaptionAsync(cancellationToken);
             if (caption == null)
             {
@@ -87,7 +74,6 @@ public class BanCelebrationService(
                 return false;
             }
 
-            // Get today's ban count for this chat
             var banCount = await GetTodaysBanCountAsync(cancellationToken);
 
             // Determine whether the AI flagged the user's display text as explicit,
@@ -118,38 +104,54 @@ public class BanCelebrationService(
                 pipelineMetrics.RecordMaskedUsername(isAutoBan ? "auto_ban" : "manual_ban");
             }
 
-            // Build the chat caption with placeholders replaced
             var chatCaption = ReplacePlaceholders(
                 caption.Text,
                 displayedName,
                 chat.ChatName ?? chat.Id.ToString(),
                 banCount);
 
-            // Send the GIF to the chat
-            var sentMessage = await SendGifToChatAsync(chat, gif, TelegramMessage.Plain(chatCaption), cancellationToken);
-            if (sentMessage == null)
+            var delivered = false;
+
+            if (postToChat)
             {
-                return false;
+                var sentMessage = await SendGifToChatAsync(chat, gif, TelegramMessage.Plain(chatCaption), cancellationToken);
+                if (sentMessage != null)
+                {
+                    if (string.IsNullOrEmpty(gif.FileId) && sentMessage.Animation?.FileId != null)
+                    {
+                        // The chat post already went out; a failed cache write must not skip the
+                        // banned-user DM or the subscriber fan-out.
+                        try
+                        {
+                            await gifRepository.UpdateFileIdAsync(gif.Id, sentMessage.Animation.FileId, cancellationToken);
+                        }
+                        catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+                        {
+                            logger.LogWarning(ex, "Failed to cache file_id for ban celebration GIF {GifId}", gif.Id);
+                        }
+                    }
+
+                    logger.LogInformation(
+                        "Ban celebration sent to {Chat}: GIF={GifId}, Caption={CaptionId}, User={User}",
+                        chat.ToLogInfo(), gif.Id, caption.Id, bannedUser.ToLogInfo());
+
+                    if (config.SendToBannedUser)
+                    {
+                        await TrySendDmToBannedUserAsync(chat, bannedUser, gif, caption, banCount, cancellationToken);
+                    }
+
+                    delivered = true;
+                }
             }
 
-            // Cache the file_id if we uploaded a new file
-            if (string.IsNullOrEmpty(gif.FileId) && sentMessage.Animation?.FileId != null)
+            if (hasSubscribers)
             {
-                await gifRepository.UpdateFileIdAsync(gif.Id, sentMessage.Animation.FileId, cancellationToken);
+                // Subscribers get exactly the chat's (masked) caption; the worker adds the chat header.
+                await userNotificationService.EnqueueBanCelebrationAsync(chat, chatCaption, gif.Id, cancellationToken);
+                delivered = true;
             }
 
-            logger.LogInformation(
-                "Ban celebration sent to {Chat}: GIF={GifId}, Caption={CaptionId}, User={User}",
-                chat.ToLogInfo(), gif.Id, caption.Id, bannedUser.ToLogInfo());
-
-            // Optionally send DM to banned user
-            if (config.SendToBannedUser)
-            {
-                await TrySendDmToBannedUserAsync(
-                    chat, bannedUser, gif, caption, banCount, cancellationToken);
-            }
-
-            return true;
+            return delivered;
         }
         catch (Exception ex)
         {
@@ -196,7 +198,7 @@ public class BanCelebrationService(
                         caption,
                         cancellationToken);
                 }
-                catch (Exception ex) when (IsInvalidFileIdError(ex))
+                catch (Exception ex) when (TelegramFileIdErrors.IsInvalidFileId(ex))
                 {
                     // Cached file_id is stale - clear it and fall back to local upload
                     logger.LogWarning(
@@ -257,51 +259,19 @@ public class BanCelebrationService(
                 return;
             }
 
-            // Build the DM caption (uses "You" grammar). Entity-based, no parse mode — the banned
-            // user's grammar token is plain text, matching the chat caption.
-            var dmCaption = TelegramMessage.Plain(
-                ReplacePlaceholders(caption.DmText, "You", chat.ChatName ?? chat.Id.ToString(), banCount));
+            // Build the DM caption (uses "You" grammar)
+            var dmCaption = ReplacePlaceholders(caption.DmText, "You", chat.ChatName ?? chat.Id.ToString(), banCount);
 
-            // Get the full path to the GIF
-            var fullPath = gifRepository.GetFullPath(gif.FilePath);
-            if (!File.Exists(fullPath))
-            {
-                logger.LogWarning("GIF file not found for DM: {Path}", fullPath);
-                return;
-            }
+            var sent = await userNotificationService.SendBanCelebrationToBannedUserAsync(
+                chat, bannedUser, dmCaption, gif.Id, cancellationToken);
 
-            // Determine if it's a video or image for the DM service
-            // The DM service uses SendDmWithMediaEntitiesAsync which accepts photo/video paths
-            // For GIFs/animations, we'll use the video path parameter
-            var extension = Path.GetExtension(fullPath).ToLowerInvariant();
-            string? photoPath = null;
-            string? videoPath = null;
-
-            if (extension is ".mp4" or ".gif")
-            {
-                videoPath = fullPath;
-            }
-            else
-            {
-                photoPath = fullPath;
-            }
-
-            var result = await dmDeliveryService.SendDmWithMediaEntitiesAsync(
-                bannedUser,
-                "ban_celebration",
-                dmCaption,
-                photoPath,
-                videoPath,
-                cancellationToken);
-
-            if (result.DmSent)
+            if (sent)
             {
                 logger.LogInformation("Ban celebration DM sent to banned user {User}", bannedUser.ToLogInfo());
             }
             else
             {
-                logger.LogDebug("Ban celebration DM failed for user {UserId}: {Error}",
-                    bannedUser.Id, result.ErrorMessage ?? "Unknown error");
+                logger.LogDebug("Ban celebration DM to banned user {UserId} was not delivered", bannedUser.Id);
             }
         }
         catch (Exception ex)
@@ -330,17 +300,5 @@ public class BanCelebrationService(
             .Replace("{username}", username, StringComparison.OrdinalIgnoreCase)
             .Replace("{chatname}", chatName, StringComparison.OrdinalIgnoreCase)
             .Replace("{bancount}", banCount.ToString(), StringComparison.OrdinalIgnoreCase);
-    }
-
-    /// <summary>
-    /// Checks if the exception indicates an invalid/expired file_id.
-    /// Telegram returns errors like "Bad Request: wrong file identifier" when file_ids become stale.
-    /// </summary>
-    private static bool IsInvalidFileIdError(Exception ex)
-    {
-        var message = ex.Message.ToLowerInvariant();
-        return message.Contains("wrong file identifier") ||
-               message.Contains("file_id") ||
-               message.Contains("invalid file");
     }
 }

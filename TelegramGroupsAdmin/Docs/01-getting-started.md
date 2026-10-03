@@ -83,7 +83,7 @@ Use the **Type** dropdown to filter reports:
 
 - **Moderation Reports** - Spam detections needing review (borderline scores, auto-deleted confirmations)
 - **Impersonation Alerts** - Users flagged for impersonating admins or other members
-- **Exam Reviews** - Failed welcome exam attempts requiring admin review
+- **Exam Reviews** - Failed welcome exam attempts requiring admin review, plus passed attempts available for admin override
 - **Profile Scan Alerts** - Suspicious profiles detected on join (see [Profile Scanning](features/08-profile-scanning.md))
 
 Use the **Status** filter to show only pending items or all history.
@@ -107,13 +107,13 @@ Start with simple, reliable detection methods:
 
 1. In **Detection Algorithms** page, enable these checks:
    - **Stop Words Detection** - Keyword matching
-   - **CAS Database** - Known spammer lookup
    - **Invisible Character Detection** - Unicode abuse detection
-   - **URL Blocklist** - Malicious domain blocking
 
 2. The default thresholds (Auto-Ban: 4.0, Review Queue: 2.5) are well-calibrated — no changes needed
 
 3. Click **Save All Changes**
+
+**Also worth enabling**: **CAS (Combot Anti-Spam) Database** lookup is configured separately under **Settings -> Welcome -> Join Security**, not on the Detection Algorithms page. URL Blocklist is covered next, in Step 3.
 
 ### Step 3: Configure URL Filtering
 
@@ -191,9 +191,9 @@ Min Message Length: 10
 - SEO Scraping Detection
 - Threat Intelligence
 - Channel Reply Detection
-- OpenAI Veto (if using OpenAI API)
-- Image Spam Detection (if using OpenAI API)
-- Video Spam Detection (if using OpenAI API)
+- OpenAI Veto (requires an AI provider connection)
+- Image Spam Detection (requires an AI provider connection)
+- Video Spam Detection (requires an AI provider connection)
 - File Scanning (if ClamAV/VirusTotal configured)
 
 ### Optional: Enable OpenAI Veto
@@ -203,11 +203,11 @@ Min Message Length: 10
 **Cost**: ~$0.002 per message reviewed (only runs on borderline cases)
 
 **To enable**:
-1. Navigate to **Settings** -> **System** -> **AI Providers**
-2. Enter your OpenAI API key
-3. Go to **Settings** -> **Content Detection** -> **AI Integration**
-4. Scroll to **OpenAI Integration**
-5. Toggle **Veto Mode** to ON
+1. Navigate to **Settings** -> **System** -> **AI Providers** and add a connection (OpenAI, Azure OpenAI, Anthropic, OpenRouter, or an OpenAI-compatible server) with your API key
+2. Go to **Settings** -> **Content Detection** -> **AI Integration** and assign that connection and a model to the **Spam Detection** feature
+3. Go to **Settings** -> **Content Detection** -> **Detection Algorithms**
+4. On the **AI Veto Check** card, click **AI Veto Configuration**
+5. Toggle **Enable AI Veto Check** to ON
 6. Optionally customize the **System Prompt** for your group's context
 7. Click **Save**
 

@@ -1,10 +1,8 @@
-@using TelegramGroupsAdmin.ContentDetection.Repositories
 @using TelegramGroupsAdmin.ContentDetection.Models
-@using TelegramGroupsAdmin.Core.BackgroundJobs
-@inject IDetectionResultsRepository DetectionResultsRepository
+@using TelegramGroupsAdmin.Services.TrainingData
+@inject ITrainingDataService TrainingDataService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
-@inject TelegramGroupsAdmin.Core.Services.IJobTriggerService JobTriggerService
 
 
 <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
@@ -41,7 +39,7 @@
                     <MudSelect T="string" Value="_typeFilter" ValueChanged="OnTypeFilterChanged" Label="Type Filter" Style="max-width: 150px;">
                         <MudSelectItem Value="@("all")">All</MudSelectItem>
                         <MudSelectItem Value="@("spam")">Spam Only</MudSelectItem>
-                        <MudSelectItem Value="@("ham")">Ham Only</MudSelectItem>
+                        <MudSelectItem Value="@("clean")">Clean Only</MudSelectItem>
                         <MudSelectItem Value="@("conflicts")">
                             <span style="color: var(--mud-palette-error);">⚠️ Conflicts Only</span>
                         </MudSelectItem>
@@ -51,7 +49,7 @@
                         <MudSelectItem Value="@("all")">All Sources</MudSelectItem>
                         @foreach (var source in _stats?.SamplesBySource.Keys ?? Enumerable.Empty<string>())
                         {
-                            <MudSelectItem Value="@source">@source</MudSelectItem>
+                            <MudSelectItem Value="@source">@SourceLabel(source)</MudSelectItem>
                         }
                     </MudSelect>
 
@@ -80,11 +78,11 @@
                         <MudTd DataLabel="Type">
                             <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
                                 <MudChip T="string" Size="Size.Small" Color="@(context.IsSpam ? Color.Error : Color.Success)">
-                                    @(context.IsSpam ? "SPAM" : "HAM")
+                                    @(context.IsSpam ? "SPAM" : "CLEAN")
                                 </MudChip>
                                 @if (context.MessageId > 0 && _conflictedMessageIds.Contains(context.MessageId))
                                 {
-                                    <MudChip T="string" Size="Size.Small" Color="Color.Warning" title="This message has both SPAM and HAM training samples">
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Warning" title="This message has both SPAM and CLEAN training samples">
                                         ⚠️ CONFLICT
                                     </MudChip>
                                 }
@@ -118,7 +116,7 @@
                         </MudTd>
                         <MudTd DataLabel="Source">
                             <MudChip T="string" Size="Size.Small" Color="Color.Info">
-                                @context.DetectionSource
+                                @context.Source.ToDisplayText()
                             </MudChip>
                         </MudTd>
                         <MudTd DataLabel="Method">
@@ -211,8 +209,8 @@
         _loading = true;
         try
         {
-            var samplesTask = DetectionResultsRepository.GetAllTrainingDataAsync();
-            var statsTask = DetectionResultsRepository.GetTrainingDataStatsAsync();
+            var samplesTask = TrainingDataService.GetSamplesAsync();
+            var statsTask = TrainingDataService.GetStatsAsync();
 
             await Task.WhenAll(samplesTask, statsTask);
 
@@ -240,6 +238,10 @@
         }
     }
 
+    /// <summary>Source filter keys are VerdictSource names; show their display text.</summary>
+    private static string SourceLabel(string key) =>
+        Enum.TryParse<VerdictSource>(key, out var source) ? source.ToDisplayText() : key;
+
     private void FilterSamples()
     {
         var filtered = _allSamples.AsEnumerable();
@@ -249,7 +251,7 @@
         {
             filtered = filtered.Where(s =>
                 (s.MessageText != null && s.MessageText.Contains(_searchText, StringComparison.OrdinalIgnoreCase)) ||
-                s.DetectionSource.Contains(_searchText, StringComparison.OrdinalIgnoreCase) ||
+                s.Source.ToDisplayText().Contains(_searchText, StringComparison.OrdinalIgnoreCase) ||
                 (s.AddedBy.DisplayName != null && s.AddedBy.DisplayName.Contains(_searchText, StringComparison.OrdinalIgnoreCase)));
         }
 
@@ -257,7 +259,7 @@
         filtered = _typeFilter switch
         {
             "spam" => filtered.Where(s => s.IsSpam),
-            "ham" => filtered.Where(s => !s.IsSpam),
+            "clean" => filtered.Where(s => !s.IsSpam),
             "conflicts" => filtered.Where(s => s.MessageId > 0 && _conflictedMessageIds.Contains(s.MessageId)),
             _ => filtered
         };
@@ -265,7 +267,7 @@
         // Filter by source
         if (_sourceFilter != "all")
         {
-            filtered = filtered.Where(s => s.DetectionSource == _sourceFilter);
+            filtered = filtered.Where(s => s.Source.ToString() == _sourceFilter);
         }
 
         _filteredSamples = filtered;
@@ -303,18 +305,10 @@
         {
             try
             {
-                await DetectionResultsRepository.AddManualTrainingSampleAsync(
-                    data.MessageText,
-                    data.IsSpam,
-                    data.Source,
-                    data.Score,
-                    WebUser.Id,
-                    data.TranslatedText,
-                    data.DetectedLanguage);
+                await TrainingDataService.AddSampleAsync(data.MessageText, data.IsSpam, WebUser.ToActor(), data.TranslatedText, data.DetectedLanguage);
 
                 var translationNote = data.TranslatedText != null ? $" (with {data.DetectedLanguage?.ToUpper()} translation)" : "";
                 Snackbar.Add($"Training sample added successfully{translationNote}", Severity.Success);
-                await TriggerRetrainingAsync();
                 await LoadData();
             }
             catch (Exception ex)
@@ -344,19 +338,9 @@
         {
             try
             {
-                // Exclude the old record from training (preserves detection history)
-                await DetectionResultsRepository.ExcludeFromTrainingAsync(data.Id);
-
-                // Create a corrected training sample as a new record (append-only)
-                await DetectionResultsRepository.AddManualTrainingSampleAsync(
-                    data.MessageText,
-                    data.IsSpam,
-                    data.Source,
-                    data.Score,
-                    WebUser.Id);
+                await TrainingDataService.ReplaceSampleAsync(sample.MessageId, sample.ChatId, data.MessageText, data.IsSpam, WebUser.ToActor());
 
                 Snackbar.Add("Training sample updated successfully", Severity.Success);
-                await TriggerRetrainingAsync();
                 await LoadData();
             }
             catch (Exception ex)
@@ -371,20 +355,24 @@
         var messagePreview = sample.MessageText ?? "";
         var confirmed = await DialogService.ShowMessageBoxAsync(
             "Remove from Training Data",
-            $"Remove this {(sample.IsSpam ? "SPAM" : "HAM")} sample from training data?\n\n" +
+            $"Remove this {(sample.IsSpam ? "SPAM" : "CLEAN")} sample from training data?\n\n" +
             $"\"{messagePreview[..Math.Min(messagePreview.Length, 100)]}{(messagePreview.Length > 100 ? "..." : "")}\"\n\n" +
             $"Note: This preserves detection history but excludes the sample from future Bayes training.",
             yesText: "Remove", cancelText: "Cancel");
 
         if (confirmed == true)
         {
+            if (WebUser is null)
+            {
+                Snackbar.Add("Your session could not be verified. Please sign in again.", Severity.Error);
+                return;
+            }
+
             try
             {
-                // Soft delete: Mark as not used for training (preserves detection history)
-                await DetectionResultsRepository.ExcludeFromTrainingAsync(sample.Id);
+                await TrainingDataService.ExcludeAsync(sample.MessageId, sample.ChatId, WebUser.ToActor());
 
                 Snackbar.Add("Training sample removed (detection history preserved)", Severity.Success);
-                await TriggerRetrainingAsync();
                 await LoadData();
             }
             catch (Exception ex)
@@ -392,10 +380,5 @@
                 Snackbar.Add($"Error removing training sample: {ex.Message}", Severity.Error);
             }
         }
-    }
-
-    private async Task TriggerRetrainingAsync()
-    {
-        await JobTriggerService.TriggerNowAsync(BackgroundJobNames.ClassifierRetraining, payload: new { });
     }
 }

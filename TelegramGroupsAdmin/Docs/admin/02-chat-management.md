@@ -248,8 +248,8 @@ Navigate to Chat Management → Configure → Welcome System tab:
 
 **Welcome Message**
 - Custom message sent to new members
-- Supports Markdown formatting
-- Variables: `{username}`, `{chat_name}`, `{timeout}`
+- Plain text — Markdown and HTML markup are not interpreted; what you type is what members see
+- Variables: `{username}`, `{chat_name}`, `{timeout}` (`{username}` renders as a clickable mention of the new member; an unrecognized placeholder is left as-is so typos are visible)
 - Live preview shows how the message will appear
 
 **DM Chat Teaser** (DM Welcome and Entrance Exam modes only)
@@ -268,13 +268,29 @@ Navigate to Chat Management → Configure → Welcome System tab:
 **Button Customization**
 - Accept button text, Deny button text, DM button text
 
+**Auto-admit Trusted Users** (expandable panel)
+- When enabled, users already marked as **trusted** (via `/trust` or auto-trust) skip the welcome flow and all Security on Join checks for this chat
+- Linked web administrators (Owner, GlobalAdmin) and Telegram admins of any managed chat **always** bypass the welcome flow, whether or not this toggle is on
+- Every bypass posts an auto-deleting announcement in the chat so other admins can see who was auto-admitted, and writes a Welcome Bypass entry to the [Audit Log](../features/17-audit-log.md)
+- **Template (admin)** and **Template (trusted)** - Separate announcement text for the two bypass reasons. Variables: `{username}`, `{chat_name}`. Leave a template blank to silence announcements for that reason. A live preview appears under each template.
+- **Auto-delete after (seconds)** - How long the announcement stays in the chat before it is removed (10-300 seconds, default 30)
+- Default: off
+
 [Screenshot: Welcome System configuration with mode selection]
 
 ---
 
 ### Join Security (Per-Chat)
 
-Security checks run for **all new members regardless of whether the welcome system is enabled**. Users are muted during verification. Configure under Chat Management → Configure → Welcome System tab → Security on Join section.
+Security checks run for **all new members regardless of whether the welcome system is enabled**. Users are muted during verification. Configure under Chat Management → Configure → Welcome System tab → Security on Join section. Checks run in this order: Username Blacklist → CAS → Impersonation Detection → Profile Scanning. Trusted users skip all of them.
+
+#### Username Blacklist
+
+- Auto-bans users whose **display name** exactly matches a blacklisted entry on join (case-insensitive). Useful for persistent bot accounts that rejoin under the same name.
+- Enable/disable per chat; the list of names itself is shared across all chats
+- Manage entries in the **Blacklisted Display Names** table inside the panel: click **Add** and enter the exact display name plus optional notes (the reason for blacklisting). Entries can be disabled without deleting them.
+- Every add, remove, enable/disable, and notes change is recorded in the [Audit Log](../features/17-audit-log.md); bans triggered by a match show **Username Blacklist** as the actor
+- Trusted users are never checked against the blacklist
 
 #### CAS (Combot Anti-Spam)
 
@@ -285,7 +301,7 @@ Security checks run for **all new members regardless of whether the welcome syst
 #### Impersonation Detection
 
 - Detects users trying to impersonate chat admins by comparing names and profile photos
-- Auto-bans high-confidence matches (score 5.0), flags medium-confidence for review (score 2.5-5.0)
+- Auto-bans high-confidence matches (score >= 100), flags medium-confidence matches for review (score 50-99), on a 0-100 scale
 - Enable/disable per chat
 
 #### Profile Scanning (User API)
@@ -300,13 +316,18 @@ AI-powered profile scanning that analyzes user profiles via the Telegram User AP
    - **Auto-Ban Threshold** - Score at which users are auto-banned (default: 4.0, range 1.0-5.0)
    - **Admin Notify Threshold** - Score at which admins are notified for review (default: 2.0, range 0.5-5.0)
 5. Toggle scan triggers:
-   - **Scan on Join** - Scan when user first joins the chat
-   - **Scan on Profile Change** - Re-scan when user's name or username changes
+   - **Scan on join** - Scan when user first joins the chat
+   - **Scan on profile change** - Re-scan when user's name or username changes
+   - **Scan on first message** - Scan a never-scanned user when they post their first message. Covers members who joined before the bot was added to the chat, and accounts that arrive without a join event (for example, people commenting on channel posts in a linked discussion group). Default: off.
+6. Choose how explicit display names are handled in public posts:
+   - **Mask explicit usernames in public ban posts** - When the AI flags a user's display name or @username as explicit content, public ban-celebration captions show the **Redaction text** instead of the name. Admin notifications still show the real name. Default: on.
+   - **Redaction text** - The substitute text (default: `[explicit username redacted]`)
 
 **What it detects**:
 - Spam signals in bios and about sections
 - Suspicious personal channels
 - Pinned stories with spam content
+- Explicit display names or usernames
 - Requires an active User API session
 
 See **[Profile Scanning](../features/08-profile-scanning.md)** for full details.
@@ -349,7 +370,7 @@ Max Kicks Before Ban: 2
 
 ### Health Checks
 
-TelegramGroupsAdmin runs health checks every **60 seconds**:
+TelegramGroupsAdmin runs health checks every **30 minutes**:
 
 **Checks performed**:
 1. **Bot connection** - Is bot polling for messages?
@@ -386,7 +407,7 @@ TelegramGroupsAdmin automatically syncs chat admins from Telegram:
 ### Admin Synchronization
 
 **Automatic sync**:
-- Runs every 60 minutes
+- Runs as part of the health check job, every 30 minutes (there's no separate admin-sync schedule)
 - Fetches current admin list from Telegram
 - Updates chat_admins table
 - Affects which web users can see this chat

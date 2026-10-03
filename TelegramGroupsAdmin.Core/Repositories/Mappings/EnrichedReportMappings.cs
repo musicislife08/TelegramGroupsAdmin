@@ -72,25 +72,25 @@ internal static class EnrichedReportMappings
     }
 
     /// <summary>
-    /// Maps EnrichedReportView to ExamFailureRecord.
+    /// Maps EnrichedReportView to ExamResultRecord.
     /// User data comes from view joins; exam details from JSONB context.
     /// </summary>
-    public static ExamFailureRecord? ToExamFailure(this EnrichedReportView view)
+    public static ExamResultRecord? ToExamResult(this EnrichedReportView view)
     {
-        if (view.Type != (short)ReportType.ExamFailure)
+        if (view.Type != (short)ReportType.ExamResult)
             return null;
 
         if (string.IsNullOrEmpty(view.Context))
             return null;
 
-        var examContext = JsonSerializer.Deserialize<ExamFailureContext>(view.Context, JsonOptions);
+        var examContext = JsonSerializer.Deserialize<ExamResultContext>(view.Context, JsonOptions);
         if (examContext == null)
             return null;
 
-        return new ExamFailureRecord
+        return new ExamResultRecord
         {
             Id = view.Id,
-            FailedAt = view.ReportedAt,
+            CompletedAt = view.ReportedAt,
             ReviewedBy = view.ReviewedBy,
             ReviewedAt = view.ReviewedAt,
             ActionTaken = view.ActionTaken,
@@ -103,6 +103,7 @@ internal static class EnrichedReportMappings
             Score = examContext.Score,
             PassingThreshold = examContext.PassingThreshold,
             AiEvaluation = examContext.AiEvaluation,
+            Outcome = examContext.Outcome,
 
             // From view joins (no more N+1!)
             User = new UserIdentity(examContext.UserId, view.ExamFirstName, view.ExamLastName, view.ExamUsername),
@@ -155,7 +156,7 @@ internal static class EnrichedReportMappings
             {
                 ReportType.ContentReport => view.ContentUserId,
                 ReportType.ImpersonationAlert => view.SuspectedUserId,
-                ReportType.ExamFailure => view.ExamUserId,
+                ReportType.ExamResult => view.ExamUserId,
                 ReportType.ProfileScanAlert => view.ProfileUserId,
                 _ => null
             }

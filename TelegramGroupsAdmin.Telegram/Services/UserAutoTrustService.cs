@@ -92,22 +92,18 @@ public class UserAutoTrustService
                 }
             }
 
-            // Get last N non-spam detection results for this user (global, across all chats)
-            // Filter by minimum message length to prevent trust gaming with short replies
-            var recentResults = await _detectionResultsRepository.GetRecentNonSpamResultsForUserAsync(
-                userId,
-                limit: config.FirstMessagesCount,
-                minMessageLength: config.AutoTrustMinMessageLength,
-                cancellationToken);
+            // Last N messages (latest version each), consecutively: any spam or short message in the
+            // window blocks trust. Edits never add messages. UntrainedHam counts as ham.
+            var recent = await _detectionResultsRepository.GetRecentMessageVerdictsForUserAsync(
+                userId, config.FirstMessagesCount, cancellationToken);
 
-            // Not enough qualifying non-spam messages yet
-            if (recentResults.Count < config.FirstMessagesCount)
+            if (recent.Count < config.FirstMessagesCount
+                || recent.Any(r => r.IsSpam || r.TextLength < config.AutoTrustMinMessageLength))
             {
                 _logger.LogDebug(
-                    "{User} has {Count}/{Threshold} qualifying messages (min {MinLength} chars), not yet eligible for auto-trust",
-                    tgUser.ToLogDebug(),
-                    recentResults.Count,
-                    config.FirstMessagesCount,
+                    "{User} not eligible for auto-trust: {Count}/{Threshold} messages, {Spam} spam, {Short} shorter than {MinLength}",
+                    tgUser.ToLogDebug(), recent.Count, config.FirstMessagesCount,
+                    recent.Count(r => r.IsSpam), recent.Count(r => r.TextLength < config.AutoTrustMinMessageLength),
                     config.AutoTrustMinMessageLength);
                 return;
             }
@@ -122,7 +118,7 @@ public class UserAutoTrustService
                 IssuedBy: Actor.AutoTrust, // System-issued
                 IssuedAt: DateTimeOffset.UtcNow,
                 ExpiresAt: null, // Permanent (until revoked)
-                Reason: $"Auto-trusted after {config.FirstMessagesCount} non-spam messages"
+                Reason: $"Auto-trusted after {config.FirstMessagesCount} consecutive non-spam messages"
             );
 
             // AddOrUpdate pattern - safe even if already trusted

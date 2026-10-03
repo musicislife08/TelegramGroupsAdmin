@@ -59,7 +59,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
             migrationBuilder.Sql(WelcomeResponseSummaryView.CreateViewSql);
 
             // 4. DetectionAccuracyView - pre-computed FP/FN flags
-            migrationBuilder.Sql(DetectionAccuracyView.CreateViewSql);
+            migrationBuilder.Sql(LegacyDetectionViewSql.DetectionAccuracy);
         }
 
         /// <inheritdoc />

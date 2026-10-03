@@ -19,7 +19,11 @@
                 <MudIcon Icon="@Icons.Material.Filled.Quiz" Color="Color.Warning" Size="Size.Small" />
                 <MudText Typo="Typo.h6">Exam Review</MudText>
                 <MudSpacer />
-                @if (ExamFailure.ReviewedAt.HasValue)
+                @if (ExamResult.Outcome == ExamOutcome.Passed)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Success">Passed — auto-admitted</MudChip>
+                }
+                @if (ExamResult.ReviewedAt.HasValue)
                 {
                     <MudChip T="string" Size="Size.Small" Color="Color.Success">Reviewed</MudChip>
                 }
@@ -28,7 +32,7 @@
                     <MudChip T="string" Size="Size.Small" Color="Color.Warning">Pending</MudChip>
                 }
                 <MudText Typo="Typo.caption" Color="Color.Secondary">
-                    <LocalTimestamp Value="@ExamFailure.FailedAt" />
+                    <LocalTimestamp Value="@ExamResult.CompletedAt" />
                 </MudText>
             </MudStack>
         </CardHeaderContent>
@@ -37,9 +41,9 @@
         <MudStack Spacing="3">
             @* User Info Section *@
             <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Start">
-                @if (ExamFailure.UserPhotoPath != null)
+                @if (ExamResult.UserPhotoPath != null)
                 {
-                    <MudImage Src="@GetPhotoUrl(ExamFailure.UserPhotoPath)"
+                    <MudImage Src="@GetPhotoUrl(ExamResult.UserPhotoPath)"
                               Alt="User photo"
                               Elevation="2"
                               Class="rounded-lg"
@@ -52,9 +56,9 @@
                     </MudAvatar>
                 }
                 <MudStack Spacing="1">
-                    <UserDetailLink UserId="@ExamFailure.User.Id" Typo="Typo.h6">@ExamFailure.User.DisplayName</UserDetailLink>
+                    <UserDetailLink UserId="@ExamResult.User.Id" Typo="Typo.h6">@ExamResult.User.DisplayName</UserDetailLink>
                     <MudText Typo="Typo.caption" Color="Color.Secondary">
-                        @(ExamFailure.User.Username != null ? $"@{ExamFailure.User.Username}" : "No username") · ID: @ExamFailure.User.Id
+                        @(ExamResult.User.Username != null ? $"@{ExamResult.User.Username}" : "No username") · ID: @ExamResult.User.Id
                     </MudText>
                     @if (_user != null)
                     {
@@ -106,21 +110,21 @@
                     @* Chat *@
                     <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
                         <MudIcon Icon="@Icons.Material.Filled.Chat" Size="Size.Small" Color="Color.Secondary" />
-                        <MudText Typo="Typo.body2">Chat: @ExamFailure.Chat.DisplayName</MudText>
+                        <MudText Typo="Typo.body2">Chat: @ExamResult.Chat.DisplayName</MudText>
                     </MudStack>
                 </MudStack>
             </MudPaper>
 
             @* MC Questions Section *@
-            @if (_examConfig?.HasMcQuestions == true && ExamFailure.McAnswers?.Count > 0)
+            @if (_examConfig?.HasMcQuestions == true && ExamResult.McAnswers?.Count > 0)
             {
                 <MudPaper Elevation="0" Class="pa-3" Style="background-color: var(--mud-palette-background-grey);">
                     <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="mb-2">
                         <MudText Typo="Typo.subtitle2"><b>Multiple Choice</b></MudText>
                         <MudChip T="string" Size="Size.Small" Color="@GetScoreColor()">
-                            @_correctCount/@ExamFailure.McAnswers.Count correct (@ExamFailure.Score%)
+                            @_correctCount/@ExamResult.McAnswers.Count correct (@ExamResult.Score%)
                         </MudChip>
-                        @if (ExamFailure.Score >= ExamFailure.PassingThreshold)
+                        @if (ExamResult.Score >= ExamResult.PassingThreshold)
                         {
                             <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Outlined">Passed</MudChip>
                         }
@@ -130,11 +134,11 @@
                         }
                     </MudStack>
                     <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-3">
-                        Passing threshold: @ExamFailure.PassingThreshold%
+                        Passing threshold: @ExamResult.PassingThreshold%
                     </MudText>
 
                     <MudStack Spacing="2">
-                        @for (var i = 0; i < _examConfig.McQuestions.Count && i < ExamFailure.McAnswers.Count; i++)
+                        @for (var i = 0; i < _examConfig.McQuestions.Count && i < ExamResult.McAnswers.Count; i++)
                         {
                             var questionIndex = i;
                             var question = _examConfig.McQuestions[questionIndex];
@@ -175,7 +179,7 @@
             }
 
             @* Open-Ended Section *@
-            @if (_examConfig?.HasOpenEndedQuestion == true && ExamFailure.OpenEndedAnswer != null)
+            @if (_examConfig?.HasOpenEndedQuestion == true && ExamResult.OpenEndedAnswer != null)
             {
                 <MudPaper Elevation="0" Class="pa-3" Style="background-color: var(--mud-palette-background-grey);">
                     <MudText Typo="Typo.subtitle2" Class="mb-2"><b>Open-Ended Question</b></MudText>
@@ -184,11 +188,11 @@
                     <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Answer:</MudText>
                     <MudPaper Elevation="1" Class="pa-3 mb-3" Style="background-color: var(--mud-palette-surface);">
                         <MudText Typo="Typo.body2" Style="white-space: pre-wrap; word-break: break-word;">
-                            @ExamFailure.OpenEndedAnswer
+                            @ExamResult.OpenEndedAnswer
                         </MudText>
                     </MudPaper>
 
-                    @if (ExamFailure.AiEvaluation != null)
+                    @if (ExamResult.AiEvaluation != null)
                     {
                         <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Class="mb-2">
                             <MudText Typo="Typo.caption" Color="Color.Secondary">AI Evaluation:</MudText>
@@ -212,7 +216,7 @@
                             }
                         </MudStack>
                         <MudText Typo="Typo.body2" Color="Color.Secondary" Style="font-style: italic;">
-                            "@ExamFailure.AiEvaluation"
+                            "@ExamResult.AiEvaluation"
                         </MudText>
                     }
                     else
@@ -225,21 +229,48 @@
             }
 
             @* Review info *@
-            @if (ExamFailure.ReviewedAt.HasValue)
+            @if (ExamResult.ReviewedAt.HasValue)
             {
                 <MudAlert Severity="Severity.Info" Dense="true">
-                    <b>Reviewed:</b> @ExamFailure.ActionTaken by @(ExamFailure.ReviewedBy ?? "Unknown")
-                    on <LocalTimestamp Value="@ExamFailure.ReviewedAt.Value" />
-                    @if (ExamFailure.AdminNotes != null)
+                    <b>Reviewed:</b> @ExamResult.ActionTaken by @(ExamResult.ReviewedBy ?? "Unknown")
+                    on <LocalTimestamp Value="@ExamResult.ReviewedAt.Value" />
+                    @if (ExamResult.AdminNotes != null)
                     {
-                        <br /><b>Notes:</b> @ExamFailure.AdminNotes
+                        <br /><b>Notes:</b> @ExamResult.AdminNotes
                     }
                 </MudAlert>
             }
         </MudStack>
     </MudCardContent>
     <MudCardActions>
-        @if (!ExamFailure.ReviewedAt.HasValue)
+        @if (ExamResult.Outcome == ExamOutcome.Passed
+             && ExamResult.ActionTaken == ExamResultRecord.AutoApprovedActionTaken)
+        {
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Success"
+                       StartIcon="@Icons.Material.Filled.Check"
+                       OnClick="@OnDismiss"
+                       Disabled="@_actionInProgress">
+                Dismiss
+            </MudButton>
+
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Warning"
+                       StartIcon="@Icons.Material.Filled.Close"
+                       OnClick="@OnDeny"
+                       Disabled="@_actionInProgress">
+                Deny
+            </MudButton>
+
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Error"
+                       StartIcon="@Icons.Material.Filled.Block"
+                       OnClick="@OnDenyAndBan"
+                       Disabled="@_actionInProgress">
+                Deny + Ban
+            </MudButton>
+        }
+        else if (!ExamResult.ReviewedAt.HasValue)
         {
             <MudButton Variant="Variant.Filled"
                        Color="Color.Success"
@@ -268,7 +299,7 @@
         else
         {
             <MudText Typo="Typo.body2" Color="Color.Secondary">
-                Action: <b>@ExamFailure.ActionTaken</b>
+                Action: <b>@ExamResult.ActionTaken</b>
             </MudText>
         }
     </MudCardActions>
@@ -276,10 +307,10 @@
 
 @code {
     [Parameter, EditorRequired]
-    public required ExamFailureRecord ExamFailure { get; set; }
+    public required ExamResultRecord ExamResult { get; set; }
 
     [Parameter]
-    public EventCallback<(ExamFailureRecord ExamFailure, ExamAction Action)> OnAction { get; set; }
+    public EventCallback<ExamCardAction> OnAction { get; set; }
 
     private bool _actionInProgress;
     private TelegramUser? _user;
@@ -292,10 +323,10 @@
     protected override async Task OnParametersSetAsync()
     {
         // Load user details
-        _user = await TelegramUserRepository.GetByTelegramIdAsync(ExamFailure.User.Id);
+        _user = await TelegramUserRepository.GetByTelegramIdAsync(ExamResult.User.Id);
 
         // Load exam config for question details
-        var welcomeConfig = await ConfigService.GetEffectiveWelcomeAsync(ExamFailure.Chat.Id);
+        var welcomeConfig = await ConfigService.GetEffectiveWelcomeAsync(ExamResult.Chat.Id);
         _examConfig = welcomeConfig?.ExamConfig;
 
         // Calculate correct answers
@@ -310,13 +341,13 @@
 
     private int CountCorrectAnswers()
     {
-        if (ExamFailure.McAnswers == null || ExamFailure.ShuffleState == null)
+        if (ExamResult.McAnswers == null || ExamResult.ShuffleState == null)
             return 0;
 
         var correct = 0;
-        foreach (var (questionIndex, answerLetter) in ExamFailure.McAnswers)
+        foreach (var (questionIndex, answerLetter) in ExamResult.McAnswers)
         {
-            if (ExamFailure.ShuffleState.TryGetValue(questionIndex, out var shuffle))
+            if (ExamResult.ShuffleState.TryGetValue(questionIndex, out var shuffle))
             {
                 var answerPosition = answerLetter[0] - 'A';
                 if (answerPosition >= 0 && answerPosition < shuffle.Length)
@@ -332,7 +363,7 @@
 
     private void ParseAiEvaluation()
     {
-        if (string.IsNullOrEmpty(ExamFailure.AiEvaluation))
+        if (string.IsNullOrEmpty(ExamResult.AiEvaluation))
         {
             _aiPassed = null;
             _aiConfidence = null;
@@ -340,7 +371,7 @@
         }
 
         // Try to extract pass/fail from the evaluation text
-        var evalLower = ExamFailure.AiEvaluation.ToLowerInvariant();
+        var evalLower = ExamResult.AiEvaluation.ToLowerInvariant();
         if (evalLower.Contains("pass") || evalLower.Contains("accept") || evalLower.Contains("approve"))
             _aiPassed = true;
         else if (evalLower.Contains("fail") || evalLower.Contains("reject") || evalLower.Contains("deny"))
@@ -356,10 +387,10 @@
     {
         try
         {
-            var userMessages = await MessageRepository.GetUserMessagesAsync(ExamFailure.User.Id);
+            var userMessages = await MessageRepository.GetUserMessagesAsync(ExamResult.User.Id);
             var distinctChatIds = userMessages
                 .Select(m => m.ChatId)
-                .Where(chatId => chatId != ExamFailure.Chat.Id)
+                .Where(chatId => chatId != ExamResult.Chat.Id)
                 .Distinct()
                 .ToList();
 
@@ -384,10 +415,10 @@
             return (false, "?", "Unknown", "?", "Unknown");
 
         var question = _examConfig.McQuestions[questionIndex];
-        var answerLetter = ExamFailure.McAnswers?.GetValueOrDefault(questionIndex) ?? "?";
+        var answerLetter = ExamResult.McAnswers?.GetValueOrDefault(questionIndex) ?? "?";
 
         // Get shuffle for this question
-        var shuffle = ExamFailure.ShuffleState?.GetValueOrDefault(questionIndex);
+        var shuffle = ExamResult.ShuffleState?.GetValueOrDefault(questionIndex);
         if (shuffle == null || answerLetter == "?")
             return (false, answerLetter, "Unknown", "A", question.Answers.FirstOrDefault() ?? "Unknown");
 
@@ -409,15 +440,15 @@
 
     private string GetCardStyle()
     {
-        if (!ExamFailure.ReviewedAt.HasValue)
+        if (!ExamResult.ReviewedAt.HasValue)
             return "border-left: 4px solid var(--mud-palette-warning);";
         return "";
     }
 
     private Color GetScoreColor()
     {
-        return ExamFailure.Score >= ExamFailure.PassingThreshold ? Color.Success :
-               ExamFailure.Score >= ExamFailure.PassingThreshold * 0.6 ? Color.Warning :
+        return ExamResult.Score >= ExamResult.PassingThreshold ? Color.Success :
+               ExamResult.Score >= ExamResult.PassingThreshold * 0.6 ? Color.Warning :
                Color.Error;
     }
 
@@ -431,7 +462,7 @@
         _actionInProgress = true;
         try
         {
-            await OnAction.InvokeAsync((ExamFailure, ExamAction.Approve));
+            await OnAction.InvokeAsync(new ExamCardAction(ExamResult, ExamAction.Approve));
         }
         finally
         {
@@ -444,7 +475,7 @@
         _actionInProgress = true;
         try
         {
-            await OnAction.InvokeAsync((ExamFailure, ExamAction.Deny));
+            await OnAction.InvokeAsync(new ExamCardAction(ExamResult, ExamAction.Deny));
         }
         finally
         {
@@ -457,7 +488,20 @@
         _actionInProgress = true;
         try
         {
-            await OnAction.InvokeAsync((ExamFailure, ExamAction.DenyAndBan));
+            await OnAction.InvokeAsync(new ExamCardAction(ExamResult, ExamAction.DenyAndBan));
+        }
+        finally
+        {
+            _actionInProgress = false;
+        }
+    }
+
+    private async Task OnDismiss()
+    {
+        _actionInProgress = true;
+        try
+        {
+            await OnAction.InvokeAsync(new ExamCardAction(ExamResult, ExamAction.Dismiss));
         }
         finally
         {

@@ -52,6 +52,18 @@ public class VideoContentConfig
     public double HashSimilarityThreshold { get; set; } = 0.85;
 
     /// <summary>
+    /// Minimum hash similarity (0.0-1.0) to an admin-verified ham video (current verdict ExplicitHam)
+    /// for Layer 1 to abstain and skip OCR/Vision. Any other ham match (an auto-scanned ImplicitHam
+    /// anchor, or an ExplicitHam anchor below this threshold) falls through to OCR and Vision.
+    /// Spam matching uses <see cref="HashSimilarityThreshold"/> and is unaffected.
+    /// Default: 0.95 (configs stored before this setting existed read as the default).
+    /// </summary>
+    public double HamSkipThreshold { get; set; } = DefaultHamSkipThreshold;
+
+    /// <summary>Default for <see cref="HamSkipThreshold"/>.</summary>
+    public const double DefaultHamSkipThreshold = 0.95;
+
+    /// <summary>
     /// Score to assign when keyframe matches a training sample (0.0-5.0)
     /// Default: 4.75 (very confident if we've seen this exact spam video before)
     /// </summary>

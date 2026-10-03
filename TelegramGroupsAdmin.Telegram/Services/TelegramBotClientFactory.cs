@@ -12,6 +12,7 @@ namespace TelegramGroupsAdmin.Telegram.Services;
 /// client when token changes. This keeps resource usage low for homelab deployment.
 ///
 /// Only used by Bot Handlers layer - services and application code should use IBot*Service interfaces.
+/// The one sanctioned exception is TelegramBotPollingHost, which needs the raw client to run the polling loop.
 /// </summary>
 public class TelegramBotClientFactory : ITelegramBotClientFactory
 {

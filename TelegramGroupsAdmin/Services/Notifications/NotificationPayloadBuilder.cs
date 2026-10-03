@@ -12,6 +12,7 @@ internal sealed class NotificationPayloadBuilder
     private readonly List<ContentBlock> _blocks = [];
     private string? _photoPath;
     private string? _videoPath;
+    private NotificationAnimation? _animation;
     private ActionKeyboardContext? _keyboard;
 
     public static NotificationPayloadBuilder Create(string subject) => new() { _subject = subject };
@@ -54,6 +55,12 @@ internal sealed class NotificationPayloadBuilder
         return this;
     }
 
+    public NotificationPayloadBuilder WithAnimation(string path, string? fileId)
+    {
+        _animation = new NotificationAnimation(path, fileId);
+        return this;
+    }
+
     public NotificationPayloadBuilder WithKeyboard(ActionKeyboardContext ctx)
     {
         _keyboard = ctx;
@@ -66,6 +73,7 @@ internal sealed class NotificationPayloadBuilder
         Blocks = _blocks.ToArray(),
         PhotoPath = _photoPath,
         VideoPath = _videoPath,
+        Animation = _animation,
         Keyboard = _keyboard
     };
 }

@@ -18,6 +18,7 @@ using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.BackgroundJobs.Constants;
 using TelegramGroupsAdmin.BackgroundJobs.Services.Backup.Handlers;
+using TelegramGroupsAdmin.BackgroundJobs.Services.Backup.Migrations;
 using TelegramGroupsAdmin.Telegram.Services;
 
 namespace TelegramGroupsAdmin.BackgroundJobs.Services.Backup;
@@ -28,7 +29,7 @@ public class BackupService : IBackupService
     private readonly ILogger<BackupService> _logger;
     private readonly IDataProtectionService _totpProtection;
     private readonly IDataProtectionProvider _dataProtectionProvider;
-    private readonly INotificationService _notificationService;
+    private readonly IAdminNotificationService _notificationService;
     private readonly IBackupEncryptionService _encryptionService;
     private readonly IServiceProvider _serviceProvider;
     private readonly TableDiscoveryService _tableDiscoveryService;
@@ -39,15 +40,16 @@ public class BackupService : IBackupService
     private readonly IBackupRetentionService _retentionService;
     private readonly IThumbnailService _thumbnailService;
     private readonly RecyclableMemoryStreamManager _streamManager;
+    private readonly BackupFileLock _fileLock;
     private readonly string _mediaBasePath;
-    private const string CurrentVersion = "3.0"; // Real tar.gz format with media files
+    private const string CurrentVersion = "3.1"; // 3.0: tar.gz with media files; 3.1: verdict events (no training_labels)
 
     public BackupService(
         NpgsqlDataSource dataSource,
         ILogger<BackupService> logger,
         IDataProtectionService totpProtection,
         IDataProtectionProvider dataProtectionProvider,
-        INotificationService notificationService,
+        IAdminNotificationService notificationService,
         IBackupEncryptionService encryptionService,
         IServiceProvider serviceProvider,
         TableDiscoveryService tableDiscoveryService,
@@ -58,6 +60,7 @@ public class BackupService : IBackupService
         IBackupRetentionService retentionService,
         IThumbnailService thumbnailService,
         RecyclableMemoryStreamManager streamManager,
+        BackupFileLock fileLock,
         IOptions<AppOptions> appOptions)
     {
         _dataSource = dataSource;
@@ -75,6 +78,7 @@ public class BackupService : IBackupService
         _retentionService = retentionService;
         _thumbnailService = thumbnailService;
         _streamManager = streamManager;
+        _fileLock = fileLock;
         _mediaBasePath = appOptions.Value.DataPath;
     }
 
@@ -104,6 +108,8 @@ public class BackupService : IBackupService
         string? passphraseOverride = null,
         CancellationToken cancellationToken = default)
     {
+        // Held from the passphrase read to the final move, so a rotation never runs between the two
+        using var heldLock = await _fileLock.AcquireAsync(cancellationToken);
         _logger.LogInformation("Starting full system backup export (tar.gz format, streaming to disk)");
 
         var backup = new SystemBackup
@@ -215,7 +221,7 @@ public class BackupService : IBackupService
             await using (var tarWriter = new TarWriter(gzipStream, leaveOpen: true))
             {
                 // Add metadata.json (unencrypted - readable by backup browser without passphrase)
-                var metadataEntry = new PaxTarEntry(TarEntryType.RegularFile, "metadata.json")
+                var metadataEntry = new PaxTarEntry(TarEntryType.RegularFile, BackupConstants.MetadataEntryName)
                 {
                     DataStream = new MemoryStream(metadataJson)
                 };
@@ -223,7 +229,7 @@ public class BackupService : IBackupService
                 _logger.LogDebug("Added metadata.json to archive: {Size} bytes", metadataJson.Length);
 
                 // Add encrypted database entry
-                var databaseEntry = new PaxTarEntry(TarEntryType.RegularFile, "database.json.enc")
+                var databaseEntry = new PaxTarEntry(TarEntryType.RegularFile, BackupConstants.EncryptedDatabaseEntryName)
                 {
                     DataStream = encryptedStream
                 };
@@ -235,7 +241,7 @@ public class BackupService : IBackupService
                 {
                     foreach (var gifPath in gifFiles)
                     {
-                        var entryName = $"media/ban-gifs/{Path.GetFileName(gifPath)}";
+                        var entryName = $"{BackupConstants.MediaEntryPrefix}ban-gifs/{Path.GetFileName(gifPath)}";
                         await tarWriter.WriteEntryAsync(gifPath, entryName, cancellationToken);
                     }
                     _logger.LogInformation("Added {Count} ban celebration GIFs to archive", gifFiles.Length);
@@ -403,12 +409,12 @@ public class BackupService : IBackupService
                 if (entry.DataStream == null)
                     continue;
 
-                if (entry.Name == "metadata.json")
+                if (entry.Name == BackupConstants.MetadataEntryName)
                 {
                     metadata = await JsonSerializer.DeserializeAsync<BackupMetadata>(entry.DataStream, jsonOptions);
                     _logger.LogDebug("Read metadata.json from tar stream");
                 }
-                else if (entry.Name == "database.json.enc")
+                else if (entry.Name == BackupConstants.EncryptedDatabaseEntryName)
                 {
                     using var encryptedMs = _streamManager.GetStream("BackupService.Restore.Encrypted");
                     await entry.DataStream.CopyToAsync(encryptedMs);
@@ -422,7 +428,7 @@ public class BackupService : IBackupService
                         resolvedPassphrase == passphrase ? "explicit passphrase" : "config passphrase",
                         encryptedMs.Length, decryptedMs.Length);
                 }
-                else if (entry.Name == "database.json")
+                else if (entry.Name == BackupConstants.PlainDatabaseEntryName)
                 {
                     using var ms = _streamManager.GetStream("BackupService.Restore.Unencrypted");
                     await entry.DataStream.CopyToAsync(ms);
@@ -430,7 +436,7 @@ public class BackupService : IBackupService
                     databaseData = await JsonSerializer.DeserializeAsync<Dictionary<string, List<object>>>(ms, jsonOptions);
                     _logger.LogInformation("Read unencrypted database: {Size} bytes", ms.Length);
                 }
-                else if (entry.Name.StartsWith("media/"))
+                else if (entry.Name.StartsWith(BackupConstants.MediaEntryPrefix))
                 {
                     var targetPath = Path.GetFullPath(Path.Combine(mediaTempDir.FullName, entry.Name));
                     if (!targetPath.StartsWith(mediaTempDir.FullName, StringComparison.OrdinalIgnoreCase))
@@ -838,7 +844,10 @@ public class BackupService : IBackupService
             await connection.ExecuteAsync(sql, parameters, transaction);
         }
 
-        // Recreate FK constraints that were dropped before insert
+        // Recreate FK constraints that were dropped before insert.
+        // constraint_def is deliberately not quoted: it is a full DDL clause, not an identifier.
+        // It is safe to concatenate because PostgreSQL generated it (pg_get_constraintdef) in this
+        // same transaction, above. It never comes from the backup file or from user input.
         foreach (var fk in fkConstraints)
         {
             await connection.ExecuteAsync(
@@ -917,7 +926,7 @@ public class BackupService : IBackupService
 
         while (await tarReader.GetNextEntryAsync() is { } entry)
         {
-            if (entry.Name == "metadata.json" && entry.DataStream != null)
+            if (entry.Name == BackupConstants.MetadataEntryName && entry.DataStream != null)
             {
                 using var ms = new MemoryStream();
                 await entry.DataStream.CopyToAsync(ms);
@@ -943,9 +952,9 @@ public class BackupService : IBackupService
 
         while (await tarReader.GetNextEntryAsync() is { } entry)
         {
-            if (entry.Name == "database.json.enc")
+            if (entry.Name == BackupConstants.EncryptedDatabaseEntryName)
                 return true;
-            if (entry.Name == "database.json")
+            if (entry.Name == BackupConstants.PlainDatabaseEntryName)
                 return false;
         }
 
@@ -1064,6 +1073,14 @@ public class BackupService : IBackupService
         {
             _logger.LogInformation("Applying SCHEMA-3 migration: configs.chat_id NULL → 0 (backup v{Version} < 2.1)", backupVersion);
             MigrateConfigsChatIdNullToZero(backup);
+        }
+
+        // Migration: v3.0 → v3.1 (single spam verdict). Backup-only and time-boxed: remove one year
+        // after the release that introduced backup format 3.1.
+        if (string.Compare(backupVersion, "3.1", StringComparison.Ordinal) < 0)
+        {
+            _logger.LogInformation("Applying verdict-events migration (backup v{Version} < 3.1)", backupVersion);
+            Backup30To31VerdictMigration.Apply(backup, _logger);
         }
     }
 

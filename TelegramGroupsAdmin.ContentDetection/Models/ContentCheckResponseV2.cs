@@ -1,4 +1,5 @@
 using TelegramGroupsAdmin.ContentDetection.Constants;
+using TelegramGroupsAdmin.Core.Models;
 
 namespace TelegramGroupsAdmin.ContentDetection.Models;
 
@@ -56,4 +57,10 @@ public record ContentCheckResponseV2
     /// Stored raw for downstream processing; Details field has formatted version for UI.
     /// </summary>
     public string? VisionAnalysisText { get; init; }
+
+    /// <summary>
+    /// Perceptual-hash features computed while scanning the message's media (image/video checks).
+    /// The orchestrator stores them on messages.media_features; never serialized into check_results_json.
+    /// </summary>
+    public MediaFeatures? MediaFeatures { get; init; }
 }

@@ -1,4 +1,6 @@
+using System.Text.RegularExpressions;
 using TelegramGroupsAdmin.E2ETests.PageObjects;
+using static Microsoft.Playwright.Assertions;
 
 namespace TelegramGroupsAdmin.E2ETests.Tests.Analytics;
 
@@ -31,8 +33,7 @@ public class AnalyticsTests : SharedAuthenticatedTestBase
         await _analyticsPage.NavigateAsync();
 
         // Assert - page loads successfully for Admin (tabs visible)
-        Assert.That(await _analyticsPage.IsTabsVisibleAsync(), Is.True,
-            "Tab container should be visible for Admin");
+        await Expect(_analyticsPage.TabsContainer).ToBeVisibleAsync();
     }
 
     [Test]
@@ -45,8 +46,7 @@ public class AnalyticsTests : SharedAuthenticatedTestBase
         await _analyticsPage.NavigateAsync();
 
         // Assert - page loads successfully (tabs visible)
-        Assert.That(await _analyticsPage.IsTabsVisibleAsync(), Is.True,
-            "Tab container should be visible for GlobalAdmin");
+        await Expect(_analyticsPage.TabsContainer).ToBeVisibleAsync();
     }
 
     [Test]
@@ -59,8 +59,7 @@ public class AnalyticsTests : SharedAuthenticatedTestBase
         await _analyticsPage.NavigateAsync();
 
         // Assert - page loads successfully (tabs visible)
-        Assert.That(await _analyticsPage.IsTabsVisibleAsync(), Is.True,
-            "Tab container should be visible for Owner");
+        await Expect(_analyticsPage.TabsContainer).ToBeVisibleAsync();
     }
 
     #endregion
@@ -77,16 +76,10 @@ public class AnalyticsTests : SharedAuthenticatedTestBase
         await _analyticsPage.NavigateAsync();
 
         // Assert - verify all 4 tabs exist
-        var tabNames = await _analyticsPage.GetTabNamesAsync();
-
-        Assert.That(tabNames, Does.Contain("Content Detection"),
-            "Should have Content Detection tab");
-        Assert.That(tabNames, Does.Contain("Message Trends"),
-            "Should have Message Trends tab");
-        Assert.That(tabNames, Does.Contain("Performance"),
-            "Should have Performance tab");
-        Assert.That(tabNames, Does.Contain("Welcome Analytics"),
-            "Should have Welcome Analytics tab");
+        await Expect(_analyticsPage.Tab("Content Detection")).ToBeVisibleAsync();
+        await Expect(_analyticsPage.Tab("Message Trends")).ToBeVisibleAsync();
+        await Expect(_analyticsPage.Tab("Performance")).ToBeVisibleAsync();
+        await Expect(_analyticsPage.Tab("Welcome Analytics")).ToBeVisibleAsync();
     }
 
     [Test]
@@ -102,38 +95,22 @@ public class AnalyticsTests : SharedAuthenticatedTestBase
         // three global tabs are DISABLED/greyed (mud-disabled) so an Admin cannot
         // open them and no global data component mounts. Message Trends is the only
         // enabled tab and is forced active for Admin.
-        var tabNames = await _analyticsPage.GetTabNamesAsync();
+        // Admin should still see all four tab shells.
+        await Expect(_analyticsPage.Tabs).ToHaveCountAsync(4);
+        await Expect(_analyticsPage.Tab("Content Detection")).ToBeVisibleAsync();
+        await Expect(_analyticsPage.Tab("Message Trends")).ToBeVisibleAsync();
+        await Expect(_analyticsPage.Tab("Performance")).ToBeVisibleAsync();
+        await Expect(_analyticsPage.Tab("Welcome Analytics")).ToBeVisibleAsync();
 
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(tabNames, Has.Count.EqualTo(4),
-                "Admin should still see all four tab shells");
-            Assert.That(tabNames, Does.Contain("Content Detection"),
-                "Admin should see the Content Detection tab shell");
-            Assert.That(tabNames, Does.Contain("Message Trends"),
-                "Admin should see the Message Trends tab");
-            Assert.That(tabNames, Does.Contain("Performance"),
-                "Admin should see the Performance tab shell");
-            Assert.That(tabNames, Does.Contain("Welcome Analytics"),
-                "Admin should see the Welcome Analytics tab shell");
-        }
+        // The three global tabs must be disabled (mud-disabled on the .mud-tab element).
+        await _analyticsPage.ExpectTabDisabledAsync("Content Detection");
+        await _analyticsPage.ExpectTabDisabledAsync("Performance");
+        await _analyticsPage.ExpectTabDisabledAsync("Welcome Analytics");
 
-        using (Assert.EnterMultipleScope())
-        {
-            // The three global tabs must be disabled (mud-disabled on the .mud-tab element).
-            Assert.That(await _analyticsPage.IsTabDisabledAsync("Content Detection"), Is.True,
-                "Admin: Content Detection tab should be disabled/greyed");
-            Assert.That(await _analyticsPage.IsTabDisabledAsync("Performance"), Is.True,
-                "Admin: Performance tab should be disabled/greyed");
-            Assert.That(await _analyticsPage.IsTabDisabledAsync("Welcome Analytics"), Is.True,
-                "Admin: Welcome Analytics tab should be disabled/greyed");
-
-            // Message Trends stays enabled and is the active tab for Admin.
-            Assert.That(await _analyticsPage.IsTabDisabledAsync("Message Trends"), Is.False,
-                "Admin: Message Trends tab should remain enabled");
-            Assert.That(await _analyticsPage.IsMessageTrendsTabActiveAsync(), Is.True,
-                "Admin: Message Trends should be the active tab");
-        }
+        // Message Trends stays enabled and is the active tab for Admin. The disabled checks
+        // above confirm the permission-aware render has landed before this absence check.
+        await _analyticsPage.ExpectTabEnabledAsync("Message Trends");
+        await Expect(_analyticsPage.Tab("Message Trends")).ToHaveAttributeAsync("aria-selected", "true");
     }
 
     [Test]
@@ -146,33 +123,24 @@ public class AnalyticsTests : SharedAuthenticatedTestBase
         await _analyticsPage.NavigateAsync();
 
         // Assert - GlobalAdmin sees all four tabs, all ENABLED (none greyed/disabled).
-        var tabNames = await _analyticsPage.GetTabNamesAsync();
+        await Expect(_analyticsPage.Tabs).ToHaveCountAsync(4);
+        await Expect(_analyticsPage.Tab("Content Detection")).ToBeVisibleAsync();
+        await Expect(_analyticsPage.Tab("Message Trends")).ToBeVisibleAsync();
+        await Expect(_analyticsPage.Tab("Performance")).ToBeVisibleAsync();
+        await Expect(_analyticsPage.Tab("Welcome Analytics")).ToBeVisibleAsync();
 
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(tabNames, Has.Count.EqualTo(4),
-                "GlobalAdmin should see exactly four tabs");
-            Assert.That(tabNames, Does.Contain("Content Detection"),
-                "GlobalAdmin should see the Content Detection tab");
-            Assert.That(tabNames, Does.Contain("Message Trends"),
-                "GlobalAdmin should see the Message Trends tab");
-            Assert.That(tabNames, Does.Contain("Performance"),
-                "GlobalAdmin should see the Performance tab");
-            Assert.That(tabNames, Does.Contain("Welcome Analytics"),
-                "GlobalAdmin should see the Welcome Analytics tab");
-        }
+        // Each "not disabled" check asserts its tab visible first (inside ExpectTabEnabledAsync),
+        // and the permission flag is set synchronously before the first render, so the
+        // absence check cannot pass before the tab has rendered.
+        await _analyticsPage.ExpectTabEnabledAsync("Content Detection");
+        await _analyticsPage.ExpectTabEnabledAsync("Message Trends");
+        await _analyticsPage.ExpectTabEnabledAsync("Performance");
+        await _analyticsPage.ExpectTabEnabledAsync("Welcome Analytics");
 
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(await _analyticsPage.IsTabDisabledAsync("Content Detection"), Is.False,
-                "GlobalAdmin: Content Detection tab should be enabled");
-            Assert.That(await _analyticsPage.IsTabDisabledAsync("Message Trends"), Is.False,
-                "GlobalAdmin: Message Trends tab should be enabled");
-            Assert.That(await _analyticsPage.IsTabDisabledAsync("Performance"), Is.False,
-                "GlobalAdmin: Performance tab should be enabled");
-            Assert.That(await _analyticsPage.IsTabDisabledAsync("Welcome Analytics"), Is.False,
-                "GlobalAdmin: Welcome Analytics tab should be enabled");
-        }
+        // The Content Detection tab is gated on IsGlobalAdminOrHigher, so a GlobalAdmin gets the real component
+        // (its Overview section), not the disabled shell, and it is the selected tab.
+        await Expect(_analyticsPage.Tab("Content Detection")).ToHaveAttributeAsync("aria-selected", "true");
+        await Expect(_analyticsPage.ContentDetectionHeading("Overview")).ToBeVisibleAsync();
     }
 
     [Test]
@@ -185,8 +153,7 @@ public class AnalyticsTests : SharedAuthenticatedTestBase
         await _analyticsPage.NavigateAsync();
 
         // Assert - Content Detection tab is active by default
-        Assert.That(await _analyticsPage.IsContentDetectionTabActiveAsync(), Is.True,
-            "Content Detection tab should be active by default");
+        await Expect(_analyticsPage.Tab("Content Detection")).ToHaveAttributeAsync("aria-selected", "true");
     }
 
     #endregion
@@ -203,16 +170,11 @@ public class AnalyticsTests : SharedAuthenticatedTestBase
         // Act - click Message Trends tab
         await _analyticsPage.SelectTabAsync("Message Trends");
 
-        using (Assert.EnterMultipleScope())
-        {
-            // Assert - tab is now active
-            Assert.That(await _analyticsPage.IsMessageTrendsTabActiveAsync(), Is.True,
-                "Message Trends tab should be active after clicking");
+        // Assert - tab is now active
+        await Expect(_analyticsPage.Tab("Message Trends")).ToHaveAttributeAsync("aria-selected", "true");
 
-            // URL should have fragment
-            Assert.That(_analyticsPage.GetCurrentFragment(), Is.EqualTo("trends"),
-                "URL fragment should be 'trends'");
-        }
+        // URL should have fragment 'trends'
+        await Expect(Page).ToHaveURLAsync(new Regex("#trends$"));
     }
 
     [Test]
@@ -225,14 +187,9 @@ public class AnalyticsTests : SharedAuthenticatedTestBase
         // Act - click Performance tab
         await _analyticsPage.SelectTabAsync("Performance");
 
-        using (Assert.EnterMultipleScope())
-        {
-            // Assert - tab is now active and shows info alert
-            Assert.That(await _analyticsPage.IsPerformanceTabActiveAsync(), Is.True,
-                "Performance tab should be active after clicking");
-            Assert.That(await _analyticsPage.IsPerformanceMetricsVisibleAsync(), Is.True,
-                "Performance metrics info alert should be visible");
-        }
+        // Assert - tab is now active and shows info alert
+        await Expect(_analyticsPage.Tab("Performance")).ToHaveAttributeAsync("aria-selected", "true");
+        await Expect(_analyticsPage.PerformanceMetricsAlert).ToBeVisibleAsync();
     }
 
     [Test]
@@ -245,14 +202,9 @@ public class AnalyticsTests : SharedAuthenticatedTestBase
         // Act - click Welcome Analytics tab
         await _analyticsPage.SelectTabAsync("Welcome Analytics");
 
-        using (Assert.EnterMultipleScope())
-        {
-            // Assert - tab is now active and shows info alert
-            Assert.That(await _analyticsPage.IsWelcomeAnalyticsTabActiveAsync(), Is.True,
-                "Welcome Analytics tab should be active after clicking");
-            Assert.That(await _analyticsPage.IsWelcomeAnalyticsVisibleAsync(), Is.True,
-                "Welcome Analytics info alert should be visible");
-        }
+        // Assert - tab is now active and shows info alert
+        await Expect(_analyticsPage.Tab("Welcome Analytics")).ToHaveAttributeAsync("aria-selected", "true");
+        await Expect(_analyticsPage.WelcomeAnalyticsAlert).ToBeVisibleAsync();
     }
 
     [Test]
@@ -265,8 +217,7 @@ public class AnalyticsTests : SharedAuthenticatedTestBase
         await _analyticsPage.NavigateToTabAsync("performance");
 
         // Assert - Performance tab is active
-        Assert.That(await _analyticsPage.IsPerformanceTabActiveAsync(), Is.True,
-            "Performance tab should be active when navigating with #performance fragment");
+        await Expect(_analyticsPage.Tab("Performance")).ToHaveAttributeAsync("aria-selected", "true");
     }
 
     [Test]
@@ -279,8 +230,7 @@ public class AnalyticsTests : SharedAuthenticatedTestBase
         await _analyticsPage.NavigateToTabAsync("welcome");
 
         // Assert - Welcome Analytics tab is active
-        Assert.That(await _analyticsPage.IsWelcomeAnalyticsTabActiveAsync(), Is.True,
-            "Welcome Analytics tab should be active when navigating with #welcome fragment");
+        await Expect(_analyticsPage.Tab("Welcome Analytics")).ToHaveAttributeAsync("aria-selected", "true");
     }
 
     #endregion
@@ -312,8 +262,8 @@ public class AnalyticsTests : SharedAuthenticatedTestBase
         await _analyticsPage.SelectTabAsync("Message Trends");
 
         // Assert - Week card should show average with "/day" suffix
-        Assert.That(await _analyticsPage.WeekCardShowsPerDayAsync(), Is.True,
-            "Week over Week card should display daily average with '/day' suffix");
+        await Expect(_analyticsPage.TrendCardAverage("Week over Week"))
+            .ToContainTextAsync("/day", new() { Timeout = 10000 });
     }
 
     [Test]
@@ -327,8 +277,8 @@ public class AnalyticsTests : SharedAuthenticatedTestBase
         await _analyticsPage.SelectTabAsync("Message Trends");
 
         // Assert - Month card should show average with "/week" suffix
-        Assert.That(await _analyticsPage.MonthCardShowsPerWeekAsync(), Is.True,
-            "Month over Month card should display weekly average with '/week' suffix");
+        await Expect(_analyticsPage.TrendCardAverage("Month over Month"))
+            .ToContainTextAsync("/week", new() { Timeout = 10000 });
     }
 
     [Test]
@@ -342,8 +292,8 @@ public class AnalyticsTests : SharedAuthenticatedTestBase
         await _analyticsPage.SelectTabAsync("Message Trends");
 
         // Assert - Year card should show average with "/month" suffix
-        Assert.That(await _analyticsPage.YearCardShowsPerMonthAsync(), Is.True,
-            "Year over Year card should display monthly average with '/month' suffix");
+        await Expect(_analyticsPage.TrendCardAverage("Year over Year"))
+            .ToContainTextAsync("/month", new() { Timeout = 10000 });
     }
 
     [Test]
@@ -357,19 +307,9 @@ public class AnalyticsTests : SharedAuthenticatedTestBase
         await _analyticsPage.SelectTabAsync("Message Trends");
 
         // Assert - all trend cards should have some value (percentage or difference)
-        var weekValue = await _analyticsPage.GetWeekOverWeekValueAsync();
-        var monthValue = await _analyticsPage.GetMonthOverMonthValueAsync();
-        var yearValue = await _analyticsPage.GetYearOverYearValueAsync();
-
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(weekValue, Is.Not.Null.And.Not.Empty,
-                      "Week over Week card should have a value");
-            Assert.That(monthValue, Is.Not.Null.And.Not.Empty,
-                "Month over Month card should have a value");
-            Assert.That(yearValue, Is.Not.Null.And.Not.Empty,
-                "Year over Year card should have a value");
-        }
+        await Expect(_analyticsPage.TrendCardValue("Week over Week")).Not.ToBeEmptyAsync(new() { Timeout = 10000 });
+        await Expect(_analyticsPage.TrendCardValue("Month over Month")).Not.ToBeEmptyAsync(new() { Timeout = 10000 });
+        await Expect(_analyticsPage.TrendCardValue("Year over Year")).Not.ToBeEmptyAsync(new() { Timeout = 10000 });
     }
 
     [Test]
@@ -383,19 +323,9 @@ public class AnalyticsTests : SharedAuthenticatedTestBase
         await _analyticsPage.SelectTabAsync("Message Trends");
 
         // Assert - all trend cards should have average comparisons displayed
-        var weekAvg = await _analyticsPage.GetWeekOverWeekAverageAsync();
-        var monthAvg = await _analyticsPage.GetMonthOverMonthAverageAsync();
-        var yearAvg = await _analyticsPage.GetYearOverYearAverageAsync();
-
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(weekAvg, Is.Not.Null.And.Not.Empty,
-                      "Week over Week card should have an average comparison");
-            Assert.That(monthAvg, Is.Not.Null.And.Not.Empty,
-                "Month over Month card should have an average comparison");
-            Assert.That(yearAvg, Is.Not.Null.And.Not.Empty,
-                "Year over Year card should have an average comparison");
-        }
+        await Expect(_analyticsPage.TrendCardAverage("Week over Week")).Not.ToBeEmptyAsync(new() { Timeout = 10000 });
+        await Expect(_analyticsPage.TrendCardAverage("Month over Month")).Not.ToBeEmptyAsync(new() { Timeout = 10000 });
+        await Expect(_analyticsPage.TrendCardAverage("Year over Year")).Not.ToBeEmptyAsync(new() { Timeout = 10000 });
     }
 
     #endregion

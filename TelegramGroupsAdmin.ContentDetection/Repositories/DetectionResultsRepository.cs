@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.EntityFrameworkCore;
 using TelegramGroupsAdmin.ContentDetection.Repositories.Mappings;
 using TelegramGroupsAdmin.Core.Repositories.Mappings;
@@ -5,6 +6,8 @@ using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Constants;
+using TelegramGroupsAdmin.ContentDetection.Services;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.ContentDetection.Utilities;
 using DataModels = TelegramGroupsAdmin.Data.Models;
 
@@ -21,29 +24,6 @@ public class DetectionResultsRepository : IDetectionResultsRepository
     {
         _contextFactory = contextFactory;
         _logger = logger;
-    }
-
-    /// <summary>
-    /// Strongly-typed record for detection result + message JOIN
-    /// Used to avoid duplicate JOIN patterns in training sample queries (H10)
-    /// </summary>
-    private record DetectionResultWithMessage(
-        DataModels.DetectionResultRecordDto DetectionResult,
-        DataModels.MessageRecordDto Message);
-
-    /// <summary>
-    /// Helper to JOIN detection_results with messages table (H10)
-    /// Returns queryable with strongly-typed DetectionResultWithMessage records
-    /// </summary>
-    private static IQueryable<DetectionResultWithMessage> WithMessageJoin(
-        IQueryable<DataModels.DetectionResultRecordDto> detectionResults,
-        AppDbContext context)
-    {
-        return detectionResults
-            .Join(context.Messages,
-                dr => new { dr.MessageId, dr.ChatId },
-                m => new { m.MessageId, m.ChatId },
-                (dr, m) => new DetectionResultWithMessage(dr, m));
     }
 
     /// <summary>
@@ -75,14 +55,14 @@ public class DetectionResultsRepository : IDetectionResultsRepository
                 MessageId = x.dr.MessageId,
                 ChatId = x.dr.ChatId,
                 DetectedAt = x.dr.DetectedAt,
-                DetectionSource = x.dr.DetectionSource,
                 DetectionMethod = x.dr.DetectionMethod,
-                IsSpam = x.dr.IsSpam,
+                Source = (VerdictSource)x.dr.Source,
+                Classification = (VerdictClassification)x.dr.Classification,
+                Properties = x.dr.Properties,
+                AuditLogId = x.dr.AuditLogId,
                 Score = x.dr.Score,
                 Reason = x.dr.Reason,
                 AddedBy = ActorMappings.ToActor(x.dr.WebUserId, x.dr.TelegramUserId, x.dr.SystemIdentifier, x.ActorWebEmail, x.ActorTelegramUsername, x.ActorTelegramFirstName, x.ActorTelegramLastName),
-                UsedForTraining = x.dr.UsedForTraining,
-                NetScore = x.dr.NetScore,
                 CheckResultsJson = x.dr.CheckResultsJson,
                 EditVersion = x.dr.EditVersion,
                 UserId = x.m.UserId,
@@ -92,21 +72,77 @@ public class DetectionResultsRepository : IDetectionResultsRepository
             });
     }
 
-    public async Task InsertAsync(DetectionResultRecord result, CancellationToken cancellationToken = default)
+    public async Task<DetectionResultRecord> RecordScanAsync(int messageId, long chatId, ContentDetectionResult scan,
+        int editVersion, CancellationToken cancellationToken = default)
+    {
+        var classification = VerdictClassifier.ClassifyScan(scan);
+        var reasonPrefix = editVersion > 0 ? $"[Edit #{editVersion}] " : "";
+        var method = scan.CheckResults.Count > 0 ? string.Join(", ", scan.CheckResults.Select(c => c.CheckName)) : "Unknown";
+
+        var row = NewRow(messageId, chatId, VerdictSource.ContentScan, classification, Actor.AutoDetection,
+            scan.TotalScore, $"{reasonPrefix}{scan.PrimaryReason}", method);
+        row.CheckResultsJson = CheckResultsSerializer.Serialize(scan.CheckResults);
+        row.EditVersion = editVersion;
+
+        await SaveAsync(row, cancellationToken);
+        return row.ToModel();
+    }
+
+    public async Task RecordFileScanAsync(int messageId, long chatId, bool infected, double score, string details,
+        CancellationToken cancellationToken = default)
+    {
+        var row = NewRow(messageId, chatId, VerdictSource.FileScan, VerdictClassifier.ClassifyFileScan(infected),
+            Actor.FileScanner, score, details, "FileScanningCheck");
+        await SaveAsync(row, cancellationToken);
+    }
+
+    public async Task<long> RecordDecisionAsync(int messageId, long chatId, VerdictSource source, Actor actor, string reason,
+        bool? isSpam = null, long? auditLogId = null, CancellationToken cancellationToken = default)
+    {
+        var row = NewRow(messageId, chatId, source, VerdictClassifier.ClassifyDecision(source, isSpam), actor,
+            score: 5.0, reason, method: source.ToString());
+        row.AuditLogId = auditLogId;
+        await SaveAsync(row, cancellationToken);
+        return row.Id;
+    }
+
+    public async Task<MessageVerdict?> GetCurrentVerdictAsync(int messageId, long chatId, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var entity = result.ToDto();
-        context.DetectionResults.Add(entity);
+        var view = await context.MessageVerdicts.AsNoTracking()
+            .FirstOrDefaultAsync(v => v.MessageId == messageId && v.ChatId == chatId, cancellationToken);
+        return view?.ToModel();
+    }
+
+    private static DataModels.DetectionResultRecordDto NewRow(int messageId, long chatId, VerdictSource source,
+        VerdictClassification classification, Actor actor, double score, string reason, string method)
+    {
+        ActorMappings.SetActorColumns(actor, out var webUserId, out var telegramUserId, out var systemIdentifier);
+        return new DataModels.DetectionResultRecordDto
+        {
+            MessageId = messageId,
+            ChatId = chatId,
+            DetectedAt = DateTimeOffset.UtcNow,
+            Source = (int)source,
+            Classification = (int)classification,
+            DetectionMethod = method,
+            Score = score,
+            Reason = reason,
+            WebUserId = webUserId,
+            TelegramUserId = telegramUserId,
+            SystemIdentifier = systemIdentifier
+        };
+    }
+
+    private async Task SaveAsync(DataModels.DetectionResultRecordDto row, CancellationToken cancellationToken)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        context.DetectionResults.Add(row);
         await context.SaveChangesAsync(cancellationToken);
 
         _logger.LogDebug(
-            "Inserted detection result for message {MessageId}: {IsSpam} (score: {Score}, net: {NetScore}, training: {UsedForTraining}, edit_version: {EditVersion})",
-            result.MessageId,
-            result.IsSpam ? "spam" : "ham",
-            result.Score,
-            result.NetScore,
-            result.UsedForTraining,
-            result.EditVersion);
+            "Recorded {Source} verdict {Classification} for message {MessageId} in chat {ChatId} (score {Score:F2})",
+            (VerdictSource)row.Source, (VerdictClassification)row.Classification, row.MessageId, row.ChatId, row.Score);
     }
 
     public async Task<DetectionResultRecord?> GetByIdAsync(long id, CancellationToken cancellationToken = default)
@@ -155,93 +191,51 @@ public class DetectionResultsRepository : IDetectionResultsRepository
     public async Task<List<(string MessageText, bool IsSpam)>> GetTrainingSamplesAsync(CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        // Phase 2.6: Only use high-quality training samples
-        // - Manual admin decisions (always training-worthy)
-        // - Confident OpenAI results (85%+, marked as used_for_training = true)
-        // This prevents low-quality auto-detections from polluting training data
-        //
-        // Phase 4.20+: Use translated text when available (matches spam detection behavior)
-        // - Spam detection runs on translated text for non-English messages
-        // - Training samples should match what was analyzed (COALESCE: translated > original)
-        var results = await context.DetectionResults
-            .AsNoTracking()
-            .Join(context.Messages,
-                dr => new { dr.MessageId, dr.ChatId },
-                m => new { m.MessageId, m.ChatId },
-                (dr, m) => new { dr, m })
-            .LeftJoin(context.MessageTranslations,
-                x => new { MessageId = (int?)x.m.MessageId, ChatId = (long?)x.m.ChatId },
-                mt => new { mt.MessageId, mt.ChatId },
-                (x, mt) => new { x.dr, x.m, mt })
-            .Where(x => x.dr.UsedForTraining == true
-                && x.m.MessageText != null
-                && x.m.MessageText != "")
-            .OrderByDescending(x => x.dr.IsSpam)
-            .Select(x => new { MessageText = x.mt != null ? x.mt.TranslatedText : x.m.MessageText, x.dr.IsSpam })
-            .ToListAsync(cancellationToken);
+        // Curated current verdicts (explicit labels + confident implicit spam); translated text when available.
+        var results = await (
+            from v in context.MessageVerdicts.AsNoTracking()
+            where VerdictClassifications.CuratedValues.Contains(v.Classification)
+            join m in context.Messages on new { v.MessageId, v.ChatId } equals new { m.MessageId, m.ChatId }
+            from mt in context.MessageTranslations
+                .Where(t => t.MessageId == m.MessageId && t.ChatId == m.ChatId && t.EditId == null)
+                .DefaultIfEmpty()
+            let text = mt != null ? mt.TranslatedText : m.MessageText
+            where text != null && text != ""
+            orderby v.IsSpam descending
+            select new { MessageText = text, v.IsSpam }
+        ).ToListAsync(cancellationToken);
 
         _logger.LogDebug(
-            "Retrieved {Count} training samples for Bayes classifier (used_for_training = true)",
+            "Retrieved {Count} training samples for Bayes classifier (curated current verdicts)",
             results.Count);
 
         return results.Select(r => (r.MessageText!, r.IsSpam)).ToList();
     }
 
-    public async Task<List<string>> GetSpamSamplesForSimilarityAsync(int limit = 1000, CancellationToken cancellationToken = default)
-    {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        // Phase 2.6: Only use high-quality training samples for similarity matching
-        // Use query syntax for EF Core translation compatibility (H10 pattern from GetTrainingSamplesAsync)
-        var results = await (
-            from dr in context.DetectionResults.AsNoTracking()
-            join m in context.Messages on new { dr.MessageId, dr.ChatId } equals new { m.MessageId, m.ChatId }
-            where dr.IsSpam == true
-                && dr.UsedForTraining == true
-                && m.MessageText != null
-                && m.MessageText != ""
-            orderby dr.DetectedAt descending
-            select m.MessageText
-        ).Take(limit).ToListAsync(cancellationToken);
-
-        _logger.LogDebug(
-            "Retrieved {Count} spam samples for similarity check (used_for_training = true)",
-            results.Count);
-
-        return results!;
-    }
-
     // REFACTOR-5: Removed IsUserTrustedAsync - use ITelegramUserRepository.IsTrustedAsync instead
     // Source of truth is telegram_users.is_trusted column
 
-    public async Task<List<DetectionResultRecord>> GetRecentNonSpamResultsForUserAsync(long userId, int limit, int minMessageLength, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<UserMessageVerdict>> GetRecentMessageVerdictsForUserAsync(
+        long userId, int limit, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        // Get last N non-spam detection results for this user (global, not per-chat)
-        // Used for auto-whitelisting: if user has N consecutive non-spam messages, trust them
-        // Optionally filter by minimum message length to prevent trust gaming with short replies
-        var query = WithActorJoins(
-                context.DetectionResults.AsNoTracking(),
-                context)
-            .Where(x => x.UserId == userId && !x.IsSpam);
+        // One row per message (the view), latest version each; edits never add units.
+        var rows = await (
+            from m in context.Messages.AsNoTracking()
+            where m.UserId == userId
+            join v in context.MessageVerdicts.AsNoTracking() on new { m.MessageId, m.ChatId } equals new { v.MessageId, v.ChatId }
+            where v.Classification != (int)VerdictClassification.Unscanned
+            orderby m.Timestamp descending
+            select new { m.MessageId, m.ChatId, v.Classification, v.IsSpam, TextLength = m.MessageText == null ? 0 : m.MessageText.Length }
+        ).Take(limit).ToListAsync(cancellationToken);
 
-        // Filter by minimum message length if specified (prevents trust gaming)
-        if (minMessageLength > 0)
-        {
-            query = query.Where(x => x.MessageText != null &&
-                                     x.MessageText.Length >= minMessageLength);
-        }
-
-        var results = await query
-            .OrderByDescending(x => x.DetectedAt)
-            .Take(limit)
-            .ToListAsync(cancellationToken);
+        var results = rows.Select(r => new UserMessageVerdict(r.MessageId, r.ChatId, (VerdictClassification)r.Classification, r.IsSpam, r.TextLength)).ToList();
 
         _logger.LogDebug(
-            "Retrieved {Count} recent non-spam results for user {UserId} (limit: {Limit}, minLength: {MinLength})",
+            "Retrieved {Count} recent message verdicts for user {UserId} (limit: {Limit})",
             results.Count,
             userId,
-            limit,
-            minMessageLength);
+            limit);
 
         return results;
     }
@@ -253,101 +247,45 @@ public class DetectionResultsRepository : IDetectionResultsRepository
     public async Task<List<DetectionResultRecord>> GetAllTrainingDataAsync(CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var currentCuratedIds = context.MessageVerdicts
+            .Where(v => v.VerdictId != null && VerdictClassifications.CuratedValues.Contains(v.Classification))
+            .Select(v => v.VerdictId!.Value);
+
         var results = await WithActorJoins(
-                context.DetectionResults.AsNoTracking().Where(dr => dr.UsedForTraining == true),
+                context.DetectionResults.AsNoTracking().Where(dr => currentCuratedIds.Contains(dr.Id)),
                 context)
             .OrderByDescending(x => x.DetectedAt)
             .ToListAsync(cancellationToken);
 
-        _logger.LogDebug("Retrieved {Count} training data records (used_for_training = true)", results.Count);
+        _logger.LogDebug("Retrieved {Count} training data records (curated current verdicts)", results.Count);
         return results;
     }
 
     public async Task<TrainingDataStats> GetTrainingDataStatsAsync(CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var trainingData = await context.DetectionResults
-            .AsNoTracking()
-            .Where(dr => dr.UsedForTraining == true)
-            .Select(dr => new { dr.IsSpam, dr.DetectionSource })
+        var rows = await context.MessageVerdicts.AsNoTracking()
+            .Where(v => v.VerdictId != null && VerdictClassifications.CuratedValues.Contains(v.Classification))
+            .Select(v => new { v.IsSpam, v.Source })
             .ToListAsync(cancellationToken);
 
-        var total = trainingData.Count;
-        var spam = trainingData.Count(d => d.IsSpam);
-        var ham = total - spam;
-
-        var sourceGroups = trainingData
-            .GroupBy(d => d.DetectionSource)
-            .ToDictionary(g => g.Key, g => g.Count());
-
+        var total = rows.Count;
+        var spam = rows.Count(r => r.IsSpam);
         return new TrainingDataStats
         {
             TotalSamples = total,
             SpamSamples = spam,
-            HamSamples = ham,
+            HamSamples = total - spam,
             SpamPercentage = total > 0 ? (double)spam / total * 100 : 0,
-            SamplesBySource = sourceGroups
+            // Source is non-null here: the VerdictId filter above keeps only messages with a verdict event.
+            SamplesBySource = rows.GroupBy(r => ((VerdictSource)r.Source!.Value).ToString()).ToDictionary(g => g.Key, g => g.Count())
         };
-    }
-
-    public async Task ExcludeFromTrainingAsync(long id, CancellationToken cancellationToken = default)
-    {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var entity = await context.DetectionResults.FindAsync([id], cancellationToken);
-        if (entity == null)
-        {
-            throw new InvalidOperationException($"Detection result {id} not found");
-        }
-
-        entity.UsedForTraining = false;
-        await context.SaveChangesAsync(cancellationToken);
-
-        _logger.LogInformation("Excluded detection result {Id} from training data", id);
-    }
-
-    public async Task DeleteDetectionResultAsync(long id, CancellationToken cancellationToken = default)
-    {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var entity = await context.DetectionResults.FindAsync([id], cancellationToken);
-        if (entity == null)
-        {
-            throw new InvalidOperationException($"Detection result {id} not found");
-        }
-
-        context.DetectionResults.Remove(entity);
-        await context.SaveChangesAsync(cancellationToken);
-
-        _logger.LogWarning("Deleted detection result {Id}", id);
-    }
-
-    /// <summary>
-    /// Invalidate all training data for a specific message (set used_for_training = false).
-    /// Used before manual reclassification to prevent cross-class conflicts in Bayes training.
-    /// </summary>
-    public async Task InvalidateTrainingDataForMessageAsync(int messageId, long chatId, CancellationToken cancellationToken = default)
-    {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-
-        var affectedRecords = await context.DetectionResults
-            .Where(dr => dr.MessageId == messageId && dr.ChatId == chatId && dr.UsedForTraining)
-            .ExecuteUpdateAsync(
-                setters => setters.SetProperty(dr => dr.UsedForTraining, false),
-                cancellationToken);
-
-        if (affectedRecords > 0)
-        {
-            _logger.LogInformation(
-                "Invalidated {Count} training data record(s) for message {MessageId}",
-                affectedRecords, messageId);
-        }
     }
 
     public async Task<long> AddManualTrainingSampleAsync(
         string messageText,
         bool isSpam,
-        string source,
-        double? score,
-        string? addedBy,
+        Actor actor,
         string? translatedText = null,
         string? detectedLanguage = null,
         CancellationToken cancellationToken = default)
@@ -402,35 +340,19 @@ public class DetectionResultsRepository : IDetectionResultsRepository
                 detectedLanguage);
         }
 
-        // Create detection_result record linked to the message
-        // Phase 4.19: Actor system - manual samples use SystemIdentifier
-        var detectionResult = new DataModels.DetectionResultRecordDto
-        {
-            MessageId = message.MessageId,
-            ChatId = 0, // Manual sample: matches parent message ChatId = 0
-            DetectedAt = DateTimeOffset.UtcNow,
-            DetectionSource = source,
-            DetectionMethod = "Manual",
-            // IsSpam computed from net_score
-            Score = score ?? 5.0,
-            Reason = "Manually added training sample",
-            SystemIdentifier = addedBy ?? "System",  // Phase 4.19: Actor system
-            UsedForTraining = true,
-            NetScore = isSpam ? 5.0 : -5.0,  // Manual: 5.0 = spam, -5.0 = ham
-            CheckResultsJson = null,
-            EditVersion = 0
-        };
-
+        // Create detection_result record linked to the message, as a TrainingDataPage decision.
+        var detectionResult = NewRow(message.MessageId, 0, VerdictSource.TrainingDataPage,
+            VerdictClassifier.ClassifyDecision(VerdictSource.TrainingDataPage, isSpam), actor,
+            score: 5.0, reason: "Manually added training sample", method: nameof(VerdictSource.TrainingDataPage));
         context.DetectionResults.Add(detectionResult);
         await context.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation(
-            "Added manual training sample: message_id={MessageId}, detection_result_id={Id}, is_spam={IsSpam}, source={Source}, added_by={AddedBy}, has_translation={HasTranslation}",
+            "Added manual training sample: message_id={MessageId}, detection_result_id={Id}, is_spam={IsSpam}, added_by={AddedBy}, has_translation={HasTranslation}",
             message.MessageId,
             detectionResult.Id,
             isSpam,
-            source,
-            addedBy ?? "System",
+            actor.GetDisplayText(),
             translatedText != null);
 
         return detectionResult.Id;
@@ -448,7 +370,7 @@ public class DetectionResultsRepository : IDetectionResultsRepository
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         var results = await WithActorJoins(
-                context.DetectionResults.AsNoTracking().Where(dr => dr.DetectionSource == "file_scan"),
+                context.DetectionResults.AsNoTracking().Where(dr => dr.Source == (int)VerdictSource.FileScan),
                 context)
             .OrderByDescending(dr => dr.DetectedAt)
             .Skip(offset)
@@ -464,8 +386,8 @@ public class DetectionResultsRepository : IDetectionResultsRepository
         var sevenDaysAgo = DateTimeOffset.UtcNow.AddDays(-7);
 
         var stats = await context.DetectionResults
-            .Where(dr => dr.DetectionSource == "file_scan" &&
-                        dr.IsSpam == true && // Only infected files
+            .Where(dr => dr.Source == (int)VerdictSource.FileScan &&
+                        dr.Classification == (int)VerdictClassification.UntrainedSpam && // Only infected files
                         dr.DetectedAt >= sevenDaysAgo)
             .GroupBy(dr => dr.DetectionMethod)
             .Select(g => new { Scanner = g.Key, Count = g.Count() })
@@ -479,7 +401,7 @@ public class DetectionResultsRepository : IDetectionResultsRepository
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         return await context.DetectionResults
-            .Where(dr => dr.DetectionSource == "file_scan")
+            .Where(dr => dr.Source == (int)VerdictSource.FileScan)
             .CountAsync(cancellationToken);
     }
 
@@ -490,7 +412,10 @@ public class DetectionResultsRepository : IDetectionResultsRepository
         // Get all detections where is_spam = false (OpenAI may have vetoed)
         // and check_results_json contains both OpenAI "clean" result and other "spam" results
         var vetoedDetections = await context.DetectionResults
-            .Where(dr => dr.DetectedAt >= since && !dr.IsSpam && dr.CheckResultsJson != null)
+            .Where(dr => dr.DetectedAt >= since
+                && dr.Source == (int)VerdictSource.ContentScan
+                && !VerdictClassifications.SpamValues.Contains(dr.Classification)
+                && dr.CheckResultsJson != null)
             .Select(dr => new { dr.Id, dr.CheckResultsJson })
             .ToListAsync(cancellationToken);
 
@@ -502,11 +427,7 @@ public class DetectionResultsRepository : IDetectionResultsRepository
                 {
                     var checks = CheckResultsSerializer.Deserialize(d.CheckResultsJson!);
 
-                    // Check if OpenAI returned "clean" and at least one other check returned "spam"
-                    var hasOpenAIClean = checks.Any(c => c.CheckName == CheckName.OpenAI && !c.IsSpam);
-                    var hasOtherSpam = checks.Any(c => c.CheckName != CheckName.OpenAI && c.IsSpam);
-
-                    if (hasOpenAIClean && hasOtherSpam)
+                    if (IsOpenAIVeto(checks, out _))
                     {
                         return new { d.Id, Checks = checks };
                     }
@@ -535,9 +456,12 @@ public class DetectionResultsRepository : IDetectionResultsRepository
             })
             .ToList();
 
-        // Get total spam flags per algorithm for accurate veto rate
+        // Get total spam flags per algorithm for accurate veto rate (content scans only: decisions and
+        // file scans are not detector runs)
         var allDetections = await context.DetectionResults
-            .Where(dr => dr.DetectedAt >= since && dr.CheckResultsJson != null)
+            .Where(dr => dr.DetectedAt >= since
+                && dr.Source == (int)VerdictSource.ContentScan
+                && dr.CheckResultsJson != null)
             .Select(dr => dr.CheckResultsJson)
             .ToListAsync(cancellationToken);
 
@@ -584,37 +508,38 @@ public class DetectionResultsRepository : IDetectionResultsRepository
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
-        // Get recent non-spam detections with their message text
-        var detections = await context.DetectionResults
-            .Where(dr => !dr.IsSpam && dr.CheckResultsJson != null)
-            .OrderByDescending(dr => dr.DetectedAt)
-            .Take(limit * 2) // Get extra to filter after JSON parsing
-            .Join(context.Messages,
-                dr => new { dr.MessageId, dr.ChatId },
-                m => new { m.MessageId, m.ChatId },
-                (dr, m) => new { dr.Id, dr.MessageId, dr.DetectedAt, dr.CheckResultsJson, m.MessageText })
-            .ToListAsync(cancellationToken);
-
+        // Vetoes are identified from the check JSON, so page through recent non-spam scans until
+        // enough are found (a fixed over-fetch could stop short while older vetoes exist).
+        var batchSize = Math.Max(limit * 2, 50);
         var vetoedMessages = new List<VetoedMessage>();
 
-        foreach (var detection in detections)
+        for (var skip = 0; vetoedMessages.Count < limit; skip += batchSize)
         {
-            try
+            var detections = await context.DetectionResults
+                .Where(dr => dr.Source == (int)VerdictSource.ContentScan
+                    && !VerdictClassifications.SpamValues.Contains(dr.Classification)
+                    && dr.CheckResultsJson != null)
+                .OrderByDescending(dr => dr.DetectedAt)
+                .ThenByDescending(dr => dr.Id)
+                .Skip(skip)
+                .Take(batchSize)
+                .Join(context.Messages,
+                    dr => new { dr.MessageId, dr.ChatId },
+                    m => new { m.MessageId, m.ChatId },
+                    (dr, m) => new { dr.Id, dr.MessageId, dr.DetectedAt, dr.CheckResultsJson, m.MessageText })
+                .ToListAsync(cancellationToken);
+
+            if (detections.Count == 0)
+                break;
+
+            foreach (var detection in detections)
             {
-                var checks = CheckResultsSerializer.Deserialize(detection.CheckResultsJson!);
-
-                var openAICheck = checks.FirstOrDefault(c => c.CheckName == CheckName.OpenAI);
-
-                var contentChecks = checks
-                    .Where(c => c.CheckName != CheckName.OpenAI && c.IsSpam)
-                    .Select(c => c.CheckName.ToString())
-                    .ToList();
-
-                // Only include if OpenAI vetoed (clean) and other checks flagged spam
-                if (openAICheck != null &&
-                    !openAICheck.IsSpam &&
-                    contentChecks.Any())
+                try
                 {
+                    var checks = CheckResultsSerializer.Deserialize(detection.CheckResultsJson!);
+                    if (!IsOpenAIVeto(checks, out var openAICheck))
+                        continue;
+
                     vetoedMessages.Add(new VetoedMessage
                     {
                         MessageId = detection.MessageId,
@@ -622,23 +547,36 @@ public class DetectionResultsRepository : IDetectionResultsRepository
                         MessagePreview = detection.MessageText?.Length > 100
                             ? detection.MessageText.Substring(0, 100) + "..."
                             : detection.MessageText,
-                        ContentCheckNames = contentChecks,
+                        ContentCheckNames = [.. checks.Where(c => c.CheckName != CheckName.OpenAI && c.IsSpam).Select(c => c.CheckName.ToString())],
                         OpenAIScore = openAICheck.Score,
                         OpenAIReason = openAICheck.Details
                     });
-                }
 
-                if (vetoedMessages.Count >= limit)
-                    break;
+                    if (vetoedMessages.Count >= limit)
+                        break;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to parse veto checks JSON for detection result in recent vetoed messages");
+                    // Skip malformed JSON - fail open
+                }
             }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Failed to parse veto checks JSON for detection result in recent vetoed messages");
-                // Skip malformed JSON - fail open
-            }
+
+            if (detections.Count < batchSize)
+                break;
         }
 
         return vetoedMessages;
     }
 
+    /// <summary>
+    /// An OpenAI veto as the detection engine applies it: OpenAI answered (not abstained) with score 0
+    /// while at least one other check flagged spam. An abstained OpenAI check (e.g. no API key) is no veto.
+    /// </summary>
+    private static bool IsOpenAIVeto(IReadOnlyList<CheckResult> checks, [NotNullWhen(true)] out CheckResult? openAICheck)
+    {
+        openAICheck = checks.FirstOrDefault(c => c.CheckName == CheckName.OpenAI);
+        return openAICheck is { Abstained: false, Score: 0 }
+            && checks.Any(c => c.CheckName != CheckName.OpenAI && c.IsSpam);
+    }
 }

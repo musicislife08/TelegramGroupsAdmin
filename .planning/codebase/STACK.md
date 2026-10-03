@@ -79,7 +79,7 @@
 - HumanCron 0.5.0 + HumanCron.Quartz 0.5.0 - Human-readable cron expression parser
 
 **Content Detection:**
-- SixLabors.ImageSharp 3.1.12 - Image processing and analysis
+- SkiaSharp 4.151.1 - Image processing and analysis (via Skia graphics library)
 - nClam 9.0.0 - ClamAV antivirus client (local file scanning)
 - Panlingo.LanguageIdentification.FastText 0.7.2 - Language detection
 - System.IO.Hashing 10.0.3 - Hash computation (SimHash)

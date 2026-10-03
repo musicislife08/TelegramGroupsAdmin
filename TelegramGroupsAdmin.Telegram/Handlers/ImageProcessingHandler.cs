@@ -1,9 +1,8 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.Processing;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Core.Imaging;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 
@@ -11,7 +10,7 @@ namespace TelegramGroupsAdmin.Telegram.Handlers;
 
 /// <summary>
 /// Handles image detection, download, and thumbnail generation for Telegram photos.
-/// Downloads full-size images and generates thumbnails using ImageSharp.
+/// Downloads full-size images and generates thumbnails via IImageProcessor.
 /// </summary>
 public class ImageProcessingHandler
 {
@@ -19,15 +18,18 @@ public class ImageProcessingHandler
 
     private readonly IBotMediaService _mediaService;
     private readonly string _dataPath;
+    private readonly IImageProcessor _imageProcessor;
     private readonly ILogger<ImageProcessingHandler> _logger;
 
     public ImageProcessingHandler(
         IBotMediaService mediaService,
         IOptions<AppOptions> appOptions,
+        IImageProcessor imageProcessor,
         ILogger<ImageProcessingHandler> logger)
     {
         _mediaService = mediaService;
         _dataPath = appOptions.Value.DataPath;
+        _imageProcessor = imageProcessor;
         _logger = logger;
     }
 
@@ -74,7 +76,7 @@ public class ImageProcessingHandler
     }
 
     /// <summary>
-    /// Download photo from Telegram and generate thumbnail using ImageSharp.
+    /// Download photo from Telegram and generate thumbnail via IImageProcessor.
     /// Returns relative paths for database storage, or (null, null) on failure.
     /// </summary>
     private async Task<ImagePaths> DownloadAndProcessImageAsync(
@@ -118,17 +120,26 @@ public class ImageProcessingHandler
                 // Copy to full image location
                 File.Copy(tempPath, fullPath, overwrite: true);
 
-                // Generate thumbnail using ImageSharp
-                using (var image = await Image.LoadAsync(tempPath, cancellationToken))
+                // Generate thumbnail. Quality 75 matches ImageSharp's JpegEncoder
+                // default, which this call site previously relied on — raising it
+                // would change every newly stored thumbnail.
+                bool thumbSucceeded;
+                await using (var thumbSource = File.OpenRead(tempPath))
+                await using (var thumbTarget = File.Create(thumbPath))
                 {
-                    var thumbnailSize = ThumbnailSize;
-                    image.Mutate(x => x.Resize(new ResizeOptions
-                    {
-                        Size = new Size(thumbnailSize, thumbnailSize),
-                        Mode = ResizeMode.Max // Maintain aspect ratio
-                    }));
+                    thumbSucceeded = await _imageProcessor.ResizeToFitAsync(
+                        thumbSource, thumbTarget, ThumbnailSize, ImageEncoding.Jpeg(75), cancellationToken);
+                }
 
-                    await image.SaveAsJpegAsync(thumbPath, cancellationToken);
+                if (!thumbSucceeded)
+                {
+                    // ResizeToFitAsync leaves an empty file behind on decode failure
+                    // (unlike the old ImageSharp path, which threw before creating one).
+                    File.Delete(thumbPath);
+                    _logger.LogWarning(
+                        "Could not decode image for thumbnail: message {MessageId} in chat {ChatId}",
+                        messageId, chatId);
+                    return new ImagePaths(null, null);
                 }
 
                 _logger.LogDebug(

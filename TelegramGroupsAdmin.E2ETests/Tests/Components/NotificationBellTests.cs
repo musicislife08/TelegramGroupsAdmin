@@ -1,3 +1,4 @@
+using TelegramGroupsAdmin.E2ETests.PageObjects;
 using Microsoft.Playwright;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.E2ETests.Infrastructure;
@@ -87,8 +88,8 @@ public class NotificationBellTests : SharedAuthenticatedTestBase
         await LoginAsAsync(user);
         await NavigateToAsync("/");
 
-        // Wait for Blazor Server's async initialization to complete
-        await Page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        // Wait for the interactive circuit to render (prerendered DOM replaced)
+        await Page.WaitForInteractiveAsync();
 
         // Assert - badge shows count of 3
         await Expect(NotificationBadge).ToBeVisibleAsync();
@@ -110,7 +111,7 @@ public class NotificationBellTests : SharedAuthenticatedTestBase
         // Now log in and navigate
         await LoginAsAsync(user);
         await NavigateToAsync("/");
-        await Page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        await Page.WaitForInteractiveAsync();
 
         // Act - click the notification bell
         await NotificationBellButton.ClickAsync();
@@ -143,7 +144,7 @@ public class NotificationBellTests : SharedAuthenticatedTestBase
         // Now log in and navigate
         await LoginAsAsync(user);
         await NavigateToAsync("/");
-        await Page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        await Page.WaitForInteractiveAsync();
 
         // Verify badge shows 2 unread
         await Expect(NotificationBadge).ToBeVisibleAsync();
@@ -177,7 +178,7 @@ public class NotificationBellTests : SharedAuthenticatedTestBase
         // Now log in and navigate
         await LoginAsAsync(user);
         await NavigateToAsync("/");
-        await Page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        await Page.WaitForInteractiveAsync();
 
         // Open dropdown
         await NotificationBellButton.ClickAsync();
@@ -222,7 +223,7 @@ public class NotificationBellTests : SharedAuthenticatedTestBase
         // Now log in and navigate
         await LoginAsAsync(user);
         await NavigateToAsync("/");
-        await Page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        await Page.WaitForInteractiveAsync();
 
         // Act - open dropdown
         await NotificationBellButton.ClickAsync();
@@ -265,7 +266,7 @@ public class NotificationBellTests : SharedAuthenticatedTestBase
         // Now log in and navigate
         await LoginAsAsync(user);
         await NavigateToAsync("/");
-        await Page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        await Page.WaitForInteractiveAsync();
 
         // Assert - badge only shows unread count (2, not 3)
         await Expect(NotificationBadge).ToBeVisibleAsync();
@@ -294,7 +295,7 @@ public class NotificationBellTests : SharedAuthenticatedTestBase
         // Now log in and navigate
         await LoginAsAsync(user);
         await NavigateToAsync("/");
-        await Page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        await Page.WaitForInteractiveAsync();
 
         // Assert - no badge visible (all read)
         await Expect(NotificationBadge).Not.ToBeVisibleAsync();

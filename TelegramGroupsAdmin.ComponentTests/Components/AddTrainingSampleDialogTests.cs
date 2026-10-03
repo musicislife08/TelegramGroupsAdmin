@@ -267,7 +267,7 @@ public class AddTrainingSampleDialogTests : AddTrainingSampleDialogTestContext
         // Assert
         provider.WaitForAssertion(() =>
         {
-            Assert.That(provider.Markup, Does.Contain("HAM - This message is legitimate/wanted"));
+            Assert.That(provider.Markup, Does.Contain("CLEAN - This message is legitimate/wanted"));
         });
     }
 
@@ -286,30 +286,6 @@ public class AddTrainingSampleDialogTests : AddTrainingSampleDialogTestContext
             Assert.That(provider.Markup, Does.Contain("mud-radio-group"));
         });
     }
-
-    #endregion
-
-    #region Source Select Tests
-
-    [Test]
-    public void HasSourceSelect()
-    {
-        // Arrange
-        var provider = RenderDialogProvider();
-
-        // Act
-        _ = OpenDialogAsync();
-
-        // Assert
-        provider.WaitForAssertion(() =>
-        {
-            Assert.That(provider.Markup, Does.Contain("Source"));
-            Assert.That(provider.Markup, Does.Contain("mud-select"));
-        });
-    }
-
-    // Note: MudSelect items are rendered via popover which requires JS interop.
-    // Testing specific select options is better suited for Playwright E2E tests.
 
     #endregion
 

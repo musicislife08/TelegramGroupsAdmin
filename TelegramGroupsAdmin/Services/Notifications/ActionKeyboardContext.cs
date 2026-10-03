@@ -10,4 +10,5 @@ internal sealed record ActionKeyboardContext(
     long EntityId,
     long ChatId,
     long UserId,
-    ReportType KeyboardType);
+    ReportType KeyboardType,
+    ExamOutcome? Outcome = null);

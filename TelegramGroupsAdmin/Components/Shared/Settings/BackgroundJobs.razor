@@ -160,7 +160,7 @@
                     <MudTextField @bind-Value="_editMessageRetention"
                                  Label="Message History"
                                  Variant="Variant.Outlined"
-                                 HelperText="e.g., 30d, 6M, 1y (spam/ham samples kept permanently)"
+                                 HelperText="e.g., 30d, 6M, 1y (spam/clean training samples kept permanently)"
                                  Error="@(!ValidateRetention(_editMessageRetention))"
                                  ErrorText="Invalid format. Use: 7d, 2w, 1M, 1y" />
 

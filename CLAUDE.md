@@ -17,7 +17,7 @@ https://github.com/musicislife08/TelegramGroupsAdmin
 - ALWAYS prefer new commits over amending
 - At session start, check `git branch` — if on master/develop, switch to a feature branch
 - Use heredoc for multi-line commits: `git commit -F- <<'EOF'`
-- Release workflow (develop → master), hotfix process, and Docker tag scheme are in context-keep memory
+- Release workflow (develop → master), hotfix process, and Docker tag scheme are in Hindsight memory (`Personal` bank; recall "TelegramGroupsAdmin release workflow")
 
 ## Design Philosophy
 
@@ -29,12 +29,13 @@ Use CSharperMcp tools (`find_symbol`, `find_references`, `get_diagnostics`) inst
 
 ## Critical Rules
 
+- **Integration/E2E tests use canonical (golden) data only** — never seed preconditions with SUT writes or raw inserts; when a shape is missing, flag-edit an unreferenced canonical row, never add one. Full rule: `.claude/rules/integration-test-data.md` (also injected by a PreToolUse hook when editing test files or superpowers plans/specs). This applies to the Testing section of every spec and plan.
 - Apply DB migrations with `dotnet run --migrate` or `dotnet run --migrate-only` (either flag works; both run migrations and exit cleanly).
 - Running the app normally locally is fine. The Telegram bot is disabled by default (`TelegramBotConfig.BotEnabled = false`, stored in the `configs` table at `chat_id=0` as JSONB) and only flipped on in prod, so there's no singleton conflict with the production instance. The one-connection-per-token constraint only applies in shared/prod environments.
 - EF Core: Modify models + AppDbContext FIRST → then `dotnet ef migrations add`
 - Prefer Fluent API in AppDbContext over custom SQL for schema configuration
 - Central Package Management: NuGet versions in `Directory.Packages.props`
 - No time estimates in docs or issues
-- MudBlazor v9 has breaking API changes — check context-keep memory before writing MudBlazor code
-- GitHub labels are custom — check context-keep memory before labeling issues/PRs
+- MudBlazor v9 has breaking API changes — recall Hindsight (`Personal` bank) and check the current MudBlazor docs before writing MudBlazor code
+- GitHub labels are custom — recall the label set from Hindsight (`Personal` bank) before labeling issues/PRs
 - NSubstitute 6 matcher lambdas are nullable-annotated: `Arg.Is<T>(x => x.Prop == y)` needs a null-forgiving `!` on the first dereference (`x!.Prop`). Never use `?.` instead — it makes a null argument silently compare `false` in `Returns()` configuration instead of throwing.

@@ -94,9 +94,19 @@ public record Actor
     /// <summary>
     /// Create actor from system identifier
     /// </summary>
-    public static Actor FromSystem(string systemIdentifier)
+    public static Actor FromSystem(string systemIdentifier) => new()
     {
-        var displayName = systemIdentifier switch
+        Type = ActorType.System,
+        SystemIdentifier = systemIdentifier,
+        DisplayName = SystemDisplayName(systemIdentifier)
+    };
+
+    /// <summary>
+    /// The human-readable name a system identifier is shown under (an unknown identifier is shown as is).
+    /// The Audit Log's Issued By filter maps a search term back through this to identifiers.
+    /// </summary>
+    public static string SystemDisplayName(string systemIdentifier) =>
+        systemIdentifier switch
         {
             SystemActorIds.AutoDetection => "Auto-Detection",
             SystemActorIds.BotProtection => "Bot Protection",
@@ -121,14 +131,6 @@ public record Actor
             SystemActorIds.BotChatService => "Bot Chat Service",
             _ => systemIdentifier
         };
-
-        return new Actor
-        {
-            Type = ActorType.System,
-            SystemIdentifier = systemIdentifier,
-            DisplayName = displayName
-        };
-    }
 
     // ============================================================================
     // Conversion to Database Columns

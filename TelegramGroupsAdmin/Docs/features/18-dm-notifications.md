@@ -34,6 +34,7 @@ Once both steps are complete, the Telegram DM channel becomes available in your 
 | **Message Reported** | Chat admins + global admins |
 | **Malware Detected** | Chat admins + global admins |
 | **Exam Failed** | Admins for that chat |
+| **Exam Passed** | Admins for that chat |
 | **Profile Scan Alert** | Chat admins + global admins |
 | **Chat Admin Changed** | Owners only |
 | **Chat Health Warning** | Owners only |

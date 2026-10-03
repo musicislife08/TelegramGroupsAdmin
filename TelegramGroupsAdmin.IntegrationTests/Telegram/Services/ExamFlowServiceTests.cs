@@ -449,7 +449,7 @@ public class ExamFlowServiceTests
     #region Exam Denial Teaser Cleanup Tests
 
     [Test]
-    public async Task DenyExamFailureAsync_FailedKick_DeletesTeaserMessage()
+    public async Task DenyExamResultAsync_FailedKick_DeletesTeaserMessage()
     {
         // Regression coverage for I2: step 1 writes welcome_responses.Response = Denied before
         // the kick runs. If the kick fails, BotModerationService's own cleanup never runs (it's
@@ -474,7 +474,7 @@ public class ExamFlowServiceTests
         var executor = Actor.WelcomeFlow;
 
         // Act
-        var result = await examFlowService.DenyExamFailureAsync(
+        var result = await examFlowService.DenyExamResultAsync(
             UserIdentity.From(user), chat, executor);
 
         // Assert
@@ -490,7 +490,7 @@ public class ExamFlowServiceTests
     }
 
     [Test]
-    public async Task DenyAndBanExamFailureAsync_FailedBan_DeletesTeaserMessage()
+    public async Task DenyAndBanExamResultAsync_FailedBan_DeletesTeaserMessage()
     {
         // Same defect class as the kick branch above, for the global-ban path.
         using var scope = _serviceProvider!.CreateScope();
@@ -512,7 +512,7 @@ public class ExamFlowServiceTests
         var executor = Actor.WelcomeFlow;
 
         // Act
-        var result = await examFlowService.DenyAndBanExamFailureAsync(
+        var result = await examFlowService.DenyAndBanExamResultAsync(
             UserIdentity.From(user), chat, executor);
 
         // Assert

@@ -117,6 +117,7 @@ public class AIContentCheckV2(
 
             // Use GetOrCreateAsync for cache-aside with stampede protection
             // Cache by content hash to avoid reprocessing identical messages
+            // Keyed by text only, on purpose: identical spam across chats reuses one AI call; history and chat are not part of the key
             var cacheKey = $"ai_check_{GetMessageHash(effectiveText)}";
             var cacheResult = await GetOrFetchAIResultAsync(cacheKey, req);
 
@@ -182,7 +183,7 @@ public class AIContentCheckV2(
                 wasCacheHit = false; // Factory called = cache miss
 
                 // Get message history for context (count from config)
-                var history = await messageContextProvider.GetRecentMessagesAsync(req.Chat, req.MessageHistoryCount, ct);
+                var history = await messageContextProvider.GetRecentMessagesAsync(req.Chat, req.MessageHistoryCount, req.MessageId, ct);
 
                 // Build prompts using the prompt builder
                 var prompts = AIPromptBuilder.CreatePrompts(req, history);

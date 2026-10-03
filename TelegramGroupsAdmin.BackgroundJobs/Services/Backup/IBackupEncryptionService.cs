@@ -9,7 +9,7 @@ public interface IBackupEncryptionService
     /// Encrypts backup JSON with passphrase-derived AES-256-GCM key
     /// </summary>
     /// <param name="jsonBytes">Unencrypted backup JSON data</param>
-    /// <param name="passphrase">User passphrase (min 12 chars recommended)</param>
+    /// <param name="passphrase">User passphrase (<see cref="TelegramGroupsAdmin.BackgroundJobs.Constants.EncryptionConstants.MinimumPassphraseLengthChars"/> or more characters recommended)</param>
     /// <returns>Encrypted backup with magic header, salt, and nonce</returns>
     byte[] EncryptBackup(byte[] jsonBytes, string passphrase);
 
@@ -36,7 +36,7 @@ public interface IBackupEncryptionService
     /// </summary>
     /// <param name="plaintext">Stream containing unencrypted backup data</param>
     /// <param name="cipherOutput">Stream to write encrypted output to</param>
-    /// <param name="passphrase">User passphrase (min 12 chars recommended)</param>
+    /// <param name="passphrase">User passphrase (<see cref="TelegramGroupsAdmin.BackgroundJobs.Constants.EncryptionConstants.MinimumPassphraseLengthChars"/> or more characters recommended)</param>
     void EncryptBackup(Stream plaintext, Stream cipherOutput, string passphrase);
 
     /// <summary>

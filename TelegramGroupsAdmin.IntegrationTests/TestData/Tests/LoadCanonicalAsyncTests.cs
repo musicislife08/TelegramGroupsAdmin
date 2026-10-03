@@ -21,7 +21,7 @@ public class LoadCanonicalAsyncTests
     public void TearDown() => _helper?.Dispose();
 
     [Test]
-    public async Task LoadCanonicalAsync_PopulatesAllThirtyFiveTables()
+    public async Task LoadCanonicalAsync_PopulatesAllThirtyThreeTables()
     {
         await using var ctx = _helper!.GetDbContext();
         await GoldenDataset.LoadCanonicalAsync(ctx, PostgresFixture.SharedDataProtectionProvider);
@@ -29,11 +29,13 @@ public class LoadCanonicalAsyncTests
         Assert.That(await ctx.Users.CountAsync(), Is.GreaterThan(0), "users");
         Assert.That(await ctx.TelegramUsers.CountAsync(), Is.GreaterThan(0), "telegram_users");
         Assert.That(await ctx.ManagedChats.CountAsync(), Is.GreaterThan(0), "managed_chats");
-        Assert.That(await ctx.Messages.CountAsync(), Is.EqualTo(407), "messages should be exactly 407");
-        Assert.That(await ctx.TrainingLabels.CountAsync(), Is.EqualTo(200), "training_labels should be exactly 200");
+        Assert.That(await ctx.Messages.CountAsync(), Is.EqualTo(409), "messages should be exactly 409");
         Assert.That(await ctx.WelcomeResponses.CountAsync(), Is.EqualTo(11), "welcome_responses should be exactly 11 (deliberate trim)");
-        // 5 tables are intentionally EMPTY in canonical: domain_filters, recovery_codes,
-        // image_training_samples, video_training_samples, web_notifications.
+        Assert.That(await ctx.BanCelebrationSubscribers.CountAsync(), Is.EqualTo(5),
+            "ban_celebration_subscribers should be exactly 5 (approved canonical addition 2026-09-25)");
+        Assert.That(await ctx.RecoveryCodes.CountAsync(), Is.EqualTo(GoldenDatasetConstants.WebUsers.StoredTotpGlobalAdminRecoveryCodeCount),
+            "recovery_codes should be exactly the StoredTotpGlobalAdmin set (canonical addition 2026-10-02)");
+        // 2 tables are intentionally EMPTY in canonical: domain_filters, web_notifications.
     }
 
     [Test]

@@ -31,7 +31,7 @@ public class ChatHealthRefreshOrchestrator(
     IBotChatService chatService,
     TelegramPhotoService photoService,
     IPhotoHashService photoHashService,
-    INotificationService notificationService,
+    IAdminNotificationService notificationService,
     ChatMetrics chatMetrics,
     ILogger<ChatHealthRefreshOrchestrator> logger) : IChatHealthRefreshOrchestrator
 {

@@ -1,6 +1,9 @@
+using System.Text.Json.Nodes;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using NUnit.Framework;
 using TelegramGroupsAdmin.IntegrationTests.Fixtures;
+using TelegramGroupsAdmin.Data.Constants;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
 
 namespace TelegramGroupsAdmin.IntegrationTests.TestData.Tests;
@@ -148,6 +151,178 @@ public class GoldenMutatePlanTests
     }
 
     [Test]
+    public async Task LockWebUser_SetsLockedUntilInTheFutureAndTheFailedAttemptCount()
+    {
+        var lockFor = TimeSpan.FromMinutes(30);
+
+        await using var ctx = _helper!.GetDbContext();
+        var before = await ctx.Users.AsNoTracking()
+            .Where(u => u.Id == GoldenDatasetConstants.WebUsers.NoTotpAdminId)
+            .Select(u => new { u.LockedUntil, u.FailedLoginAttempts }).SingleAsync();
+        Assert.That(before.LockedUntil, Is.Null, "canonical anchor must start unlocked");
+
+        var appliedAt = DateTimeOffset.UtcNow;
+        await GoldenDataset.Mutate(ctx)
+            .LockWebUser(GoldenDatasetConstants.WebUsers.NoTotpAdminId, lockFor)
+            .ApplyAsync();
+
+        var after = await ctx.Users.AsNoTracking()
+            .Where(u => u.Id == GoldenDatasetConstants.WebUsers.NoTotpAdminId)
+            .Select(u => new { u.LockedUntil, u.FailedLoginAttempts }).SingleAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(after.LockedUntil, Is.Not.Null);
+            Assert.That(after.LockedUntil!.Value, Is.EqualTo(appliedAt + lockFor).Within(TimeSpan.FromSeconds(5)),
+                "locked_until must be NOW() + lockFor");
+            Assert.That(after.FailedLoginAttempts, Is.EqualTo(GoldenMutatePlanBuilder.LockedFailedLoginAttempts));
+        }
+    }
+
+    [Test]
+    public async Task LockWebUser_DoesNotTouchOtherUsers()
+    {
+        await using var ctx = _helper!.GetDbContext();
+
+        await GoldenDataset.Mutate(ctx)
+            .LockWebUser(GoldenDatasetConstants.WebUsers.NoTotpAdminId, TimeSpan.FromMinutes(30))
+            .ApplyAsync();
+
+        var lockedOthers = await ctx.Users.AsNoTracking()
+            .CountAsync(u => u.Id != GoldenDatasetConstants.WebUsers.NoTotpAdminId
+                             && (u.LockedUntil != null || u.FailedLoginAttempts != 0));
+        Assert.That(lockedOthers, Is.Zero);
+    }
+
+    [Test]
+    public void LockWebUser_RejectsANonPositiveDuration()
+    {
+        using var ctx = _helper!.GetDbContext();
+        Assert.That(() => GoldenDataset.Mutate(ctx).LockWebUser(GoldenDatasetConstants.WebUsers.NoTotpAdminId, TimeSpan.Zero),
+            Throws.TypeOf<ArgumentOutOfRangeException>());
+    }
+
+    [Test]
+    public async Task LockWebUser_FailsLoudlyForAnUnknownUser()
+    {
+        await using var ctx = _helper!.GetDbContext();
+        var plan = GoldenDataset.Mutate(ctx).LockWebUser("00000000-0000-0000-0000-000000000000", TimeSpan.FromMinutes(1));
+
+        Assert.That(async () => await plan.ApplyAsync(), Throws.TypeOf<InvalidOperationException>());
+    }
+
+    [Test]
+    public async Task ShiftDetectionResultTimestamps_FailsLoudlyForAnUnknownId()
+    {
+        await using var ctx = _helper!.GetDbContext();
+        var plan = GoldenDataset.Mutate(ctx)
+            .ShiftDetectionResultTimestamps([new TimestampShift(long.MaxValue, TimeSpan.FromHours(1))]);
+
+        Assert.That(async () => await plan.ApplyAsync(), Throws.TypeOf<InvalidOperationException>());
+    }
+
+    [Test]
+    public async Task ShiftWelcomeResponseTimestamps_FailsLoudlyForAnUnknownId()
+    {
+        await using var ctx = _helper!.GetDbContext();
+        var plan = GoldenDataset.Mutate(ctx)
+            .ShiftWelcomeResponseTimestamps([new TimestampShift(long.MaxValue, TimeSpan.FromHours(1))]);
+
+        Assert.That(async () => await plan.ApplyAsync(), Throws.TypeOf<InvalidOperationException>());
+    }
+
+    [Test]
+    public async Task ShiftMessageTimestamps_FailsLoudlyForAnUnknownMessage()
+    {
+        await using var ctx = _helper!.GetDbContext();
+        var plan = GoldenDataset.Mutate(ctx)
+            .ShiftMessageTimestamps(long.MaxValue, [new TimestampShift(long.MaxValue, TimeSpan.FromHours(1))]);
+
+        Assert.That(async () => await plan.ApplyAsync(), Throws.TypeOf<InvalidOperationException>());
+    }
+
+    [Test]
+    public async Task ExtendTelegramUserWarnings_MovesEveryWarningExpiryToNowPlusDuration()
+    {
+        const long UserId = GoldenDatasetConstants.UsersPage.WarnedTrustedMemberId;
+        var expiresIn = TimeSpan.FromDays(30);
+
+        await using var ctx = _helper!.GetDbContext();
+        var before = await ctx.TelegramUsers.AsNoTracking()
+            .Where(u => u.TelegramUserId == UserId).Select(u => u.Warnings).SingleAsync();
+        Assert.That(before, Is.Not.Null.And.Not.Empty, "canonical anchor must carry at least one warning");
+        Assert.That(before!.All(w => w.ExpiresAt < DateTimeOffset.UtcNow), "canonical warnings are expired");
+
+        var appliedAt = DateTimeOffset.UtcNow;
+        await GoldenDataset.Mutate(ctx)
+            .ExtendTelegramUserWarnings(UserId, expiresIn)
+            .ApplyAsync();
+
+        var after = await ctx.TelegramUsers.AsNoTracking()
+            .Where(u => u.TelegramUserId == UserId).Select(u => u.Warnings).SingleAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(after, Has.Count.EqualTo(before.Count), "no warning is added or dropped");
+            foreach (var (original, extended) in before.Zip(after!))
+            {
+                Assert.That(extended.ExpiresAt, Is.Not.Null);
+                Assert.That(extended.ExpiresAt!.Value, Is.EqualTo(appliedAt + expiresIn).Within(TimeSpan.FromSeconds(5)),
+                    "ExpiresAt must be NOW() + expiresIn");
+                Assert.That(extended.IssuedAt, Is.EqualTo(original.IssuedAt), "IssuedAt is left alone");
+                Assert.That(extended.Reason, Is.EqualTo(original.Reason), "Reason is left alone");
+                Assert.That(extended.ActorType, Is.EqualTo(original.ActorType));
+                Assert.That(extended.ActorId, Is.EqualTo(original.ActorId));
+                Assert.That(extended.ChatId, Is.EqualTo(original.ChatId));
+                Assert.That(extended.MessageId, Is.EqualTo(original.MessageId));
+            }
+        }
+    }
+
+    [Test]
+    public async Task ExtendTelegramUserWarnings_DoesNotTouchOtherUsers()
+    {
+        const long Extended = GoldenDatasetConstants.UsersPage.WarnedTrustedMemberId;
+        const long Untouched = GoldenDatasetConstants.UsersPage.ExpiredWarningTrustedMemberId;
+
+        await using var ctx = _helper!.GetDbContext();
+        var untouchedBefore = await ctx.TelegramUsers.AsNoTracking()
+            .Where(u => u.TelegramUserId == Untouched).Select(u => u.Warnings).SingleAsync();
+
+        await GoldenDataset.Mutate(ctx)
+            .ExtendTelegramUserWarnings(Extended, TimeSpan.FromDays(30))
+            .ApplyAsync();
+
+        var untouchedAfter = await ctx.TelegramUsers.AsNoTracking()
+            .Where(u => u.TelegramUserId == Untouched).Select(u => u.Warnings).SingleAsync();
+        Assert.That(untouchedAfter!.Select(w => w.ExpiresAt), Is.EqualTo(untouchedBefore!.Select(w => w.ExpiresAt)));
+    }
+
+    [Test]
+    public void ExtendTelegramUserWarnings_RejectsANonPositiveDuration()
+    {
+        using var ctx = _helper!.GetDbContext();
+        Assert.That(
+            () => GoldenDataset.Mutate(ctx).ExtendTelegramUserWarnings(GoldenDatasetConstants.UsersPage.WarnedTrustedMemberId, TimeSpan.Zero),
+            Throws.TypeOf<ArgumentOutOfRangeException>());
+    }
+
+    [Test]
+    public async Task ExtendTelegramUserWarnings_FailsLoudlyForAUserWithoutWarnings()
+    {
+        await using var ctx = _helper!.GetDbContext();
+        var hasWarnings = await ctx.TelegramUsers.AsNoTracking()
+            .Where(u => u.TelegramUserId == GoldenDatasetConstants.UsersPage.KickedJoinerId)
+            .Select(u => u.Warnings != null && u.Warnings.Any()).SingleAsync();
+        Assert.That(hasWarnings, Is.False, "the kicked joiner must carry no warnings for this test to mean anything");
+
+        var plan = GoldenDataset.Mutate(ctx)
+            .ExtendTelegramUserWarnings(GoldenDatasetConstants.UsersPage.KickedJoinerId, TimeSpan.FromDays(1));
+
+        Assert.That(async () => await plan.ApplyAsync(), Throws.TypeOf<InvalidOperationException>());
+    }
+
+    [Test]
     public async Task ShiftMessageTimestamps_DoesNotTouchUnshiftedRows()
     {
         const long ChatId = -100026957614982L;
@@ -165,5 +340,77 @@ public class GoldenMutatePlanTests
         var untouchedAfter = await ctx.Messages.Where(m => m.MessageId == UntouchedMsgId && m.ChatId == ChatId)
             .Select(m => m.Timestamp).SingleAsync();
         Assert.That(untouchedAfter, Is.EqualTo(untouchedBefore));
+    }
+
+    private static async Task<JsonObject> ReadApiKeysAsync(Data.AppDbContext ctx)
+    {
+        var cipher = await ctx.Configs.AsNoTracking().Where(c => c.ChatId == 0).Select(c => c.ApiKeys).SingleAsync();
+        Assert.That(cipher, Is.Not.Null);
+        var plaintext = PostgresFixture.SharedDataProtectionProvider
+            .CreateProtector(DataProtectionPurposes.ApiKeys).Unprotect(cipher!);
+        return JsonNode.Parse(plaintext)!.AsObject();
+    }
+
+    [Test]
+    public async Task EnableSendGridApiKey_StoresTheKeyUnderTheApiKeysPurposeAndKeepsTheAiConnectionKeys()
+    {
+        const string ApiKey = "SG.canonical-mutate-test";
+
+        await using var ctx = _helper!.GetDbContext();
+        var before = await ReadApiKeysAsync(ctx);
+        Assert.That(before["sendGrid"], Is.Null, "canonical carries no SendGrid key");
+
+        await GoldenDataset.Mutate(ctx)
+            .EnableSendGridApiKey(PostgresFixture.SharedDataProtectionProvider, ApiKey)
+            .ApplyAsync();
+
+        var after = await ReadApiKeysAsync(ctx);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That((string?)after["sendGrid"], Is.EqualTo(ApiKey));
+            Assert.That(after["aiConnectionKeys"]!.ToJsonString(), Is.EqualTo(before["aiConnectionKeys"]!.ToJsonString()),
+                "the canonical AI connection keys are kept");
+        }
+    }
+
+    [Test]
+    public async Task EnableSendGridApiKey_DoesNotTouchTheSendGridConfigOrOtherConfigRows()
+    {
+        await using var ctx = _helper!.GetDbContext();
+        var before = await ctx.Configs.AsNoTracking().OrderBy(c => c.ChatId)
+            .Select(c => new { c.ChatId, c.SendGridConfig, c.WelcomeConfig, c.ApiKeys }).ToListAsync();
+
+        await GoldenDataset.Mutate(ctx)
+            .EnableSendGridApiKey(PostgresFixture.SharedDataProtectionProvider, "SG.canonical-mutate-test")
+            .ApplyAsync();
+
+        var after = await ctx.Configs.AsNoTracking().OrderBy(c => c.ChatId)
+            .Select(c => new { c.ChatId, c.SendGridConfig, c.WelcomeConfig, c.ApiKeys }).ToListAsync();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(after.Select(c => c.SendGridConfig), Is.EqualTo(before.Select(c => c.SendGridConfig)));
+            Assert.That(after.Select(c => c.WelcomeConfig), Is.EqualTo(before.Select(c => c.WelcomeConfig)));
+            Assert.That(after.Where(c => c.ChatId != 0).Select(c => c.ApiKeys), Is.EqualTo(before.Where(c => c.ChatId != 0).Select(c => c.ApiKeys)));
+        }
+    }
+
+    [Test]
+    public void EnableSendGridApiKey_RejectsABlankKey()
+    {
+        using var ctx = _helper!.GetDbContext();
+        Assert.That(
+            () => GoldenDataset.Mutate(ctx).EnableSendGridApiKey(PostgresFixture.SharedDataProtectionProvider, " "),
+            Throws.InstanceOf<ArgumentException>());
+    }
+
+    [Test]
+    public async Task EnableSendGridApiKey_FailsLoudlyWithoutAStoredApiKeysRow()
+    {
+        await using var ctx = _helper!.GetDbContext();
+        await ctx.Database.ExecuteSqlRawAsync("UPDATE configs SET api_keys = NULL WHERE chat_id = 0");
+
+        var plan = GoldenDataset.Mutate(ctx).EnableSendGridApiKey(PostgresFixture.SharedDataProtectionProvider, "SG.x");
+
+        Assert.That(async () => await plan.ApplyAsync(), Throws.TypeOf<InvalidOperationException>());
     }
 }

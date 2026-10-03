@@ -27,4 +27,15 @@ public static class SystemActorIds
     public const string ProfileDiffDetection = "profile_diff_detection";
     public const string WelcomeBypass = "welcome_bypass";
     public const string BotChatService = "bot_chat_service";
+
+    /// <summary>
+    /// Every identifier above, for code that maps a display-name search back to identifiers
+    /// (the Audit Log's Issued By filter). Keep in step with the constants; a unit test checks it.
+    /// </summary>
+    public static readonly IReadOnlyList<string> All =
+    [
+        AutoDetection, BotProtection, FileScanner, AutoTrust, Impersonation, AutoBan, Cas, LanguageWarning,
+        SystemSeed, InitialSeed, WebAdmin, ExamFlow, WelcomeFlow, TempbanExpiry, Unknown, ProfileScan,
+        UsernameBlacklist, Bootstrap, ProfileDiffDetection, WelcomeBypass, BotChatService,
+    ];
 }

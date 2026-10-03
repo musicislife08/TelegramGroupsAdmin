@@ -7,6 +7,7 @@ using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Models.Welcome;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
+using TelegramGroupsAdmin.Core.Imaging;
 using TelegramGroupsAdmin.Core.JobPayloads;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
@@ -130,6 +131,7 @@ public class WelcomeServiceTests
             NullLogger<TelegramPhotoService>.Instance,
             mockMediaService,
             mockChatServiceForPhoto,
+            new SkiaImageProcessor(),
             mockAppOptions);
 
         // --- Default mock behaviours ---

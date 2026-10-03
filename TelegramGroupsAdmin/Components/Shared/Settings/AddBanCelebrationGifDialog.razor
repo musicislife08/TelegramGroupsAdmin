@@ -154,7 +154,7 @@
             if (_activeTabIndex == 0 && _selectedFile != null)
             {
                 // Upload file
-                await using var stream = _selectedFile.OpenReadStream(maxAllowedSize: 50 * 1024 * 1024); // 50MB max
+                await using var stream = _selectedFile.OpenReadStream(maxAllowedSize: BanCelebrationGif.MaxFileBytes);
                 gif = await GifRepository.AddFromFileAsync(stream, _selectedFile.Name, _name);
             }
             else if (_activeTabIndex == 1 && !string.IsNullOrWhiteSpace(_url))

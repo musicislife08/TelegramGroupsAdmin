@@ -37,8 +37,15 @@ public interface ISystemConfigRepository
     /// Keys are stored encrypted in configs.api_keys JSONB column using Data Protection
     /// </summary>
     /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>API keys or null if not configured</returns>
+    /// <returns>API keys or null if not configured — or if stored keys could not be decrypted (logged)</returns>
     Task<ApiKeysConfig?> GetApiKeysAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Strict read of the API keys: tells "nothing stored" from "stored but undecryptable", for callers
+    /// that must fail closed. <see cref="GetApiKeysAsync"/> is this with both failure shapes collapsed to null.
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token</param>
+    Task<ApiKeysReadResult> ReadApiKeysAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Save API keys for external services (global only - chat_id = NULL)
@@ -55,8 +62,15 @@ public interface ISystemConfigRepository
     /// Configuration stored in configs.sendgrid_config JSONB column
     /// </summary>
     /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>SendGrid config or default if not configured</returns>
+    /// <returns>SendGrid config or default if not configured — or if the stored JSON is unreadable (logged)</returns>
     Task<SendGridConfig?> GetSendGridConfigAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Strict read of the SendGrid config: tells "not stored" from "stored but unreadable", for callers that
+    /// must fail closed. <see cref="GetSendGridConfigAsync"/> is this with both collapsed to a default config.
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token</param>
+    Task<SendGridConfigReadResult> ReadSendGridConfigAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Save SendGrid email service configuration (global only - chat_id = NULL)

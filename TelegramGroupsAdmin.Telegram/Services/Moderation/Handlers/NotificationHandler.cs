@@ -17,7 +17,7 @@ internal sealed record InviteLink(string DisplayName, string Url);
 
 /// <summary>
 /// Domain expert for all moderation-related notifications.
-/// Handles both user DM notifications and admin notifications via NotificationService.
+/// Handles both user DM notifications and admin notifications via AdminNotificationService.
 /// Called directly by orchestrator after successful actions.
 ///
 /// User DM notifications:
@@ -31,7 +31,7 @@ internal sealed record InviteLink(string DisplayName, string Url);
 public class NotificationHandler : INotificationHandler
 {
     private readonly INotificationOrchestrator _notificationOrchestrator;
-    private readonly INotificationService _notificationService;
+    private readonly IAdminNotificationService _notificationService;
     private readonly IManagedChatsRepository _managedChatsRepository;
     private readonly IBotChatService _chatService;
     private readonly IChatCache _chatCache;
@@ -39,7 +39,7 @@ public class NotificationHandler : INotificationHandler
 
     public NotificationHandler(
         INotificationOrchestrator notificationOrchestrator,
-        INotificationService notificationService,
+        IAdminNotificationService notificationService,
         IManagedChatsRepository managedChatsRepository,
         IBotChatService chatService,
         IChatCache chatCache,
@@ -268,6 +268,7 @@ public class NotificationHandler : INotificationHandler
     {
         var msg = enrichedMessage.Message;
         var detection = enrichedMessage.LatestDetection;
+        var evidence = enrichedMessage.LatestScan ?? detection;
 
         try
         {
@@ -278,9 +279,9 @@ public class NotificationHandler : INotificationHandler
                 : messageContent;
 
             // Truncate detection reason
-            var detectionReason = detection?.Reason is { Length: > 100 }
-                ? detection.Reason[..97] + "..."
-                : detection?.Reason;
+            var detectionReason = evidence?.Reason is { Length: > 100 }
+                ? evidence.Reason[..97] + "..."
+                : evidence?.Reason;
 
             // Get media paths from enriched message
             string? photoPath = null;
@@ -300,8 +301,8 @@ public class NotificationHandler : INotificationHandler
                 chat: msg.Chat,
                 user: msg.User,
                 bannedBy: detection?.AddedBy,
-                netScore: detection != null ? Math.Abs(detection.NetScore) : 0,
-                score: detection?.Score ?? 0,
+                netScore: evidence?.Score ?? 0,
+                score: evidence?.Score ?? 0,
                 detectionReason: detectionReason,
                 chatsAffected: chatsAffected,
                 messageDeleted: messageDeleted,

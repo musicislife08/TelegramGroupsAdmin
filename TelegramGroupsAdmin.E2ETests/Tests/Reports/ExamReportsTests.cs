@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Microsoft.Playwright;
 using TelegramGroupsAdmin.Data.Models;
 using TelegramGroupsAdmin.E2ETests.Infrastructure;
@@ -42,7 +43,7 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
             .BuildAsync();
 
         // Create exam failure
-        await new TestExamFailureBuilder(SharedFactory.Services)
+        await new TestExamResultBuilder(SharedFactory.Services)
             .WithUser(600001, "examuser", "Exam", "Taker")
             .InChat(chat)
             .WithScore(50, 80) // 50% score, 80% threshold (failed)
@@ -53,18 +54,10 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
         await _reportsPage.NavigateAsync();
         await _reportsPage.WaitForLoadAsync();
 
-        using (Assert.EnterMultipleScope())
-        {
-            // Assert
-            Assert.That(await _reportsPage.HasReportsAsync(), Is.True,
-                "Should display exam review when pending exam failure exists");
-
-            Assert.That(await _reportsPage.IsPendingExamChipVisibleAsync(), Is.True,
-                "Pending exam chip should be visible");
-
-            Assert.That(await _reportsPage.GetPendingExamCountAsync(), Is.GreaterThanOrEqualTo(1),
-                "Should show at least 1 pending exam review");
-        }
+        // Assert - exam review displayed, and the exam chip shows a pending count of at least 1
+        await Expect(_reportsPage.AnyReportTitle.First).ToBeVisibleAsync(new() { Timeout = 5000 });
+        await Expect(_reportsPage.PendingExamChip).ToBeVisibleAsync();
+        await Expect(_reportsPage.PendingExamChip).ToHaveTextAsync(ReportsPage.PendingCountAtLeastOne("Exam"));
     }
 
     [Test]
@@ -83,7 +76,7 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
             .WithName("Title", "Test")
             .BuildAsync();
 
-        await new TestExamFailureBuilder(SharedFactory.Services)
+        await new TestExamResultBuilder(SharedFactory.Services)
             .WithUser(600002, "titletest", "Title", "Test")
             .InChat(chat)
             .AsFailing()
@@ -113,7 +106,7 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
             .WithName("John", "Smith")
             .BuildAsync();
 
-        await new TestExamFailureBuilder(SharedFactory.Services)
+        await new TestExamResultBuilder(SharedFactory.Services)
             .WithUser(600003, "johnsmith", "John", "Smith")
             .InChat(chat)
             .AsFailing()
@@ -165,7 +158,7 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
             .WithName("Exam", "Fail")
             .BuildAsync();
 
-        await new TestExamFailureBuilder(SharedFactory.Services)
+        await new TestExamResultBuilder(SharedFactory.Services)
             .WithUser(600012, "examfail", "Exam", "Fail")
             .InChat(chat)
             .AsFailing()
@@ -182,16 +175,9 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
         await Expect(Page.GetByText("Exam Review", new() { Exact = true })).ToBeVisibleAsync();
         await Expect(Page.GetByText("Moderation Report", new() { Exact = true })).Not.ToBeVisibleAsync();
 
-        var examCount = await _reportsPage.GetExamReviewCountAsync();
-        var moderationCount = await _reportsPage.GetModerationReportCountAsync();
-
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(examCount, Is.GreaterThanOrEqualTo(1),
-                      "Should show exam reviews when filtered");
-            Assert.That(moderationCount, Is.EqualTo(0),
-                "Should not show moderation reports when filtered to exam reviews");
-        }
+        // At least one exam review, and no moderation report rendered at all
+        await Expect(_reportsPage.ExamReviewHeaders.First).ToBeVisibleAsync();
+        await Expect(_reportsPage.ModerationReportHeaders).ToHaveCountAsync(0);
     }
 
     [Test]
@@ -224,7 +210,7 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
             .WithName("AllTypes", "Exam")
             .BuildAsync();
 
-        await new TestExamFailureBuilder(SharedFactory.Services)
+        await new TestExamResultBuilder(SharedFactory.Services)
             .WithUser(600022, "alltypesexam", "AllTypes", "Exam")
             .InChat(chat)
             .AsFailing()
@@ -235,12 +221,9 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
         await _reportsPage.WaitForLoadAsync();
 
         // Default filter is "All Types"
-        // Assert - both report types should be visible
-        var examCount = await _reportsPage.GetExamReviewCountAsync();
-        var moderationCount = await _reportsPage.GetModerationReportCountAsync();
-
-        Assert.That(examCount + moderationCount, Is.GreaterThanOrEqualTo(2),
-            "Should show both exam reviews and moderation reports with All Types filter");
+        // Assert - both report types should be visible: at least two exam/moderation cards combined
+        await Expect(_reportsPage.ExamReviewHeaders.Or(_reportsPage.ModerationReportHeaders).Nth(1))
+            .ToBeVisibleAsync();
     }
 
     [Test]
@@ -287,7 +270,7 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
             .WithName("Exam", "Fail")
             .BuildAsync();
 
-        await new TestExamFailureBuilder(SharedFactory.Services)
+        await new TestExamResultBuilder(SharedFactory.Services)
             .WithUser(700005, "examfailuser", "Exam", "Fail")
             .InChat(chat)
             .AsFailing()
@@ -297,39 +280,23 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
         await _reportsPage.NavigateAsync();
         await _reportsPage.WaitForLoadAsync();
 
-        // Wait for all data to fully load (Blazor SignalR + async data fetching)
-        await Page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        // Wait for the interactive circuit; the assertions below retry until the data lands
+        await Page.WaitForInteractiveAsync();
 
         // Assert - All three types should be visible with default "All Types" filter
-        var moderationCount = await _reportsPage.GetModerationReportCountAsync();
-        var impersonationCount = await _reportsPage.GetImpersonationAlertCountAsync();
-        var examCount = await _reportsPage.GetExamReviewCountAsync();
-
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(moderationCount, Is.GreaterThanOrEqualTo(1),
-                "Should display at least 1 moderation report");
-            Assert.That(impersonationCount, Is.GreaterThanOrEqualTo(1),
-                "Should display at least 1 impersonation alert");
-            Assert.That(examCount, Is.GreaterThanOrEqualTo(1),
-                "Should display at least 1 exam review");
-        }
+        await Expect(_reportsPage.ModerationReportHeaders.First).ToBeVisibleAsync();
+        await Expect(_reportsPage.ImpersonationAlertHeaders.First).ToBeVisibleAsync();
+        await Expect(_reportsPage.ExamReviewHeaders.First).ToBeVisibleAsync();
 
         // Verify each card type header is visible
         await Expect(Page.GetByText("Moderation Report", new() { Exact = true })).ToBeVisibleAsync();
         await Expect(Page.GetByText("Impersonation Alert", new() { Exact = true })).ToBeVisibleAsync();
         await Expect(Page.GetByText("Exam Review", new() { Exact = true })).ToBeVisibleAsync();
 
-        using (Assert.EnterMultipleScope())
-        {
-            // Verify pending count chips show all types
-            Assert.That(await _reportsPage.IsPendingModerationChipVisibleAsync(), Is.True,
-                "Pending moderation chip should be visible");
-            Assert.That(await _reportsPage.IsPendingImpersonationChipVisibleAsync(), Is.True,
-                "Pending impersonation chip should be visible");
-            Assert.That(await _reportsPage.IsPendingExamChipVisibleAsync(), Is.True,
-                "Pending exam chip should be visible");
-        }
+        // Verify pending count chips show all types
+        await Expect(_reportsPage.PendingModerationChip).ToBeVisibleAsync();
+        await Expect(_reportsPage.PendingImpersonationChip).ToBeVisibleAsync();
+        await Expect(_reportsPage.PendingExamChip).ToBeVisibleAsync();
     }
 
     #endregion
@@ -358,7 +325,7 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
             .WithName("MC", "User")
             .BuildAsync();
 
-        await new TestExamFailureBuilder(SharedFactory.Services)
+        await new TestExamResultBuilder(SharedFactory.Services)
             .WithUser(600030, "mcuser", "MC", "User")
             .InChat(chat)
             .WithMcAnswers(
@@ -376,8 +343,7 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
         await _reportsPage.WaitForLoadAsync();
 
         // Assert
-        Assert.That(await _reportsPage.HasExamMcSectionAsync(), Is.True,
-            "Multiple Choice section should be visible");
+        await Expect(_reportsPage.ExamMcSection).ToBeVisibleAsync(new() { Timeout = 5000 });
     }
 
     [Test]
@@ -402,7 +368,7 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
             .WithName("Failed", "User")
             .BuildAsync();
 
-        await new TestExamFailureBuilder(SharedFactory.Services)
+        await new TestExamResultBuilder(SharedFactory.Services)
             .WithUser(600031, "faileduser", "Failed", "User")
             .InChat(chat)
             .WithScore(40, 80) // 40% score, 80% threshold (failed)
@@ -413,8 +379,7 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
         await _reportsPage.WaitForLoadAsync();
 
         // Assert
-        Assert.That(await _reportsPage.IsExamMcFailedAsync(), Is.True,
-            "Failed status should be visible for score below threshold");
+        await Expect(_reportsPage.ExamMcFailedChip).ToBeVisibleAsync(new() { Timeout = 5000 });
     }
 
     #endregion
@@ -443,7 +408,7 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
             .WithName("OpenEnded", "User")
             .BuildAsync();
 
-        await new TestExamFailureBuilder(SharedFactory.Services)
+        await new TestExamResultBuilder(SharedFactory.Services)
             .WithUser(600040, "openendeduser", "OpenEnded", "User")
             .InChat(chat)
             .WithOpenEndedAnswer("I want to join because I love technology and want to learn more.")
@@ -455,8 +420,7 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
         await _reportsPage.WaitForLoadAsync();
 
         // Assert
-        Assert.That(await _reportsPage.HasExamOpenEndedSectionAsync(), Is.True,
-            "Open-Ended Question section should be visible");
+        await Expect(_reportsPage.ExamOpenEndedSection).ToBeVisibleAsync(new() { Timeout = 5000 });
     }
 
     [Test]
@@ -481,7 +445,7 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
             .WithName("AIEval", "User")
             .BuildAsync();
 
-        await new TestExamFailureBuilder(SharedFactory.Services)
+        await new TestExamResultBuilder(SharedFactory.Services)
             .WithUser(600041, "aievaluser", "AIEval", "User")
             .InChat(chat)
             .WithOpenEndedAnswer(
@@ -495,8 +459,7 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
         await _reportsPage.WaitForLoadAsync();
 
         // Assert
-        Assert.That(await _reportsPage.HasExamAiEvaluationAsync(), Is.True,
-            "AI Evaluation section should be visible");
+        await Expect(_reportsPage.ExamAiEvaluation).ToBeVisibleAsync(new() { Timeout = 5000 });
     }
 
     #endregion
@@ -519,7 +482,7 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
             .WithName("Action", "User")
             .BuildAsync();
 
-        await new TestExamFailureBuilder(SharedFactory.Services)
+        await new TestExamResultBuilder(SharedFactory.Services)
             .WithUser(600050, "actionuser", "Action", "User")
             .InChat(chat)
             .AsFailing()
@@ -530,13 +493,10 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
         await _reportsPage.WaitForLoadAsync();
 
         // Assert - action buttons are visible
-        var buttons = await _reportsPage.GetVisibleActionButtonsAsync();
-        Assert.That(buttons, Has.Some.Contain("Approve"),
-            "Approve button should be visible");
-        Assert.That(buttons, Has.Some.Contain("Deny"),
-            "Deny button should be visible");
-        Assert.That(buttons, Has.Some.Contain("Ban").IgnoreCase,
-            "Deny + Ban button should be visible");
+        await Expect(_reportsPage.ActionButtonsMatching(new Regex("Approve")).First).ToBeVisibleAsync();
+        await Expect(_reportsPage.ActionButtonsMatching(new Regex("Deny")).First).ToBeVisibleAsync();
+        await Expect(_reportsPage.ActionButtonsMatching(new Regex("Ban", RegexOptions.IgnoreCase)).First)
+            .ToBeVisibleAsync();
     }
 
     [Test]
@@ -561,7 +521,7 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
             .WithName("Approve", "User")
             .BuildAsync();
 
-        await new TestExamFailureBuilder(SharedFactory.Services)
+        await new TestExamResultBuilder(SharedFactory.Services)
             .WithUser(600051, "approveuser", "Approve", "User")
             .InChat(chat)
             .AsFailing()
@@ -578,10 +538,8 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
         await _reportsPage.ClickApproveExamAsync();
 
         // Assert - snackbar confirms success (orchestrator is mocked to return success)
-        var snackbarText = await _reportsPage.WaitForSnackbarAsync();
-        Assert.That(snackbarText, Does.Contain("approved").IgnoreCase
-            .Or.Contain("success").IgnoreCase,
-            "Snackbar should confirm the approve action succeeded");
+        await Expect(_reportsPage.Snackbar)
+            .ToContainTextAsync(new Regex("approved|success"), new() { IgnoreCase = true });
     }
 
     [Test]
@@ -600,7 +558,7 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
             .WithName("Deny", "User")
             .BuildAsync();
 
-        await new TestExamFailureBuilder(SharedFactory.Services)
+        await new TestExamResultBuilder(SharedFactory.Services)
             .WithUser(600052, "denyuser", "Deny", "User")
             .InChat(chat)
             .AsFailing()
@@ -617,11 +575,8 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
         await _reportsPage.ClickDenyExamAsync();
 
         // Assert - snackbar confirms success (orchestrator is mocked to return success)
-        var snackbarText = await _reportsPage.WaitForSnackbarAsync();
-        Assert.That(snackbarText, Does.Contain("denied").IgnoreCase
-            .Or.Contain("kicked").IgnoreCase
-            .Or.Contain("success").IgnoreCase,
-            "Snackbar should confirm the deny action succeeded");
+        await Expect(_reportsPage.Snackbar)
+            .ToContainTextAsync(new Regex("denied|kicked|success"), new() { IgnoreCase = true });
     }
 
     [Test]
@@ -640,7 +595,7 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
             .WithName("DenyBan", "User")
             .BuildAsync();
 
-        await new TestExamFailureBuilder(SharedFactory.Services)
+        await new TestExamResultBuilder(SharedFactory.Services)
             .WithUser(600053, "denybanuser", "DenyBan", "User")
             .InChat(chat)
             .AsFailing()
@@ -657,11 +612,8 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
         await _reportsPage.ClickDenyAndBanExamAsync();
 
         // Assert - snackbar confirms success (orchestrator is mocked to return success)
-        var snackbarText = await _reportsPage.WaitForSnackbarAsync();
-        Assert.That(snackbarText, Does.Contain("banned").IgnoreCase
-            .Or.Contain("denied").IgnoreCase
-            .Or.Contain("success").IgnoreCase,
-            "Snackbar should confirm the deny + ban action succeeded");
+        await Expect(_reportsPage.Snackbar)
+            .ToContainTextAsync(new Regex("banned|denied|success"), new() { IgnoreCase = true });
     }
 
     #endregion
@@ -691,7 +643,7 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
             .BuildAsync();
 
         // Create already-reviewed exam failure
-        await new TestExamFailureBuilder(SharedFactory.Services)
+        await new TestExamResultBuilder(SharedFactory.Services)
             .WithUser(600060, "revieweduser", "Reviewed", "User")
             .InChat(chat)
             .AsFailing()
@@ -736,7 +688,7 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
             .BuildAsync();
 
         // Create approved exam failure
-        await new TestExamFailureBuilder(SharedFactory.Services)
+        await new TestExamResultBuilder(SharedFactory.Services)
             .WithUser(600061, "actiontakenuser", "ActionTaken", "User")
             .InChat(chat)
             .AsFailing()
@@ -752,6 +704,63 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
 
         // Assert - should show action taken (in card actions: "Action: approved")
         await Expect(Page.GetByText("Action: approved")).ToBeVisibleAsync();
+    }
+
+    #endregion
+
+    #region Passed Exam Tests
+
+    [Test]
+    public async Task PassedExam_VisibleUnderAllStatuses_WithAutoAdmittedChip()
+    {
+        // Arrange
+        await LoginAsOwnerAsync();
+
+        var chat = await new TestChatBuilder(SharedFactory.Services)
+            .WithTitle("Passed Exam Chat")
+            .BuildAsync();
+
+        await new TestTelegramUserBuilder(SharedFactory.Services)
+            .WithUserId(600080)
+            .WithUsername("passeduser")
+            .WithName("Passed", "User")
+            .BuildAsync();
+
+        await new TestExamResultBuilder(SharedFactory.Services)
+            .WithUser(600080, "passeduser", "Passed", "User")
+            .InChat(chat)
+            .AsPassed()
+            .WithOpenEndedAnswer("I love self-hosting and want to compare notes", "Genuine, on-topic answer")
+            .BuildAsync();
+
+        // Act
+        await _reportsPage.NavigateAsync();
+        await _reportsPage.WaitForLoadAsync();
+
+        // Passed exams are born reviewed, so they only show up once we widen the type/status filters
+        await _reportsPage.SelectTypeFilterAsync("Exam Reviews");
+        await _reportsPage.SelectStatusFilterAsync("All Statuses");
+
+        // Assert - card visible with the auto-admitted chip
+        await Expect(_reportsPage.ExamReviewHeaders).ToBeVisibleAsync();
+        await Expect(Page.GetByText("Passed — auto-admitted")).ToBeVisibleAsync();
+
+        var examCard = _reportsPage.ExamReviewCards.First;
+
+        // Assert - Dismiss/Deny/Deny+Ban are shown, Approve is not (this is an override, not a first decision)
+        await Expect(_reportsPage.ActionButtonsMatching(new Regex("Dismiss")).First).ToBeVisibleAsync();
+        await Expect(_reportsPage.ActionButtonsMatching(new Regex("Deny")).First).ToBeVisibleAsync();
+        await Expect(_reportsPage.ActionButtonsMatching(new Regex("Ban", RegexOptions.IgnoreCase)).First)
+            .ToBeVisibleAsync();
+
+        // Absence check runs after the buttons above are rendered, so it cannot pass early
+        await Expect(_reportsPage.ActionButtonsMatching(new Regex("Approve"))).ToHaveCountAsync(0);
+
+        // Act - switch to Pending Only
+        await _reportsPage.SelectStatusFilterAsync("Pending Only");
+
+        // Assert - the passed exam is not pending, so it disappears from the queue
+        await Expect(examCard).Not.ToBeVisibleAsync();
     }
 
     #endregion
@@ -774,7 +783,7 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
             .WithName("GlobalAdmin", "Exam")
             .BuildAsync();
 
-        await new TestExamFailureBuilder(SharedFactory.Services)
+        await new TestExamResultBuilder(SharedFactory.Services)
             .WithUser(600070, "globaladminexam", "GlobalAdmin", "Exam")
             .InChat(chat)
             .AsFailing()
@@ -785,8 +794,7 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
         await _reportsPage.WaitForLoadAsync();
 
         // Assert - GlobalAdmin should see exam reviews
-        Assert.That(await _reportsPage.HasReportsAsync(), Is.True,
-            "GlobalAdmin should be able to see exam reviews");
+        await Expect(_reportsPage.AnyReportTitle.First).ToBeVisibleAsync(new() { Timeout = 5000 });
     }
 
     [Test]
@@ -805,7 +813,7 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
             .WithName("Admin", "Exam")
             .BuildAsync();
 
-        await new TestExamFailureBuilder(SharedFactory.Services)
+        await new TestExamResultBuilder(SharedFactory.Services)
             .WithUser(600071, "adminexam", "Admin", "Exam")
             .InChat(chat)
             .AsFailing()
@@ -816,8 +824,7 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
         await _reportsPage.WaitForLoadAsync();
 
         // Assert - page loads (Admin may not see all reports, but can access page)
-        Assert.That(await _reportsPage.IsPageTitleVisibleAsync(), Is.True,
-            "Admin should be able to access reports page");
+        await Expect(_reportsPage.PageTitle).ToBeVisibleAsync();
     }
 
     #endregion

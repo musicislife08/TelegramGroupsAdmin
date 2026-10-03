@@ -71,6 +71,7 @@ public interface IBotMessageHandler
         string? caption,
         ParseMode? parseMode = null,
         InlineKeyboardMarkup? replyMarkup = null,
+        IReadOnlyList<MessageEntity>? captionEntities = null,
         CancellationToken ct = default);
 
     /// <summary>Delete a message.</summary>

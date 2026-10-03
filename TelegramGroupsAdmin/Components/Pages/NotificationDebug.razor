@@ -4,7 +4,7 @@
 @using TelegramGroupsAdmin.Core.Services
 @attribute [Authorize(Policy = AuthenticationConstants.PolicyOwnerOnly)]
 
-@inject INotificationService NotificationService
+@inject IAdminNotificationService AdminNotificationService
 @inject IWebPushNotificationService WebPushService
 @inject INotificationStateService NotificationState
 
@@ -179,13 +179,13 @@
 
             if (_deliveryMode == DeliveryMode.BackupFailed)
             {
-                results = await NotificationService.SendBackupFailedAsync(
+                results = await AdminNotificationService.SendBackupFailedAsync(
                     tableName: _subject,
                     error: _message);
             }
             else
             {
-                results = await NotificationService.SendChatHealthWarningAsync(
+                results = await AdminNotificationService.SendChatHealthWarningAsync(
                     chatName: _subject,
                     status: "Debug",
                     isAdmin: true,

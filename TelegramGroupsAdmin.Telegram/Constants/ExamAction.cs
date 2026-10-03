@@ -13,5 +13,8 @@ public enum ExamAction
     Deny = 1,
 
     /// <summary>Deny and ban user from chat (prevents repeat join spam)</summary>
-    DenyAndBan = 2
+    DenyAndBan = 2,
+
+    /// <summary>Acknowledge an auto-admit notification (pass records only; a failed exam is never dismissible)</summary>
+    Dismiss = 3
 }

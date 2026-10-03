@@ -48,7 +48,6 @@
         <PackageReference Include="Serilog.AspNetCore" />
         <PackageReference Include="Serilog.Sinks.OpenTelemetry" />
         <PackageReference Include="Serilog.Sinks.Seq" />
-        <PackageReference Include="SixLabors.ImageSharp" />
         <PackageReference Include="Telegram.Bot" />
         <PackageReference Include="TimeZoneConverter" />
     </ItemGroup>
@@ -77,6 +76,8 @@
     <!-- Allow unit tests to access internal members for testing prompt builders -->
     <ItemGroup>
       <InternalsVisibleTo Include="TelegramGroupsAdmin.UnitTests" />
+      <!-- Lets NSubstitute/Castle DynamicProxy build ILogger<T> proxies for internal T (e.g. AdminNotificationService) -->
+      <InternalsVisibleTo Include="DynamicProxyGenAssembly2" />
     </ItemGroup>
 
 </Project>

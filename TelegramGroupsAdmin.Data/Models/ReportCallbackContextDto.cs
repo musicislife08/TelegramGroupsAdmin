@@ -28,7 +28,7 @@ public class ReportCallbackContextDto
 
     /// <summary>
     /// Type of report. Repository maps to domain enum.
-    /// 0=ContentReport, 1=ImpersonationAlert, 2=ExamFailure
+    /// 0=ContentReport, 1=ImpersonationAlert, 2=ExamResult
     /// </summary>
     [Required]
     [Column("report_type")]

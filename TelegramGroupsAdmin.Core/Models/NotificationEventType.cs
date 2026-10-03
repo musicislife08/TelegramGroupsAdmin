@@ -16,5 +16,6 @@ public enum NotificationEventType
     ChatAdminChanged, // Phase 5.2: Notify admins when admins are promoted/demoted
     ExamFailed, // Notify admins when a user fails entrance exam and is sent to review
     TelegramSessionRevoked, // Notify admin when their WTelegram session is invalidated server-side
-    ProfileScanAlert // Notify admins when a profile scan detects suspicious content
+    ProfileScanAlert, // Notify admins when a profile scan detects suspicious content
+    ExamPassed // Notify admins when a user passes the entrance exam and is auto-admitted
 }

@@ -13,18 +13,6 @@ public class BackupEncryptionConfig
     public bool Enabled { get; set; }
 
     /// <summary>
-    /// Encryption algorithm identifier (for future extensibility)
-    /// Current: AES256-GCM
-    /// </summary>
-    public string Algorithm { get; set; } = "AES256-GCM";
-
-    /// <summary>
-    /// PBKDF2 iteration count (higher = slower but more secure)
-    /// Default: 100,000 iterations
-    /// </summary>
-    public int Iterations { get; set; } = 100000;
-
-    /// <summary>
     /// When encryption was first configured (UTC)
     /// </summary>
     public DateTimeOffset? CreatedAt { get; set; }

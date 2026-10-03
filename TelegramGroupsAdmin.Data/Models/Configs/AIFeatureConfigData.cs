@@ -21,11 +21,6 @@ public class AIFeatureConfigData
     public int MaxTokens { get; set; } = 500;
 
     /// <summary>
-    /// Temperature for API requests (0.0-2.0)
-    /// </summary>
-    public float Temperature { get; set; } = 1.0f;
-
-    /// <summary>
     /// Azure deployment name (required for AzureOpenAI connections)
     /// </summary>
     public string? AzureDeploymentName { get; set; }

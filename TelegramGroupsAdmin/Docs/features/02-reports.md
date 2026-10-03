@@ -1,8 +1,8 @@
 # Reports Queue - Moderation Central
 
-The **Reports** page is your central hub for reviewing and managing spam detections that need human judgment. This is where borderline spam (scores between 2.5-3.9 points), suspected impersonators, exam failures, and profile scan alerts land for your review.
+The **Reports** page is your central hub for reviewing and managing spam detections that need human judgment. This is where borderline spam (scores between 2.5-3.9 points), suspected impersonators, exam reviews, and profile scan alerts land for your review.
 
-**Think of it as**: Your moderation inbox - messages that aren't clearly spam or ham need your decision.
+**Think of it as**: Your moderation inbox - messages that aren't clearly spam or clean need your decision.
 
 ## Page Overview
 
@@ -10,7 +10,7 @@ The Reports page uses a unified queue with type filters:
 
 1. **Moderation Reports** - Spam detections needing manual review
 2. **Impersonation Alerts** - Suspected impersonators (duplicate photos, similar usernames)
-3. **Exam Reviews** - Users who failed the welcome exam and need manual approval
+3. **Exam Reviews** - Users who failed the welcome exam and need manual approval, plus users who passed and are available for admin override
 4. **Profile Scan Alerts** - Suspicious user profiles flagged by automated scanning
 
 All types follow the same workflow: **Review → Decide → Act → Train**
@@ -39,7 +39,7 @@ Each report displays:
 - **Spam score** - Overall spam score (e.g., "3.2 points")
 - **Check breakdown** - Which checks flagged it
 - **Status** - Pending, Resolved, Dismissed
-- **Action buttons** - Delete as Spam, Ban User, Warn, Dismiss
+- **Action buttons** - Delete as Spam, Ban User, Warn, Mark Clean, Dismiss
 
 [Screenshot: Moderation report card with all elements labeled]
 
@@ -62,9 +62,10 @@ The system uses **additive scoring** where each detection check contributes 0.0-
 - OR one check strongly flagged it, others abstained
 - OR patterns similar to spam but not enough combined signal
 
-**Your decision trains the ML algorithms!**
-- Mark as spam → ML learns this pattern is spam
-- Mark as ham → ML learns this pattern is legitimate
+**Your decision trains the ML algorithms!** A review-queued message is never used for training on its own - only your call makes it training data:
+- Delete as Spam → ML learns this pattern is spam
+- Mark Clean → ML learns this pattern is legitimate
+- Ban, Warn and Dismiss → no training (moderation only)
 
 ---
 
@@ -112,7 +113,7 @@ Ask yourself:
 
 ### Step 4: Make a Decision
 
-You have four options:
+You have five options. The same five buttons appear on the web report card and in the Telegram DM notification, and do exactly the same thing in both places.
 
 #### Option 1: Delete as Spam ✓
 
@@ -134,6 +135,7 @@ You have four options:
 - User is permanently banned from the group
 - Report marked as "Resolved"
 - Audit log entry created
+- Does NOT train ML (a ban is a moderation action; use Delete as Spam to also teach the model)
 
 **Example**: Known spammer account with repeated offenses
 
@@ -148,18 +150,29 @@ You have four options:
 
 **Example**: Slightly promotional content from a regular member
 
-#### Option 4: Dismiss ⊘
+#### Option 4: Mark Clean ✅
 
-**Choose this if**: You're unsure or the message is legitimate (false positive)
+**Choose this if**: The message is legitimate - the detection was a false positive
 
 **What happens**:
-- No action taken
+- Message stays, user is not banned
+- Added to clean training samples (trains ML)
+- Report marked as "Resolved"
+- The chat sees a "reviewed, no action taken" reply
+
+**Example**: Legitimate question about cryptocurrency that matched spam keywords
+
+#### Option 5: Dismiss 👁
+
+**Choose this if**: You've seen it and don't want to change anything (or you're unsure)
+
+**What happens**:
+- No action taken; whatever detection decided stays as-is
 - User not banned, message stays
 - Does NOT train ML (neutral)
 - Report marked as "Dismissed"
-- Can revisit later
 
-**Example**: Legitimate question about cryptocurrency that matched spam keywords
+**Example**: A borderline promotion you'd rather leave alone without teaching the model either way
 
 [Screenshot: Report detail view with action buttons]
 
@@ -176,11 +189,14 @@ flowchart TD
     B -->|Delete as Spam| C[Delete Message]
     B -->|Ban User| C2[Ban + Delete]
     B -->|Warn| D[Warn User]
+    B -->|Mark Clean| CL[Message Stays]
     B -->|Dismiss| E[No Action]
 
     C --> F[Train ML: This is Spam]
-    C2 --> F
-    E --> H[No ML Training]
+    CL --> G[Train ML: This is Clean]
+    C2 --> H[No ML Training]
+    D --> H
+    E --> H
 
     F --> I[Future Similar Messages Score Higher]
     G --> J[Future Similar Messages Score Lower]
@@ -222,7 +238,7 @@ flowchart TD
 - Only one weak check flagged it
 - Established user with good history
 - On-topic, legitimate question
-- **Decision**: Dismiss
+- **Decision**: Mark Clean
 
 **Borderline cases (investigate)**:
 - Mixed algorithm signals
@@ -263,7 +279,7 @@ flowchart TD
 
 **Review workflow**:
 1. Review every detection
-2. Mark as spam or ham consistently
+2. Delete as Spam or Mark Clean consistently
 3. Build confidence in system accuracy
 4. After 100+ reviews, transition to Production
 
@@ -347,6 +363,32 @@ For details on how profile scanning works, see **[Profile Scanning](08-profile-s
 
 ---
 
+## Exam Reviews
+
+The Exam Reviews filter shows completed entrance exams -- both failures awaiting manual approval and passes available for admin override.
+
+### Failed Exams
+
+When a user fails the welcome exam, they're held pending until an admin reviews the result:
+
+- **Approve** - Restores the user's permissions (overrides the failure)
+- **Deny** - Kicks the user from the chat
+- **Deny + Ban** - Kicks and permanently bans the user
+
+### Passed Exams
+
+Passing users are **auto-admitted immediately** -- a passed exam lands in the queue as a record of that auto-admit, not a pending decision. From a passed exam card, an admin can still override the auto-approval:
+
+- **Dismiss** - Acknowledges the auto-admit; no change to the user
+- **Deny** - Overrides the auto-approval and kicks the user
+- **Deny + Ban** - Overrides the auto-approval and permanently bans the user
+
+Only the first admin action on a passed exam takes effect -- if a second admin tries to act on the same record, they're told it's already been handled.
+
+Admins can also act on exam results directly from Telegram DM: **Exam Failed** notifications include Approve/Deny/Deny+Ban buttons, and **Exam Passed** notifications include Dismiss/Deny/Deny+Ban buttons. See **[Notifications](18-dm-notifications.md)**.
+
+---
+
 ## Status Filters
 
 All report types share two status filters:
@@ -374,7 +416,7 @@ All report types share two status filters:
 Currently planned but not implemented:
 - Select multiple reports
 - Bulk confirm spam
-- Bulk mark as ham
+- Bulk mark clean
 - Bulk dismiss
 
 **Workaround**: Review reports one-by-one (keyboard shortcuts help)
@@ -437,9 +479,9 @@ Track your moderation performance in Analytics page:
 - **Average time to resolve** - How long reports sit pending
 
 **Accuracy Metrics**:
-- **False positive rate** - % of reports marked as ham
+- **False positive rate** - % of reports marked clean
 - **False negative rate** - Spam that slipped through (scored below 2.5 points)
-- **ML training samples** - Total spam/ham samples collected
+- **ML training samples** - Total spam/clean samples collected
 
 **Action Stats**:
 - **Bans per day** - How many users banned
@@ -474,7 +516,7 @@ Track your moderation performance in Analytics page:
 **Solutions**:
 - **Review stop words list** - Remove overly broad keywords
 - **Whitelist common domains** - Add legitimate sites to URL whitelist
-- **Mark as ham consistently** - Train ML to recognize these patterns
+- **Mark Clean consistently** - Train ML to recognize these patterns
 - **Adjust check thresholds** - Fine-tune individual check sensitivity in Settings
 
 ### Impersonation alerts are all false positives
@@ -496,7 +538,7 @@ Track your moderation performance in Analytics page:
 1. **Open Reports** → Moderation Reports
 2. **Check pending count** - Should be <20 from overnight
 3. **Review from top to bottom**:
-   - Quick decisions on obvious spam/ham
+   - Quick decisions on obvious spam/clean
    - Dismiss borderline cases for later
 4. **Switch to Impersonation Alerts**
 5. **Check for new alerts**

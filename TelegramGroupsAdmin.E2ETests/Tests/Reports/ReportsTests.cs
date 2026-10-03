@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using TelegramGroupsAdmin.Data.Models;
 using TelegramGroupsAdmin.E2ETests.Infrastructure;
 using TelegramGroupsAdmin.E2ETests.PageObjects;
@@ -33,12 +34,8 @@ public class ReportsTests : SharedAuthenticatedTestBase
         await _reportsPage.WaitForLoadAsync();
 
         // Assert - page title is visible
-        Assert.That(await _reportsPage.IsPageTitleVisibleAsync(), Is.True,
-            "Reports page title should be visible");
-
-        var pageTitle = await _reportsPage.GetPageTitleAsync();
-        Assert.That(pageTitle, Is.EqualTo("Reports Queue"),
-            "Page title should be 'Reports Queue'");
+        await Expect(_reportsPage.PageTitle).ToBeVisibleAsync();
+        await Expect(_reportsPage.PageTitle).ToHaveTextAsync("Reports Queue");
     }
 
     [Test]
@@ -52,8 +49,7 @@ public class ReportsTests : SharedAuthenticatedTestBase
         await _reportsPage.WaitForLoadAsync();
 
         // Assert - page title is visible
-        Assert.That(await _reportsPage.IsPageTitleVisibleAsync(), Is.True,
-            "Owner should be able to view reports page");
+        await Expect(_reportsPage.PageTitle).ToBeVisibleAsync();
     }
 
     [Test]
@@ -63,7 +59,7 @@ public class ReportsTests : SharedAuthenticatedTestBase
         await Page.GotoAsync("/reports");
 
         // Assert - should redirect to login or register
-        await Expect(Page).ToHaveURLAsync(new System.Text.RegularExpressions.Regex("/(login|register)"));
+        await Expect(Page).ToHaveURLAsync(new Regex("/(login|register)"));
     }
 
     [Test]
@@ -78,12 +74,8 @@ public class ReportsTests : SharedAuthenticatedTestBase
         await _reportsPage.WaitForLoadAsync();
 
         // Assert - page title is visible (Admin can access)
-        Assert.That(await _reportsPage.IsPageTitleVisibleAsync(), Is.True,
-            "Reports page title should be visible for Admin");
-
-        var pageTitle = await _reportsPage.GetPageTitleAsync();
-        Assert.That(pageTitle, Is.EqualTo("Reports Queue"),
-            "Page title should be 'Reports Queue'");
+        await Expect(_reportsPage.PageTitle).ToBeVisibleAsync();
+        await Expect(_reportsPage.PageTitle).ToHaveTextAsync("Reports Queue");
     }
 
     [Test]
@@ -97,8 +89,7 @@ public class ReportsTests : SharedAuthenticatedTestBase
         await _reportsPage.WaitForLoadAsync();
 
         // Assert - filters are visible
-        Assert.That(await _reportsPage.AreFiltersVisibleAsync(), Is.True,
-            "Filters should be visible on Reports page");
+        await Expect(_reportsPage.Filters).ToBeVisibleAsync();
     }
 
     [Test]
@@ -111,15 +102,9 @@ public class ReportsTests : SharedAuthenticatedTestBase
         await _reportsPage.NavigateAsync();
         await _reportsPage.WaitForLoadAsync();
 
-        using (Assert.EnterMultipleScope())
-        {
-            // Assert - empty state message visible
-            Assert.That(await _reportsPage.IsEmptyStateVisibleAsync(), Is.True,
-                "Empty state should be visible when no reports exist");
-
-            Assert.That(await _reportsPage.IsAllReviewedMessageVisibleAsync(), Is.True,
-                "Should show 'All reports have been reviewed!' message for pending filter");
-        }
+        // Assert - empty state message visible, with the pending-filter wording
+        await Expect(_reportsPage.EmptyState).ToBeVisibleAsync();
+        await Expect(_reportsPage.AllReviewedMessage).ToBeVisibleAsync();
     }
 
     [Test]
@@ -148,18 +133,11 @@ public class ReportsTests : SharedAuthenticatedTestBase
         await _reportsPage.NavigateAsync();
         await _reportsPage.WaitForLoadAsync();
 
-        using (Assert.EnterMultipleScope())
-        {
-            // Assert
-            Assert.That(await _reportsPage.HasReportsAsync(), Is.True,
-                "Should display reports when pending reports exist");
-
-            Assert.That(await _reportsPage.IsPendingModerationChipVisibleAsync(), Is.True,
-                "Pending moderation chip should be visible");
-
-            Assert.That(await _reportsPage.GetPendingModerationCountAsync(), Is.GreaterThanOrEqualTo(1),
-                "Should show at least 1 pending moderation report");
-        }
+        // Assert - reports displayed, and the moderation chip shows a pending count of at least 1
+        await Expect(_reportsPage.AnyReportTitle.First).ToBeVisibleAsync(new() { Timeout = 5000 });
+        await Expect(_reportsPage.PendingModerationChip).ToBeVisibleAsync();
+        await Expect(_reportsPage.PendingModerationChip)
+            .ToHaveTextAsync(ReportsPage.PendingCountAtLeastOne("Moderation"));
     }
 
     [Test]
@@ -196,18 +174,11 @@ public class ReportsTests : SharedAuthenticatedTestBase
         await _reportsPage.NavigateAsync();
         await _reportsPage.WaitForLoadAsync();
 
-        using (Assert.EnterMultipleScope())
-        {
-            // Assert
-            Assert.That(await _reportsPage.HasReportsAsync(), Is.True,
-                "Should display alerts when pending impersonation alerts exist");
-
-            Assert.That(await _reportsPage.IsPendingImpersonationChipVisibleAsync(), Is.True,
-                "Pending impersonation chip should be visible");
-
-            Assert.That(await _reportsPage.GetPendingImpersonationCountAsync(), Is.GreaterThanOrEqualTo(1),
-                "Should show at least 1 pending impersonation alert");
-        }
+        // Assert - alerts displayed, and the impersonation chip shows a pending count of at least 1
+        await Expect(_reportsPage.AnyReportTitle.First).ToBeVisibleAsync(new() { Timeout = 5000 });
+        await Expect(_reportsPage.PendingImpersonationChip).ToBeVisibleAsync();
+        await Expect(_reportsPage.PendingImpersonationChip)
+            .ToHaveTextAsync(ReportsPage.PendingCountAtLeastOne("Impersonation"));
     }
 
     [Test]
@@ -264,16 +235,9 @@ public class ReportsTests : SharedAuthenticatedTestBase
         await Expect(Page.GetByText("Moderation Report", new() { Exact = true })).ToBeVisibleAsync();
         await Expect(Page.GetByText("Impersonation Alert", new() { Exact = true })).Not.ToBeVisibleAsync();
 
-        var moderationCount = await _reportsPage.GetModerationReportCountAsync();
-        var impersonationCount = await _reportsPage.GetImpersonationAlertCountAsync();
-
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(moderationCount, Is.GreaterThanOrEqualTo(1),
-                      "Should show moderation reports when filtered");
-            Assert.That(impersonationCount, Is.EqualTo(0),
-                "Should not show impersonation alerts when filtered to moderation");
-        }
+        // At least one moderation report, and no impersonation alert rendered at all
+        await Expect(_reportsPage.ModerationReportHeaders.First).ToBeVisibleAsync();
+        await Expect(_reportsPage.ImpersonationAlertHeaders).ToHaveCountAsync(0);
     }
 
     [Test]
@@ -330,16 +294,9 @@ public class ReportsTests : SharedAuthenticatedTestBase
         await Expect(Page.GetByText("Impersonation Alert", new() { Exact = true })).ToBeVisibleAsync();
         await Expect(Page.GetByText("Moderation Report", new() { Exact = true })).Not.ToBeVisibleAsync();
 
-        var moderationCount = await _reportsPage.GetModerationReportCountAsync();
-        var impersonationCount = await _reportsPage.GetImpersonationAlertCountAsync();
-
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(impersonationCount, Is.GreaterThanOrEqualTo(1),
-                      "Should show impersonation alerts when filtered");
-            Assert.That(moderationCount, Is.EqualTo(0),
-                "Should not show moderation reports when filtered to impersonation");
-        }
+        // At least one impersonation alert, and no moderation report rendered at all
+        await Expect(_reportsPage.ImpersonationAlertHeaders.First).ToBeVisibleAsync();
+        await Expect(_reportsPage.ModerationReportHeaders).ToHaveCountAsync(0);
     }
 
     [Test]
@@ -383,7 +340,9 @@ public class ReportsTests : SharedAuthenticatedTestBase
         await _reportsPage.NavigateAsync();
         await _reportsPage.WaitForLoadAsync();
 
-        // Get count with default Pending filter
+        // Get count with default Pending filter; sync on the rendered list first so the
+        // one-shot count cannot read a half-rendered page (a pending report was seeded above)
+        await Expect(_reportsPage.DisplayedReportHeaders.First).ToBeVisibleAsync();
         var pendingOnlyCount = await _reportsPage.GetDisplayedReportCountAsync();
 
         // Switch to All Statuses
@@ -394,11 +353,9 @@ public class ReportsTests : SharedAuthenticatedTestBase
         var statusSelectText = Page.Locator(".mud-select:has(#status-filter) div.mud-input-slot");
         await Expect(statusSelectText).ToHaveTextAsync("All Statuses");
 
-        var allStatusesCount = await _reportsPage.GetDisplayedReportCountAsync();
-
-        // Assert - All Statuses should show more or equal reports
-        Assert.That(allStatusesCount, Is.GreaterThanOrEqualTo(pendingOnlyCount),
-            "All Statuses filter should show at least as many reports as Pending Only");
+        // Assert - All Statuses should show more or equal reports: the pendingOnlyCount-th
+        // displayed report must exist (retries until the re-filtered list has rendered)
+        await Expect(_reportsPage.DisplayedReportHeaders.Nth(pendingOnlyCount - 1)).ToBeVisibleAsync();
     }
 
     [Test]
@@ -415,8 +372,7 @@ public class ReportsTests : SharedAuthenticatedTestBase
         await _reportsPage.ClickRefreshAsync();
 
         // Assert - page should still be loaded (no errors)
-        Assert.That(await _reportsPage.IsPageTitleVisibleAsync(), Is.True,
-            "Page should remain loaded after refresh");
+        await Expect(_reportsPage.PageTitle).ToBeVisibleAsync();
     }
 
     [Test]
@@ -454,15 +410,9 @@ public class ReportsTests : SharedAuthenticatedTestBase
         await _reportsPage.NavigateAsync();
         await _reportsPage.WaitForLoadAsync();
 
-        using (Assert.EnterMultipleScope())
-        {
-            // Assert - critical alert should be displayed
-            Assert.That(await _reportsPage.HasReportsAsync(), Is.True,
-                "Critical alert should be displayed");
-
-            Assert.That(await _reportsPage.IsPendingImpersonationChipVisibleAsync(), Is.True,
-                "Pending impersonation chip should be visible for critical alert");
-        }
+        // Assert - critical alert should be displayed, with the pending impersonation chip
+        await Expect(_reportsPage.AnyReportTitle.First).ToBeVisibleAsync(new() { Timeout = 5000 });
+        await Expect(_reportsPage.PendingImpersonationChip).ToBeVisibleAsync();
     }
 
     [Test]
@@ -508,10 +458,8 @@ public class ReportsTests : SharedAuthenticatedTestBase
         await _reportsPage.NavigateAsync();
         await _reportsPage.WaitForLoadAsync();
 
-        // Assert - GlobalAdmin sees reports from all chats
-        var totalCount = await _reportsPage.GetDisplayedReportCountAsync();
-        Assert.That(totalCount, Is.GreaterThanOrEqualTo(2),
-            "GlobalAdmin should see reports from all chats");
+        // Assert - GlobalAdmin sees reports from all chats: a second displayed report exists
+        await Expect(_reportsPage.DisplayedReportHeaders.Nth(1)).ToBeVisibleAsync();
     }
 
     [Test]
@@ -541,15 +489,19 @@ public class ReportsTests : SharedAuthenticatedTestBase
         await _reportsPage.NavigateAsync();
         await _reportsPage.WaitForLoadAsync();
 
-        // Filter to impersonation only (which doesn't exist)
+        // Sync on the seeded moderation report before filtering
+        await Expect(_reportsPage.ModerationReportHeaders).ToBeVisibleAsync();
+
+        // Widen to all statuses, then narrow to impersonation only (none exist). Reports.razor only
+        // renders "No reports match the selected filters." when the status filter is not Pending;
+        // with Pending it says "All reports have been reviewed!" instead.
+        await _reportsPage.SelectStatusFilterAsync("All Statuses");
         await _reportsPage.SelectTypeFilterAsync("Impersonation Alerts");
 
-        // Wait for Blazor to re-render - use web-first assertion
-        await Expect(Page.GetByText("No reports found")).ToBeVisibleAsync();
-
-        // Assert - should show empty state
-        Assert.That(await _reportsPage.IsEmptyStateVisibleAsync(), Is.True,
-            "Should show empty state when no reports match filter");
+        // Assert - empty state explains that the filters matched nothing
+        await Expect(_reportsPage.EmptyState).ToBeVisibleAsync();
+        await Expect(_reportsPage.NoMatchingFiltersMessage).ToBeVisibleAsync();
+        await Expect(_reportsPage.AllReviewedMessage).Not.ToBeVisibleAsync();
     }
 
     #region Dangerous Action Tests - NO CONFIRMATION
@@ -585,16 +537,14 @@ public class ReportsTests : SharedAuthenticatedTestBase
         await _reportsPage.WaitForLoadAsync();
 
         // Verify report card is visible before action
-        Assert.That(await _reportsPage.HasReportsAsync(), Is.True,
-            "Report should be visible before dismissing");
+        await Expect(_reportsPage.AnyReportTitle.First).ToBeVisibleAsync(new() { Timeout = 5000 });
 
         // Click dismiss - NO CONFIRMATION DIALOG
         await _reportsPage.ClickDismissAsync();
 
         // Assert - snackbar confirms action
-        var snackbarText = await _reportsPage.WaitForSnackbarAsync();
-        Assert.That(snackbarText, Does.Contain("dismiss").IgnoreCase.Or.Contain("processed").IgnoreCase,
-            "Snackbar should confirm the dismiss action");
+        await Expect(_reportsPage.Snackbar)
+            .ToContainTextAsync(new Regex("dismiss|processed"), new() { IgnoreCase = true });
     }
 
     /// <summary>
@@ -635,16 +585,14 @@ public class ReportsTests : SharedAuthenticatedTestBase
         await _reportsPage.WaitForLoadAsync();
 
         // Verify report exists
-        Assert.That(await _reportsPage.HasReportsAsync(), Is.True,
-            "Report should exist before action");
+        await Expect(_reportsPage.AnyReportTitle.First).ToBeVisibleAsync(new() { Timeout = 5000 });
 
         // Click Delete as Spam - NO CONFIRMATION DIALOG
         await _reportsPage.ClickDeleteAsSpamAsync();
 
         // Assert - snackbar confirms action
-        var snackbarText = await _reportsPage.WaitForSnackbarAsync();
-        Assert.That(snackbarText, Does.Contain("spam").IgnoreCase.Or.Contain("deleted").IgnoreCase.Or.Contain("banned").IgnoreCase,
-            "Snackbar should confirm the spam action");
+        await Expect(_reportsPage.Snackbar)
+            .ToContainTextAsync(new Regex("spam|deleted|banned"), new() { IgnoreCase = true });
     }
 
     /// <summary>
@@ -685,16 +633,14 @@ public class ReportsTests : SharedAuthenticatedTestBase
         await _reportsPage.WaitForLoadAsync();
 
         // Verify report exists
-        Assert.That(await _reportsPage.HasReportsAsync(), Is.True,
-            "Report should exist before action");
+        await Expect(_reportsPage.AnyReportTitle.First).ToBeVisibleAsync(new() { Timeout = 5000 });
 
         // Click Ban User - NO CONFIRMATION DIALOG
         await _reportsPage.ClickBanUserAsync();
 
         // Assert - snackbar confirms action
-        var snackbarText = await _reportsPage.WaitForSnackbarAsync();
-        Assert.That(snackbarText, Does.Contain("ban").IgnoreCase.Or.Contain("processed").IgnoreCase,
-            "Snackbar should confirm the ban action");
+        await Expect(_reportsPage.Snackbar)
+            .ToContainTextAsync(new Regex("ban|processed"), new() { IgnoreCase = true });
     }
 
     /// <summary>
@@ -745,9 +691,8 @@ public class ReportsTests : SharedAuthenticatedTestBase
         await _reportsPage.ClickConfirmAsync();
 
         // Assert - snackbar confirms action
-        var snackbarText = await _reportsPage.WaitForSnackbarAsync();
-        Assert.That(snackbarText, Does.Contain("confirm").IgnoreCase.Or.Contain("scam").IgnoreCase.Or.Contain("processed").IgnoreCase,
-            "Snackbar should confirm the verdict");
+        await Expect(_reportsPage.Snackbar)
+            .ToContainTextAsync(new Regex("confirm|scam|processed"), new() { IgnoreCase = true });
     }
 
     /// <summary>
@@ -798,9 +743,8 @@ public class ReportsTests : SharedAuthenticatedTestBase
         await _reportsPage.ClickTrustAsync();
 
         // Assert - snackbar confirms action
-        var snackbarText = await _reportsPage.WaitForSnackbarAsync();
-        Assert.That(snackbarText, Does.Contain("trust").IgnoreCase.Or.Contain("whitelist").IgnoreCase.Or.Contain("processed").IgnoreCase,
-            "Snackbar should confirm the trust action");
+        await Expect(_reportsPage.Snackbar)
+            .ToContainTextAsync(new Regex("trust|whitelist|processed"), new() { IgnoreCase = true });
     }
 
     /// <summary>
@@ -849,11 +793,8 @@ public class ReportsTests : SharedAuthenticatedTestBase
         await _reportsPage.ClickDismissAsync();
 
         // Assert - snackbar confirms action
-        var snackbarText = await _reportsPage.WaitForSnackbarAsync();
-        Assert.That(snackbarText, Does.Contain("dismiss").IgnoreCase
-            .Or.Contain("false positive").IgnoreCase
-            .Or.Contain("processed").IgnoreCase,
-            "Snackbar should confirm the false positive action");
+        await Expect(_reportsPage.Snackbar)
+            .ToContainTextAsync(new Regex("dismiss|false positive|processed"), new() { IgnoreCase = true });
     }
 
     /// <summary>
@@ -886,16 +827,14 @@ public class ReportsTests : SharedAuthenticatedTestBase
         await _reportsPage.WaitForLoadAsync();
 
         // Assert - action buttons are visible
-        Assert.That(await _reportsPage.HasActionButtonsVisibleAsync(), Is.True,
-            "Action buttons should be visible on pending reports");
+        await Expect(_reportsPage.ActionButtons.First).ToBeVisibleAsync();
 
-        var buttons = await _reportsPage.GetVisibleActionButtonsAsync();
-        Assert.That(buttons, Has.Some.Contain("Spam").IgnoreCase,
-            "Delete as Spam button should be visible");
-        Assert.That(buttons, Has.Some.Contain("Ban").IgnoreCase,
-            "Ban User button should be visible");
-        Assert.That(buttons, Has.Some.Contain("Dismiss").IgnoreCase,
-            "Dismiss button should be visible");
+        await Expect(_reportsPage.ActionButtonsMatching(new Regex("Spam", RegexOptions.IgnoreCase)).First)
+            .ToBeVisibleAsync();
+        await Expect(_reportsPage.ActionButtonsMatching(new Regex("Ban", RegexOptions.IgnoreCase)).First)
+            .ToBeVisibleAsync();
+        await Expect(_reportsPage.ActionButtonsMatching(new Regex("Dismiss", RegexOptions.IgnoreCase)).First)
+            .ToBeVisibleAsync();
     }
 
     #endregion

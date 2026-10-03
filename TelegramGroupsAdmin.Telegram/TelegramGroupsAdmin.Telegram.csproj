@@ -20,7 +20,6 @@
     <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
     <PackageReference Include="Microsoft.IO.RecyclableMemoryStream" />
-    <PackageReference Include="SixLabors.ImageSharp" />
     <PackageReference Include="Telegram.Bot" />
     <PackageReference Include="Testably.Abstractions" />
     <PackageReference Include="WTelegramClient" />

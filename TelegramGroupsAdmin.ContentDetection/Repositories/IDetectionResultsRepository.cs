@@ -1,4 +1,6 @@
 using TelegramGroupsAdmin.ContentDetection.Models;
+using TelegramGroupsAdmin.ContentDetection.Services;
+using TelegramGroupsAdmin.Core.Models;
 
 namespace TelegramGroupsAdmin.ContentDetection.Repositories;
 
@@ -7,10 +9,18 @@ namespace TelegramGroupsAdmin.ContentDetection.Repositories;
 /// </summary>
 public interface IDetectionResultsRepository
 {
-    /// <summary>
-    /// Insert a new detection result (spam or ham classification)
-    /// </summary>
-    Task InsertAsync(DetectionResultRecord result, CancellationToken cancellationToken = default);
+    /// <summary>Records a content-detection scan. The classification is decided by VerdictClassifier.</summary>
+    Task<DetectionResultRecord> RecordScanAsync(int messageId, long chatId, ContentDetectionResult scan, int editVersion, CancellationToken cancellationToken = default);
+
+    /// <summary>Records an attachment scan. Never becomes the message's verdict.</summary>
+    Task RecordFileScanAsync(int messageId, long chatId, bool infected, double score, string details, CancellationToken cancellationToken = default);
+
+    /// <summary>Records a decision (admin, auto-ban, dismiss, training page, exclusion). Latest event wins.</summary>
+    Task<long> RecordDecisionAsync(int messageId, long chatId, VerdictSource source, Actor actor, string reason,
+        bool? isSpam = null, long? auditLogId = null, CancellationToken cancellationToken = default);
+
+    /// <summary>The message's current verdict from message_verdicts; null only if the message does not exist.</summary>
+    Task<MessageVerdict?> GetCurrentVerdictAsync(int messageId, long chatId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Get detection result by ID
@@ -34,32 +44,28 @@ public interface IDetectionResultsRepository
     /// </summary>
     Task<List<(string MessageText, bool IsSpam)>> GetTrainingSamplesAsync(CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Get spam samples for similarity check (TF-IDF)
-    /// Returns only spam messages (is_spam=true)
-    /// </summary>
-    Task<List<string>> GetSpamSamplesForSimilarityAsync(int limit = 1000, CancellationToken cancellationToken = default);
-
     // REFACTOR-5: Removed IsUserTrustedAsync - use ITelegramUserRepository.IsTrustedAsync instead
     // Source of truth is telegram_users.is_trusted column
 
     /// <summary>
-    /// Get recent non-spam detection results for a user (global, not per-chat)
-    /// Used for auto-whitelisting after N consecutive non-spam messages
+    /// The user's latest <paramref name="limit"/> scanned messages (Unscanned excluded), global across
+    /// all chats, one row per message (latest version each), ordered by the message's post time,
+    /// newest first. Each row carries its current verdict and current text length. Used for
+    /// auto-whitelisting: UserAutoTrustService judges spam/short-message eligibility from this window.
     /// </summary>
     /// <param name="userId">Telegram user ID</param>
     /// <param name="limit">Max results to return (from config.FirstMessagesCount)</param>
-    /// <param name="minMessageLength">Only count messages with at least this many characters (prevents trust gaming)</param>
     /// <param name="cancellationToken">Cancellation token</param>
-    Task<List<DetectionResultRecord>> GetRecentNonSpamResultsForUserAsync(long userId, int limit, int minMessageLength, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<UserMessageVerdict>> GetRecentMessageVerdictsForUserAsync(long userId, int limit, CancellationToken cancellationToken = default);
 
     // ====================================================================================
     // Training Data Management Methods (for TrainingData.razor UI)
     // ====================================================================================
 
     /// <summary>
-    /// Get all training data records (detection_results WHERE used_for_training = true)
-    /// with JOIN to messages for full details
+    /// Get the curated training set: messages whose current verdict (from message_verdicts) is
+    /// in the curated classification set (ExplicitSpam, ExplicitHam, ImplicitSpam), with JOIN to
+    /// messages for full details.
     /// </summary>
     Task<List<DetectionResultRecord>> GetAllTrainingDataAsync(CancellationToken cancellationToken = default);
 
@@ -69,34 +75,14 @@ public interface IDetectionResultsRepository
     Task<TrainingDataStats> GetTrainingDataStatsAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Exclude a detection result from ML training data (sets used_for_training = false).
-    /// Does not modify the detection's classification or score — preserves append-only history.
-    /// </summary>
-    Task ExcludeFromTrainingAsync(long id, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Delete a detection result (hard delete)
-    /// Used when removing bad training samples
-    /// </summary>
-    Task DeleteDetectionResultAsync(long id, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Invalidate all training data for a specific message (set used_for_training = false).
-    /// Used before manual reclassification to prevent cross-class conflicts in Bayes training.
-    /// </summary>
-    Task InvalidateTrainingDataForMessageAsync(int messageId, long chatId, CancellationToken cancellationToken = default);
-
-    /// <summary>
     /// Add a manual training sample (creates message with chat_id=0, user_id=0 + detection_result)
-    /// Phase 4.20+: Supports optional translation data for non-English samples
-    /// Returns the ID of the created detection_result
+    /// Records it as a TrainingDataPage decision. Supports optional translation data for
+    /// non-English samples. Returns the ID of the created detection_result.
     /// </summary>
     Task<long> AddManualTrainingSampleAsync(
         string messageText,
         bool isSpam,
-        string source,
-        double? score,
-        string? addedBy,
+        Actor actor,
         string? translatedText = null,
         string? detectedLanguage = null,
         CancellationToken cancellationToken = default);
@@ -107,7 +93,7 @@ public interface IDetectionResultsRepository
 
     /// <summary>
     /// Get file scan results for UI display (paginated)
-    /// Filters by detection_source='file_scan' only
+    /// Filters by source = FileScan only
     /// </summary>
     /// <param name="limit">Maximum number of results to return</param>
     /// <param name="offset">Number of results to skip (for pagination)</param>
@@ -128,7 +114,7 @@ public interface IDetectionResultsRepository
 
     /// <summary>
     /// Get total count of file scan results (for pagination)
-    /// Filters by detection_source='file_scan' only
+    /// Filters by source = FileScan only
     /// </summary>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Total count of file scan results</returns>

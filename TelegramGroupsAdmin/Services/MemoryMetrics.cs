@@ -100,7 +100,7 @@ public sealed class MemoryMetrics
 
         // --- Native memory gap (RSS minus GC committed) ---
         // Stable gap = WTelegram + ML.NET + Kestrel SSL baseline.
-        // Growing gap = native memory leak. See context-keep: tga_perf_ml_retraining_loh
+        // Growing gap = native memory leak. See Hindsight memory (Personal bank): the TGA native memory investigation.
         meter.CreateObservableGauge(
             "tga.memory.native_gap",
             () =>

@@ -6,6 +6,7 @@ using MudBlazor.Services;
 using NSubstitute;
 using TelegramGroupsAdmin.Components.Shared.ChatManagement;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
+using TelegramGroupsAdmin.Core.JobPayloads;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
@@ -152,11 +153,15 @@ public class ChatActionsCellTests : ChatActionsCellTestContext
 
         JobScheduler.ScheduleJobAsync(
                 Arg.Any<string>(),
-                Arg.Any<object>(),
+                Arg.Any<ChatHealthCheckPayload>(),
                 Arg.Any<int>(),
                 Arg.Any<string?>(),
                 Arg.Any<CancellationToken>())
             .Returns("job-id-123");
+
+        // The context outlives a single test, so drop snackbars an earlier test left behind.
+        var snackbar = Services.GetRequiredService<ISnackbar>();
+        snackbar.Clear();
 
         var cut = Render<ChatActionsCell>(p => p.Add(x => x.ChatInfo, chatInfo));
 
@@ -168,10 +173,13 @@ public class ChatActionsCellTests : ChatActionsCellTestContext
         // Verify job was scheduled
         await JobScheduler.Received(1).ScheduleJobAsync(
             BackgroundJobNames.ChatHealthCheck,
-            Arg.Any<object>(),
+            Arg.Is<ChatHealthCheckPayload>(p => p!.ChatId == -100555),
             0, // delaySeconds
             Arg.Any<string?>(),
             Arg.Any<CancellationToken>());
+
+        Assert.That(snackbar.ShownSnackbars.Select(s => s.Severity).ToList(), Is.EqualTo(new[] { Severity.Success }),
+            "a success snackbar confirms the health refresh was queued");
     }
 
     [Test]

@@ -14,6 +14,9 @@ public class TelegramUserListItem : IUserDisplayInfo
     public string? LastName { get; set; }
     public string? UserPhotoPath { get; set; }
     public bool IsTrusted { get; set; }
+
+    /// <summary>False until the user passes the join gate (welcome / exam / profile review) or posts a message.</summary>
+    public bool IsActive { get; set; }
     public DateTimeOffset LastSeenAt { get; set; }
 
     // Computed stats

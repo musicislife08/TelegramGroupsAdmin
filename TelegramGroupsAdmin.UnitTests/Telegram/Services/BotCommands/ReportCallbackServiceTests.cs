@@ -39,6 +39,7 @@ public class ReportCallbackServiceTests
     private IReportCallbackContextRepository _mockCallbackContextRepo = null!;
     private IBotDmService _mockDmService = null!;
     private IReportActionsService _mockReportActionsService = null!;
+    private ITelegramPermissionService _mockPermissionService = null!;
 
     private ReportCallbackService _service = null!;
 
@@ -61,6 +62,13 @@ public class ReportCallbackServiceTests
             .Returns(_mockCallbackContextRepo);
         _mockServiceProvider.GetService(typeof(IBotDmService))
             .Returns(_mockDmService);
+
+        // The clicker is a chat admin unless a test says otherwise.
+        _mockPermissionService = Substitute.For<ITelegramPermissionService>();
+        _mockPermissionService.GetEffectiveLevelAsync(Arg.Any<long>(), Arg.Any<long>(), Arg.Any<CancellationToken>())
+            .Returns(PermissionLevel.Admin);
+        _mockServiceProvider.GetService(typeof(ITelegramPermissionService))
+            .Returns(_mockPermissionService);
 
         _service = new ReportCallbackService(
             _mockLogger,
@@ -179,6 +187,57 @@ public class ReportCallbackServiceTests
 
     #endregion
 
+    #region Click-Time Permission Tests
+
+    [Test]
+    public async Task HandleCallbackAsync_ClickerNoLongerAdmin_RejectsWithoutRouting()
+    {
+        SetupContext(ReportType.ContentReport);
+        _mockPermissionService.GetEffectiveLevelAsync(TestChatId, 99999, Arg.Any<CancellationToken>())
+            .Returns(PermissionLevel.Member);
+
+        await _service.HandleCallbackAsync(CreateCallbackQuery(data: $"rev:{TestContextId}:4"));
+
+        await _mockReportActionsService.DidNotReceiveWithAnyArgs().HandleContentCleanAsync(default, default!, default);
+        await _mockReportActionsService.DidNotReceiveWithAnyArgs().HandleContentSpamAsync(default, default!, default);
+        await _mockDmService.Received(1).EditDmTextAsync(
+            TestDmChatId, TestDmMessageId,
+            Arg.Is<string>(s => s!.Contains("no longer have permission")),
+            replyMarkup: null,
+            cancellationToken: Arg.Any<CancellationToken>());
+    }
+
+    [TestCase(PermissionLevel.Admin)]
+    [TestCase(PermissionLevel.GlobalAdmin)]
+    [TestCase(PermissionLevel.Owner)]
+    public async Task HandleCallbackAsync_ClickerIsAdminNow_Routes(PermissionLevel level)
+    {
+        SetupContext(ReportType.ContentReport);
+        _mockPermissionService.GetEffectiveLevelAsync(TestChatId, 99999, Arg.Any<CancellationToken>())
+            .Returns(level);
+        _mockReportActionsService.HandleContentCleanAsync(TestReportId, Arg.Any<Actor>(), Arg.Any<CancellationToken>())
+            .Returns(new ReviewActionResult(true, "Marked clean", "Clean"));
+
+        await _service.HandleCallbackAsync(CreateCallbackQuery(data: $"rev:{TestContextId}:4"));
+
+        await _mockReportActionsService.Received(1)
+            .HandleContentCleanAsync(TestReportId, Arg.Any<Actor>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task HandleCallbackAsync_ChecksPermissionInTheReportsChat()
+    {
+        SetupContext(ReportType.ContentReport);
+        _mockReportActionsService.HandleContentSpamAsync(TestReportId, Arg.Any<Actor>(), Arg.Any<CancellationToken>())
+            .Returns(new ReviewActionResult(true, "Spam done", "Spam"));
+
+        await _service.HandleCallbackAsync(CreateCallbackQuery(data: $"rev:{TestContextId}:0"));
+
+        await _mockPermissionService.Received(1).GetEffectiveLevelAsync(TestChatId, 99999, Arg.Any<CancellationToken>());
+    }
+
+    #endregion
+
     #region Content Report Routing Tests
 
     [Test]
@@ -233,8 +292,21 @@ public class ReportCallbackServiceTests
             .HandleContentDismissAsync(TestReportId, Arg.Any<Actor>(), cancellationToken: Arg.Any<CancellationToken>());
     }
 
+    [Test]
+    public async Task HandleCallbackAsync_ContentClean_RoutesToHandleContentCleanAsync()
+    {
+        SetupContext(ReportType.ContentReport);
+        _mockReportActionsService.HandleContentCleanAsync(TestReportId, Arg.Any<Actor>(), Arg.Any<CancellationToken>())
+            .Returns(new ReviewActionResult(true, "Marked clean", "Clean"));
+
+        await _service.HandleCallbackAsync(CreateCallbackQuery(data: $"rev:{TestContextId}:4"));
+
+        await _mockReportActionsService.Received(1)
+            .HandleContentCleanAsync(TestReportId, Arg.Any<Actor>(), Arg.Any<CancellationToken>());
+    }
+
     [TestCase(-1)]
-    [TestCase(4)]
+    [TestCase(5)]
     [TestCase(99)]
     public async Task HandleCallbackAsync_ContentInvalidAction_ReturnsInvalidAction(int invalidAction)
     {
@@ -316,7 +388,7 @@ public class ReportCallbackServiceTests
     [Test]
     public async Task HandleCallbackAsync_ExamApprove_RoutesCorrectly()
     {
-        SetupContext(ReportType.ExamFailure);
+        SetupContext(ReportType.ExamResult);
         _mockReportActionsService.HandleExamApproveAsync(TestReportId, Arg.Any<Actor>(), Arg.Any<CancellationToken>())
             .Returns(new ReviewActionResult(true, "Approved"));
 
@@ -329,7 +401,7 @@ public class ReportCallbackServiceTests
     [Test]
     public async Task HandleCallbackAsync_ExamDeny_RoutesCorrectly()
     {
-        SetupContext(ReportType.ExamFailure);
+        SetupContext(ReportType.ExamResult);
         _mockReportActionsService.HandleExamDenyAsync(TestReportId, Arg.Any<Actor>(), Arg.Any<CancellationToken>())
             .Returns(new ReviewActionResult(true, "Denied"));
 
@@ -342,7 +414,7 @@ public class ReportCallbackServiceTests
     [Test]
     public async Task HandleCallbackAsync_ExamDenyAndBan_RoutesCorrectly()
     {
-        SetupContext(ReportType.ExamFailure);
+        SetupContext(ReportType.ExamResult);
         _mockReportActionsService.HandleExamDenyAndBanAsync(TestReportId, Arg.Any<Actor>(), Arg.Any<CancellationToken>())
             .Returns(new ReviewActionResult(true, "Banned"));
 
@@ -352,12 +424,25 @@ public class ReportCallbackServiceTests
             .HandleExamDenyAndBanAsync(TestReportId, Arg.Any<Actor>(), Arg.Any<CancellationToken>());
     }
 
+    [Test]
+    public async Task HandleCallbackAsync_ExamDismiss_RoutesCorrectly()
+    {
+        SetupContext(ReportType.ExamResult);
+        _mockReportActionsService.HandleExamDismissAsync(TestReportId, Arg.Any<Actor>(), Arg.Any<CancellationToken>())
+            .Returns(new ReviewActionResult(true, "Dismissed"));
+
+        await _service.HandleCallbackAsync(CreateCallbackQuery(data: $"rev:{TestContextId}:3"));
+
+        await _mockReportActionsService.Received(1)
+            .HandleExamDismissAsync(TestReportId, Arg.Any<Actor>(), Arg.Any<CancellationToken>());
+    }
+
     [TestCase(-1)]
-    [TestCase(3)]
+    [TestCase(4)]
     [TestCase(99)]
     public async Task HandleCallbackAsync_ExamInvalidAction_ReturnsInvalidAction(int invalidAction)
     {
-        SetupContext(ReportType.ExamFailure);
+        SetupContext(ReportType.ExamResult);
 
         await _service.HandleCallbackAsync(CreateCallbackQuery(data: $"rev:{TestContextId}:{invalidAction}"));
 
@@ -494,6 +579,59 @@ public class ReportCallbackServiceTests
     }
 
     [Test]
+    public async Task HandleCallbackAsync_TextMessageWithMention_KeepsEntitiesOnEdit()
+    {
+        SetupContext(ReportType.ContentReport);
+        _mockReportActionsService.HandleContentBanAsync(TestReportId, Arg.Any<Actor>(), Arg.Any<CancellationToken>())
+            .Returns(new ReviewActionResult(true, "User banned"));
+
+        MessageEntity[] entities =
+        [
+            new() { Type = MessageEntityType.TextMention, Offset = 6, Length = 5, User = new User { Id = 42, FirstName = "Alice" } }
+        ];
+        var callback = CreateCallbackQuery(
+            data: $"rev:{TestContextId}:1",
+            messageText: "User: Alice reported",
+            entities: entities);
+
+        await _service.HandleCallbackAsync(callback);
+
+        await _mockDmService.Received(1).EditDmTextAsync(
+            TestDmChatId, TestDmMessageId,
+            Arg.Is<string>(s => s!.StartsWith("User: Alice reported") && s.Contains("User banned")),
+            replyMarkup: null,
+            entities: entities,
+            cancellationToken: Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task HandleCallbackAsync_PhotoCaptionWithMention_KeepsCaptionEntitiesOnEdit()
+    {
+        SetupContext(ReportType.ContentReport);
+        _mockReportActionsService.HandleContentBanAsync(TestReportId, Arg.Any<Actor>(), Arg.Any<CancellationToken>())
+            .Returns(new ReviewActionResult(true, "User banned"));
+
+        MessageEntity[] captionEntities =
+        [
+            new() { Type = MessageEntityType.TextMention, Offset = 6, Length = 5, User = new User { Id = 42, FirstName = "Alice" } }
+        ];
+        var callback = CreateCallbackQuery(
+            data: $"rev:{TestContextId}:1",
+            messageCaption: "User: Alice reported",
+            hasPhoto: true,
+            captionEntities: captionEntities);
+
+        await _service.HandleCallbackAsync(callback);
+
+        await _mockDmService.Received(1).EditDmCaptionAsync(
+            TestDmChatId, TestDmMessageId,
+            Arg.Is<string>(s => s!.StartsWith("User: Alice reported") && s.Contains("User banned")),
+            replyMarkup: null,
+            captionEntities: captionEntities,
+            cancellationToken: Arg.Any<CancellationToken>());
+    }
+
+    [Test]
     public async Task HandleCallbackAsync_NullMessage_SkipsMessageUpdate()
     {
         SetupContext(ReportType.ContentReport);
@@ -515,7 +653,7 @@ public class ReportCallbackServiceTests
 
         // But no DM update
         await _mockDmService.DidNotReceiveWithAnyArgs()
-            .EditDmTextAsync(default, default, default!, default, default);
+            .EditDmTextAsync(default, default, default!, default, default, default);
     }
 
     [Test]
@@ -528,6 +666,7 @@ public class ReportCallbackServiceTests
         _mockDmService.EditDmTextAsync(
                 Arg.Any<long>(), Arg.Any<int>(), Arg.Any<string>(),
                 Arg.Any<InlineKeyboardMarkup?>(),
+                Arg.Any<IReadOnlyList<MessageEntity>?>(),
                 Arg.Any<CancellationToken>())
             .ThrowsAsync(new Exception("DM edit failed"));
 
@@ -603,7 +742,9 @@ public class ReportCallbackServiceTests
         string? messageText = null,
         string? messageCaption = null,
         bool hasPhoto = false,
-        bool hasVideo = false)
+        bool hasVideo = false,
+        MessageEntity[]? entities = null,
+        MessageEntity[]? captionEntities = null)
     {
         Message? message = null;
         if (messageText != null || messageCaption != null || hasPhoto || hasVideo)
@@ -613,7 +754,9 @@ public class ReportCallbackServiceTests
                 Chat = new Chat { Id = TestDmChatId },
                 Id = TestDmMessageId,
                 Text = messageText,
+                Entities = entities,
                 Caption = messageCaption,
+                CaptionEntities = captionEntities,
                 Photo = hasPhoto ? [new PhotoSize { FileId = "photo1", FileUniqueId = "u1", Width = 100, Height = 100 }] : null,
                 Video = hasVideo ? new Video { FileId = "video1", FileUniqueId = "u2", Width = 100, Height = 100, Duration = 10 } : null
             };

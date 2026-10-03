@@ -1,3 +1,4 @@
+using TelegramGroupsAdmin.Configuration.Models;
 using TelegramGroupsAdmin.Configuration.Repositories;
 
 namespace TelegramGroupsAdmin.Services;
@@ -20,30 +21,50 @@ public class FeatureAvailabilityService : IFeatureAvailabilityService
     }
 
     public async Task<bool> IsEmailConfiguredAsync()
+        => await GetEmailConfigurationStateAsync() == EmailConfigurationState.Enabled;
+
+    public async Task<EmailConfigurationState> GetEmailConfigurationStateAsync()
     {
         try
         {
-            // Check if SendGrid is enabled in database config
-            var sendGridConfig = await _configRepo.GetSendGridConfigAsync();
+            // Check if SendGrid is enabled in database config. Stored-but-unreadable JSON is not "disabled":
+            // the service may well be configured, so the answer is unknown and callers must fail closed.
+            var sendGridRead = await _configRepo.ReadSendGridConfigAsync();
+            if (sendGridRead.Status == SendGridConfigReadStatus.Unreadable)
+            {
+                _logger.LogError("Email configuration state is indeterminate: stored SendGrid config could not be read");
+                return EmailConfigurationState.Indeterminate;
+            }
+
+            var sendGridConfig = sendGridRead.Config;
             if (sendGridConfig?.Enabled != true)
             {
-                return false;
+                return EmailConfigurationState.Disabled;
             }
 
             // Check if required fields are configured
             if (string.IsNullOrWhiteSpace(sendGridConfig.FromAddress))
             {
-                return false;
+                return EmailConfigurationState.Disabled;
             }
 
-            // Check if API key is configured in database
-            var apiKeys = await _configRepo.GetApiKeysAsync();
-            return !string.IsNullOrWhiteSpace(apiKeys?.SendGrid);
+            // Check if API key is configured in database. Stored-but-undecryptable keys are not "no key":
+            // the service may well be configured, so the answer is unknown and callers must fail closed.
+            var apiKeys = await _configRepo.ReadApiKeysAsync();
+            if (apiKeys.Status == ApiKeysReadStatus.Undecryptable)
+            {
+                _logger.LogError("Email configuration state is indeterminate: stored API keys could not be decrypted");
+                return EmailConfigurationState.Indeterminate;
+            }
+
+            return string.IsNullOrWhiteSpace(apiKeys.Keys?.SendGrid)
+                ? EmailConfigurationState.Disabled
+                : EmailConfigurationState.Enabled;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to check email configuration status");
-            return false;
+            return EmailConfigurationState.Indeterminate;
         }
     }
 
@@ -96,12 +117,6 @@ public class FeatureAvailabilityService : IFeatureAvailabilityService
     public Task<bool> IsPasswordResetEnabledAsync()
     {
         // Password reset requires email service
-        return IsEmailConfiguredAsync();
-    }
-
-    public Task<bool> IsEmailVerificationEnabledAsync()
-    {
-        // Email verification requires email service
         return IsEmailConfiguredAsync();
     }
 

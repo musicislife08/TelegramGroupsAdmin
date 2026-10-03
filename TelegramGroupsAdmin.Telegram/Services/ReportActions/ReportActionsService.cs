@@ -44,6 +44,11 @@ internal sealed class ReportActionsService(
             scope.ServiceProvider.GetRequiredService<IContentReportHandler>()
                 .DismissAsync(reportId, executor, reason, cancellationToken: cancellationToken), cancellationToken);
 
+    public Task<ReviewActionResult> HandleContentCleanAsync(long reportId, Actor executor, CancellationToken cancellationToken)
+        => ExecuteWithLockAsync(reportId, "content", "clean", scope =>
+            scope.ServiceProvider.GetRequiredService<IContentReportHandler>()
+                .CleanAsync(reportId, executor, cancellationToken: cancellationToken), cancellationToken);
+
     // Profile scan actions
     public Task<ReviewActionResult> HandleProfileScanBanAsync(long alertId, Actor executor, CancellationToken cancellationToken)
         => ExecuteWithLockAsync(alertId, "profile_scan", "ban", scope =>
@@ -91,6 +96,11 @@ internal sealed class ReportActionsService(
         => ExecuteWithLockAsync(examId, "exam_failure", "deny_and_ban", scope =>
             scope.ServiceProvider.GetRequiredService<IExamHandler>()
                 .DenyAndBanAsync(examId, executor, cancellationToken: cancellationToken), cancellationToken);
+
+    public Task<ReviewActionResult> HandleExamDismissAsync(long examId, Actor executor, CancellationToken cancellationToken)
+        => ExecuteWithLockAsync(examId, "exam_failure", "dismiss", scope =>
+            scope.ServiceProvider.GetRequiredService<IExamHandler>()
+                .DismissAsync(examId, executor, cancellationToken: cancellationToken), cancellationToken);
 
     private async Task<ReviewActionResult> ExecuteWithLockAsync(
         long reportId,

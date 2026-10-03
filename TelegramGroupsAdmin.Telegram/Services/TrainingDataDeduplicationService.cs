@@ -53,11 +53,12 @@ public class TrainingDataDeduplicationService(
             {
                 Id = s.Id,
                 MessageId = s.MessageId,
+                ChatId = s.ChatId,
                 MessageText = s.MessageText ?? string.Empty,
                 ContentHash = s.ContentHash,
                 IsSpam = s.IsSpam,
                 Score = s.Score,
-                DetectionSource = s.DetectionSource,
+                Source = s.Source,
                 DetectedAt = s.DetectedAt,
                 AddedBy = s.AddedBy
             })

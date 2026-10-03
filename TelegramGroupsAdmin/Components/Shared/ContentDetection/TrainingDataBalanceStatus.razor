@@ -38,7 +38,7 @@
                         <div style="width: @GetCurrentHamPercentage()%; background: var(--mud-palette-success);"></div>
                     </div>
                     <MudText Typo="Typo.caption" Color="Color.Default">
-                        Spam: @_currentModelMetadata.SpamSampleCount | Ham: @_currentModelMetadata.HamSampleCount
+                        Spam: @_currentModelMetadata.SpamSampleCount | Clean: @_currentModelMetadata.HamSampleCount
                     </MudText>
                 </MudStack>
             }
@@ -54,16 +54,16 @@
             <!-- Status Chips -->
             <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
                 <MudChip T="string" Size="Size.Small" Style="background: #d32f2f; color: white;" Icon="@Icons.Material.Filled.Warning">
-                    Explicit Spam: @_balanceStats.ExplicitSpamCount
+                    Spam (confirmed): @_balanceStats.ExplicitSpamCount
                 </MudChip>
                 <MudChip T="string" Size="Size.Small" Style="background: #ef9a9a; color: white;" Icon="@Icons.Material.Filled.AutoAwesome">
-                    Implicit Spam: @_balanceStats.ImplicitSpamCount
+                    Spam (auto): @_balanceStats.ImplicitSpamCount
                 </MudChip>
                 <MudChip T="string" Size="Size.Small" Color="Color.Info" Icon="@Icons.Material.Filled.Label">
-                    Explicit Ham: @_balanceStats.ExplicitHamCount
+                    Clean (confirmed): @_balanceStats.ExplicitHamCount
                 </MudChip>
                 <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.CheckCircle">
-                    Implicit Ham: @_balanceStats.ImplicitHamCount
+                    Clean (auto): @_balanceStats.ImplicitHamCount
                 </MudChip>
                 <MudText Typo="Typo.body2" Color="Color.Default">
                     Total: @_balanceStats.TotalSampleCount samples
@@ -142,7 +142,7 @@
             @if (_currentModelMetadata != null)
             {
                 <MudText Typo="Typo.body2" Color="Color.Secondary">
-                    Delta: @FormatDelta(SpamDelta) spam, @FormatDelta(HamDelta) ham since last training
+                    Delta: @FormatDelta(SpamDelta) spam, @FormatDelta(HamDelta) clean since last training
                 </MudText>
             }
         </MudStack>
@@ -249,7 +249,7 @@
 
         if (spamNeeded > 0 && hamNeeded > 0)
         {
-            return $"⚠️ Insufficient data: Need {spamNeeded} more spam sample{(spamNeeded == 1 ? "" : "s")}, {hamNeeded} more ham sample{(hamNeeded == 1 ? "" : "s")}";
+            return $"⚠️ Insufficient data: Need {spamNeeded} more spam sample{(spamNeeded == 1 ? "" : "s")}, {hamNeeded} more clean sample{(hamNeeded == 1 ? "" : "s")}";
         }
         else if (spamNeeded > 0)
         {
@@ -257,7 +257,7 @@
         }
         else if (hamNeeded > 0)
         {
-            return $"⚠️ Insufficient data: Need {hamNeeded} more ham sample{(hamNeeded == 1 ? "" : "s")}";
+            return $"⚠️ Insufficient data: Need {hamNeeded} more clean sample{(hamNeeded == 1 ? "" : "s")}";
         }
         else if (!IsBalanced())
         {

@@ -28,7 +28,7 @@ public class BotChatService(
     IChatAdminsRepository chatAdminsRepo,
     ITelegramUserRepository userRepo,
     IUserActionsRepository userActionsRepo,
-    INotificationService notificationService,
+    IAdminNotificationService notificationService,
     ApiMetrics apiMetrics,
     ILogger<BotChatService> logger) : IBotChatService
 {
@@ -308,7 +308,7 @@ public class BotChatService(
                         IssuedBy: Actor.AutoTrust,
                         IssuedAt: DateTimeOffset.UtcNow,
                         ExpiresAt: null,
-                        Reason: $"Admin in chat {chat.Id} ({chat.Title ?? "Unknown"})"
+                        Reason: $"Admin in {ChatIdentity.From(chat).ToLogInfo()}"
                     );
 
                     await userActionsRepo.InsertAsync(trustAction, ct);
@@ -489,7 +489,7 @@ public class BotChatService(
                                 IssuedBy: Actor.AutoTrust,
                                 IssuedAt: DateTimeOffset.UtcNow,
                                 ExpiresAt: null,
-                                Reason: $"Admin in chat {chat.Id}"
+                                Reason: $"Admin in {chat.ToLogInfo()}"
                             );
 
                             await userActionsRepo.InsertAsync(trustAction, ct);

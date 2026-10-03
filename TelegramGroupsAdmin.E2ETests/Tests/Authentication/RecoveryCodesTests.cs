@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using TelegramGroupsAdmin.Constants;
 using TelegramGroupsAdmin.E2ETests.Helpers;
 using TelegramGroupsAdmin.E2ETests.Infrastructure;
@@ -55,8 +56,7 @@ public class RecoveryCodesTests : SharedE2ETestBase
         await _profilePage.WaitForLoadAsync();
 
         // Assert - regenerate button should be visible when TOTP is enabled
-        Assert.That(await _profilePage.IsRegenerateRecoveryCodesButtonVisibleAsync(), Is.True,
-            "Regenerate Recovery Codes button should be visible when 2FA is enabled");
+        await Expect(_profilePage.RegenerateRecoveryCodesButton).ToBeVisibleAsync();
     }
 
     [Test]
@@ -87,8 +87,7 @@ public class RecoveryCodesTests : SharedE2ETestBase
 
         // Assert - password confirmation dialog should appear
         await _profilePage.WaitForPasswordConfirmDialogAsync();
-        Assert.That(await _profilePage.IsPasswordConfirmDialogVisibleAsync(), Is.True,
-            "Password confirmation dialog should appear when regenerating codes");
+        await Expect(_profilePage.PasswordConfirmDialog).ToBeVisibleAsync();
     }
 
     [Test]
@@ -115,19 +114,24 @@ public class RecoveryCodesTests : SharedE2ETestBase
         await _profilePage.WaitForLoadAsync();
 
         // Act - regenerate recovery codes with valid password
-        var recoveryCodes = await _profilePage.RegenerateRecoveryCodesAsync(user.Password);
+        await _profilePage.ClickRegenerateRecoveryCodesAsync();
+        await _profilePage.WaitForPasswordConfirmDialogAsync();
+        await _profilePage.FillPasswordConfirmDialogAsync(user.Password);
+        await _profilePage.ClickGenerateNewCodesAsync();
+        await _profilePage.WaitForRecoveryCodesDialogAsync();
 
-        // Assert - should receive recovery codes per AuthenticationConstants.RecoveryCodeCount
-        Assert.That(recoveryCodes.Count, Is.EqualTo(AuthenticationConstants.RecoveryCodeCount),
-            $"Should display {AuthenticationConstants.RecoveryCodeCount} new recovery codes");
+        // Assert - should display recovery codes per AuthenticationConstants.RecoveryCodeCount
+        // (asserted on the open dialog, before it is closed below)
+        await Expect(_profilePage.RecoveryCodeItems).ToHaveCountAsync(AuthenticationConstants.RecoveryCodeCount);
 
-        // Each code should be a valid format (hex string per AuthenticationConstants.RecoveryCodeStringLength)
-        var expectedPattern = $@"^[a-f0-9]{{{AuthenticationConstants.RecoveryCodeStringLength}}}$";
-        foreach (var code in recoveryCodes)
-        {
-            Assert.That(code, Does.Match(expectedPattern),
-                $"Recovery code '{code}' should be a {AuthenticationConstants.RecoveryCodeStringLength}-character hex string");
-        }
+        // Each code should be a valid format (hex string per AuthenticationConstants.RecoveryCodeStringLength).
+        // Surrounding whitespace is allowed because regex matching sees the raw (untrimmed) text.
+        var expectedPattern = new Regex($@"^\s*[a-f0-9]{{{AuthenticationConstants.RecoveryCodeStringLength}}}\s*$");
+        await Expect(_profilePage.RecoveryCodeItems).ToHaveTextAsync(
+            Enumerable.Repeat(expectedPattern, AuthenticationConstants.RecoveryCodeCount));
+
+        // Close the dialog, as the regenerate flow does
+        await _profilePage.ClickSavedCodesAsync();
     }
 
     [Test]
@@ -160,16 +164,10 @@ public class RecoveryCodesTests : SharedE2ETestBase
         await _profilePage.ClickGenerateNewCodesAsync(expectSuccess: false);
 
         // Assert - should show error snackbar
-        var snackbar = await _profilePage.WaitForSnackbarAsync();
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(snackbar, Does.Contain("Invalid").IgnoreCase,
-                      "Should show error for invalid password");
+        await Expect(_profilePage.Snackbar).ToContainTextAsync("Invalid", new() { IgnoreCase = true });
 
-            // Dialog should still be visible (not closed)
-            Assert.That(await _profilePage.IsPasswordConfirmDialogVisibleAsync(), Is.True,
-                "Dialog should remain open after failed password verification");
-        }
+        // Dialog should still be visible (not closed)
+        await Expect(_profilePage.PasswordConfirmDialog).ToBeVisibleAsync();
     }
 
     [Test]
@@ -202,8 +200,7 @@ public class RecoveryCodesTests : SharedE2ETestBase
 
         // Assert - dialog should be closed (use Playwright's auto-waiting instead of Task.Delay)
         await _profilePage.WaitForPasswordConfirmDialogClosedAsync();
-        Assert.That(await _profilePage.IsPasswordConfirmDialogVisibleAsync(), Is.False,
-            "Dialog should be closed after canceling");
+        await Expect(_profilePage.PasswordConfirmDialog).Not.ToBeVisibleAsync();
     }
 
     #endregion
@@ -239,8 +236,7 @@ public class RecoveryCodesTests : SharedE2ETestBase
 
         // Wait for dialog with QR code
         await Expect(Page.Locator(".mud-dialog")).ToBeVisibleAsync();
-        Assert.That(await _profilePage.IsTotpQRCodeVisibleAsync(), Is.True,
-            "QR code should be visible in setup dialog");
+        await Expect(_profilePage.TotpQrCode).ToBeVisibleAsync();
 
         // Note: Full TOTP verification in Profile page would require reading the
         // secret from the QR URI or input field, which is complex for E2E tests.
@@ -269,8 +265,7 @@ public class RecoveryCodesTests : SharedE2ETestBase
         await _verifyPage.WaitForPageAsync();
 
         // Assert - "Use a recovery code instead" link should be visible
-        Assert.That(await _verifyPage.IsUseRecoveryCodeLinkVisibleAsync(), Is.True,
-            "Recovery code option should be available on TOTP verify page");
+        await Expect(_verifyPage.UseRecoveryCodeLink).ToBeVisibleAsync();
     }
 
     [Test]
@@ -293,16 +288,22 @@ public class RecoveryCodesTests : SharedE2ETestBase
         await _verifyPage.ClickUseRecoveryCodeAsync();
         await _verifyPage.WaitForRecoveryCodeFormAsync();
 
-        using (Assert.EnterMultipleScope())
-        {
-            // Assert - recovery code input should be visible, TOTP input should not
-            Assert.That(await _verifyPage.IsRecoveryCodeInputVisibleAsync(), Is.True,
-                "Recovery code input should be visible");
+        // Assert - recovery code form replaces the authenticator form (useRecovery=true in the URL)
+        await Expect(Page).ToHaveURLAsync(new Regex(@"/login/verify\?.*useRecovery=true"));
+        await Expect(_verifyPage.RecoveryCodeInput).ToBeVisibleAsync();
+        await Expect(_verifyPage.TotpCodeInput).Not.ToBeVisibleAsync();
 
-            // "Back to authenticator" link should be visible
-            Assert.That(await _verifyPage.IsBackToAuthenticatorLinkVisibleAsync(), Is.True,
-                "Back to authenticator link should be visible");
-        }
+        // "Back to authenticator" link should be visible
+        await Expect(_verifyPage.BackToAuthenticatorLink).ToBeVisibleAsync();
+
+        // Act - go back to the authenticator form
+        await _verifyPage.ClickBackToAuthenticatorAsync();
+
+        // Assert - authenticator form is back (no useRecovery flag) and the recovery form is gone
+        await Expect(Page).Not.ToHaveURLAsync(new Regex(@"useRecovery=true"));
+        await Expect(_verifyPage.TotpCodeInput).ToBeVisibleAsync();
+        await Expect(_verifyPage.RecoveryCodeInput).Not.ToBeVisibleAsync();
+        await Expect(_verifyPage.UseRecoveryCodeLink).ToBeVisibleAsync();
     }
 
     [Test]
@@ -371,8 +372,7 @@ public class RecoveryCodesTests : SharedE2ETestBase
         await _verifyPage.VerifyWithRecoveryCodeAsync(invalidCode);
 
         // Assert - should show error
-        Assert.That(await _verifyPage.HasErrorMessageAsync(), Is.True,
-            "Should show error for invalid recovery code");
+        await Expect(_verifyPage.ErrorAlert).ToBeVisibleAsync();
 
         // Should still be on the verify page
         await Expect(Page).ToHaveURLAsync(new System.Text.RegularExpressions.Regex("/login/verify"));
@@ -425,8 +425,7 @@ public class RecoveryCodesTests : SharedE2ETestBase
         await _verifyPage.VerifyWithRecoveryCodeAsync(recoveryCodes[0]); // Same code
 
         // Assert - should fail (code already used)
-        Assert.That(await _verifyPage.HasErrorMessageAsync(), Is.True,
-            "Should show error when trying to reuse a recovery code");
+        await Expect(_verifyPage.ErrorAlert).ToBeVisibleAsync();
 
         // Should still be on the verify page
         await Expect(Page).ToHaveURLAsync(new System.Text.RegularExpressions.Regex("/login/verify"));

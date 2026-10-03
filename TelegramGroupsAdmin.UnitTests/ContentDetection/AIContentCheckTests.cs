@@ -42,7 +42,7 @@ public class AIContentCheckTests
 
         // Setup message context provider to return empty list by default
         _mockMessageContextProvider
-            .GetRecentMessagesAsync(Arg.Any<ChatIdentity>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .GetRecentMessagesAsync(Arg.Any<ChatIdentity>(), Arg.Any<int>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IEnumerable<HistoryMessage>>(new List<HistoryMessage>()));
 
         _check = new AIContentCheckV2(
@@ -792,6 +792,39 @@ public class AIContentCheckTests
             Arg.Any<CancellationToken>());
 
         Assert.That(response2.Details, Does.Contain("cached"));
+    }
+
+    #endregion
+
+    #region History Context Tests
+
+    [TestCase(77310)]
+    [TestCase(null, TestName = "CheckAsync_NoMessageId_ExcludesNothingFromHistory")]
+    public async Task CheckAsync_ExcludesMessageUnderEvaluationFromHistory(int? messageId)
+    {
+        // #521: on an edit re-scan the message's own earlier verdict was fed back as history,
+        // inflating the score past the auto-ban threshold.
+        SetupChatService(CreateCleanResponse("Legitimate", 0.0));
+        var request = new AIVetoCheckRequest
+        {
+            Message = "I am new here and looking for a good friend",
+            User = UserIdentity.FromId(123),
+            Chat = ChatIdentity.FromId(456),
+            MessageId = messageId,
+            SystemPrompt = null,
+            HasSpamFlags = true,
+            MinMessageLength = 10,
+            CheckShortMessages = false,
+            MessageHistoryCount = 3,
+            Model = "gpt-4",
+            MaxTokens = 500,
+            CancellationToken = CancellationToken.None
+        };
+
+        await _check.CheckAsync(request);
+
+        await _mockMessageContextProvider.Received(1).GetRecentMessagesAsync(
+            Arg.Is<ChatIdentity>(c => c!.Id == 456), 3, messageId, Arg.Any<CancellationToken>());
     }
 
     #endregion
