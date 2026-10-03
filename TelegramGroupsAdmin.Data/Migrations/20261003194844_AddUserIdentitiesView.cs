@@ -11,7 +11,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.Sql(UserIdentityView.CreateViewSql);
+            migrationBuilder.Sql(LegacyUserIdentityViewSql.V1);
         }
 
         /// <inheritdoc />

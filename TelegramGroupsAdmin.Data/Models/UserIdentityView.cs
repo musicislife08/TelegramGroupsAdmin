@@ -5,6 +5,11 @@ namespace TelegramGroupsAdmin.Data.Models;
 /// <summary>
 /// Keyless model of the user_identities view: a user's names plus the explicit flag from their
 /// latest profile scan. Every identity read joins this view so the verdict comes from one place.
+/// <para>
+/// <c>enriched_messages</c> and <c>enriched_reports</c> depend on this view. Any change to its
+/// definition must drop and recreate those views around it, and the migration that does so must
+/// replay older history from a frozen copy (see LegacyUserIdentityViewSql).
+/// </para>
 /// </summary>
 public class UserIdentityView
 {

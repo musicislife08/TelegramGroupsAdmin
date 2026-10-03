@@ -64,6 +64,7 @@ public class UserIdentitiesViewTests
 
         Assert.That(row.LatestScanExplicit, Is.Null);
     }
+
     [Test]
     public async Task EnrichedReports_ProfileScanAlert_UserCarriesLatestScanFlag()
     {
