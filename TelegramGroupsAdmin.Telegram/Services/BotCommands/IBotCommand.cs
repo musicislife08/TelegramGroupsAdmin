@@ -50,11 +50,13 @@ public interface IBotCommand
     /// <param name="message">Telegram message containing the command</param>
     /// <param name="args">Command arguments (parsed after command name)</param>
     /// <param name="userPermission">Effective permission tier of the user who issued the command</param>
+    /// <param name="sender">Identity of the user who issued the command, as the pipeline recorded or resolved it</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>CommandResult with response message and optional dynamic deletion time</returns>
     Task<CommandResult> ExecuteAsync(
         Message message,
         string[] args,
         PermissionLevel userPermission,
+        UserIdentity sender,
         CancellationToken cancellationToken = default);
 }

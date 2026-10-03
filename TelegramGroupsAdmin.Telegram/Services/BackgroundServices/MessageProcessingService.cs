@@ -75,15 +75,19 @@ public partial class MessageProcessingService(
         if (message.Chat.Type == ChatType.Private)
         {
             // Private DMs: handle commands first
-            if (commandRouter.IsCommand(message))
+            if (commandRouter.IsCommand(message) && message.From != null)
             {
                 try
                 {
-                    var commandResult = await commandRouter.RouteCommandAsync(message, cancellationToken);
+                    using var scope = scopeFactory.CreateScope();
+
+                    // DMs are not observed (see below), so the command's sender is resolved by id.
+                    var dmSender = await scope.ServiceProvider.GetRequiredService<IUserIdentityService>()
+                        .ResolveAsync(message.From.Id, cancellationToken);
+                    var commandResult = await commandRouter.RouteCommandAsync(message, dmSender, cancellationToken);
                     if (commandResult != null && !string.IsNullOrWhiteSpace(commandResult.Message.Text))
                     {
                         // Use BotMessageService to save bot response to database
-                        using var scope = scopeFactory.CreateScope();
                         var botMessageService = scope.ServiceProvider.GetRequiredService<IBotMessageService>();
                         await botMessageService.SendAndSaveMessageAsync(
                             message.Chat.Id,
@@ -373,11 +377,11 @@ public partial class MessageProcessingService(
             // Check if message is a bot command (execute first, then save to history)
             // Note: Errors are caught to ensure message history is always saved
             CommandResult? commandResult = null;
-            if (commandRouter.IsCommand(message))
+            if (commandRouter.IsCommand(message) && sender is not null)
             {
                 try
                 {
-                    commandResult = await commandRouter.RouteCommandAsync(message, cancellationToken);
+                    commandResult = await commandRouter.RouteCommandAsync(message, sender, cancellationToken);
                     if (commandResult != null)
                     {
                         // Send response if there is one (and it's not empty)

@@ -34,17 +34,22 @@ public class CommandRouterTests
         public int? DeleteResponseAfterSeconds => null;
 
         public bool WasExecuted { get; private set; }
+        public UserIdentity? ReceivedSender { get; private set; }
 
         public Task<CommandResult> ExecuteAsync(
             Message message,
             string[] args,
             PermissionLevel userPermission,
+            UserIdentity sender,
             CancellationToken cancellationToken = default)
         {
             WasExecuted = true;
+            ReceivedSender = sender;
             return Task.FromResult(new CommandResult(TelegramMessage.Plain(ExecutedSentinel), false));
         }
     }
+
+    private static readonly UserIdentity Sender = UserIdentity.ForTest(123, "Resolved", "Admin");
 
     private static readonly Message BanMessage = new()
     {
@@ -99,7 +104,7 @@ public class CommandRouterTests
         public bool DeleteCommandMessage => false;
         public int? DeleteResponseAfterSeconds => null;
 
-        public Task<CommandResult> ExecuteAsync(Message message, string[] args, PermissionLevel userPermission, CancellationToken cancellationToken = default)
+        public Task<CommandResult> ExecuteAsync(Message message, string[] args, PermissionLevel userPermission, UserIdentity sender, CancellationToken cancellationToken = default)
             => Task.FromResult(new CommandResult(TelegramMessage.Plain("other"), false));
     }
 
@@ -114,7 +119,7 @@ public class CommandRouterTests
                       .Returns(false);
 
         // Act
-        var result = await router.RouteCommandAsync(BanMessage);
+        var result = await router.RouteCommandAsync(BanMessage, Sender);
 
         // Assert
         Assert.That(result, Is.Not.Null);
@@ -133,12 +138,13 @@ public class CommandRouterTests
                       .Returns(true);
 
         // Act
-        var result = await router.RouteCommandAsync(BanMessage);
+        var result = await router.RouteCommandAsync(BanMessage, Sender);
 
         // Assert
         Assert.That(result, Is.Not.Null);
         Assert.That(result!.Message.Text, Is.EqualTo(ExecutedSentinel));
         Assert.That(stub.WasExecuted, Is.True, "Command must execute for native chat admin");
+        Assert.That(stub.ReceivedSender, Is.SameAs(Sender), "Command must receive the pipeline's sender");
     }
 
     [Test]
@@ -154,7 +160,7 @@ public class CommandRouterTests
                       .Returns(false);
 
         // Act
-        var result = await router.RouteCommandAsync(BanMessage);
+        var result = await router.RouteCommandAsync(BanMessage, Sender);
 
         // Assert
         Assert.That(result, Is.Not.Null);
@@ -173,7 +179,7 @@ public class CommandRouterTests
                       .Returns(false);
 
         // Act
-        var result = await router.RouteCommandAsync(BanMessage);
+        var result = await router.RouteCommandAsync(BanMessage, Sender);
 
         // Assert
         Assert.That(result, Is.Not.Null);

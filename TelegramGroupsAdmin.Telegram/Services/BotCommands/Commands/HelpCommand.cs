@@ -29,6 +29,7 @@ public class HelpCommand : IBotCommand
         Message message,
         string[] args,
         PermissionLevel userPermission,
+        UserIdentity sender,
         CancellationToken cancellationToken = default)
     {
         using var scope = _serviceProvider.CreateScope();

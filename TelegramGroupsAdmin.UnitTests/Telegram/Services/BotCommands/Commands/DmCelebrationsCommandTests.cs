@@ -16,6 +16,9 @@ public class DmCelebrationsCommandTests
     private const long ChatId = -100059667856554L;
     private const long UserId = 42L;
 
+    // The pipeline's resolved sender; the message's own From carries stale names.
+    private static readonly UserIdentity Sender = UserIdentity.ForTest(UserId, "Resolved");
+
     private IBanCelebrationSubscriptionService _subscriptions = null!;
     private IBotDmService _dm = null!;
     private DmCelebrationsCommand _sut = null!;
@@ -48,11 +51,11 @@ public class DmCelebrationsCommandTests
         _subscriptions.SubscribeAsync(Arg.Any<ChatIdentity>(), Arg.Any<UserIdentity>(), Arg.Any<CancellationToken>())
             .Returns(DmCelebrationSubscribeResult.Subscribed);
 
-        var result = await _sut.ExecuteAsync(GroupMessage(), ["on"], PermissionLevel.Member);
+        var result = await _sut.ExecuteAsync(GroupMessage(), ["on"], PermissionLevel.Member, Sender);
 
         Assert.That(result.Message.Text, Is.Empty);
         await _subscriptions.Received(1).SubscribeAsync(
-            Arg.Is<ChatIdentity>(c => c!.Id == ChatId), Arg.Is<UserIdentity>(u => u!.Id == UserId), Arg.Any<CancellationToken>());
+            Arg.Is<ChatIdentity>(c => c!.Id == ChatId), Arg.Is(Sender), Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -61,7 +64,7 @@ public class DmCelebrationsCommandTests
         _subscriptions.SubscribeAsync(Arg.Any<ChatIdentity>(), Arg.Any<UserIdentity>(), Arg.Any<CancellationToken>())
             .Returns(DmCelebrationSubscribeResult.AwaitingStart);
 
-        var result = await _sut.ExecuteAsync(GroupMessage(), ["on"], PermissionLevel.Member);
+        var result = await _sut.ExecuteAsync(GroupMessage(), ["on"], PermissionLevel.Member, Sender);
 
         Assert.That(result.Message.Text, Is.Empty);
     }
@@ -72,7 +75,7 @@ public class DmCelebrationsCommandTests
         _subscriptions.SubscribeAsync(Arg.Any<ChatIdentity>(), Arg.Any<UserIdentity>(), Arg.Any<CancellationToken>())
             .Returns(DmCelebrationSubscribeResult.NotAllowed);
 
-        var result = await _sut.ExecuteAsync(GroupMessage(), ["on"], PermissionLevel.Member);
+        var result = await _sut.ExecuteAsync(GroupMessage(), ["on"], PermissionLevel.Member, Sender);
 
         using (Assert.EnterMultipleScope())
         {
@@ -87,7 +90,7 @@ public class DmCelebrationsCommandTests
         _subscriptions.SubscribeAsync(Arg.Any<ChatIdentity>(), Arg.Any<UserIdentity>(), Arg.Any<CancellationToken>())
             .Returns(DmCelebrationSubscribeResult.Subscribed);
 
-        await _sut.ExecuteAsync(GroupMessage(), ["ON", "please"], PermissionLevel.Member);
+        await _sut.ExecuteAsync(GroupMessage(), ["ON", "please"], PermissionLevel.Member, Sender);
 
         await _subscriptions.ReceivedWithAnyArgs(1).SubscribeAsync(default!, default!);
     }
@@ -95,7 +98,7 @@ public class DmCelebrationsCommandTests
     [Test]
     public async Task Execute_Off_UnsubscribesAndConfirmsByDm()
     {
-        var result = await _sut.ExecuteAsync(GroupMessage(), ["off"], PermissionLevel.Member);
+        var result = await _sut.ExecuteAsync(GroupMessage(), ["off"], PermissionLevel.Member, Sender);
 
         Assert.That(result.Message.Text, Is.Empty);
         await DmReceivedContaining("won't get Workshop Alumni's ban celebrations");
@@ -109,7 +112,7 @@ public class DmCelebrationsCommandTests
     {
         _subscriptions.IsSubscribedAsync(ChatId, UserId, Arg.Any<CancellationToken>()).Returns(subscribed);
 
-        var result = await _sut.ExecuteAsync(GroupMessage(), [], PermissionLevel.Member);
+        var result = await _sut.ExecuteAsync(GroupMessage(), [], PermissionLevel.Member, Sender);
 
         Assert.That(result.Message.Text, Is.Empty);
         await DmReceivedContaining(hint);
@@ -121,7 +124,7 @@ public class DmCelebrationsCommandTests
         var dm = GroupMessage();
         dm.Chat = new Chat { Id = UserId, Type = ChatType.Private };
 
-        var result = await _sut.ExecuteAsync(dm, ["on"], PermissionLevel.Member);
+        var result = await _sut.ExecuteAsync(dm, ["on"], PermissionLevel.Member, Sender);
 
         Assert.That(result.Message.Text, Does.Contain("in the group"));
         await _subscriptions.DidNotReceiveWithAnyArgs().SubscribeAsync(default!, default!);
@@ -135,7 +138,7 @@ public class DmCelebrationsCommandTests
         anonymous.From = new User { Id = 1087968824, IsBot = true, FirstName = "Group", Username = "GroupAnonymousBot" };
         anonymous.SenderChat = new Chat { Id = ChatId, Type = ChatType.Supergroup, Title = "Workshop Alumni" };
 
-        var result = await _sut.ExecuteAsync(anonymous, ["on"], PermissionLevel.Member);
+        var result = await _sut.ExecuteAsync(anonymous, ["on"], PermissionLevel.Member, Sender);
 
         Assert.That(result.Message.Text, Does.Contain("your own account"));
         await _subscriptions.DidNotReceiveWithAnyArgs().SubscribeAsync(default!, default!);

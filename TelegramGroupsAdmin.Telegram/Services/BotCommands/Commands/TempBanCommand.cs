@@ -1,11 +1,13 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
+using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.Telegram.Services.Identity;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
 using TelegramGroupsAdmin.Telegram.Constants;
 
@@ -20,6 +22,7 @@ public class TempBanCommand : IBotCommand
     private readonly ILogger<TempBanCommand> _logger;
     private readonly IServiceProvider _serviceProvider;
     private readonly IBotModerationService _moderationService;
+    private readonly IUserIdentityService _identityService;
 
     public string Name => "tempban";
     public string Description => "Temporarily ban user with auto-unrestriction";
@@ -32,17 +35,20 @@ public class TempBanCommand : IBotCommand
     public TempBanCommand(
         ILogger<TempBanCommand> logger,
         IServiceProvider serviceProvider,
-        IBotModerationService moderationService)
+        IBotModerationService moderationService,
+        IUserIdentityService identityService)
     {
         _logger = logger;
         _serviceProvider = serviceProvider;
         _moderationService = moderationService;
+        _identityService = identityService;
     }
 
     public async Task<CommandResult> ExecuteAsync(
         Message message,
         string[] args,
         PermissionLevel userPermission,
+        UserIdentity sender,
         CancellationToken cancellationToken = default)
     {
         if (message.ReplyToMessage == null)
@@ -50,11 +56,13 @@ public class TempBanCommand : IBotCommand
             return new CommandResult(TelegramMessage.Plain("❌ Please reply to a message from the user to temp ban."), DeleteCommandMessage);
         }
 
-        var targetUser = message.ReplyToMessage.From;
-        if (targetUser == null)
+        var replyFrom = message.ReplyToMessage.From;
+        if (replyFrom == null)
         {
             return new CommandResult(TelegramMessage.Plain("❌ Could not identify target user."), DeleteCommandMessage);
         }
+
+        var targetUser = await _identityService.ResolveAsync(replyFrom.Id, cancellationToken);
 
         using var scope = _serviceProvider.CreateScope();
         var chatAdminsRepository = scope.ServiceProvider.GetRequiredService<IChatAdminsRepository>();
@@ -89,18 +97,13 @@ public class TempBanCommand : IBotCommand
 
         try
         {
-            // Get executor actor
-            var executor = Core.Models.Actor.FromTelegramUser(
-                message.From!.Id,
-                message.From.Username,
-                message.From.FirstName,
-                message.From.LastName);
+            var executor = Core.Models.Actor.FromUserIdentity(sender);
 
             // Execute temp ban via ModerationActionService
             var result = await _moderationService.TempBanUserAsync(
                 new TempBanIntent
                 {
-                    User = UserIdentity.From(targetUser),
+                    User = targetUser,
                     Executor = executor,
                     Reason = reason,
                     MessageId = message.ReplyToMessage.MessageId,
@@ -122,7 +125,7 @@ public class TempBanCommand : IBotCommand
             _logger.LogInformation(
                 "{TargetUser} temp banned by {Executor} from {ChatsAffected} chats for {Duration}. Reason: {Reason}",
                 targetUser.ToLogInfo(),
-                message.From.ToLogInfo(),
+                sender.ToLogInfo(),
                 result.ChatsAffected, duration, reason);
 
             // Return CommandResult with dynamic deletion time matching tempban duration

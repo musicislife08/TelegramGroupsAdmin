@@ -32,6 +32,7 @@ public class LinkCommand : IBotCommand
         Message message,
         string[] args,
         PermissionLevel userPermission,
+        UserIdentity sender,
         CancellationToken cancellationToken = default)
     {
         // Validate token argument

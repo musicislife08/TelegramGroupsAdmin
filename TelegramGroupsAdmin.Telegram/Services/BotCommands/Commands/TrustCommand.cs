@@ -1,12 +1,14 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
+using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
+using TelegramGroupsAdmin.Telegram.Services.Identity;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
 
@@ -19,6 +21,7 @@ public class TrustCommand : IBotCommand
     private readonly ILogger<TrustCommand> _logger;
     private readonly IServiceProvider _serviceProvider;
     private readonly IBotModerationService _moderationService;
+    private readonly IUserIdentityService _identityService;
 
     public string Name => "trust";
     public string Description => "Toggle trust status (bypass spam detection)";
@@ -31,26 +34,29 @@ public class TrustCommand : IBotCommand
     public TrustCommand(
         ILogger<TrustCommand> logger,
         IServiceProvider serviceProvider,
-        IBotModerationService moderationService)
+        IBotModerationService moderationService,
+        IUserIdentityService identityService)
     {
         _logger = logger;
         _serviceProvider = serviceProvider;
         _moderationService = moderationService;
+        _identityService = identityService;
     }
 
     public async Task<CommandResult> ExecuteAsync(
         Message message,
         string[] args,
         PermissionLevel userPermission,
+        UserIdentity sender,
         CancellationToken cancellationToken = default)
     {
-        User? targetUser = null;
+        User? replyFrom = null;
         int? messageId = null;
 
         // Option 1: Reply to message
         if (message.ReplyToMessage != null)
         {
-            targetUser = message.ReplyToMessage.From;
+            replyFrom = message.ReplyToMessage.From;
             messageId = message.ReplyToMessage.MessageId;
         }
         // Option 2: Username provided
@@ -67,10 +73,12 @@ public class TrustCommand : IBotCommand
             return new CommandResult(TelegramMessage.Plain("❌ Please reply to a message from the user OR provide username: /trust <username>"), DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
 
-        if (targetUser == null)
+        if (replyFrom == null)
         {
             return new CommandResult(TelegramMessage.Plain("❌ Could not identify target user."), DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
+
+        var targetUser = await _identityService.ResolveAsync(replyFrom.Id, cancellationToken);
 
         using var scope = _serviceProvider.CreateScope();
         var userRepository = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
@@ -80,12 +88,7 @@ public class TrustCommand : IBotCommand
             targetUser.Id,
             cancellationToken);
 
-        // Create executor actor from Telegram user
-        var executor = Core.Models.Actor.FromTelegramUser(
-            message.From!.Id,
-            message.From.Username,
-            message.From.FirstName,
-            message.From.LastName);
+        var executor = Core.Models.Actor.FromUserIdentity(sender);
 
         // Build reason with chat context
         var chatName = message.Chat.Title ?? message.Chat.Username ?? message.Chat.Id.ToString();
@@ -99,7 +102,7 @@ public class TrustCommand : IBotCommand
             var result = await _moderationService.UntrustUserAsync(
                 new UntrustIntent
                 {
-                    User = UserIdentity.From(targetUser),
+                    User = targetUser,
                     Executor = executor,
                     Reason = reason
                 },
@@ -116,7 +119,7 @@ public class TrustCommand : IBotCommand
             _logger.LogInformation(
                 "{TargetUser} untrusted by {Executor} in {Chat}",
                 targetUser.ToLogInfo(),
-                message.From.ToLogInfo(),
+                sender.ToLogInfo(),
                 message.Chat.ToLogInfo());
 
             return new CommandResult(TelegramMessage.Plain($"✅ User @{userDisplay} is no longer trusted\n\n" +
@@ -130,7 +133,7 @@ public class TrustCommand : IBotCommand
             var result = await _moderationService.TrustUserAsync(
                 new TrustIntent
                 {
-                    User = UserIdentity.From(targetUser),
+                    User = targetUser,
                     Executor = executor,
                     Reason = reason
                 },
@@ -147,7 +150,7 @@ public class TrustCommand : IBotCommand
             _logger.LogInformation(
                 "{TargetUser} trusted by {Executor} in {Chat}",
                 targetUser.ToLogInfo(),
-                message.From.ToLogInfo(),
+                sender.ToLogInfo(),
                 message.Chat.ToLogInfo());
 
             return new CommandResult(TelegramMessage.Plain($"✅ User @{userDisplay} marked as trusted\n\n" +

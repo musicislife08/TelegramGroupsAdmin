@@ -9,6 +9,7 @@ using TelegramGroupsAdmin.Telegram.Constants;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.Telegram.Services.Identity;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
@@ -25,6 +26,7 @@ public class BanCommand : IBotCommand
     private readonly IBotModerationService _moderationService;
     private readonly IUserMessagingService _messagingService;
     private readonly IBotMessageService _messageService;
+    private readonly IUserIdentityService _identityService;
 
     public string Name => "ban";
     public string Description => "Ban user from all managed chats";
@@ -39,19 +41,22 @@ public class BanCommand : IBotCommand
         IServiceProvider serviceProvider,
         IBotModerationService moderationService,
         IUserMessagingService messagingService,
-        IBotMessageService messageService)
+        IBotMessageService messageService,
+        IUserIdentityService identityService)
     {
         _logger = logger;
         _serviceProvider = serviceProvider;
         _moderationService = moderationService;
         _messagingService = messagingService;
         _messageService = messageService;
+        _identityService = identityService;
     }
 
     public async Task<CommandResult> ExecuteAsync(
         Message message,
         string[] args,
         PermissionLevel userPermission,
+        UserIdentity sender,
         CancellationToken cancellationToken = default)
     {
         UserIdentity? targetIdentity = null;
@@ -69,7 +74,7 @@ public class BanCommand : IBotCommand
                 return new CommandResult(TelegramMessage.Plain("❌ Could not identify target user."), DeleteCommandMessage, DeleteResponseAfterSeconds);
             }
 
-            targetIdentity = UserIdentity.From(message.ReplyToMessage.From);
+            targetIdentity = await _identityService.ResolveAsync(message.ReplyToMessage.From.Id, cancellationToken);
             triggerMessageId = message.ReplyToMessage.MessageId;
         }
         // Option 2: Arguments provided
@@ -85,7 +90,7 @@ public class BanCommand : IBotCommand
                 {
                     return new CommandResult(TelegramMessage.Plain($"❌ User ID {userId} not found."), DeleteCommandMessage, DeleteResponseAfterSeconds);
                 }
-                targetIdentity = UserIdentity.From(user);
+                targetIdentity = await _identityService.ResolveAsync(user.TelegramUserId, cancellationToken);
             }
             // Check if @username (e.g., /ban @johndoe)
             else if (firstArg.StartsWith('@'))
@@ -96,7 +101,7 @@ public class BanCommand : IBotCommand
                 {
                     return new CommandResult(TelegramMessage.Plain($"❌ User @{username} not found."), DeleteCommandMessage, DeleteResponseAfterSeconds);
                 }
-                targetIdentity = UserIdentity.From(user);
+                targetIdentity = await _identityService.ResolveAsync(user.TelegramUserId, cancellationToken);
             }
             // Otherwise: fuzzy name search (e.g., /ban john smith)
             else
@@ -112,7 +117,7 @@ public class BanCommand : IBotCommand
                 if (matches.Count == 1)
                 {
                     // Single match - proceed with ban directly
-                    targetIdentity = UserIdentity.From(matches[0]);
+                    targetIdentity = await _identityService.ResolveAsync(matches[0].TelegramUserId, cancellationToken);
                 }
                 else
                 {
@@ -137,7 +142,7 @@ public class BanCommand : IBotCommand
         }
 
         // Execute ban
-        return await ExecuteBanAsync(message, targetIdentity, triggerMessageId, cancellationToken);
+        return await ExecuteBanAsync(message, sender, targetIdentity, triggerMessageId, cancellationToken);
     }
 
     /// <summary>
@@ -177,18 +182,14 @@ public class BanCommand : IBotCommand
     /// </summary>
     private async Task<CommandResult> ExecuteBanAsync(
         Message message,
+        UserIdentity sender,
         UserIdentity targetIdentity,
         int? triggerMessageId,
         CancellationToken cancellationToken)
     {
         try
         {
-            // Create executor actor from Telegram user
-            var executor = Core.Models.Actor.FromTelegramUser(
-                message.From!.Id,
-                message.From.Username,
-                message.From.FirstName,
-                message.From.LastName);
+            var executor = Core.Models.Actor.FromUserIdentity(sender);
 
             // Execute ban via BotModerationService
             var result = await _moderationService.BanUserAsync(
@@ -221,7 +222,7 @@ public class BanCommand : IBotCommand
                 "{TargetUser} banned by {Executor} from {ChatsAffected} chats. " +
                 "Reason: {Reason}. Ban DM delivered: {DmDelivered}. Trust removed: {TrustRemoved}",
                 targetIdentity.ToLogInfo(),
-                message.From.ToLogInfo(),
+                sender.ToLogInfo(),
                 result.ChatsAffected, ModerationConstants.DefaultBanReason, messageResult.Success, result.TrustRemoved);
 
             // Silent mode: No chat feedback, command message simply disappears

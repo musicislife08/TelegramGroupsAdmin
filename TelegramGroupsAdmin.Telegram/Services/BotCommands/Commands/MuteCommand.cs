@@ -1,11 +1,13 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
+using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.Telegram.Services.Identity;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
 using TelegramGroupsAdmin.Telegram.Constants;
 
@@ -19,6 +21,7 @@ public class MuteCommand : IBotCommand
     private readonly ILogger<MuteCommand> _logger;
     private readonly IServiceProvider _serviceProvider;
     private readonly IBotModerationService _moderationService;
+    private readonly IUserIdentityService _identityService;
 
     public string Name => "mute";
     public string Description => "Temporarily mute user with auto-unmute";
@@ -31,17 +34,20 @@ public class MuteCommand : IBotCommand
     public MuteCommand(
         ILogger<MuteCommand> logger,
         IServiceProvider serviceProvider,
-        IBotModerationService moderationService)
+        IBotModerationService moderationService,
+        IUserIdentityService identityService)
     {
         _logger = logger;
         _serviceProvider = serviceProvider;
         _moderationService = moderationService;
+        _identityService = identityService;
     }
 
     public async Task<CommandResult> ExecuteAsync(
         Message message,
         string[] args,
         PermissionLevel userPermission,
+        UserIdentity sender,
         CancellationToken cancellationToken = default)
     {
         if (message.ReplyToMessage == null)
@@ -49,11 +55,13 @@ public class MuteCommand : IBotCommand
             return new CommandResult(TelegramMessage.Plain("❌ Please reply to a message from the user to mute."), DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
 
-        var targetUser = message.ReplyToMessage.From;
-        if (targetUser == null)
+        var replyFrom = message.ReplyToMessage.From;
+        if (replyFrom == null)
         {
             return new CommandResult(TelegramMessage.Plain("❌ Could not identify target user."), DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
+
+        var targetUser = await _identityService.ResolveAsync(replyFrom.Id, cancellationToken);
 
         using var scope = _serviceProvider.CreateScope();
         var chatAdminsRepository = scope.ServiceProvider.GetRequiredService<IChatAdminsRepository>();
@@ -88,18 +96,13 @@ public class MuteCommand : IBotCommand
 
         try
         {
-            // Get executor actor
-            var executor = Core.Models.Actor.FromTelegramUser(
-                message.From!.Id,
-                message.From.Username,
-                message.From.FirstName,
-                message.From.LastName);
+            var executor = Core.Models.Actor.FromUserIdentity(sender);
 
             // Execute mute via ModerationActionService
             var result = await _moderationService.RestrictUserAsync(
                 new RestrictIntent
                 {
-                    User = UserIdentity.From(targetUser),
+                    User = targetUser,
                     Executor = executor,
                     Reason = reason,
                     Duration = duration
@@ -121,7 +124,7 @@ public class MuteCommand : IBotCommand
             _logger.LogInformation(
                 "{TargetUser} muted by {Executor} in {ChatsAffected} chats for {Duration}. Reason: {Reason}",
                 targetUser.ToLogInfo(),
-                message.From.ToLogInfo(),
+                sender.ToLogInfo(),
                 result.ChatsAffected, duration, reason);
 
             return new CommandResult(TelegramMessage.Plain(response), DeleteCommandMessage, DeleteResponseAfterSeconds);

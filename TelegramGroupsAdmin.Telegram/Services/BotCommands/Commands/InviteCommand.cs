@@ -45,6 +45,7 @@ public class InviteCommand : IBotCommand
         Message message,
         string[] args,
         PermissionLevel userPermission,
+        UserIdentity sender,
         CancellationToken cancellationToken = default)
     {
         // Only works in groups/supergroups

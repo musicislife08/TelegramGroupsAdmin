@@ -29,6 +29,7 @@ public sealed class DmCelebrationsCommand(
         Message message,
         string[] args,
         PermissionLevel userPermission,
+        UserIdentity sender,
         CancellationToken cancellationToken = default)
     {
         if (message.From is null)
@@ -48,7 +49,7 @@ public sealed class DmCelebrationsCommand(
         }
 
         var chat = ChatIdentity.From(message.Chat);
-        var user = UserIdentity.From(message.From);
+        var user = sender;
         var chatName = chat.ChatName ?? "this chat";
 
         switch (args.FirstOrDefault()?.ToLowerInvariant())

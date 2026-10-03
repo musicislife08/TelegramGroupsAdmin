@@ -10,6 +10,8 @@ namespace TelegramGroupsAdmin.UnitTests.Telegram.Services.BotCommands.Commands;
 [TestFixture]
 public class HelpCommandTests
 {
+    private static readonly UserIdentity Sender = UserIdentity.ForTest(1, "Kim");
+
     private HelpCommand _command = null!;
     private Message _message = null!;
 
@@ -30,6 +32,7 @@ public class HelpCommandTests
             Message message,
             string[] args,
             PermissionLevel userPermission,
+            UserIdentity sender,
             CancellationToken cancellationToken = default)
             => Task.FromResult(new CommandResult(TelegramMessage.Plain("stub"), false));
     }
@@ -69,7 +72,7 @@ public class HelpCommandTests
     [Test]
     public async Task Help_Footer_ShowsAdmin_ForAdminTier()
     {
-        var result = await _command.ExecuteAsync(_message, [], PermissionLevel.Admin);
+        var result = await _command.ExecuteAsync(_message, [], PermissionLevel.Admin, Sender);
         Assert.That(result.Message.Text, Does.Contain("Permission: Admin"));
         Assert.That(result.Message.Text, Does.Not.Contain("Permission: GlobalAdmin"));
     }
@@ -77,28 +80,28 @@ public class HelpCommandTests
     [Test]
     public async Task Help_Footer_ShowsMember_ForMemberTier()
     {
-        var result = await _command.ExecuteAsync(_message, [], PermissionLevel.Member);
+        var result = await _command.ExecuteAsync(_message, [], PermissionLevel.Member, Sender);
         Assert.That(result.Message.Text, Does.Contain("Permission: Member"));
     }
 
     [Test]
     public async Task Help_HidesAdminCommandsSection_ForMember()
     {
-        var result = await _command.ExecuteAsync(_message, [], PermissionLevel.Member);
+        var result = await _command.ExecuteAsync(_message, [], PermissionLevel.Member, Sender);
         Assert.That(result.Message.Text, Does.Not.Contain("Admin Commands:"));
     }
 
     [Test]
     public async Task Help_ShowsAdminCommandsSection_ForAdmin()
     {
-        var result = await _command.ExecuteAsync(_message, [], PermissionLevel.Admin);
+        var result = await _command.ExecuteAsync(_message, [], PermissionLevel.Admin, Sender);
         Assert.That(result.Message.Text, Does.Contain("Admin Commands:"));
     }
 
     [Test]
     public async Task Help_Member_ListsPublicCommands_IncludingMyStatus()
     {
-        var result = await _command.ExecuteAsync(_message, [], PermissionLevel.Member);
+        var result = await _command.ExecuteAsync(_message, [], PermissionLevel.Member, Sender);
         Assert.That(result.Message.Text, Does.Contain("/mystatus"));
         Assert.That(result.Message.Text, Does.Contain("/report"));
         Assert.That(result.Message.Text, Does.Not.Contain("Admin Commands:"));
@@ -107,7 +110,7 @@ public class HelpCommandTests
     [Test]
     public async Task Help_Admin_ListsModeration_IncludingMute()
     {
-        var result = await _command.ExecuteAsync(_message, [], PermissionLevel.Admin);
+        var result = await _command.ExecuteAsync(_message, [], PermissionLevel.Admin, Sender);
         Assert.That(result.Message.Text, Does.Contain("Admin Commands:"));
         Assert.That(result.Message.Text, Does.Contain("/mute"));
         Assert.That(result.Message.Text, Does.Contain("/ban"));
@@ -116,21 +119,21 @@ public class HelpCommandTests
     [Test]
     public async Task Help_Admin_ExcludesStart()
     {
-        var result = await _command.ExecuteAsync(_message, [], PermissionLevel.Admin);
+        var result = await _command.ExecuteAsync(_message, [], PermissionLevel.Admin, Sender);
         Assert.That(result.Message.Text, Does.Not.Contain("/start"));
     }
 
     [Test]
     public async Task Help_Member_ExcludesStart()
     {
-        var result = await _command.ExecuteAsync(_message, [], PermissionLevel.Member);
+        var result = await _command.ExecuteAsync(_message, [], PermissionLevel.Member, Sender);
         Assert.That(result.Message.Text, Does.Not.Contain("/start"));
     }
 
     [Test]
     public async Task Help_GlobalAdmin_SeesAdminSection()
     {
-        var result = await _command.ExecuteAsync(_message, [], PermissionLevel.GlobalAdmin);
+        var result = await _command.ExecuteAsync(_message, [], PermissionLevel.GlobalAdmin, Sender);
         Assert.That(result.Message.Text, Does.Contain("Admin Commands:"));
         Assert.That(result.Message.Text, Does.Contain("Permission: GlobalAdmin"));
     }

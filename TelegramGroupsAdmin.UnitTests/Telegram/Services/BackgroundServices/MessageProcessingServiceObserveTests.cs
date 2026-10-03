@@ -40,6 +40,7 @@ public class MessageProcessingServiceObserveTests
     private IUserIdentityService _identities = null!;
     private ITelegramUserRepository _users = null!;
     private ITelegramPermissionService _permissions = null!;
+    private IBotCommand _help = null!;
     private MessageProcessingService _sut = null!;
     private string _dataPath = null!;
 
@@ -66,7 +67,8 @@ public class MessageProcessingServiceObserveTests
         services.AddSingleton(_users);
         services.AddSingleton(_permissions);
         services.AddSingleton(translation);
-        services.AddKeyedSingleton(CommandNames.Help, Substitute.For<IBotCommand>());
+        _help = Substitute.For<IBotCommand>();
+        services.AddKeyedSingleton(CommandNames.Help, _help);
 
         // Managed-chat lookups return null, so content detection is skipped as for an inactive chat.
         services.AddSingleton(Substitute.For<IConfigService>());
@@ -129,6 +131,34 @@ public class MessageProcessingServiceObserveTests
         await _sut.HandleNewMessageAsync(TextMessage(from: SenderId, text: "/help"), CancellationToken.None);
 
         Assert.That(order, Is.EqualTo(new[] { "observe", "command" }));
+    }
+
+    [Test]
+    public async Task GroupCommand_ReceivesTheObservedSender()
+    {
+        var observed = UserIdentity.ForTest(SenderId, "Observed");
+        _identities.ObserveAsync(Arg.Any<ObservedUser>(), Arg.Any<ProfileChangeContext>(), Arg.Any<RenameRescan>(), Arg.Any<CancellationToken>())
+            .Returns(observed);
+
+        await _sut.HandleNewMessageAsync(TextMessage(from: SenderId, text: "/help"), CancellationToken.None);
+
+        await _help.Received(1).ExecuteAsync(
+            Arg.Any<Message>(), Arg.Any<string[]>(), Arg.Any<PermissionLevel>(), Arg.Is(observed), Arg.Any<CancellationToken>());
+        await _identities.DidNotReceiveWithAnyArgs().ResolveAsync(default, default);
+    }
+
+    [Test]
+    public async Task PrivateCommand_ResolvesTheSenderByIdAndPassesItToTheCommand()
+    {
+        var resolved = UserIdentity.ForTest(SenderId, "Resolved");
+        _identities.ResolveAsync(SenderId, Arg.Any<CancellationToken>()).Returns(resolved);
+
+        await _sut.HandleNewMessageAsync(
+            TextMessage(from: SenderId, text: "/help", chatType: ChatType.Private, chatId: SenderId), CancellationToken.None);
+
+        await _help.Received(1).ExecuteAsync(
+            Arg.Any<Message>(), Arg.Any<string[]>(), Arg.Any<PermissionLevel>(), Arg.Is(resolved), Arg.Any<CancellationToken>());
+        await _identities.DidNotReceiveWithAnyArgs().ObserveAsync(default!, default!, default, default);
     }
 
     [Test]

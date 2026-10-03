@@ -4,8 +4,10 @@ using NSubstitute;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Core.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
+using TelegramGroupsAdmin.Telegram.Services.Identity;
 using TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
 
 namespace TelegramGroupsAdmin.UnitTests.Telegram.Services.BotCommands.Commands;
@@ -30,6 +32,8 @@ public class ReportCommandTests
     private IServiceProvider _mockScopeServiceProvider = null!;
     private IReportsRepository _mockReportsRepository = null!;
     private IReportService _mockReportService = null!;
+    private IUserIdentityService _identities = null!;
+    private IConfigService _config = null!;
 
     private ReportCommand _command = null!;
 
@@ -56,7 +60,10 @@ public class ReportCommandTests
         _mockScopeServiceProvider.GetService(typeof(IReportService))
             .Returns(_mockReportService);
 
-        _command = new ReportCommand(_mockLogger, _mockServiceProvider);
+        _identities = Substitute.For<IUserIdentityService>();
+        _config = Substitute.For<IConfigService>();
+
+        _command = new ReportCommand(_mockLogger, _mockServiceProvider, _identities, _config);
     }
 
     [TearDown]
@@ -110,8 +117,11 @@ public class ReportCommandTests
             .CreateReportAsync(Arg.Any<Report>(), Arg.Any<Message>(), Arg.Any<Actor>(), Arg.Any<CancellationToken>())
             .Returns(new ReportCreationResult(ReportId: 7));
 
+        _identities.ResolveAsync(ReportedUserId, Arg.Any<CancellationToken>())
+            .Returns(UserIdentity.ForTest(ReportedUserId, "Sofia", "Rodriguez", "rodriguez_sofi"));
+
         // Act
-        var result = await _command.ExecuteAsync(message, [], userPermission: PermissionLevel.Admin);
+        var result = await _command.ExecuteAsync(message, [], PermissionLevel.Admin, Reporter);
 
         // Assert: text contains the report number
         Assert.That(result.Message.Text, Does.Contain("Report #7"));
@@ -127,4 +137,44 @@ public class ReportCommandTests
         // Assert: no raw Markdown italic syntax (underscore-wrapped) in the text
         Assert.That(result.Message.Text, Does.Not.Contain("_Admins"));
     }
+
+    [Test]
+    public async Task Report_mentions_resolved_target_with_chat_masking_and_records_sender_as_reporter()
+    {
+        var message = new Message
+        {
+            Id = TestMessageId,
+            From = new User { Id = ReporterUserId, FirstName = "Stale reporter" },
+            Chat = new Chat { Id = TestChatId },
+            Text = "/report",
+            ReplyToMessage = new Message
+            {
+                Id = TestReplyMessageId,
+                From = new User { Id = ReportedUserId, FirstName = "Stale" },
+                Chat = new Chat { Id = TestChatId },
+                Text = "spam"
+            }
+        };
+        _mockReportsRepository
+            .GetExistingPendingContentReportAsync(TestReplyMessageId, TestChatId, Arg.Any<CancellationToken>())
+            .Returns((Report?)null);
+        _mockReportService
+            .CreateReportAsync(Arg.Any<Report>(), Arg.Any<Message>(), Arg.Any<Actor>(), Arg.Any<CancellationToken>())
+            .Returns(new ReportCreationResult(ReportId: 7));
+        _identities.ResolveAsync(ReportedUserId, Arg.Any<CancellationToken>())
+            .Returns(UserIdentity.ForTest(ReportedUserId, "Promo", verdict: NameVerdict.Promotional));
+        _config.GetNameMaskingAsync(TestChatId, Arg.Any<CancellationToken>()).Returns(NameMasking.On);
+
+        var result = await _command.ExecuteAsync(message, [], PermissionLevel.Member, Reporter);
+
+        Assert.That(result.Message.Text, Does.Contain("Reported user: " + NameRedaction.Spam));
+        Assert.That(result.Message.Text, Does.Not.Contain("Promo"));
+        await _mockReportService.Received(1).CreateReportAsync(
+            Arg.Is<Report>(r => r!.ReportedByUserId == ReporterUserId && r.ReportedByUserName == "alex_reporter"),
+            Arg.Any<Message>(),
+            Arg.Is<Actor>(a => a!.TelegramUserId == ReporterUserId && a.DisplayName == Reporter.DisplayName),
+            Arg.Any<CancellationToken>());
+    }
+
+    private static readonly UserIdentity Reporter = UserIdentity.ForTest(ReporterUserId, "Alex", username: "alex_reporter");
 }

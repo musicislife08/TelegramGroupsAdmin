@@ -36,6 +36,7 @@ public class DeleteCommand : IBotCommand
         Message message,
         string[] args,
         PermissionLevel userPermission,
+        UserIdentity sender,
         CancellationToken cancellationToken = default)
     {
         if (message.ReplyToMessage == null)
