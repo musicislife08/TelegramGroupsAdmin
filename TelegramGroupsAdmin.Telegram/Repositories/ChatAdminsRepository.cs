@@ -48,7 +48,13 @@ public class ChatAdminsRepository : IChatAdminsRepository
             .ThenBy(ca => ca.PromotedAt)
             .ToListAsync(cancellationToken);
 
-        return entities.Select(e => e.ToModel()).ToList();
+        var adminIds = entities.Select(e => e.TelegramId).ToList();
+        var identities = await context.UserIdentities
+            .AsNoTracking()
+            .Where(v => adminIds.Contains(v.TelegramUserId))
+            .ToDictionaryAsync(v => v.TelegramUserId, cancellationToken);
+
+        return entities.Select(e => e.ToModel(identities.GetValueOrDefault(e.TelegramId))).ToList();
     }
 
     /// <inheritdoc/>

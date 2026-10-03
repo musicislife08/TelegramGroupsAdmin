@@ -13,7 +13,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
         {
             // Create the enriched_reports view using SQL from the entity class
             // This keeps the view definition co-located with the entity for maintainability
-            migrationBuilder.Sql(EnrichedReportView.CreateViewSql);
+            migrationBuilder.Sql(LegacyEnrichedViewSql.EnrichedReports);
         }
 
         /// <inheritdoc />

@@ -48,8 +48,8 @@ internal static class EnrichedReportMappings
         return new ImpersonationAlertRecord
         {
             Id = view.Id,
-            SuspectedUser = new UserIdentity(alertContext.SuspectedUserId, view.SuspectedFirstName, view.SuspectedLastName, view.SuspectedUsername),
-            TargetUser = new UserIdentity(alertContext.TargetUserId, view.TargetFirstName, view.TargetLastName, view.TargetUsername),
+            SuspectedUser = UserIdentityMapping.ToIdentity(alertContext.SuspectedUserId, view.SuspectedFirstName, view.SuspectedLastName, view.SuspectedUsername, view.SuspectedIsBot ?? false, view.SuspectedLatestScanExplicit),
+            TargetUser = UserIdentityMapping.ToIdentity(alertContext.TargetUserId, view.TargetFirstName, view.TargetLastName, view.TargetUsername, view.TargetIsBot ?? false, view.TargetLatestScanExplicit),
             Chat = new ChatIdentity(view.ChatId, view.ChatName),
             DetectedAt = view.ReportedAt,
             ReviewedByUserId = view.WebUserId,
@@ -106,7 +106,7 @@ internal static class EnrichedReportMappings
             Outcome = examContext.Outcome,
 
             // From view joins (no more N+1!)
-            User = new UserIdentity(examContext.UserId, view.ExamFirstName, view.ExamLastName, view.ExamUsername),
+            User = UserIdentityMapping.ToIdentity(examContext.UserId, view.ExamFirstName, view.ExamLastName, view.ExamUsername, view.ExamUserIsBot ?? false, view.ExamUserLatestScanExplicit),
             Chat = new ChatIdentity(view.ChatId, view.ChatName),
             UserPhotoPath = view.ExamPhotoPath
         };
@@ -182,7 +182,7 @@ internal static class EnrichedReportMappings
         return new ProfileScanAlertRecord
         {
             Id = view.Id,
-            User = new UserIdentity(alertContext.UserId, view.ProfileFirstName, view.ProfileLastName, view.ProfileUsername),
+            User = UserIdentityMapping.ToIdentity(alertContext.UserId, view.ProfileFirstName, view.ProfileLastName, view.ProfileUsername, view.ProfileUserIsBot ?? false, view.ProfileUserLatestScanExplicit),
             Chat = new ChatIdentity(view.ChatId, view.ChatName),
             Score = alertContext.Score,
             Outcome = (ProfileScanOutcome)alertContext.Outcome,

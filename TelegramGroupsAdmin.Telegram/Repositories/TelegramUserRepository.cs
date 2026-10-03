@@ -966,9 +966,14 @@ public class TelegramUserRepository : ITelegramUserRepository
             .OrderByDescending(r => r.ScannedAt)
             .FirstOrDefaultAsync(cancellationToken);
 
+        // Identity (names + verdict) from the user_identities view, the single source of the verdict rule
+        var identity = await context.UserIdentities
+            .AsNoTracking()
+            .FirstOrDefaultAsync(v => v.TelegramUserId == telegramUserId, cancellationToken);
+
         return new UiModels.TelegramUserDetail
         {
-            User = new UserIdentity(user.TelegramUserId, user.FirstName, user.LastName, user.Username),
+            User = identity?.ToIdentity() ?? UserIdentity.FromId(telegramUserId),
             UserPhotoPath = user.UserPhotoPath,
             PhotoHash = user.PhotoHash,
             IsTrusted = user.IsTrusted,

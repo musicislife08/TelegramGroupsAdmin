@@ -1,5 +1,6 @@
 using DataModels = TelegramGroupsAdmin.Data.Models;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Repositories.Mappings;
 using TelegramGroupsAdmin.Core.Utilities;
 using UiModels = TelegramGroupsAdmin.Telegram.Models;
 
@@ -33,7 +34,7 @@ public static class EnrichedMessageMappings
 
             return new UiModels.MessageRecord(
                 MessageId: view.MessageId,
-                User: new UserIdentity(view.UserId, view.FirstName, view.LastName, view.UserName),
+                User: UserIdentityMapping.ToIdentity(view.UserId, view.FirstName, view.LastName, view.UserName, view.IsBot ?? false, view.LatestScanExplicit),
                 Chat: new ChatIdentity(view.ChatId, view.ChatName),
                 Timestamp: view.Timestamp,
                 MessageText: view.MessageText,

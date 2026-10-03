@@ -171,6 +171,8 @@ public class MessageHistoryRepository : IMessageHistoryRepository
             where m.MessageId == messageId && m.ChatId == chatId
             join c in context.ManagedChats on m.ChatId equals c.ChatId into chatGroup
             from chat in chatGroup.DefaultIfEmpty()
+            join ui in context.UserIdentities on m.UserId equals ui.TelegramUserId into identityGroup
+            from identity in identityGroup.DefaultIfEmpty()
             join u in context.TelegramUsers on m.UserId equals u.TelegramUserId into userGroup
             from user in userGroup.DefaultIfEmpty()
             join parent in context.Messages
@@ -185,9 +187,12 @@ public class MessageHistoryRepository : IMessageHistoryRepository
                 Message = m,
                 ChatName = chat != null ? chat.ChatName : null,
                 ChatIconPath = chat != null ? chat.ChatIconPath : null,
-                UserName = user != null ? user.Username : null,
-                FirstName = user != null ? user.FirstName : null,
-                LastName = user != null ? user.LastName : null,
+                // user_identities is keyless, so no null check on the row: its columns read NULL when unmatched
+                UserName = identity.Username,
+                FirstName = identity.FirstName,
+                LastName = identity.LastName,
+                IsBot = (bool?)identity.IsBot ?? false,
+                LatestScanExplicit = identity.LatestScanExplicit,
                 UserPhotoPath = user != null ? user.UserPhotoPath : null,
                 ParentUserFirstName = parentUserInfo != null ? parentUserInfo.FirstName : null,
                 ParentUserLastName = parentUserInfo != null ? parentUserInfo.LastName : null,
@@ -208,6 +213,8 @@ public class MessageHistoryRepository : IMessageHistoryRepository
             userName: result.UserName,
             firstName: result.FirstName,
             lastName: result.LastName,
+            isBot: result.IsBot,
+            latestScanExplicit: result.LatestScanExplicit,
             userPhotoPath: result.UserPhotoPath,
             replyToUser: TelegramDisplayName.Format(result.ParentUserFirstName, result.ParentUserLastName, result.ParentUserUsername, result.ParentUserId),
             replyToText: result.ReplyToText);

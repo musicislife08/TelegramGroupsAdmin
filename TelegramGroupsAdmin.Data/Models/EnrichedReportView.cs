@@ -16,7 +16,8 @@ public class EnrichedReportView
     /// SQL to create the enriched_reports view. Referenced by migrations.
     /// Joins reports with all related entities based on report type:
     /// - managed_chats (chat name for all types)
-    /// - telegram_users (suspected/target user for ImpersonationAlert, user for ExamResult)
+    /// - user_identities (names, is_bot, latest scan flag) and telegram_users (photo only) for the
+    ///   suspected/target user (ImpersonationAlert), exam user (ExamResult), profile user (ProfileScanAlert)
     /// - users (reviewer email)
     /// </summary>
     public const string CreateViewSql = """
@@ -43,31 +44,39 @@ public class EnrichedReportView
             c.chat_name,
 
             -- ImpersonationAlert: Suspected user (type = 1)
-            suspected.telegram_user_id AS suspected_user_id,
-            suspected.username AS suspected_username,
-            suspected.first_name AS suspected_first_name,
-            suspected.last_name AS suspected_last_name,
+            suspected_ident.telegram_user_id AS suspected_user_id,
+            suspected_ident.username AS suspected_username,
+            suspected_ident.first_name AS suspected_first_name,
+            suspected_ident.last_name AS suspected_last_name,
+            suspected_ident.is_bot AS suspected_is_bot,
+            suspected_ident.latest_scan_explicit AS suspected_latest_scan_explicit,
             suspected.user_photo_path AS suspected_photo_path,
 
             -- ImpersonationAlert: Target user (type = 1)
-            target.telegram_user_id AS target_user_id,
-            target.username AS target_username,
-            target.first_name AS target_first_name,
-            target.last_name AS target_last_name,
+            target_ident.telegram_user_id AS target_user_id,
+            target_ident.username AS target_username,
+            target_ident.first_name AS target_first_name,
+            target_ident.last_name AS target_last_name,
+            target_ident.is_bot AS target_is_bot,
+            target_ident.latest_scan_explicit AS target_latest_scan_explicit,
             target.user_photo_path AS target_photo_path,
 
             -- ExamResult: User (type = 2)
-            exam_user.telegram_user_id AS exam_user_id,
-            exam_user.username AS exam_username,
-            exam_user.first_name AS exam_first_name,
-            exam_user.last_name AS exam_last_name,
+            exam_user_ident.telegram_user_id AS exam_user_id,
+            exam_user_ident.username AS exam_username,
+            exam_user_ident.first_name AS exam_first_name,
+            exam_user_ident.last_name AS exam_last_name,
+            exam_user_ident.is_bot AS exam_user_is_bot,
+            exam_user_ident.latest_scan_explicit AS exam_user_latest_scan_explicit,
             exam_user.user_photo_path AS exam_photo_path,
 
             -- ProfileScanAlert: User (type = 3)
-            profile_user.telegram_user_id AS profile_user_id,
-            profile_user.username AS profile_username,
-            profile_user.first_name AS profile_first_name,
-            profile_user.last_name AS profile_last_name,
+            profile_user_ident.telegram_user_id AS profile_user_id,
+            profile_user_ident.username AS profile_username,
+            profile_user_ident.first_name AS profile_first_name,
+            profile_user_ident.last_name AS profile_last_name,
+            profile_user_ident.is_bot AS profile_user_is_bot,
+            profile_user_ident.latest_scan_explicit AS profile_user_latest_scan_explicit,
             profile_user.user_photo_path AS profile_photo_path,
 
             -- ContentReport: message author (type = 0)
@@ -82,24 +91,32 @@ public class EnrichedReportView
         LEFT JOIN managed_chats c ON r.chat_id = c.chat_id
 
         -- ImpersonationAlert suspected user (only for type = 1)
-        LEFT JOIN telegram_users suspected
+        LEFT JOIN user_identities suspected_ident
             ON r.type = 1
-            AND suspected.telegram_user_id = (r.context->>'suspectedUserId')::bigint
+            AND suspected_ident.telegram_user_id = (r.context->>'suspectedUserId')::bigint
+        LEFT JOIN telegram_users suspected
+            ON suspected.telegram_user_id = suspected_ident.telegram_user_id
 
         -- ImpersonationAlert target user (only for type = 1)
-        LEFT JOIN telegram_users target
+        LEFT JOIN user_identities target_ident
             ON r.type = 1
-            AND target.telegram_user_id = (r.context->>'targetUserId')::bigint
+            AND target_ident.telegram_user_id = (r.context->>'targetUserId')::bigint
+        LEFT JOIN telegram_users target
+            ON target.telegram_user_id = target_ident.telegram_user_id
 
         -- ExamResult user (only for type = 2)
-        LEFT JOIN telegram_users exam_user
+        LEFT JOIN user_identities exam_user_ident
             ON r.type = 2
-            AND exam_user.telegram_user_id = (r.context->>'userId')::bigint
+            AND exam_user_ident.telegram_user_id = (r.context->>'userId')::bigint
+        LEFT JOIN telegram_users exam_user
+            ON exam_user.telegram_user_id = exam_user_ident.telegram_user_id
 
         -- ProfileScanAlert user (only for type = 3)
-        LEFT JOIN telegram_users profile_user
+        LEFT JOIN user_identities profile_user_ident
             ON r.type = 3
-            AND profile_user.telegram_user_id = (r.context->>'userId')::bigint
+            AND profile_user_ident.telegram_user_id = (r.context->>'userId')::bigint
+        LEFT JOIN telegram_users profile_user
+            ON profile_user.telegram_user_id = profile_user_ident.telegram_user_id
 
         -- ContentReport author (only for type = 0). Joins messages on its
         -- (message_id, chat_id) primary key. No telegram_users join — only the
@@ -190,6 +207,13 @@ public class EnrichedReportView
     [Column("suspected_last_name")]
     public string? SuspectedLastName { get; set; }
 
+    [Column("suspected_is_bot")]
+    public bool? SuspectedIsBot { get; set; }
+
+    /// <summary>Explicit flag from the user's latest profile scan; NULL when unscanned.</summary>
+    [Column("suspected_latest_scan_explicit")]
+    public bool? SuspectedLatestScanExplicit { get; set; }
+
     [Column("suspected_photo_path")]
     public string? SuspectedPhotoPath { get; set; }
 
@@ -208,6 +232,13 @@ public class EnrichedReportView
 
     [Column("target_last_name")]
     public string? TargetLastName { get; set; }
+
+    [Column("target_is_bot")]
+    public bool? TargetIsBot { get; set; }
+
+    /// <summary>Explicit flag from the user's latest profile scan; NULL when unscanned.</summary>
+    [Column("target_latest_scan_explicit")]
+    public bool? TargetLatestScanExplicit { get; set; }
 
     [Column("target_photo_path")]
     public string? TargetPhotoPath { get; set; }
@@ -228,6 +259,13 @@ public class EnrichedReportView
     [Column("exam_last_name")]
     public string? ExamLastName { get; set; }
 
+    [Column("exam_user_is_bot")]
+    public bool? ExamUserIsBot { get; set; }
+
+    /// <summary>Explicit flag from the user's latest profile scan; NULL when unscanned.</summary>
+    [Column("exam_user_latest_scan_explicit")]
+    public bool? ExamUserLatestScanExplicit { get; set; }
+
     [Column("exam_photo_path")]
     public string? ExamPhotoPath { get; set; }
 
@@ -246,6 +284,13 @@ public class EnrichedReportView
 
     [Column("profile_last_name")]
     public string? ProfileLastName { get; set; }
+
+    [Column("profile_user_is_bot")]
+    public bool? ProfileUserIsBot { get; set; }
+
+    /// <summary>Explicit flag from the user's latest profile scan; NULL when unscanned.</summary>
+    [Column("profile_user_latest_scan_explicit")]
+    public bool? ProfileUserLatestScanExplicit { get; set; }
 
     [Column("profile_photo_path")]
     public string? ProfilePhotoPath { get; set; }
