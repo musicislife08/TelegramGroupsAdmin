@@ -111,4 +111,23 @@ public class BanCallbackServiceTests
             Arg.Is<BanIntent>(i => i!.Executor.TelegramUserId == ClickerId && i.Executor.DisplayName == "Stored Admin"),
             Arg.Any<CancellationToken>());
     }
+
+    [Test]
+    public async Task HandleCallbackAsync_AdminClicker_BansTheTargetResolvedById()
+    {
+        _permissionService.GetEffectiveLevelAsync(ChatId, ClickerId, Arg.Any<CancellationToken>())
+            .Returns(PermissionLevel.Admin);
+        _userRepository.GetByTelegramIdAsync(TargetId, Arg.Any<CancellationToken>()).Returns(new TelegramUser(
+            TelegramUserId: TargetId, Username: "row", FirstName: "Row", LastName: null,
+            UserPhotoPath: null, PhotoHash: null, PhotoFileUniqueId: null,
+            IsBot: false, IsTrusted: false, IsBanned: false, KickCount: 0, BotDmEnabled: false,
+            FirstSeenAt: DateTimeOffset.UtcNow, LastSeenAt: DateTimeOffset.UtcNow,
+            CreatedAt: DateTimeOffset.UtcNow, UpdatedAt: DateTimeOffset.UtcNow));
+        var target = UserIdentity.ForTest(TargetId, "Resolved", verdict: NameVerdict.Explicit);
+        _identities.ResolveAsync(TargetId, Arg.Any<CancellationToken>()).Returns(target);
+
+        await _service.HandleCallbackAsync(Click($"ban_select:{TargetId}:10"));
+
+        await _moderation.Received(1).BanUserAsync(Arg.Is<BanIntent>(i => i!.User == target), Arg.Any<CancellationToken>());
+    }
 }
