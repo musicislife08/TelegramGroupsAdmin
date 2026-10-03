@@ -122,14 +122,19 @@ public class BotDmService(
         int? autoDeleteSeconds,
         CancellationToken cancellationToken)
     {
-        var masking = await configService.GetNameMaskingAsync(chatId, cancellationToken);
-        message = TelegramMessageBuilder.For(masking).Mention(recipient).Text(" ").Append(message).Build();
-
-        // Fetch chat once for logging (reuse for all logs in this method)
-        var chat = await managedChatsRepository.GetByChatIdAsync(chatId, cancellationToken);
+        // Called from the 403 handler, so every read stays inside the try: any failure becomes
+        // a failed delivery result rather than an exception out of SendDmAsync.
+        var chatIdentity = ChatIdentity.FromId(chatId);
 
         try
         {
+            // Fetch chat once for logging (reuse for all logs in this method)
+            var chat = await managedChatsRepository.GetByChatIdAsync(chatId, cancellationToken);
+            chatIdentity = chat?.Identity ?? chatIdentity;
+
+            var masking = await configService.GetNameMaskingAsync(chatId, cancellationToken);
+            message = TelegramMessageBuilder.For(masking).Mention(recipient).Text(" ").Append(message).Build();
+
             var fallbackMessage = await messageHandler.SendAsync(
                 chatId: chatId,
                 text: message.Text,
@@ -139,7 +144,7 @@ public class BotDmService(
             logger.LogInformation(
                 "Sent fallback message {MessageId} in {Chat}{DeleteInfo}",
                 fallbackMessage.MessageId,
-                (chat?.Identity ?? ChatIdentity.FromId(chatId)).ToLogInfo(),
+                chatIdentity.ToLogInfo(),
                 autoDeleteSeconds.HasValue ? $", will delete in {autoDeleteSeconds.Value} seconds" : "");
 
             if (autoDeleteSeconds.HasValue && autoDeleteSeconds.Value > 0)
@@ -172,14 +177,14 @@ public class BotDmService(
             {
                 logger.LogWarning(
                     "Failed to send fallback message in {Chat} - network unavailable",
-                    (chat?.Identity ?? ChatIdentity.FromId(chatId)).ToLogDebug());
+                    chatIdentity.ToLogDebug());
             }
             else
             {
                 logger.LogError(
                     ex,
                     "Failed to send fallback message in {Chat}",
-                    (chat?.Identity ?? ChatIdentity.FromId(chatId)).ToLogDebug());
+                    chatIdentity.ToLogDebug());
             }
 
             return new DmDeliveryResult

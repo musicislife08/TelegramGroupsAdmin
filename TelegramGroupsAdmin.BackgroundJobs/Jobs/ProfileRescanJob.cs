@@ -72,16 +72,18 @@ public class ProfileRescanJob(
 
             logger.LogInformation("Profile rescan: found {Count} users to scan", userIds.Count);
 
+            // One lookup for the batch; ResolveManyAsync keeps the requested order
+            var users = await identityService.ResolveManyAsync(userIds, cancellationToken);
+
             var scanned = 0;
             var skipped = 0;
             var aborted = false;
-            foreach (var userId in userIds)
+            foreach (var user in users)
             {
                 try
                 {
                     // Look up the user's most recently active chat for alert/notification targeting
-                    var chat = await userRepository.GetFirstChatForUserAsync(userId, cancellationToken);
-                    var user = await identityService.ResolveAsync(userId, cancellationToken);
+                    var chat = await userRepository.GetFirstChatForUserAsync(user.Id, cancellationToken);
 
                     var result = await profileScanService.ScanUserProfileAsync(
                         user,
@@ -105,7 +107,7 @@ public class ProfileRescanJob(
                 }
                 catch (Exception ex)
                 {
-                    logger.LogWarning(ex, "Profile rescan: failed to scan user {UserId}, continuing batch", userId);
+                    logger.LogWarning(ex, "Profile rescan: failed to scan user {UserId}, continuing batch", user.Id);
                 }
             }
 

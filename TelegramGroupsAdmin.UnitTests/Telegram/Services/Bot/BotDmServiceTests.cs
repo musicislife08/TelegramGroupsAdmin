@@ -9,6 +9,7 @@ using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.Bot.Handlers;
 
@@ -184,6 +185,36 @@ public class BotDmServiceTests
             Assert.That(fallbackEntities[0].Offset, Is.Zero);
             Assert.That(fallbackEntities[1].Type, Is.EqualTo(MessageEntityType.Bold));
             Assert.That(fallbackEntities[1].Offset, Is.EqualTo(mention.Length + " You're ".Length));
+        }
+    }
+
+    [Test]
+    public async Task SendDmAsync_DmBlockedAndMaskingReadFails_ReturnsFailedResultWithoutThrowing()
+    {
+        // The fallback runs inside the 403 handler; a config read failure there must become a
+        // failed delivery result, never an exception out of SendDmAsync.
+        const long fallbackChatId = -100557L;
+        _configService.GetNameMaskingAsync(fallbackChatId, Arg.Any<CancellationToken>())
+            .Returns<ValueTask<NameMasking>>(_ => throw new InvalidOperationException("config db down"));
+        _messageHandler
+            .SendAsync(
+                chatId: TestUser.Id,
+                text: Arg.Any<string>(),
+                parseMode: Arg.Any<ParseMode?>(),
+                replyParameters: Arg.Any<ReplyParameters?>(),
+                replyMarkup: Arg.Any<InlineKeyboardMarkup?>(),
+                entities: Arg.Any<IReadOnlyList<MessageEntity>?>(),
+                ct: Arg.Any<CancellationToken>())
+            .Returns<Message>(_ => throw new ApiRequestException("Forbidden: bot was blocked by the user", 403));
+
+        DmDeliveryResult? result = null;
+        Assert.DoesNotThrowAsync(async () => result = await _service.SendDmAsync(TestUser, TelegramMessage.Plain("Notice"), fallbackChatId));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result!.Failed, Is.True);
+            Assert.That(result.DmSent, Is.False);
+            Assert.That(result.FallbackUsed, Is.False);
         }
     }
 
