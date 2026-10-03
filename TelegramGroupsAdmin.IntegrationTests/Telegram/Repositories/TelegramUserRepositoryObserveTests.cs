@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
@@ -131,6 +132,25 @@ public class TelegramUserRepositoryObserveTests
     }
 
     [Test]
+    public async Task NonUtcObservedAt_IsStoredAsTheUtcInstant()
+    {
+        var id = GoldenDatasetConstants.IdentityService.UntrustedNoHistoryUserId;
+        await using var ctx = _testHelper!.GetDbContext();
+        var before = await ctx.TelegramUsers.AsNoTracking().SingleAsync(u => u.TelegramUserId == id);
+        Assert.That(before.NamesObservedAt, Is.Null);
+        Assert.That(before.FirstName, Is.Not.EqualTo("Offset"));
+        var at = new DateTimeOffset(2026, 10, 3, 14, 30, 0, TimeSpan.FromHours(2));
+
+        var result = await _repository!.GetOrUpdateAsync(
+            Observe(id, "Offset", before.LastName, before.Username, at), NoContext);
+
+        Assert.That(result.Renamed, Is.Not.Null);
+        var after = await ctx.TelegramUsers.AsNoTracking().SingleAsync(u => u.TelegramUserId == id);
+        Assert.That(after.NamesObservedAt, Is.EqualTo(at));
+        Assert.That(after.NamesObservedAt!.Value.UtcDateTime, Is.EqualTo(new DateTime(2026, 10, 3, 12, 30, 0, DateTimeKind.Utc)));
+    }
+
+    [Test]
     public async Task NameUpdate_LeavesPhotoFieldsUntouched()
     {
         var id = GoldenDatasetConstants.IdentityService.PhotoUserId;
@@ -176,10 +196,18 @@ public class TelegramUserRepositoryObserveTests
         var first = _repository!.GetOrUpdateAsync(Observe(id, "Racer", null, null, at), NoContext);
         var second = _repository.GetOrUpdateAsync(Observe(id, "Racer", null, null, at), NoContext);
 
-        await WaitForLockWaitersAsync(expected: 2);
-        await tx.CommitAsync();
+        ObservedNamesResult[] results;
+        try
+        {
+            await WaitForLockWaitersAsync(expected: 2);
+        }
+        finally
+        {
+            // Release the lock and observe both writers even if the probe failed.
+            await tx.CommitAsync();
+            results = await Task.WhenAll(first, second);
+        }
 
-        var results = await Task.WhenAll(first, second);
         Assert.That(results.Count(r => r.Renamed is not null), Is.EqualTo(1));
         Assert.That(results.Select(r => r.User.FirstName), Is.All.EqualTo("Racer"));
         await using var verify = _testHelper.GetDbContext();
@@ -187,23 +215,29 @@ public class TelegramUserRepositoryObserveTests
     }
 
     /// <summary>
-    /// Polls pg_stat_activity (no sleeps) until this test database has the expected number of
-    /// sessions waiting on a lock. The probe uses the test's own connection string, so
-    /// current_database() is the per-test clone and other tests' sessions are not counted.
+    /// Polls pg_stat_activity until this test database has the expected number of sessions waiting
+    /// on a lock, bounded by elapsed time (fixtures run in parallel, so the writers can be slow to
+    /// reach the lock). The probe uses the test's own connection string, so current_database() is
+    /// the per-test clone and other tests' sessions are not counted.
     /// </summary>
     private async Task WaitForLockWaitersAsync(int expected)
     {
         await using var probe = new NpgsqlConnection(_testHelper!.ConnectionString);
         await probe.OpenAsync();
         Assert.That(probe.Database, Is.EqualTo(_testHelper.DatabaseName));
-        for (var attempt = 0; attempt < 2000; attempt++)
+        var deadline = Stopwatch.StartNew();
+        long waiters = 0;
+        while (deadline.Elapsed < LockWaitTimeout)
         {
             await using var cmd = new NpgsqlCommand(
                 "SELECT count(*) FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock'",
                 probe);
-            if ((long)(await cmd.ExecuteScalarAsync())! >= expected) return;
-            await Task.Yield();
+            waiters = (long)(await cmd.ExecuteScalarAsync())!;
+            if (waiters >= expected) return;
+            await Task.Delay(1);
         }
-        Assert.Fail($"Expected {expected} lock waiters");
+        Assert.Fail($"Expected {expected} lock waiters within {LockWaitTimeout}, last saw {waiters}");
     }
+
+    private static readonly TimeSpan LockWaitTimeout = TimeSpan.FromSeconds(30);
 }

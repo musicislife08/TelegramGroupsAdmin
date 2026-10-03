@@ -97,6 +97,8 @@ public class TelegramUserRepository : ITelegramUserRepository
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
         var now = DateTimeOffset.UtcNow;
+        // Npgsql writes timestamptz only from offset-zero values.
+        var observedAt = observed.ObservedAt.ToUniversalTime();
         var isTrusted = TelegramConstants.IsSystemUser(observed.Id);
 
         await context.Database.ExecuteSqlAsync($"""
@@ -105,7 +107,7 @@ public class TelegramUserRepository : ITelegramUserRepository
                 is_bot, is_trusted, is_banned, bot_dm_enabled,
                 first_seen_at, last_seen_at, created_at, updated_at, is_active
             ) VALUES (
-                {observed.Id}, {observed.Username}, {observed.FirstName}, {observed.LastName}, {observed.ObservedAt},
+                {observed.Id}, {observed.Username}, {observed.FirstName}, {observed.LastName}, {observedAt},
                 {observed.IsBot}, {isTrusted}, {false}, {false},
                 {now}, {now}, {now}, {now}, {false}
             )
@@ -114,22 +116,22 @@ public class TelegramUserRepository : ITelegramUserRepository
 
         // The FOR UPDATE row lock serializes concurrent writers. A writer that waited re-reads the
         // committed row, so the WHERE fails for it and only the statement that changed the names
-        // returns a row. RETURNING old.* yields the names as they were before this update.
+        // returns a row. RETURNING prev.* yields the names as they were before this update.
         var previous = await context.Database.SqlQuery<PreviousNamesRow>($"""
             UPDATE telegram_users t
             SET first_name = {observed.FirstName},
                 last_name = {observed.LastName},
                 username = {observed.Username},
-                names_observed_at = {observed.ObservedAt},
+                names_observed_at = {observedAt},
                 updated_at = {now}
             FROM (SELECT telegram_user_id, first_name, last_name, username
-                  FROM telegram_users WHERE telegram_user_id = {observed.Id} FOR UPDATE) old
-            WHERE t.telegram_user_id = old.telegram_user_id
-              AND (t.names_observed_at IS NULL OR {observed.ObservedAt} >= t.names_observed_at)
+                  FROM telegram_users WHERE telegram_user_id = {observed.Id} FOR UPDATE) prev
+            WHERE t.telegram_user_id = prev.telegram_user_id
+              AND (t.names_observed_at IS NULL OR {observedAt} >= t.names_observed_at)
               AND (t.first_name IS DISTINCT FROM {observed.FirstName}
                    OR t.last_name IS DISTINCT FROM {observed.LastName}
                    OR t.username IS DISTINCT FROM {observed.Username})
-            RETURNING old.first_name AS "FirstName", old.last_name AS "LastName", old.username AS "Username"
+            RETURNING prev.first_name AS "FirstName", prev.last_name AS "LastName", prev.username AS "Username"
             """).ToListAsync(cancellationToken);
 
         UiModels.PreviousNames? renamed = null;
@@ -165,9 +167,9 @@ public class TelegramUserRepository : ITelegramUserRepository
         // Advance the watermark when the names were already equal, so a later stale observation
         // cannot overwrite them.
         await context.Database.ExecuteSqlAsync($"""
-            UPDATE telegram_users SET names_observed_at = {observed.ObservedAt}
+            UPDATE telegram_users SET names_observed_at = {observedAt}
             WHERE telegram_user_id = {observed.Id}
-              AND (names_observed_at IS NULL OR names_observed_at < {observed.ObservedAt})
+              AND (names_observed_at IS NULL OR names_observed_at < {observedAt})
             """, cancellationToken);
 
         await transaction.CommitAsync(cancellationToken);
@@ -188,9 +190,10 @@ public class TelegramUserRepository : ITelegramUserRepository
     public async Task MarkActiveAsync(long telegramUserId, DateTimeOffset seenAt, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var seenAtUtc = seenAt.ToUniversalTime();
         await context.Database.ExecuteSqlAsync($"""
             UPDATE telegram_users
-            SET is_active = true, last_seen_at = {seenAt}, updated_at = {DateTimeOffset.UtcNow}
+            SET is_active = true, last_seen_at = {seenAtUtc}, updated_at = {DateTimeOffset.UtcNow}
             WHERE telegram_user_id = {telegramUserId}
             """, cancellationToken);
     }
