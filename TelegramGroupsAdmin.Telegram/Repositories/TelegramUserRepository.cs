@@ -193,7 +193,9 @@ public class TelegramUserRepository : ITelegramUserRepository
         var seenAtUtc = seenAt.ToUniversalTime();
         await context.Database.ExecuteSqlAsync($"""
             UPDATE telegram_users
-            SET is_active = true, last_seen_at = {seenAtUtc}, updated_at = {DateTimeOffset.UtcNow}
+            SET is_active = true,
+                last_seen_at = GREATEST(last_seen_at, {seenAtUtc}),
+                updated_at = {DateTimeOffset.UtcNow}
             WHERE telegram_user_id = {telegramUserId}
             """, cancellationToken);
     }

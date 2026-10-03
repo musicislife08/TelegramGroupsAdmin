@@ -214,6 +214,38 @@ public class TelegramUserRepositoryObserveTests
         Assert.That(await verify.UsernameHistory.CountAsync(h => h.UserId == id), Is.EqualTo(1));
     }
 
+    [Test]
+    public async Task MarkActive_OnlyMovesLastSeenForward()
+    {
+        var id = GoldenDatasetConstants.IdentityService.UntrustedNoHistoryUserId;
+        DateTimeOffset canonicalLastSeen;
+        await using (var ctx = _testHelper!.GetDbContext())
+        {
+            var row = await ctx.TelegramUsers.AsNoTracking().SingleAsync(u => u.TelegramUserId == id);
+            canonicalLastSeen = row.LastSeenAt;
+        }
+
+        // A late-processed older update must not move last_seen_at back, but still marks the user active.
+        await _repository!.MarkActiveAsync(id, canonicalLastSeen.AddDays(-1));
+
+        await using (var ctx = _testHelper.GetDbContext())
+        {
+            var row = await ctx.TelegramUsers.AsNoTracking().SingleAsync(u => u.TelegramUserId == id);
+            Assert.That(row.LastSeenAt, Is.EqualTo(canonicalLastSeen));
+            Assert.That(row.IsActive, Is.True);
+        }
+
+        var newer = canonicalLastSeen.AddDays(1);
+        await _repository.MarkActiveAsync(id, newer);
+
+        await using (var ctx = _testHelper.GetDbContext())
+        {
+            var row = await ctx.TelegramUsers.AsNoTracking().SingleAsync(u => u.TelegramUserId == id);
+            Assert.That(row.LastSeenAt, Is.EqualTo(newer));
+            Assert.That(row.IsActive, Is.True);
+        }
+    }
+
     /// <summary>
     /// Polls pg_stat_activity until this test database has the expected number of sessions waiting
     /// on a lock, bounded by elapsed time (fixtures run in parallel, so the writers can be slow to
@@ -233,8 +265,8 @@ public class TelegramUserRepositoryObserveTests
                 "SELECT count(*) FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock'",
                 probe);
             waiters = (long)(await cmd.ExecuteScalarAsync())!;
+            // Each probe is a database round trip, which paces the loop.
             if (waiters >= expected) return;
-            await Task.Delay(1);
         }
         Assert.Fail($"Expected {expected} lock waiters within {LockWaitTimeout}, last saw {waiters}");
     }

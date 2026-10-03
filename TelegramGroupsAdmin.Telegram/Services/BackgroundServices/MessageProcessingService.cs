@@ -674,8 +674,9 @@ public partial class MessageProcessingService(
             // without a join event (for example, accounts commenting on channel
             // posts in a linked discussion group) are not covered by the join
             // trigger, and have no prior names for a rename to be detected against.
-            // The observation at the start of this method guarantees the user row
-            // for the scan-result and report foreign keys. The gate owns the whole
+            // The observation at the start of this method creates the user row for
+            // the scan-result and report foreign keys, unless recording it failed
+            // (which ObserveAsync logs). The gate owns the whole
             // eligibility decision, including whether this user was scanned before.
             var profileScanBanned = false;
 

@@ -41,6 +41,7 @@ public class MessageProcessingServiceObserveTests
     private ITelegramUserRepository _users = null!;
     private ITelegramPermissionService _permissions = null!;
     private MessageProcessingService _sut = null!;
+    private string _dataPath = null!;
 
     [SetUp]
     public void SetUp()
@@ -58,7 +59,8 @@ public class MessageProcessingServiceObserveTests
 
         var services = new ServiceCollection();
         services.AddLogging();
-        services.Configure<AppOptions>(o => o.DataPath = Path.Combine(Path.GetTempPath(), $"tga-observe-{Guid.NewGuid():N}"));
+        _dataPath = Path.Combine(Path.GetTempPath(), $"tga-observe-{Guid.NewGuid():N}");
+        services.Configure<AppOptions>(o => o.DataPath = _dataPath);
 
         services.AddSingleton(_identities);
         services.AddSingleton(_users);
@@ -107,7 +109,12 @@ public class MessageProcessingServiceObserveTests
     }
 
     [TearDown]
-    public void TearDown() => _provider.Dispose();
+    public void TearDown()
+    {
+        _provider.Dispose();
+        if (Directory.Exists(_dataPath))
+            Directory.Delete(_dataPath, recursive: true);
+    }
 
     [Test]
     public async Task NewMessage_ObservesSenderBeforeRoutingCommands()
@@ -138,7 +145,6 @@ public class MessageProcessingServiceObserveTests
             RenameRescan.Inline,
             Arg.Any<CancellationToken>());
         await _users.Received(1).MarkActiveAsync(SenderId, expectedAt, Arg.Any<CancellationToken>());
-        await _users.DidNotReceiveWithAnyArgs().UpsertAsync(default!);
     }
 
     [Test]
@@ -147,6 +153,18 @@ public class MessageProcessingServiceObserveTests
         // DMs never recorded names or rescanned before; recording a DM rename without a
         // rescan would use the rename up before the next group message could act on it.
         var message = TextMessage(from: SenderId, text: "hello", chatType: ChatType.Private, chatId: SenderId);
+
+        await _sut.HandleNewMessageAsync(message, CancellationToken.None);
+
+        await _identities.DidNotReceiveWithAnyArgs().ObserveAsync(default!, default!, default, default);
+        await _users.DidNotReceiveWithAnyArgs().MarkActiveAsync(default, default, default);
+    }
+
+    [Test]
+    public async Task GroupMessageWithoutSender_IsNotObservedOrMarkedActive()
+    {
+        var message = TextMessage(from: SenderId, text: "hi");
+        message.From = null;
 
         await _sut.HandleNewMessageAsync(message, CancellationToken.None);
 

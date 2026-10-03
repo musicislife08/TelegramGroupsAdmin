@@ -38,7 +38,8 @@ public interface ITelegramUserRepository
         UiModels.ObservedUser observed, UiModels.ProfileChangeContext context, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Marks the user active and sets last_seen_at. Names are untouched; they change only via
+    /// Marks the user active and moves last_seen_at forward to <paramref name="seenAt"/> (an older
+    /// update processed late never moves it back). Names are untouched; they change only via
     /// <see cref="GetOrUpdateAsync"/>.
     /// </summary>
     Task MarkActiveAsync(long telegramUserId, DateTimeOffset seenAt, CancellationToken cancellationToken = default);
