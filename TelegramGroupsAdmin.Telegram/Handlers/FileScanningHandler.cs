@@ -4,6 +4,7 @@ using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.JobPayloads;
+using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
 using static TelegramGroupsAdmin.Core.BackgroundJobs.DeduplicationKeys;
 using TelegramGroupsAdmin.Telegram.Extensions;
@@ -50,12 +51,15 @@ public class FileScanningHandler
     /// Returns scan scheduling result if document found, null otherwise.
     /// Respects FileScanning.Enabled and FileScanning.AlwaysRun configuration.
     /// </summary>
+    /// <param name="message">Message that may carry a document.</param>
+    /// <param name="sender">Identity of <c>message.From</c>, as the pipeline recorded it.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     public async Task<FileScanSchedulingResult?> ProcessFileScanningAsync(
         Message message,
-        long chatId,
-        long userId,
+        UserIdentity sender,
         CancellationToken cancellationToken = default)
     {
+        var chatId = message.Chat.Id;
         var detection = DetectScannableFile(message);
         if (detection == null)
         {
@@ -87,8 +91,8 @@ public class FileScanningHandler
         // Check trust/admin status for AlwaysRun bypass logic
         if (!fileScanningConfig.AlwaysRun)
         {
-            var isUserTrusted = await _userRepository.IsTrustedAsync(userId, cancellationToken);
-            var isUserAdmin = await _chatAdminsRepository.IsAdminAsync(chatId, userId, cancellationToken);
+            var isUserTrusted = await _userRepository.IsTrustedAsync(sender.Id, cancellationToken);
+            var isUserAdmin = await _chatAdminsRepository.IsAdminAsync(chatId, sender.Id, cancellationToken);
 
             if (isUserTrusted || isUserAdmin)
             {
@@ -99,7 +103,7 @@ public class FileScanningHandler
                 _logger.LogInformation(
                     "Skipping file scan for '{FileName}' from {User} in {Chat}: {Reason}",
                     detection.FileName ?? "unknown",
-                    message.From.ToLogInfo(),
+                    sender.ToLogInfo(),
                     message.Chat.ToLogInfo(),
                     skipReason);
 
@@ -119,7 +123,7 @@ public class FileScanningHandler
         var scanPayload = new FileScanJobPayload(
             MessageId: message.MessageId,
             Chat: ChatIdentity.From(message.Chat),
-            User: message.From != null ? UserIdentity.From(message.From) : UserIdentity.FromId(userId),
+            User: sender,
             FileId: detection.FileId,
             FileSize: detection.FileSize,
             FileName: detection.FileName,
@@ -130,7 +134,7 @@ public class FileScanningHandler
             "Scheduling file scan for '{FileName}' ({FileSize} bytes) from {User} in {Chat}",
             detection.FileName ?? "unknown",
             detection.FileSize,
-            message.From.ToLogInfo(),
+            sender.ToLogInfo(),
             message.Chat.ToLogInfo());
 
         await _jobScheduler.ScheduleJobAsync(

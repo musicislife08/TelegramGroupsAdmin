@@ -48,10 +48,11 @@ public class MessageEditProcessor
         // An edit reports the editor's current names, dated by the edit. Recorded before anything
         // else, and a rename is rescanned inline as for a new message. DMs are not observed: a DM
         // rename recorded without a rescan would use the rename up before the next group message.
+        UserIdentity? editorIdentity = null;
         if (editedMessage.From is { } editor && editedMessage.Chat.Type != ChatType.Private)
         {
             var observedAt = (editedMessage.EditDate ?? editedMessage.Date).ToUtcOffset();
-            await scope.ServiceProvider.GetRequiredService<IUserIdentityService>().ObserveAsync(
+            editorIdentity = await scope.ServiceProvider.GetRequiredService<IUserIdentityService>().ObserveAsync(
                 new ObservedUser(editor.Id, editor.FirstName, editor.LastName, editor.Username,
                     editor.IsBot, ObservationSource.BotUpdate, observedAt),
                 new ProfileChangeContext(ChatIdentity.From(editedMessage.Chat), editedMessage.MessageId),
@@ -130,7 +131,7 @@ public class MessageEditProcessor
             editedMessage.Chat.ToLogInfo());
 
         // Schedule spam re-scan in background
-        await ScheduleSpamReScanAsync(editedMessage, newText);
+        await ScheduleSpamReScanAsync(editedMessage, editorIdentity, newText);
 
         return editRecord;
     }
@@ -200,9 +201,11 @@ public class MessageEditProcessor
     /// </summary>
     private Task ScheduleSpamReScanAsync(
         Message editedMessage,
+        UserIdentity? editor,
         string? newText)
     {
-        if (string.IsNullOrWhiteSpace(newText))
+        // Only an observed group edit has an editor identity; nothing else is scanned.
+        if (string.IsNullOrWhiteSpace(newText) || editor is null)
             return Task.CompletedTask;
 
         _ = Task.Run(async () =>
@@ -219,7 +222,7 @@ public class MessageEditProcessor
                     : 0;
 
                 var contentOrchestrator = scope.ServiceProvider.GetRequiredService<ContentDetectionOrchestrator>();
-                await contentOrchestrator.RunDetectionAsync(editedMessage, newText, photoLocalPath: null, editVersion: maxEditVersion + 1, CancellationToken.None);
+                await contentOrchestrator.RunDetectionAsync(editedMessage, editor, newText, photoLocalPath: null, editVersion: maxEditVersion + 1, CancellationToken.None);
             }
             catch (Exception ex)
             {

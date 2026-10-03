@@ -588,8 +588,7 @@ public partial class MessageProcessingService(
             var fileScanHandler = messageScope.ServiceProvider.GetRequiredService<Handlers.FileScanningHandler>();
             await fileScanHandler.ProcessFileScanningAsync(
                 message,
-                message.Chat.Id,
-                message.From!.Id,
+                sender,
                 cancellationToken);
 
             // CRITICAL: Check if user was banned while this message was being processed
@@ -765,6 +764,7 @@ public partial class MessageProcessingService(
                     // Use translated text if available (avoids double translation in ContentDetectionEngine)
                     await contentOrchestrator.RunDetectionAsync(
                         message,
+                        sender,
                         translationForDetection.TextForDetection,
                         photoLocalPath,
                         editVersion: 0,
