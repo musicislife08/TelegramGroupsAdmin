@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Branch: `feat/552-user-identity-service`, created from `docs/552-name-masking-specs`. PR to `develop` only. Conventional commits. Never commit to `develop`/`master`. Never use git worktrees.
+- Branch: `feat/552-user-identity-service` (spec, plan and implementation together). PR to `develop` only. Conventional commits. Never commit to `develop`/`master`. Never use git worktrees.
 - Fixed wording: `[name removed: explicit]` (explicit), `[name removed: spam]` (promotional). No configurable redaction text.
 - `NameVerdict` values: `Unscanned`, `Clean`, `Promotional`, `Explicit`. Nothing produces `Promotional` in this plan.
 - Setting: `MaskFlaggedNames`, default `true`, global (`chat_id = 0`) with per-chat override via `GetEffectiveWelcomeAsync`; chat-less messages use the global value.
@@ -64,11 +64,11 @@ None. Planning decisions (inline rename rescans, the `user_identities` view, rul
 
 ### Task 0: Branch
 
-- [ ] **Step 1: Create the branch**
+The spec, this plan and the implementation share one branch, `feat/552-user-identity-service`.
+
+- [ ] **Step 1: Confirm the branch**
 
 ```bash
-git checkout docs/552-name-masking-specs
-git checkout -b feat/552-user-identity-service
 git branch --show-current
 ```
 Expected: `feat/552-user-identity-service`
