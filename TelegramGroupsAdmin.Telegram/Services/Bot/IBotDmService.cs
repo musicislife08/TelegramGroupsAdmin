@@ -48,23 +48,27 @@ public interface IBotDmService
     /// <summary>
     /// Edit a DM text message with optional inline keyboard change.
     /// Used for updating review notification DMs after admin action (removes buttons, shows result).
+    /// Pass the original message's entities to keep its formatting (mentions, bold, links).
     /// </summary>
     Task<Message> EditDmTextAsync(
         long dmChatId,
         int messageId,
         string text,
         InlineKeyboardMarkup? replyMarkup = null,
+        IReadOnlyList<MessageEntity>? entities = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Edit a DM media message caption with optional inline keyboard change.
     /// Used for updating review notification DMs with photos/videos after admin action.
+    /// Pass the original caption's entities to keep its formatting (mentions, bold, links).
     /// </summary>
     Task<Message> EditDmCaptionAsync(
         long dmChatId,
         int messageId,
         string? caption,
         InlineKeyboardMarkup? replyMarkup = null,
+        IReadOnlyList<MessageEntity>? captionEntities = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>

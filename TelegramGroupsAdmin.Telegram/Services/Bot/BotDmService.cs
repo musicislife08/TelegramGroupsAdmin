@@ -193,6 +193,7 @@ public class BotDmService(
         int messageId,
         string text,
         InlineKeyboardMarkup? replyMarkup = null,
+        IReadOnlyList<MessageEntity>? entities = null,
         CancellationToken cancellationToken = default)
     {
         var editedMessage = await messageHandler.EditTextAsync(
@@ -200,6 +201,7 @@ public class BotDmService(
             messageId: messageId,
             text: text,
             replyMarkup: replyMarkup,
+            entities: entities,
             ct: cancellationToken);
 
         logger.LogDebug("Edited DM text message {MessageId} in chat {ChatId}", messageId, dmChatId);
@@ -212,6 +214,7 @@ public class BotDmService(
         int messageId,
         string? caption,
         InlineKeyboardMarkup? replyMarkup = null,
+        IReadOnlyList<MessageEntity>? captionEntities = null,
         CancellationToken cancellationToken = default)
     {
         var editedMessage = await messageHandler.EditCaptionAsync(
@@ -219,6 +222,7 @@ public class BotDmService(
             messageId: messageId,
             caption: caption,
             replyMarkup: replyMarkup,
+            captionEntities: captionEntities,
             ct: cancellationToken);
 
         logger.LogDebug("Edited DM caption for message {MessageId} in chat {ChatId}", messageId, dmChatId);

@@ -123,6 +123,7 @@ public class BotMessageHandler(ITelegramBotClientFactory botClientFactory) : IBo
         string? caption,
         ParseMode? parseMode = null,
         InlineKeyboardMarkup? replyMarkup = null,
+        IReadOnlyList<MessageEntity>? captionEntities = null,
         CancellationToken ct = default)
     {
         var apiClient = await botClientFactory.GetApiClientAsync();
@@ -132,6 +133,7 @@ public class BotMessageHandler(ITelegramBotClientFactory botClientFactory) : IBo
             caption: caption ?? string.Empty,
             parseMode: parseMode,
             replyMarkup: replyMarkup,
+            captionEntities: captionEntities,
             ct: ct);
     }
 

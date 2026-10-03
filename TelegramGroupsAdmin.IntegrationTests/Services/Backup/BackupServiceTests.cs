@@ -1302,6 +1302,7 @@ public class BackupServiceTests
             int messageId,
             string text,
             InlineKeyboardMarkup? replyMarkup = null,
+            IReadOnlyList<MessageEntity>? entities = null,
             CancellationToken cancellationToken = default)
             => Task.FromResult(TelegramTestFactory.CreateMessage(messageId: messageId));
 
@@ -1310,6 +1311,7 @@ public class BackupServiceTests
             int messageId,
             string? caption,
             InlineKeyboardMarkup? replyMarkup = null,
+            IReadOnlyList<MessageEntity>? captionEntities = null,
             CancellationToken cancellationToken = default)
             => Task.FromResult(TelegramTestFactory.CreateMessage(messageId: messageId));
 
