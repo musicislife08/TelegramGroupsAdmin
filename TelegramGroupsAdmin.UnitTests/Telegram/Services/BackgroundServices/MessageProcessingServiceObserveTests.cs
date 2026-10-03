@@ -7,6 +7,8 @@ using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Services;
+using TelegramGroupsAdmin.ContentDetection.Models;
+using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Services;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Imaging;
@@ -41,6 +43,9 @@ public class MessageProcessingServiceObserveTests
     private ITelegramUserRepository _users = null!;
     private ITelegramPermissionService _permissions = null!;
     private IBotCommand _help = null!;
+    private IProfileScanGate _scanGate = null!;
+    private IManagedChatsRepository _chats = null!;
+    private IContentCheckCoordinator _coordinator = null!;
     private MessageProcessingService _sut = null!;
     private string _dataPath = null!;
 
@@ -72,10 +77,19 @@ public class MessageProcessingServiceObserveTests
 
         // Managed-chat lookups return null, so content detection is skipped as for an inactive chat.
         services.AddSingleton(Substitute.For<IConfigService>());
-        services.AddSingleton(Substitute.For<IManagedChatsRepository>());
+        _chats = Substitute.For<IManagedChatsRepository>();
+        services.AddSingleton(_chats);
         services.AddSingleton(Substitute.For<IChatAdminsRepository>());
         services.AddSingleton(Substitute.For<IMessageHistoryRepository>());
-        services.AddSingleton(Substitute.For<IProfileScanGate>());
+        _scanGate = Substitute.For<IProfileScanGate>();
+        services.AddSingleton(_scanGate);
+        // Content detection is the observable consumer of the sender after the first-message scan.
+        // It only runs for an active managed chat; the coordinator is where the sender lands.
+        _coordinator = Substitute.For<IContentCheckCoordinator>();
+        services.AddSingleton(_coordinator);
+        services.AddSingleton(Substitute.For<IDetectionResultsRepository>());
+        services.AddScoped(sp => new ContentDetectionOrchestrator(
+            sp, null!, NullLogger<ContentDetectionOrchestrator>.Instance)); // action service unused: no result
         services.AddSingleton(Substitute.For<IJobScheduler>());
         services.AddSingleton(Substitute.For<IImageProcessor>());
         services.AddSingleton(Substitute.For<IBotChatService>());
@@ -200,6 +214,36 @@ public class MessageProcessingServiceObserveTests
 
         await _identities.DidNotReceiveWithAnyArgs().ObserveAsync(default!, default!, default, default);
         await _users.DidNotReceiveWithAnyArgs().MarkActiveAsync(default, default, default);
+    }
+
+    [Test]
+    public async Task FirstMessageScan_DownstreamUsesIdentityResolvedAfterTheScan()
+    {
+        // Observed before the scan: no verdict. The scan flags the name, so the identity resolved
+        // after it carries the verdict, and content detection must receive that one.
+        _identities.ObserveAsync(Arg.Any<ObservedUser>(), Arg.Any<ProfileChangeContext>(), Arg.Any<RenameRescan>(), Arg.Any<CancellationToken>())
+            .Returns(UserIdentity.ForTest(SenderId, "A"));
+        var rescanned = UserIdentity.ForTest(SenderId, "A", verdict: NameVerdict.Explicit);
+        _identities.ResolveAsync(SenderId, Arg.Any<CancellationToken>()).Returns(rescanned);
+        _scanGate.ScanIfEligibleAsync(Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity?>(), ProfileScanTrigger.FirstMessage, Arg.Any<CancellationToken>())
+            .Returns(new ProfileScanResult(SenderId, null, null, null, null, false, null, false, false, false,
+                3m, ProfileScanOutcome.HeldForReview, "explicit name", ["explicit"], ExplicitDisplayText: true));
+        _chats.GetByChatIdAsync(ChatId, Arg.Any<CancellationToken>())
+            .Returns(new ManagedChatRecord(ChatIdentity.FromId(ChatId), default, default, IsAdmin: true,
+                DateTimeOffset.UtcNow, IsActive: true, IsDeleted: false, null, null, null));
+
+        await _sut.HandleNewMessageAsync(TextMessage(from: SenderId, text: "hello"), CancellationToken.None);
+
+        await _coordinator.Received(1).CheckAsync(
+            Arg.Is<ContentCheckRequest>(r => r!.User == rescanned), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task NoFirstMessageScan_DoesNotReResolve()
+    {
+        await _sut.HandleNewMessageAsync(TextMessage(from: SenderId, text: "hello"), CancellationToken.None);
+
+        await _identities.DidNotReceiveWithAnyArgs().ResolveAsync(default, default);
     }
 
     private static Message TextMessage(long from, string text, ChatType chatType = ChatType.Supergroup, long chatId = ChatId) => new()

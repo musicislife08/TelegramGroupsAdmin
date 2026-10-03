@@ -682,11 +682,12 @@ public partial class MessageProcessingService(
             // (which ObserveAsync logs). The gate owns the whole
             // eligibility decision, including whether this user was scanned before.
             var profileScanBanned = false;
+            ProfileScanResult? firstMessageScan = null;
 
             try
             {
                 var profileScanGate = messageScope.ServiceProvider.GetRequiredService<IProfileScanGate>();
-                var firstMessageScan = await profileScanGate.ScanIfEligibleAsync(
+                firstMessageScan = await profileScanGate.ScanIfEligibleAsync(
                     sender,
                     ChatIdentity.From(message.Chat),
                     ProfileScanTrigger.FirstMessage,
@@ -702,6 +703,14 @@ public partial class MessageProcessingService(
             {
                 // A failed scan must never cost us the message.
                 LogProfileScanFailed(logger, ex, message.From.ToLogDebug());
+            }
+
+            // The scan may have just flagged the name, and the identity observed above predates its
+            // verdict: re-resolve so the rest of the pipeline masks it. Never throws except on cancellation.
+            if (firstMessageScan is not null)
+            {
+                sender = await messageScope.ServiceProvider.GetRequiredService<IUserIdentityService>()
+                    .ResolveAsync(sender.Id, cancellationToken);
             }
 
             // Raise event for real-time UI updates
