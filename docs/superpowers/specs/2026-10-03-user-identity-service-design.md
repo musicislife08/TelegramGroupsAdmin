@@ -244,8 +244,10 @@ passes the identity down.
   wording is fixed so both labels share one format.
 - A data migration renames the JSONB key in every `configs` row so stored values carry over.
 - The setting sits where the explicit toggle is today, with helper text naming both labels.
-- Masking still requires a verdict, so a chat with profile scanning off gets no masking (admin
-  choice).
+- Masking does not depend on whether a chat scans profiles. A verdict belongs to the account, so a
+  name flagged by one chat's scan is masked in every chat with the setting on. In practice a flagged
+  account is almost always removed everywhere already. The settings switch is no longer disabled
+  when scanning is off.
 
 ### Platform boundary
 

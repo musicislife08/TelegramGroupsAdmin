@@ -26,9 +26,7 @@
 
 ## Spec deviations
 
-1. **Masking keeps the profile-scan kill switch.** `GetNameMaskingAsync` returns `On` only when the effective `ProfileScan.Enabled` and `MaskFlaggedNames` are both true, matching today's `maskingActive` rule in `BanCelebrationService.cs:87`. (Pending the maintainer's decision.)
-
-Earlier planning decisions (inline rename rescans, the `user_identities` view, rule-plus-test enforcement) are now in the spec.
+None. Planning decisions (inline rename rescans, the `user_identities` view, rule-plus-test enforcement, masking independent of the scan switch) are in the spec.
 
 ## Review Focus
 
@@ -36,7 +34,7 @@ Earlier planning decisions (inline rename rescans, the `user_identities` view, r
 2. A user renamed twice quickly (A→B→A) must record both changes and end on A, and a stale scan observation must not undo a newer message name: pinned by Task 5's ordering tests.
 3. Names containing only whitespace or emoji, and users with only an id (no row), must still render a non-empty mention: pinned by Task 1's `BotDisplayName` cases and Task 6's id-only resolve test.
 4. A DB failure during `ObserveAsync` must not stop the message being moderated: pinned by Task 6's failure test.
-5. Turning `MaskFlaggedNames` off for one chat must not unmask admin DMs (global value applies there): pinned by Task 3's `GetNameMaskingAsync` tests.
+5. Turning `MaskFlaggedNames` off for one chat must not unmask admin DMs (global value applies there), and a chat with scanning off still masks a name flagged elsewhere: pinned by Task 3's `GetNameMaskingAsync` tests.
 
 ---
 
@@ -409,10 +407,11 @@ public class ConfigServiceNameMaskingTests
     }
 
     [Test]
-    public async Task ScanDisabled_ReturnsOff()
+    public async Task ScanDisabledInChat_StillMasksWhenSettingOn()
     {
+        // Verdicts are per account, so a flag from another chat's scan masks here too.
         Effective(-100, scanEnabled: false, mask: true);
-        Assert.That(await _sut.GetNameMaskingAsync(-100), Is.EqualTo(NameMasking.Off));
+        Assert.That(await _sut.GetNameMaskingAsync(-100), Is.EqualTo(NameMasking.On));
     }
 
     [Test]
@@ -447,8 +446,8 @@ Expected: build error (`MaskFlaggedNames`, `GetNameMaskingAsync` missing).
 ```csharp
     /// <summary>
     /// Effective "Mask flagged names" for a chat, or the global value when <paramref name="chatId"/>
-    /// is null (messages that belong to no chat, e.g. admin DMs). On only when profile scanning is
-    /// also enabled, so stale scan rows are never consulted for a chat that turned scanning off.
+    /// is null (messages that belong to no chat, e.g. admin DMs). Independent of whether this chat
+    /// scans profiles: a name verdict belongs to the account, not the chat.
     /// </summary>
     ValueTask<NameMasking> GetNameMaskingAsync(long? chatId, CancellationToken ct = default);
 ```
@@ -457,8 +456,7 @@ Expected: build error (`MaskFlaggedNames`, `GetNameMaskingAsync` missing).
     public async ValueTask<NameMasking> GetNameMaskingAsync(long? chatId, CancellationToken ct = default)
     {
         var welcome = await GetEffectiveWelcomeAsync(chatId ?? 0, ct);
-        var scan = welcome?.JoinSecurity?.ProfileScan;
-        return scan is { Enabled: true, MaskFlaggedNames: true } ? NameMasking.On : NameMasking.Off;
+        return welcome?.JoinSecurity?.ProfileScan.MaskFlaggedNames == true ? NameMasking.On : NameMasking.Off;
     }
 ```
 
@@ -466,13 +464,12 @@ Expected: build error (`MaskFlaggedNames`, `GetNameMaskingAsync` missing).
 ```razor
 <MudSwitch @bind-Value="_config.JoinSecurity.ProfileScan.MaskFlaggedNames"
            Label="Mask flagged names"
-           Color="Color.Primary"
-           Disabled="@(!_config.JoinSecurity.ProfileScan.Enabled)" />
+           Color="Color.Primary" />
 <MudText Typo="Typo.caption" Color="Color.Secondary">
     Bot messages show "[name removed: explicit]" or "[name removed: spam]" instead of a name the profile scan flagged.
 </MudText>
 ```
-(Copy the existing `Disabled` expression and surrounding layout from lines 190-206 exactly; only the bound property, label and helper text change.)
+(Keep the surrounding layout from lines 190-206. The switch is no longer disabled when profile scanning is off: a verdict from another chat's scan still applies here. Move it out of any block that only renders when scanning is enabled, and update the component test that expected it disabled.)
 
 - [ ] **Step 4: Add the migration**
 
