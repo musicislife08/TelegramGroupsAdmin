@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Data;
+using TelegramGroupsAdmin.Data.Extensions;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
@@ -49,6 +50,30 @@ public class TelegramUserRepositoryObserveTests
         new(id, first, last, username, IsBot: false, ObservationSource.BotUpdate, at);
 
     private static readonly ProfileChangeContext NoContext = new(Chat: null, MessageId: null);
+
+    [Test]
+    public async Task Rename_WithProductionDataServices_RecordsTheRename()
+    {
+        // Production registers the context through AddDataServices, which enables retry-on-failure.
+        // The plain UseNpgsql factory in SetUp does not, so this exercises the production context.
+        var id = GoldenDatasetConstants.IdentityService.UntrustedNoHistoryUserId;
+        await using var production = new ServiceCollection()
+            .AddDataServices(_testHelper!.ConnectionString)
+            .AddLogging()
+            .AddScoped<ITelegramUserRepository, TelegramUserRepository>()
+            .BuildServiceProvider();
+        await using var scope = production.CreateAsyncScope();
+        var repository = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
+        await using var ctx = _testHelper.GetDbContext();
+        var before = await ctx.TelegramUsers.AsNoTracking().SingleAsync(u => u.TelegramUserId == id);
+        Assert.That(before.FirstName, Is.Not.EqualTo("Renamed"));
+
+        var result = await repository.GetOrUpdateAsync(
+            Observe(id, "Renamed", before.LastName, before.Username, DateTimeOffset.UtcNow), NoContext);
+
+        Assert.That(result.Renamed, Is.Not.Null);
+        Assert.That(await ctx.UsernameHistory.CountAsync(h => h.UserId == id), Is.EqualTo(1));
+    }
 
     [Test]
     public async Task Rename_UpdatesNames_WritesOneHistoryAndOneAuditRow()
