@@ -28,7 +28,7 @@ public sealed class UserIdentityService(
         {
             // Recording what we saw must never cost the update its moderation.
             logger.LogError(ex, "Failed to record observed names for user {UserId}", observed.Id);
-            return new UserIdentity(observed.Id, observed.FirstName, observed.LastName, observed.Username);
+            return FromObservedNames(observed);
         }
 
         UserIdentity identity;
@@ -41,7 +41,7 @@ public sealed class UserIdentityService(
             // A failed read must not cost the update its moderation either; the observed
             // names are better than the id-only fallback ResolveAsync would give.
             logger.LogError(ex, "Failed to resolve identity for user {UserId} after recording names", observed.Id);
-            return new UserIdentity(observed.Id, observed.FirstName, observed.LastName, observed.Username);
+            return FromObservedNames(observed);
         }
 
         // Inline, as the message pipeline did before: a profile ban stays inside this update's
@@ -61,6 +61,14 @@ public sealed class UserIdentityService(
 
         return identity;
     }
+
+    /// <summary>
+    /// The fallback identity when recording or reading fails: the observed names with
+    /// <see cref="NameVerdict.Unscanned"/>, so masking fails open by design. A lookup failure must
+    /// never block moderation, and an unscanned name is shown as it is.
+    /// </summary>
+    private static UserIdentity FromObservedNames(ObservedUser observed) =>
+        new UserIdentity(observed.Id, observed.FirstName, observed.LastName, observed.Username);
 
     /// <summary>
     /// Whether a recorded rename is rescanned now. Only a message or edit (BotUpdate) of a user worth
