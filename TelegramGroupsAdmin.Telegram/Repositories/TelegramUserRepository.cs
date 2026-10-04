@@ -69,11 +69,14 @@ public class TelegramUserRepository : ITelegramUserRepository
         // strategy. The strategy re-runs this whole unit on a transient failure, so everything an
         // attempt writes or decides lives inside it.
         var strategy = context.Database.CreateExecutionStrategy();
-        var renamed = await strategy.ExecuteAsync(async () =>
+        var renamed = await strategy.ExecuteAsync(async ct =>
         {
+            // An ambiguous commit (committed, but the ack was lost) is retried: the retry sees equal
+            // names and returns Renamed = null, so an inline rescan can be skipped. The scan's
+            // history check (a username_history row newer than the last scan) still catches it.
             // A failed attempt may leave the history and audit entities tracked.
             context.ChangeTracker.Clear();
-            await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+            await using var transaction = await context.Database.BeginTransactionAsync(ct);
             var now = DateTimeOffset.UtcNow;
             var observedAt = ToWatermark(observed.ObservedAt);
             var isTrusted = TelegramConstants.IsSystemUser(observed.Id);
@@ -89,7 +92,7 @@ public class TelegramUserRepository : ITelegramUserRepository
                     {now}, {now}, {now}, {now}, {false}
                 )
                 ON CONFLICT (telegram_user_id) DO NOTHING
-                """, cancellationToken);
+                """, ct);
 
             // The FOR UPDATE row lock serializes concurrent writers. A writer that waited re-reads the
             // committed row, so the WHERE fails for it and only the statement that changed the names
@@ -109,7 +112,7 @@ public class TelegramUserRepository : ITelegramUserRepository
                        OR t.last_name IS DISTINCT FROM {observed.LastName}
                        OR t.username IS DISTINCT FROM {observed.Username})
                 RETURNING prev.first_name AS "FirstName", prev.last_name AS "LastName", prev.username AS "Username"
-                """).ToListAsync(cancellationToken);
+                """).ToListAsync(ct);
 
             UiModels.PreviousNames? oldNames = null;
             if (previous.Count == 1)
@@ -138,7 +141,7 @@ public class TelegramUserRepository : ITelegramUserRepository
                     ExpiresAt: null,
                     Reason: changeContext.Chat is { } chat ? AuditReason.WithChatTag(chat, reason) : reason).ToDto());
 
-                await context.SaveChangesAsync(cancellationToken);
+                await context.SaveChangesAsync(ct);
             }
 
             // Advance the watermark when the names were already equal, so a later stale observation
@@ -147,11 +150,11 @@ public class TelegramUserRepository : ITelegramUserRepository
                 UPDATE telegram_users SET names_observed_at = {observedAt}
                 WHERE telegram_user_id = {observed.Id}
                   AND (names_observed_at IS NULL OR names_observed_at < {observedAt})
-                """, cancellationToken);
+                """, ct);
 
-            await transaction.CommitAsync(cancellationToken);
+            await transaction.CommitAsync(ct);
             return oldNames;
-        });
+        }, cancellationToken);
 
         var entity = await context.TelegramUsers.AsNoTracking()
             .FirstAsync(u => u.TelegramUserId == observed.Id, cancellationToken);

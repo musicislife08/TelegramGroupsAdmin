@@ -143,8 +143,9 @@ public class WelcomeService(
 
         try
         {
-            // Step 2: Record the joiner's names (also creates the row the audit FKs need). No rename
-            // rescan here: the join flow scans the user below, on the names just recorded.
+            // Step 2: Record the joiner's names (also creates the row the audit FKs need). Source
+            // ChatMember records a rename only, never rescans: muting comes first. Step 9's scan, if
+            // the gate allows it, sees the rename in username_history and scores the new name.
             var userIdentity = await identityService.ObserveAsync(
                 new ObservedUser(user.Id, user.FirstName, user.LastName, user.Username, user.IsBot,
                     ObservationSource.ChatMember, seenAt),

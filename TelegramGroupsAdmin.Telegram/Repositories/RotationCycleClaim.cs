@@ -53,25 +53,25 @@ internal static class RotationCycleClaim
         // failure rather than letting one surface as a skipped celebration.
         var strategy = context.Database.CreateExecutionStrategy();
 
-        return await strategy.ExecuteAsync(async () =>
+        return await strategy.ExecuteAsync(async token =>
         {
-            await using var transaction = await context.Database.BeginTransactionAsync(ct);
+            await using var transaction = await context.Database.BeginTransactionAsync(token);
 
             // Fast path: something is still pending in the current cycle.
-            var claimed = await ClaimOneAsync(context, target.Table, ct)
-                          ?? await StartFreshCycleAndClaimAsync(context, target, ct);
+            var claimed = await ClaimOneAsync(context, target.Table, token)
+                          ?? await StartFreshCycleAndClaimAsync(context, target, token);
 
             if (claimed is null)
             {
-                await transaction.CommitAsync(ct);
+                await transaction.CommitAsync(token);
                 return default;
             }
 
-            var materialized = await materialize(claimed.Value, ct);
+            var materialized = await materialize(claimed.Value, token);
 
-            await transaction.CommitAsync(ct);
+            await transaction.CommitAsync(token);
             return materialized;
-        });
+        }, ct);
     }
 
     private static async Task<int?> StartFreshCycleAndClaimAsync(

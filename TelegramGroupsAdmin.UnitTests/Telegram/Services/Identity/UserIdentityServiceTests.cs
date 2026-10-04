@@ -120,6 +120,64 @@ public class UserIdentityServiceTests
     }
 
     [Test]
+    public void ResolveMany_Cancelled_PropagatesCancellation()
+    {
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        _users.GetIdentitiesAsync(Arg.Any<IReadOnlyCollection<long>>(), Arg.Any<CancellationToken>())
+            .Returns<IReadOnlyList<UserIdentity>>(_ => throw new OperationCanceledException(cts.Token));
+
+        Assert.CatchAsync<OperationCanceledException>(() => _sut.ResolveManyAsync([7, 8], cts.Token));
+    }
+
+    // ── Cancellation is never swallowed by ObserveAsync's fallbacks ──
+
+    [Test]
+    public void Observe_CancelledWhileRecording_PropagatesCancellation()
+    {
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        _users.GetOrUpdateAsync(Arg.Any<ObservedUser>(), Arg.Any<ProfileChangeContext>(), Arg.Any<CancellationToken>())
+            .Returns<ObservedNamesResult>(_ => throw new OperationCanceledException(cts.Token));
+
+        Assert.CatchAsync<OperationCanceledException>(() =>
+            _sut.ObserveAsync(Observed(7, "Seen"), new ProfileChangeContext(Chat, 5), cts.Token));
+    }
+
+    [Test]
+    public void Observe_CancelledWhileReadingIdentity_PropagatesCancellation()
+    {
+        using var cts = new CancellationTokenSource();
+        Renamed(Row(7, "New"));
+        _users.GetIdentitiesAsync(Arg.Any<IReadOnlyCollection<long>>(), Arg.Any<CancellationToken>())
+            .Returns<IReadOnlyList<UserIdentity>>(_ =>
+            {
+                cts.Cancel();
+                throw new OperationCanceledException(cts.Token);
+            });
+
+        Assert.CatchAsync<OperationCanceledException>(() =>
+            _sut.ObserveAsync(Observed(7, "New"), new ProfileChangeContext(Chat, 5), cts.Token));
+    }
+
+    [Test]
+    public void Observe_CancelledDuringRenameRescan_PropagatesCancellation()
+    {
+        using var cts = new CancellationTokenSource();
+        Renamed(Row(7, "New"));
+        IdentityRow(7, "New", NameVerdict.Clean);
+        _gate.ScanIfEligibleAsync(default!, default, default, default, default)
+            .ReturnsForAnyArgs<ProfileScanResult?>(_ =>
+            {
+                cts.Cancel();
+                throw new OperationCanceledException(cts.Token);
+            });
+
+        Assert.CatchAsync<OperationCanceledException>(() =>
+            _sut.ObserveAsync(Observed(7, "New"), new ProfileChangeContext(Chat, 5), cts.Token));
+    }
+
+    [Test]
     public async Task Observe_BotUpdateRenameOfUntrustedUser_RescansThroughGate()
     {
         Renamed(Row(7, "New"));

@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Data;
+using TelegramGroupsAdmin.Data.Extensions;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
 using TelegramGroupsAdmin.Telegram.Repositories;
 
@@ -37,13 +38,8 @@ public class UsernameHistoryRepositoryTests
 
         var services = new ServiceCollection();
 
-        var dataSourceBuilder = new Npgsql.NpgsqlDataSourceBuilder(_testHelper.ConnectionString);
-        services.AddSingleton(dataSourceBuilder.Build());
-
-        services.AddDbContextFactory<AppDbContext>((_, options) =>
-        {
-            options.UseNpgsql(_testHelper.ConnectionString);
-        });
+        // Production data registration (pooled factory, retry-on-failure), as the app runs it.
+        services.AddDataServices(_testHelper.ConnectionString);
 
         services.AddLogging(builder =>
         {

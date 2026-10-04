@@ -10,6 +10,7 @@ using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Repositories;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Data;
+using TelegramGroupsAdmin.Data.Extensions;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
 using TelegramGroupsAdmin.Telegram.Metrics;
 using TelegramGroupsAdmin.Telegram.Models;
@@ -51,7 +52,7 @@ public class JoinRenameRescanTests
             .ReturnsForAnyArgs(new ScoringResult(0m, ProfileScanOutcome.Clean, 0m, 0m, null, null));
 
         _provider = new ServiceCollection()
-            .AddDbContextFactory<AppDbContext>(o => o.UseNpgsql(_testHelper.ConnectionString))
+            .AddDataServices(_testHelper.ConnectionString)
             .AddLogging()
             .AddScoped<ITelegramUserRepository, TelegramUserRepository>()
             .AddScoped<IProfileScanResultsRepository, ProfileScanResultsRepository>()
@@ -88,6 +89,7 @@ public class JoinRenameRescanTests
             Assert.That(row.ProfileScannedAt, Is.LessThan(DateTimeOffset.UtcNow.AddMinutes(-1)));
             Assert.That(row.FirstName, Is.Not.EqualTo(newName));
         });
+        Assert.That(await ctx.UsernameHistory.CountAsync(h => h.UserId == id), Is.Zero);
         // The live profile matches the stored one except for the new first name.
         ClientReturning(new TL.User { id = id, access_hash = 1, first_name = newName, username = row.Username });
         var chat = ChatIdentity.FromId(GoldenDatasetConstants.Chats.MainChatId);
@@ -97,9 +99,46 @@ public class JoinRenameRescanTests
         var identity = await scope.ServiceProvider.GetRequiredService<IUserIdentityService>().ObserveAsync(
             new ObservedUser(id, newName, null, row.Username, IsBot: false, ObservationSource.ChatMember, DateTimeOffset.UtcNow),
             new ProfileChangeContext(chat, MessageId: null));
+
+        // The join observation records the rename and does not scan (source ChatMember).
+        Assert.That(await ctx.UsernameHistory.CountAsync(h => h.UserId == id), Is.EqualTo(1));
+        await _provider!.GetRequiredService<IProfileScanGate>().DidNotReceiveWithAnyArgs()
+            .ScanIfEligibleAsync(default!, default, default, default, default);
+
         await NewScanService().ScanUserProfileAsync(identity, triggeringChat: null, CancellationToken.None);
 
         await _scoring.ReceivedWithAnyArgs(1).ScoreAsync(default!, default!, default, default, default, default);
+    }
+
+    [Test]
+    public async Task Join_WithoutRename_ReusesCachedScore()
+    {
+        // Same harness, no rename: the join observation carries the stored names and the live
+        // profile is unchanged, so the join scan reuses the cached score.
+        var id = GoldenDatasetConstants.IdentityService.ScannedCleanUserId;
+        await using var ctx = _testHelper!.GetDbContext();
+        var row = await ctx.TelegramUsers.AsNoTracking().SingleAsync(u => u.TelegramUserId == id);
+        Assert.Multiple(() =>
+        {
+            Assert.That(row.IsTrusted, Is.False);
+            Assert.That(row.ProfileScanScore, Is.Not.Null);
+            Assert.That(row.ProfileScannedAt, Is.LessThan(DateTimeOffset.UtcNow.AddMinutes(-1)));
+        });
+        ClientReturning(new TL.User
+        {
+            id = id, access_hash = 1, first_name = row.FirstName, last_name = row.LastName, username = row.Username
+        });
+        var chat = ChatIdentity.FromId(GoldenDatasetConstants.Chats.MainChatId);
+
+        await using var scope = _provider!.CreateAsyncScope();
+        var identity = await scope.ServiceProvider.GetRequiredService<IUserIdentityService>().ObserveAsync(
+            new ObservedUser(id, row.FirstName, row.LastName, row.Username, IsBot: false, ObservationSource.ChatMember,
+                DateTimeOffset.UtcNow),
+            new ProfileChangeContext(chat, MessageId: null));
+        await NewScanService().ScanUserProfileAsync(identity, triggeringChat: null, CancellationToken.None);
+
+        Assert.That(await ctx.UsernameHistory.CountAsync(h => h.UserId == id), Is.Zero);
+        await _scoring.DidNotReceiveWithAnyArgs().ScoreAsync(default!, default!, default, default, default, default);
     }
 
     [Test]
