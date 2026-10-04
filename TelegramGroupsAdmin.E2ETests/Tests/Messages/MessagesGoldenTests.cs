@@ -9,7 +9,7 @@ namespace TelegramGroupsAdmin.E2ETests.Tests.Messages;
 /// <summary>
 /// The Messages page's chat sidebar on canonical messages, as the Owner (who sees every non-deleted chat).
 /// Read-only. Each chat's last-message preview is the chat's newest message — its media display name, else
-/// its text, truncated to 40 characters plus "..." — and the expected previews are derived from this test's
+/// its text, truncated to 40 characters plus "..." when longer (shorter text is shown in full) — and the expected previews are derived from this test's
 /// clone, never pasted. Chats are picked by data shape and found by exact title, so the test names no chat.
 /// </summary>
 [TestFixture]
@@ -20,6 +20,7 @@ public class MessagesGoldenTests : GoldenE2ETestBase
     private MessagesPage _messages = null!;
     private Anchor _truncatedText = null!;
     private Anchor _otherTruncatedText = null!;
+    private Anchor _shortText = null!;
     private string _emptyChatName = null!;
 
     protected override async Task ArrangeDataAsync(AppDbContext context)
@@ -34,6 +35,7 @@ public class MessagesGoldenTests : GoldenE2ETestBase
         // assert fails here instead of passing blind.
         var shapes = new Dictionary<string, string>();
         var longAnchors = new List<Anchor>();
+        var shortAnchors = new List<Anchor>();
         foreach (var chat in chats)
         {
             var top = await context.Messages.AsNoTracking()
@@ -71,13 +73,14 @@ public class MessagesGoldenTests : GoldenE2ETestBase
             else
             {
                 shape = "short";
+                shortAnchors.Add(new Anchor(chat.ChatName!, Normalize(top[0].MessageText!)));
             }
             shapes[chat.ChatName!] = shape;
         }
 
-        // Asserted below: long text (truncated) and empty chats. Ties are skipped (no defined "newest").
-        // Anything else (short, media, photo-only, blank) has no assertion here yet.
-        var unasserted = shapes.Where(kv => kv.Value is not ("long" or "empty" or "tied-newest")).ToList();
+        // Asserted below: long text (truncated), short text (shown in full) and empty chats. Ties are skipped
+        // (no defined "newest"). Anything else (media, photo-only, blank) has no assertion here yet.
+        var unasserted = shapes.Where(kv => kv.Value is not ("long" or "short" or "empty" or "tied-newest")).ToList();
         Assert.That(unasserted, Is.Empty,
             "canonical now carries a newest-message shape this test does not assert: extend the preview assertions ("
             + string.Join(", ", unasserted.Select(kv => kv.Value).Distinct()) + ")");
@@ -86,6 +89,10 @@ public class MessagesGoldenTests : GoldenE2ETestBase
         _truncatedText = longAnchors[0];
         _otherTruncatedText = longAnchors[1];
         Assert.That(_truncatedText.ExpectedPreview, Is.Not.EqualTo(_otherTruncatedText.ExpectedPreview));
+
+        Assert.That(shortAnchors, Is.Not.Empty);
+        _shortText = shortAnchors[0];
+        Assert.That(_shortText.ExpectedPreview, Does.Not.EndWith("..."));
 
         _emptyChatName = shapes.OrderBy(kv => kv.Key, StringComparer.Ordinal).First(kv => kv.Value == "empty").Key;
     }
@@ -101,13 +108,14 @@ public class MessagesGoldenTests : GoldenE2ETestBase
     public void CreatePageObject() => _messages = new MessagesPage(Page);
 
     [Test]
-    public async Task ChatList_ShowsTheNewestMessageAsEachChatsPreview_TruncatedPastFortyCharacters_AndNoMessagesYetForAnEmptyChat()
+    public async Task ChatList_ShowsTheNewestMessageAsEachChatsPreview_TruncatedPastFortyCharacters_ShortTextShownInFull_AndNoMessagesYetForAnEmptyChat()
     {
         await LoginAsOwnerAsync();
         await _messages.NavigateAsync();
 
         await Expect(_messages.ChatLastMessagePreview(_truncatedText.ChatName)).ToHaveTextAsync(_truncatedText.ExpectedPreview);
         await Expect(_messages.ChatLastMessagePreview(_otherTruncatedText.ChatName)).ToHaveTextAsync(_otherTruncatedText.ExpectedPreview);
+        await Expect(_messages.ChatLastMessagePreview(_shortText.ChatName)).ToHaveTextAsync(_shortText.ExpectedPreview);
         await Expect(_messages.ChatLastMessagePreview(_emptyChatName)).ToHaveTextAsync("No messages yet");
     }
 
