@@ -143,6 +143,8 @@ Task<IReadOnlyList<UserIdentity>> ResolveManyAsync(IReadOnlyCollection<long> use
 
 - `ObservedUser` carries the names, `IsBot`, the source (`BotUpdate`, `ChatMember`, `UserApiScan`)
   and `ObservedAt` (message `date` or `edit_date`, or the time a scan fetched the names).
+  `GetOrUpdateAsync` stores and compares it truncated to whole seconds, Telegram's resolution, so a
+  rename sent in the same second as a server-clock observation (a scan) is not ignored.
 - The service is stateless; lifetime follows the existing repository pattern (`IDbContextFactory`).
 - The service reads `user_identities` through `ITelegramUserRepository.GetIdentitiesAsync(ids)`,
   which maps rows with the shared mapper.

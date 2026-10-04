@@ -75,8 +75,7 @@ public class TelegramUserRepository : ITelegramUserRepository
             context.ChangeTracker.Clear();
             await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
             var now = DateTimeOffset.UtcNow;
-            // Npgsql writes timestamptz only from offset-zero values.
-            var observedAt = observed.ObservedAt.ToUniversalTime();
+            var observedAt = ToWatermark(observed.ObservedAt);
             var isTrusted = TelegramConstants.IsSystemUser(observed.Id);
 
             await context.Database.ExecuteSqlAsync($"""
@@ -161,6 +160,19 @@ public class TelegramUserRepository : ITelegramUserRepository
             _logger.LogDebug("Recorded rename of Telegram user {User}", entity.ToLogDebug());
 
         return new UiModels.ObservedNamesResult(entity.ToModel(), renamed);
+    }
+
+    /// <summary>
+    /// The <c>names_observed_at</c> value for an observation: UTC (Npgsql writes timestamptz only
+    /// from offset-zero values) and truncated to whole seconds. Telegram dates messages and edits in
+    /// whole seconds while scans and the bot's own record use the server clock, so without the
+    /// truncation a rename sent in the same second as a scan would lose to the scan's watermark.
+    /// Normalised here, where the watermark is compared, so every source gets it.
+    /// </summary>
+    private static DateTimeOffset ToWatermark(DateTimeOffset observedAt)
+    {
+        var utc = observedAt.ToUniversalTime();
+        return utc.AddTicks(-(utc.Ticks % TimeSpan.TicksPerSecond));
     }
 
     /// <summary>Columns returned by the rename UPDATE; names match the SQL aliases.</summary>

@@ -176,6 +176,32 @@ public class TelegramUserRepositoryObserveTests
     }
 
     [Test]
+    public async Task RenameMessageInTheSameSecondAsAScan_RecordsTheRename()
+    {
+        // A scan is dated by the server clock (milliseconds); Telegram dates a message in whole
+        // seconds. A rename sent in the second the scan ran must not lose to the scan's watermark.
+        var id = GoldenDatasetConstants.IdentityService.UntrustedNoHistoryUserId;
+        await using var ctx = _testHelper!.GetDbContext();
+        var before = await ctx.TelegramUsers.AsNoTracking().SingleAsync(u => u.TelegramUserId == id);
+        Assert.That(before.NamesObservedAt, Is.Null);
+        Assert.That(before.FirstName, Is.Not.EqualTo("Renamed"));
+        var second = new DateTimeOffset(2026, 10, 3, 12, 0, 0, TimeSpan.Zero);
+
+        var scan = await _repository!.GetOrUpdateAsync(
+            new ObservedUser(id, before.FirstName, before.LastName, before.Username, IsBot: false,
+                ObservationSource.UserApiScan, second.AddMilliseconds(700)),
+            NoContext);
+        var afterScan = await ctx.TelegramUsers.AsNoTracking().SingleAsync(u => u.TelegramUserId == id);
+        var message = await _repository.GetOrUpdateAsync(
+            Observe(id, "Renamed", before.LastName, before.Username, second), NoContext);
+
+        Assert.That(scan.Renamed, Is.Null);
+        Assert.That(afterScan.NamesObservedAt, Is.EqualTo(second), "server-clock observations are stored at whole seconds");
+        Assert.That(message.Renamed, Is.Not.Null);
+        Assert.That(message.User.FirstName, Is.EqualTo("Renamed"));
+    }
+
+    [Test]
     public async Task NameUpdate_LeavesPhotoFieldsUntouched()
     {
         var id = GoldenDatasetConstants.IdentityService.PhotoUserId;
