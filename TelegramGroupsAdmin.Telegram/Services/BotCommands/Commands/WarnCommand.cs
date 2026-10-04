@@ -100,7 +100,9 @@ public class WarnCommand : IBotCommand
 
             if (!result.Success)
             {
-                return new CommandResult(TelegramMessage.Plain($"❌ Failed to issue warning: {result.ErrorMessage}"), DeleteCommandMessage, DeleteResponseAfterSeconds);
+                // The chat reply stays generic: ErrorMessage can carry exception text
+                _logger.LogWarning("Failed to warn {User}: {Error}", targetUser.ToLogDebug(), result.ErrorMessage);
+                return new CommandResult(TelegramMessage.Plain("❌ Failed to issue warning."), DeleteCommandMessage, DeleteResponseAfterSeconds);
             }
 
             // Notify user of warning via DM (preferred) or chat mention (fallback)

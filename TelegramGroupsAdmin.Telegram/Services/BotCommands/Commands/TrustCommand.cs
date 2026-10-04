@@ -113,10 +113,11 @@ public class TrustCommand : IBotCommand
 
             if (!result.Success)
             {
-                _logger.LogError("Failed to untrust {User}: {Error}",
+                // The chat reply stays generic: ErrorMessage can carry exception text
+                _logger.LogWarning("Failed to untrust {User}: {Error}",
                     targetUser.ToLogDebug(),
                     result.ErrorMessage);
-                return new CommandResult(TelegramMessage.Plain($"❌ Failed to untrust user: {result.ErrorMessage}"), DeleteCommandMessage, DeleteResponseAfterSeconds);
+                return new CommandResult(TelegramMessage.Plain("❌ Failed to untrust user."), DeleteCommandMessage, DeleteResponseAfterSeconds);
             }
 
             _logger.LogInformation(
@@ -149,10 +150,11 @@ public class TrustCommand : IBotCommand
 
             if (!result.Success)
             {
-                _logger.LogError("Failed to trust {User}: {Error}",
+                // The chat reply stays generic: ErrorMessage can carry exception text
+                _logger.LogWarning("Failed to trust {User}: {Error}",
                     targetUser.ToLogDebug(),
                     result.ErrorMessage);
-                return new CommandResult(TelegramMessage.Plain($"❌ Failed to trust user: {result.ErrorMessage}"), DeleteCommandMessage, DeleteResponseAfterSeconds);
+                return new CommandResult(TelegramMessage.Plain("❌ Failed to trust user."), DeleteCommandMessage, DeleteResponseAfterSeconds);
             }
 
             _logger.LogInformation(

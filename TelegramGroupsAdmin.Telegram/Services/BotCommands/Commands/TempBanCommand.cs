@@ -117,7 +117,9 @@ public class TempBanCommand : IBotCommand
 
             if (!result.Success)
             {
-                return new CommandResult(TelegramMessage.Plain($"❌ Failed to temp ban user: {result.ErrorMessage}"), DeleteCommandMessage);
+                // The chat reply stays generic: ErrorMessage can carry exception text
+                _logger.LogWarning("Failed to temp ban {User}: {Error}", targetUser.ToLogDebug(), result.ErrorMessage);
+                return new CommandResult(TelegramMessage.Plain("❌ Failed to temp ban user."), DeleteCommandMessage);
             }
 
             // Build success message (DM notification sent by ModerationActionService);

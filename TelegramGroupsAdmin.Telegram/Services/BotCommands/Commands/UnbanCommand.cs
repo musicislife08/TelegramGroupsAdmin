@@ -79,7 +79,9 @@ public class UnbanCommand : IBotCommand
             // Build response based on result
             if (!result.Success)
             {
-                return new CommandResult(TelegramMessage.Plain($"❌ {result.ErrorMessage}"), DeleteCommandMessage, DeleteResponseAfterSeconds);
+                // The chat reply stays generic: ErrorMessage can carry exception text
+                _logger.LogWarning("Failed to unban {User}: {Error}", targetUser.ToLogDebug(), result.ErrorMessage);
+                return new CommandResult(TelegramMessage.Plain("❌ Failed to unban user."), DeleteCommandMessage, DeleteResponseAfterSeconds);
             }
 
             // The mention follows the chat's name-masking setting

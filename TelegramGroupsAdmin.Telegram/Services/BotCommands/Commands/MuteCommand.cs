@@ -116,7 +116,9 @@ public class MuteCommand : IBotCommand
 
             if (!result.Success)
             {
-                return new CommandResult(TelegramMessage.Plain($"❌ Failed to mute user: {result.ErrorMessage}"), DeleteCommandMessage, DeleteResponseAfterSeconds);
+                // The chat reply stays generic: ErrorMessage can carry exception text
+                _logger.LogWarning("Failed to mute {User}: {Error}", targetUser.ToLogDebug(), result.ErrorMessage);
+                return new CommandResult(TelegramMessage.Plain("❌ Failed to mute user."), DeleteCommandMessage, DeleteResponseAfterSeconds);
             }
 
             // Build success message; the mention follows the chat's name-masking setting

@@ -34,6 +34,7 @@ public class CommandFailureReplyTests
     private IConfigService _config = null!;
     private IBotModerationService _moderation = null!;
     private IBotMessageService _messages = null!;
+    private ITelegramUserRepository _users = null!;
     private ServiceProvider _provider = null!;
     private InvalidOperationException _boom = null!;
 
@@ -57,9 +58,11 @@ public class CommandFailureReplyTests
         _messages.DeleteAndMarkMessageAsync(Arg.Any<long>(), Arg.Any<int>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(_boom);
 
+        _users = Substitute.For<ITelegramUserRepository>();
+
         var services = new ServiceCollection();
         services.AddScoped(_ => Substitute.For<IChatAdminsRepository>());
-        services.AddScoped(_ => Substitute.For<ITelegramUserRepository>());
+        services.AddScoped(_ => _users);
         services.AddScoped(_ => _messages);
         _provider = services.BuildServiceProvider();
     }
@@ -118,6 +121,13 @@ public class CommandFailureReplyTests
                 var warnLog = Substitute.For<ILogger<WarnCommand>>();
                 return (new WarnCommand(warnLog, _provider, _moderation, Substitute.For<IUserMessagingService>(),
                     _identities, _config), warnLog);
+            case "trust":
+            case "untrust":
+                var trustLog = Substitute.For<ILogger<TrustCommand>>();
+                return (new TrustCommand(trustLog, _provider, _moderation, _identities, _config), trustLog);
+            case "spam":
+                var spamLog = Substitute.For<ILogger<SpamCommand>>();
+                return (new SpamCommand(spamLog, _provider, _moderation, _identities), spamLog);
             case "delete":
                 var deleteLog = Substitute.For<ILogger<DeleteCommand>>();
                 return (new DeleteCommand(deleteLog, _provider), deleteLog);
@@ -136,6 +146,46 @@ public class CommandFailureReplyTests
         Assert.That(result.Message.Text, Is.EqualTo(c.Reply));
         Assert.That(result.Message.Text, Does.Not.Contain("hunter2"));
         logger.Received(1).Log(LogLevel.Error, Arg.Any<EventId>(), Arg.Any<object>(), _boom,
+            Arg.Any<Func<object, Exception?, string>>());
+    }
+
+    private static IEnumerable<Case> FailedResultCases() =>
+    [
+        new("ban", "/ban", [], "❌ Failed to ban user."),
+        new("mute", "/mute 5m", ["5m"], "❌ Failed to mute user."),
+        new("tempban", "/tempban 1h", ["1h"], "❌ Failed to temp ban user."),
+        new("unban", "/unban", [], "❌ Failed to unban user."),
+        new("warn", "/warn spam", ["spam"], "❌ Failed to issue warning."),
+        new("trust", "/trust", [], "❌ Failed to trust user."),
+        new("untrust", "/trust", [], "❌ Failed to untrust user."),
+        new("spam", "/spam", [], "❌ Failed to process spam action."),
+    ];
+
+    /// <summary>
+    /// The moderation service reports a failure whose ErrorMessage can carry exception text from
+    /// the handler. The chat reply stays generic; the ErrorMessage goes to the log at Warning.
+    /// </summary>
+    [TestCaseSource(nameof(FailedResultCases))]
+    public async Task ModerationFails_RepliesWithoutErrorMessage_AndLogsWarning(Case c)
+    {
+        var failed = ModerationResult.Failed(Secret);
+        _moderation.BanUserAsync(Arg.Any<BanIntent>(), Arg.Any<CancellationToken>()).Returns(failed);
+        _moderation.RestrictUserAsync(Arg.Any<RestrictIntent>(), Arg.Any<CancellationToken>()).Returns(failed);
+        _moderation.TempBanUserAsync(Arg.Any<TempBanIntent>(), Arg.Any<CancellationToken>()).Returns(failed);
+        _moderation.UnbanUserAsync(Arg.Any<UnbanIntent>(), Arg.Any<CancellationToken>()).Returns(failed);
+        _moderation.WarnUserAsync(Arg.Any<WarnIntent>(), Arg.Any<CancellationToken>()).Returns(failed);
+        _moderation.TrustUserAsync(Arg.Any<TrustIntent>(), Arg.Any<CancellationToken>()).Returns(failed);
+        _moderation.UntrustUserAsync(Arg.Any<UntrustIntent>(), Arg.Any<CancellationToken>()).Returns(failed);
+        _moderation.MarkAsSpamAndBanAsync(Arg.Any<SpamBanIntent>(), Arg.Any<CancellationToken>()).Returns(failed);
+        _users.IsTrustedAsync(TargetId, Arg.Any<CancellationToken>()).Returns(c.Name == "untrust");
+        var (command, logger) = Build(c.Name);
+
+        var result = await command.ExecuteAsync(ReplyTo(c.Text), c.Args, PermissionLevel.Admin, Sender);
+
+        Assert.That(result.Message.Text, Is.EqualTo(c.Reply));
+        Assert.That(result.Message.Text, Does.Not.Contain("hunter2"));
+        logger.Received(1).Log(LogLevel.Warning, Arg.Any<EventId>(),
+            Arg.Is<object>(state => state!.ToString()!.Contains(Secret)), null,
             Arg.Any<Func<object, Exception?, string>>());
     }
 }

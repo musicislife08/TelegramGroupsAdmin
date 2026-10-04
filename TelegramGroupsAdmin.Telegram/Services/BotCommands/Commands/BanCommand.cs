@@ -205,7 +205,9 @@ public class BanCommand : IBotCommand
 
             if (!result.Success)
             {
-                return new CommandResult(TelegramMessage.Plain($"❌ Failed to ban user: {result.ErrorMessage}"), DeleteCommandMessage, DeleteResponseAfterSeconds);
+                // The chat reply stays generic: ErrorMessage can carry exception text
+                _logger.LogWarning("Failed to ban {User}: {Error}", targetIdentity.ToLogDebug(), result.ErrorMessage);
+                return new CommandResult(TelegramMessage.Plain("❌ Failed to ban user."), DeleteCommandMessage, DeleteResponseAfterSeconds);
             }
 
             // Notify user of ban via DM only - they are out of the chat, so a mention is just noise

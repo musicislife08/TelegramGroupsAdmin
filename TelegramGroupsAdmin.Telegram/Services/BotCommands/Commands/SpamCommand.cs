@@ -95,7 +95,9 @@ public class SpamCommand : IBotCommand
 
         if (!result.Success)
         {
-            return new CommandResult(TelegramMessage.Plain($"❌ Failed to process spam action: {result.ErrorMessage}"), DeleteCommandMessage, DeleteResponseAfterSeconds);
+            // The chat reply stays generic: ErrorMessage can carry exception text
+            _logger.LogWarning("Failed to mark as spam and ban {User}: {Error}", spamUser.ToLogDebug(), result.ErrorMessage);
+            return new CommandResult(TelegramMessage.Plain("❌ Failed to process spam action."), DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
 
         _logger.LogInformation(
