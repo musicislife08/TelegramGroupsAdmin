@@ -722,25 +722,6 @@ public class WelcomeSystemConfigTests : WelcomeSystemConfigTestContext
         }, TimeSpan.FromSeconds(2));
     }
 
-    private static ManagedChatRecord MaskingTestChat() => new(
-        Identity: new ChatIdentity(123456L, "Test Chat"),
-        ChatType: ManagedChatType.Supergroup,
-        BotStatus: BotChatStatus.Administrator,
-        IsAdmin: true,
-        AddedAt: DateTimeOffset.UtcNow,
-        IsActive: true,
-        IsDeleted: false,
-        LastSeenAt: null,
-        SettingsJson: null,
-        ChatIconPath: null);
-
-    private static WelcomeConfig WithMasking(bool mask) => new()
-    {
-        Enabled = true,
-        MainWelcomeMessage = "Welcome {username}!",
-        JoinSecurity = new JoinSecurityConfig { ProfileScan = new ProfileScanConfig { MaskFlaggedNames = mask } }
-    };
-
     private static AngleSharp.Dom.IElement MaskCaption(IRenderedComponent<WelcomeSystemConfig> cut) =>
         cut.Find("#mask-flagged-names-help");
 
@@ -761,45 +742,6 @@ public class WelcomeSystemConfigTests : WelcomeSystemConfigTestContext
                 .Single(l => l.TextContent.Contains("Mask flagged names"))
                 .QuerySelector("input");
             Assert.That(maskInput!.GetAttribute("aria-describedby"), Is.EqualTo("mask-flagged-names-help"));
-        }, TimeSpan.FromSeconds(2));
-    }
-
-    [Test]
-    public void MaskingSwitch_GlobalSettings_ShowNoInheritanceNote()
-    {
-        var cut = Render<WelcomeSystemConfig>();
-
-        cut.WaitForAssertion(() =>
-        {
-            Assert.That(MaskCaption(cut).TextContent, Does.Not.Contain("global default"));
-        }, TimeSpan.FromSeconds(2));
-    }
-
-    [Test]
-    public void MaskingSwitch_ChatWithoutItsOwnConfig_SaysItInheritsTheGlobalValue()
-    {
-        ConfigService.GetWelcomeAsync(123456L).Returns((WelcomeConfig?)null);
-        ConfigService.GetWelcomeAsync(0L).Returns(WithMasking(false));
-
-        var cut = Render<WelcomeSystemConfig>(p => p.Add(x => x.Chat, MaskingTestChat()));
-
-        cut.WaitForAssertion(() =>
-        {
-            Assert.That(MaskCaption(cut).TextContent, Does.Contain("uses the global default (Off)"));
-        }, TimeSpan.FromSeconds(2));
-    }
-
-    [Test]
-    public void MaskingSwitch_ChatWithItsOwnConfig_SaysItIsSetForThisChat()
-    {
-        ConfigService.GetWelcomeAsync(123456L).Returns(WithMasking(false));
-        ConfigService.GetWelcomeAsync(0L).Returns(WithMasking(true));
-
-        var cut = Render<WelcomeSystemConfig>(p => p.Add(x => x.Chat, MaskingTestChat()));
-
-        cut.WaitForAssertion(() =>
-        {
-            Assert.That(MaskCaption(cut).TextContent, Does.Contain("Set for this chat; the global default is On"));
         }, TimeSpan.FromSeconds(2));
     }
 

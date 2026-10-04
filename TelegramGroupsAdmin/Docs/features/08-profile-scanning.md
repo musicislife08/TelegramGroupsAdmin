@@ -299,7 +299,7 @@ A flag belongs to the account, not the chat. Once any scan flags a name, it is m
 The setting is **Mask flagged names**. It is on by default:
 
 - **Global default:** Settings > Telegram > Bot Configuration > Welcome System > Security on Join > Profile Scan. Chats without their own value follow it.
-- **Per-chat override:** the same switch in a chat's Welcome System settings (see [Configuration](#configuration)). It decides masking for what the bot posts in that chat and for that chat's ban celebration DMs. Under the switch, the chat's settings say whether the chat uses the global default (it has no welcome settings of its own) or its own value.
+- **Per-chat override:** the same switch in a chat's Welcome System settings (see [Configuration](#configuration)). It decides masking for what the bot posts in that chat and for that chat's ban celebration DMs.
 
 The labels are fixed; there is no configurable redaction text.
 

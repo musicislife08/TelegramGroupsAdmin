@@ -196,13 +196,6 @@
                                                    UserAttributes="@(new Dictionary<string, object?> { ["aria-describedby"] = MaskFlaggedNamesHelpId })" />
                                         <MudText Typo="Typo.caption" Color="Color.Secondary" id="@MaskFlaggedNamesHelpId">
                                             What the bot posts in chats, and ban celebration DMs, show "[name removed: explicit]" or "[name removed: spam]" instead of a name flagged by earlier profile scans, even while scanning is off. Admin DMs show real names.
-                                            @if (Chat != null)
-                                            {
-                                                <br />
-                                                @(_chatHasOwnConfig
-                                                    ? $"Set for this chat; the global default is {OnOff(_globalMaskFlaggedNames)}."
-                                                    : $"This chat has no welcome settings of its own, so it uses the global default ({OnOff(_globalMaskFlaggedNames)}). Saving here sets this chat's own value.")
-                                            }
                                         </MudText>
                                     </MudItem>
                                 </MudGrid>
@@ -563,10 +556,6 @@
 
     private WelcomeConfig? _config;
     private const string MaskFlaggedNamesHelpId = "mask-flagged-names-help";
-    // Per-chat editing only: whether the chat has its own welcome config (a chat's config replaces
-    // the global one wholesale, masking included) and the global masking value it would inherit.
-    private bool _chatHasOwnConfig;
-    private bool _globalMaskFlaggedNames = new ProfileScanConfig().MaskFlaggedNames;
     private MudForm? _form;
     private bool _isValid = true;
     private bool _loading = true;
@@ -587,13 +576,6 @@
             // Normalize null to 0 for global config (SQL NULL comparison doesn't work with ==)
             var config = await ConfigService.GetWelcomeAsync(Chat?.Identity.Id ?? 0);
             _config = config ?? WelcomeConfig.Default;
-            if (Chat != null)
-            {
-                _chatHasOwnConfig = config != null;
-                var global = await ConfigService.GetWelcomeAsync(0);
-                _globalMaskFlaggedNames = global?.JoinSecurity.ProfileScan.MaskFlaggedNames
-                                          ?? new ProfileScanConfig().MaskFlaggedNames;
-            }
         }
         catch (Exception ex)
         {
@@ -645,8 +627,6 @@
             _saving = false;
         }
     }
-
-    private static string OnOff(bool value) => value ? "On" : "Off";
 
     private void LoadDefaults()
     {
