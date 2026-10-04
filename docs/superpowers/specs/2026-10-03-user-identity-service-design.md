@@ -134,7 +134,7 @@ enforcement is aimed at future sessions rather than outside contributors:
 ### `IUserIdentityService` (Telegram adapter)
 
 ```
-Task<UserIdentity> ObserveAsync(ObservedUser observed, RenameRescan rescan, CancellationToken ct)
+Task<UserIdentity> ObserveAsync(ObservedUser observed, ProfileChangeContext context, CancellationToken ct)
 Task<UserIdentity> ResolveAsync(long userId, CancellationToken ct)
 Task<IReadOnlyList<UserIdentity>> ResolveManyAsync(IReadOnlyCollection<long> userIds, CancellationToken ct)
 ```
@@ -163,19 +163,33 @@ Task<IReadOnlyList<UserIdentity>> ResolveManyAsync(IReadOnlyCollection<long> use
      row sees it; an observation older than the stored one is ignored.
 2. If renamed, in the same transaction: the `username_history` row and the `ProfileChange`
    audit row (moved here from `MessageProcessingService.cs:680-700`).
-3. After the transaction, if the caller passed `RenameRescan.Inline` and the user is untrusted and
-   not a bot, run the rescan inline through `IProfileScanGate` (`ProfileScanTrigger.ProfileChange`),
-   as the message pipeline does today. A rename-triggered rescan forces a full rescore: it skips both
-   the scan service's 60s freshness window and its unchanged-profile reuse, because the new name is
-   already stored when the scan runs. Callers that pass `RenameRescan.None` either scan right after anyway (join) or
-   need no scan (admins, bots, the scan itself).
+3. After the transaction, `ObserveAsync` decides whether a recorded rename is rescanned now. Callers
+   pass no rescan option. It rescans inline through `IProfileScanGate`
+   (`ProfileScanTrigger.ProfileChange`, `forceRescan: true`) and then re-resolves the identity only
+   when all of these hold:
+   - the observation's source is `BotUpdate` (a new or edited message);
+   - the user is not trusted, not banned, not a bot and not a system account
+     (`TelegramConstants.IsSystemUser`).
+
+   Otherwise it records the rename only:
+   - `ChatMember` (joins, admin promotion, admin refresh): muting is one of the first join steps
+     and nothing slow may run before it. The join flow's own scan picks the rename up (see Profile
+     scan changes and the gate rule below). Admins are trusted by invariant.
+   - `UserApiScan`: the observation is the scan's own; rescanning would recurse.
+   - Trusted and banned users: there is nothing to protect against.
+
+   A forced rescan skips both the scan service's 60s freshness window and its unchanged-profile
+   reuse, because the new name is already stored when the scan runs.
 
    Rescans stay inline on purpose: part 1 is a refactor, and a profile ban that runs from a queued
    job, outside the message's context, would be a new route into the ban cleanup logic. Renames are
    rare, so the inline scan's stall of the serial update loop is rare too.
 
-   Whoever records a new name "uses up" the rename: the next observation sees no difference. So only
-   entry points that rescan inline (or scan anyway) record names; everything else resolves by id.
+   Recording a new name makes the next observation see no difference, so the stored names alone
+   cannot tell a later scan that the profile changed. The `username_history` row written here does:
+   a scan treats a history row recorded after the user's last scan as a profile change (see below).
+   This needs no new column.
+   Failure handling is unchanged: `ObserveAsync` never throws except on cancellation.
 4. Return the resolved identity.
 
 A failure to write never blocks moderation: the service logs it and returns an identity built from
@@ -194,6 +208,20 @@ own row and `BotProtectionService`; if they fit `GetOrUpdateAsync`, `UpsertAsync
   `profile_scanned_at`, which is written only after the scan finishes, so concurrent scans both
   pass it.
 - The scan returns the re-resolved identity so the calling flow continues with the new verdict.
+- A rename recorded since the last scan is a profile change. A `username_history` row for the user
+  with `RecordedAt` later than the stored `profile_scanned_at` defeats both the 60s freshness-window
+  reuse and the unchanged-profile (`HasProfileChanged`) reuse, so the new name is scored. The scan
+  reads it through `IUsernameHistoryRepository.HasChangeSinceAsync(userId, since)`; a user never
+  scanned is scanned in full anyway.
+
+### Profile scan gate
+
+`ProfileScanGate` decides whether a trigger may scan:
+- `Join` is eligible when `ScanOnJoin` is on, or when `ScanOnProfileChange` is on and the user has a
+  rename recorded after their last scan (the same `HasChangeSinceAsync` query; a never-scanned user
+  counts any recorded rename). So a chat that scans only on profile changes still scans a joiner who
+  renamed since their last scan, which the join observation recorded without scanning.
+- Other triggers are unchanged, as are the trusted, admin, bot and excluded skips.
 
 ### Concurrency
 
@@ -209,16 +237,16 @@ message name as a rename.
 Each entry point either records names (`ObserveAsync`) or resolves by id (`ResolveAsync`), then
 passes the identity down.
 
-| Entry point | Call | Rename rescan |
+| Entry point | Call | On a rename |
 |---|---|---|
-| New message (`MessageProcessingService`) | `ObserveAsync(message.From)` first, before commands; the late upsert at :717 and the diff block at :673-715 go away. One identity is passed to commands, detection and moderation. | `Inline` (as today) |
-| Edited message | `ObserveAsync` with `edit_date` | `Inline` |
-| Join (chat-member update) | `ObserveAsync(NewChatMember.User)` | `None`: the join flow scans the user inline right after, on the names just recorded |
+| New message (`MessageProcessingService`) | `ObserveAsync(message.From)` first, before commands; the late upsert at :717 and the diff block at :673-715 go away. One identity is passed to commands, detection and moderation. | Source `BotUpdate`: inline forced rescan for an untrusted, unbanned user |
+| Edited message | `ObserveAsync` with `edit_date` | As a new message |
+| Join (chat-member update) | `ObserveAsync(NewChatMember.User)` | Source `ChatMember`: record only; the join scan sees the history row and rescores |
 | Other chat-member updates (leave, promote, restrict) | `ResolveAsync(id)` | n/a |
 | Callback query | `ResolveAsync(CallbackQuery.From.Id)`. Buttons exist only in the welcome flow (a user observed at join seconds earlier) and for admins. | n/a |
 | Commands | The caller comes from the pipeline. Reply targets (`/warn`, `/ban`, …) use `ResolveAsync(ReplyToMessage.From.Id)`: every message was observed when it arrived. | n/a |
-| `getChatMember` results (admin refresh), the bot's own row, bots joining | `ObserveAsync` | `None`: admins are trusted, bots are not scanned |
-| Profile scan (User API names) | `ObserveAsync`, source `UserApiScan` | `None`: it is the scan |
+| `getChatMember` results (admin refresh), the bot's own row, bots joining | `ObserveAsync` | Record only: source `ChatMember`; admins are trusted, bots are not scanned |
+| Profile scan (User API names) | `ObserveAsync`, source `UserApiScan` | Record only: it is the scan |
 | Quartz jobs | Payloads keep their snapshot for compatibility; jobs call `ResolveAsync(payload.User.Id)` before writing anything a user sees. | n/a |
 | Web UI | `ResolveAsync` / `ResolveManyAsync` by id. | n/a |
 
@@ -290,6 +318,13 @@ Unit:
 - `ProfileScanService` single-flight: two concurrent calls gated by a `TaskCompletionSource` fake
   produce one scan and the same result.
 - `ObserveAsync` swallows a repository failure and returns an `Unscanned` identity.
+- `ObserveAsync` rename rule: a `BotUpdate` rename by an untrusted user rescans through the gate
+  (`ProfileChange`, forced) and re-resolves; `ChatMember` and `UserApiScan` renames, and renames by
+  trusted, banned, bot or system users, record only; no rename, no scan.
+- Gate: `Join` with `ScanOnJoin` off and `ScanOnProfileChange` on scans only when a rename was
+  recorded after the last scan; with both off it never scans.
+- Scan reuse: a rename recorded after the last scan defeats the 60s freshness window and the
+  unchanged-profile reuse; with no such rename, both still reuse the cached score.
 - `GetNameMaskingAsync` (substituted config): a chat override off gives `Off`; no override falls back
   to the global value; `null` chat gives the global value.
 - One `Explicit` identity rendered by a builder with `Off` shows the real name and by a builder with
@@ -312,6 +347,12 @@ Integration (real Postgres, canonical data; anchors in the Canonical anchors sec
 
 - Pipeline: a renamed untrusted user's message updates the row before command routing and requests
   a rescan; a renamed trusted user's row is updated with no rescan.
+- Execution strategy: `GetOrUpdateAsync` through the production data registration (retry on
+  failure) records a rename.
+- `HasChangeSinceAsync`: true for a time before a user's history row, false at or after it, false
+  for a user with no history.
+- Join after a rename: an untrusted user scanned clean, renamed in a join observation, has the new
+  name scored by the join scan.
 
 ### Canonical anchors
 
@@ -328,6 +369,9 @@ subject does not leak between tests.
 | No-op and ordering | 9263051408340 @pastramiherbs | As above; observations at and before `names_observed_at`. |
 | Race (row lock) | 9680301255238 @violingentleman | Not trusted, active, no history rows. |
 | Photo fields untouched by a name update | 9264989724828 @raceoutnumber | Not trusted; `user_photo_path` and `photo_hash` both set. |
+| Execution strategy | 9263051408340 @pastramiherbs | As above. |
+| Join after a rename | 9025828368896 @swivelhumvee | Not trusted, not banned, scanned once (score 0.0) with a plain profile. Read-only; the join observation that records the rename is the scenario under test, not seeded. |
+| `HasChangeSinceAsync` | 9875141377477 "Jeanette" (history row 2); 9263051408340 @pastramiherbs (no history) | Read-only; the row's `recorded_at` is read back at runtime. |
 
 Each test reads its anchor back first and asserts the shape (trust, bot flag, scan rows, photo
 fields) so a later canonical change fails loudly. New constants go in

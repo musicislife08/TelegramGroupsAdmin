@@ -8,9 +8,10 @@ paths:
 
 # User identity rule (MANDATORY)
 
-- Get a `UserIdentity` from `IUserIdentityService`: `ObserveAsync` where an update shows the user's
-  current names and a rename should be rescanned (new and edited messages, joins), otherwise
-  `ResolveAsync` / `ResolveManyAsync` by id.
+- Get a `UserIdentity` from `IUserIdentityService`: `ObserveAsync` where an update or scan shows the
+  user's current names (new and edited messages, joins, admin refresh, profile scans), otherwise
+  `ResolveAsync` / `ResolveManyAsync` by id. `ObserveAsync` decides from the observation's source
+  and the user whether a rename is rescanned; callers pass no rescan option.
 - Repository code that reads users joins the `user_identities` view and builds identities only with
   `UserIdentityMapping.ToIdentity` (or `ToIdentityOrIdOnly` for a left join). Never join `telegram_users`
   for names that become an identity.
