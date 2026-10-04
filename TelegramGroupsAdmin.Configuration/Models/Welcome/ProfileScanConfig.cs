@@ -41,9 +41,10 @@ public class ProfileScanConfig
     public bool ScanOnFirstMessage { get; set; } = false;
 
     /// <summary>
-    /// When true, bot-written messages show "[name removed: explicit]" or "[name removed: spam]"
-    /// instead of a name the latest profile scan flagged. Per-chat override of the global value;
-    /// messages that belong to no chat use the global value.
+    /// When true, what the bot posts in the chat (and the chat's ban celebration DMs) shows
+    /// "[name removed: explicit]" or "[name removed: spam]" instead of a name the latest profile
+    /// scan flagged. Per-chat override of the global value. Direct messages to a person are never
+    /// masked.
     /// </summary>
     public bool MaskFlaggedNames { get; set; } = true;
 }
