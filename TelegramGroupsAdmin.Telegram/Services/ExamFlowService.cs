@@ -91,8 +91,7 @@ public class ExamFlowService : IExamFlowService
         {
             await using var scope = _serviceProvider.CreateAsyncScope();
             var sessionRepo = scope.ServiceProvider.GetRequiredService<IExamSessionRepository>();
-            var masking = await scope.ServiceProvider.GetRequiredService<IConfigService>()
-                .GetNameMaskingAsync(null, cancellationToken);
+            var masking = NameMasking.Off; // DM: never masked
 
             // Check for existing active session (user clicked deep link twice, or re-joined)
             var existingSession = await sessionRepo.GetSessionAsync(chat.Id, user.Id, cancellationToken);
@@ -234,7 +233,7 @@ public class ExamFlowService : IExamFlowService
 
         // Send to user's DM (in Telegram, private chat ID = user ID)
         var targetChatId = session.UserId;
-        var masking = await configService.GetNameMaskingAsync(null, cancellationToken);
+        var masking = NameMasking.Off; // DM: never masked
 
         // Check if more MC questions
         var nextQuestionIndex = questionIndex + 1;

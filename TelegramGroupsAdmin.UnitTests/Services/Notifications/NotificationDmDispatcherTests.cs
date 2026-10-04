@@ -1,7 +1,6 @@
 using NSubstitute;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.ReplyMarkups;
-using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Services.Notifications;
@@ -18,7 +17,6 @@ public class NotificationDmDispatcherTests
 
     private IBotDmService _dm = null!;
     private IUserIdentityService _identities = null!;
-    private IConfigService _config = null!;
     private NotificationDmDispatcher _sut = null!;
 
     [SetUp]
@@ -26,9 +24,7 @@ public class NotificationDmDispatcherTests
     {
         _dm = Substitute.For<IBotDmService>();
         _identities = Substitute.For<IUserIdentityService>();
-        _config = Substitute.For<IConfigService>();
-        _config.GetNameMaskingAsync(Arg.Any<long?>(), Arg.Any<CancellationToken>()).Returns(NameMasking.Off);
-        _sut = new NotificationDmDispatcher(_dm, _identities, _config);
+        _sut = new NotificationDmDispatcher(_dm, _identities);
     }
 
     [Test]
@@ -124,10 +120,9 @@ public class NotificationDmDispatcherTests
     }
 
     [Test]
-    public async Task DispatchAsync_GlobalMaskingOn_MasksFlaggedUserInDmText()
+    public async Task DispatchAsync_FlaggedUser_DmShowsRealName()
     {
-        // Admin DMs are outside any chat, so the global masking row applies.
-        _config.GetNameMaskingAsync(null, Arg.Any<CancellationToken>()).Returns(NameMasking.On);
+        // A DM goes to a person, never into a chat, so names in it are never masked.
         var payload = NotificationPayloadBuilder.Create("Subject")
             .WithField("User", UserIdentity.ForTest(7L, "Bad", verdict: NameVerdict.Explicit))
             .Build();
@@ -135,7 +130,7 @@ public class NotificationDmDispatcherTests
         await _sut.DispatchAsync(Recipient, payload, keyboard: null, CancellationToken.None);
 
         await _dm.Received(1).SendDmWithEntitiesAsync(Recipient, "notification",
-            Arg.Is<string>(t => t!.Contains(NameRedaction.Explicit) && !t.Contains("Bad")),
+            Arg.Is<string>(t => t!.Contains("User: Bad") && !t.Contains(NameRedaction.Explicit)),
             Arg.Any<IReadOnlyList<MessageEntity>>(), Arg.Any<CancellationToken>());
     }
 }

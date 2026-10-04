@@ -181,7 +181,7 @@ public class StartCommand : IBotCommand
             sender,
             chatName,
             config.TimeoutSeconds,
-            await configService.GetNameMaskingAsync(null, cancellationToken));
+            NameMasking.Off); // DM: never masked
 
         await _messageService.SendAndSaveMessageAsync(
             chatId: message.Chat.Id,

@@ -1,5 +1,4 @@
 using Microsoft.Extensions.Logging.Abstractions;
-using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Telegram.Services.Identity;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
@@ -28,7 +27,7 @@ public class BanCelebrationDmSenderTests
         _dm = Substitute.For<IBotDmService>();
         _gifs = Substitute.For<IBanCelebrationGifRepository>();
         _gifs.GetFullPath(Arg.Any<string>()).Returns(ci => "/data/media/" + ci.Arg<string>());
-        _sut = new BanCelebrationDmSender(new NotificationDmDispatcher(_dm, Substitute.For<IUserIdentityService>(), Substitute.For<IConfigService>()), _gifs,
+        _sut = new BanCelebrationDmSender(new NotificationDmDispatcher(_dm, Substitute.For<IUserIdentityService>()), _gifs,
             NullLogger<BanCelebrationDmSender>.Instance);
     }
 
@@ -36,6 +35,24 @@ public class BanCelebrationDmSenderTests
         _dm.SendDmWithAnimationEntitiesAsync(Arg.Any<UserIdentity>(), Arg.Any<TelegramMessage>(),
                 Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns(result);
+
+    [Test]
+    public async Task SendAsync_SubscriberCaptionMaskedByChat_StaysMaskedInDm()
+    {
+        // DMs are never masked, but a subscriber celebration carries the chat's caption, which
+        // BanCelebrationService already rendered with the chat's masking. The DM keeps it as is.
+        var gif = new BanCelebrationGif { Id = 3, FilePath = "ban-gifs/3.gif", FileId = "cached" };
+        TelegramMessage? sent = null;
+        _dm.SendDmWithAnimationEntitiesAsync(Arg.Any<UserIdentity>(), Arg.Do<TelegramMessage>(m => sent = m),
+                Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(new DmDeliveryResult { DmSent = true, AnimationFileId = "cached" });
+
+        await _sut.SendAsync(Recipient, new ChatIdentity(-100L, "Workshop Alumni"),
+            NameRedaction.Explicit + " got banned!", gif, CancellationToken.None);
+
+        Assert.That(sent, Is.Not.Null);
+        Assert.That(sent!.Text, Does.Contain(NameRedaction.Explicit + " got banned!"));
+    }
 
     [Test]
     public async Task SendAsync_FirstUpload_CachesReturnedFileIdInRepositoryAndOnGif()

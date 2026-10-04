@@ -496,6 +496,35 @@ public class WelcomeServiceTests
     }
 
     [Test]
+    public async Task HandleCallbackQuery_ChatAccept_FlaggedUserWithMaskingOn_RulesDmShowsRealName()
+    {
+        // The rules confirmation is a DM to the joiner: never masked, whatever the chat setting.
+        _identities.ResolveAsync(TestUserId, Arg.Any<CancellationToken>())
+            .Returns(UserIdentity.ForTest(TestUserId, "Bad", verdict: NameVerdict.Explicit));
+        _configService.GetNameMaskingAsync(Arg.Any<long>(), Arg.Any<CancellationToken>()).Returns(NameMasking.On);
+        var config = WelcomeConfig.Default;
+        config.MainWelcomeMessage = "Rules for {username}";
+        _configService.GetEffectiveWelcomeAsync(TestChatId, Arg.Any<CancellationToken>()).Returns(config);
+        _dmDeliveryService.SendDmAsync(Arg.Any<UserIdentity>(), Arg.Any<TelegramMessage>(),
+                Arg.Any<long?>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
+            .Returns(new DmDeliveryResult { DmSent = true });
+        var callback = new CallbackQuery
+        {
+            Id = "cb-accept",
+            Data = $"welcome_accept:{TestUserId}",
+            From = new User { Id = TestUserId, FirstName = "Bad", IsBot = false },
+            Message = new Message { Id = 42, Chat = new Chat { Id = TestChatId, Type = ChatType.Supergroup, Title = "Test Group" } }
+        };
+
+        await _sut.HandleCallbackQueryAsync(callback, CancellationToken.None);
+
+        await _dmDeliveryService.Received(1).SendDmAsync(
+            Arg.Is<UserIdentity>(u => u!.Id == TestUserId),
+            Arg.Is<TelegramMessage>(m => m!.Text.Contains("Rules for Bad") && !m.Text.Contains(NameRedaction.Explicit)),
+            Arg.Any<long?>(), Arg.Any<int?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
     public async Task HandleCallbackQuery_DmAcceptHeldForReview_GroupEditUsesGroupChatMasking()
     {
         // The accept click happens in the DM; the hold edit goes to the group, so the group's

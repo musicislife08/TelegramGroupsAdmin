@@ -1,6 +1,5 @@
 using Microsoft.Extensions.Logging;
 using NSubstitute;
-using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Repositories;
 using TelegramGroupsAdmin.Repositories;
@@ -34,7 +33,6 @@ public class AdminNotificationServiceRoutingTests
     private IUserRepository _mockUserRepo = null!;
     private IReportCallbackContextRepository _mockCallbackContextRepo = null!;
     private IUserIdentityService _mockIdentities = null!;
-    private IConfigService _mockConfig = null!;
     private ILogger<AdminNotificationService> _mockLogger = null!;
 
     private AdminNotificationService _service = null!;
@@ -54,7 +52,6 @@ public class AdminNotificationServiceRoutingTests
         _mockIdentities = Substitute.For<IUserIdentityService>();
         _mockIdentities.ResolveAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(ci => UserIdentity.ForTest(ci.Arg<long>()));
-        _mockConfig = Substitute.For<IConfigService>();
         _mockLogger = Substitute.For<ILogger<AdminNotificationService>>();
 
         // Default: notification preferences return all-disabled config (no channels deliver)
@@ -76,7 +73,7 @@ public class AdminNotificationServiceRoutingTests
         _service = new AdminNotificationService(
             _mockPrefsRepo,
             _mockEmailService,
-            new NotificationDmDispatcher(_mockDmService, _mockIdentities, _mockConfig),
+            new NotificationDmDispatcher(_mockDmService, _mockIdentities),
             _mockWebPushService,
             _mockTelegramMappingRepo,
             _mockChatAdminsRepo,
@@ -353,11 +350,12 @@ public class AdminNotificationServiceRoutingTests
         Assert.That(text, Does.Contain($"Reported by: {Actor.AutoDetection.GetDisplayText()}"));
     }
 
-    // ── Subjects never carry the user's name (the masked "User" field identifies them) ──
+    // ── Admin DMs are never masked: admins need the real name, even for a flagged user ──
 
     private async Task<string> CaptureDmTextAsync(ChatIdentity chat, Func<Task> send)
     {
-        _mockConfig.GetNameMaskingAsync(Arg.Any<long?>(), Arg.Any<CancellationToken>()).Returns(NameMasking.On);
+        // The DM path reads no masking setting at all: whatever a chat's "Mask flagged names" says,
+        // an admin DM renders the real name.
         _mockUserRepo.GetWebUsersWithChatAccessAsync(chat.Id, Arg.Any<CancellationToken>())
             .Returns(new List<UserRecord>());
         _mockChatAdminsRepo.GetChatAdminsAsync(chat.Id, Arg.Any<CancellationToken>())
@@ -375,7 +373,7 @@ public class AdminNotificationServiceRoutingTests
     }
 
     [Test]
-    public async Task SendBanNotificationAsync_FlaggedName_SubjectOmitsNameAndUserFieldIsMasked()
+    public async Task SendBanNotificationAsync_FlaggedNameWithMaskingOn_DmShowsRealNameInSubjectAndUserField()
     {
         var chat = new ChatIdentity(-1001234567890L, "Test Chat");
         var user = UserIdentity.ForTest(999L, "Bad", verdict: NameVerdict.Explicit);
@@ -383,14 +381,14 @@ public class AdminNotificationServiceRoutingTests
         var text = await CaptureDmTextAsync(chat, () =>
             _service.SendBanNotificationAsync(user, Actor.AutoDetection, "spam", chat, CancellationToken.None));
 
-        Assert.That(text, Does.Contain("User Banned"));
-        Assert.That(text, Does.Contain(NameRedaction.Explicit));
-        Assert.That(text, Does.Not.Contain("Bad"));
+        Assert.That(text, Does.Contain("User Banned: Bad"));
+        Assert.That(text, Does.Contain("User: Bad"));
+        Assert.That(text, Does.Not.Contain(NameRedaction.Explicit));
     }
 
-    [TestCase(true, "Admin Promoted")]
-    [TestCase(false, "Admin Demoted")]
-    public async Task SendAdminChangedAsync_FlaggedName_SubjectOmitsNameAndUserFieldIsMasked(bool promoted, string subject)
+    [TestCase(true, "Admin Promoted: Bad")]
+    [TestCase(false, "Admin Demoted: Bad")]
+    public async Task SendAdminChangedAsync_FlaggedNameWithMaskingOn_DmShowsRealNameInSubjectAndUserField(bool promoted, string subject)
     {
         var chat = new ChatIdentity(-1001234567890L, "Test Chat");
         var user = UserIdentity.ForTest(999L, "Bad", verdict: NameVerdict.Explicit);
@@ -399,7 +397,7 @@ public class AdminNotificationServiceRoutingTests
             _service.SendAdminChangedAsync(chat, user, promoted, isCreator: false, CancellationToken.None));
 
         Assert.That(text, Does.Contain(subject));
-        Assert.That(text, Does.Contain(NameRedaction.Explicit));
-        Assert.That(text, Does.Not.Contain("Bad"));
+        Assert.That(text, Does.Contain("User: Bad"));
+        Assert.That(text, Does.Not.Contain(NameRedaction.Explicit));
     }
 }

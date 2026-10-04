@@ -37,9 +37,9 @@ public class ConfigService(
             async factoryCt => await repository.GetEffectiveWelcomeAsync(chatId, factoryCt),
             CacheOptions, tags: ["effective_welcome"], cancellationToken: ct);
 
-    public async ValueTask<NameMasking> GetNameMaskingAsync(long? chatId, CancellationToken ct = default)
+    public async ValueTask<NameMasking> GetNameMaskingAsync(long chatId, CancellationToken ct = default)
     {
-        var welcome = await GetEffectiveWelcomeAsync(chatId ?? 0, ct);
+        var welcome = await GetEffectiveWelcomeAsync(chatId, ct);
         // No stored config means the defaults apply, and ProfileScanConfig defaults to masking.
         var mask = welcome?.JoinSecurity?.ProfileScan.MaskFlaggedNames ?? new ProfileScanConfig().MaskFlaggedNames;
         return mask ? NameMasking.On : NameMasking.Off;

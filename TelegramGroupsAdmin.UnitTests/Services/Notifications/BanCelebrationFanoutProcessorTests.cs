@@ -1,5 +1,4 @@
 using Microsoft.Extensions.Logging.Abstractions;
-using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Telegram.Services.Identity;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
@@ -43,7 +42,7 @@ public class BanCelebrationFanoutProcessorTests
         _gifs.GetByIdAsync(9, Arg.Any<CancellationToken>())
             .Returns(new BanCelebrationGif { Id = 9, FilePath = "ban-gifs/9.gif", FileId = null });
 
-        var sender = new BanCelebrationDmSender(new NotificationDmDispatcher(_dm, Substitute.For<IUserIdentityService>(), Substitute.For<IConfigService>()), _gifs,
+        var sender = new BanCelebrationDmSender(new NotificationDmDispatcher(_dm, Substitute.For<IUserIdentityService>()), _gifs,
             NullLogger<BanCelebrationDmSender>.Instance);
         _sut = new BanCelebrationFanoutProcessor(_subscribers, _identities, _gifs, _subscriptions, sender,
             new PipelineMetrics(), NullLogger<BanCelebrationFanoutProcessor>.Instance);

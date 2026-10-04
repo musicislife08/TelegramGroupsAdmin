@@ -1378,10 +1378,9 @@ public class WelcomeService(
     {
         var chatName = chat.Title ?? "this chat";
 
-        // Use extracted builder for rules confirmation message (includes footer). DM-only text,
-        // so the global masking setting applies.
-        var masking = await configService.GetNameMaskingAsync(null, cancellationToken);
-        var dmMessage = WelcomeMessageBuilder.FormatRulesConfirmation(config, user, chatName, masking);
+        // Use extracted builder for rules confirmation message (includes footer).
+        var dmMessage = WelcomeMessageBuilder.FormatRulesConfirmation(
+            config, user, chatName, NameMasking.Off); // DM: never masked
 
         // No chat fallback: a blocked DM must not spill the rules into the group as a
         // message addressed to a user who may already be banned or held for review.

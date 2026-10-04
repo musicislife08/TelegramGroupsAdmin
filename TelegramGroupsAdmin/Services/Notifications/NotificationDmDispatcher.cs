@@ -1,5 +1,4 @@
 using Telegram.Bot.Types.ReplyMarkups;
-using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
@@ -10,13 +9,13 @@ namespace TelegramGroupsAdmin.Services.Notifications;
 /// <summary>
 /// The single path from a <see cref="NotificationPayload"/> to a Telegram DM, shared by the
 /// admin- and user-facing notification services. Renders once and picks the DM overload:
-/// animation, media/keyboard, or text. A DM is outside any chat, so names in it follow the
-/// global "Mask flagged names" setting.
+/// animation, media/keyboard, or text. A DM goes to a person, so user mentions in it show the
+/// real name. Ban celebration DMs stay masked because their caption arrives as text the chat's
+/// masking already produced (see BanCelebrationService).
 /// </summary>
 internal sealed class NotificationDmDispatcher(
     IBotDmService dmService,
-    IUserIdentityService identityService,
-    IConfigService configService)
+    IUserIdentityService identityService)
 {
     private const string NotificationType = "notification";
 
@@ -50,8 +49,7 @@ internal sealed class NotificationDmDispatcher(
         InlineKeyboardMarkup? keyboard,
         CancellationToken ct)
     {
-        var masking = await configService.GetNameMaskingAsync(null, ct);
-        var rendered = NotificationRenderer.ToTelegramMessage(payload, masking);
+        var rendered = NotificationRenderer.ToTelegramMessage(payload, NameMasking.Off); // DM: never masked
 
         if (payload.Animation is { } animation)
         {

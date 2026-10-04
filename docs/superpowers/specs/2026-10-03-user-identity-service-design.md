@@ -7,7 +7,9 @@ Telegram user and to obtain an immutable `UserIdentity` carrying both the real n
 and the UI) and a bot-safe name (for anything the bot writes to Telegram). Part 1 changes no
 visible behaviour except explicit-name masking: it now applies to every bot-written mention, not
 only ban-celebration captions, with fixed wording and one "Mask flagged names" setting (global
-default, per-chat override).
+default, per-chat override). Masking applies to text the bot posts into a group chat (and to ban
+celebration subscriber DMs, a copy of the chat's caption); direct messages to a person are never
+masked.
 **PR target:** `develop`.
 
 ---
@@ -16,8 +18,8 @@ default, per-chat override).
 
 A banned spammer's display name was substituted into a ban-celebration caption, and Telegram
 clients auto-linked the domain in it (#552). Fixing only the caption leaves the same name in
-every other message the bot writes: welcome and exam prompts, `/report`, `/warn`, DM fallbacks,
-admin notification DMs. The deeper problem is that user names have no single owner:
+every other message the bot posts in a chat: welcome and hold posts, `/report`, `/warn`, DM
+fallbacks posted in the group. The deeper problem is that user names have no single owner:
 
 - `UserIdentity` (`Core/Models/UserIdentity.cs`) is a public record built at about 120 sites:
   ~83 from the Telegram update (`message.From`, `CallbackQuery.From`, `ChatMember.User`), ~20 from
@@ -255,9 +257,20 @@ passes the identity down.
 - A builder is created for a masking policy: `TelegramMessageBuilder.For(NameMasking masking)`.
   `Mention(UserIdentity)` renders `BotDisplayName(masking)` and still emits a `TextMention` with the
   user id, so it stays clickable and still pings.
-- Callers get the policy from `IConfigService.GetNameMaskingAsync(long? chatId)`: the chat's
-  effective value for group posts, the global value when `chatId` is null (admin notification DMs,
-  `/start` DMs).
+- Masking applies only to text the bot posts into a group chat. Group posts get the policy from
+  `IConfigService.GetNameMaskingAsync(long chatId)`, the chat's effective value. Direct messages to
+  a person are never masked and use `TelegramMessageBuilder.For(NameMasking.Off)` with a
+  `// DM: never masked` comment: admins need real names (only the maintainer has Seq access).
+- Destinations:
+  - Group chat (that chat's masking): verifying, welcome, hold and exam posts in the chat, bypass
+    announcements, ban celebration posts, command replies, `@admin` alerts (a reply in the chat),
+    the DM-to-group fallback (`BotDmService`, `UserMessagingService` chat mention), report replies
+    and the `/dmcelebrations` prompt.
+  - DM to a person (`Off`): admin notifications and alerts (reports, profile-scan and
+    impersonation alerts, ban and admin-change notifications) and their action-result edits,
+    welcome rules and exam DMs, `/start` replies, the banned user's own celebration DM.
+  - Exception: ban celebration subscriber DMs stay masked with the chat's setting, because they
+    carry the chat post's caption, already rendered with that chat's masking.
 - Stage 4 removes the parameterless builder constructor, so every builder states its policy and a
   forgotten one is a compile error (about 40 construction sites).
 - Ban-celebration captions (plain text) substitute `BotDisplayName(masking)` for `{username}`;
@@ -268,7 +281,8 @@ passes the identity down.
 - `ProfileScanConfig.MaskExplicitUsername` is renamed in place to `MaskFlaggedNames` ("Mask flagged
   names"), default on. Like every config it has a global value (`chat_id = 0`) and per-chat
   overrides merged by `GetEffectiveWelcomeAsync`.
-- Group posts use the chat's effective value; messages with no chat use the global value.
+- Group posts (and ban celebration subscriber DMs) use the chat's effective value; DMs to a person
+  are never masked. A chat without its own value inherits the global one.
 - `ExplicitUsernameRedactionText` and `DefaultExplicitUsernameRedactionText` are removed; the
   wording is fixed so both labels share one format.
 - A data migration renames the JSONB key in every `configs` row so stored values carry over.
@@ -326,7 +340,9 @@ Unit:
 - Scan reuse: a rename recorded after the last scan defeats the 60s freshness window and the
   unchanged-profile reuse; with no such rename, both still reuse the cached score.
 - `GetNameMaskingAsync` (substituted config): a chat override off gives `Off`; no override falls back
-  to the global value; `null` chat gives the global value.
+  to the global value.
+- DMs to a person (admin notifications, welcome rules, exam, `/start`) show the real name of an
+  `Explicit` identity with masking `On`; ban celebration subscriber DMs carry the masked caption.
 - One `Explicit` identity rendered by a builder with `Off` shows the real name and by a builder with
   `On` shows `[name removed: explicit]`.
 

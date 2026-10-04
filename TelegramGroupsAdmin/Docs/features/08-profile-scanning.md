@@ -283,21 +283,23 @@ This prevents explicit images from appearing in the admin UI when reviewing bann
 
 Some spam accounts put the explicit content in the display name itself. During the AI layer, the model also judges whether the user's display name or @username is explicit, and the result is stored with the scan.
 
-When the latest scan flagged a user's name, every message the bot writes shows a fixed label instead of the name:
+When the latest scan flagged a user's name, every message the bot posts in a chat shows a fixed label instead of the name:
 
 | Flag | Shown as |
 |---|---|
 | Explicit name | `[name removed: explicit]` |
 | Spam name (reserved for spam-flagged names) | `[name removed: spam]` |
 
-This covers everything the bot posts or sends in Telegram: verifying, welcome and hold messages, [Ban Celebration](09-ban-celebration.md) captions, command replies, and the admin DMs and alerts the bot sends. Mentions still link to the account, so admins can tap through to the real profile. The web UI, email and push notifications show the real name, so you can always see who you are reviewing.
+This covers what the bot posts in chats: verifying, welcome and hold messages, [Ban Celebration](09-ban-celebration.md) captions, command replies, and DM fallbacks posted in the group. Ban celebration DMs to [subscribers](09-ban-celebration.md#dm-subscribers) are masked too, because they copy the chat's caption. Mentions still link to the account, so admins can tap through to the real profile.
+
+Direct messages to a person are never masked: admin DMs and alerts (reports, profile scan and impersonation alerts, ban and admin-change notifications) and a user's own welcome, exam and `/start` DMs always show the real name. The web UI, email and push notifications show the real name too, so you can always see who you are reviewing.
 
 A flag belongs to the account, not the chat. Once any scan flags a name, it is masked in every chat where masking is on, including chats that do not scan profiles themselves. A later scan that no longer flags the name lifts the mask.
 
 The setting is **Mask flagged names**. It is on by default:
 
-- **Global default:** Settings > Telegram > Bot Configuration > Welcome System > Security on Join > Profile Scan. Messages that belong to no chat, such as admin DMs, follow this value.
-- **Per-chat override:** the same switch in a chat's Welcome System settings (see [Configuration](#configuration)). It decides masking for messages the bot writes in that chat.
+- **Global default:** Settings > Telegram > Bot Configuration > Welcome System > Security on Join > Profile Scan. Chats without their own value follow it.
+- **Per-chat override:** the same switch in a chat's Welcome System settings (see [Configuration](#configuration)). It decides masking for what the bot posts in that chat and for that chat's ban celebration DMs.
 
 The labels are fixed; there is no configurable redaction text.
 
@@ -341,7 +343,7 @@ Connect at least one Telegram User API session. The scanner selects the best ava
 | Scan on join | On | Trigger scan when a user joins the chat |
 | Scan on profile change | On | Re-scan when Bot API detects name/username changes |
 | Scan on first message | Off | Scan a never-scanned user on their first message (see [How It Works](#how-it-works)) |
-| Mask flagged names | On | Show `[name removed: explicit]` or `[name removed: spam]` instead of a flagged name in every message the bot writes (see [Masking Flagged Names](#masking-flagged-names)). Applies whether or not this chat scans profiles |
+| Mask flagged names | On | Show `[name removed: explicit]` or `[name removed: spam]` instead of a flagged name in what the bot posts in the chat and in ban celebration DMs; admin and personal DMs show the real name (see [Masking Flagged Names](#masking-flagged-names)). Applies whether or not this chat scans profiles |
 
 [Screenshot: Profile Scan configuration in Welcome > Join Security settings]
 
@@ -396,4 +398,4 @@ This prevents a temporary rate limit from permanently excluding users who should
 - **[Reports Queue](02-reports.md)** -- Review profile scan alerts alongside message reports
 - **[URL Filtering](04-url-filtering.md)** -- URL blocklists used by the rule-based scoring layer
 - **[AI Prompt Builder](06-ai-prompt-builder.md)** -- Customize AI prompts for other detection features
-- **[Ban Celebration](09-ban-celebration.md)** -- Ban captions mask flagged names like every other bot message
+- **[Ban Celebration](09-ban-celebration.md)** -- Ban captions (in the chat and in subscriber DMs) mask flagged names like every other chat post

@@ -66,13 +66,6 @@ public class ConfigServiceNameMaskingTests
     }
 
     [Test]
-    public async Task NullChat_UsesGlobalRow()
-    {
-        Effective(0, scanEnabled: true, mask: true);
-        Assert.That(await _sut.GetNameMaskingAsync(null), Is.EqualTo(NameMasking.On));
-    }
-
-    [Test]
     public async Task ScanDisabledInChat_StillMasksWhenSettingOn()
     {
         // Verdicts are per account, so a flag from another chat's scan masks here too.
