@@ -31,7 +31,6 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
 {
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
     private readonly ITelegramUserRepository _telegramUserRepository;
-    private readonly IChatAdminsRepository _chatAdminsRepository;
     private readonly IManagedChatsRepository _managedChatsRepository;
     private readonly IMessageHistoryRepository _messageHistoryRepository;
     private readonly IPhotoHashService _photoHashService;
@@ -50,7 +49,6 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
     public ImpersonationDetectionService(
         IDbContextFactory<AppDbContext> contextFactory,
         ITelegramUserRepository telegramUserRepository,
-        IChatAdminsRepository chatAdminsRepository,
         IManagedChatsRepository managedChatsRepository,
         IMessageHistoryRepository messageHistoryRepository,
         IPhotoHashService photoHashService,
@@ -62,7 +60,6 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
     {
         _contextFactory = contextFactory;
         _telegramUserRepository = telegramUserRepository;
-        _chatAdminsRepository = chatAdminsRepository;
         _managedChatsRepository = managedChatsRepository;
         _messageHistoryRepository = messageHistoryRepository;
         _photoHashService = photoHashService;

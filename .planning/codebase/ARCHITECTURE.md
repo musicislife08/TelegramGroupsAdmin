@@ -128,7 +128,7 @@
 
 **Identity Types:**
 - Purpose: Type-safe representation of Telegram users and chats with cached display names
-- Examples: `UserIdentity.FromId(123)`, `UserIdentity.FromAsync(repo)`, `ChatIdentity.From(tgChat)`
+- Examples: `IUserIdentityService.ObserveAsync` / `ResolveAsync` (the only way to obtain a `UserIdentity`; see `.claude/rules/user-identity.md`), `ChatIdentity.From(tgChat)`
 - Pattern: Sealed records, init-only properties, static factories with `From*` methods
 - Location: `TelegramGroupsAdmin.Core.Models/`, extensions in `TelegramGroupsAdmin.Telegram.Extensions/`
 

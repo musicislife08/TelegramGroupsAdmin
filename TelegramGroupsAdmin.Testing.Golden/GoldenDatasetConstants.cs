@@ -852,5 +852,9 @@ public static class GoldenDatasetConstants
         public const long PastFirstNameUserId = 9875141377477;
         /// <summary>Prior first name on history row 2.</summary>
         public const string PastFirstName = "QQQ";
+        /// <summary>History row 4 records the prior names "Tin Tun" / "Min" with no prior username. Read-only.</summary>
+        public const long NoPastUsernameUserId = 9095125964119;
+        /// <summary>History row 1's owner. <c>UsernameHistoryRepositoryTests</c> deletes this user in its clone to test the cascade; otherwise read-only.</summary>
+        public const long CascadeDeleteUserId = 9726308613009;
     }
 }

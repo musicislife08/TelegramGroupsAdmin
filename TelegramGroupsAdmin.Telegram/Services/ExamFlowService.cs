@@ -27,7 +27,6 @@ public class ExamFlowService : IExamFlowService
 
     private readonly ILogger<ExamFlowService> _logger;
     private readonly IServiceProvider _serviceProvider;
-    private readonly IBotMessageService _messageService;
     private readonly IBotDmService _dmService;
     private readonly IBotChatService _chatService;
     private readonly IExamEvaluationService _examEvaluationService;
@@ -36,7 +35,6 @@ public class ExamFlowService : IExamFlowService
     public ExamFlowService(
         ILogger<ExamFlowService> logger,
         IServiceProvider serviceProvider,
-        IBotMessageService messageService,
         IBotDmService dmService,
         IBotChatService chatService,
         IExamEvaluationService examEvaluationService,
@@ -44,7 +42,6 @@ public class ExamFlowService : IExamFlowService
     {
         _logger = logger;
         _serviceProvider = serviceProvider;
-        _messageService = messageService;
         _dmService = dmService;
         _chatService = chatService;
         _admissionHandler = admissionHandler;

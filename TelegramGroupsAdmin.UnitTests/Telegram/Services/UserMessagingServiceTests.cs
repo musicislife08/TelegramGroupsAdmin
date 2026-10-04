@@ -337,7 +337,7 @@ public class UserMessagingServiceTests
     [Test]
     public async Task SendDmOnlyAsync_UserNotFound_ReturnsFailedWithoutSending()
     {
-        // Arrange: no such user on record - must not NRE at UserIdentity.From(user)
+        // Arrange: no such user on record - must fail cleanly before resolving an identity
         _mockUserRepo
             .GetByTelegramIdAsync(TestUserId1, Arg.Any<CancellationToken>())
             .Returns((TelegramUser?)null);

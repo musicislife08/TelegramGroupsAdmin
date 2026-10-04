@@ -18,8 +18,8 @@ and to every spec or plan that specifies one.
 
 ## The hard rule
 
-- **Never seed a precondition.** No SUT write method as setup (`GetOrCreateAsync`, `UpsertAsync`,
-  `SetBanStatusAsync`, `TrustUserAsync`, `InsertAsync`, `CreateAsync`, …), no `ctx.<Table>.Add(...)`,
+- **Never seed a precondition.** No SUT write method as setup (`ObserveAsync`, `SetBanStatusAsync`,
+  `TrustUserAsync`, `InsertAsync`, `CreateAsync`, …), no `ctx.<Table>.Add(...)`,
   no raw `INSERT`. A SUT write appears in a test **only when that write is the assertion subject**.
   Do not launder an out-of-place write by asserting on it afterwards.
 - **Never add rows to canonical to get a shape.** There are plenty of users: find an existing

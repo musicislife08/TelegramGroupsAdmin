@@ -10,6 +10,11 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-03-user-identity-service-design.md`
 
+> **Note (after implementation):** the `RenameRescan` option below was replaced by the spec's
+> `ObserveAsync` rename rules: `ObserveAsync` decides from the observation's source and the user
+> whether a rename is rescanned, and callers pass no rescan option. Read `RenameRescan` in the
+> tasks below as historical.
+
 ## Global Constraints
 
 - Branch: `feat/552-user-identity-service` (spec, plan and implementation together). PR to `develop` only. Conventional commits. Never commit to `develop`/`master`. Never use git worktrees.

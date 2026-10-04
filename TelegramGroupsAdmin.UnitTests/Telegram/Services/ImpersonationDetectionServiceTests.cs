@@ -75,7 +75,6 @@ public class ImpersonationDetectionServiceTests
     private ImpersonationDetectionService CreateServiceForShouldCheckTests()
     {
         var mockContextFactory = Substitute.For<IDbContextFactory<AppDbContext>>();
-        var mockChatAdminsRepo = Substitute.For<IChatAdminsRepository>();
         var mockManagedChatsRepo = Substitute.For<IManagedChatsRepository>();
         var mockPhotoHashService = Substitute.For<IPhotoHashService>();
         var mockLogger = Substitute.For<ILogger<ImpersonationDetectionService>>();
@@ -83,7 +82,6 @@ public class ImpersonationDetectionServiceTests
         return new ImpersonationDetectionService(
             mockContextFactory,
             _mockTelegramUserRepo,
-            mockChatAdminsRepo,
             mockManagedChatsRepo,
             _mockMessageHistoryRepo,
             mockPhotoHashService,

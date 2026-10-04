@@ -17,7 +17,8 @@ public interface IReportService
     /// <param name="reporter">
     /// The actor submitting the report. Pass <see cref="Actor.AutoDetection"/> (or another
     /// system actor such as <see cref="Actor.Cas"/>) for automated reports, or
-    /// <see cref="Actor.FromTelegramUser(long, string?, string?, string?)"/> for user-submitted reports.
+    /// <see cref="Actor.FromUserIdentity(UserIdentity)"/> with the reporter's resolved identity
+    /// for user-submitted reports.
     /// </param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Result containing report ID and notification counts</returns>

@@ -6,7 +6,7 @@ This file is auto-loaded by Claude Code when working under `TelegramGroupsAdmin.
 
 The binding rule set lives in `.claude/rules/integration-test-data.md` and is injected automatically when you edit files in this project or a superpowers plan/spec. The short form:
 
-- A test asserts its logic against canonical rows. **Never seed a precondition** — no SUT write method (`GetOrCreateAsync`, `UpsertAsync`, `SetBanStatusAsync`, `TrustUserAsync`, …) as setup, no `ctx.<Table>.Add`, no raw `INSERT`. A SUT write appears only when that write **is** the assertion subject.
+- A test asserts its logic against canonical rows. **Never seed a precondition** — no SUT write method (`ObserveAsync`, `SetBanStatusAsync`, `TrustUserAsync`, …) as setup, no `ctx.<Table>.Add`, no raw `INSERT`. A SUT write appears only when that write **is** the assertion subject.
 - Canonical lacks a shape? **Do not add rows.** Find a canonical row no test or doc references and flag-edit it in place; keep the story plausible; pin it in `TelegramGroupsAdmin.Testing.Golden/GoldenDatasetConstants.cs`; add a Part 2 recipe marked "(canonical edit <date>)"; guard the precondition in the test by reading the row back.
 - Read expected counts/names at runtime, never hard-code them.
 - Hit an infrastructure problem (template build, FK, sequence, missing shape)? Escalate — never change the assertion to make it pass.
@@ -414,6 +414,8 @@ Anchors are in code as `GoldenDatasetConstants.UsernameHistory`. Both owners are
 |---|---|---|
 | `PastUsernameUserId` / `PastUsername` | 9032620986755 @BryanNguyen54, history row 3 | prior username `rsza_tilla` (flag-edited from NULL; prior names "Rsza Тилляев" unchanged) |
 | `PastFirstNameUserId` / `PastFirstName` | 9875141377477 "Jeanette", history row 2 | prior first name `QQQ` |
+| `NoPastUsernameUserId` | 9095125964119, history row 4 | prior names "Tin Tun" / "Min", no prior username; `UsernameHistoryRepositoryTests` field mapping and isolation (read-only) |
+| `CascadeDeleteUserId` | 9726308613009, history row 1 | `UsernameHistoryRepositoryTests` deletes the user in its clone to test the cascade, and reads it for isolation |
 
 Use when: a search must match a user by a past name only (`TelegramUserRepositoryTests` search region), or a rename must be recorded at a known time (`UsernameHistoryRepositoryTests` `HasChangeSinceAsync`, which reads row 2's `recorded_at` back). Tests read the history row and the current names back first.
 

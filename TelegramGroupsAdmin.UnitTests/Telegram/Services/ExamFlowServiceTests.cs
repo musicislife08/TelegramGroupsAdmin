@@ -53,7 +53,6 @@ public class ExamFlowServiceTests
     {
         // Create service with mocked dependencies (only needed for constructor)
         var logger = NullLogger<ExamFlowService>.Instance;
-        var botMessageService = Substitute.For<IBotMessageService>();
         var botDmService = _botDmService = Substitute.For<IBotDmService>();
         var botChatService = Substitute.For<IBotChatService>();
         _examEvaluationService = Substitute.For<IExamEvaluationService>();
@@ -88,7 +87,6 @@ public class ExamFlowServiceTests
         _service = new ExamFlowService(
             logger,
             serviceProvider,
-            botMessageService,
             botDmService,
             botChatService,
             _examEvaluationService,
