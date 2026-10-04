@@ -231,7 +231,7 @@ public class BanCommand : IBotCommand
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to ban {User}", targetIdentity.ToLogDebug());
-            return new CommandResult(TelegramMessage.Plain($"❌ Failed to ban user: {ex.Message}"), DeleteCommandMessage, DeleteResponseAfterSeconds);
+            return new CommandResult(TelegramMessage.Plain("❌ Failed to ban user."), DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
     }
 

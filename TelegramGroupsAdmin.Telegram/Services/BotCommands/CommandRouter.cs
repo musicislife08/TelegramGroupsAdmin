@@ -128,8 +128,9 @@ public partial class CommandRouter
         }
         catch (Exception ex)
         {
+            // The reply is posted in the chat, so it never carries exception text; the log has it.
             _logger.LogError(ex, "Error executing command /{Command} by {User}", commandName, sender.ToLogDebug());
-            return new CommandResult(TelegramMessage.Plain($"❌ Error executing command: {ex.Message}"), false);
+            return new CommandResult(TelegramMessage.Plain("❌ Something went wrong running that command."), false);
         }
     }
 

@@ -95,7 +95,7 @@ public class UnbanCommand : IBotCommand
         {
             _logger.LogError(ex, "Failed to unban {User}",
                 targetUser.ToLogDebug());
-            return new CommandResult(TelegramMessage.Plain($"❌ Failed to unban user: {ex.Message}"), DeleteCommandMessage, DeleteResponseAfterSeconds);
+            return new CommandResult(TelegramMessage.Plain("❌ Failed to unban user."), DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
     }
 }

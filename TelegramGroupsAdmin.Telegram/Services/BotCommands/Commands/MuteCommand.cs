@@ -141,7 +141,7 @@ public class MuteCommand : IBotCommand
         {
             _logger.LogError(ex, "Failed to mute {User}",
                 targetUser.ToLogDebug());
-            return new CommandResult(TelegramMessage.Plain($"❌ Failed to mute user: {ex.Message}"), DeleteCommandMessage, DeleteResponseAfterSeconds);
+            return new CommandResult(TelegramMessage.Plain("❌ Failed to mute user."), DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
     }
 

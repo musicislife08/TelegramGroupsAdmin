@@ -150,7 +150,7 @@ public class WarnCommand : IBotCommand
         {
             _logger.LogError(ex, "Failed to warn {User}",
                 targetUser.ToLogDebug());
-            return new CommandResult(TelegramMessage.Plain($"❌ Failed to issue warning: {ex.Message}"), DeleteCommandMessage, DeleteResponseAfterSeconds);
+            return new CommandResult(TelegramMessage.Plain("❌ Failed to issue warning."), DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
     }
 }

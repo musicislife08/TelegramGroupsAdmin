@@ -144,7 +144,7 @@ public class TempBanCommand : IBotCommand
         {
             _logger.LogError(ex, "Failed to temp ban {User}",
                 targetUser.ToLogDebug());
-            return new CommandResult(TelegramMessage.Plain($"❌ Failed to temp ban user: {ex.Message}"), DeleteCommandMessage);
+            return new CommandResult(TelegramMessage.Plain("❌ Failed to temp ban user."), DeleteCommandMessage);
         }
     }
 
