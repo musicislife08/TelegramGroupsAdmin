@@ -96,8 +96,6 @@ public class TrustCommand : IBotCommand
 
         // Build reason with chat context
         var chatName = message.Chat.Title ?? message.Chat.Username ?? message.Chat.Id.ToString();
-        // Confirmations mention the target following the chat's name-masking setting
-        var masking = await _configService.GetNameMaskingAsync(message.Chat.Id, cancellationToken);
 
         if (isAlreadyTrusted)
         {
@@ -127,8 +125,9 @@ public class TrustCommand : IBotCommand
                 sender.ToLogInfo(),
                 message.Chat.ToLogInfo());
 
+            // The confirmation mentions the target following the chat's name-masking setting
             return new CommandResult(
-                TelegramMessageBuilder.For(masking)
+                (await _configService.CreateChatMessageBuilderAsync(message.Chat.Id, cancellationToken))
                     .Text("✅ User ").Mention(targetUser).Text(" is no longer trusted").LineBreak().LineBreak()
                     .Text("This user's messages will now be subject to spam detection.")
                     .Build(),
@@ -162,8 +161,9 @@ public class TrustCommand : IBotCommand
                 sender.ToLogInfo(),
                 message.Chat.ToLogInfo());
 
+            // The confirmation mentions the target following the chat's name-masking setting
             return new CommandResult(
-                TelegramMessageBuilder.For(masking)
+                (await _configService.CreateChatMessageBuilderAsync(message.Chat.Id, cancellationToken))
                     .Text("✅ User ").Mention(targetUser).Text(" marked as trusted").LineBreak().LineBreak()
                     .Text("This user's messages will bypass spam detection globally.")
                     .Build(),

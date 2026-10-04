@@ -47,7 +47,6 @@ public class ReportCommand(
         }
 
         var reportedUser = await identityService.ResolveAsync(reportedMessage.From.Id, cancellationToken);
-        var masking = await configService.GetNameMaskingAsync(message.Chat.Id, cancellationToken);
 
         using var scope = serviceProvider.CreateScope();
         var reportsRepository = scope.ServiceProvider.GetRequiredService<IReportsRepository>();
@@ -61,7 +60,7 @@ public class ReportCommand(
 
         if (existingReport != null)
         {
-            var reply = TelegramMessageBuilder.For(masking)
+            var reply = (await configService.CreateChatMessageBuilderAsync(message.Chat.Id, cancellationToken))
                 .Text("ℹ️ This message has already been reported.")
                 .LineBreak().LineBreak()
                 .Text($"📋 Report #{existingReport.Id}")
@@ -119,7 +118,7 @@ public class ReportCommand(
             reportedUser.Username);
 
         return new CommandResult(
-            TelegramMessageBuilder.For(masking)
+            (await configService.CreateChatMessageBuilderAsync(message.Chat.Id, cancellationToken))
                 .Text($"✅ Message reported for admin review (Report #{result.ReportId})")
                 .LineBreak()
                 .Text("Reported user: ")

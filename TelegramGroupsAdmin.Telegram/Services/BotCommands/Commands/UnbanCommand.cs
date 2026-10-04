@@ -83,8 +83,7 @@ public class UnbanCommand : IBotCommand
             }
 
             // The mention follows the chat's name-masking setting
-            var masking = await _configService.GetNameMaskingAsync(message.Chat.Id, cancellationToken);
-            var response = TelegramMessageBuilder.For(masking)
+            var response = (await _configService.CreateChatMessageBuilderAsync(message.Chat.Id, cancellationToken))
                 .Text("✅ User ").Mention(targetUser)
                 .Text($" unbanned from {result.ChatsAffected} chat(s)")
                 .Build();

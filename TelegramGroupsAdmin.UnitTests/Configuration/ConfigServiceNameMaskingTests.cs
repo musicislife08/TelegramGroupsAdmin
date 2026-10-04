@@ -81,4 +81,16 @@ public class ConfigServiceNameMaskingTests
             .Returns((WelcomeConfig?)null);
         Assert.That(await _sut.GetNameMaskingAsync(-100), Is.EqualTo(NameMasking.On));
     }
+
+    [TestCase(true, "[name removed: explicit]")]
+    [TestCase(false, "Bad")]
+    public async Task CreateChatMessageBuilderAsync_UsesTheChatsMasking(bool mask, string shown)
+    {
+        Effective(-100, scanEnabled: false, mask: mask);
+        var flagged = UserIdentity.ForTest(7, "Bad", verdict: NameVerdict.Explicit);
+
+        var builder = await _sut.CreateChatMessageBuilderAsync(-100);
+
+        Assert.That(builder.Mention(flagged).Build().Text, Is.EqualTo(shown));
+    }
 }

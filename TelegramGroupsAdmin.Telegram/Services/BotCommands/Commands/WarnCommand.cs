@@ -85,7 +85,6 @@ public class WarnCommand : IBotCommand
         try
         {
             var executor = Core.Models.Actor.FromUserIdentity(sender);
-            var masking = await _configService.GetNameMaskingAsync(message.Chat.Id, cancellationToken);
 
             // Execute warn action using service
             var result = await _moderationService.WarnUserAsync(
@@ -106,7 +105,7 @@ public class WarnCommand : IBotCommand
 
             // Notify user of warning via DM (preferred) or chat mention (fallback)
             var chatName = message.Chat.Title ?? message.Chat.Username ?? "this chat";
-            var warningBuilder = TelegramMessageBuilder.For(masking)
+            var warningBuilder = TelegramMessageBuilder.For(NameMasking.Off) // no user mentions
                 .Text("⚠️ ").Bold("Warning Issued").LineBreak().LineBreak()
                 .Bold("Chat: ").Text(chatName).LineBreak()
                 .Bold("Reason: ").Text(reason).LineBreak()
@@ -133,7 +132,7 @@ public class WarnCommand : IBotCommand
                 ? " (notified via DM)"
                 : " (notified in chat)";
 
-            var response = TelegramMessageBuilder.For(masking)
+            var response = (await _configService.CreateChatMessageBuilderAsync(message.Chat.Id, cancellationToken))
                 .Text("⚠️ Warning issued to ").Mention(targetUser).Text(deliveryNote).LineBreak()
                 .Text($"Reason: {reason}").LineBreak()
                 .Text($"Total warnings: {result.WarningCount}");

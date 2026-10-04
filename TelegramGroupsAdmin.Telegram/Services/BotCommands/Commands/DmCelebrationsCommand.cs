@@ -49,7 +49,6 @@ public sealed class DmCelebrationsCommand(
         }
 
         var chat = ChatIdentity.From(message.Chat);
-        var user = sender;
         var chatName = chat.ChatName ?? "this chat";
 
         switch (args.FirstOrDefault()?.ToLowerInvariant())
@@ -57,17 +56,17 @@ public sealed class DmCelebrationsCommand(
             case "on":
                 // The service DMs the confirmation, or posts the start prompt when it can't;
                 // a banned user gets nothing. Either way the group sees no reply from here.
-                await subscriptionService.SubscribeAsync(chat, user, cancellationToken);
+                await subscriptionService.SubscribeAsync(chat, sender, cancellationToken);
                 return Reply(TelegramMessage.Empty);
 
             case "off":
-                await subscriptionService.UnsubscribeAsync(chat, user, cancellationToken);
-                return await ReplyByDmAsync(user, chat,
+                await subscriptionService.UnsubscribeAsync(chat, sender, cancellationToken);
+                return await ReplyByDmAsync(sender, chat,
                     $"🔕 You won't get {chatName}'s ban celebrations in your DMs anymore.", cancellationToken);
 
             default:
-                var subscribed = await subscriptionService.IsSubscribedAsync(chat.Id, user.Id, cancellationToken);
-                return await ReplyByDmAsync(user, chat, subscribed
+                var subscribed = await subscriptionService.IsSubscribedAsync(chat.Id, sender.Id, cancellationToken);
+                return await ReplyByDmAsync(sender, chat, subscribed
                     ? $"✅ You're getting {chatName}'s ban celebrations in your DMs. Use /dmcelebrations off to stop."
                     : $"You're not getting {chatName}'s ban celebrations in your DMs. Use /dmcelebrations on to start.",
                     cancellationToken);
