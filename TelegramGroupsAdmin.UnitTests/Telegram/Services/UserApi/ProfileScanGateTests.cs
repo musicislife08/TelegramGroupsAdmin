@@ -23,6 +23,7 @@ public class ProfileScanGateTests
 
     private IConfigService _configService = null!;
     private ITelegramUserRepository _userRepository = null!;
+    private IUsernameHistoryRepository _usernameHistory = null!;
     private IChatAdminsRepository _chatAdminsRepository = null!;
 #pragma warning disable NUnit1032 // Mock doesn't need disposal
     private ITelegramSessionManager _sessionManager = null!;
@@ -35,6 +36,7 @@ public class ProfileScanGateTests
     {
         _configService = Substitute.For<IConfigService>();
         _userRepository = Substitute.For<ITelegramUserRepository>();
+        _usernameHistory = Substitute.For<IUsernameHistoryRepository>();
         _chatAdminsRepository = Substitute.For<IChatAdminsRepository>();
         _sessionManager = Substitute.For<ITelegramSessionManager>();
         _profileScanService = Substitute.For<IProfileScanService>();
@@ -52,6 +54,7 @@ public class ProfileScanGateTests
         _gate = new ProfileScanGate(
             _configService,
             _userRepository,
+            _usernameHistory,
             _chatAdminsRepository,
             _sessionManager,
             _profileScanService,
@@ -194,6 +197,83 @@ public class ProfileScanGateTests
         Assert.That(result, Is.Null);
     }
 
+    // ── Join with ScanOnJoin off: eligible through ScanOnProfileChange when renamed since the last scan ──
+
+    private static ProfileScanConfig ProfileChangeOnly()
+    {
+        var config = CreateConfig();
+        config.ScanOnJoin = false;
+        return config;
+    }
+
+    private void RenamedSince(DateTimeOffset? since) =>
+        _usernameHistory.HasChangeSinceAsync(TestUserId, since, Arg.Any<CancellationToken>()).Returns(true);
+
+    [Test]
+    public async Task Join_ScanOnJoinOff_RenamedSinceLastScan_Scans()
+    {
+        var lastScan = DateTimeOffset.UtcNow.AddDays(-3);
+        SetConfig(ProfileChangeOnly());
+        SetUser(CreateUser(profileScannedAt: lastScan));
+        RenamedSince(lastScan);
+
+        var result = await ScanAsync(ProfileScanTrigger.Join);
+
+        Assert.That(result, Is.Not.Null);
+    }
+
+    [Test]
+    public async Task Join_ScanOnJoinOff_NeverScannedAndRenamed_Scans()
+    {
+        SetConfig(ProfileChangeOnly());
+        SetUser(CreateUser(profileScannedAt: null));
+        RenamedSince(null);
+
+        var result = await ScanAsync(ProfileScanTrigger.Join);
+
+        Assert.That(result, Is.Not.Null);
+    }
+
+    [Test]
+    public async Task Join_ScanOnJoinOff_NoRenameSinceLastScan_Skips()
+    {
+        SetConfig(ProfileChangeOnly());
+        SetUser(CreateUser(profileScannedAt: DateTimeOffset.UtcNow.AddDays(-3)));
+
+        var result = await ScanAsync(ProfileScanTrigger.Join);
+
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public async Task Join_ScanOnJoinAndProfileChangeOff_Renamed_Skips()
+    {
+        var lastScan = DateTimeOffset.UtcNow.AddDays(-3);
+        var config = ProfileChangeOnly();
+        config.ScanOnProfileChange = false;
+        SetConfig(config);
+        SetUser(CreateUser(profileScannedAt: lastScan));
+        RenamedSince(lastScan);
+
+        var result = await ScanAsync(ProfileScanTrigger.Join);
+
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public async Task Join_ScanOnJoinOff_RenamedTrustedUser_Skips()
+    {
+        var lastScan = DateTimeOffset.UtcNow.AddDays(-3);
+        SetConfig(ProfileChangeOnly());
+        SetUser(CreateUser(profileScannedAt: lastScan, isTrusted: true));
+        RenamedSince(lastScan);
+
+        var result = await ScanAsync(ProfileScanTrigger.Join);
+
+        Assert.That(result, Is.Null);
+        await _profileScanService.DidNotReceiveWithAnyArgs().ScanUserProfileAsync(default!, default, default, default);
+    }
+
     [Test]
     public async Task ProfileChange_ScanOnProfileChangeDisabled_Skips()
     {
@@ -233,6 +313,19 @@ public class ProfileScanGateTests
         var result = await ScanAsync(ProfileScanTrigger.FirstMessage);
 
         Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public async Task ForceRescan_IsForwardedToScan()
+    {
+        SetUser(CreateUser(profileScannedAt: null));
+
+        await _gate.ScanIfEligibleAsync(
+            UserIdentity.ForTest(TestUserId, "Andrea"), null, ProfileScanTrigger.ProfileChange,
+            CancellationToken.None, forceRescan: true);
+
+        await _profileScanService.Received(1).ScanUserProfileAsync(
+            Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity?>(), Arg.Any<CancellationToken>(), true);
     }
 
     [Test]

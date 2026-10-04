@@ -6,6 +6,12 @@ namespace TelegramGroupsAdmin.Data.Models;
 /// View-backed entity for enriched messages with user/chat/reply/translation data.
 /// Maps to enriched_messages PostgreSQL view.
 /// NOTE: Named *View (not *Dto) to avoid backup/restore reflection picking this up.
+/// <para>
+/// Freeze before changing: the JoinUserIdentitiesInEnrichedViews migration replays this class's live
+/// <c>CreateViewSql</c>. Before changing the definition, copy the current SQL into a frozen constant
+/// (as LegacyUserIdentityViewSql does for UserIdentityView) and point that migration at the copy, so
+/// the change cannot alter fresh-database history.
+/// </para>
 /// </summary>
 public class EnrichedMessageView
 {
@@ -15,8 +21,8 @@ public class EnrichedMessageView
     /// SQL to create the enriched_messages view. Referenced by migrations.
     /// Includes all message columns plus enrichment from:
     /// - managed_chats (chat name, icon)
-    /// - telegram_users (user name, photo)
-    /// - parent message + user (reply context)
+    /// - user_identities (author names, is_bot, latest scan flag); telegram_users (author photo only)
+    /// - parent message + user_identities (reply context)
     /// - message_translations (translation for original messages only)
     /// </summary>
     public const string CreateViewSql = """
@@ -50,16 +56,20 @@ public class EnrichedMessageView
             -- Chat enrichment (from managed_chats)
             c.chat_name,
             c.chat_icon_path,
-            -- User enrichment (from telegram_users)
-            u.username AS user_name,
-            u.first_name,
-            u.last_name,
+            -- User enrichment (identity from user_identities, photo from telegram_users)
+            ui.username AS user_name,
+            ui.first_name,
+            ui.last_name,
+            ui.is_bot,
+            ui.latest_scan_explicit,
             u.user_photo_path,
-            -- Reply enrichment (from parent message + user)
+            -- Reply enrichment (from parent message + user_identities)
             parent_user.first_name AS reply_to_first_name,
             parent_user.last_name AS reply_to_last_name,
             parent_user.username AS reply_to_username,
             parent_user.telegram_user_id AS reply_to_user_id,
+            parent_user.is_bot AS reply_to_is_bot,
+            parent_user.latest_scan_explicit AS reply_to_latest_scan_explicit,
             parent.message_text AS reply_to_text,
             -- Translation (from message_translations, message-only not edits)
             t.id AS translation_id,
@@ -69,9 +79,10 @@ public class EnrichedMessageView
             t.translated_at
         FROM messages m
         LEFT JOIN managed_chats c ON m.chat_id = c.chat_id
+        LEFT JOIN user_identities ui ON m.user_id = ui.telegram_user_id
         LEFT JOIN telegram_users u ON m.user_id = u.telegram_user_id
         LEFT JOIN messages parent ON m.reply_to_message_id = parent.message_id AND m.chat_id = parent.chat_id
-        LEFT JOIN telegram_users parent_user ON parent.user_id = parent_user.telegram_user_id
+        LEFT JOIN user_identities parent_user ON parent.user_id = parent_user.telegram_user_id
         LEFT JOIN message_translations t ON m.message_id = t.message_id AND m.chat_id = t.chat_id AND t.edit_id IS NULL;
         """;
 
@@ -168,7 +179,7 @@ public class EnrichedMessageView
 
     #endregion
 
-    #region User Enrichment (from telegram_users JOIN)
+    #region User Enrichment (from user_identities + telegram_users JOINs)
 
     [Column("user_name")]
     public string? UserName { get; set; }
@@ -178,6 +189,14 @@ public class EnrichedMessageView
 
     [Column("last_name")]
     public string? LastName { get; set; }
+
+    /// <summary>NULL when the author has no telegram_users row.</summary>
+    [Column("is_bot")]
+    public bool? IsBot { get; set; }
+
+    /// <summary>Explicit flag from the author's latest profile scan; NULL when unscanned.</summary>
+    [Column("latest_scan_explicit")]
+    public bool? LatestScanExplicit { get; set; }
 
     [Column("user_photo_path")]
     public string? UserPhotoPath { get; set; }
@@ -197,6 +216,12 @@ public class EnrichedMessageView
 
     [Column("reply_to_user_id")]
     public long? ReplyToUserId { get; set; }
+
+    [Column("reply_to_is_bot")]
+    public bool? ReplyToIsBot { get; set; }
+
+    [Column("reply_to_latest_scan_explicit")]
+    public bool? ReplyToLatestScanExplicit { get; set; }
 
     [Column("reply_to_text")]
     public string? ReplyToText { get; set; }

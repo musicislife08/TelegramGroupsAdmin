@@ -6,6 +6,7 @@ using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.Telegram.Services.Identity;
 using TelegramGroupsAdmin.Telegram.Services.Notifications;
 
 namespace TelegramGroupsAdmin.UnitTests.Telegram.Services.Notifications;
@@ -25,6 +26,7 @@ public class TelegramDmChannelTests
 {
     private IBotDmService _mockDmService = null!;
     private ILogger<TelegramDmChannel> _mockLogger = null!;
+    private IUserIdentityService _mockIdentities = null!;
     private TelegramDmChannel _channel = null!;
 
     [SetUp]
@@ -33,7 +35,26 @@ public class TelegramDmChannelTests
         _mockDmService = Substitute.For<IBotDmService>();
         _mockLogger = Substitute.For<ILogger<TelegramDmChannel>>();
 
-        _channel = new TelegramDmChannel(_mockLogger, _mockDmService);
+        _mockIdentities = Substitute.For<IUserIdentityService>();
+        _mockIdentities.ResolveAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
+            .Returns(ci => UserIdentity.ForTest(ci.Arg<long>()));
+
+        _channel = new TelegramDmChannel(_mockLogger, _mockDmService, _mockIdentities);
+    }
+
+    [Test]
+    public async Task SendAsync_SendsToIdentityResolvedById()
+    {
+        var resolved = UserIdentity.ForTest(4242L, "Kim");
+        _mockIdentities.ResolveAsync(4242L, Arg.Any<CancellationToken>()).Returns(resolved);
+        _mockDmService.SendDmWithEntitiesAsync(Arg.Any<UserIdentity>(), Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<IReadOnlyList<MessageEntity>>(), Arg.Any<CancellationToken>())
+            .Returns(new DmDeliveryResult { DmSent = true });
+
+        await _channel.SendAsync("4242", new Notification("warning", TelegramMessage.Plain("hi")));
+
+        await _mockDmService.Received(1).SendDmWithEntitiesAsync(resolved, "warning", "hi",
+            Arg.Any<IReadOnlyList<MessageEntity>>(), Arg.Any<CancellationToken>());
     }
 
     [Test]

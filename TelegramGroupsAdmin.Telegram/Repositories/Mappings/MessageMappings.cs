@@ -1,5 +1,6 @@
 using DataModels = TelegramGroupsAdmin.Data.Models;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Repositories.Mappings;
 using UiModels = TelegramGroupsAdmin.Telegram.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Repositories.Mappings;
@@ -11,19 +12,21 @@ public static class MessageMappings
 {
     extension(DataModels.MessageRecordDto data)
     {
-        // Message mappings (requires chat and user info from JOINs)
+        // Message mappings (requires chat info and user_identities columns from JOINs)
         public UiModels.MessageRecord ToModel(
             string? chatName,
             string? chatIconPath,
             string? userName,
             string? firstName,
             string? lastName,
+            bool isBot,
+            bool? latestScanExplicit,
             string? userPhotoPath,
             string? replyToUser,
             string? replyToText,
             MessageTranslation? translation = null) => new(
             MessageId: data.MessageId,
-            User: new UserIdentity(data.UserId, firstName, lastName, userName),
+            User: UserIdentityMapping.ToIdentity(data.UserId, firstName, lastName, userName, isBot, latestScanExplicit),
             Chat: new ChatIdentity(data.ChatId, chatName),
             Timestamp: data.Timestamp,
             MessageText: data.MessageText,

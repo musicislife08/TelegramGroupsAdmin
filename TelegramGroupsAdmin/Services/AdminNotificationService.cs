@@ -11,6 +11,7 @@ using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.Telegram.Services.Identity;
 
 namespace TelegramGroupsAdmin.Services;
 
@@ -29,6 +30,7 @@ internal sealed class AdminNotificationService : IAdminNotificationService
     private readonly IChatAdminsRepository _chatAdminsRepo;
     private readonly IUserRepository _userRepo;
     private readonly IReportCallbackContextRepository _callbackContextRepo;
+    private readonly IUserIdentityService _identityService;
     private readonly ILogger<AdminNotificationService> _logger;
 
     public AdminNotificationService(
@@ -40,6 +42,7 @@ internal sealed class AdminNotificationService : IAdminNotificationService
         IChatAdminsRepository chatAdminsRepo,
         IUserRepository userRepo,
         IReportCallbackContextRepository callbackContextRepo,
+        IUserIdentityService identityService,
         ILogger<AdminNotificationService> logger)
     {
         _preferencesRepo = preferencesRepo;
@@ -50,6 +53,7 @@ internal sealed class AdminNotificationService : IAdminNotificationService
         _chatAdminsRepo = chatAdminsRepo;
         _userRepo = userRepo;
         _callbackContextRepo = callbackContextRepo;
+        _identityService = identityService;
         _logger = logger;
     }
 
@@ -105,7 +109,7 @@ internal sealed class AdminNotificationService : IAdminNotificationService
         return SendToChatAudienceAsync(chat, NotificationEventType.UserBanned, payload, ct);
     }
 
-    public Task<Dictionary<string, bool>> SendReportNotificationAsync(
+    public async Task<Dictionary<string, bool>> SendReportNotificationAsync(
         ChatIdentity chat,
         UserIdentity reportedUser,
         Actor reporter,
@@ -119,18 +123,12 @@ internal sealed class AdminNotificationService : IAdminNotificationService
             .WithField("Chat", chat.ChatName ?? chat.Id.ToString())
             .WithField("Reported user", reportedUser);
 
-        // Reporter rendering: TelegramUser → clickable TextMention via UserIdentity,
-        // System / WebUser / Unknown → plain text with the actor's display name.
-        // (TextMention only needs Actor.TelegramUserId for profile linking; the rendered
-        // text comes from the message body at the entity offset, so we seed FirstName
-        // with the actor's DisplayName.)
+        // Reporter rendering: TelegramUser → clickable TextMention of the identity resolved by id
+        // (current names and verdict), System / WebUser / Unknown → plain text with the actor's
+        // display name.
         if (reporter.Type == ActorType.TelegramUser && reporter.TelegramUserId is { } telegramId)
         {
-            builder.WithField("Reported by", new UserIdentity(
-                telegramId,
-                FirstName: reporter.DisplayName,
-                LastName: null,
-                Username: null));
+            builder.WithField("Reported by", await _identityService.ResolveAsync(telegramId, ct));
         }
         else
         {
@@ -146,7 +144,7 @@ internal sealed class AdminNotificationService : IAdminNotificationService
 
         var payload = builder.Build();
 
-        return SendToChatAudienceAsync(chat, NotificationEventType.MessageReported, payload, ct);
+        return await SendToChatAudienceAsync(chat, NotificationEventType.MessageReported, payload, ct);
     }
 
     public Task<Dictionary<string, bool>> SendProfileScanAlertAsync(

@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
+using TelegramGroupsAdmin.Configuration.Services;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Core.Models;
@@ -8,6 +9,7 @@ using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.Telegram.Services.Identity;
 
 namespace TelegramGroupsAdmin.UnitTests.Telegram.Services;
 
@@ -33,6 +35,8 @@ public class AdminMentionHandlerTests
     private IChatAdminsRepository _chatAdminsRepository = null!;
     private IBotUserService _userService = null!;
     private IBotMessageService _messageService = null!;
+    private IUserIdentityService _identities = null!;
+    private IConfigService _config = null!;
 #pragma warning restore NUnit1032
 
     private AdminMentionHandler _sut = null!;
@@ -43,12 +47,21 @@ public class AdminMentionHandlerTests
         _chatAdminsRepository = Substitute.For<IChatAdminsRepository>();
         _userService = Substitute.For<IBotUserService>();
         _messageService = Substitute.For<IBotMessageService>();
+        _identities = Substitute.For<IUserIdentityService>();
+        _config = Substitute.For<IConfigService>();
+
+        // Default: resolution echoes the requested ids in order
+        _identities
+            .ResolveManyAsync(Arg.Any<IReadOnlyCollection<long>>(), Arg.Any<CancellationToken>())
+            .Returns(ci => ci.Arg<IReadOnlyCollection<long>>().Select(id => UserIdentity.ForTest(id, $"User{id}")).ToList());
 
         _sut = new AdminMentionHandler(
             NullLogger<AdminMentionHandler>.Instance,
             _chatAdminsRepository,
             _userService,
-            _messageService);
+            _messageService,
+            _identities,
+            _config);
 
         _userService
             .GetBotIdAsync(Arg.Any<CancellationToken>())
@@ -81,7 +94,7 @@ public class AdminMentionHandlerTests
         {
             Id = userId,
             ChatId = ChatId,
-            User = new UserIdentity(userId, firstName, null, username),
+            User = UserIdentity.ForTest(userId, firstName, username: username),
             IsCreator = false,
             IsActive = true,
             PromotedAt = DateTimeOffset.UtcNow,
@@ -237,5 +250,38 @@ public class AdminMentionHandlerTests
                 message: Arg.Any<TelegramMessage>(),
                 replyParameters: Arg.Any<ReplyParameters?>(),
                 cancellationToken: Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task NotifyAdminsAsync_ChatMaskingOn_MentionsResolvedAdminsWithMaskedNames()
+    {
+        // Admin names come from the identity service (current names and verdicts), not the
+        // cached chat_admins row, and the chat's masking setting applies to the alert text.
+        _chatAdminsRepository
+            .GetChatAdminsAsync(ChatId, Arg.Any<CancellationToken>())
+            .Returns([MakeAdmin(Admin1Id, "StaleName")]);
+        _identities
+            .ResolveManyAsync(Arg.Is<IReadOnlyCollection<long>>(ids => ids!.SequenceEqual(new[] { Admin1Id })), Arg.Any<CancellationToken>())
+            .Returns([UserIdentity.ForTest(Admin1Id, "Lewd", verdict: NameVerdict.Explicit)]);
+        _config.GetNameMaskingAsync(ChatId, Arg.Any<CancellationToken>()).Returns(NameMasking.On);
+
+        TelegramMessage? captured = null;
+        await _messageService
+            .SendAndSaveMessageAsync(
+                chatId: Arg.Any<long>(),
+                message: Arg.Do<TelegramMessage>(m => captured = m),
+                replyParameters: Arg.Any<ReplyParameters?>(),
+                cancellationToken: Arg.Any<CancellationToken>());
+
+        await _sut.NotifyAdminsAsync(MakeMessage());
+
+        Assert.That(captured, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(captured!.Text, Does.Contain(NameRedaction.Explicit));
+            Assert.That(captured.Text, Does.Not.Contain("Lewd"));
+            Assert.That(captured.Text, Does.Not.Contain("StaleName"));
+            Assert.That(captured.Entities.Single(e => e.Type == MessageEntityType.TextMention).User!.Id, Is.EqualTo(Admin1Id));
+        }
     }
 }

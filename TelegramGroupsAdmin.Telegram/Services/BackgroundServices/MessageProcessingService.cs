@@ -18,6 +18,7 @@ using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Metrics;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.BotCommands;
+using TelegramGroupsAdmin.Telegram.Services.Identity;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
 using TelegramGroupsAdmin.Telegram.Services.UserApi;
 using TelegramGroupsAdmin.Configuration.Services;
@@ -74,15 +75,19 @@ public partial class MessageProcessingService(
         if (message.Chat.Type == ChatType.Private)
         {
             // Private DMs: handle commands first
-            if (commandRouter.IsCommand(message))
+            if (commandRouter.IsCommand(message) && message.From != null)
             {
                 try
                 {
-                    var commandResult = await commandRouter.RouteCommandAsync(message, cancellationToken);
+                    using var scope = scopeFactory.CreateScope();
+
+                    // DMs are not observed (see below), so the command's sender is resolved by id.
+                    var dmSender = await scope.ServiceProvider.GetRequiredService<IUserIdentityService>()
+                        .ResolveAsync(message.From.Id, cancellationToken);
+                    var commandResult = await commandRouter.RouteCommandAsync(message, dmSender, cancellationToken);
                     if (commandResult != null && !string.IsNullOrWhiteSpace(commandResult.Message.Text))
                     {
                         // Use BotMessageService to save bot response to database
-                        using var scope = scopeFactory.CreateScope();
                         var botMessageService = scope.ServiceProvider.GetRequiredService<IBotMessageService>();
                         await botMessageService.SendAndSaveMessageAsync(
                             message.Chat.Id,
@@ -105,12 +110,16 @@ public partial class MessageProcessingService(
                     using var scope = scopeFactory.CreateScope();
                     var examFlowService = scope.ServiceProvider.GetRequiredService<IExamFlowService>();
 
-                    var examContext = await examFlowService.GetActiveExamContextAsync(UserIdentity.From(message.From), cancellationToken);
+                    // DMs are not observed: recording a DM rename without a rescan would use the
+                    // rename up before the next group message could act on it.
+                    var identityService = scope.ServiceProvider.GetRequiredService<IUserIdentityService>();
+                    var dmSender = await identityService.ResolveAsync(message.From.Id, cancellationToken);
+                    var examContext = await examFlowService.GetActiveExamContextAsync(dmSender, cancellationToken);
                     if (examContext?.AwaitingOpenEndedAnswer == true)
                     {
                         var result = await examFlowService.HandleOpenEndedAnswerAsync(
                             examContext.GroupChatId,
-                            message.From,
+                            dmSender,
                             message.Text,
                             cancellationToken);
 
@@ -194,6 +203,21 @@ public partial class MessageProcessingService(
         // Create a single DI scope for all group message processing operations
         using var messageScope = serviceProvider.CreateScope();
 
+        // Record the sender's names first, so everything below (commands, detection, moderation)
+        // sees one identity. A rename is rescanned inline, keeping a profile ban inside this
+        // update's cleanup path. Messages without a sender (channel posts) are not observed.
+        var observedAt = message.Date.ToUtcOffset();
+        UserIdentity? sender = null;
+        if (message.From is not null)
+        {
+            var identityService = messageScope.ServiceProvider.GetRequiredService<IUserIdentityService>();
+            sender = await identityService.ObserveAsync(
+                new ObservedUser(message.From.Id, message.From.FirstName, message.From.LastName, message.From.Username,
+                    message.From.IsBot, ObservationSource.BotUpdate, observedAt),
+                new ProfileChangeContext(ChatIdentity.From(message.Chat), message.MessageId),
+                cancellationToken);
+        }
+
         // Handle service messages (join/leave, photo changes, title changes, etc.)
         // Check per-chat config to determine if each type should be deleted
         var configService = messageScope.ServiceProvider.GetRequiredService<IConfigService>();
@@ -206,11 +230,11 @@ public partial class MessageProcessingService(
 
             // Store service message for UI consistency with Telegram Desktop
             var serviceMessageText = ServiceMessageHelper.GetServiceMessageText(message);
-            if (serviceMessageText != null && message.From != null)
+            if (serviceMessageText != null && sender is not null)
             {
                 var serviceMessageRecord = new MessageRecord(
                     message.MessageId,
-                    User: new Core.Models.UserIdentity(message.From.Id, message.From.FirstName, message.From.LastName, message.From.Username),
+                    User: sender,
                     Chat: new Core.Models.ChatIdentity(message.Chat.Id, message.Chat.Title ?? message.Chat.Username),
                     DateTimeOffset.UtcNow,
                     serviceMessageText,
@@ -352,11 +376,11 @@ public partial class MessageProcessingService(
             // Check if message is a bot command (execute first, then save to history)
             // Note: Errors are caught to ensure message history is always saved
             CommandResult? commandResult = null;
-            if (commandRouter.IsCommand(message))
+            if (commandRouter.IsCommand(message) && sender is not null)
             {
                 try
                 {
-                    commandResult = await commandRouter.RouteCommandAsync(message, cancellationToken);
+                    commandResult = await commandRouter.RouteCommandAsync(message, sender, cancellationToken);
                     if (commandResult != null)
                     {
                         // Send response if there is one (and it's not empty)
@@ -516,10 +540,14 @@ public partial class MessageProcessingService(
                 }
             }
 
+            // Every step from here on needs the sender.
+            if (sender is null)
+                throw new InvalidOperationException($"Group message {message.MessageId} has no sender");
+
             // User photo will be fetched asynchronously after message save (non-blocking)
             var messageRecord = new MessageRecord(
                 message.MessageId,
-                User: new Core.Models.UserIdentity(message.From!.Id, message.From.FirstName, message.From.LastName, message.From.Username),
+                User: sender,
                 Chat: new Core.Models.ChatIdentity(message.Chat.Id, message.Chat.Title ?? message.Chat.Username),
                 now,
                 text,
@@ -559,8 +587,7 @@ public partial class MessageProcessingService(
             var fileScanHandler = messageScope.ServiceProvider.GetRequiredService<Handlers.FileScanningHandler>();
             await fileScanHandler.ProcessFileScanningAsync(
                 message,
-                message.Chat.Id,
-                message.From!.Id,
+                sender,
                 cancellationToken);
 
             // CRITICAL: Check if user was banned while this message was being processed
@@ -589,7 +616,7 @@ public partial class MessageProcessingService(
                     {
                         MessageId = message.MessageId,
                         Chat = ChatIdentity.From(message.Chat),
-                        User = UserIdentity.From(message.From!),
+                        User = sender,
                         Executor = Core.Models.Actor.AutoDetection,
                         Reason = "User banned during message processing (multi-message spam campaign)"
                     },
@@ -600,7 +627,7 @@ public partial class MessageProcessingService(
                 await moderationService.SyncBanToChatAsync(
                     new SyncBanIntent
                     {
-                        User = UserIdentity.From(message.From!),
+                        User = sender,
                         Chat = ChatIdentity.From(message.Chat),
                         Executor = Core.Models.Actor.AutoDetection,
                         Reason = "Lazy ban sync: User was globally banned before this chat was added",
@@ -642,94 +669,25 @@ public partial class MessageProcessingService(
                 }
             }
 
-            // Upsert user into telegram_users table (centralized user tracking)
-            var telegramUserRepo = messageScope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
-
-            // Fetch existing user for profile diff detection (before upsert overwrites fields)
-            var existingUser = await telegramUserRepo.GetByTelegramIdAsync(message.From!.Id, cancellationToken);
-
-            var telegramUser = new TelegramUser(
-                TelegramUserId: message.From!.Id,
-                Username: message.From.Username,
-                FirstName: message.From.FirstName,
-                LastName: message.From.LastName,
-                UserPhotoPath: null, // Will be populated by FetchUserPhotoJob
-                PhotoHash: null,
-                PhotoFileUniqueId: null, // Will be populated by FetchUserPhotoJob
-                IsBot: message.From.IsBot, // Track bot status from Telegram API
-                IsTrusted: false,
-                IsBanned: false, // New users are not banned
-                KickCount: 0,
-                BotDmEnabled: false, // Will be set to true when user sends /start in private chat
-                FirstSeenAt: now,
-                LastSeenAt: now,
-                CreatedAt: now,
-                UpdatedAt: now
-            );
-            // Profile change detection: compare Bot API User fields against stored values
-            // New users (existingUser == null) are covered by the first-message scan below,
-            // not here.
-            // Trusted/admin users are already skipped by contentCheckSkipReason.
-            if (existingUser is not null
-                && contentCheckSkipReason == ContentCheckSkipReason.NotSkipped
-                && ProfileDiffDetected(existingUser, message.From))
-            {
-                LogProfileChangeDetected(logger, message.From.ToLogDebug(), existingUser.ToLogInfo(), message.From.ToLogInfo());
-
-                // Record previous profile values in username_history
-                var historyRepo = messageScope.ServiceProvider.GetRequiredService<IUsernameHistoryRepository>();
-                await historyRepo.InsertAsync(
-                    existingUser.TelegramUserId,
-                    existingUser.Username,
-                    existingUser.FirstName,
-                    existingUser.LastName,
-                    cancellationToken);
-
-                // Record profile change in user_actions audit trail
-                var userActionsRepo = messageScope.ServiceProvider.GetRequiredService<IUserActionsRepository>();
-                var changeReason = BuildProfileChangeReason(existingUser, message.From);
-                await userActionsRepo.InsertAsync(new UserActionRecord(
-                    Id: 0,
-                    UserId: existingUser.TelegramUserId,
-                    ActionType: UserActionType.ProfileChange,
-                    MessageId: message.MessageId,
-                    ChatId: message.Chat.Id,
-                    IssuedBy: Actor.ProfileDiffDetection,
-                    IssuedAt: DateTimeOffset.UtcNow,
-                    ExpiresAt: null,
-                    Reason: AuditReason.WithChatTag(ChatIdentity.From(message.Chat), changeReason)), cancellationToken);
-
-                try
-                {
-                    var profileScanGate = messageScope.ServiceProvider.GetRequiredService<IProfileScanGate>();
-                    await profileScanGate.ScanIfEligibleAsync(
-                        UserIdentity.From(message.From),
-                        ChatIdentity.From(message.Chat),
-                        ProfileScanTrigger.ProfileChange,
-                        ct: cancellationToken);
-                }
-                catch (Exception ex)
-                {
-                    LogProfileScanFailed(logger, ex, message.From.ToLogDebug());
-                }
-            }
-
-            await telegramUserRepo.UpsertAsync(telegramUser, cancellationToken);
+            await messageScope.ServiceProvider.GetRequiredService<ITelegramUserRepository>()
+                .MarkActiveAsync(message.From!.Id, observedAt, cancellationToken);
 
             // Profile scan for users we have never scanned. Users who arrive
             // without a join event (for example, accounts commenting on channel
             // posts in a linked discussion group) are not covered by the join
-            // trigger, and have no prior record for the profile-diff trigger to
-            // compare against. Runs after the upsert so the user row exists for
-            // the scan-result and report foreign keys. The gate owns the whole
+            // trigger, and have no prior names for a rename to be detected against.
+            // The observation at the start of this method creates the user row for
+            // the scan-result and report foreign keys, unless recording it failed
+            // (which ObserveAsync logs). The gate owns the whole
             // eligibility decision, including whether this user was scanned before.
             var profileScanBanned = false;
+            ProfileScanResult? firstMessageScan = null;
 
             try
             {
                 var profileScanGate = messageScope.ServiceProvider.GetRequiredService<IProfileScanGate>();
-                var firstMessageScan = await profileScanGate.ScanIfEligibleAsync(
-                    UserIdentity.From(message.From),
+                firstMessageScan = await profileScanGate.ScanIfEligibleAsync(
+                    sender,
                     ChatIdentity.From(message.Chat),
                     ProfileScanTrigger.FirstMessage,
                     ct: cancellationToken);
@@ -744,6 +702,14 @@ public partial class MessageProcessingService(
             {
                 // A failed scan must never cost us the message.
                 LogProfileScanFailed(logger, ex, message.From.ToLogDebug());
+            }
+
+            // The scan may have just flagged the name, and the identity observed above predates its
+            // verdict: re-resolve so the rest of the pipeline masks it. Never throws except on cancellation.
+            if (firstMessageScan is not null)
+            {
+                sender = await messageScope.ServiceProvider.GetRequiredService<IUserIdentityService>()
+                    .ResolveAsync(sender.Id, cancellationToken);
             }
 
             // Raise event for real-time UI updates
@@ -806,6 +772,7 @@ public partial class MessageProcessingService(
                     // Use translated text if available (avoids double translation in ContentDetectionEngine)
                     await contentOrchestrator.RunDetectionAsync(
                         message,
+                        sender,
                         translationForDetection.TextForDetection,
                         photoLocalPath,
                         editVersion: 0,
@@ -864,34 +831,6 @@ public partial class MessageProcessingService(
                 "Error handling edit for message {MessageId}",
                 editedMessage.MessageId);
         }
-    }
-
-    /// <summary>
-    /// Compare Bot API User fields against stored values to detect profile changes.
-    /// Pure in-memory comparison — zero DB or API cost.
-    /// Premium status deliberately excluded (weak signal, scammers buy it).
-    /// </summary>
-    private static bool ProfileDiffDetected(TelegramUser existing, global::Telegram.Bot.Types.User current)
-    {
-        return !string.Equals(existing.FirstName, current.FirstName, StringComparison.Ordinal)
-            || !string.Equals(existing.LastName, current.LastName, StringComparison.Ordinal)
-            || !string.Equals(existing.Username, current.Username, StringComparison.Ordinal);
-    }
-
-    internal static string BuildProfileChangeReason(TelegramUser old, global::Telegram.Bot.Types.User current)
-    {
-        var changes = new List<string>();
-
-        if (!string.Equals(old.Username, current.Username, StringComparison.Ordinal))
-            changes.Add($"Username: @{old.Username ?? "(none)"} → @{current.Username ?? "(none)"}");
-
-        if (!string.Equals(old.FirstName, current.FirstName, StringComparison.Ordinal))
-            changes.Add($"First name: {old.FirstName ?? "(none)"} → {current.FirstName ?? "(none)"}");
-
-        if (!string.Equals(old.LastName, current.LastName, StringComparison.Ordinal))
-            changes.Add($"Last name: {old.LastName ?? "(none)"} → {current.LastName ?? "(none)"}");
-
-        return string.Join(", ", changes);
     }
 
     // REFACTOR-2: Extracted methods to specialized handlers

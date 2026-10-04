@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using Telegram.Bot.Exceptions;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.ReplyMarkups;
+using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
@@ -29,6 +30,7 @@ public class BotDmService(
     IPendingNotificationsRepository pendingNotificationsRepository,
     IManagedChatsRepository managedChatsRepository,
     IJobScheduler jobScheduler,
+    IConfigService configService,
     ILogger<BotDmService> logger) : IBotDmService
 {
 
@@ -110,7 +112,8 @@ public class BotDmService(
 
     /// <summary>
     /// Send fallback message in chat with optional auto-delete. The message was meant for one
-    /// user's DMs, so the group copy opens with a clickable mention telling them it's theirs.
+    /// user's DMs, so the group copy opens with a clickable mention telling them it's theirs,
+    /// named per that chat's "Mask flagged names" setting.
     /// </summary>
     private async Task<DmDeliveryResult> SendFallbackToChatAsync(
         long chatId,
@@ -119,13 +122,19 @@ public class BotDmService(
         int? autoDeleteSeconds,
         CancellationToken cancellationToken)
     {
-        message = new TelegramMessageBuilder().Mention(recipient).Text(" ").Append(message).Build();
-
-        // Fetch chat once for logging (reuse for all logs in this method)
-        var chat = await managedChatsRepository.GetByChatIdAsync(chatId, cancellationToken);
+        // Called from the 403 handler, so every read stays inside the try: any failure becomes
+        // a failed delivery result rather than an exception out of SendDmAsync.
+        var chatIdentity = ChatIdentity.FromId(chatId);
 
         try
         {
+            // Fetch chat once for logging (reuse for all logs in this method)
+            var chat = await managedChatsRepository.GetByChatIdAsync(chatId, cancellationToken);
+            chatIdentity = chat?.Identity ?? chatIdentity;
+
+            var masking = await configService.GetNameMaskingAsync(chatId, cancellationToken);
+            message = TelegramMessageBuilder.For(masking).Mention(recipient).Text(" ").Append(message).Build();
+
             var fallbackMessage = await messageHandler.SendAsync(
                 chatId: chatId,
                 text: message.Text,
@@ -135,7 +144,7 @@ public class BotDmService(
             logger.LogInformation(
                 "Sent fallback message {MessageId} in {Chat}{DeleteInfo}",
                 fallbackMessage.MessageId,
-                (chat?.Identity ?? ChatIdentity.FromId(chatId)).ToLogInfo(),
+                chatIdentity.ToLogInfo(),
                 autoDeleteSeconds.HasValue ? $", will delete in {autoDeleteSeconds.Value} seconds" : "");
 
             if (autoDeleteSeconds.HasValue && autoDeleteSeconds.Value > 0)
@@ -168,14 +177,14 @@ public class BotDmService(
             {
                 logger.LogWarning(
                     "Failed to send fallback message in {Chat} - network unavailable",
-                    (chat?.Identity ?? ChatIdentity.FromId(chatId)).ToLogDebug());
+                    chatIdentity.ToLogDebug());
             }
             else
             {
                 logger.LogError(
                     ex,
                     "Failed to send fallback message in {Chat}",
-                    (chat?.Identity ?? ChatIdentity.FromId(chatId)).ToLogDebug());
+                    chatIdentity.ToLogDebug());
             }
 
             return new DmDeliveryResult

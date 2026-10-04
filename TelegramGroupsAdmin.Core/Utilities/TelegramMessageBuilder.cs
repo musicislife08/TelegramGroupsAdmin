@@ -15,6 +15,15 @@ public sealed class TelegramMessageBuilder
 {
     private readonly StringBuilder _sb = new();
     private readonly List<MessageEntity> _entities = [];
+    private readonly NameMasking _masking;
+
+    private TelegramMessageBuilder(NameMasking masking) => _masking = masking;
+
+    /// <summary>
+    /// Builder for a message written where the effective "Mask flagged names" setting is
+    /// <paramref name="masking"/> (see IConfigService.GetNameMaskingAsync).
+    /// </summary>
+    public static TelegramMessageBuilder For(NameMasking masking) => new(masking);
 
     public TelegramMessageBuilder Text(string text) { _sb.Append(text); return this; }
     public TelegramMessageBuilder LineBreak() { _sb.Append('\n'); return this; }
@@ -35,11 +44,11 @@ public sealed class TelegramMessageBuilder
     /// <summary>
     /// Append a clickable mention of <paramref name="user"/>. Always emits a TextMention entity
     /// carrying the real User id, so it is clickable even for users without a username.
-    /// Display text is the user's name (no @).
+    /// Display text is <see cref="UserIdentity.BotDisplayName"/> for this builder's masking setting.
     /// </summary>
     public TelegramMessageBuilder Mention(UserIdentity user)
     {
-        var displayText = TelegramDisplayName.Format(user.FirstName, user.LastName, user.Username, user.Id);
+        var displayText = user.BotDisplayName(_masking);
         var offset = _sb.Length;
         _sb.Append(displayText);
         _entities.Add(new MessageEntity

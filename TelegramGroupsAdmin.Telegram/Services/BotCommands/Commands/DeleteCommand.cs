@@ -36,6 +36,7 @@ public class DeleteCommand : IBotCommand
         Message message,
         string[] args,
         PermissionLevel userPermission,
+        UserIdentity sender,
         CancellationToken cancellationToken = default)
     {
         if (message.ReplyToMessage == null)
@@ -68,7 +69,7 @@ public class DeleteCommand : IBotCommand
         {
             _logger.LogError(ex, "Failed to delete message {MessageId} in {Chat}",
                 targetMessage.MessageId, message.Chat.ToLogDebug());
-            return new CommandResult(TelegramMessage.Plain($"❌ Failed to delete message: {ex.Message}"), DeleteCommandMessage, DeleteResponseAfterSeconds);
+            return new CommandResult(TelegramMessage.Plain("❌ Failed to delete message."), DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
     }
 }

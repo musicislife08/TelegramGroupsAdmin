@@ -1,11 +1,14 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
+using TelegramGroupsAdmin.Configuration.Services;
+using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.Telegram.Services.Identity;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
 using TelegramGroupsAdmin.Telegram.Constants;
 
@@ -19,6 +22,8 @@ public class MuteCommand : IBotCommand
     private readonly ILogger<MuteCommand> _logger;
     private readonly IServiceProvider _serviceProvider;
     private readonly IBotModerationService _moderationService;
+    private readonly IUserIdentityService _identityService;
+    private readonly IConfigService _configService;
 
     public string Name => "mute";
     public string Description => "Temporarily mute user with auto-unmute";
@@ -31,17 +36,22 @@ public class MuteCommand : IBotCommand
     public MuteCommand(
         ILogger<MuteCommand> logger,
         IServiceProvider serviceProvider,
-        IBotModerationService moderationService)
+        IBotModerationService moderationService,
+        IUserIdentityService identityService,
+        IConfigService configService)
     {
         _logger = logger;
         _serviceProvider = serviceProvider;
         _moderationService = moderationService;
+        _identityService = identityService;
+        _configService = configService;
     }
 
     public async Task<CommandResult> ExecuteAsync(
         Message message,
         string[] args,
         PermissionLevel userPermission,
+        UserIdentity sender,
         CancellationToken cancellationToken = default)
     {
         if (message.ReplyToMessage == null)
@@ -49,11 +59,13 @@ public class MuteCommand : IBotCommand
             return new CommandResult(TelegramMessage.Plain("❌ Please reply to a message from the user to mute."), DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
 
-        var targetUser = message.ReplyToMessage.From;
-        if (targetUser == null)
+        var replyFrom = message.ReplyToMessage.From;
+        if (replyFrom == null)
         {
             return new CommandResult(TelegramMessage.Plain("❌ Could not identify target user."), DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
+
+        var targetUser = await _identityService.ResolveAsync(replyFrom.Id, cancellationToken);
 
         using var scope = _serviceProvider.CreateScope();
         var chatAdminsRepository = scope.ServiceProvider.GetRequiredService<IChatAdminsRepository>();
@@ -88,18 +100,13 @@ public class MuteCommand : IBotCommand
 
         try
         {
-            // Get executor actor
-            var executor = Core.Models.Actor.FromTelegramUser(
-                message.From!.Id,
-                message.From.Username,
-                message.From.FirstName,
-                message.From.LastName);
+            var executor = Core.Models.Actor.FromUserIdentity(sender);
 
             // Execute mute via ModerationActionService
             var result = await _moderationService.RestrictUserAsync(
                 new RestrictIntent
                 {
-                    User = UserIdentity.From(targetUser),
+                    User = targetUser,
                     Executor = executor,
                     Reason = reason,
                     Duration = duration
@@ -109,28 +116,33 @@ public class MuteCommand : IBotCommand
 
             if (!result.Success)
             {
-                return new CommandResult(TelegramMessage.Plain($"❌ Failed to mute user: {result.ErrorMessage}"), DeleteCommandMessage, DeleteResponseAfterSeconds);
+                // The chat reply stays generic: ErrorMessage can carry exception text
+                _logger.LogWarning("Failed to mute {User}: {Error}", targetUser.ToLogDebug(), result.ErrorMessage);
+                return new CommandResult(TelegramMessage.Plain("❌ Failed to mute user."), DeleteCommandMessage, DeleteResponseAfterSeconds);
             }
 
-            // Build success message
-            var response = $"🔇 User @{targetUser.Username ?? targetUser.Id.ToString()} muted in {result.ChatsAffected} chat(s)\n" +
+            // Build success message; the mention follows the chat's name-masking setting
+            var response = (await _configService.CreateChatMessageBuilderAsync(message.Chat.Id, cancellationToken))
+                .Text("🔇 User ").Mention(targetUser)
+                .Text($" muted in {result.ChatsAffected} chat(s)\n" +
                           $"Duration: {TimeSpanUtilities.FormatDuration(duration)}\n" +
                           $"Reason: {reason}\n" +
-                          $"⚠️ Will be automatically unmuted at {DateTimeOffset.UtcNow.Add(duration):yyyy-MM-dd HH:mm} UTC";
+                          $"⚠️ Will be automatically unmuted at {DateTimeOffset.UtcNow.Add(duration):yyyy-MM-dd HH:mm} UTC")
+                .Build();
 
             _logger.LogInformation(
                 "{TargetUser} muted by {Executor} in {ChatsAffected} chats for {Duration}. Reason: {Reason}",
                 targetUser.ToLogInfo(),
-                message.From.ToLogInfo(),
+                sender.ToLogInfo(),
                 result.ChatsAffected, duration, reason);
 
-            return new CommandResult(TelegramMessage.Plain(response), DeleteCommandMessage, DeleteResponseAfterSeconds);
+            return new CommandResult(response, DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to mute {User}",
                 targetUser.ToLogDebug());
-            return new CommandResult(TelegramMessage.Plain($"❌ Failed to mute user: {ex.Message}"), DeleteCommandMessage, DeleteResponseAfterSeconds);
+            return new CommandResult(TelegramMessage.Plain("❌ Failed to mute user."), DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
     }
 

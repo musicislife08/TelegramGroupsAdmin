@@ -4,6 +4,7 @@ using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Telegram.Services.Identity;
 
 namespace TelegramGroupsAdmin.Telegram.Services.Moderation.Infrastructure;
 
@@ -15,13 +16,16 @@ namespace TelegramGroupsAdmin.Telegram.Services.Moderation.Infrastructure;
 public class MessageBackfillService : IMessageBackfillService
 {
     private readonly IMessageHistoryRepository _messageHistoryRepository;
+    private readonly IUserIdentityService _identityService;
     private readonly ILogger<MessageBackfillService> _logger;
 
     public MessageBackfillService(
         IMessageHistoryRepository messageHistoryRepository,
+        IUserIdentityService identityService,
         ILogger<MessageBackfillService> logger)
     {
         _messageHistoryRepository = messageHistoryRepository;
+        _identityService = identityService;
         _logger = logger;
     }
 
@@ -57,9 +61,12 @@ public class MessageBackfillService : IMessageBackfillService
 
         try
         {
+            // A message without a sender (channel post) is stored under user 0, which resolves
+            // to an id-only identity.
+            var author = await _identityService.ResolveAsync(telegramMessage.From?.Id ?? 0, cancellationToken);
             var messageRecord = new MessageRecord(
                 MessageId: messageId,
-                User: telegramMessage.From is { } from ? UserIdentity.From(from) : UserIdentity.FromId(0),
+                User: author,
                 Chat: ChatIdentity.FromId(chatId),
                 Timestamp: telegramMessage.Date,
                 MessageText: messageText,
@@ -92,7 +99,7 @@ public class MessageBackfillService : IMessageBackfillService
 
             _logger.LogInformation(
                 "Backfilled message {MessageId} from chat {ChatId} for user {UserId}",
-                messageId, chatId, telegramMessage.From?.Id ?? 0);
+                messageId, chatId, author.Id);
 
             return true;
         }

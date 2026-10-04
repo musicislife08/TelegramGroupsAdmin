@@ -12,9 +12,11 @@ using TelegramGroupsAdmin.AI.Services;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using TelegramGroupsAdmin.Telegram.Metrics;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.Telegram.Services.Identity;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
 using TL;
 using TelegramGroupsAdmin.Configuration.Services;
@@ -46,9 +48,56 @@ public sealed class ProfileScanService(
     /// </summary>
     private static readonly TimeSpan ScanTimeout = TimeSpan.FromSeconds(45);
 
+    // One scan per (user, force), shared by concurrent callers. The 60s freshness window alone
+    // cannot do this: profile_scanned_at is written only when a scan finishes. Chat is deliberately
+    // not in the key: bot updates are processed one at a time and join scans run inline, so two
+    // chats' joins never overlap (the second reaches the 60s dedup path, which recomputes the
+    // outcome with its own chat's thresholds). Sharing only matters when an off-loop source
+    // (rescan job, manual rescan) overlaps a join or rename scan; there the first caller's chat
+    // decides, which is acceptable. Force is in the key so a forced rescan never joins a
+    // cache-eligible run (or vice versa).
+    private readonly ConcurrentDictionary<(long UserId, bool ForceRescan), Lazy<Task<ProfileScanResult>>> _inFlight = new();
+
     public async Task<ProfileScanResult> ScanUserProfileAsync(
         UserIdentity user,
         ChatIdentity? triggeringChat,
+        CancellationToken ct,
+        bool forceRescan = false)
+    {
+        // The shared run uses CancellationToken.None (ScanTimeout bounds it) so the first caller's
+        // cancellation cannot cancel it for others; each caller's ct only stops its own wait.
+        // Removal is tied to the run's completion, not to any caller, so a cancelled caller cannot
+        // evict a still-running scan and let a later caller start a duplicate.
+        var key = (user.Id, forceRescan);
+        Lazy<Task<ProfileScanResult>> candidate = null!;
+        candidate = new Lazy<Task<ProfileScanResult>>(
+            () => RunAndRemoveAsync(key, candidate, user, triggeringChat, forceRescan));
+        var lazy = _inFlight.GetOrAdd(key, candidate);
+        return await lazy.Value.WaitAsync(ct);
+    }
+
+    private async Task<ProfileScanResult> RunAndRemoveAsync(
+        (long UserId, bool ForceRescan) key,
+        Lazy<Task<ProfileScanResult>> self,
+        UserIdentity user,
+        ChatIdentity? triggeringChat,
+        bool forceRescan)
+    {
+        try
+        {
+            return await ScanOnceAsync(user, triggeringChat, forceRescan, CancellationToken.None);
+        }
+        finally
+        {
+            // Pair removal: only ever removes this run's own entry, never a newer one.
+            _inFlight.TryRemove(new KeyValuePair<(long, bool), Lazy<Task<ProfileScanResult>>>(key, self));
+        }
+    }
+
+    private async Task<ProfileScanResult> ScanOnceAsync(
+        UserIdentity user,
+        ChatIdentity? triggeringChat,
+        bool forceRescan,
         CancellationToken ct)
     {
         var startTimestamp = Stopwatch.GetTimestamp();
@@ -60,11 +109,17 @@ public sealed class ProfileScanService(
         // ── Multi-chat dedup: skip if recently scanned ──
         var existingUser = await userRepo.GetByTelegramIdAsync(user.Id, ct);
 
-        // Enrich identity from DB if caller only provided a bare ID (e.g., rescan job)
-        if (existingUser != null && user.FirstName is null && user.LastName is null && user.Username is null)
-            user = UserIdentity.From(existingUser);
+        // Enrich identity if caller only provided a bare ID (e.g., rescan job)
+        if (user.FirstName is null && user.LastName is null && user.Username is null)
+            user = await scope.ServiceProvider.GetRequiredService<IUserIdentityService>().ResolveAsync(user.Id, ct);
 
-        if (existingUser?.ProfileScannedAt is { } lastScan
+        // Both reuse paths (this freshness window and the unchanged-profile check) are skipped on a
+        // forced rescan and when a rename was recorded after the last scan. Joins and admin refresh
+        // record a rename without scanning, so the stored names already match the live ones and
+        // only username_history still shows the change.
+        var skipReuse = forceRescan || await RenamedSinceLastScanAsync(existingUser, scope.ServiceProvider, ct);
+
+        if (!skipReuse && existingUser?.ProfileScannedAt is { } lastScan
             && DateTimeOffset.UtcNow - lastScan < ScanFreshnessWindow
             && existingUser.ProfileScanScore.HasValue)
         {
@@ -112,7 +167,7 @@ public sealed class ProfileScanService(
         // the task completes or faults — preventing ObjectDisposedException on DbContexts.
         try
         {
-            var scanTask = ScanWithOwnedScopeAsync(client, user, existingUser, triggeringChat, ct);
+            var scanTask = ScanWithOwnedScopeAsync(client, user, existingUser, triggeringChat, skipReuse, ct);
 
             var completedTask = await Task.WhenAny(scanTask, Task.Delay(ScanTimeout, CancellationToken.None));
 
@@ -157,12 +212,13 @@ public sealed class ProfileScanService(
         UserIdentity user,
         Models.TelegramUser? existingUser,
         ChatIdentity? triggeringChat,
+        bool skipReuse,
         CancellationToken ct)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
         var userRepo = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
 
-        return await ScanUserProfileCoreAsync(client, user, existingUser, triggeringChat,
+        return await ScanUserProfileCoreAsync(client, user, existingUser, triggeringChat, skipReuse,
             userRepo, scope.ServiceProvider, ct);
     }
 
@@ -171,6 +227,7 @@ public sealed class ProfileScanService(
         UserIdentity user,
         Models.TelegramUser? existingUser,
         ChatIdentity? triggeringChat,
+        bool skipReuse,
         ITelegramUserRepository userRepo,
         IServiceProvider sp,
         CancellationToken ct)
@@ -200,6 +257,19 @@ public sealed class ProfileScanService(
 
         var userInfo = fullUser.full_user;
         var tlUser = fullUser.users.Values.OfType<TL.User>().FirstOrDefault(u => u.id == user.Id);
+
+        // Record the live names. existingUser is the snapshot read before this point (a detached
+        // object, not re-read), so HasProfileChanged below still compares the live names against
+        // the pre-observe row and a rename discovered here still gets a full rescore. Source UserApiScan:
+        // ObserveAsync records only, so the scan never triggers itself. ObserveAsync never throws except on cancellation.
+        if (tlUser is not null)
+        {
+            await sp.GetRequiredService<IUserIdentityService>().ObserveAsync(
+                new ObservedUser(tlUser.id, tlUser.first_name, tlUser.last_name, tlUser.MainUsername,
+                    tlUser.IsBot, ObservationSource.UserApiScan, DateTimeOffset.UtcNow),
+                new ProfileChangeContext(triggeringChat, null),
+                ct);
+        }
 
         var bio = userInfo?.about;
         var personalChannelId = userInfo?.personal_channel_id;
@@ -321,7 +391,9 @@ public sealed class ProfileScanService(
             ? string.Join(",", storyItems.Select(s => s.id).Order())
             : null;
 
-        if (existingUser?.ProfileScannedAt != null && existingUser.ProfileScanScore.HasValue
+        // skipReuse (forced, or renamed since the last scan) skips this reuse too: the rename is
+        // already stored when the scan runs, so the diff sees no change.
+        if (!skipReuse && existingUser?.ProfileScannedAt != null && existingUser.ProfileScanScore.HasValue
             && !HasProfileChanged(existingUser, tlUser, bio, personalChannelId, channelTitle, channelAbout,
                 hasPinnedStories, pinnedStoryCaptions, isScam, isFake, isVerified,
                 profilePhotoId, channelPhotoId, pinnedStoryIdString))
@@ -428,10 +500,16 @@ public sealed class ProfileScanService(
             ExplicitDisplayText: scoreResult.ExplicitDisplayText);
 
         // ── Step 8: Take moderation action ──
-        if (scoreResult.Outcome == ProfileScanOutcome.Banned)
-            await HandleBanAsync(user, triggeringChat, result, sp, ct);
-        else if (scoreResult.Outcome == ProfileScanOutcome.HeldForReview)
-            await CreateProfileScanAlertAsync(user, triggeringChat, result, sp, ct);
+        // Re-resolve after Step 7 persisted the scan: the caller's identity predates this scan's
+        // verdict, so a name it just flagged would otherwise reach bot-written text unmasked.
+        if (scoreResult.Outcome is ProfileScanOutcome.Banned or ProfileScanOutcome.HeldForReview)
+        {
+            var scannedUser = await sp.GetRequiredService<IUserIdentityService>().ResolveAsync(user.Id, ct);
+            if (scoreResult.Outcome == ProfileScanOutcome.Banned)
+                await HandleBanAsync(scannedUser, triggeringChat, result, sp, ct);
+            else
+                await CreateProfileScanAlertAsync(scannedUser, triggeringChat, result, sp, ct);
+        }
 
         return result;
     }
@@ -886,6 +964,18 @@ public sealed class ProfileScanService(
             : score >= notifyThreshold
                 ? ProfileScanOutcome.HeldForReview
                 : ProfileScanOutcome.Clean;
+    }
+
+    /// <summary>
+    /// Whether a rename was recorded after the user's last scan. Only asked when a reuse path could
+    /// apply (the user has a stored scan), so a never-scanned user costs no query.
+    /// </summary>
+    private static async Task<bool> RenamedSinceLastScanAsync(
+        Models.TelegramUser? existingUser, IServiceProvider sp, CancellationToken ct)
+    {
+        if (existingUser?.ProfileScannedAt is not { } lastScan || !existingUser.ProfileScanScore.HasValue)
+            return false;
+        return await sp.GetRequiredService<IUsernameHistoryRepository>().HasChangeSinceAsync(existingUser.TelegramUserId, lastScan, ct);
     }
 
     /// <summary>

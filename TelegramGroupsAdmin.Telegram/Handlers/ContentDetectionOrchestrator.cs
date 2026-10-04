@@ -5,6 +5,7 @@ using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Services;
+using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Constants;
 using TelegramGroupsAdmin.Telegram.Extensions;
@@ -40,8 +41,11 @@ public class ContentDetectionOrchestrator
     /// Run spam detection on a message and take appropriate actions.
     /// Handles: critical violations, detection result storage, auto-trust, language warnings, spam actions.
     /// </summary>
+    /// <param name="message">Message to scan.</param>
+    /// <param name="sender">Identity of <c>message.From</c>, as the pipeline recorded it.</param>
     public async Task RunDetectionAsync(
         Message message,
+        UserIdentity sender,
         string? text,
         string? photoLocalPath,
         int editVersion,
@@ -52,7 +56,7 @@ public class ContentDetectionOrchestrator
             _logger.LogDebug(
                 "Starting content detection for message {MessageId} from {User} in {Chat} (hasText: {HasText}, hasPhoto: {HasPhoto}, edit: {EditVersion})",
                 message.MessageId,
-                message.From.ToLogDebug(),
+                sender.ToLogDebug(),
                 message.Chat.ToLogDebug(),
                 !string.IsNullOrWhiteSpace(text),
                 !string.IsNullOrEmpty(photoLocalPath),
@@ -91,7 +95,7 @@ public class ContentDetectionOrchestrator
             var request = new ContentCheckRequest
             {
                 Message = text ?? "", // Empty string for image-only messages
-                User = UserIdentity.From(message.From!),
+                User = sender,
                 Chat = ChatIdentity.From(message.Chat),
                 MessageId = message.MessageId,
                 PhotoLocalPath = photoFullPath, // Pass full for ImageSpamCheck layers
@@ -110,13 +114,14 @@ public class ContentDetectionOrchestrator
                 _logger.LogWarning(
                     "Critical check violations detected for message {MessageId} from {User}: {Violations}",
                     message.MessageId,
-                    message.From.ToLogDebug(),
+                    sender.ToLogDebug(),
                     string.Join("; ", result.CriticalCheckViolations));
 
                 // Use DetectionActionService to handle critical violations
                 // Policy: Delete + DM notice, NO ban/warn for trusted/admin users
                 await _spamActionService.HandleCriticalCheckViolationAsync(
                     message,
+                    sender,
                     result.CriticalCheckViolations,
                     cancellationToken);
 
@@ -166,17 +171,18 @@ public class ContentDetectionOrchestrator
 
                 // Phase 4.21: Language warning for non-English non-spam messages from untrusted users
                 // Note: Language detection happens earlier in ProcessNewMessageAsync, check translation there
-                if (!result.SpamResult.IsSpam && message.From?.Id != null)
+                if (!result.SpamResult.IsSpam)
                 {
                     // Language warning is handled by LanguageWarningHandler (REFACTOR-2 Phase 2.2)
                     // This will be extracted to handler in next phase
                     var languageWarningHandler = scope.ServiceProvider.GetRequiredService<LanguageWarningHandler>();
-                    await languageWarningHandler.HandleWarningAsync(message, scope, cancellationToken);
+                    await languageWarningHandler.HandleWarningAsync(message, sender, scope, cancellationToken);
                 }
 
                 // Phase 2.7: Handle spam actions based on net confidence
                 await _spamActionService.HandleSpamDetectionActionsAsync(
                     message,
+                    sender,
                     result.SpamResult,
                     detectionResult,
                     cancellationToken);

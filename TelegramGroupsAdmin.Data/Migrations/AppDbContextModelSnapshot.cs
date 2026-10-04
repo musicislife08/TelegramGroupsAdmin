@@ -1428,9 +1428,17 @@ namespace TelegramGroupsAdmin.Data.Migrations
                         .HasColumnType("text")
                         .HasColumnName("first_name");
 
+                    b.Property<bool?>("IsBot")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_bot");
+
                     b.Property<string>("LastName")
                         .HasColumnType("text")
                         .HasColumnName("last_name");
+
+                    b.Property<bool?>("LatestScanExplicit")
+                        .HasColumnType("boolean")
+                        .HasColumnName("latest_scan_explicit");
 
                     b.Property<int?>("MediaDuration")
                         .HasColumnType("integer")
@@ -1488,9 +1496,17 @@ namespace TelegramGroupsAdmin.Data.Migrations
                         .HasColumnType("text")
                         .HasColumnName("reply_to_first_name");
 
+                    b.Property<bool?>("ReplyToIsBot")
+                        .HasColumnType("boolean")
+                        .HasColumnName("reply_to_is_bot");
+
                     b.Property<string>("ReplyToLastName")
                         .HasColumnType("text")
                         .HasColumnName("reply_to_last_name");
+
+                    b.Property<bool?>("ReplyToLatestScanExplicit")
+                        .HasColumnType("boolean")
+                        .HasColumnName("reply_to_latest_scan_explicit");
 
                     b.Property<int?>("ReplyToMessageId")
                         .HasColumnType("integer")
@@ -1595,6 +1611,14 @@ namespace TelegramGroupsAdmin.Data.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("exam_user_id");
 
+                    b.Property<bool?>("ExamUserIsBot")
+                        .HasColumnType("boolean")
+                        .HasColumnName("exam_user_is_bot");
+
+                    b.Property<bool?>("ExamUserLatestScanExplicit")
+                        .HasColumnType("boolean")
+                        .HasColumnName("exam_user_latest_scan_explicit");
+
                     b.Property<string>("ExamUsername")
                         .HasColumnType("text")
                         .HasColumnName("exam_username");
@@ -1622,6 +1646,14 @@ namespace TelegramGroupsAdmin.Data.Migrations
                     b.Property<long?>("ProfileUserId")
                         .HasColumnType("bigint")
                         .HasColumnName("profile_user_id");
+
+                    b.Property<bool?>("ProfileUserIsBot")
+                        .HasColumnType("boolean")
+                        .HasColumnName("profile_user_is_bot");
+
+                    b.Property<bool?>("ProfileUserLatestScanExplicit")
+                        .HasColumnType("boolean")
+                        .HasColumnName("profile_user_latest_scan_explicit");
 
                     b.Property<string>("ProfileUsername")
                         .HasColumnType("text")
@@ -1663,9 +1695,17 @@ namespace TelegramGroupsAdmin.Data.Migrations
                         .HasColumnType("text")
                         .HasColumnName("suspected_first_name");
 
+                    b.Property<bool?>("SuspectedIsBot")
+                        .HasColumnType("boolean")
+                        .HasColumnName("suspected_is_bot");
+
                     b.Property<string>("SuspectedLastName")
                         .HasColumnType("text")
                         .HasColumnName("suspected_last_name");
+
+                    b.Property<bool?>("SuspectedLatestScanExplicit")
+                        .HasColumnType("boolean")
+                        .HasColumnName("suspected_latest_scan_explicit");
 
                     b.Property<string>("SuspectedPhotoPath")
                         .HasColumnType("text")
@@ -1683,9 +1723,17 @@ namespace TelegramGroupsAdmin.Data.Migrations
                         .HasColumnType("text")
                         .HasColumnName("target_first_name");
 
+                    b.Property<bool?>("TargetIsBot")
+                        .HasColumnType("boolean")
+                        .HasColumnName("target_is_bot");
+
                     b.Property<string>("TargetLastName")
                         .HasColumnType("text")
                         .HasColumnName("target_last_name");
+
+                    b.Property<bool?>("TargetLatestScanExplicit")
+                        .HasColumnType("boolean")
+                        .HasColumnName("target_latest_scan_explicit");
 
                     b.Property<string>("TargetPhotoPath")
                         .HasColumnType("text")
@@ -3015,6 +3063,10 @@ namespace TelegramGroupsAdmin.Data.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("last_seen_at");
 
+                    b.Property<DateTimeOffset?>("NamesObservedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("names_observed_at");
+
                     b.Property<string>("PersonalChannelAbout")
                         .HasColumnType("text")
                         .HasColumnName("personal_channel_about");
@@ -3214,6 +3266,37 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                             t.HasCheckConstraint("CK_user_actions_message_chat_null_consistency", "(message_id IS NULL) OR (chat_id IS NOT NULL)");
                         });
+                });
+
+            modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.UserIdentityView", b =>
+                {
+                    b.Property<string>("FirstName")
+                        .HasColumnType("text")
+                        .HasColumnName("first_name");
+
+                    b.Property<bool>("IsBot")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_bot");
+
+                    b.Property<string>("LastName")
+                        .HasColumnType("text")
+                        .HasColumnName("last_name");
+
+                    b.Property<bool?>("LatestScanExplicit")
+                        .HasColumnType("boolean")
+                        .HasColumnName("latest_scan_explicit");
+
+                    b.Property<long>("TelegramUserId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("telegram_user_id");
+
+                    b.Property<string>("Username")
+                        .HasColumnType("text")
+                        .HasColumnName("username");
+
+                    b.ToTable((string)null);
+
+                    b.ToView("user_identities", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.UserRecordDto", b =>

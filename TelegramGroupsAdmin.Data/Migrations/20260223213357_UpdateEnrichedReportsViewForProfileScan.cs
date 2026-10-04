@@ -13,7 +13,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
         {
             // Drop and recreate to add profile_user columns (type = 3)
             migrationBuilder.Sql(EnrichedReportView.DropViewSql);
-            migrationBuilder.Sql(EnrichedReportView.CreateViewSql);
+            migrationBuilder.Sql(LegacyEnrichedViewSql.EnrichedReports);
         }
 
         /// <inheritdoc />

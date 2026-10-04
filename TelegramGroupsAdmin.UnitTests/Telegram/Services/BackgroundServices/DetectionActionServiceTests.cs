@@ -57,7 +57,7 @@ public class DetectionActionServiceTests
         };
         var record = new DetectionResultRecord { AddedBy = Actor.AutoDetection, Reason = "Borderline" };
 
-        await _service.HandleSpamDetectionActionsAsync(message, spamResult, record);
+        await _service.HandleSpamDetectionActionsAsync(message, UserIdentity.ForTest(7, "Tester"), spamResult, record);
 
         await _reportService.Received(1).CreateReportAsync(
             Arg.Any<Report>(), message, Actor.AutoDetection, Arg.Any<CancellationToken>());

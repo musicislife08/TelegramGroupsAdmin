@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Data;
+using TelegramGroupsAdmin.Data.Extensions;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
 using TelegramGroupsAdmin.Telegram.Repositories;
 
@@ -9,7 +10,7 @@ namespace TelegramGroupsAdmin.IntegrationTests.Repositories;
 
 /// <summary>
 /// Integration tests verifying UsernameHistoryRepository against a real PostgreSQL database.
-/// Covers insert/retrieve round-trips, ordering, cascade delete, user isolation, and null handling.
+/// Covers retrieval and field mapping, ordering, cascade delete, user isolation, and HasChangeSinceAsync.
 ///
 /// All tests clone the golden_template. Canonical has 4 username_history rows total:
 ///   id=1  user_id=9726308613009
@@ -17,8 +18,7 @@ namespace TelegramGroupsAdmin.IntegrationTests.Repositories;
 ///   id=3  user_id=9032620986755
 ///   id=4  user_id=9095125964119
 ///
-/// Fresh-INSERT tests use canonical telegram_users with no existing username_history rows so
-/// count assertions are unambiguous without requiring any legacy seed calls.
+/// Tests read canonical history rows (anchors in GoldenDatasetConstants.UsernameHistory).
 /// </summary>
 [TestFixture]
 [Category("Integration")]
@@ -27,14 +27,8 @@ public class UsernameHistoryRepositoryTests
     private MigrationTestHelper? _testHelper;
     private IServiceProvider? _serviceProvider;
 
-    // Canonical telegram_user_ids with NO existing username_history rows.
-    // These are valid FK targets (exist in telegram_users after golden_template clone).
-    private const long FreshUser1 = 9921676191756L; // @unhelpfulgrab — "Squeak Degree"
+    // Canonical telegram_user_id with NO existing username_history rows (ordering test).
     private const long FreshUser2 = 9960171136314L; // @sillywolf — "Early Spirits"
-    private const long FreshUser3 = 9452657005278L; // @strainermaroon — "Obtrusive Impure"
-    private const long FreshUserA = 9971261287520L; // @lazinessunsheathe — "Reappear Math"
-    private const long FreshUserB = 9793662571780L; // canonical no-history user
-    private const long FreshUser5 = 9196379650113L; // @squishierspectacle — "Recall Zen"
 
     [SetUp]
     public async Task SetUp()
@@ -44,13 +38,8 @@ public class UsernameHistoryRepositoryTests
 
         var services = new ServiceCollection();
 
-        var dataSourceBuilder = new Npgsql.NpgsqlDataSourceBuilder(_testHelper.ConnectionString);
-        services.AddSingleton(dataSourceBuilder.Build());
-
-        services.AddDbContextFactory<AppDbContext>((_, options) =>
-        {
-            options.UseNpgsql(_testHelper.ConnectionString);
-        });
+        // Production data registration (pooled factory, retry-on-failure), as the app runs it.
+        services.AddDataServices(_testHelper.ConnectionString);
 
         services.AddLogging(builder =>
         {
@@ -70,19 +59,16 @@ public class UsernameHistoryRepositoryTests
     }
 
     // ============================================================================
-    // Insert and Retrieve
+    // Retrieve (canonical history rows, read-only)
     // ============================================================================
 
     [Test]
-    public async Task InsertAsync_And_GetByUserIdAsync_RoundTrips()
+    public async Task GetByUserIdAsync_CanonicalRow_MapsEveryFieldIncludingNulls()
     {
-        // FreshUser1 has no existing username_history rows in canonical.
-        const long userId = FreshUser1;
-
+        // History row 4: prior names "Tin Tun Min", no prior username.
+        const long userId = GoldenDatasetConstants.UsernameHistory.NoPastUsernameUserId;
         await using var scope = _serviceProvider!.CreateAsyncScope();
         var repo = scope.ServiceProvider.GetRequiredService<IUsernameHistoryRepository>();
-
-        await repo.InsertAsync(userId, "old_username", "OldFirst", "OldLast");
 
         var results = await repo.GetByUserIdAsync(userId);
 
@@ -91,9 +77,9 @@ public class UsernameHistoryRepositoryTests
         Assert.Multiple(() =>
         {
             Assert.That(record.UserId, Is.EqualTo(userId));
-            Assert.That(record.Username, Is.EqualTo("old_username"));
-            Assert.That(record.FirstName, Is.EqualTo("OldFirst"));
-            Assert.That(record.LastName, Is.EqualTo("OldLast"));
+            Assert.That(record.Username, Is.Null);
+            Assert.That(record.FirstName, Is.EqualTo("Tin Tun"));
+            Assert.That(record.LastName, Is.EqualTo("Min"));
             Assert.That(record.RecordedAt, Is.Not.EqualTo(default(DateTimeOffset)));
         });
     }
@@ -136,16 +122,9 @@ public class UsernameHistoryRepositoryTests
     [Test]
     public async Task CascadeDelete_RemovesHistoryWhenUserDeleted()
     {
-        // FreshUser3 has no existing username_history rows in canonical.
-        const long userId = FreshUser3;
+        // History row 1's owner. Deleting the user (in this test's clone) is the act under test.
+        const long userId = GoldenDatasetConstants.UsernameHistory.CascadeDeleteUserId;
 
-        await using (var scope = _serviceProvider!.CreateAsyncScope())
-        {
-            var repo = scope.ServiceProvider.GetRequiredService<IUsernameHistoryRepository>();
-            await repo.InsertAsync(userId, "username_to_delete", "ToDelete", "User");
-        }
-
-        // Verify history exists before delete
         await using (var scope = _serviceProvider!.CreateAsyncScope())
         {
             var repo = scope.ServiceProvider.GetRequiredService<IUsernameHistoryRepository>();
@@ -153,11 +132,9 @@ public class UsernameHistoryRepositoryTests
             Assert.That(before, Has.Count.EqualTo(1), "History must exist before user deletion");
         }
 
-        // Delete the parent user directly via SQL
         await _testHelper!.ExecuteSqlAsync(
             $"DELETE FROM telegram_users WHERE telegram_user_id = {userId}");
 
-        // History must be gone due to CASCADE DELETE
         await using (var scope = _serviceProvider!.CreateAsyncScope())
         {
             var repo = scope.ServiceProvider.GetRequiredService<IUsernameHistoryRepository>();
@@ -174,63 +151,85 @@ public class UsernameHistoryRepositoryTests
     [Test]
     public async Task GetByUserIdAsync_DoesNotReturnOtherUsersHistory()
     {
-        // FreshUserA and FreshUserB have no existing username_history rows in canonical.
-        const long userAId = FreshUserA;
-        const long userBId = FreshUserB;
-
-        await using (var scope = _serviceProvider!.CreateAsyncScope())
-        {
-            var repo = scope.ServiceProvider.GetRequiredService<IUsernameHistoryRepository>();
-            await repo.InsertAsync(userAId, "user_a_old", "UserA", "Old");
-            await repo.InsertAsync(userBId, "user_b_old", "UserB", "Old");
-        }
-
-        await using (var scope = _serviceProvider!.CreateAsyncScope())
-        {
-            var repo = scope.ServiceProvider.GetRequiredService<IUsernameHistoryRepository>();
-
-            var userAHistory = await repo.GetByUserIdAsync(userAId);
-            var userBHistory = await repo.GetByUserIdAsync(userBId);
-
-            Assert.Multiple(() =>
-            {
-                Assert.That(userAHistory, Has.Count.EqualTo(1));
-                Assert.That(userAHistory[0].UserId, Is.EqualTo(userAId));
-                Assert.That(userAHistory[0].Username, Is.EqualTo("user_a_old"));
-
-                Assert.That(userBHistory, Has.Count.EqualTo(1));
-                Assert.That(userBHistory[0].UserId, Is.EqualTo(userBId));
-                Assert.That(userBHistory[0].Username, Is.EqualTo("user_b_old"));
-            });
-        }
-    }
-
-    // ============================================================================
-    // Null Fields
-    // ============================================================================
-
-    [Test]
-    public async Task InsertAsync_HandlesNullFields()
-    {
-        // FreshUser5 has no existing username_history rows in canonical.
-        const long userId = FreshUser5;
-
+        // Two canonical owners of one history row each (rows 4 and 1).
+        const long userAId = GoldenDatasetConstants.UsernameHistory.NoPastUsernameUserId;
+        const long userBId = GoldenDatasetConstants.UsernameHistory.CascadeDeleteUserId;
         await using var scope = _serviceProvider!.CreateAsyncScope();
         var repo = scope.ServiceProvider.GetRequiredService<IUsernameHistoryRepository>();
 
-        Assert.DoesNotThrowAsync(async () =>
-            await repo.InsertAsync(userId, username: null, firstName: null, lastName: null));
+        var userAHistory = await repo.GetByUserIdAsync(userAId);
+        var userBHistory = await repo.GetByUserIdAsync(userBId);
 
-        var results = await repo.GetByUserIdAsync(userId);
-
-        Assert.That(results, Has.Count.EqualTo(1));
-        var record = results[0];
         Assert.Multiple(() =>
         {
-            Assert.That(record.UserId, Is.EqualTo(userId));
-            Assert.That(record.Username, Is.Null);
-            Assert.That(record.FirstName, Is.Null);
-            Assert.That(record.LastName, Is.Null);
+            Assert.That(userAHistory, Has.Count.EqualTo(1));
+            Assert.That(userAHistory[0].UserId, Is.EqualTo(userAId));
+            Assert.That(userAHistory[0].FirstName, Is.EqualTo("Tin Tun"));
+
+            Assert.That(userBHistory, Has.Count.EqualTo(1));
+            Assert.That(userBHistory[0].UserId, Is.EqualTo(userBId));
         });
+    }
+
+    // ============================================================================
+    // HasChangeSinceAsync (canonical history row 2, read-only)
+    // ============================================================================
+
+    private async Task<DateTimeOffset> PastFirstNameRecordedAtAsync()
+    {
+        await using var ctx = _testHelper!.GetDbContext();
+        var row = await ctx.UsernameHistory.AsNoTracking()
+            .SingleAsync(h => h.UserId == GoldenDatasetConstants.UsernameHistory.PastFirstNameUserId);
+        Assert.That(row.FirstName, Is.EqualTo(GoldenDatasetConstants.UsernameHistory.PastFirstName));
+        return row.RecordedAt;
+    }
+
+    [Test]
+    public async Task HasChangeSinceAsync_SinceBeforeTheRename_IsTrue()
+    {
+        var recordedAt = await PastFirstNameRecordedAtAsync();
+        await using var scope = _serviceProvider!.CreateAsyncScope();
+        var repo = scope.ServiceProvider.GetRequiredService<IUsernameHistoryRepository>();
+
+        var changed = await repo.HasChangeSinceAsync(
+            GoldenDatasetConstants.UsernameHistory.PastFirstNameUserId, recordedAt.AddSeconds(-1));
+
+        Assert.That(changed, Is.True);
+    }
+
+    [Test]
+    public async Task HasChangeSinceAsync_SinceAtOrAfterTheRename_IsFalse()
+    {
+        var recordedAt = await PastFirstNameRecordedAtAsync();
+        await using var scope = _serviceProvider!.CreateAsyncScope();
+        var repo = scope.ServiceProvider.GetRequiredService<IUsernameHistoryRepository>();
+        const long userId = GoldenDatasetConstants.UsernameHistory.PastFirstNameUserId;
+
+        Assert.That(await repo.HasChangeSinceAsync(userId, recordedAt), Is.False);
+        Assert.That(await repo.HasChangeSinceAsync(userId, recordedAt.AddSeconds(1)), Is.False);
+    }
+
+    [Test]
+    public async Task HasChangeSinceAsync_NeverScanned_CountsAnyRename()
+    {
+        await PastFirstNameRecordedAtAsync();
+        await using var scope = _serviceProvider!.CreateAsyncScope();
+        var repo = scope.ServiceProvider.GetRequiredService<IUsernameHistoryRepository>();
+
+        var changed = await repo.HasChangeSinceAsync(GoldenDatasetConstants.UsernameHistory.PastFirstNameUserId, since: null);
+
+        Assert.That(changed, Is.True);
+    }
+
+    [Test]
+    public async Task HasChangeSinceAsync_UserWithNoHistory_IsFalse()
+    {
+        const long userId = GoldenDatasetConstants.IdentityService.UntrustedNoHistoryUserId;
+        await using (var ctx = _testHelper!.GetDbContext())
+            Assert.That(await ctx.UsernameHistory.CountAsync(h => h.UserId == userId), Is.Zero);
+        await using var scope = _serviceProvider!.CreateAsyncScope();
+        var repo = scope.ServiceProvider.GetRequiredService<IUsernameHistoryRepository>();
+
+        Assert.That(await repo.HasChangeSinceAsync(userId, since: null), Is.False);
     }
 }

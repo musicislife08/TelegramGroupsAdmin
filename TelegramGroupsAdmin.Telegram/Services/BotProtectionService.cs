@@ -9,6 +9,7 @@ using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.Telegram.Services.Identity;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
@@ -20,7 +21,7 @@ namespace TelegramGroupsAdmin.Telegram.Services;
 public class BotProtectionService(
     IConfigService configService,
     IChatAdminsRepository chatAdminsRepository,
-    ITelegramUserRepository telegramUserRepository,
+    IUserIdentityService identityService,
     IBotModerationService moderationService,
     ILogger<BotProtectionService> logger) : IBotProtectionService
 {
@@ -82,37 +83,22 @@ public class BotProtectionService(
         return false;
     }
 
-    public async Task BanBotAsync(Chat chat, User bot, string reason, CancellationToken cancellationToken = default)
+    public async Task BanBotAsync(Chat chat, User bot, DateTimeOffset seenAt, string reason, CancellationToken cancellationToken = default)
     {
         try
         {
-            // First, upsert bot to telegram_users table to capture username/name before banning
-            var now = DateTimeOffset.UtcNow;
-            var telegramUser = new TelegramUser(
-                TelegramUserId: bot.Id,
-                Username: bot.Username,
-                FirstName: bot.FirstName,
-                LastName: bot.LastName,
-                UserPhotoPath: null, // Bots don't need photo fetching
-                PhotoHash: null,
-                PhotoFileUniqueId: null,
-                IsBot: true, // This is a bot
-                IsTrusted: false,
-                IsBanned: false, // Will be set by moderation after ban
-                KickCount: 0,
-                BotDmEnabled: false, // Bots don't accept DMs
-                FirstSeenAt: now,
-                LastSeenAt: now,
-                CreatedAt: now,
-                UpdatedAt: now
-            );
-            await telegramUserRepository.UpsertAsync(telegramUser, cancellationToken);
+            // Record the bot's names before banning so the UI can show them. Bots are never scanned.
+            var botIdentity = await identityService.ObserveAsync(
+                new ObservedUser(bot.Id, bot.FirstName, bot.LastName, bot.Username, IsBot: true,
+                    ObservationSource.ChatMember, seenAt),
+                new ProfileChangeContext(ChatIdentity.From(chat), MessageId: null),
+                cancellationToken);
 
             // Ban the bot via moderation service (handles Telegram API + audit trail)
             var result = await moderationService.SyncBanToChatAsync(
                 new SyncBanIntent
                 {
-                    User = UserIdentity.From(bot),
+                    User = botIdentity,
                     Chat = ChatIdentity.From(chat),
                     Executor = Actor.BotProtection,
                     Reason = $"Unauthorized bot: {reason}"

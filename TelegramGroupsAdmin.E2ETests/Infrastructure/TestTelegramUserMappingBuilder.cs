@@ -103,7 +103,6 @@ public class TestTelegramUserMappingBuilder
         }
 
         using var scope = _services.CreateScope();
-        var userRepository = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
         var mappingRepository = scope.ServiceProvider.GetRequiredService<ITelegramUserMappingRepository>();
 
         // Create the telegram_user first (FK constraint requires this)
@@ -127,7 +126,7 @@ public class TestTelegramUserMappingBuilder
             UpdatedAt: now,
             IsActive: true
         );
-        await userRepository.UpsertAsync(telegramUser, cancellationToken);
+        await TelegramUserRowWriter.WriteAsync(_services, telegramUser, cancellationToken);
 
         // Now create the mapping
         var mapping = new TelegramUserMappingRecord(

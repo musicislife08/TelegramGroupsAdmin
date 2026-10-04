@@ -20,6 +20,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     // Views (read-only, query optimization)
     public DbSet<EnrichedMessageView> EnrichedMessages => Set<EnrichedMessageView>();
     public DbSet<EnrichedReportView> EnrichedReports => Set<EnrichedReportView>();
+    public DbSet<UserIdentityView> UserIdentities => Set<UserIdentityView>();
     public DbSet<EnrichedDetectionView> EnrichedDetections => Set<EnrichedDetectionView>();
     public DbSet<HourlyDetectionStatsView> HourlyDetectionStats => Set<HourlyDetectionStatsView>();
     public DbSet<WelcomeResponseSummaryView> WelcomeResponseSummary => Set<WelcomeResponseSummaryView>();
@@ -964,6 +965,12 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.Entity<EnrichedReportView>()
             .HasNoKey()
             .ToView("enriched_reports");
+
+        // Configure UserIdentityView as keyless entity mapping to user_identities view
+        // Names + latest-scan flags: the single source for identity reads
+        modelBuilder.Entity<UserIdentityView>()
+            .HasNoKey()
+            .ToView("user_identities");
 
         // Configure EnrichedDetectionView as keyless entity mapping to enriched_detections view
         // Provides detection enrichment (actor, message author) for GetRecentDetectionsAsync

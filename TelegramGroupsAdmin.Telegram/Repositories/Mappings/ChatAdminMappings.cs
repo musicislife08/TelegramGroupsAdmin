@@ -1,5 +1,6 @@
 using TelegramGroupsAdmin.Core.Mappings;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Repositories.Mappings;
 using DataModels = TelegramGroupsAdmin.Data.Models;
 using UiModels = TelegramGroupsAdmin.Telegram.Models;
 
@@ -13,10 +14,11 @@ public static class ChatAdminMappings
     extension(DataModels.ChatAdminRecordDto data)
     {
         /// <summary>
-        /// Maps to UI model with user details from navigation property.
-        /// Includes linked web user if the Telegram admin has linked a web account.
+        /// Maps to UI model. The identity comes from the admin's user_identities row (null when the
+        /// user has no telegram_users row); BotDmEnabled and the linked web user come from the
+        /// TelegramUser navigation.
         /// </summary>
-        public UiModels.ChatAdmin ToModel()
+        public UiModels.ChatAdmin ToModel(DataModels.UserIdentityView? identity)
         {
             // Get the linked web user (first active mapping's user, if any)
             var linkedWebUser = data.TelegramUser?.UserMappings
@@ -26,7 +28,7 @@ public static class ChatAdminMappings
             {
                 Id = data.Id,
                 ChatId = data.ChatId,
-                User = new UserIdentity(data.TelegramId, data.TelegramUser?.FirstName, data.TelegramUser?.LastName, data.TelegramUser?.Username),
+                User = identity.ToIdentityOrIdOnly(data.TelegramId),
                 IsCreator = data.IsCreator,
                 PromotedAt = data.PromotedAt,
                 LastVerifiedAt = data.LastVerifiedAt,
@@ -35,20 +37,6 @@ public static class ChatAdminMappings
                 LinkedWebUser = linkedWebUser
             };
         }
-
-        /// <summary>
-        /// Maps to UI model with explicit user details (for inline projections)
-        /// </summary>
-        public UiModels.ChatAdmin ToModel(string? username, string? firstName, string? lastName) => new()
-        {
-            Id = data.Id,
-            ChatId = data.ChatId,
-            User = new UserIdentity(data.TelegramId, firstName, lastName, username),
-            IsCreator = data.IsCreator,
-            PromotedAt = data.PromotedAt,
-            LastVerifiedAt = data.LastVerifiedAt,
-            IsActive = data.IsActive
-        };
     }
 
     extension(UiModels.ChatAdmin ui)

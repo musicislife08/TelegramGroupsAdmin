@@ -11,6 +11,7 @@ using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot.Handlers;
+using TelegramGroupsAdmin.Telegram.Services.Identity;
 
 namespace TelegramGroupsAdmin.Telegram.Services.Bot;
 
@@ -25,6 +26,7 @@ public class BotMessageService(
     IBotChatHandler chatHandler,
     IMessageHistoryRepository messageRepo,
     IMessageEditService editService,
+    IUserIdentityService identityService,
     ITelegramUserRepository userRepo,
     ApiMetrics apiMetrics,
     ILogger<BotMessageService> logger) : IBotMessageService
@@ -94,32 +96,13 @@ public class BotMessageService(
         // Get bot user info (cached in singleton IBotIdentityCache via IBotUserService)
         var botInfo = await userService.GetMeAsync(cancellationToken);
 
-        // Upsert bot to telegram_users table (ensures bot name is available for UI display)
-        var now = DateTimeOffset.UtcNow;
-        var botUser = new TelegramUser(
-            TelegramUserId: botInfo.Id,
-            Username: botInfo.Username,
-            FirstName: botInfo.FirstName,
-            LastName: botInfo.LastName,
-            UserPhotoPath: null,
-            PhotoHash: null,
-            PhotoFileUniqueId: null,
-            IsBot: true,
-            IsTrusted: false,
-            IsBanned: false,
-            KickCount: 0,
-            BotDmEnabled: false,
-            FirstSeenAt: now,
-            LastSeenAt: now,
-            CreatedAt: now,
-            UpdatedAt: now
-        );
-        await userRepo.UpsertAsync(botUser, cancellationToken);
+        // Record the bot's own names (ensures they are available for UI display). Never rescanned.
+        var botIdentity = await ObserveBotAsync(botInfo, cancellationToken);
 
         // Save to messages table (use bot info from cache, not sentMessage.From which may be null)
         var messageRecord = new MessageRecord(
             MessageId: sentMessage.MessageId,
-            User: UserIdentity.From(botInfo),
+            User: botIdentity,
             Chat: ChatIdentity.From(sentMessage.Chat),
             Timestamp: DateTimeOffset.UtcNow,
             MessageText: text,
@@ -340,32 +323,13 @@ public class BotMessageService(
         var chatInfo = await chatHandler.GetChatAsync(chatId, cancellationToken);
         apiMetrics.RecordTelegramApiCall("get_chat", success: true);
 
-        // Upsert bot to telegram_users table (ensures bot name is available for UI display)
-        var now = DateTimeOffset.UtcNow;
-        var botUser = new TelegramUser(
-            TelegramUserId: botInfo.Id,
-            Username: botInfo.Username,
-            FirstName: botInfo.FirstName,
-            LastName: botInfo.LastName,
-            UserPhotoPath: null,
-            PhotoHash: null,
-            PhotoFileUniqueId: null,
-            IsBot: true,
-            IsTrusted: false,
-            IsBanned: false,
-            KickCount: 0,
-            BotDmEnabled: false,
-            FirstSeenAt: now,
-            LastSeenAt: now,
-            CreatedAt: now,
-            UpdatedAt: now
-        );
-        await userRepo.UpsertAsync(botUser, cancellationToken);
+        // Record the bot's own names (ensures they are available for UI display). Never rescanned.
+        var botIdentity = await ObserveBotAsync(botInfo, cancellationToken);
 
         // Save to messages table
         var messageRecord = new MessageRecord(
             MessageId: messageId,
-            User: UserIdentity.From(botInfo),
+            User: botIdentity,
             Chat: ChatIdentity.From(chatInfo),
             Timestamp: DateTimeOffset.UtcNow,
             MessageText: text,
@@ -444,32 +408,13 @@ public class BotMessageService(
         // Get bot user info (cached in singleton IBotIdentityCache via IBotUserService)
         var botInfo = await userService.GetMeAsync(cancellationToken);
 
-        // Upsert bot to telegram_users table
-        var now = DateTimeOffset.UtcNow;
-        var botUser = new TelegramUser(
-            TelegramUserId: botInfo.Id,
-            Username: botInfo.Username,
-            FirstName: botInfo.FirstName,
-            LastName: botInfo.LastName,
-            UserPhotoPath: null,
-            PhotoHash: null,
-            PhotoFileUniqueId: null,
-            IsBot: true,
-            IsTrusted: false,
-            IsBanned: false,
-            KickCount: 0,
-            BotDmEnabled: false,
-            FirstSeenAt: now,
-            LastSeenAt: now,
-            CreatedAt: now,
-            UpdatedAt: now
-        );
-        await userRepo.UpsertAsync(botUser, cancellationToken);
+        // Record the bot's own names (ensures they are available for UI display). Never rescanned.
+        var botIdentity = await ObserveBotAsync(botInfo, cancellationToken);
 
         // Save to messages table with animation metadata
         var messageRecord = new MessageRecord(
             MessageId: sentMessage.MessageId,
-            User: UserIdentity.From(botInfo),
+            User: botIdentity,
             Chat: ChatIdentity.From(sentMessage.Chat),
             Timestamp: DateTimeOffset.UtcNow,
             MessageText: caption, // Caption as message text
@@ -525,4 +470,20 @@ public class BotMessageService(
             parseMode: null,
             captionEntities: caption.Entities,
             cancellationToken);
+
+    /// <summary>
+    /// Records the bot's own names as of now (GetMe has no date; bots are never scanned) and marks
+    /// the bot's row active, as sending a message is activity.
+    /// </summary>
+    private async Task<UserIdentity> ObserveBotAsync(User botInfo, CancellationToken cancellationToken)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var identity = await identityService.ObserveAsync(
+            new ObservedUser(botInfo.Id, botInfo.FirstName, botInfo.LastName, botInfo.Username, IsBot: true,
+                ObservationSource.BotUpdate, now),
+            new ProfileChangeContext(Chat: null, MessageId: null),
+            cancellationToken);
+        await userRepo.MarkActiveAsync(botInfo.Id, now, cancellationToken);
+        return identity;
+    }
 }

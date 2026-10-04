@@ -11,7 +11,7 @@ public class ChatAdmin
 {
     public long Id { get; init; }
     public long ChatId { get; init; }
-    public UserIdentity User { get; init; } = UserIdentity.FromId(0);
+    public required UserIdentity User { get; init; }
 
     public bool IsCreator { get; init; }
     public DateTimeOffset PromotedAt { get; init; }

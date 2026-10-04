@@ -682,10 +682,10 @@ public class WelcomeSystemConfigTests : WelcomeSystemConfigTestContext
 
     #endregion
 
-    #region Explicit Username Masking Tests
+    #region Name Masking Tests
 
     [Test]
-    public void WelcomeSystemConfig_RendersMaskExplicitUsernameSwitchWhenProfileScanEnabled()
+    public void WelcomeSystemConfig_RendersMaskFlaggedNamesSwitchWhenProfileScanEnabled()
     {
         // Arrange - profile scan ON so the masking switch should render enabled
         ConfigService.GetWelcomeAsync(Arg.Any<long>())
@@ -698,8 +698,7 @@ public class WelcomeSystemConfigTests : WelcomeSystemConfigTestContext
                     ProfileScan = new ProfileScanConfig
                     {
                         Enabled = true,
-                        MaskExplicitUsername = true,
-                        ExplicitUsernameRedactionText = "[explicit username redacted]"
+                        MaskFlaggedNames = true
                     }
                 }
             });
@@ -711,9 +710,9 @@ public class WelcomeSystemConfigTests : WelcomeSystemConfigTestContext
         cut.WaitForAssertion(() =>
         {
             var maskLabel = cut.FindAll("label")
-                .FirstOrDefault(l => l.TextContent.Contains("Mask explicit usernames"));
+                .FirstOrDefault(l => l.TextContent.Contains("Mask flagged names"));
             Assert.That(maskLabel, Is.Not.Null,
-                "Mask explicit usernames switch label should be present in the rendered DOM");
+                "Mask flagged names switch label should be present in the rendered DOM");
 
             // MudSwitch renders <label><span class="mud-switch"><input /></span>...<span>Label</span></label>
             var maskInput = maskLabel!.QuerySelector("input");
@@ -723,10 +722,33 @@ public class WelcomeSystemConfigTests : WelcomeSystemConfigTestContext
         }, TimeSpan.FromSeconds(2));
     }
 
+    private static AngleSharp.Dom.IElement MaskCaption(IRenderedComponent<WelcomeSystemConfig> cut) =>
+        cut.Find("#mask-flagged-names-help");
+
     [Test]
-    public void WelcomeSystemConfig_DisablesMaskingSwitchWhenProfileScanDisabled()
+    public void MaskingSwitch_CaptionExplainsScopeAndIsLinkedToTheSwitch()
     {
-        // Arrange - profile scan OFF cascades disabled to the masking switch
+        var cut = Render<WelcomeSystemConfig>();
+
+        cut.WaitForAssertion(() =>
+        {
+            var caption = MaskCaption(cut).TextContent;
+            Assert.That(caption, Does.Contain("flagged by earlier profile scans"));
+            Assert.That(caption, Does.Contain("even while scanning is off"));
+            Assert.That(caption, Does.Contain("ban celebration DMs"));
+            Assert.That(caption, Does.Contain("Admin DMs show real names"));
+
+            var maskInput = cut.FindAll("label")
+                .Single(l => l.TextContent.Contains("Mask flagged names"))
+                .QuerySelector("input");
+            Assert.That(maskInput!.GetAttribute("aria-describedby"), Is.EqualTo("mask-flagged-names-help"));
+        }, TimeSpan.FromSeconds(2));
+    }
+
+    [Test]
+    public void WelcomeSystemConfig_MaskingSwitchStaysEnabledWhenProfileScanDisabled()
+    {
+        // Arrange - profile scan OFF: a verdict from another chat's scan still applies, so the switch stays usable
         ConfigService.GetWelcomeAsync(Arg.Any<long>())
             .Returns(new WelcomeConfig
             {
@@ -737,8 +759,7 @@ public class WelcomeSystemConfigTests : WelcomeSystemConfigTestContext
                     ProfileScan = new ProfileScanConfig
                     {
                         Enabled = false,
-                        MaskExplicitUsername = true,
-                        ExplicitUsernameRedactionText = "[explicit username redacted]"
+                        MaskFlaggedNames = true
                     }
                 }
             });
@@ -746,59 +767,18 @@ public class WelcomeSystemConfigTests : WelcomeSystemConfigTestContext
         // Act
         var cut = Render<WelcomeSystemConfig>();
 
-        // Assert - the mask switch input carries the disabled attribute
+        // Assert - the mask switch input is not disabled
         cut.WaitForAssertion(() =>
         {
             var maskLabel = cut.FindAll("label")
-                .FirstOrDefault(l => l.TextContent.Contains("Mask explicit usernames"));
+                .FirstOrDefault(l => l.TextContent.Contains("Mask flagged names"));
             Assert.That(maskLabel, Is.Not.Null,
-                "Mask explicit usernames switch label should be present in the rendered DOM");
+                "Mask flagged names switch label should be present in the rendered DOM");
 
             var maskInput = maskLabel!.QuerySelector("input");
             Assert.That(maskInput, Is.Not.Null, "Mask switch should expose an input element");
-            Assert.That(maskInput!.HasAttribute("disabled"), Is.True,
-                "Mask switch should be disabled when ProfileScan.Enabled is false");
-        }, TimeSpan.FromSeconds(2));
-    }
-
-    [Test]
-    public void WelcomeSystemConfig_DisablesRedactionTextFieldWhenMaskingOff()
-    {
-        // Arrange - profile scan ON but masking OFF: the redaction text should be disabled
-        ConfigService.GetWelcomeAsync(Arg.Any<long>())
-            .Returns(new WelcomeConfig
-            {
-                Enabled = true,
-                MainWelcomeMessage = "Welcome {username}!",
-                JoinSecurity = new JoinSecurityConfig
-                {
-                    ProfileScan = new ProfileScanConfig
-                    {
-                        Enabled = true,
-                        MaskExplicitUsername = false,
-                        ExplicitUsernameRedactionText = "[explicit username redacted]"
-                    }
-                }
-            });
-
-        // Act
-        var cut = Render<WelcomeSystemConfig>();
-
-        // Assert - MudTextField label sits in a sibling element addressed via for/id linkage
-        cut.WaitForAssertion(() =>
-        {
-            var redactionLabel = cut.FindAll("label")
-                .FirstOrDefault(l => l.TextContent.Contains("Redaction text"));
-            Assert.That(redactionLabel, Is.Not.Null,
-                "Redaction text field label should be present in the rendered DOM");
-
-            var forId = redactionLabel!.GetAttribute("for");
-            Assert.That(forId, Is.Not.Null.And.Not.Empty,
-                "Redaction text label should be linked to its input via for=");
-
-            var redactionInput = cut.Find($"#{forId}");
-            Assert.That(redactionInput.HasAttribute("disabled"), Is.True,
-                "Redaction text field should be disabled when MaskExplicitUsername is false");
+            Assert.That(maskInput!.HasAttribute("disabled"), Is.False,
+                "Mask switch should stay enabled when ProfileScan.Enabled is false");
         }, TimeSpan.FromSeconds(2));
     }
 
@@ -817,8 +797,7 @@ public class WelcomeSystemConfigTests : WelcomeSystemConfigTestContext
                     ProfileScan = new ProfileScanConfig
                     {
                         Enabled = true,
-                        MaskExplicitUsername = false,
-                        ExplicitUsernameRedactionText = "custom redaction"
+                        MaskFlaggedNames = false
                     }
                 }
             });
@@ -843,8 +822,7 @@ public class WelcomeSystemConfigTests : WelcomeSystemConfigTestContext
         await ConfigService.Received(1).SaveWelcomeAsync(
             Arg.Any<ChatIdentity>(),
             Arg.Is<WelcomeConfig>(c =>
-                c!.JoinSecurity.ProfileScan.MaskExplicitUsername == false
-             && c.JoinSecurity.ProfileScan.ExplicitUsernameRedactionText == "custom redaction"),
+                c!.JoinSecurity.ProfileScan.MaskFlaggedNames == false),
             Arg.Any<Actor>(),
             Arg.Any<CancellationToken>());
     }

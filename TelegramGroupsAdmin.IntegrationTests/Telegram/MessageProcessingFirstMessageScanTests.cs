@@ -25,6 +25,7 @@ using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.BotCommands;
+using TelegramGroupsAdmin.Telegram.Services.Identity;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
 using TelegramGroupsAdmin.Telegram.Services.UserApi;
 
@@ -80,7 +81,7 @@ namespace TelegramGroupsAdmin.IntegrationTests.Telegram;
 /// golden template: <see cref="ProfileScanGate"/>, <see cref="IConfigService"/>,
 /// <see cref="ITelegramUserRepository"/>, <see cref="IMessageHistoryRepository"/>,
 /// <see cref="IManagedChatsRepository"/>, <see cref="IChatAdminsRepository"/>,
-/// <see cref="IUserActionsRepository"/>, <see cref="IUsernameHistoryRepository"/>.
+/// <see cref="IUsernameHistoryRepository"/> (the gate's rename-since-last-scan check).
 /// Substituted: <see cref="IProfileScanService"/> (no live WTelegram API session is available,
 /// so the scan itself cannot be real), <see cref="ITelegramSessionManager"/>, and every
 /// remaining interface-based dependency. Asserting on the substituted
@@ -151,7 +152,6 @@ public class MessageProcessingFirstMessageScanTests
         // ── Real: repositories the profile-scan gate and the message path read/write ──
         services.AddScoped<ITelegramUserRepository, TelegramUserRepository>();
         services.AddScoped<IMessageHistoryRepository, MessageHistoryRepository>();
-        services.AddScoped<IUserActionsRepository, UserActionsRepository>();
         services.AddScoped<IUsernameHistoryRepository, UsernameHistoryRepository>();
         services.AddScoped<IManagedChatsRepository, ManagedChatsRepository>();
         services.AddScoped<IChatAdminsRepository, ChatAdminsRepository>();
@@ -166,6 +166,9 @@ public class MessageProcessingFirstMessageScanTests
         services.AddSingleton<PipelineMetrics>();
         services.AddSingleton<ChatMetrics>();
         services.AddScoped<IProfileScanGate, ProfileScanGate>();
+
+        // ── Real: the identity service the pipeline observes the sender through ──
+        services.AddScoped<IUserIdentityService, UserIdentityService>();
 
         // ── Real: concrete handlers on the pre-detection path. All take interface-only
         //    dependencies and short-circuit for a plain-text, non-command message. ──

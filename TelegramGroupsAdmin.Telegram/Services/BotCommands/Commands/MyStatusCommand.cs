@@ -44,6 +44,7 @@ public class MyStatusCommand : IBotCommand
         Message message,
         string[] args,
         PermissionLevel userPermission,
+        UserIdentity sender,
         CancellationToken cancellationToken = default)
     {
         if (message.From == null)
@@ -111,7 +112,7 @@ public class MyStatusCommand : IBotCommand
         var warningCount = activeWarnings.Count;
 
         // Build status message with explicit entities (bold via builder, no parse mode)
-        var builder = new TelegramMessageBuilder()
+        var builder = TelegramMessageBuilder.For(NameMasking.Off) // no user mentions
             .Text("📊 ").Bold("Your Status").LineBreak()
             .LineBreak();
 

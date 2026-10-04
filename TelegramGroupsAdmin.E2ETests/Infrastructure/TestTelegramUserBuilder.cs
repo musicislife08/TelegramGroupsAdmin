@@ -1,12 +1,10 @@
-using Microsoft.Extensions.DependencyInjection;
 using TelegramGroupsAdmin.Telegram.Models;
-using TelegramGroupsAdmin.Telegram.Repositories;
 
 namespace TelegramGroupsAdmin.E2ETests.Infrastructure;
 
 /// <summary>
 /// Fluent builder for creating Telegram users in the database for E2E testing.
-/// Uses ITelegramUserRepository to create proper telegram_users entries.
+/// Writes the telegram_users row directly (see <see cref="TelegramUserRowWriter"/>).
 /// </summary>
 /// <remarks>
 /// Usage:
@@ -131,9 +129,6 @@ public class TestTelegramUserBuilder
     /// </summary>
     public async Task<TelegramUser> BuildAsync(CancellationToken cancellationToken = default)
     {
-        using var scope = _services.CreateScope();
-        var userRepository = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
-
         var now = DateTimeOffset.UtcNow;
         var user = new TelegramUser(
             TelegramUserId: _telegramUserId,
@@ -154,7 +149,7 @@ public class TestTelegramUserBuilder
             UpdatedAt: now
         );
 
-        await userRepository.UpsertAsync(user, cancellationToken);
+        await TelegramUserRowWriter.WriteAsync(_services, user, cancellationToken);
 
         return user;
     }

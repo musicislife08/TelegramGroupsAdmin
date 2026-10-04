@@ -319,9 +319,8 @@ AI-powered profile scanning that analyzes user profiles via the Telegram User AP
    - **Scan on join** - Scan when user first joins the chat
    - **Scan on profile change** - Re-scan when user's name or username changes
    - **Scan on first message** - Scan a never-scanned user when they post their first message. Covers members who joined before the bot was added to the chat, and accounts that arrive without a join event (for example, people commenting on channel posts in a linked discussion group). Default: off.
-6. Choose how explicit display names are handled in public posts:
-   - **Mask explicit usernames in public ban posts** - When the AI flags a user's display name or @username as explicit content, public ban-celebration captions show the **Redaction text** instead of the name. Admin notifications still show the real name. Default: on.
-   - **Redaction text** - The substitute text (default: `[explicit username redacted]`)
+6. Choose whether flagged names are masked:
+   - **Mask flagged names** - When a profile scan flags a user's display name or @username, what the bot posts in this chat, and this chat's ban celebration DMs, show `[name removed: explicit]` or `[name removed: spam]` instead of the name. Admin DMs and alerts, and a user's own welcome, exam and `/start` DMs, always show the real name, as do the web UI, email and push notifications. This chat's value overrides the global value, which you can change in **Settings → Telegram → Bot Configuration → Welcome System**; the built-in default is on. It applies even when this chat does not scan profiles, because a flag belongs to the account. The labels are fixed.
 
 **What it detects**:
 - Spam signals in bios and about sections

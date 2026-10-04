@@ -31,16 +31,4 @@ public class ProfileScanResultsRepository(IDbContextFactory<AppDbContext> contex
 
         return results.Select(r => r.ToModel()).ToList();
     }
-
-    public async Task<ProfileScanResultRecord?> GetLatestByUserIdAsync(long userId, CancellationToken cancellationToken)
-    {
-        await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
-        var dto = await context.ProfileScanResults
-            .AsNoTracking()
-            .Where(r => r.UserId == userId)
-            .OrderByDescending(r => r.ScannedAt)
-            .FirstOrDefaultAsync(cancellationToken);
-
-        return dto?.ToModel();
-    }
 }

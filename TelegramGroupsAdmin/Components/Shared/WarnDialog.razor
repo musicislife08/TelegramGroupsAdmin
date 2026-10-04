@@ -42,7 +42,7 @@
 @code {
     [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
 
-    [Parameter] public UserIdentity User { get; set; } = UserIdentity.FromId(0);
+    [Parameter] public UserIdentity User { get; set; } = UserIdentity.ForPreview(0, null, null, null);
     [Parameter] public int CurrentWarningCount { get; set; }
 
     private string _reason = string.Empty;

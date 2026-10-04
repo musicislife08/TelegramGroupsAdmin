@@ -7,6 +7,7 @@ using TelegramGroupsAdmin.Telegram.Constants;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.Telegram.Services.Identity;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
@@ -125,19 +126,20 @@ public class BanCallbackService : IBanCallbackService
 
         try
         {
-            // Create executor actor
-            var executor = Core.Models.Actor.FromTelegramUser(
-                executorUser.Id,
-                executorUser.Username,
-                executorUser.FirstName,
-                executorUser.LastName);
+            // Executor resolved by id: the picker is only actionable by admins, whose names are
+            // recorded by the admin refresh and their own messages. The target row exists, so
+            // its identity resolves by id too.
+            var identityService = scope.ServiceProvider.GetRequiredService<IUserIdentityService>();
+            var executor = Core.Models.Actor.FromUserIdentity(
+                await identityService.ResolveAsync(executorUser.Id, cancellationToken));
+            var targetIdentity = await identityService.ResolveAsync(targetUser.TelegramUserId, cancellationToken);
 
             // Execute ban (resolve from scope since BotModerationService is Scoped)
             var moderationService = scope.ServiceProvider.GetRequiredService<IBotModerationService>();
             var result = await moderationService.BanUserAsync(
                 new BanIntent
                 {
-                    User = UserIdentity.From(targetUser),
+                    User = targetIdentity,
                     Executor = executor,
                     Reason = ModerationConstants.DefaultBanReason
                     // No trigger message or chat for fuzzy search bans

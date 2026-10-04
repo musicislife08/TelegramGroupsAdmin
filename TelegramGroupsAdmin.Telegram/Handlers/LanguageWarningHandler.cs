@@ -34,6 +34,7 @@ public class LanguageWarningHandler
     /// </summary>
     public async Task HandleWarningAsync(
         Message message,
+        UserIdentity sender,
         IServiceScope scope,
         CancellationToken cancellationToken)
     {
@@ -57,14 +58,14 @@ public class LanguageWarningHandler
 
             // Check if user is trusted or admin (skip warning for them)
             var userRepo = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
-            var user = await userRepo.GetByIdAsync(message.From!.Id, cancellationToken);
+            var user = await userRepo.GetByIdAsync(sender.Id, cancellationToken);
 
             if (user?.IsTrusted == true)
                 return;
 
             // Check if user is admin in this chat
             var userService = scope.ServiceProvider.GetRequiredService<IBotUserService>();
-            var chatMember = await userService.GetChatMemberAsync(message.Chat.Id, message.From.Id, cancellationToken);
+            var chatMember = await userService.GetChatMemberAsync(message.Chat.Id, sender.Id, cancellationToken);
             if (chatMember.Status is ChatMemberStatus.Administrator or ChatMemberStatus.Creator)
                 return;
 
@@ -73,7 +74,7 @@ public class LanguageWarningHandler
                                ?? WarningSystemConfig.Default;
 
             // REFACTOR-5: Get current warning count from source of truth (JSONB warnings on telegram_users)
-            var currentWarnings = await userRepo.GetActiveWarningCountAsync(message.From.Id, cancellationToken);
+            var currentWarnings = await userRepo.GetActiveWarningCountAsync(sender.Id, cancellationToken);
 
             // Calculate warnings remaining
             var warningsRemaining = warningConfig.AutoBanThreshold - currentWarnings;
@@ -92,7 +93,7 @@ public class LanguageWarningHandler
             await moderationService.WarnUserAsync(
                 new WarnIntent
                 {
-                    User = UserIdentity.From(message.From!),
+                    User = sender,
                     Chat = ChatIdentity.From(message.Chat),
                     Executor = Actor.LanguageWarning,
                     Reason = $"Non-English message ({translation.DetectedLanguage})",
@@ -103,7 +104,7 @@ public class LanguageWarningHandler
             // Send warning to user via DM with chat fallback
             var messagingService = scope.ServiceProvider.GetRequiredService<IUserMessagingService>();
             await messagingService.SendToUserAsync(
-                userId: message.From.Id,
+                userId: sender.Id,
                 chat: message.Chat,
                 message: TelegramMessage.Plain(warningMessage),
                 replyToMessageId: message.MessageId,
@@ -111,7 +112,7 @@ public class LanguageWarningHandler
 
             _logger.LogInformation(
                 "Language warning issued to user {UserId} for {Language} message in chat {ChatId} ({Warnings}/{Threshold})",
-                message.From.Id,
+                sender.Id,
                 translation.DetectedLanguage,
                 message.Chat.Id,
                 currentWarnings + 1,

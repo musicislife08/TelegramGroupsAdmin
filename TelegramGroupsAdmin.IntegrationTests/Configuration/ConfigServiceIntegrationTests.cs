@@ -172,8 +172,7 @@ public class ConfigServiceIntegrationTests
         var welcome = WelcomeConfig.Default;
         welcome.JoinSecurity.ProfileScan = new ProfileScanConfig
         {
-            MaskExplicitUsername = false,
-            ExplicitUsernameRedactionText = "custom redaction value"
+            MaskFlaggedNames = false
         };
 
         await _sut!.SaveWelcomeAsync(chat, welcome, actor, CancellationToken.None);
@@ -183,8 +182,7 @@ public class ConfigServiceIntegrationTests
         Assert.That(reloaded, Is.Not.Null);
         Assert.Multiple(() =>
         {
-            Assert.That(reloaded!.JoinSecurity.ProfileScan.MaskExplicitUsername, Is.False);
-            Assert.That(reloaded.JoinSecurity.ProfileScan.ExplicitUsernameRedactionText, Is.EqualTo("custom redaction value"));
+            Assert.That(reloaded!.JoinSecurity.ProfileScan.MaskFlaggedNames, Is.False);
         });
     }
 
@@ -198,10 +196,8 @@ public class ConfigServiceIntegrationTests
         Assert.That(effective, Is.Not.Null);
         Assert.Multiple(() =>
         {
-            Assert.That(effective!.JoinSecurity.ProfileScan.MaskExplicitUsername, Is.True,
-                "Default for MaskExplicitUsername should be true");
-            Assert.That(effective.JoinSecurity.ProfileScan.ExplicitUsernameRedactionText,
-                Is.EqualTo(ProfileScanConfig.DefaultExplicitUsernameRedactionText));
+            Assert.That(effective!.JoinSecurity.ProfileScan.MaskFlaggedNames, Is.True,
+                "Default for MaskFlaggedNames should be true");
         });
     }
 

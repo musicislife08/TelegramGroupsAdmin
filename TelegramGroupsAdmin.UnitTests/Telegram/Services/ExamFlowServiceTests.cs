@@ -7,6 +7,7 @@ using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Repositories;
 using TelegramGroupsAdmin.Core.Services;
+using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
@@ -45,14 +46,14 @@ public class ExamFlowServiceTests
     // Constructor-level (singleton) dependencies.
     private IExamEvaluationService _examEvaluationService = null!;
     private IWelcomeAdmissionHandler _admissionHandler = null!;
+    private IBotDmService _botDmService = null!;
 
     [SetUp]
     public void SetUp()
     {
         // Create service with mocked dependencies (only needed for constructor)
         var logger = NullLogger<ExamFlowService>.Instance;
-        var botMessageService = Substitute.For<IBotMessageService>();
-        var botDmService = Substitute.For<IBotDmService>();
+        var botDmService = _botDmService = Substitute.For<IBotDmService>();
         var botChatService = Substitute.For<IBotChatService>();
         _examEvaluationService = Substitute.For<IExamEvaluationService>();
         _admissionHandler = Substitute.For<IWelcomeAdmissionHandler>();
@@ -86,12 +87,43 @@ public class ExamFlowServiceTests
         _service = new ExamFlowService(
             logger,
             serviceProvider,
-            botMessageService,
             botDmService,
             botChatService,
             _examEvaluationService,
             _admissionHandler);
     }
+
+    #region DM masking
+
+    [Test]
+    public async Task StartExamInDmAsync_FlaggedUserWithMaskingOn_DmsShowRealName()
+    {
+        // The intro and questions are DMs to the joiner: never masked, whatever the chat setting.
+        var user = UserIdentity.ForTest(TestUserId, "Bad", verdict: NameVerdict.Explicit);
+        var chat = new ChatIdentity(TestChatId, "Test Chat");
+        var config = new WelcomeConfig
+        {
+            MainWelcomeMessage = "Hi {username}",
+            TimeoutSeconds = 300,
+            ExamConfig = new ExamConfig { OpenEndedQuestion = "Why join?", EvaluationCriteria = "Be nice" }
+        };
+        _configService.GetNameMaskingAsync(Arg.Any<long>(), Arg.Any<CancellationToken>()).Returns(NameMasking.On);
+        _sessionRepo.CreateSessionAsync(chat, user, Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
+            .Returns(TestSessionId);
+        var sent = new List<string>();
+        _botDmService.SendDmAsync(user, Arg.Do<TelegramMessage>(m => sent.Add(m.Text)),
+                Arg.Any<long?>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
+            .Returns(new DmDeliveryResult { DmSent = true, MessageId = 7 });
+
+        var result = await _service.StartExamInDmAsync(chat, user, TestUserId, config, CancellationToken.None);
+
+        Assert.That(result.Success, Is.True);
+        Assert.That(sent, Has.Count.EqualTo(2), "intro + open-ended question");
+        Assert.That(sent, Has.All.Contains("Bad"));
+        Assert.That(sent, Has.None.Contains(NameRedaction.Explicit));
+    }
+
+    #endregion
 
     #region IsExamCallback Tests
 
@@ -288,7 +320,7 @@ public class ExamFlowServiceTests
     public async Task EvaluateAndComplete_Passed_PersistsPassedRecordBeforeSessionDelete()
     {
         // Arrange
-        var user = new User { Id = TestUserId, FirstName = "Test", Username = "testuser" };
+        var user = UserIdentity.ForTest(TestUserId, "Test", username: "testuser");
         var session = CreateOpenEndedSession("Because I want to learn and contribute.");
 
         _sessionRepo.GetSessionAsync(TestChatId, TestUserId, Arg.Any<CancellationToken>())
@@ -334,7 +366,7 @@ public class ExamFlowServiceTests
     public async Task EvaluateAndComplete_Failed_PersistsFailedRecordBeforeSessionDelete()
     {
         // Arrange
-        var user = new User { Id = TestUserId, FirstName = "Test", Username = "testuser" };
+        var user = UserIdentity.ForTest(TestUserId, "Test", username: "testuser");
         var session = CreateOpenEndedSession("nah");
 
         _sessionRepo.GetSessionAsync(TestChatId, TestUserId, Arg.Any<CancellationToken>())
@@ -385,7 +417,7 @@ public class ExamFlowServiceTests
     {
         // Arrange - EvaluateAnswerAsync returning null means the AI is unavailable;
         // the flow must force the result to review rather than silently pass.
-        var user = new User { Id = TestUserId, FirstName = "Test", Username = "testuser" };
+        var user = UserIdentity.ForTest(TestUserId, "Test", username: "testuser");
         var session = CreateOpenEndedSession("An answer the AI never gets to see.");
 
         _sessionRepo.GetSessionAsync(TestChatId, TestUserId, Arg.Any<CancellationToken>())

@@ -11,6 +11,7 @@ using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.Bot.Handlers;
+using TelegramGroupsAdmin.Telegram.Services.Identity;
 
 namespace TelegramGroupsAdmin.UnitTests.Telegram.Services.Bot;
 
@@ -27,6 +28,7 @@ public class BotMessageServiceEntityTests
     private IBotChatHandler _chatHandler = null!;
     private IMessageHistoryRepository _messageRepo = null!;
     private IMessageEditService _editService = null!;
+    private IUserIdentityService _identities = null!;
     private ITelegramUserRepository _userRepo = null!;
     private ApiMetrics _apiMetrics = null!;
     private BotMessageService _service = null!;
@@ -48,6 +50,9 @@ public class BotMessageServiceEntityTests
         _messageRepo = Substitute.For<IMessageHistoryRepository>();
         _editService = Substitute.For<IMessageEditService>();
         _userRepo = Substitute.For<ITelegramUserRepository>();
+        _identities = Substitute.For<IUserIdentityService>();
+        _identities.ObserveAsync(Arg.Any<ObservedUser>(), Arg.Any<ProfileChangeContext>(), Arg.Any<CancellationToken>())
+            .Returns(ci => UserIdentity.ForTest(ci.Arg<ObservedUser>().Id, "Stored Bot"));
         _apiMetrics = new ApiMetrics();
 
         _userService.GetMeAsync(Arg.Any<CancellationToken>()).Returns(BotUser);
@@ -58,6 +63,7 @@ public class BotMessageServiceEntityTests
             _chatHandler,
             _messageRepo,
             _editService,
+            _identities,
             _userRepo,
             _apiMetrics,
             NullLogger<BotMessageService>.Instance);
@@ -80,7 +86,7 @@ public class BotMessageServiceEntityTests
                 ct: Arg.Any<CancellationToken>())
             .ReturnsForAnyArgs(sentMessage);
 
-        var msg = new TelegramMessageBuilder().Bold("hi").Build();
+        var msg = TelegramMessageBuilder.For(NameMasking.Off).Bold("hi").Build();
 
         // Act
         await _service.SendAndSaveMessageAsync(42, msg);
@@ -112,7 +118,7 @@ public class BotMessageServiceEntityTests
                 ct: Arg.Any<CancellationToken>())
             .ReturnsForAnyArgs(sentMessage);
 
-        var msg = new TelegramMessageBuilder().Text("hello").Build();
+        var msg = TelegramMessageBuilder.For(NameMasking.Off).Text("hello").Build();
 
         // Act
         var result = await _service.SendAndSaveMessageAsync(42, msg);
@@ -167,7 +173,7 @@ public class BotMessageServiceEntityTests
                 ct: Arg.Any<CancellationToken>())
             .ReturnsForAnyArgs(editedMessage);
 
-        var msg = new TelegramMessageBuilder().Bold("new text").Build();
+        var msg = TelegramMessageBuilder.For(NameMasking.Off).Bold("new text").Build();
 
         // Act
         await _service.EditAndUpdateMessageAsync(chatId, messageId, msg);
@@ -217,7 +223,7 @@ public class BotMessageServiceEntityTests
                 ct: Arg.Any<CancellationToken>())
             .ReturnsForAnyArgs(sentMessage);
 
-        var captionMsg = new TelegramMessageBuilder().Bold("caption text").Build();
+        var captionMsg = TelegramMessageBuilder.For(NameMasking.Off).Bold("caption text").Build();
 
         // Act
         var result = await _service.SendAndSaveAnimationAsync(42, animation, captionMsg);
@@ -234,6 +240,79 @@ public class BotMessageServiceEntityTests
                 e != null && e.Count == 1 && e[0].Type == MessageEntityType.Bold),
             ct: Arg.Any<CancellationToken>());
         Assert.That(result.Id, Is.EqualTo(5));
+    }
+
+    #endregion
+
+    #region Bot identity — the bot's own names are recorded (never rescanned) and its row marked active
+
+    // The bot's row is also marked active with a fresh last_seen_at, as the old upsert did.
+    private async Task AssertBotObserved(DateTimeOffset before, DateTimeOffset after)
+    {
+        await _identities.Received(1).ObserveAsync(
+            Arg.Is<ObservedUser>(o => o!.Id == BotUser.Id && o.IsBot && o.Username == "test_bot"
+                && o.ObservedAt >= before && o.ObservedAt <= after),
+            Arg.Any<ProfileChangeContext>(),
+            Arg.Any<CancellationToken>());
+        await _userRepo.Received(1).MarkActiveAsync(
+            BotUser.Id, Arg.Is<DateTimeOffset>(t => t >= before && t <= after), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task SendAndSaveMessageAsync_ObservesBotMarksItActive_AndSavesTheReturnedIdentity()
+    {
+        _handler.SendAsync(
+                chatId: Arg.Any<long>(), text: Arg.Any<string>(), parseMode: Arg.Any<ParseMode?>(),
+                replyParameters: Arg.Any<ReplyParameters?>(), replyMarkup: Arg.Any<InlineKeyboardMarkup?>(),
+                entities: Arg.Any<IReadOnlyList<MessageEntity>?>(), ct: Arg.Any<CancellationToken>())
+            .ReturnsForAnyArgs(new Message { Id = 99, Chat = new Chat { Id = 42 } });
+        var before = DateTimeOffset.UtcNow;
+
+        await _service.SendAndSaveMessageAsync(42, TelegramMessageBuilder.For(NameMasking.Off).Text("hello").Build());
+
+        await AssertBotObserved(before, DateTimeOffset.UtcNow);
+        await _messageRepo.Received(1).InsertMessageAsync(
+            Arg.Is<MessageRecord>(m => m!.User.Id == BotUser.Id && m.User.FirstName == "Stored Bot"),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task SaveBotMessageAsync_ObservesBotMarksItActive_AndSavesTheReturnedIdentity()
+    {
+        _chatHandler.GetChatAsync(42, Arg.Any<CancellationToken>())
+            .Returns(new ChatFullInfo { Id = 42, Type = ChatType.Supergroup, Title = "Group" });
+        var before = DateTimeOffset.UtcNow;
+
+        await _service.SaveBotMessageAsync(42, 7, "hello");
+
+        await AssertBotObserved(before, DateTimeOffset.UtcNow);
+        await _messageRepo.Received(1).InsertMessageAsync(
+            Arg.Is<MessageRecord>(m => m!.User.Id == BotUser.Id && m.User.FirstName == "Stored Bot"),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task SendAndSaveAnimationAsync_ObservesBotMarksItActive_AndSavesTheReturnedIdentity()
+    {
+        _handler.SendAnimationAsync(
+                chatId: Arg.Any<long>(), animation: Arg.Any<InputFile>(), caption: Arg.Any<string?>(),
+                parseMode: Arg.Any<ParseMode?>(), replyParameters: Arg.Any<ReplyParameters?>(),
+                replyMarkup: Arg.Any<InlineKeyboardMarkup?>(), captionEntities: Arg.Any<IReadOnlyList<MessageEntity>?>(),
+                ct: Arg.Any<CancellationToken>())
+            .ReturnsForAnyArgs(new Message
+            {
+                Id = 5,
+                Chat = new Chat { Id = 42 },
+                Animation = new Animation { FileId = "a", FileUniqueId = "u", Width = 1, Height = 1, Duration = 1 }
+            });
+        var before = DateTimeOffset.UtcNow;
+
+        await _service.SendAndSaveAnimationAsync(42, InputFile.FromFileId("a"), TelegramMessageBuilder.For(NameMasking.Off).Text("c").Build());
+
+        await AssertBotObserved(before, DateTimeOffset.UtcNow);
+        await _messageRepo.Received(1).InsertMessageAsync(
+            Arg.Is<MessageRecord>(m => m!.User.Id == BotUser.Id && m.User.FirstName == "Stored Bot"),
+            Arg.Any<CancellationToken>());
     }
 
     #endregion

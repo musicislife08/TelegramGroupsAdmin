@@ -14,7 +14,8 @@ public enum DmCelebrationSubscribeResult
 
     /// <summary>
     /// The user is banned (known locally, even if this chat hasn't synced the ban yet); nothing was
-    /// saved or posted, so a banned user can't make the bot mention them in the group.
+    /// saved or posted, so a banned user can't make the bot mention them in the group. Also returned
+    /// when the user has no user record (recording the sender failed), since nothing can be saved.
     /// </summary>
     NotAllowed
 }

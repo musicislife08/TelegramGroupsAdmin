@@ -800,4 +800,61 @@ public static class GoldenDatasetConstants
         /// <summary>Dummy API key stored for <see cref="OpenAiConnectionId"/> in <c>04_configs.api_keys.json</c>. Only the format matters; it is never sent anywhere.</summary>
         public const string OpenAiConnectionKey = "sk-canonical-test-key";
     }
+
+    /// <summary>Anchors for the user identity service tests (#552 part 1). No canonical rows were edited.</summary>
+    public static class IdentityService
+    {
+        /// <summary>@bagging_armado: two scans (530 older, 534 newer); 534 has ai_explicit_display_text = true. Read-only: ProfileScanResultsRepositoryTests pins it.</summary>
+        public const long ScannedTwiceExplicitUserId = 9220500615182;
+        /// <summary>Message 110342 in Workshop Alumni: @bagging_armado's join service message (canonical edit 2026-10-03), the one message whose author's latest scan is explicit.</summary>
+        public const long ExplicitAuthorMessageId = 110342;
+        /// <summary>@swivelhumvee: not trusted, not banned, scanned once (score 0.0, Feb 2026) with a plain profile (no bio, personal channel 0, no photo or stories). Used by the join rename rescan test.</summary>
+        public const long ScannedCleanUserId = 9025828368896;
+        /// <summary>@Juvenileii: not trusted, not a bot, no scan rows, profile_scanned_at NULL.</summary>
+        public const long UnscannedUserId = 9063342700386;
+        /// <summary>@doilyemcee: the canonical bot. Read-only.</summary>
+        public const long BotUserId = 9742468412405;
+        /// <summary>@pastramiherbs: not trusted, active, no username_history rows.</summary>
+        public const long UntrustedNoHistoryUserId = 9263051408340;
+        /// <summary>@starlightskinless: trusted, not an admin.</summary>
+        public const long TrustedUserId = 9006671634371;
+        /// <summary>@violingentleman: not trusted, active, no history rows. Used by the row-lock race test.</summary>
+        public const long RaceUserId = 9680301255238;
+        /// <summary>@raceoutnumber: not trusted; user_photo_path and photo_hash both set.</summary>
+        public const long PhotoUserId = 9264989724828;
+        /// <summary>@calixrowen: is_active = false (a banned spammer, not trusted, not a bot). Used by the MarkActiveAsync test.</summary>
+        public const long InactiveUserId = 9332352149450;
+    }
+
+    /// <summary>Anchors for BackupService restore tests.</summary>
+    public static class Backup
+    {
+        /// <summary>
+        /// Synthetic username_blacklist row 999005 ('archived_pattern', disabled). RestoreAsync_ShouldWipeAllTablesFirst
+        /// moves it to <see cref="MovedBlacklistEntryId"/> after taking the backup (runtime UPDATE, no canonical edit).
+        /// </summary>
+        public const long BlacklistEntryId = 999005;
+        /// <summary>The key the restore-wipe test moves <see cref="BlacklistEntryId"/> to; never present in canonical.</summary>
+        public const long MovedBlacklistEntryId = 999905;
+    }
+
+    /// <summary>
+    /// username_history anchors for past-name search (canonical edit 2026-10-03). Both owners are
+    /// banned spammers, so they appear under the All and Banned tabs, not Active.
+    /// </summary>
+    public static class UsernameHistory
+    {
+        /// <summary>@BryanNguyen54 "Bryan Nguyen": history row 3 records the prior names "Rsza Тилляев" and, since the 2026-10-03 edit, the prior username <see cref="PastUsername"/>.</summary>
+        public const long PastUsernameUserId = 9032620986755;
+        /// <summary>Prior username on history row 3 (flag-edited from NULL). No current name or other history row contains it.</summary>
+        public const string PastUsername = "rsza_tilla";
+        /// <summary>"Jeanette" (no username): history row 2 records the prior first name <see cref="PastFirstName"/>.</summary>
+        public const long PastFirstNameUserId = 9875141377477;
+        /// <summary>Prior first name on history row 2.</summary>
+        public const string PastFirstName = "QQQ";
+        /// <summary>History row 4 records the prior names "Tin Tun" / "Min" with no prior username. Read-only.</summary>
+        public const long NoPastUsernameUserId = 9095125964119;
+        /// <summary>History row 1's owner. <c>UsernameHistoryRepositoryTests</c> deletes this user in its clone to test the cascade; otherwise read-only.</summary>
+        public const long CascadeDeleteUserId = 9726308613009;
+    }
 }

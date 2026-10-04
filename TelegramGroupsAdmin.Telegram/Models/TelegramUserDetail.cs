@@ -10,7 +10,7 @@ namespace TelegramGroupsAdmin.Telegram.Models;
 public class TelegramUserDetail
 {
     // Base user data
-    public UserIdentity User { get; set; } = UserIdentity.FromId(0);
+    public required UserIdentity User { get; set; }
     public string? UserPhotoPath { get; set; }
     public string? PhotoHash { get; set; }
     public bool IsTrusted { get; set; }

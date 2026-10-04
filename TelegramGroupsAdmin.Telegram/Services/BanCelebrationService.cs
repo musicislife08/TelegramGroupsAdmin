@@ -11,6 +11,7 @@ using TelegramGroupsAdmin.Telegram.Metrics;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.Telegram.Services.Identity;
 using TelegramGroupsAdmin.Configuration.Services;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
@@ -29,7 +30,7 @@ public class BanCelebrationService(
     IConfigService configService,
     IBanCelebrationGifRepository gifRepository,
     IBanCelebrationCaptionRepository captionRepository,
-    IProfileScanResultsRepository scanRepository,
+    IUserIdentityService identityService,
     IBotMessageService messageService,
     IUserActionsRepository userActionsRepository,
     IBanCelebrationSubscriberRepository subscriberRepository,
@@ -60,6 +61,10 @@ public class BanCelebrationService(
                 return false;
             }
 
+            // Resolve the stored identity so the caption uses the latest names and name verdict,
+            // whatever the caller's copy carried.
+            bannedUser = await identityService.ResolveAsync(bannedUser.Id, cancellationToken);
+
             var gif = await GetNextGifAsync(cancellationToken);
             if (gif == null)
             {
@@ -76,30 +81,13 @@ public class BanCelebrationService(
 
             var banCount = await GetTodaysBanCountAsync(cancellationToken);
 
-            // Determine whether the AI flagged the user's display text as explicit,
-            // and whether per-chat config says to mask it in the public caption.
-            var welcomeConfig = await configService.GetEffectiveWelcomeAsync(chat.Id, cancellationToken);
-            var profileScanConfig = welcomeConfig?.JoinSecurity?.ProfileScan ?? new ProfileScanConfig();
+            // The chat's name-masking policy decides whether a flagged name is shown.
+            var masking = await configService.GetNameMaskingAsync(chat.Id, cancellationToken);
+            var displayedName = bannedUser.BotDisplayName(masking);
 
-            // Honor the parent ProfileScan.Enabled kill-switch. If scans are off, don't
-            // consult stale scan rows even if MaskExplicitUsername was left on (UI disables
-            // the child switch under the parent but doesn't reset its stored value).
-            var maskingActive = profileScanConfig.Enabled && profileScanConfig.MaskExplicitUsername;
-            var latestScan = maskingActive
-                ? await scanRepository.GetLatestByUserIdAsync(bannedUser.Id, cancellationToken)
-                : null;
-            var aiFlagged = latestScan?.ExplicitDisplayText ?? false;
-            var maskUsername = maskingActive && aiFlagged;
-            // Admins can clear the redaction text field (MudTextField MaxLength is client-only).
-            // A blank value would publish a caption like " got banned!" — fall back to the default.
-            var redactionText = string.IsNullOrWhiteSpace(profileScanConfig.ExplicitUsernameRedactionText)
-                ? ProfileScanConfig.DefaultExplicitUsernameRedactionText
-                : profileScanConfig.ExplicitUsernameRedactionText;
-            var displayedName = maskUsername ? redactionText : bannedUser.DisplayName;
-
-            if (maskUsername)
+            if (displayedName != bannedUser.DisplayName)
             {
-                logger.LogDebug("Masking explicit display name for {User} in {Chat}",
+                logger.LogDebug("Masking flagged display name for {User} in {Chat}",
                     bannedUser.ToLogDebug(), chat.ToLogDebug());
                 pipelineMetrics.RecordMaskedUsername(isAutoBan ? "auto_ban" : "manual_ban");
             }

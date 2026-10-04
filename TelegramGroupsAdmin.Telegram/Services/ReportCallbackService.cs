@@ -6,6 +6,7 @@ using TelegramGroupsAdmin.Telegram.Constants;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.Telegram.Services.Identity;
 using TelegramGroupsAdmin.Telegram.Services.ReportActions;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
@@ -81,12 +82,11 @@ public sealed class ReportCallbackService(
             "Review callback: Type={ReportType}, Action={ActionInt}, ReviewId={ReviewId}, ChatId={ChatId}, UserId={UserId}, Executor={Executor}",
             reportType, actionInt, reviewId, context.ChatId, context.UserId, executorUser.ToLogInfo());
 
-        // Create executor actor
-        var executor = Actor.FromTelegramUser(
-            executorUser.Id,
-            executorUser.Username,
-            executorUser.FirstName,
-            executorUser.LastName);
+        // Executor resolved by id: only admins act on these buttons, and their names are recorded
+        // by the admin refresh and their own messages.
+        var executor = Actor.FromUserIdentity(
+            await scope.ServiceProvider.GetRequiredService<IUserIdentityService>()
+                .ResolveAsync(executorUser.Id, cancellationToken));
 
         // Route to unified service
         var result = await RouteToServiceAsync(reportType, reviewId, actionInt, executor, cancellationToken);

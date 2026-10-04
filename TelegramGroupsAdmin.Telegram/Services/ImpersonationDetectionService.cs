@@ -16,6 +16,7 @@ using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
+using TelegramGroupsAdmin.Telegram.Services.Identity;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 
@@ -30,13 +31,13 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
 {
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
     private readonly ITelegramUserRepository _telegramUserRepository;
-    private readonly IChatAdminsRepository _chatAdminsRepository;
     private readonly IManagedChatsRepository _managedChatsRepository;
     private readonly IMessageHistoryRepository _messageHistoryRepository;
     private readonly IPhotoHashService _photoHashService;
     private readonly IReportsRepository _reportsRepository;
     private readonly IBotModerationService _moderationActionService;
     private readonly IConfigService _configService;
+    private readonly IUserIdentityService _identityService;
     private readonly ILogger<ImpersonationDetectionService> _logger;
 
     // Name matching threshold (80% similar = possible impersonation)
@@ -48,24 +49,24 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
     public ImpersonationDetectionService(
         IDbContextFactory<AppDbContext> contextFactory,
         ITelegramUserRepository telegramUserRepository,
-        IChatAdminsRepository chatAdminsRepository,
         IManagedChatsRepository managedChatsRepository,
         IMessageHistoryRepository messageHistoryRepository,
         IPhotoHashService photoHashService,
         IReportsRepository reportsRepository,
         IBotModerationService moderationActionService,
         IConfigService configService,
+        IUserIdentityService identityService,
         ILogger<ImpersonationDetectionService> logger)
     {
         _contextFactory = contextFactory;
         _telegramUserRepository = telegramUserRepository;
-        _chatAdminsRepository = chatAdminsRepository;
         _managedChatsRepository = managedChatsRepository;
         _messageHistoryRepository = messageHistoryRepository;
         _photoHashService = photoHashService;
         _reportsRepository = reportsRepository;
         _moderationActionService = moderationActionService;
         _configService = configService;
+        _identityService = identityService;
         _logger = logger;
     }
 
@@ -230,15 +231,19 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
     }
 
     /// <inheritdoc/>
-    public async Task ExecuteActionAsync(ImpersonationCheckResult result)
+    public async Task ExecuteActionAsync(ImpersonationCheckResult result, CancellationToken ct = default)
     {
         try
         {
+            var identities = await _identityService.ResolveManyAsync([result.SuspectedUser.Id, result.TargetUserId], ct);
+            var suspectedUser = identities[0];
+            var targetUser = identities[1];
+
             // 1. Create alert record
             var alert = new ImpersonationAlertRecord
             {
-                SuspectedUser = UserIdentity.From(result.SuspectedUser),
-                TargetUser = UserIdentity.FromId(result.TargetUserId),
+                SuspectedUser = suspectedUser,
+                TargetUser = targetUser,
                 Chat = ChatIdentity.From(result.DetectionChat),
                 TotalScore = result.TotalScore,
                 RiskLevel = result.RiskLevel,
@@ -249,7 +254,7 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
                 AutoBanned = result.ShouldAutoBan
             };
 
-            var alertId = await _reportsRepository.InsertImpersonationAlertAsync(alert);
+            var alertId = await _reportsRepository.InsertImpersonationAlertAsync(alert, ct);
 
             _logger.LogInformation(
                 "Created impersonation alert #{AlertId}: {SuspectedUser} → Admin ({TargetUserId}) (score: {Score})",
@@ -264,11 +269,11 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
                 var banResult = await _moderationActionService.BanUserAsync(
                     new BanIntent
                     {
-                        User = UserIdentity.From(result.SuspectedUser),
+                        User = suspectedUser,
                         Executor = executor,
                         Reason = reason,
                         Chat = ChatIdentity.From(result.DetectionChat) // Enables ban celebration
-                    });
+                    }, ct);
 
                 if (banResult.Success)
                 {

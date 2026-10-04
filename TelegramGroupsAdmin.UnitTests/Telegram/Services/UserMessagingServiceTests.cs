@@ -2,12 +2,14 @@ using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
+using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.Telegram.Services.Identity;
 
 namespace TelegramGroupsAdmin.UnitTests.Telegram.Services;
 
@@ -30,6 +32,8 @@ public class UserMessagingServiceTests
     private ITelegramUserRepository _mockUserRepo = null!;
     private IBotDmService _mockDmService = null!;
     private IBotMessageService _mockMessageService = null!;
+    private IUserIdentityService _identities = null!;
+    private IConfigService _config = null!;
 #pragma warning restore NUnit1032
 
     private UserMessagingService _sut = null!;
@@ -40,11 +44,17 @@ public class UserMessagingServiceTests
         _mockUserRepo = Substitute.For<ITelegramUserRepository>();
         _mockDmService = Substitute.For<IBotDmService>();
         _mockMessageService = Substitute.For<IBotMessageService>();
+        _identities = Substitute.For<IUserIdentityService>();
+        _identities.ResolveAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
+            .Returns(ci => UserIdentity.ForTest(ci.Arg<long>(), "Resolved"));
+        _config = Substitute.For<IConfigService>();
 
         _sut = new UserMessagingService(
             _mockUserRepo,
             _mockDmService,
             _mockMessageService,
+            _identities,
+            _config,
             NullLogger<UserMessagingService>.Instance);
 
         // Default: SendAndSaveMessageAsync (entity overload) returns a stub Message
@@ -202,6 +212,54 @@ public class UserMessagingServiceTests
         Assert.That(result.DeliveryMethod, Is.EqualTo(MessageDeliveryMethod.ChatMention));
     }
 
+    [Test]
+    public async Task SendToUserAsync_ChatMention_UsesResolvedIdentityWithChatMasking()
+    {
+        _mockUserRepo
+            .GetByTelegramIdAsync(TestUserId1, Arg.Any<CancellationToken>())
+            .Returns(MakeUser(TestUserId1, firstName: "Stale", botDmEnabled: false));
+        _identities.ResolveAsync(TestUserId1, Arg.Any<CancellationToken>())
+            .Returns(UserIdentity.ForTest(TestUserId1, "Bad", verdict: NameVerdict.Explicit));
+        _config.GetNameMaskingAsync(TestChatId, Arg.Any<CancellationToken>()).Returns(NameMasking.On);
+
+        await _sut.SendToUserAsync(TestUserId1, MakeChat(), TelegramMessage.Plain("Check this."));
+
+        await _mockMessageService
+            .Received(1)
+            .SendAndSaveMessageAsync(
+                chatId: TestChatId,
+                message: Arg.Is<TelegramMessage>(m => m!.Text == NameRedaction.Explicit + ": Check this."),
+                replyParameters: Arg.Any<ReplyParameters?>(),
+                cancellationToken: Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task SendDmOnlyAsync_DmsTheResolvedIdentity()
+    {
+        _mockUserRepo
+            .GetByTelegramIdAsync(TestUserId1, Arg.Any<CancellationToken>())
+            .Returns(MakeUser(TestUserId1, firstName: "Stale", botDmEnabled: true));
+        var resolved = UserIdentity.ForTest(TestUserId1, "Current");
+        _identities.ResolveAsync(TestUserId1, Arg.Any<CancellationToken>()).Returns(resolved);
+        _mockDmService
+            .SendDmAsync(
+                user: Arg.Any<UserIdentity>(),
+                message: Arg.Any<TelegramMessage>(),
+                fallbackChatId: Arg.Any<long?>(),
+                autoDeleteSeconds: Arg.Any<int?>(),
+                cancellationToken: Arg.Any<CancellationToken>())
+            .Returns(new DmDeliveryResult { DmSent = true });
+
+        await _sut.SendDmOnlyAsync(TestUserId1, TelegramMessage.Plain("Hello."));
+
+        await _mockDmService.Received(1).SendDmAsync(
+            user: Arg.Is(resolved),
+            message: Arg.Any<TelegramMessage>(),
+            fallbackChatId: Arg.Any<long?>(),
+            autoDeleteSeconds: Arg.Any<int?>(),
+            cancellationToken: Arg.Any<CancellationToken>());
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // SendDmOnlyAsync — no chat-mention fallback (issue #526)
     // ─────────────────────────────────────────────────────────────────────────
@@ -279,7 +337,7 @@ public class UserMessagingServiceTests
     [Test]
     public async Task SendDmOnlyAsync_UserNotFound_ReturnsFailedWithoutSending()
     {
-        // Arrange: no such user on record - must not NRE at UserIdentity.From(user)
+        // Arrange: no such user on record - must fail cleanly before resolving an identity
         _mockUserRepo
             .GetByTelegramIdAsync(TestUserId1, Arg.Any<CancellationToken>())
             .Returns((TelegramUser?)null);

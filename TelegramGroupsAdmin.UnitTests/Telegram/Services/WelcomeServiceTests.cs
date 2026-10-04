@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
+using NSubstitute.ExceptionExtensions;
 using global::Telegram.Bot.Types;
 using global::Telegram.Bot.Types.Enums;
 using global::Telegram.Bot.Types.ReplyMarkups;
@@ -15,6 +16,7 @@ using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.Telegram.Services.Identity;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Handlers;
 using TelegramGroupsAdmin.Telegram.Services.UserApi;
@@ -45,6 +47,7 @@ public class WelcomeServiceTests
     private IConfigService _configService = null!;
     private IWelcomeResponsesRepository _welcomeResponsesRepository = null!;
     private ITelegramUserRepository _telegramUserRepository = null!;
+    private IUserIdentityService _identities = null!;
     private IExamFlowService _examFlowService = null!;
     private IImpersonationDetectionService _impersonationDetectionService = null!;
     private IBotProtectionService _botProtectionService = null!;
@@ -103,6 +106,11 @@ public class WelcomeServiceTests
         _configService = Substitute.For<IConfigService>();
         _welcomeResponsesRepository = Substitute.For<IWelcomeResponsesRepository>();
         _telegramUserRepository = Substitute.For<ITelegramUserRepository>();
+        _identities = Substitute.For<IUserIdentityService>();
+        _identities.ObserveAsync(Arg.Any<ObservedUser>(), Arg.Any<ProfileChangeContext>(), Arg.Any<CancellationToken>())
+            .Returns(ci => { var o = ci.Arg<ObservedUser>(); return new UserIdentity(o.Id, o.FirstName, o.LastName, o.Username); });
+        _identities.ResolveAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
+            .Returns(ci => UserIdentity.FromId(ci.Arg<long>()));
         _examFlowService = Substitute.For<IExamFlowService>();
         _impersonationDetectionService = Substitute.For<IImpersonationDetectionService>();
         _botProtectionService = Substitute.For<IBotProtectionService>();
@@ -148,8 +156,7 @@ public class WelcomeServiceTests
 
         // User exists and is not banned
         _telegramUserRepository
-            .GetOrCreateAsync(
-                Arg.Any<UserIdentity>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
+            .GetByTelegramIdAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(NonBannedTelegramUser);
 
         // Bot protection allows bots by default
@@ -195,6 +202,7 @@ public class WelcomeServiceTests
             _configService,
             _welcomeResponsesRepository,
             _telegramUserRepository,
+            _identities,
             _examFlowService,
             _impersonationDetectionService,
             _botProtectionService,
@@ -300,8 +308,7 @@ public class WelcomeServiceTests
     {
         // Arrange — repository returns a globally banned user
         _telegramUserRepository
-            .GetOrCreateAsync(
-                Arg.Any<UserIdentity>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
+            .GetByTelegramIdAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(BannedTelegramUser);
 
         var update = CreateJoinUpdate();
@@ -354,7 +361,231 @@ public class WelcomeServiceTests
 
     #endregion
 
-    #region Test 3: User leaving — GetOrCreateAsync is never called
+    #region Identity: join observes, callbacks resolve
+
+    [Test]
+    public async Task HandleChatMemberUpdate_Join_ObservesJoinerWithUpdateDateWithoutRescan()
+    {
+        var update = CreateJoinUpdate();
+        update.Date = new DateTime(2026, 10, 3, 12, 0, 0, DateTimeKind.Utc);
+
+        await _sut.HandleChatMemberUpdateAsync(update, CancellationToken.None);
+
+        // Source ChatMember: ObserveAsync records a rename only; the join scan picks it up.
+        await _identities.Received(1).ObserveAsync(
+            Arg.Is<ObservedUser>(o => o!.Id == TestUserId
+                && o.Source == ObservationSource.ChatMember
+                && o.ObservedAt == new DateTimeOffset(2026, 10, 3, 12, 0, 0, TimeSpan.Zero)),
+            Arg.Is<ProfileChangeContext>(c => c!.Chat!.Id == TestChatId && c.MessageId == null),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task HandleCallbackQuery_WrongUser_ResolvesClickerById_WithoutObserving()
+    {
+        // Someone other than the joiner taps the button: they may never have been observed.
+        const long otherUserId = 444_555_666L;
+        var callback = new CallbackQuery
+        {
+            Id = "cb1",
+            Data = $"welcome_accept:{TestUserId}",
+            From = new User { Id = otherUserId, FirstName = "Mallory", IsBot = false },
+            Message = new Message { Id = 42, Chat = new Chat { Id = TestChatId, Type = ChatType.Supergroup, Title = "Test Group" } }
+        };
+
+        await _sut.HandleCallbackQueryAsync(callback, CancellationToken.None);
+
+        await _identities.Received(1).ResolveAsync(otherUserId, Arg.Any<CancellationToken>());
+        await _identities.DidNotReceiveWithAnyArgs().ObserveAsync(default!, default!, default);
+        await _messageService.Received(1).SendAndSaveMessageAsync(
+            TestChatId,
+            Arg.Is<TelegramMessage>(m => m!.Entities.Any(e => e.User != null && e.User.Id == otherUserId)),
+            Arg.Any<ReplyParameters?>(), Arg.Any<InlineKeyboardMarkup?>(), Arg.Any<CancellationToken>());
+    }
+
+    #endregion
+
+    #region Name masking: bot text follows the chat's policy
+
+    [Test]
+    public async Task HandleChatMemberUpdate_ExplicitJoinerMaskingOn_VerifyingMessageShowsLabel()
+    {
+        _identities.ObserveAsync(Arg.Any<ObservedUser>(), Arg.Any<ProfileChangeContext>(), Arg.Any<CancellationToken>())
+            .Returns(UserIdentity.ForTest(TestUserId, "Bad", verdict: NameVerdict.Explicit));
+        _configService.GetNameMaskingAsync(TestChatId, Arg.Any<CancellationToken>()).Returns(NameMasking.On);
+
+        await _sut.HandleChatMemberUpdateAsync(CreateJoinUpdate(), CancellationToken.None);
+
+        await _messageService.Received(1).SendAndSaveMessageAsync(
+            TestChatId,
+            Arg.Is<TelegramMessage>(m => m!.Text == NameRedaction.Explicit + " ⏳ Verifying..."
+                && m.Entities.Single().User!.Id == TestUserId),
+            Arg.Any<ReplyParameters?>(), Arg.Any<InlineKeyboardMarkup?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task HandleChatMemberUpdate_ExplicitJoinerMaskingOff_VerifyingMessageShowsName()
+    {
+        _identities.ObserveAsync(Arg.Any<ObservedUser>(), Arg.Any<ProfileChangeContext>(), Arg.Any<CancellationToken>())
+            .Returns(UserIdentity.ForTest(TestUserId, "Bad", verdict: NameVerdict.Explicit));
+        _configService.GetNameMaskingAsync(TestChatId, Arg.Any<CancellationToken>()).Returns(NameMasking.Off);
+
+        await _sut.HandleChatMemberUpdateAsync(CreateJoinUpdate(), CancellationToken.None);
+
+        await _messageService.Received(1).SendAndSaveMessageAsync(
+            TestChatId,
+            Arg.Is<TelegramMessage>(m => m!.Text == "Bad ⏳ Verifying..."),
+            Arg.Any<ReplyParameters?>(), Arg.Any<InlineKeyboardMarkup?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task HandleChatMemberUpdate_JoinScanFlagsName_LaterJoinTextUsesReResolvedIdentity()
+    {
+        // Observed before the scan: no verdict yet. The scan flags the name; the identity
+        // resolved after it carries the Explicit verdict.
+        _identities.ObserveAsync(Arg.Any<ObservedUser>(), Arg.Any<ProfileChangeContext>(), Arg.Any<CancellationToken>())
+            .Returns(UserIdentity.ForTest(TestUserId, "Bad"));
+        _identities.ResolveAsync(TestUserId, Arg.Any<CancellationToken>())
+            .Returns(UserIdentity.ForTest(TestUserId, "Bad", verdict: NameVerdict.Explicit));
+        _configService.GetNameMaskingAsync(TestChatId, Arg.Any<CancellationToken>()).Returns(NameMasking.On);
+        _chatService.GetChatAsync(TestChatId, Arg.Any<CancellationToken>())
+            .Returns(new ChatFullInfo { Id = TestChatId, Type = ChatType.Supergroup, Title = "Test Group" });
+        _casCheckService.CheckUserAsync(Arg.Any<UserIdentity>(), Arg.Any<TelegramGroupsAdmin.Configuration.Models.Welcome.CasConfig>(), Arg.Any<CancellationToken>())
+            .Returns(new CasCheckResult(false, null));
+        _profileScanGate.ScanIfEligibleAsync(
+                Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity?>(), Arg.Any<ProfileScanTrigger>(), Arg.Any<CancellationToken>())
+            .Returns(new ProfileScanResult(TestUserId, null, null, null, null, false, null, false, false, false,
+                3m, ProfileScanOutcome.HeldForReview, "explicit name", ["explicit"], ExplicitDisplayText: true));
+
+        await _sut.HandleChatMemberUpdateAsync(CreateJoinUpdate(firstName: "Bad"), CancellationToken.None);
+
+        await _messageService.Received(1).EditAndUpdateMessageAsync(
+            TestChatId, 42,
+            Arg.Is<TelegramMessage>(m => m!.Text == NameRedaction.Explicit + " ⏳ Your profile is under admin review. Please wait..."),
+            Arg.Any<InlineKeyboardMarkup?>(), Arg.Any<CancellationToken>());
+        // The welcome message that replaces it later in the same join flow is masked too.
+        var edits = _messageService.ReceivedCalls()
+            .Where(c => c.GetMethodInfo().Name == nameof(IBotMessageService.EditAndUpdateMessageAsync))
+            .Select(c => c.GetArguments().OfType<TelegramMessage>().Single().Text)
+            .ToList();
+        Assert.That(edits, Has.Count.EqualTo(2));
+        Assert.That(edits, Has.None.Contains("Bad"));
+    }
+
+    [Test]
+    public async Task HandleCallbackQuery_WrongUser_ExplicitClickerMaskingOn_WarningShowsLabel()
+    {
+        const long otherUserId = 444_555_666L;
+        _identities.ResolveAsync(otherUserId, Arg.Any<CancellationToken>())
+            .Returns(UserIdentity.ForTest(otherUserId, "Bad", verdict: NameVerdict.Explicit));
+        _configService.GetNameMaskingAsync(TestChatId, Arg.Any<CancellationToken>()).Returns(NameMasking.On);
+        var callback = new CallbackQuery
+        {
+            Id = "cb1",
+            Data = $"welcome_accept:{TestUserId}",
+            From = new User { Id = otherUserId, FirstName = "Bad", IsBot = false },
+            Message = new Message { Id = 42, Chat = new Chat { Id = TestChatId, Type = ChatType.Supergroup, Title = "Test Group" } }
+        };
+
+        await _sut.HandleCallbackQueryAsync(callback, CancellationToken.None);
+
+        await _messageService.Received(1).SendAndSaveMessageAsync(
+            TestChatId,
+            Arg.Is<TelegramMessage>(m => m!.Text.StartsWith(NameRedaction.Explicit + ", ⚠️")),
+            Arg.Any<ReplyParameters?>(), Arg.Any<InlineKeyboardMarkup?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task HandleCallbackQuery_ChatAccept_FlaggedUserWithMaskingOn_RulesDmShowsRealName()
+    {
+        // The rules confirmation is a DM to the joiner: never masked, whatever the chat setting.
+        _identities.ResolveAsync(TestUserId, Arg.Any<CancellationToken>())
+            .Returns(UserIdentity.ForTest(TestUserId, "Bad", verdict: NameVerdict.Explicit));
+        _configService.GetNameMaskingAsync(Arg.Any<long>(), Arg.Any<CancellationToken>()).Returns(NameMasking.On);
+        var config = WelcomeConfig.Default;
+        config.MainWelcomeMessage = "Rules for {username}";
+        _configService.GetEffectiveWelcomeAsync(TestChatId, Arg.Any<CancellationToken>()).Returns(config);
+        _dmDeliveryService.SendDmAsync(Arg.Any<UserIdentity>(), Arg.Any<TelegramMessage>(),
+                Arg.Any<long?>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
+            .Returns(new DmDeliveryResult { DmSent = true });
+        var callback = new CallbackQuery
+        {
+            Id = "cb-accept",
+            Data = $"welcome_accept:{TestUserId}",
+            From = new User { Id = TestUserId, FirstName = "Bad", IsBot = false },
+            Message = new Message { Id = 42, Chat = new Chat { Id = TestChatId, Type = ChatType.Supergroup, Title = "Test Group" } }
+        };
+
+        await _sut.HandleCallbackQueryAsync(callback, CancellationToken.None);
+
+        await _dmDeliveryService.Received(1).SendDmAsync(
+            Arg.Is<UserIdentity>(u => u!.Id == TestUserId),
+            Arg.Is<TelegramMessage>(m => m!.Text.Contains("Rules for Bad") && !m.Text.Contains(NameRedaction.Explicit)),
+            Arg.Any<long?>(), Arg.Any<int?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task HandleCallbackQuery_DmAcceptHeldForReview_GroupEditUsesGroupChatMasking()
+    {
+        // The accept click happens in the DM; the hold edit goes to the group, so the group's
+        // masking applies, not the DM chat's.
+        const int welcomeMessageId = 77;
+        _identities.ResolveAsync(TestUserId, Arg.Any<CancellationToken>())
+            .Returns(UserIdentity.ForTest(TestUserId, "Bad", verdict: NameVerdict.Explicit));
+        _configService.GetNameMaskingAsync(TestChatId, Arg.Any<CancellationToken>()).Returns(NameMasking.On);
+        _configService.GetNameMaskingAsync(TestUserId, Arg.Any<CancellationToken>()).Returns(NameMasking.Off);
+        _chatService.GetChatAsync(TestChatId, Arg.Any<CancellationToken>())
+            .Returns(new ChatFullInfo { Id = TestChatId, Type = ChatType.Supergroup, Title = "Test Group" });
+        _welcomeResponsesRepository.GetByUserAndChatAsync(TestUserId, TestChatId, Arg.Any<CancellationToken>())
+            .Returns(new WelcomeResponse(
+                Id: 5, ChatId: TestChatId, UserId: TestUserId, Username: null,
+                WelcomeMessageId: welcomeMessageId, Response: WelcomeResponseType.Pending,
+                RespondedAt: DateTimeOffset.UtcNow, DmSent: true, DmFallback: false,
+                CreatedAt: DateTimeOffset.UtcNow, TimeoutJobId: null));
+        _admissionHandler.TryAdmitUserAsync(Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<Actor>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(AdmissionResult.StillWaiting);
+        var callback = new CallbackQuery
+        {
+            Id = "cb-dm",
+            Data = $"dm_accept:{TestChatId}:{TestUserId}",
+            From = new User { Id = TestUserId, FirstName = "Bad", IsBot = false },
+            Message = new Message { Id = 300, Chat = new Chat { Id = TestUserId, Type = ChatType.Private } }
+        };
+
+        await _sut.HandleCallbackQueryAsync(callback, CancellationToken.None);
+
+        await _messageService.Received(1).EditAndUpdateMessageAsync(
+            TestChatId,
+            welcomeMessageId,
+            Arg.Is<TelegramMessage>(m => m!.Text.StartsWith(NameRedaction.Explicit + " ⏳")),
+            Arg.Any<InlineKeyboardMarkup?>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task HandleCallbackQuery_ExamCallback_ResolveFails_StillAnswersCallback()
+    {
+        _examFlowService.IsExamCallback(Arg.Any<string>()).Returns(true);
+        _identities.ResolveAsync(TestUserId, Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException("db down"));
+        var callback = new CallbackQuery
+        {
+            Id = "cb-exam",
+            Data = "exam:1:0:0",
+            From = new User { Id = TestUserId, FirstName = "Test", IsBot = false },
+            Message = new Message { Id = 301, Chat = new Chat { Id = TestUserId, Type = ChatType.Private } }
+        };
+
+        Assert.DoesNotThrowAsync(() => _sut.HandleCallbackQueryAsync(callback, CancellationToken.None));
+
+        await _messageService.Received(1).AnswerCallbackAsync(
+            "cb-exam", Arg.Any<string?>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
+        await _examFlowService.DidNotReceiveWithAnyArgs().HandleMcAnswerAsync(default, default, default, default!, default!);
+    }
+
+    #endregion
+
+    #region Test 3: User leaving — the joiner is never observed
 
     [Test]
     public async Task HandleChatMemberUpdate_UserLeaving_HandlesLeaveNotJoin()
@@ -368,8 +599,7 @@ public class WelcomeServiceTests
         await _sut.HandleChatMemberUpdateAsync(update, CancellationToken.None);
 
         // Assert — the leave path must not attempt to fetch/create a user record
-        await _telegramUserRepository.DidNotReceive().GetOrCreateAsync(
-            Arg.Any<UserIdentity>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
+        await _identities.DidNotReceiveWithAnyArgs().ObserveAsync(default!, default!, default);
 
         // No mute should happen either
         await _moderationService.DidNotReceive().RestrictUserAsync(
@@ -406,8 +636,7 @@ public class WelcomeServiceTests
             Arg.Any<Chat>(), Arg.Any<User>(), Arg.Any<ChatMemberUpdated?>(), Arg.Any<CancellationToken>());
 
         // Human join path must not execute — user record must not be fetched
-        await _telegramUserRepository.DidNotReceive().GetOrCreateAsync(
-            Arg.Any<UserIdentity>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
+        await _identities.DidNotReceiveWithAnyArgs().ObserveAsync(default!, default!, default);
     }
 
     [Test]
@@ -436,11 +665,10 @@ public class WelcomeServiceTests
             Arg.Any<Chat>(), Arg.Any<User>(), Arg.Any<ChatMemberUpdated?>(), Arg.Any<CancellationToken>());
 
         await _botProtectionService.Received(1).BanBotAsync(
-            Arg.Any<Chat>(), Arg.Any<User>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+            Arg.Any<Chat>(), Arg.Any<User>(), Arg.Any<DateTimeOffset>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
 
         // User record path must not execute
-        await _telegramUserRepository.DidNotReceive().GetOrCreateAsync(
-            Arg.Any<UserIdentity>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
+        await _identities.DidNotReceiveWithAnyArgs().ObserveAsync(default!, default!, default);
     }
 
     #endregion
@@ -506,8 +734,7 @@ public class WelcomeServiceTests
         await _sut.HandleChatMemberUpdateAsync(update, CancellationToken.None);
 
         // Assert — the early-return guard must fire, nothing processed
-        await _telegramUserRepository.DidNotReceive().GetOrCreateAsync(
-            Arg.Any<UserIdentity>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
+        await _identities.DidNotReceiveWithAnyArgs().ObserveAsync(default!, default!, default);
 
         await _moderationService.DidNotReceive().RestrictUserAsync(
             Arg.Any<RestrictIntent>(), Arg.Any<CancellationToken>());
@@ -518,8 +745,7 @@ public class WelcomeServiceTests
     {
         // Arrange
         _telegramUserRepository
-            .GetOrCreateAsync(
-                Arg.Any<UserIdentity>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
+            .GetByTelegramIdAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(BannedTelegramUser);
 
         var update = CreateJoinUpdate();
@@ -764,7 +990,7 @@ public class WelcomeServiceTests
     {
         // Arrange — pre-banned user. Resolver should not be consulted at all.
         _telegramUserRepository
-            .GetOrCreateAsync(Arg.Any<UserIdentity>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
+            .GetByTelegramIdAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(BannedTelegramUser);
 
         // Act

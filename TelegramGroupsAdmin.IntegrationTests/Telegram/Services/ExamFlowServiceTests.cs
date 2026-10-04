@@ -184,7 +184,7 @@ public class ExamFlowServiceTests
         var examFlowService = scope.ServiceProvider.GetRequiredService<IExamFlowService>();
         var sessionRepo = scope.ServiceProvider.GetRequiredService<IExamSessionRepository>();
 
-        var user = TelegramTestFactory.CreateUser(id: TestUserId, firstName: "Test", username: "testuser");
+        var user = UserIdentity.ForTest(TestUserId, "Test", username: "testuser");
         var config = CreateValidExamConfig();
 
         // Act
@@ -211,7 +211,7 @@ public class ExamFlowServiceTests
         using var scope = _serviceProvider!.CreateScope();
         var examFlowService = scope.ServiceProvider.GetRequiredService<IExamFlowService>();
 
-        var user = TelegramTestFactory.CreateUser(id: TestUserId, firstName: "Test");
+        var user = UserIdentity.ForTest(TestUserId, "Test");
         var config = new WelcomeConfig { ExamConfig = null };
 
         // Act
@@ -234,7 +234,7 @@ public class ExamFlowServiceTests
         var examFlowService = scope.ServiceProvider.GetRequiredService<IExamFlowService>();
         var sessionRepo = scope.ServiceProvider.GetRequiredService<IExamSessionRepository>();
 
-        var user = TelegramTestFactory.CreateUser(id: TestUserId, firstName: "Test");
+        var user = UserIdentity.ForTest(TestUserId, "Test");
         var config = CreateValidExamConfig();
 
         // Start exam to create session
@@ -276,7 +276,7 @@ public class ExamFlowServiceTests
         var expiredTime = DateTimeOffset.UtcNow.AddMinutes(-5);
         var sessionId = await sessionRepo.CreateSessionAsync(new ChatIdentity(TestChatId, "Test Chat"), UserIdentity.FromId(TestUserId), expiredTime);
 
-        var user = TelegramTestFactory.CreateUser(id: TestUserId, firstName: "Test");
+        var user = UserIdentity.ForTest(TestUserId, "Test");
         var message = TelegramTestFactory.CreateMessage(
             messageId: 1,
             chatId: TestDmChatId,
@@ -306,7 +306,7 @@ public class ExamFlowServiceTests
         var sessionId = await sessionRepo.CreateSessionAsync(new ChatIdentity(TestChatId, "Test Chat"), UserIdentity.FromId(TestUserId), expiresAt);
 
         // Different user tries to answer
-        var wrongUser = TelegramTestFactory.CreateUser(id: TestUserId + 1, firstName: "Wrong");
+        var wrongUser = UserIdentity.ForTest(TestUserId + 1, "Wrong");
         var message = TelegramTestFactory.CreateMessage(
             messageId: 1,
             chatId: TestDmChatId,
@@ -469,13 +469,13 @@ public class ExamFlowServiceTests
         _mockModerationService!.KickUserFromChatAsync(Arg.Any<KickIntent>(), Arg.Any<CancellationToken>())
             .Returns(ModerationResult.Failed("kick failed"));
 
-        var user = TelegramTestFactory.CreateUser(id: CanonicalMainChatUserId, firstName: "Test");
+        var user = UserIdentity.ForTest(CanonicalMainChatUserId, "Test");
         var chat = new ChatIdentity(TestChatId, "Test Chat");
         var executor = Actor.WelcomeFlow;
 
         // Act
         var result = await examFlowService.DenyExamResultAsync(
-            UserIdentity.From(user), chat, executor);
+            user, chat, executor);
 
         // Assert
         Assert.That(result.Success, Is.False);
@@ -507,13 +507,13 @@ public class ExamFlowServiceTests
         _mockModerationService!.BanUserAsync(Arg.Any<BanIntent>(), Arg.Any<CancellationToken>())
             .Returns(ModerationResult.Failed("ban failed"));
 
-        var user = TelegramTestFactory.CreateUser(id: CanonicalMainChatUserId, firstName: "Test");
+        var user = UserIdentity.ForTest(CanonicalMainChatUserId, "Test");
         var chat = new ChatIdentity(TestChatId, "Test Chat");
         var executor = Actor.WelcomeFlow;
 
         // Act
         var result = await examFlowService.DenyAndBanExamResultAsync(
-            UserIdentity.From(user), chat, executor);
+            user, chat, executor);
 
         // Assert
         Assert.That(result.Success, Is.False);

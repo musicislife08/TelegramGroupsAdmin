@@ -1,9 +1,11 @@
 using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
+using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.Telegram.Services.Identity;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 
@@ -17,17 +19,23 @@ public class AdminMentionHandler
     private readonly IChatAdminsRepository _chatAdminsRepository;
     private readonly IBotUserService _userService;
     private readonly IBotMessageService _messageService;
+    private readonly IUserIdentityService _identityService;
+    private readonly IConfigService _configService;
 
     public AdminMentionHandler(
         ILogger<AdminMentionHandler> logger,
         IChatAdminsRepository chatAdminsRepository,
         IBotUserService userService,
-        IBotMessageService messageService)
+        IBotMessageService messageService,
+        IUserIdentityService identityService,
+        IConfigService configService)
     {
         _logger = logger;
         _chatAdminsRepository = chatAdminsRepository;
         _userService = userService;
         _messageService = messageService;
+        _identityService = identityService;
+        _configService = configService;
     }
 
     /// <summary>
@@ -64,31 +72,31 @@ public class AdminMentionHandler
                 return;
             }
 
-            // Build entity-based notification with text_mention entities for each admin
-            var builder = new TelegramMessageBuilder().Bold("🔔 Admin Alert").LineBreak();
-            var notified = 0;
+            // Skip the user who sent the @admin mention, and the bot itself (bots can't
+            // receive notifications anyway)
+            var adminIds = admins
+                .Select(admin => admin.User.Id)
+                .Where(id => id != message.From?.Id && id != botId)
+                .ToList();
 
-            foreach (var admin in admins)
-            {
-                // Skip the user who sent the @admin mention
-                if (admin.User.Id == message.From?.Id)
-                    continue;
-
-                // Skip the bot itself (bots can't receive notifications anyway)
-                if (admin.User.Id == botId)
-                    continue;
-
-                if (notified > 0) builder.Text(" ");
-                builder.Mention(admin.User);
-                notified++;
-            }
-
-            if (notified == 0)
+            if (adminIds.Count == 0)
             {
                 _logger.LogInformation(
                     "No other admins to notify in chat {ChatId} (only sender is admin)",
                     message.Chat.Id);
                 return;
+            }
+
+            // Mention each admin by their resolved identity (current names and verdict), with
+            // this chat's name masking applied
+            var adminIdentities = await _identityService.ResolveManyAsync(adminIds, cancellationToken);
+            var masking = await _configService.GetNameMaskingAsync(message.Chat.Id, cancellationToken);
+            var builder = TelegramMessageBuilder.For(masking).Bold("🔔 Admin Alert").LineBreak();
+
+            for (var i = 0; i < adminIdentities.Count; i++)
+            {
+                if (i > 0) builder.Text(" ");
+                builder.Mention(adminIdentities[i]);
             }
 
             builder.Text(" you've been mentioned in this conversation.");
@@ -102,7 +110,7 @@ public class AdminMentionHandler
 
             _logger.LogInformation(
                 "Notified {AdminCount} admins in {Chat} for @admin mention by {User}",
-                notified,
+                adminIdentities.Count,
                 message.Chat.ToLogInfo(),
                 message.From.ToLogInfo());
         }

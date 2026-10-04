@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using System.Text.RegularExpressions;
 using Telegram.Bot.Types;
+using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Extensions;
@@ -53,8 +54,12 @@ public partial class CommandRouter
     /// <summary>
     /// Route and execute bot command
     /// </summary>
+    /// <param name="message">Message containing the command.</param>
+    /// <param name="sender">Identity of <c>message.From</c>: observed by the group pipeline, resolved by id for DMs.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     public async Task<CommandResult?> RouteCommandAsync(
         Message message,
+        UserIdentity sender,
         CancellationToken cancellationToken = default)
     {
         if (message.Text == null || message.From == null)
@@ -86,14 +91,14 @@ public partial class CommandRouter
 
             // Resolve the user's effective tier in this chat (web tier ⊕ chat-admin status).
             var permissionLevel = await scope.ServiceProvider.GetRequiredService<ITelegramPermissionService>()
-                .GetEffectiveLevelAsync(message.Chat.Id, message.From.Id, cancellationToken);
+                .GetEffectiveLevelAsync(message.Chat.Id, sender.Id, cancellationToken);
 
             // Gate: public commands are PermissionLevel.Member (the floor) so they never fail this.
             if (permissionLevel < command.MinPermissionLevel)
             {
                 _logger.LogWarning(
                     "User {User} attempted /{Command} without sufficient permission (has {UserLevel}, needs {RequiredLevel})",
-                    TelegramDisplayName.Format(message.From.FirstName, message.From.LastName, message.From.Username, message.From.Id),
+                    sender.ToLogDebug(),
                     commandName, permissionLevel, command.MinPermissionLevel);
 
                 // Every gated command requires Admin (moderation); public commands are Member (the floor)
@@ -112,10 +117,10 @@ public partial class CommandRouter
             // Execute command
             _logger.LogInformation(
                 "Executing command /{Command} by user {User} with args: {Args}",
-                commandName, TelegramDisplayName.Format(message.From.FirstName, message.From.LastName, message.From.Username, message.From.Id),
+                commandName, sender.ToLogDebug(),
                 string.Join(", ", args));
 
-            var result = await command.ExecuteAsync(message, args, permissionLevel, cancellationToken);
+            var result = await command.ExecuteAsync(message, args, permissionLevel, sender, cancellationToken);
             _pipelineMetrics.RecordCommandHandled(commandName);
 
             // Commands can now return dynamic CommandResult or use defaults from interface properties
@@ -123,8 +128,9 @@ public partial class CommandRouter
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error executing command /{Command} by {User}", commandName, message.From.ToLogDebug());
-            return new CommandResult(TelegramMessage.Plain($"❌ Error executing command: {ex.Message}"), false);
+            // The reply is posted in the chat, so it never carries exception text; the log has it.
+            _logger.LogError(ex, "Error executing command /{Command} by {User}", commandName, sender.ToLogDebug());
+            return new CommandResult(TelegramMessage.Plain("❌ Something went wrong running that command."), false);
         }
     }
 

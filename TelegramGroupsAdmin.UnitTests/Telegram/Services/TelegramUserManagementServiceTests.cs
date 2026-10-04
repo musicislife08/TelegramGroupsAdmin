@@ -5,6 +5,7 @@ using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
+using TelegramGroupsAdmin.Telegram.Services.Identity;
 
 namespace TelegramGroupsAdmin.UnitTests.Telegram.Services;
 
@@ -21,6 +22,7 @@ public class TelegramUserManagementServiceTests
     private ITelegramUserRepository _mockUserRepo = null!;
     private IUserActionsRepository _mockActionsRepo = null!;
     private IUsernameHistoryRepository _mockHistoryRepo = null!;
+    private IUserIdentityService _mockIdentities = null!;
     private ILogger<TelegramUserManagementService> _mockLogger = null!;
     private TelegramUserManagementService _service = null!;
 
@@ -32,6 +34,7 @@ public class TelegramUserManagementServiceTests
         _mockUserRepo = Substitute.For<ITelegramUserRepository>();
         _mockActionsRepo = Substitute.For<IUserActionsRepository>();
         _mockHistoryRepo = Substitute.For<IUsernameHistoryRepository>();
+        _mockIdentities = Substitute.For<IUserIdentityService>();
 
         // Logger is required by constructor but intentionally not verified.
         // Logging is an implementation detail - tests focus on business logic outcomes.
@@ -41,8 +44,25 @@ public class TelegramUserManagementServiceTests
             _mockUserRepo,
             _mockActionsRepo,
             _mockHistoryRepo,
+            _mockIdentities,
             _mockLogger);
     }
+
+    #region ResolveIdentityAsync Tests
+
+    [Test]
+    public async Task ResolveIdentityAsync_ReturnsIdentityFromIdentityService()
+    {
+        // Web UI intents carry the identity resolved by id (current names and verdict).
+        var resolved = UserIdentity.ForTest(TestUserId, "Current", verdict: NameVerdict.Explicit);
+        _mockIdentities.ResolveAsync(TestUserId, Arg.Any<CancellationToken>()).Returns(resolved);
+
+        var result = await _service.ResolveIdentityAsync(TestUserId);
+
+        Assert.That(result, Is.SameAs(resolved));
+    }
+
+    #endregion
 
     #region ToggleTrustAsync Tests
 

@@ -26,7 +26,7 @@ public class TelegramMessagePreviewTests : MudBlazorTestContext
     [Test]
     public void Renders_bold_entity_as_bold_tag()
     {
-        var message = new TelegramMessageBuilder().Text("a ").Bold("banned").Build();
+        var message = TelegramMessageBuilder.For(NameMasking.Off).Text("a ").Bold("banned").Build();
 
         var cut = Render<TelegramMessagePreview>(p => p.Add(c => c.Message, message));
 
@@ -37,7 +37,7 @@ public class TelegramMessagePreviewTests : MudBlazorTestContext
     [Test]
     public void Renders_text_mention_as_styled_span()
     {
-        var message = new TelegramMessageBuilder()
+        var message = TelegramMessageBuilder.For(NameMasking.Off)
             .Text("Hi ")
             .Mention(new UserIdentity(1, "Sofi", null, null))
             .Build();

@@ -32,12 +32,13 @@ public class LinkCommand : IBotCommand
         Message message,
         string[] args,
         PermissionLevel userPermission,
+        UserIdentity sender,
         CancellationToken cancellationToken = default)
     {
         // Validate token argument
         if (args.Length == 0 || string.IsNullOrWhiteSpace(args[0]))
         {
-            var usageMessage = new TelegramMessageBuilder()
+            var usageMessage = TelegramMessageBuilder.For(NameMasking.Off) // no user mentions
                 .Text("❌ Please provide a link token: ").Code("/link <token>").LineBreak()
                 .LineBreak()
                 .Text("Generate a token at: Profile → Linked Telegram Accounts")

@@ -4,27 +4,27 @@ using Telegram.Bot.Types.ReplyMarkups;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Services.Notifications;
-using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.Telegram.Services.Identity;
 
 namespace TelegramGroupsAdmin.UnitTests.Services.Notifications;
 
 [TestFixture]
 public class NotificationDmDispatcherTests
 {
-    private static readonly UserIdentity Recipient = new(42L, "Kim", null, "kim");
+    private static readonly UserIdentity Recipient = UserIdentity.ForTest(42L, "Kim", username: "kim");
 
     private IBotDmService _dm = null!;
-    private ITelegramUserRepository _users = null!;
+    private IUserIdentityService _identities = null!;
     private NotificationDmDispatcher _sut = null!;
 
     [SetUp]
     public void SetUp()
     {
         _dm = Substitute.For<IBotDmService>();
-        _users = Substitute.For<ITelegramUserRepository>();
-        _sut = new NotificationDmDispatcher(_dm, _users);
+        _identities = Substitute.For<IUserIdentityService>();
+        _sut = new NotificationDmDispatcher(_dm, _identities);
     }
 
     [Test]
@@ -108,12 +108,29 @@ public class NotificationDmDispatcherTests
     }
 
     [Test]
-    public async Task DispatchAsync_ByTelegramId_ResolvesIdentityFromRepository()
+    public async Task DispatchAsync_ByTelegramId_SendsToIdentityResolvedById()
     {
+        _identities.ResolveAsync(42L, Arg.Any<CancellationToken>()).Returns(Recipient);
         var payload = NotificationPayloadBuilder.Create("Subject").WithText("body").Build();
 
         await _sut.DispatchAsync(42L, payload, keyboard: null, CancellationToken.None);
 
-        await _users.Received(1).GetByTelegramIdAsync(42L, Arg.Any<CancellationToken>());
+        await _dm.Received(1).SendDmWithEntitiesAsync(Recipient, "notification", Arg.Any<string>(),
+            Arg.Any<IReadOnlyList<MessageEntity>>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task DispatchAsync_FlaggedUser_DmShowsRealName()
+    {
+        // A DM goes to a person, never into a chat, so names in it are never masked.
+        var payload = NotificationPayloadBuilder.Create("Subject")
+            .WithField("User", UserIdentity.ForTest(7L, "Bad", verdict: NameVerdict.Explicit))
+            .Build();
+
+        await _sut.DispatchAsync(Recipient, payload, keyboard: null, CancellationToken.None);
+
+        await _dm.Received(1).SendDmWithEntitiesAsync(Recipient, "notification",
+            Arg.Is<string>(t => t!.Contains("User: Bad") && !t.Contains(NameRedaction.Explicit)),
+            Arg.Any<IReadOnlyList<MessageEntity>>(), Arg.Any<CancellationToken>());
     }
 }

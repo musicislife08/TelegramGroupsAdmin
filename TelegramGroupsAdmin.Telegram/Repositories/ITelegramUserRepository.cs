@@ -13,14 +13,31 @@ public interface ITelegramUserRepository
     Task<UiModels.TelegramUser?> GetByIdAsync(long telegramUserId, CancellationToken cancellationToken = default); // Alias for GetByTelegramIdAsync
 
     /// <summary>
-    /// Returns the existing user if found, or creates a minimal inactive record.
-    /// The returned object reflects current DB state (including IsBanned, IsTrusted, etc.).
+    /// Returns one identity per id found (names plus the verdict from the latest profile scan).
+    /// Ids with no row are absent from the result.
     /// </summary>
-    Task<UiModels.TelegramUser> GetOrCreateAsync(
-        UserIdentity user, bool isBot, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<UserIdentity>> GetIdentitiesAsync(
+        IReadOnlyCollection<long> userIds, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Records an observation of a user's names. Creates a minimal inactive row for an unknown user.
+    /// For a known user, the names change only when the observation is not older than the stored one
+    /// (newest observation wins) and differs from it; a change writes a username_history row and a
+    /// ProfileChange audit row in the same transaction. A row lock serializes concurrent observers so
+    /// the same rename is recorded once. <see cref="UiModels.ObservedNamesResult.Renamed"/> holds the
+    /// previous names only for the call that changed them.
+    /// </summary>
+    Task<UiModels.ObservedNamesResult> GetOrUpdateAsync(
+        UiModels.ObservedUser observed, UiModels.ProfileChangeContext context, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Marks the user active and moves last_seen_at forward to <paramref name="seenAt"/> (an older
+    /// update processed late never moves it back). Names are untouched; they change only via
+    /// <see cref="GetOrUpdateAsync"/>.
+    /// </summary>
+    Task MarkActiveAsync(long telegramUserId, DateTimeOffset seenAt, CancellationToken cancellationToken = default);
 
     Task<string?> GetUserPhotoPathAsync(long telegramUserId, CancellationToken cancellationToken = default);
-    Task UpsertAsync(UiModels.TelegramUser user, CancellationToken cancellationToken = default);
     Task UpdateUserPhotoPathAsync(long telegramUserId, string? photoPath, string? photoHash = null, CancellationToken cancellationToken = default);
     Task UpdatePhotoFileUniqueIdAsync(long telegramUserId, string? fileUniqueId, string? photoPath, CancellationToken cancellationToken = default);
     Task<List<UiModels.TelegramUser>> GetActiveUsersAsync(int days, CancellationToken cancellationToken = default);

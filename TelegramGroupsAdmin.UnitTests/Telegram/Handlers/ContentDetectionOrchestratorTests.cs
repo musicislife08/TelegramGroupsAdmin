@@ -19,6 +19,7 @@ using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.Telegram.Services.Moderation;
 
 namespace TelegramGroupsAdmin.UnitTests.Telegram.Handlers;
 
@@ -33,7 +34,11 @@ public class ContentDetectionOrchestratorTests
     private IDetectionResultsRepository _detectionResults = null!;
     private IMessageHistoryRepository _messageHistory = null!;
     private IReportService _reportService = null!;
+    private IBotModerationService _moderation = null!;
     private ServiceProvider _provider = null!;
+
+    // The pipeline's observed sender; the message's own From carries stale names.
+    private static readonly UserIdentity Sender = UserIdentity.ForTest(7, "Observed");
     private ContentDetectionOrchestrator _orchestrator = null!;
 
     [SetUp]
@@ -43,6 +48,7 @@ public class ContentDetectionOrchestratorTests
         _detectionResults = Substitute.For<IDetectionResultsRepository>();
         _messageHistory = Substitute.For<IMessageHistoryRepository>();
         _reportService = Substitute.For<IReportService>();
+        _moderation = Substitute.For<IBotModerationService>();
 
         var configService = Substitute.For<IConfigService>();
         configService.GetEffectiveContentDetectionAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
@@ -54,7 +60,7 @@ public class ContentDetectionOrchestratorTests
         services.AddScoped(_ => _messageHistory);
         services.AddScoped(_ => configService);
         services.AddScoped(_ => _reportService);
-        services.AddScoped(_ => Substitute.For<IBotModerationService>());
+        services.AddScoped(_ => _moderation);
         services.AddSingleton(Options.Create(new AppOptions()));
         _provider = services.BuildServiceProvider();
 
@@ -94,7 +100,7 @@ public class ContentDetectionOrchestratorTests
         _messageHistory.SetMediaFeaturesAsync(42, -1001, Arg.Any<MediaFeatures>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("db down"));
 
-        await _orchestrator.RunDetectionAsync(message, text: "hello", photoLocalPath: null, editVersion: 0);
+        await _orchestrator.RunDetectionAsync(message, Sender, text: "hello", photoLocalPath: null, editVersion: 0);
 
         await _messageHistory.Received(1).SetMediaFeaturesAsync(42, -1001, Arg.Any<MediaFeatures>(), Arg.Any<CancellationToken>());
         await _reportService.Received(1).CreateReportAsync(
@@ -120,7 +126,7 @@ public class ContentDetectionOrchestratorTests
             });
         ArrangeScan(spamResult);
 
-        await _orchestrator.RunDetectionAsync(message, text: "hello", photoLocalPath: null, editVersion: 0);
+        await _orchestrator.RunDetectionAsync(message, Sender, text: "hello", photoLocalPath: null, editVersion: 0);
 
         await _messageHistory.Received(1).SetMediaFeaturesAsync(42, -1001, Arg.Any<MediaFeatures>(), Arg.Any<CancellationToken>());
         await _messageHistory.Received(1).SetMediaFeaturesAsync(42, -1001, videoFeatures, Arg.Any<CancellationToken>());
@@ -136,7 +142,7 @@ public class ContentDetectionOrchestratorTests
             new ContentCheckResponseV2 { CheckName = CheckName.StopWords, Score = 2.5, Abstained = false, Details = "text only" });
         ArrangeScan(spamResult);
 
-        await _orchestrator.RunDetectionAsync(message, text: "hello", photoLocalPath: null, editVersion: 0);
+        await _orchestrator.RunDetectionAsync(message, Sender, text: "hello", photoLocalPath: null, editVersion: 0);
 
         await _messageHistory.DidNotReceiveWithAnyArgs().SetMediaFeaturesAsync(default, default, default!, default);
         // Moderation ran, so the flow reached (and passed) the media-features step rather than bailing out early.
@@ -152,10 +158,46 @@ public class ContentDetectionOrchestratorTests
         var message = CreateMessage();
         ArrangeScan(BorderlineSpamResult());
 
-        await _orchestrator.RunDetectionAsync(message, text: "hello", photoLocalPath: null, editVersion: editVersion);
+        await _orchestrator.RunDetectionAsync(message, Sender, text: "hello", photoLocalPath: null, editVersion: editVersion);
 
         await _coordinator.Received(1).CheckAsync(
             Arg.Is<ContentCheckRequest>(r => r!.MessageId == 42), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task RunDetectionAsync_RequestAndModerationCarryThePipelineSender()
+    {
+        var message = CreateMessage();
+        var hardBlock = new ContentDetectionResult
+        {
+            IsSpam = true,
+            TotalScore = 5.0,
+            CheckResults =
+            [
+                new ContentCheckResponseV2 { CheckName = CheckName.UrlBlocklist, Score = 5.0, Abstained = false, Details = "blocked" }
+            ]
+        };
+        ArrangeScan(hardBlock);
+
+        await _orchestrator.RunDetectionAsync(message, Sender, text: "hello", photoLocalPath: null, editVersion: 0);
+
+        await _coordinator.Received(1).CheckAsync(
+            Arg.Is<ContentCheckRequest>(r => r!.User == Sender), Arg.Any<CancellationToken>());
+        await _moderation.Received(1).MarkAsSpamAndBanAsync(
+            Arg.Is<SpamBanIntent>(i => i!.User == Sender), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task RunDetectionAsync_CriticalViolation_CarriesThePipelineSender()
+    {
+        var message = CreateMessage();
+        _coordinator.CheckAsync(Arg.Any<ContentCheckRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new ContentCheckCoordinatorResult { CriticalCheckViolations = ["malicious url"] });
+
+        await _orchestrator.RunDetectionAsync(message, Sender, text: "hello", photoLocalPath: null, editVersion: 0);
+
+        await _moderation.Received(1).HandleCriticalViolationAsync(
+            Arg.Is<CriticalViolationIntent>(i => i!.User == Sender), Arg.Any<CancellationToken>());
     }
 
     private static Message CreateMessage() => new()

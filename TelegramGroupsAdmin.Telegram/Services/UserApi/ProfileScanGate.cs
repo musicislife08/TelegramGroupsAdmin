@@ -11,6 +11,7 @@ namespace TelegramGroupsAdmin.Telegram.Services.UserApi;
 public sealed class ProfileScanGate(
     IConfigService configService,
     ITelegramUserRepository userRepository,
+    IUsernameHistoryRepository usernameHistory,
     IChatAdminsRepository chatAdminsRepository,
     ITelegramSessionManager sessionManager,
     IProfileScanService profileScanService,
@@ -21,7 +22,8 @@ public sealed class ProfileScanGate(
         UserIdentity user,
         ChatIdentity? chat,
         ProfileScanTrigger trigger,
-        CancellationToken ct)
+        CancellationToken ct,
+        bool forceRescan = false)
     {
         var welcomeConfig = await configService.GetEffectiveWelcomeAsync(chat?.Id ?? 0, ct: ct);
         var config = welcomeConfig?.JoinSecurity?.ProfileScan;
@@ -37,6 +39,24 @@ public sealed class ProfileScanGate(
             _ => false
         };
 
+        // A null row means the user is not yet tracked: not trusted, never
+        // scanned, so eligible. This is the common case for FirstMessage.
+        // Read lazily: the trigger_disabled skip below fires on nearly every
+        // group message and must stay free of queries.
+        Models.TelegramUser? existingUser = null;
+        var userLoaded = false;
+
+        // A join records a rename without scanning (nothing slow may run before
+        // the joiner is muted). With ScanOnJoin off, a chat that scans on profile
+        // changes still scans a joiner who renamed since their last scan.
+        if (!triggerEnabled && trigger == ProfileScanTrigger.Join && config.ScanOnProfileChange)
+        {
+            existingUser = await userRepository.GetByTelegramIdAsync(user.Id, cancellationToken: ct);
+            userLoaded = true;
+            triggerEnabled = existingUser is not null
+                && await usernameHistory.HasChangeSinceAsync(user.Id, existingUser.ProfileScannedAt, ct);
+        }
+
         if (!triggerEnabled)
         {
             // Not recorded via Skip(): in the shipping configuration
@@ -49,9 +69,8 @@ public sealed class ProfileScanGate(
             return null;
         }
 
-        // A null row means the user is not yet tracked: not trusted, never
-        // scanned, so eligible. This is the common case for FirstMessage.
-        var existingUser = await userRepository.GetByTelegramIdAsync(user.Id, cancellationToken: ct);
+        if (!userLoaded)
+            existingUser = await userRepository.GetByTelegramIdAsync(user.Id, cancellationToken: ct);
 
         if (existingUser?.IsTrusted == true)
             return Skip("trusted", user, trigger);
@@ -83,7 +102,7 @@ public sealed class ProfileScanGate(
             "Profile scan gate admitted {User} for trigger {Trigger}",
             user.ToLogDebug(), trigger);
 
-        return await profileScanService.ScanUserProfileAsync(user, chat, ct: ct);
+        return await profileScanService.ScanUserProfileAsync(user, chat, ct, forceRescan);
     }
 
     private ProfileScanResult? Skip(string reason, UserIdentity user, ProfileScanTrigger trigger)

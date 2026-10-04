@@ -18,10 +18,12 @@ internal static class NotificationRenderer
     /// Emits Bold entities for subject, field labels, and section headers;
     /// TextMention entities with full User object for clickable user mentions.
     /// No HTML — uses the entities parameter which is mutually exclusive with parse_mode.
+    /// User mentions show <see cref="UserIdentity.BotDisplayName"/> for <paramref name="masking"/>;
+    /// email and plain text keep the real name.
     /// </summary>
-    public static TelegramMessage ToTelegramMessage(NotificationPayload payload)
+    public static TelegramMessage ToTelegramMessage(NotificationPayload payload, NameMasking masking)
     {
-        var builder = new TelegramMessageBuilder();
+        var builder = TelegramMessageBuilder.For(masking);
         builder.Bold(payload.Subject).LineBreak().LineBreak();
         RenderBlocksTelegram(builder, payload.Blocks);
         var msg = builder.Build();

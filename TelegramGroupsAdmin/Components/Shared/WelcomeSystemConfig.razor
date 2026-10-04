@@ -189,20 +189,14 @@
                                                    Label="Scan on first message"
                                                    Disabled="!_config.JoinSecurity.ProfileScan.Enabled" />
                                     </MudItem>
-                                    <MudItem xs="6">
-                                        <MudSwitch @bind-Value="_config.JoinSecurity.ProfileScan.MaskExplicitUsername"
-                                                   Color="Color.Primary"
-                                                   Label="Mask explicit usernames in public ban posts"
-                                                   Disabled="!_config.JoinSecurity.ProfileScan.Enabled" />
-                                    </MudItem>
                                     <MudItem xs="12">
-                                        <MudTextField @bind-Value="_config.JoinSecurity.ProfileScan.ExplicitUsernameRedactionText"
-                                                      Label="Redaction text"
-                                                      Variant="Variant.Outlined"
-                                                      MaxLength="80"
-                                                      HelperText="Shown in place of the user's name when the AI flags it as explicit"
-                                                      Disabled="@(!_config.JoinSecurity.ProfileScan.Enabled
-                                                                  || !_config.JoinSecurity.ProfileScan.MaskExplicitUsername)" />
+                                        <MudSwitch @bind-Value="_config.JoinSecurity.ProfileScan.MaskFlaggedNames"
+                                                   Label="Mask flagged names"
+                                                   Color="Color.Primary"
+                                                   UserAttributes="@(new Dictionary<string, object?> { ["aria-describedby"] = MaskFlaggedNamesHelpId })" />
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary" id="@MaskFlaggedNamesHelpId">
+                                            What the bot posts in chats, and ban celebration DMs, show "[name removed: explicit]" or "[name removed: spam]" instead of a name flagged by earlier profile scans, even while scanning is off. Admin DMs show real names.
+                                        </MudText>
                                     </MudItem>
                                 </MudGrid>
                             </ChildContent>
@@ -561,6 +555,7 @@
     public EventCallback OnSaved { get; set; }
 
     private WelcomeConfig? _config;
+    private const string MaskFlaggedNamesHelpId = "mask-flagged-names-help";
     private MudForm? _form;
     private bool _isValid = true;
     private bool _loading = true;
@@ -642,7 +637,7 @@
     // Sample user for live previews. Mirrors ExamConfigEditor's convention so the preview renders
     // a real clickable text_mention entity (works even for usernameless users) — exactly what
     // production produces — instead of a literal "@SampleUser" string.
-    private static readonly UserIdentity SampleUser = new(0, "SampleUser", null, null);
+    private static readonly UserIdentity SampleUser = UserIdentity.ForPreview(0, "SampleUser", null, null);
 
     private TelegramMessage GetPreviewText(string? template)
     {
@@ -655,7 +650,8 @@
             template,
             SampleUser,
             "Sample Chat Group",
-            _config?.TimeoutSeconds ?? 60);
+            _config?.TimeoutSeconds ?? 60,
+            NameMasking.Off);
     }
 
     /// <summary>
@@ -669,8 +665,9 @@
             ? TelegramMessage.Plain("(empty template)")
             : WelcomeMessageBuilder.BuildBypassTemplate(
                 template,
-                new UserIdentity(0, exampleUsername, null, null),
-                "Example Chat");
+                UserIdentity.ForPreview(0, exampleUsername, null, null),
+                "Example Chat",
+                NameMasking.Off);
 
     private static TelegramMessage GetAdminBypassPreviewText(string? template)
         => GetBypassPreviewText(template, "example_admin");

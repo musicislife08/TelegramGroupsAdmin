@@ -4,6 +4,7 @@ using TelegramGroupsAdmin.Core;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Telegram.Services.Identity;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 
@@ -16,17 +17,20 @@ public class TelegramUserManagementService : ITelegramUserManagementService
     private readonly ITelegramUserRepository _userRepository;
     private readonly IUserActionsRepository _userActionsRepository;
     private readonly IUsernameHistoryRepository _usernameHistoryRepository;
+    private readonly IUserIdentityService _identityService;
     private readonly ILogger<TelegramUserManagementService> _logger;
 
     public TelegramUserManagementService(
         ITelegramUserRepository userRepository,
         IUserActionsRepository userActionsRepository,
         IUsernameHistoryRepository usernameHistoryRepository,
+        IUserIdentityService identityService,
         ILogger<TelegramUserManagementService> logger)
     {
         _userRepository = userRepository;
         _userActionsRepository = userActionsRepository;
         _usernameHistoryRepository = usernameHistoryRepository;
+        _identityService = identityService;
         _logger = logger;
     }
 
@@ -211,6 +215,12 @@ public class TelegramUserManagementService : ITelegramUserManagementService
             reason ?? "Manual unban");
 
         return true;
+    }
+
+    /// <inheritdoc/>
+    public Task<UserIdentity> ResolveIdentityAsync(long telegramUserId, CancellationToken cancellationToken = default)
+    {
+        return _identityService.ResolveAsync(telegramUserId, cancellationToken);
     }
 
     /// <inheritdoc/>

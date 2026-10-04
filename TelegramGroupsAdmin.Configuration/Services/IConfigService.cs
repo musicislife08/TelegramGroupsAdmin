@@ -19,6 +19,15 @@ public interface IConfigService
     ValueTask<WelcomeConfig?> GetWelcomeAsync(long chatId, CancellationToken ct = default);
     ValueTask<WelcomeConfig?> GetEffectiveWelcomeAsync(long chatId, CancellationToken ct = default);
 
+    /// <summary>
+    /// Effective "Mask flagged names" for text the bot posts into <paramref name="chatId"/>.
+    /// Only group posts (and ban celebration DMs, a copy of the chat's caption) are masked; a
+    /// direct message to a person is never masked, so DM builders use <see cref="NameMasking.Off"/>
+    /// and never call this. Independent of whether this chat scans profiles: a name verdict
+    /// belongs to the account, not the chat.
+    /// </summary>
+    ValueTask<NameMasking> GetNameMaskingAsync(long chatId, CancellationToken ct = default);
+
     ValueTask<LogConfig?> GetLogAsync(long chatId, CancellationToken ct = default);
     ValueTask<LogConfig?> GetEffectiveLogAsync(long chatId, CancellationToken ct = default);
 

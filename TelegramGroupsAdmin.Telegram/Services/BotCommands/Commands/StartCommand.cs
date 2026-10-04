@@ -5,6 +5,7 @@ using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Core.Services;
+using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Extensions;
@@ -65,6 +66,7 @@ public class StartCommand : IBotCommand
         Message message,
         string[] args,
         PermissionLevel userPermission,
+        UserIdentity sender,
         CancellationToken cancellationToken = default)
     {
         // Only respond to /start in private DMs, ignore in group chats
@@ -74,32 +76,30 @@ public class StartCommand : IBotCommand
         }
 
         // User started a private conversation with the bot - enable DM notifications
-        // This allows the bot to send private messages to this user in the future
-        if (message.From != null)
-        {
-            await _telegramUserRepository.EnableBotDmAsync(message.From.Id, cancellationToken);
+        // This allows the bot to send private messages to this user in the future.
+        // The sender was resolved by id in the DM pipeline (DMs are not observed).
+        await _telegramUserRepository.EnableBotDmAsync(sender.Id, cancellationToken);
 
-            // Deliver any pending notifications
-            await DeliverPendingNotificationsAsync(message.From.Id, cancellationToken);
-        }
+        // Deliver any pending notifications
+        await DeliverPendingNotificationsAsync(sender, cancellationToken);
 
         // Deep link from the /dmcelebrations start prompt
-        if (args.Length > 0 && message.From != null &&
+        if (args.Length > 0 &&
             DmCelebrationDeepLink.TryParseChatId(args[0], out var celebrationChatId))
         {
-            return await HandleDmCelebrationsDeepLinkAsync(message.From, celebrationChatId, cancellationToken);
+            return await HandleDmCelebrationsDeepLinkAsync(sender, celebrationChatId, cancellationToken);
         }
 
         // Check if this is a deep link for welcome system
         if (args.Length > 0 && args[0].StartsWith("welcome_"))
         {
-            return await HandleWelcomeDeepLinkAsync(message, args[0], cancellationToken);
+            return await HandleWelcomeDeepLinkAsync(message, sender, args[0], cancellationToken);
         }
 
         // Check if this is a deep link for entrance exam
         if (args.Length > 0 && WelcomeDeepLinkBuilder.IsExamPayload(args[0]))
         {
-            return await HandleExamDeepLinkAsync(message, args[0], cancellationToken);
+            return await HandleExamDeepLinkAsync(message, sender, args[0], cancellationToken);
         }
 
         // Default /start response
@@ -113,11 +113,11 @@ public class StartCommand : IBotCommand
     }
 
     private async Task<CommandResult> HandleDmCelebrationsDeepLinkAsync(
-        User from,
+        UserIdentity from,
         long chatId,
         CancellationToken cancellationToken)
     {
-        var chat = await _celebrationSubscriptionService.ConfirmFromStartAsync(chatId, UserIdentity.From(from), cancellationToken);
+        var chat = await _celebrationSubscriptionService.ConfirmFromStartAsync(chatId, from, cancellationToken);
 
         var reply = chat is null
             ? "You're not signed up for ban celebrations from that chat. Run /dmcelebrations on in the group to sign up."
@@ -128,6 +128,7 @@ public class StartCommand : IBotCommand
 
     private async Task<CommandResult> HandleWelcomeDeepLinkAsync(
         Message message,
+        UserIdentity sender,
         string payload,
         CancellationToken cancellationToken)
     {
@@ -142,7 +143,7 @@ public class StartCommand : IBotCommand
         }
 
         // Verify the user clicking is the target user
-        if (message.From?.Id != targetUserId)
+        if (sender.Id != targetUserId)
         {
             return new CommandResult(
                 TelegramMessage.Plain("❌ This link is not for you. Please use the welcome link sent to you."),
@@ -177,9 +178,10 @@ public class StartCommand : IBotCommand
         var chatName = chat.Title ?? "the chat";
         var welcomeMessage = WelcomeMessageBuilder.BuildFromTemplate(
             config.MainWelcomeMessage,
-            new UserIdentity(message.From.Id, message.From.FirstName, message.From.LastName, message.From.Username),
+            sender,
             chatName,
-            config.TimeoutSeconds);
+            config.TimeoutSeconds,
+            NameMasking.Off); // DM: never masked
 
         await _messageService.SendAndSaveMessageAsync(
             chatId: message.Chat.Id,
@@ -224,6 +226,7 @@ public class StartCommand : IBotCommand
     /// </summary>
     private async Task<CommandResult> HandleExamDeepLinkAsync(
         Message message,
+        UserIdentity sender,
         string payload,
         CancellationToken cancellationToken)
     {
@@ -238,7 +241,7 @@ public class StartCommand : IBotCommand
         }
 
         // Verify the user clicking is the target user
-        if (message.From?.Id != examPayload.UserId)
+        if (sender.Id != examPayload.UserId)
         {
             return new CommandResult(
                 TelegramMessage.Plain("❌ This exam link is not for you. Please use the button sent to you when you joined."),
@@ -278,7 +281,7 @@ public class StartCommand : IBotCommand
         var examFlowService = scope.ServiceProvider.GetRequiredService<IExamFlowService>();
         var result = await examFlowService.StartExamInDmAsync(
             chat: ChatIdentity.From(chat),
-            user: message.From,
+            user: sender,
             dmChatId: message.Chat.Id,  // User's private chat with bot
             config: config,
             cancellationToken: cancellationToken);
@@ -293,7 +296,7 @@ public class StartCommand : IBotCommand
 
         _logger.LogInformation(
             "Started entrance exam in DM for {User} from {Chat}",
-            message.From.ToLogInfo(),
+            sender.ToLogInfo(),
             chat.ToLogInfo());
 
         // Empty result - the exam service sends the first question
@@ -304,9 +307,10 @@ public class StartCommand : IBotCommand
     /// Deliver all pending notifications to user when they enable DMs
     /// </summary>
     private async Task DeliverPendingNotificationsAsync(
-        long telegramUserId,
+        UserIdentity user,
         CancellationToken cancellationToken)
     {
+        var telegramUserId = user.Id;
         try
         {
             var pendingNotifications = await _pendingNotificationsRepository.GetPendingNotificationsForUserAsync(
@@ -329,7 +333,7 @@ public class StartCommand : IBotCommand
                 try
                 {
                     var result = await _dmService.SendDmAsync(
-                        user: Core.Models.UserIdentity.FromId(telegramUserId),
+                        user: user,
                         messageText: notification.MessageText,
                         cancellationToken: cancellationToken);
 

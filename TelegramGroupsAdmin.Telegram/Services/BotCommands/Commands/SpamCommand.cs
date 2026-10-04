@@ -1,12 +1,14 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
+using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
+using TelegramGroupsAdmin.Telegram.Services.Identity;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
 
@@ -18,6 +20,7 @@ public class SpamCommand : IBotCommand
     private readonly ILogger<SpamCommand> _logger;
     private readonly IServiceProvider _serviceProvider;
     private readonly IBotModerationService _moderationService;
+    private readonly IUserIdentityService _identityService;
 
     public string Name => "spam";
     public string Description => "Mark message as spam and delete it";
@@ -30,17 +33,20 @@ public class SpamCommand : IBotCommand
     public SpamCommand(
         ILogger<SpamCommand> logger,
         IServiceProvider serviceProvider,
-        IBotModerationService moderationService)
+        IBotModerationService moderationService,
+        IUserIdentityService identityService)
     {
         _logger = logger;
         _serviceProvider = serviceProvider;
         _moderationService = moderationService;
+        _identityService = identityService;
     }
 
     public async Task<CommandResult> ExecuteAsync(
         Message message,
         string[] args,
         PermissionLevel userPermission,
+        UserIdentity sender,
         CancellationToken cancellationToken = default)
     {
         if (message.ReplyToMessage == null)
@@ -49,23 +55,18 @@ public class SpamCommand : IBotCommand
         }
 
         var spamMessage = message.ReplyToMessage;
-        var spamUserId = spamMessage.From?.Id;
-        var spamUserName = TelegramDisplayName.Format(
-            spamMessage.From?.FirstName,
-            spamMessage.From?.LastName,
-            spamMessage.From?.Username,
-            spamUserId);
-
-        if (spamUserId == null)
+        if (spamMessage.From == null)
         {
             return new CommandResult(TelegramMessage.Plain("❌ Could not identify user."), DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
+
+        var spamUser = await _identityService.ResolveAsync(spamMessage.From.Id, cancellationToken);
 
         using var scope = _serviceProvider.CreateScope();
         var chatAdminsRepository = scope.ServiceProvider.GetRequiredService<IChatAdminsRepository>();
 
         // Check if target user is an admin (can't mark admin messages as spam)
-        var isAdmin = await chatAdminsRepository.IsAdminAsync(message.Chat.Id, spamUserId.Value, cancellationToken);
+        var isAdmin = await chatAdminsRepository.IsAdminAsync(message.Chat.Id, spamUser.Id, cancellationToken);
         if (isAdmin)
         {
             return new CommandResult(TelegramMessage.Plain("❌ Cannot mark admin messages as spam."), DeleteCommandMessage, DeleteResponseAfterSeconds);
@@ -75,19 +76,14 @@ public class SpamCommand : IBotCommand
         // Trust only bypasses automatic spam detection - admins can always manually mark trusted users as spam
         // if they start posting spam after building up trust.
 
-        // Get executor actor
-        var executor = Core.Models.Actor.FromTelegramUser(
-            message.From!.Id,
-            message.From.Username,
-            message.From.FirstName,
-            message.From.LastName);
+        var executor = Core.Models.Actor.FromUserIdentity(sender);
 
         // Execute spam and ban action via centralized service
         var reason = $"Spam detected via /spam command in chat {message.Chat.Title ?? message.Chat.Id.ToString()}";
         var result = await _moderationService.MarkAsSpamAndBanAsync(
             new SpamBanIntent
             {
-                User = UserIdentity.From(spamMessage.From!),
+                User = spamUser,
                 Chat = ChatIdentity.From(message.Chat),
                 MessageId = spamMessage.MessageId,
                 Executor = executor,
@@ -99,13 +95,15 @@ public class SpamCommand : IBotCommand
 
         if (!result.Success)
         {
-            return new CommandResult(TelegramMessage.Plain($"❌ Failed to process spam action: {result.ErrorMessage}"), DeleteCommandMessage, DeleteResponseAfterSeconds);
+            // The chat reply stays generic: ErrorMessage can carry exception text
+            _logger.LogWarning("Failed to mark as spam and ban {User}: {Error}", spamUser.ToLogDebug(), result.ErrorMessage);
+            return new CommandResult(TelegramMessage.Plain("❌ Failed to process spam action."), DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
 
         _logger.LogInformation(
             "Spam command executed by {AdminId} on message {MessageId} from user {SpamUserId} ({SpamUserName}) in chat {ChatId}. " +
             "Banned from {ChatsAffected} chat(s). Trust removed: {TrustRemoved}",
-            message.From?.Id, spamMessage.MessageId, spamUserId, spamUserName, message.Chat.Id, result.ChatsAffected, result.TrustRemoved);
+            sender.Id, spamMessage.MessageId, spamUser.Id, spamUser.DisplayName, message.Chat.Id, result.ChatsAffected, result.TrustRemoved);
 
         // Silent mode: No chat feedback, message and command simply disappear
         // Admins see action through DM notifications if enabled

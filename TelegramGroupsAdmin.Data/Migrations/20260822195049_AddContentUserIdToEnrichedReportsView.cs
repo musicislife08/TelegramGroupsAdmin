@@ -13,7 +13,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
         {
             // Drop and recreate to add content_user_id (type = 0)
             migrationBuilder.Sql(EnrichedReportView.DropViewSql);
-            migrationBuilder.Sql(EnrichedReportView.CreateViewSql);
+            migrationBuilder.Sql(LegacyEnrichedViewSql.EnrichedReports);
         }
 
         /// <inheritdoc />

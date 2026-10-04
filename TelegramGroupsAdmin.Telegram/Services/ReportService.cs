@@ -7,6 +7,7 @@ using TelegramGroupsAdmin.Core.Repositories;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Metrics;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Telegram.Services.Identity;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 
@@ -19,6 +20,7 @@ public class ReportService(
     IAdminNotificationService notificationService,
     IAuditService auditService,
     IMessageHistoryRepository messageHistoryRepository,
+    IUserIdentityService identityService,
     ReportMetrics reportMetrics,
     ILogger<ReportService> logger) : IReportService
 {
@@ -50,12 +52,12 @@ public class ReportService(
             report.MessageId,
             reporter.GetDisplayText());
 
+        // Reported user resolved by id: every message was observed when it arrived
+        // (From guaranteed non-null by guard above)
+        var reportedUser = await identityService.ResolveAsync(originalMessage.From.Id, cancellationToken);
+
         // 2. Log audit event — reporter actor is already built, pass directly
-        var target = Actor.FromTelegramUser(
-            originalMessage.From.Id,
-            originalMessage.From.Username,
-            originalMessage.From.FirstName,
-            originalMessage.From.LastName);
+        var target = Actor.FromUserIdentity(reportedUser);
 
         await auditService.LogEventAsync(
             AuditEventType.ReportCreated,
@@ -66,9 +68,6 @@ public class ReportService(
 
         // 3. Send notification via typed notification service
         var messagePreview = GetMessagePreview(originalMessage, report);
-
-        // Build reported user identity from original message (From guaranteed non-null by guard above)
-        var reportedUser = UserIdentity.From(originalMessage.From);
 
         // Get photo path from stored message for DM with image
         string? photoPath = null;

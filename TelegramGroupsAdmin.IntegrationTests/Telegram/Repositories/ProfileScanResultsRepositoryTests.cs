@@ -10,33 +10,24 @@ using TelegramGroupsAdmin.Telegram.Repositories;
 namespace TelegramGroupsAdmin.IntegrationTests.Telegram.Repositories;
 
 /// <summary>
-/// Integration tests for ProfileScanResultsRepository covering the new
+/// Integration tests for ProfileScanResultsRepository covering the
 /// ai_explicit_display_text column.
 ///
-/// Setup-data source:
-/// - Write path tests: SUT InsertAsync IS the assertion subject (allowed
-///   exception to the no-inline-test-data-injection rule). The FK parent
-///   row in telegram_users is seeded via raw INSERT (the FK parent is
-///   infrastructure, not the SUT).
-/// - Read path tests: canonical extension only (user 9220500615182,
-///   scan ID 534 from 23_profile_scan_results.sql).
+/// Setup-data source (canonical only):
+/// - Write path tests: SUT InsertAsync IS the assertion subject, for a canonical user
+///   with no scan rows (@Juvenileii); the test reads the user's (empty) history first.
+/// - Read path tests: user 9220500615182 (@bagging_armado), scans 530 and 534
+///   from 23_profile_scan_results.sql, read-only.
 /// </summary>
 [TestFixture]
 public class ProfileScanResultsRepositoryTests
 {
     // Canonical anchors (from 23_profile_scan_results.sql)
-    private const long CanonicalFlaggedUserId = 9220500615182L;
+    private const long CanonicalFlaggedUserId = GoldenDatasetConstants.IdentityService.ScannedTwiceExplicitUserId;
     private const long CanonicalFlaggedScanId = 534L;
 
-    // Synthetic write-path FK parents. Chosen outside the canonical
-    // telegram_user_id range [9_000_000_000_000, 10_000_000_000_000) so
-    // they cannot collide with golden-template rows.
-    private const long WritePathUserIdTrue = 99999999999L;
-    private const long WritePathUserIdFalse = 99999999988L;
-
-    // A user that has no profile_scan_results row in canonical (also
-    // outside the canonical user-id range).
-    private const long UnseenUserId = 12121212121L;
+    // Canonical user with no profile_scan_results rows: the write-path FK parent.
+    private const long UnscannedUserId = GoldenDatasetConstants.IdentityService.UnscannedUserId;
 
     private MigrationTestHelper? _testHelper;
     private IServiceProvider? _serviceProvider;
@@ -72,28 +63,20 @@ public class ProfileScanResultsRepositoryTests
         _testHelper?.Dispose();
     }
 
-    /// <summary>
-    /// Seed a minimal telegram_users row so that profile_scan_results
-    /// inserts satisfy the FK_profile_scan_results_telegram_users_user_id
-    /// constraint. The FK parent is infrastructure for the write-path
-    /// tests, not the SUT.
-    /// </summary>
-    private async Task SeedTelegramUserAsync(long telegramUserId)
+    private async Task AssertUnscannedAsync()
     {
-        var contextFactory = _serviceProvider!.GetRequiredService<IDbContextFactory<AppDbContext>>();
-        await using var context = await contextFactory.CreateDbContextAsync();
-        await context.Database.ExecuteSqlInterpolatedAsync(
-            $"INSERT INTO telegram_users (telegram_user_id, is_bot, is_trusted, is_active, is_banned, bot_dm_enabled, first_seen_at, last_seen_at, created_at, updated_at, has_pinned_stories, is_fake, is_scam, is_verified, profile_scan_excluded, kick_count) VALUES ({telegramUserId}, false, false, true, false, false, NOW(), NOW(), NOW(), NOW(), false, false, false, false, false, 0)");
+        var history = await _repository!.GetByUserIdAsync(UnscannedUserId, CancellationToken.None);
+        Assert.That(history, Is.Empty, "anchor must have no scan rows in canonical");
     }
 
-    [Test]
-    public async Task InsertAsync_WithExplicitDisplayTextTrue_PersistsTrue()
+    [TestCase(true)]
+    [TestCase(false)]
+    public async Task InsertAsync_PersistsExplicitDisplayText(bool explicitDisplayText)
     {
-        await SeedTelegramUserAsync(WritePathUserIdTrue);
-
+        await AssertUnscannedAsync();
         var record = new ProfileScanResultRecord(
             Id: 0,
-            UserId: WritePathUserIdTrue,
+            UserId: UnscannedUserId,
             ScannedAt: DateTimeOffset.UtcNow,
             Score: 4.7m,
             Outcome: ProfileScanOutcome.Banned,
@@ -101,66 +84,34 @@ public class ProfileScanResultsRepositoryTests
             AiScore: 4.7m,
             AiReason: "test reason",
             AiSignals: "test_signal",
-            ExplicitDisplayText: true);
+            ExplicitDisplayText: explicitDisplayText);
 
         var insertedId = await _repository!.InsertAsync(record, CancellationToken.None);
-        var roundTripped = await _repository.GetLatestByUserIdAsync(WritePathUserIdTrue, CancellationToken.None);
+        var history = await _repository.GetByUserIdAsync(UnscannedUserId, CancellationToken.None);
 
-        Assert.That(roundTripped, Is.Not.Null);
+        Assert.That(history, Has.Count.EqualTo(1));
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(roundTripped!.Id, Is.EqualTo(insertedId));
-            Assert.That(roundTripped.ExplicitDisplayText, Is.True);
+            Assert.That(history[0].Id, Is.EqualTo(insertedId));
+            Assert.That(history[0].ExplicitDisplayText, Is.EqualTo(explicitDisplayText));
         }
     }
 
     [Test]
-    public async Task InsertAsync_WithExplicitDisplayTextFalse_PersistsFalse()
+    public async Task GetByUserIdAsync_CanonicalFlaggedUser_NewestFirstWithFlag()
     {
-        await SeedTelegramUserAsync(WritePathUserIdFalse);
+        var history = await _repository!.GetByUserIdAsync(CanonicalFlaggedUserId, CancellationToken.None);
 
-        var record = new ProfileScanResultRecord(
-            Id: 0,
-            UserId: WritePathUserIdFalse,
-            ScannedAt: DateTimeOffset.UtcNow,
-            Score: 1.0m,
-            Outcome: ProfileScanOutcome.Clean,
-            RuleScore: 0.0m,
-            AiScore: 1.0m,
-            AiReason: null,
-            AiSignals: null,
-            ExplicitDisplayText: false);
-
-        await _repository!.InsertAsync(record, CancellationToken.None);
-        var roundTripped = await _repository.GetLatestByUserIdAsync(WritePathUserIdFalse, CancellationToken.None);
-
-        Assert.That(roundTripped, Is.Not.Null);
-        Assert.That(roundTripped!.ExplicitDisplayText, Is.False);
-    }
-
-    [Test]
-    public async Task GetLatestByUserIdAsync_CanonicalFlaggedUser_ReturnsFlaggedRow()
-    {
-        var latest = await _repository!.GetLatestByUserIdAsync(
-            CanonicalFlaggedUserId,
-            CancellationToken.None);
-
-        Assert.That(latest, Is.Not.Null,
-            $"Canonical row for user {CanonicalFlaggedUserId} not found - check 23_profile_scan_results.sql");
+        Assert.That(history, Has.Count.EqualTo(2),
+            $"Canonical rows for user {CanonicalFlaggedUserId} not found - check 23_profile_scan_results.sql");
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(latest!.Id, Is.EqualTo(CanonicalFlaggedScanId));
-            Assert.That(latest.ExplicitDisplayText, Is.True);
+            Assert.That(history[0].Id, Is.EqualTo(CanonicalFlaggedScanId));
+            Assert.That(history[0].ExplicitDisplayText, Is.True);
+            Assert.That(history[1].ExplicitDisplayText, Is.False);
         }
     }
 
     [Test]
-    public async Task GetLatestByUserIdAsync_NoScanForUser_ReturnsNull()
-    {
-        var latest = await _repository!.GetLatestByUserIdAsync(
-            userId: UnseenUserId,
-            CancellationToken.None);
-
-        Assert.That(latest, Is.Null);
-    }
+    public async Task GetByUserIdAsync_NoScanForUser_ReturnsEmpty() => await AssertUnscannedAsync();
 }

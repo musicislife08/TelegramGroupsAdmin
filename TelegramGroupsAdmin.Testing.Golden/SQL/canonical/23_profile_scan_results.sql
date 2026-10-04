@@ -9,8 +9,8 @@ INSERT INTO profile_scan_results (id, user_id, scanned_at, score, outcome, rule_
 INSERT INTO profile_scan_results (id, user_id, scanned_at, score, outcome, rule_score, ai_score, ai_reason, ai_signals) VALUES (529, 9995544961449, '2026-04-30 00:55:52.082553+00', 0.2, 0, 0.0, 0.2, NULL, NULL);
 INSERT INTO profile_scan_results (id, user_id, scanned_at, score, outcome, rule_score, ai_score, ai_reason, ai_signals) VALUES (533, 9922735795237, '2026-04-30 15:42:53.888433+00', 0.0, 0, 0.0, 0.0, NULL, NULL);
 
--- Flagged display-text scan row for tests that exercise BanCelebrationService masking
--- and IProfileScanResultsRepository.GetLatestByUserIdAsync flagged-read behavior.
+-- Flagged display-text scan row: as the user's latest scan it drives the user_identities
+-- view's latest_scan_explicit flag, so the user's identity verdict is Explicit.
 -- Anchored to canonical user 9220500615182 (already has a high-score scan, ID 530).
 -- Newer scanned_at than ID 530 so this row wins "latest" lookups.
 INSERT INTO profile_scan_results (id, user_id, scanned_at, score, outcome, rule_score, ai_score, ai_reason, ai_signals, ai_explicit_display_text) VALUES (534, 9220500615182, '2026-05-01 09:00:00.000000+00', 4.6, 2, 0.0, 4.6, 'Display name itself reads as explicit solicitation.', 'explicit_display_text, manufactured profile signals', true);

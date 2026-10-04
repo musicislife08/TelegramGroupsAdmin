@@ -85,16 +85,15 @@ public sealed class BanCelebrationSubscriberRepository(
             .AnyAsync(ct);
     }
 
-    public async Task<List<UserIdentity>> GetDeliverableSubscribersAsync(long chatId, CancellationToken ct = default)
+    public async Task<List<long>> GetDeliverableSubscriberIdsAsync(long chatId, CancellationToken ct = default)
     {
         await using var context = await contextFactory.CreateDbContextAsync(ct);
-        var users = await context.BanCelebrationSubscribers.AsNoTracking()
+        return await context.BanCelebrationSubscribers.AsNoTracking()
             .Where(s => s.ChatId == chatId)
             .Where(IsDeliverable)
             .OrderBy(s => s.SubscribedAt)
-            .Select(s => s.TelegramUser!)
+            .Select(s => s.TelegramUserId)
             .ToListAsync(ct);
-        return users.Select(UserIdentity.From).ToList();
     }
 
     public async Task SetPromptAsync(long telegramUserId, long chatId, int promptMessageId, string promptDeleteJobId, CancellationToken ct = default)

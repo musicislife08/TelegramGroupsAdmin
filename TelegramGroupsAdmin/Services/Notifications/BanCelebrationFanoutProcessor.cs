@@ -2,6 +2,7 @@ using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Telegram.Metrics;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.DmCelebrations;
+using TelegramGroupsAdmin.Telegram.Services.Identity;
 
 namespace TelegramGroupsAdmin.Services.Notifications;
 
@@ -13,6 +14,7 @@ namespace TelegramGroupsAdmin.Services.Notifications;
 /// </summary>
 internal sealed class BanCelebrationFanoutProcessor(
     IBanCelebrationSubscriberRepository subscriberRepository,
+    IUserIdentityService identityService,
     IBanCelebrationGifRepository gifRepository,
     IBanCelebrationSubscriptionService subscriptionService,
     BanCelebrationDmSender sender,
@@ -23,8 +25,8 @@ internal sealed class BanCelebrationFanoutProcessor(
 
     public async Task ProcessAsync(BanCelebrationFanoutItem item, CancellationToken ct)
     {
-        var subscribers = await subscriberRepository.GetDeliverableSubscribersAsync(item.Chat.Id, ct);
-        if (subscribers.Count == 0)
+        var subscriberIds = await subscriberRepository.GetDeliverableSubscriberIdsAsync(item.Chat.Id, ct);
+        if (subscriberIds.Count == 0)
         {
             return;
         }
@@ -36,6 +38,8 @@ internal sealed class BanCelebrationFanoutProcessor(
                 item.GifId, item.Chat.ToLogDebug());
             return;
         }
+
+        var subscribers = await identityService.ResolveManyAsync(subscriberIds, ct);
 
         int sent = 0, blocked = 0, failed = 0;
         for (var i = 0; i < subscribers.Count; i++)

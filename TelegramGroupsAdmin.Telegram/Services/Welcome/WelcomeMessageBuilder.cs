@@ -9,6 +9,8 @@ namespace TelegramGroupsAdmin.Telegram.Services.Welcome;
 /// Admin-authored templates carry <c>{username}</c>, <c>{chat_name}</c>, and <c>{timeout}</c> tokens;
 /// <see cref="TelegramMessageBuilder.AppendTemplate"/> substitutes them (username → clickable
 /// <c>text_mention</c>) and passes any mistyped token through as literal text so it renders visibly.
+/// Each builder takes the effective <see cref="NameMasking"/> of where the text is written; settings
+/// previews pass <see cref="NameMasking.Off"/>.
 /// </summary>
 public static class WelcomeMessageBuilder
 {
@@ -19,13 +21,14 @@ public static class WelcomeMessageBuilder
     public static TelegramMessage FormatWelcomeMessage(
         WelcomeConfig config,
         UserIdentity user,
-        string chatName)
+        string chatName,
+        NameMasking masking)
     {
         var template = config.Mode is WelcomeMode.DmWelcome or WelcomeMode.EntranceExam
             ? config.DmChatTeaserMessage
             : config.MainWelcomeMessage;
 
-        return BuildFromTemplate(template, user, chatName, config.TimeoutSeconds);
+        return BuildFromTemplate(template, user, chatName, config.TimeoutSeconds, masking);
     }
 
     /// <summary>
@@ -34,8 +37,9 @@ public static class WelcomeMessageBuilder
     public static TelegramMessage FormatRulesConfirmation(
         WelcomeConfig config,
         UserIdentity user,
-        string chatName)
-        => new TelegramMessageBuilder()
+        string chatName,
+        NameMasking masking)
+        => TelegramMessageBuilder.For(masking)
             .AppendTemplate(config.MainWelcomeMessage, Substitutions(user, chatName, config.TimeoutSeconds))
             .Text("\n\n✅ You're all set! You can now participate in the chat.")
             .Build();
@@ -53,8 +57,9 @@ public static class WelcomeMessageBuilder
     public static TelegramMessage FormatExamIntro(
         WelcomeConfig config,
         UserIdentity user,
-        string chatName)
-        => BuildFromTemplate(config.MainWelcomeMessage, user, chatName, config.TimeoutSeconds);
+        string chatName,
+        NameMasking masking)
+        => BuildFromTemplate(config.MainWelcomeMessage, user, chatName, config.TimeoutSeconds, masking);
 
     /// <summary>
     /// Builds a welcome template (<c>{username}</c> → clickable <c>text_mention</c>,
@@ -66,8 +71,9 @@ public static class WelcomeMessageBuilder
         string template,
         UserIdentity user,
         string chatName,
-        int timeoutSeconds)
-        => new TelegramMessageBuilder()
+        int timeoutSeconds,
+        NameMasking masking)
+        => TelegramMessageBuilder.For(masking)
             .AppendTemplate(template, Substitutions(user, chatName, timeoutSeconds))
             .Build();
 
@@ -80,8 +86,9 @@ public static class WelcomeMessageBuilder
     public static TelegramMessage BuildBypassTemplate(
         string template,
         UserIdentity user,
-        string chatName)
-        => new TelegramMessageBuilder()
+        string chatName,
+        NameMasking masking)
+        => TelegramMessageBuilder.For(masking)
             .AppendTemplate(template, new Dictionary<string, Action<TelegramMessageBuilder>>
             {
                 ["{username}"] = b => b.Mention(user),

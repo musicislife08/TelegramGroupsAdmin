@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
+using TelegramGroupsAdmin.Configuration.Services;
 using Telegram.Bot.Exceptions;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
@@ -8,6 +9,7 @@ using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.Bot.Handlers;
 
@@ -27,6 +29,7 @@ public class BotDmServiceTests
     private IPendingNotificationsRepository _pendingNotificationsRepository = null!;
     private IManagedChatsRepository _managedChatsRepository = null!;
     private IJobScheduler _jobScheduler = null!;
+    private IConfigService _configService = null!;
     private BotDmService _service = null!;
 
     private static readonly UserIdentity TestUser = new(99001L, "Alice", null, "alice_tg");
@@ -39,6 +42,7 @@ public class BotDmServiceTests
         _pendingNotificationsRepository = Substitute.For<IPendingNotificationsRepository>();
         _managedChatsRepository = Substitute.For<IManagedChatsRepository>();
         _jobScheduler = Substitute.For<IJobScheduler>();
+        _configService = Substitute.For<IConfigService>();
 
         // Default: SendAsync succeeds with a minimal Message
         _messageHandler
@@ -58,6 +62,7 @@ public class BotDmServiceTests
             _pendingNotificationsRepository,
             _managedChatsRepository,
             _jobScheduler,
+            _configService,
             NullLogger<BotDmService>.Instance);
     }
 
@@ -67,7 +72,7 @@ public class BotDmServiceTests
     public async Task SendDmAsync_WithTelegramMessage_ForwardsEntitiesAndNullParseMode()
     {
         // Arrange
-        var message = new TelegramMessageBuilder().Bold("Hello").Text(" world").Build();
+        var message = TelegramMessageBuilder.For(NameMasking.Off).Bold("Hello").Text(" world").Build();
         IReadOnlyList<MessageEntity>? capturedEntities = null;
         ParseMode? capturedParseMode = ParseMode.Html; // intentionally wrong default — assert it gets null
 
@@ -101,7 +106,7 @@ public class BotDmServiceTests
     public async Task SendDmAsync_WithTelegramMessage_SendsToUserChatId()
     {
         // Arrange
-        var message = new TelegramMessageBuilder().Bold("test").Build();
+        var message = TelegramMessageBuilder.For(NameMasking.Off).Bold("test").Build();
 
         // Act
         await _service.SendDmAsync(TestUser, message);
@@ -139,7 +144,7 @@ public class BotDmServiceTests
     {
         // Arrange — the DM is refused (403), the fallback post in the group succeeds
         const long fallbackChatId = -100555L;
-        var message = new TelegramMessageBuilder().Text("You're ").Bold("in").Build();
+        var message = TelegramMessageBuilder.For(NameMasking.Off).Text("You're ").Bold("in").Build();
         string? fallbackText = null;
         IReadOnlyList<MessageEntity>? fallbackEntities = null;
 
@@ -183,6 +188,71 @@ public class BotDmServiceTests
         }
     }
 
+    [Test]
+    public async Task SendDmAsync_DmBlockedAndMaskingReadFails_ReturnsFailedResultWithoutThrowing()
+    {
+        // The fallback runs inside the 403 handler; a config read failure there must become a
+        // failed delivery result, never an exception out of SendDmAsync.
+        const long fallbackChatId = -100557L;
+        _configService.GetNameMaskingAsync(fallbackChatId, Arg.Any<CancellationToken>())
+            .Returns<ValueTask<NameMasking>>(_ => throw new InvalidOperationException("config db down"));
+        _messageHandler
+            .SendAsync(
+                chatId: TestUser.Id,
+                text: Arg.Any<string>(),
+                parseMode: Arg.Any<ParseMode?>(),
+                replyParameters: Arg.Any<ReplyParameters?>(),
+                replyMarkup: Arg.Any<InlineKeyboardMarkup?>(),
+                entities: Arg.Any<IReadOnlyList<MessageEntity>?>(),
+                ct: Arg.Any<CancellationToken>())
+            .Returns<Message>(_ => throw new ApiRequestException("Forbidden: bot was blocked by the user", 403));
+
+        DmDeliveryResult? result = null;
+        Assert.DoesNotThrowAsync(async () => result = await _service.SendDmAsync(TestUser, TelegramMessage.Plain("Notice"), fallbackChatId));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result!.Failed, Is.True);
+            Assert.That(result.DmSent, Is.False);
+            Assert.That(result.FallbackUsed, Is.False);
+        }
+    }
+
+    [Test]
+    public async Task SendDmAsync_DmBlockedWithFallbackChat_MasksFlaggedRecipientPerFallbackChat()
+    {
+        // The fallback post lands in a group, so that chat's masking setting decides the name shown.
+        const long fallbackChatId = -100556L;
+        var flagged = UserIdentity.ForTest(99002L, "Lewd", verdict: NameVerdict.Explicit);
+        _configService.GetNameMaskingAsync(fallbackChatId, Arg.Any<CancellationToken>()).Returns(NameMasking.On);
+        string? fallbackText = null;
+
+        _messageHandler
+            .SendAsync(
+                chatId: flagged.Id,
+                text: Arg.Any<string>(),
+                parseMode: Arg.Any<ParseMode?>(),
+                replyParameters: Arg.Any<ReplyParameters?>(),
+                replyMarkup: Arg.Any<InlineKeyboardMarkup?>(),
+                entities: Arg.Any<IReadOnlyList<MessageEntity>?>(),
+                ct: Arg.Any<CancellationToken>())
+            .Returns<Message>(_ => throw new ApiRequestException("Forbidden: bot was blocked by the user", 403));
+        _messageHandler
+            .SendAsync(
+                chatId: fallbackChatId,
+                text: Arg.Do<string>(t => fallbackText = t),
+                parseMode: Arg.Any<ParseMode?>(),
+                replyParameters: Arg.Any<ReplyParameters?>(),
+                replyMarkup: Arg.Any<InlineKeyboardMarkup?>(),
+                entities: Arg.Any<IReadOnlyList<MessageEntity>?>(),
+                ct: Arg.Any<CancellationToken>())
+            .Returns(new Message { Id = 8, Chat = new Chat { Id = fallbackChatId } });
+
+        await _service.SendDmAsync(flagged, TelegramMessage.Plain("Notice"), fallbackChatId);
+
+        Assert.That(fallbackText, Is.EqualTo($"{NameRedaction.Explicit} Notice"));
+    }
+
     #endregion
 
     #region SendDmWithKeyboardAsync — TelegramMessage overload
@@ -191,7 +261,7 @@ public class BotDmServiceTests
     public async Task SendDmWithKeyboardAsync_WithTelegramMessage_ForwardsEntitiesAndNullParseMode()
     {
         // Arrange
-        var message = new TelegramMessageBuilder().Bold("Question?").Build();
+        var message = TelegramMessageBuilder.For(NameMasking.Off).Bold("Question?").Build();
         var keyboard = new InlineKeyboardMarkup(new[]
         {
             new[] { InlineKeyboardButton.WithCallbackData("Yes", "yes") }
@@ -229,7 +299,7 @@ public class BotDmServiceTests
     public async Task SendDmWithKeyboardAsync_WithTelegramMessage_ForwardsKeyboardToHandler()
     {
         // Arrange
-        var message = new TelegramMessageBuilder().Text("Pick one:").Build();
+        var message = TelegramMessageBuilder.For(NameMasking.Off).Text("Pick one:").Build();
         var keyboard = new InlineKeyboardMarkup(new[]
         {
             new[] { InlineKeyboardButton.WithCallbackData("Option A", "a") }
@@ -289,7 +359,7 @@ public class BotDmServiceTests
     public async Task SendDmWithAnimationEntitiesAsync_CachedFileId_SendsByFileIdAndReportsReturnedId()
     {
         SetupAnimationReturns("cached-id");
-        var caption = new TelegramMessageBuilder().Bold("Workshop Alumni").LineBreak().Text("banned!").Build();
+        var caption = TelegramMessageBuilder.For(NameMasking.Off).Bold("Workshop Alumni").LineBreak().Text("banned!").Build();
 
         var result = await _service.SendDmWithAnimationEntitiesAsync(TestUser, caption, "cached-id", "/nope.gif");
 

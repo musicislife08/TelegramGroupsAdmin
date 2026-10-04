@@ -45,6 +45,7 @@ public class InviteCommand : IBotCommand
         Message message,
         string[] args,
         PermissionLevel userPermission,
+        UserIdentity sender,
         CancellationToken cancellationToken = default)
     {
         // Only works in groups/supergroups
@@ -97,7 +98,7 @@ public class InviteCommand : IBotCommand
             chatId,
             message.Chat.Title ?? "Unknown");
 
-        var inviteMessage = new TelegramMessageBuilder()
+        var inviteMessage = TelegramMessageBuilder.For(NameMasking.Off) // no user mentions
             .Text("🔗 ").Bold("Invite Link").LineBreak()
             .LineBreak()
             .Text(inviteLink).LineBreak()

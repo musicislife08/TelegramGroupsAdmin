@@ -281,17 +281,8 @@ public class ExamFlowE2ETests : E2ETestBase
         return await sessionRepo.GetSessionAsync(chatId, userId);
     }
 
-    private static User CreateTelegramUser(long id, string? username, string firstName, string? lastName)
-    {
-        return new User
-        {
-            Id = id,
-            Username = username,
-            FirstName = firstName,
-            LastName = lastName,
-            IsBot = false
-        };
-    }
+    private static UserIdentity CreateTelegramUser(long id, string? username, string firstName, string? lastName)
+        => UserIdentity.ForTest(id, firstName, lastName, username);
 
     private static Message CreateDmMessage(long userId, long dmChatId)
     {

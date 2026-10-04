@@ -6,7 +6,7 @@ This file is auto-loaded by Claude Code when working under `TelegramGroupsAdmin.
 
 The binding rule set lives in `.claude/rules/integration-test-data.md` and is injected automatically when you edit files in this project or a superpowers plan/spec. The short form:
 
-- A test asserts its logic against canonical rows. **Never seed a precondition** — no SUT write method (`GetOrCreateAsync`, `UpsertAsync`, `SetBanStatusAsync`, `TrustUserAsync`, …) as setup, no `ctx.<Table>.Add`, no raw `INSERT`. A SUT write appears only when that write **is** the assertion subject.
+- A test asserts its logic against canonical rows. **Never seed a precondition** — no SUT write method (`ObserveAsync`, `SetBanStatusAsync`, `TrustUserAsync`, …) as setup, no `ctx.<Table>.Add`, no raw `INSERT`. A SUT write appears only when that write **is** the assertion subject.
 - Canonical lacks a shape? **Do not add rows.** Find a canonical row no test or doc references and flag-edit it in place; keep the story plausible; pin it in `TelegramGroupsAdmin.Testing.Golden/GoldenDatasetConstants.cs`; add a Part 2 recipe marked "(canonical edit <date>)"; guard the precondition in the test by reading the row back.
 - Read expected counts/names at runtime, never hard-code them.
 - Hit an infrastructure problem (template build, FK, sequence, missing shape)? Escalate — never change the assertion to make it pass.
@@ -49,7 +49,7 @@ Origin: prod DB snapshot from 2026-04-30. Bootstrap pipeline (full detail in `do
 | 14 | domain_filters | 0 | Empty by design. |
 | 17 | web_notifications | 0 | Empty by design. |
 | 18 | notification_preferences | 5 | One per active web user. |
-| 19 | messages | 409 | 100 per slice: explicit_spam, implicit_spam, explicit_ham, implicit_ham. Plus 7 SimHash test anchors appended in 3A.3 (4666, 14538, 212355, 220848, 221429, 221904, 222949) — all banned-user spam from dev DB, preserved verbatim, FK-resolved against existing canonical telegram_users and MainChat. Plus 2 messages with converted OpenAI vetoes (94, 22127) appended 2026-09-28 from prod, authored by existing non-banned canonical users (see Part 2 recipe 4h). |
+| 19 | messages | 410 | 100 per slice: explicit_spam, implicit_spam, explicit_ham, implicit_ham. Plus 7 SimHash test anchors appended in 3A.3 (4666, 14538, 212355, 220848, 221429, 221904, 222949) — all banned-user spam from dev DB, preserved verbatim, FK-resolved against existing canonical telegram_users and MainChat. Plus 2 messages with converted OpenAI vetoes (94, 22127) appended 2026-09-28 from prod, authored by existing non-banned canonical users (see Part 2 recipe 4h). Plus @bagging_armado's join message 110342 appended 2026-10-03 from prod (see Part 2 "User identity service anchors"). |
 | 20 | chat_admins | 104 | Snapshot of admin membership across all 21 chats. |
 | 21 | linked_channels | 3 | One per chat that has a linked channel. |
 | 22 | telegram_user_mappings | 3 | Cross-chat user identity links. |
@@ -260,7 +260,7 @@ Recipe format: a heading, the anchor id(s), a one-line description, and "use whe
 
 #### Workshop Alumni: secondary chat for cross-chat tests
 - `chat_id` = `-100059667856554`
-- Second-most messages (39). 5 `chat_admins` members.
+- Second-most messages (40). 5 `chat_admins` members.
 - Use when: a test needs a second active chat to pair against MainChat (`chatA` vs `chatB` patterns in MessageHistoryRepositoryTests).
 
 #### Crypto Group: most-administered chat
@@ -341,7 +341,7 @@ Anchors are in code as `GoldenDatasetConstants.DmCelebrations`. None of these us
 | @chummyrepair | `9306234060091` | true | none (MainChat member) | the subscribe path, where the SUT upsert is the assertion subject |
 | @ToniBaronePaul | `9782251136844` | true (and `is_banned=true`) | Workshop Alumni | a subscription row that outlived its owner's ban; "deliverable" must exclude banned users |
 
-Workshop Alumni (`-100059667856554`) has no `ban_celebration_config`, so its effective celebration config is disabled: a subscribers-only chat.
+Workshop Alumni (`-100059667856554`) has a `ban_celebration_config` that is enabled for auto and manual bans (`sendToBannedUser` true) and no `welcome_config` (the global row applies), so a celebration there both posts to the chat and fans out to its deliverable subscribers. `BanCelebrationNameMaskingTests` uses it with `ScannedTwiceExplicitUserId` for caption name masking.
 
 ### Verdict events (canonical edit 2026-09-27)
 
@@ -391,9 +391,37 @@ Flag-edit: Poultry Community's msg 14498 renumbered to 14538 (still after the ch
 #### Profile-scan alert `aiSignals` shape (canonical edit 2026-10-01)
 `reports` 177, 178, 180 (`type=3`, resolved, real rows) had `context.aiSignals` stored as one lorem *string*. Production writes only arrays (`ProfileScanAlertContext.AiSignals` is `string[]`, verified against prod 2026-10-01: 9 rows, all arrays); the string shape was an artifact of the bootstrap's length-preserving lorem sanitizer, and it made `ReportsRepository.GetProfileScanAlertsAsync(pendingOnly: false)` — and so the whole Reports page — throw a `JsonException` on canonical data. The three values were split on `,`/`.` into short lorem items (`["Lorem ipsum dolor sit amet", "consectetur adipiscing elit", …]`); no real-looking signals were invented. Guard: `TestData/Tests/CanonicalReportContextShapeTests` (`jsonb_typeof(context->'aiSignals')`). Pending fixture 188 already carried an array.
 
+### User identity service anchors (canonical edit 2026-10-03)
+Anchors are in code as `GoldenDatasetConstants.IdentityService` (#552 part 1); all read-only.
+
+| Constant | Anchor | Shape |
+|---|---|---|
+| `ScannedTwiceExplicitUserId` | 9220500615182 @bagging_armado | scans 530 (older) and 534 (newer); 534 explicit. Also the banned user in `BanCelebrationNameMaskingTests` (global `maskFlaggedNames` absent → true, so the caption shows the explicit label) |
+| `ExplicitAuthorMessageId` | msg 110342, Workshop Alumni | @bagging_armado's real join service message (added from prod; deleted by `ban_cleanup`). The only message whose author's latest scan is explicit, so `enriched_messages` carries `latest_scan_explicit = true` on it |
+| `ScannedCleanUserId` | 9025828368896 @swivelhumvee | not trusted, not banned, scanned once (score 0.0, Feb 2026) with a plain profile (no bio, personal channel 0, no photo or stories); `JoinRenameRescanTests` (the join observation that records the rename is the scenario under test) |
+| `UnscannedUserId` | 9063342700386 @Juvenileii | not trusted, not a bot, no scan rows |
+| `BotUserId` | 9742468412405 @doilyemcee | the canonical bot |
+| `UntrustedNoHistoryUserId` | 9263051408340 @pastramiherbs | not trusted, active, no username_history |
+| `TrustedUserId` | 9006671634371 @starlightskinless | trusted, not an admin |
+| `RaceUserId` | 9680301255238 @violingentleman | not trusted, active, no history; row-lock race test |
+| `PhotoUserId` | 9264989724828 @raceoutnumber | not trusted; user_photo_path and photo_hash set |
+| `InactiveUserId` | 9332352149450 @calixrowen | is_active = false (banned spammer); MarkActiveAsync test |
+
+### Past-name search anchors (canonical edit 2026-10-03)
+Anchors are in code as `GoldenDatasetConstants.UsernameHistory`. Both owners are banned spammers (All and Banned tabs, not Active).
+
+| Constant | Anchor | Shape |
+|---|---|---|
+| `PastUsernameUserId` / `PastUsername` | 9032620986755 @BryanNguyen54, history row 3 | prior username `rsza_tilla` (flag-edited from NULL; prior names "Rsza Тилляев" unchanged) |
+| `PastFirstNameUserId` / `PastFirstName` | 9875141377477 "Jeanette", history row 2 | prior first name `QQQ` |
+| `NoPastUsernameUserId` | 9095125964119, history row 4 | prior names "Tin Tun" / "Min", no prior username; `UsernameHistoryRepositoryTests` field mapping and isolation (read-only) |
+| `CascadeDeleteUserId` | 9726308613009, history row 1 | `UsernameHistoryRepositoryTests` deletes the user in its clone to test the cascade, and reads it for isolation |
+
+Use when: a search must match a user by a past name only (`TelegramUserRepositoryTests` search region), or a rename must be recorded at a known time (`UsernameHistoryRepositoryTests` `HasChangeSinceAsync`, which reads row 2's `recorded_at` back). Tests read the history row and the current names back first.
+
 ### Synthetic / reserved rows (do not regenerate)
 - `welcome_responses` IDs `999001..999005`: 5 status branches anchored on `(MainChat_Id=-100026957614982, user_id=9196379650113, username='canonical_user1')`. Mapping: `999001`=Pending, `999002`=Accepted, `999003`=Denied, `999004`=Timeout, `999005`=Left.
-- `username_blacklist` IDs `999001` (`pattern='spambot_admin'`, enabled, Exact match) + `999005` (`pattern='archived_pattern'`, disabled, Exact match). No Contains/Regex/StartsWith fixtures (feature not yet implemented).
+- `username_blacklist` IDs `999001` (`pattern='spambot_admin'`, enabled, Exact match) + `999005` (`pattern='archived_pattern'`, disabled, Exact match). No Contains/Regex/StartsWith fixtures (feature not yet implemented). `999005` is also `GoldenDatasetConstants.Backup.BlacklistEntryId`: `BackupServiceTests.RestoreAsync_ShouldWipeAllTablesFirst` moves it to `999905` at runtime after taking the backup.
 - `detection_results` rows with `reason='canonical_synthetic_promotion'`: 15 synthetic explicit-ham decisions (`LegacyManual` / `ExplicitHam`, folded from the old explicit label table).
 - `reports` IDs `186..188`: 3 pending (`status=0`) fixtures, all for `9465377455871`, added for join-gate cleanup tests (the golden dataset's real reports are all already resolved). `186`=ContentReport pointing at real message `(70989, -100054416618415)` so the `enriched_reports.content_user_id` join resolves; `187`=ExamResult (failure) in chat `-100054416618415`; `188`=ProfileScanAlert in chat `-100048429560480`. `188` is also the one pre-existing pending profile-scan alert `ProfileScanAlertMappingTests` must account for.
 - `reports` ID `189`: synthetic auto-approved ExamResult pass (status=1, `reviewed_by='Exam Flow'`, `action_taken='auto-approved'`, context `outcome=1`) for user `9960171136314` in MainChat, anchoring the auto-approval override tests. All six pre-existing exam contexts (`179, 181, 182, 183, 185, 187`) now carry `"outcome": 0`.

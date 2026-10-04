@@ -10,6 +10,7 @@ using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.Telegram.Services.Identity;
 
 namespace TelegramGroupsAdmin.UnitTests.Services.Notifications;
 
@@ -31,6 +32,7 @@ public class AdminNotificationServiceRoutingTests
     private IChatAdminsRepository _mockChatAdminsRepo = null!;
     private IUserRepository _mockUserRepo = null!;
     private IReportCallbackContextRepository _mockCallbackContextRepo = null!;
+    private IUserIdentityService _mockIdentities = null!;
     private ILogger<AdminNotificationService> _mockLogger = null!;
 
     private AdminNotificationService _service = null!;
@@ -47,6 +49,9 @@ public class AdminNotificationServiceRoutingTests
         _mockChatAdminsRepo = Substitute.For<IChatAdminsRepository>();
         _mockUserRepo = Substitute.For<IUserRepository>();
         _mockCallbackContextRepo = Substitute.For<IReportCallbackContextRepository>();
+        _mockIdentities = Substitute.For<IUserIdentityService>();
+        _mockIdentities.ResolveAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
+            .Returns(ci => UserIdentity.ForTest(ci.Arg<long>()));
         _mockLogger = Substitute.For<ILogger<AdminNotificationService>>();
 
         // Default: notification preferences return all-disabled config (no channels deliver)
@@ -68,12 +73,13 @@ public class AdminNotificationServiceRoutingTests
         _service = new AdminNotificationService(
             _mockPrefsRepo,
             _mockEmailService,
-            new NotificationDmDispatcher(_mockDmService, _mockTelegramUserRepo),
+            new NotificationDmDispatcher(_mockDmService, _mockIdentities),
             _mockWebPushService,
             _mockTelegramMappingRepo,
             _mockChatAdminsRepo,
             _mockUserRepo,
             _mockCallbackContextRepo,
+            _mockIdentities,
             _mockLogger);
     }
 
@@ -296,5 +302,102 @@ public class AdminNotificationServiceRoutingTests
             Arg.Any<string>(),
             Arg.Any<IReadOnlyList<global::Telegram.Bot.Types.MessageEntity>>(),
             Arg.Any<CancellationToken>());
+    }
+
+    // ── Report notification reporter rendering ──
+
+    private async Task<string> CaptureReportDmTextAsync(Actor reporter)
+    {
+        var chat = new ChatIdentity(-1001234567890L, "Test Chat");
+        _mockUserRepo.GetWebUsersWithChatAccessAsync(chat.Id, Arg.Any<CancellationToken>())
+            .Returns(new List<UserRecord>());
+        _mockChatAdminsRepo.GetChatAdminsAsync(chat.Id, Arg.Any<CancellationToken>())
+            .Returns(new List<ChatAdmin> { CreateTestChatAdmin(chat.Id, telegramId: 555L) });
+
+        string? text = null;
+        _mockDmService.SendDmWithMediaAndKeyboardEntitiesAsync(
+                Arg.Any<UserIdentity>(), Arg.Any<string>(), Arg.Do<string>(t => text = t),
+                Arg.Any<IReadOnlyList<global::Telegram.Bot.Types.MessageEntity>>(), Arg.Any<string?>(), Arg.Any<string?>(),
+                Arg.Any<global::Telegram.Bot.Types.ReplyMarkups.InlineKeyboardMarkup?>(), Arg.Any<CancellationToken>())
+            .Returns(new DmDeliveryResult { DmSent = true });
+
+        await _service.SendReportNotificationAsync(chat, UserIdentity.ForTest(999L, "Reported"), reporter,
+            "message text", photoPath: null, reportId: 1, ReportType.ContentReport, CancellationToken.None);
+
+        Assert.That(text, Is.Not.Null, "the unlinked admin should have received the report DM");
+        return text!;
+    }
+
+    [Test]
+    public async Task SendReportNotificationAsync_TelegramReporter_RendersIdentityResolvedById()
+    {
+        // The Actor's stored display name is stale; the reporter is resolved by id.
+        _mockIdentities.ResolveAsync(54321L, Arg.Any<CancellationToken>())
+            .Returns(UserIdentity.ForTest(54321L, "Alice", "Current"));
+        var reporter = Actor.FromTelegramUser(54321L, "alice_a", "Alice", "Stale");
+
+        var text = await CaptureReportDmTextAsync(reporter);
+
+        Assert.That(text, Does.Contain("Reported by: Alice Current"));
+        Assert.That(text, Does.Not.Contain("Stale"));
+    }
+
+    [Test]
+    public async Task SendReportNotificationAsync_SystemReporter_RendersPlainText()
+    {
+        var text = await CaptureReportDmTextAsync(Actor.AutoDetection);
+
+        Assert.That(text, Does.Contain($"Reported by: {Actor.AutoDetection.GetDisplayText()}"));
+    }
+
+    // ── Admin DMs are never masked: admins need the real name, even for a flagged user ──
+
+    private async Task<string> CaptureDmTextAsync(ChatIdentity chat, Func<Task> send)
+    {
+        // The DM path reads no masking setting at all: whatever a chat's "Mask flagged names" says,
+        // an admin DM renders the real name.
+        _mockUserRepo.GetWebUsersWithChatAccessAsync(chat.Id, Arg.Any<CancellationToken>())
+            .Returns(new List<UserRecord>());
+        _mockChatAdminsRepo.GetChatAdminsAsync(chat.Id, Arg.Any<CancellationToken>())
+            .Returns(new List<ChatAdmin> { CreateTestChatAdmin(chat.Id, telegramId: 555L) });
+        string? text = null;
+        _mockDmService.SendDmWithEntitiesAsync(
+                Arg.Any<UserIdentity>(), Arg.Any<string>(), Arg.Do<string>(t => text = t),
+                Arg.Any<IReadOnlyList<global::Telegram.Bot.Types.MessageEntity>>(), Arg.Any<CancellationToken>())
+            .Returns(new DmDeliveryResult { DmSent = true });
+
+        await send();
+
+        Assert.That(text, Is.Not.Null, "the unlinked admin should have received the DM");
+        return text!;
+    }
+
+    [Test]
+    public async Task SendBanNotificationAsync_FlaggedName_DmShowsRealNameInSubjectAndUserField()
+    {
+        var chat = new ChatIdentity(-1001234567890L, "Test Chat");
+        var user = UserIdentity.ForTest(999L, "Bad", verdict: NameVerdict.Explicit);
+
+        var text = await CaptureDmTextAsync(chat, () =>
+            _service.SendBanNotificationAsync(user, Actor.AutoDetection, "spam", chat, CancellationToken.None));
+
+        Assert.That(text, Does.Contain("User Banned: Bad"));
+        Assert.That(text, Does.Contain("User: Bad"));
+        Assert.That(text, Does.Not.Contain(NameRedaction.Explicit));
+    }
+
+    [TestCase(true, "Admin Promoted: Bad")]
+    [TestCase(false, "Admin Demoted: Bad")]
+    public async Task SendAdminChangedAsync_FlaggedName_DmShowsRealNameInSubjectAndUserField(bool promoted, string subject)
+    {
+        var chat = new ChatIdentity(-1001234567890L, "Test Chat");
+        var user = UserIdentity.ForTest(999L, "Bad", verdict: NameVerdict.Explicit);
+
+        var text = await CaptureDmTextAsync(chat, () =>
+            _service.SendAdminChangedAsync(chat, user, promoted, isCreator: false, CancellationToken.None));
+
+        Assert.That(text, Does.Contain(subject));
+        Assert.That(text, Does.Contain("User: Bad"));
+        Assert.That(text, Does.Not.Contain(NameRedaction.Explicit));
     }
 }

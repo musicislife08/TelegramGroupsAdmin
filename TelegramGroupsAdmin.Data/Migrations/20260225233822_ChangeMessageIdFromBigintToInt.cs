@@ -236,7 +236,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
                 LEFT JOIN telegram_users actor_tu ON dr.telegram_user_id = actor_tu.telegram_user_id
                 LEFT JOIN telegram_users msg_tu ON m.user_id = msg_tu.telegram_user_id;
                 """);
-            migrationBuilder.Sql(EnrichedReportView.CreateViewSql);
+            migrationBuilder.Sql(LegacyEnrichedViewSql.EnrichedReports);
             migrationBuilder.Sql(LegacyDetectionViewSql.DetectionAccuracy);
             // Inline SQL snapshot — the C# constant was later updated for V2 scoring columns.
             migrationBuilder.Sql("""
@@ -388,7 +388,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
                 LEFT JOIN telegram_users actor_tu ON dr.telegram_user_id = actor_tu.telegram_user_id
                 LEFT JOIN telegram_users msg_tu ON m.user_id = msg_tu.telegram_user_id;
                 """);
-            migrationBuilder.Sql(EnrichedReportView.CreateViewSql);
+            migrationBuilder.Sql(LegacyEnrichedViewSql.EnrichedReports);
             migrationBuilder.Sql(LegacyDetectionViewSql.DetectionAccuracy);
             // Inline SQL snapshot — the C# constant was later updated for V2 scoring columns.
             migrationBuilder.Sql("""

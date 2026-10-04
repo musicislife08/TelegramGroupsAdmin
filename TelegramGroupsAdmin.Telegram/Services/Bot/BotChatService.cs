@@ -11,6 +11,7 @@ using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot.Handlers;
+using TelegramGroupsAdmin.Telegram.Services.Identity;
 
 namespace TelegramGroupsAdmin.Telegram.Services.Bot;
 
@@ -27,6 +28,7 @@ public class BotChatService(
     IManagedChatsRepository managedChatsRepo,
     IChatAdminsRepository chatAdminsRepo,
     ITelegramUserRepository userRepo,
+    IUserIdentityService identityService,
     IUserActionsRepository userActionsRepo,
     IAdminNotificationService notificationService,
     ApiMetrics apiMetrics,
@@ -180,8 +182,8 @@ public class BotChatService(
                 {
                     if (isNowAdmin)
                     {
-                        // User promoted to admin - ensure user exists in telegram_users first (FK constraint)
-                        await userRepo.GetOrCreateAsync(UserIdentity.From(affectedUser), affectedUser.IsBot, ct);
+                        // User promoted to admin - record the user first (chat_admins FK needs the row)
+                        await ObserveChatMemberAsync(affectedUser, chat, myChatMember.Date.ToUtcOffset(), ct);
 
                         var isCreator = newStatus == ChatMemberStatus.Creator;
                         await chatAdminsRepo.UpsertAsync(chat.Id, affectedUser.Id, isCreator, cancellationToken: ct);
@@ -193,8 +195,9 @@ public class BotChatService(
                     }
                     else
                     {
-                        // User demoted from admin
-                        await chatAdminsRepo.DeactivateAsync(ChatIdentity.From(chat), UserIdentity.From(affectedUser), ct);
+                        // User demoted from admin (resolved by id: demotion does not record names)
+                        var demotedUser = await identityService.ResolveAsync(affectedUser.Id, ct);
+                        await chatAdminsRepo.DeactivateAsync(ChatIdentity.From(chat), demotedUser, ct);
                         logger.LogInformation(
                             "❌ {User} demoted from admin in {Chat}",
                             affectedUser.ToLogInfo(),
@@ -284,8 +287,8 @@ public class BotChatService(
 
             if (isNowAdmin)
             {
-                // User promoted to admin - ensure user exists in telegram_users first (FK constraint)
-                await userRepo.GetOrCreateAsync(UserIdentity.From(user), user.IsBot, ct);
+                // User promoted to admin - record the user first (chat_admins FK needs the row)
+                var promotedUser = await ObserveChatMemberAsync(user, chat, chatMemberUpdate.Date.ToUtcOffset(), ct);
 
                 var isCreator = newStatus == ChatMemberStatus.Creator;
                 await chatAdminsRepo.UpsertAsync(chat.Id, user.Id, isCreator, ct);
@@ -329,15 +332,16 @@ public class BotChatService(
                 // Phase 5.2: Notify admins about admin promotion
                 _ = notificationService.SendAdminChangedAsync(
                     chat: ChatIdentity.From(chat),
-                    user: UserIdentity.From(user),
+                    user: promotedUser,
                     promoted: true,
                     isCreator: isCreator,
                     ct: ct);
             }
             else
             {
-                // User demoted from admin
-                await chatAdminsRepo.DeactivateAsync(ChatIdentity.From(chat), UserIdentity.From(user), ct);
+                // User demoted from admin (resolved by id: demotion does not record names)
+                var demotedUser = await identityService.ResolveAsync(user.Id, ct);
+                await chatAdminsRepo.DeactivateAsync(ChatIdentity.From(chat), demotedUser, ct);
 
                 logger.LogInformation(
                     "⬇️ INSTANT: {User} demoted from admin in {Chat}",
@@ -347,7 +351,7 @@ public class BotChatService(
                 // Phase 5.2: Notify admins about admin demotion
                 _ = notificationService.SendAdminChangedAsync(
                     chat: ChatIdentity.From(chat),
-                    user: UserIdentity.From(user),
+                    user: demotedUser,
                     promoted: false,
                     isCreator: false,
                     ct: ct);
@@ -449,13 +453,13 @@ public class BotChatService(
 
             foreach (var admin in admins)
             {
-                // Ensure user exists in telegram_users first (FK constraint)
-                var adminRecord = await userRepo.GetOrCreateAsync(
-                    UserIdentity.From(admin.User), admin.User.IsBot, ct);
+                // Record the admin first (chat_admins FK needs the row). getChatAdministrators
+                // carries no date, so the names are as of now. No rescan: admins are trusted.
+                var adminUser = await ObserveChatMemberAsync(admin.User, chat, DateTimeOffset.UtcNow, ct);
 
                 var isCreator = admin.Status == ChatMemberStatus.Creator;
                 var wasNew = !cachedAdminIds.Contains(admin.User.Id);
-                var needsTrust = !adminRecord.IsTrusted;
+                var needsTrust = !await userRepo.IsTrustedAsync(admin.User.Id, ct);
 
                 await chatAdminsRepo.UpsertAsync(chat.Id, admin.User.Id, isCreator, ct);
 
@@ -463,8 +467,6 @@ public class BotChatService(
 
                 if (wasNew || needsTrust)
                 {
-                    var adminUser = UserIdentity.From(admin.User);
-
                     if (wasNew)
                     {
                         logger.LogInformation(
@@ -524,6 +526,20 @@ public class BotChatService(
             throw; // Re-throw so caller can track failures
         }
     }
+
+    /// <summary>
+    /// Records a chat member's names from a chat-member update or getChatAdministrators result.
+    /// Never rescans: this runs only for admins, who are trusted.
+    /// </summary>
+    private Task<UserIdentity> ObserveChatMemberAsync(User user, Chat chat, DateTimeOffset seenAt, CancellationToken ct) =>
+        ObserveChatMemberAsync(user, ChatIdentity.From(chat), seenAt, ct);
+
+    private Task<UserIdentity> ObserveChatMemberAsync(User user, ChatIdentity chat, DateTimeOffset seenAt, CancellationToken ct) =>
+        identityService.ObserveAsync(
+            new ObservedUser(user.Id, user.FirstName, user.LastName, user.Username, user.IsBot,
+                ObservationSource.ChatMember, seenAt),
+            new ProfileChangeContext(chat, MessageId: null),
+            ct);
 
     /// <summary>
     /// Refresh admin cache for all active managed chats.

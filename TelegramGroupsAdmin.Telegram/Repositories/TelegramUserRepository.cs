@@ -4,8 +4,11 @@ using TelegramGroupsAdmin.ContentDetection.Repositories.Mappings;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Core;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Repositories.Mappings;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Core.Extensions;
+using TelegramGroupsAdmin.Core.Utilities;
+using TelegramGroupsAdmin.Telegram.Helpers;
 using TelegramGroupsAdmin.Telegram.Constants;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using DataModels = TelegramGroupsAdmin.Data.Models;
@@ -29,6 +32,22 @@ public class TelegramUserRepository : ITelegramUserRepository
     }
 
     /// <summary>
+    /// Returns one identity per id found, read from the user_identities view
+    /// (names plus the verdict from the latest profile scan). Ids with no row are absent.
+    /// </summary>
+    public async Task<IReadOnlyList<UserIdentity>> GetIdentitiesAsync(
+        IReadOnlyCollection<long> userIds, CancellationToken cancellationToken = default)
+    {
+        if (userIds.Count == 0) return [];
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var rows = await context.UserIdentities
+            .AsNoTracking()
+            .Where(v => userIds.Contains(v.TelegramUserId))
+            .ToListAsync(cancellationToken);
+        return rows.Select(r => r.ToIdentity()).ToList();
+    }
+
+    /// <summary>
     /// Get Telegram user by ID
     /// </summary>
     public async Task<UiModels.TelegramUser?> GetByTelegramIdAsync(long telegramUserId, CancellationToken cancellationToken = default)
@@ -42,33 +61,138 @@ public class TelegramUserRepository : ITelegramUserRepository
     }
 
     /// <inheritdoc/>
-    public async Task<UiModels.TelegramUser> GetOrCreateAsync(
-        UserIdentity user, bool isBot, CancellationToken cancellationToken = default)
+    public async Task<UiModels.ObservedNamesResult> GetOrUpdateAsync(
+        UiModels.ObservedUser observed, UiModels.ProfileChangeContext changeContext, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var now = DateTimeOffset.UtcNow;
-        var isTrusted = TelegramConstants.IsSystemUser(user.Id);
+        // Production enables retry-on-failure, which rejects a user transaction opened outside the
+        // strategy. The strategy re-runs this whole unit on a transient failure, so everything an
+        // attempt writes or decides lives inside it.
+        var strategy = context.Database.CreateExecutionStrategy();
+        var renamed = await strategy.ExecuteAsync(async ct =>
+        {
+            // An ambiguous commit (committed, but the ack was lost) is retried: the retry sees equal
+            // names and returns Renamed = null, so an inline rescan can be skipped. The scan's
+            // history check (a username_history row newer than the last scan) still catches it.
+            // A failed attempt may leave the history and audit entities tracked.
+            context.ChangeTracker.Clear();
+            await using var transaction = await context.Database.BeginTransactionAsync(ct);
+            var now = DateTimeOffset.UtcNow;
+            var observedAt = ToWatermark(observed.ObservedAt);
+            var isTrusted = TelegramConstants.IsSystemUser(observed.Id);
 
+            await context.Database.ExecuteSqlAsync($"""
+                INSERT INTO telegram_users (
+                    telegram_user_id, username, first_name, last_name, names_observed_at,
+                    is_bot, is_trusted, is_banned, bot_dm_enabled,
+                    first_seen_at, last_seen_at, created_at, updated_at, is_active
+                ) VALUES (
+                    {observed.Id}, {observed.Username}, {observed.FirstName}, {observed.LastName}, {observedAt},
+                    {observed.IsBot}, {isTrusted}, {false}, {false},
+                    {now}, {now}, {now}, {now}, {false}
+                )
+                ON CONFLICT (telegram_user_id) DO NOTHING
+                """, ct);
+
+            // The FOR UPDATE row lock serializes concurrent writers. A writer that waited re-reads the
+            // committed row, so the WHERE fails for it and only the statement that changed the names
+            // returns a row. RETURNING prev.* yields the names as they were before this update.
+            var previous = await context.Database.SqlQuery<PreviousNamesRow>($"""
+                UPDATE telegram_users t
+                SET first_name = {observed.FirstName},
+                    last_name = {observed.LastName},
+                    username = {observed.Username},
+                    names_observed_at = {observedAt},
+                    updated_at = {now}
+                FROM (SELECT telegram_user_id, first_name, last_name, username
+                      FROM telegram_users WHERE telegram_user_id = {observed.Id} FOR UPDATE) prev
+                WHERE t.telegram_user_id = prev.telegram_user_id
+                  AND (t.names_observed_at IS NULL OR {observedAt} >= t.names_observed_at)
+                  AND (t.first_name IS DISTINCT FROM {observed.FirstName}
+                       OR t.last_name IS DISTINCT FROM {observed.LastName}
+                       OR t.username IS DISTINCT FROM {observed.Username})
+                RETURNING prev.first_name AS "FirstName", prev.last_name AS "LastName", prev.username AS "Username"
+                """).ToListAsync(ct);
+
+            UiModels.PreviousNames? oldNames = null;
+            if (previous.Count == 1)
+            {
+                var old = previous[0];
+                oldNames = new UiModels.PreviousNames(old.FirstName, old.LastName, old.Username);
+
+                context.UsernameHistory.Add(new DataModels.UsernameHistoryDto
+                {
+                    UserId = observed.Id,
+                    Username = old.Username,
+                    FirstName = old.FirstName,
+                    LastName = old.LastName,
+                    RecordedAt = now
+                });
+
+                var reason = ProfileChangeReason.Build(oldNames, observed);
+                context.UserActions.Add(new UiModels.UserActionRecord(
+                    Id: 0,
+                    UserId: observed.Id,
+                    ActionType: UserActionType.ProfileChange,
+                    MessageId: changeContext.MessageId,
+                    ChatId: changeContext.Chat?.Id,
+                    IssuedBy: Actor.ProfileDiffDetection,
+                    IssuedAt: now,
+                    ExpiresAt: null,
+                    Reason: changeContext.Chat is { } chat ? AuditReason.WithChatTag(chat, reason) : reason).ToDto());
+
+                await context.SaveChangesAsync(ct);
+            }
+
+            // Advance the watermark when the names were already equal, so a later stale observation
+            // cannot overwrite them.
+            await context.Database.ExecuteSqlAsync($"""
+                UPDATE telegram_users SET names_observed_at = {observedAt}
+                WHERE telegram_user_id = {observed.Id}
+                  AND (names_observed_at IS NULL OR names_observed_at < {observedAt})
+                """, ct);
+
+            await transaction.CommitAsync(ct);
+            return oldNames;
+        }, cancellationToken);
+
+        var entity = await context.TelegramUsers.AsNoTracking()
+            .FirstAsync(u => u.TelegramUserId == observed.Id, cancellationToken);
+
+        if (renamed is not null)
+            _logger.LogDebug("Recorded rename of Telegram user {User}", entity.ToLogDebug());
+
+        return new UiModels.ObservedNamesResult(entity.ToModel(), renamed);
+    }
+
+    /// <summary>
+    /// The <c>names_observed_at</c> value for an observation: UTC (Npgsql writes timestamptz only
+    /// from offset-zero values) and truncated to whole seconds. Telegram dates messages and edits in
+    /// whole seconds while scans and the bot's own record use the server clock, so without the
+    /// truncation a rename sent in the same second as a scan would lose to the scan's watermark.
+    /// Normalised here, where the watermark is compared, so every source gets it.
+    /// </summary>
+    private static DateTimeOffset ToWatermark(DateTimeOffset observedAt)
+    {
+        var utc = observedAt.ToUniversalTime();
+        return utc.AddTicks(-(utc.Ticks % TimeSpan.TicksPerSecond));
+    }
+
+    /// <summary>Columns returned by the rename UPDATE; names match the SQL aliases.</summary>
+    private sealed record PreviousNamesRow(string? FirstName, string? LastName, string? Username);
+
+    /// <inheritdoc/>
+    public async Task MarkActiveAsync(long telegramUserId, DateTimeOffset seenAt, CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var seenAtUtc = seenAt.ToUniversalTime();
         await context.Database.ExecuteSqlAsync($"""
-            INSERT INTO telegram_users (
-                telegram_user_id, username, first_name, last_name,
-                is_bot, is_trusted, is_banned, bot_dm_enabled,
-                first_seen_at, last_seen_at, created_at, updated_at, is_active
-            ) VALUES (
-                {user.Id}, {user.Username}, {user.FirstName}, {user.LastName},
-                {isBot}, {isTrusted}, {false}, {false},
-                {now}, {now}, {now}, {now}, {false}
-            )
-            ON CONFLICT (telegram_user_id) DO NOTHING
+            UPDATE telegram_users
+            SET is_active = true,
+                last_seen_at = GREATEST(last_seen_at, {seenAtUtc}),
+                updated_at = {DateTimeOffset.UtcNow}
+            WHERE telegram_user_id = {telegramUserId}
             """, cancellationToken);
-
-        var entity = await context.TelegramUsers
-            .AsNoTracking()
-            .FirstAsync(u => u.TelegramUserId == user.Id, cancellationToken);
-
-        _logger.LogDebug("Ensured Telegram user {User}", user.ToLogDebug());
-
-        return entity.ToModel();
     }
 
     /// <summary>
@@ -82,46 +206,6 @@ public class TelegramUserRepository : ITelegramUserRepository
             .Where(u => u.TelegramUserId == telegramUserId)
             .Select(u => u.UserPhotoPath)
             .FirstOrDefaultAsync(cancellationToken);
-    }
-
-    /// <summary>
-    /// Upsert (insert or update) Telegram user record using atomic PostgreSQL ON CONFLICT DO UPDATE.
-    /// Used by FetchUserPhotoJob and message processing to maintain user data.
-    /// NOTE: IsTrusted and BotDmEnabled are never updated on conflict — only set by dedicated methods.
-    /// NOTE: IsActive is hardcoded to true on conflict — sending a message definitively makes user active.
-    /// </summary>
-    public async Task UpsertAsync(UiModels.TelegramUser user, CancellationToken cancellationToken = default)
-    {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var now = DateTimeOffset.UtcNow;
-        var isTrusted = TelegramConstants.IsSystemUser(user.TelegramUserId);
-
-        await context.Database.ExecuteSqlAsync($"""
-            INSERT INTO telegram_users (
-                telegram_user_id, username, first_name, last_name,
-                user_photo_path, photo_hash, is_active, is_trusted,
-                is_bot, is_banned, bot_dm_enabled,
-                first_seen_at, last_seen_at, created_at, updated_at
-            ) VALUES (
-                {user.TelegramUserId}, {user.Username}, {user.FirstName}, {user.LastName},
-                {user.UserPhotoPath}, {user.PhotoHash}, {user.IsActive}, {isTrusted},
-                {user.IsBot}, {false}, {false},
-                {now}, {user.LastSeenAt}, {now}, {now}
-            )
-            ON CONFLICT (telegram_user_id) DO UPDATE SET
-                username = EXCLUDED.username,
-                first_name = EXCLUDED.first_name,
-                last_name = EXCLUDED.last_name,
-                user_photo_path = EXCLUDED.user_photo_path,
-                photo_hash = EXCLUDED.photo_hash,
-                is_active = true,
-                last_seen_at = EXCLUDED.last_seen_at,
-                updated_at = {now}
-            """, cancellationToken);
-
-        _logger.LogDebug(
-            "Upserted Telegram user {User}",
-            user.ToLogDebug());
     }
 
     /// <summary>
@@ -907,9 +991,14 @@ public class TelegramUserRepository : ITelegramUserRepository
             .OrderByDescending(r => r.ScannedAt)
             .FirstOrDefaultAsync(cancellationToken);
 
+        // Identity (names + verdict) from the user_identities view, the single source of the verdict rule
+        var identity = await context.UserIdentities
+            .AsNoTracking()
+            .FirstOrDefaultAsync(v => v.TelegramUserId == telegramUserId, cancellationToken);
+
         return new UiModels.TelegramUserDetail
         {
-            User = new UserIdentity(user.TelegramUserId, user.FirstName, user.LastName, user.Username),
+            User = identity.ToIdentityOrIdOnly(telegramUserId),
             UserPhotoPath = user.UserPhotoPath,
             PhotoHash = user.PhotoHash,
             IsTrusted = user.IsTrusted,

@@ -14,6 +14,7 @@ using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.Telegram.Services.Identity;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Handlers;
 using TelegramGroupsAdmin.Telegram.Services.UserApi;
@@ -42,6 +43,7 @@ public class WelcomeServiceBlacklistTests
     private IConfigService _configService = null!;
     private IWelcomeResponsesRepository _welcomeResponsesRepository = null!;
     private ITelegramUserRepository _telegramUserRepository = null!;
+    private IUserIdentityService _identities = null!;
     private IExamFlowService _examFlowService = null!;
     private IImpersonationDetectionService _impersonationDetectionService = null!;
     private IBotProtectionService _botProtectionService = null!;
@@ -101,6 +103,11 @@ public class WelcomeServiceBlacklistTests
         _configService = Substitute.For<IConfigService>();
         _welcomeResponsesRepository = Substitute.For<IWelcomeResponsesRepository>();
         _telegramUserRepository = Substitute.For<ITelegramUserRepository>();
+        _identities = Substitute.For<IUserIdentityService>();
+        _identities.ObserveAsync(Arg.Any<ObservedUser>(), Arg.Any<ProfileChangeContext>(), Arg.Any<CancellationToken>())
+            .Returns(ci => { var o = ci.Arg<ObservedUser>(); return new UserIdentity(o.Id, o.FirstName, o.LastName, o.Username); });
+        _identities.ResolveAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
+            .Returns(ci => UserIdentity.FromId(ci.Arg<long>()));
         _examFlowService = Substitute.For<IExamFlowService>();
         _impersonationDetectionService = Substitute.For<IImpersonationDetectionService>();
         _botProtectionService = Substitute.For<IBotProtectionService>();
@@ -146,8 +153,7 @@ public class WelcomeServiceBlacklistTests
 
         // User exists and is not banned
         _telegramUserRepository
-            .GetOrCreateAsync(
-                Arg.Any<UserIdentity>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
+            .GetByTelegramIdAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(NonBannedTelegramUser);
 
         // Bot protection allows bots by default
@@ -208,6 +214,7 @@ public class WelcomeServiceBlacklistTests
             _configService,
             _welcomeResponsesRepository,
             _telegramUserRepository,
+            _identities,
             _examFlowService,
             _impersonationDetectionService,
             _botProtectionService,
@@ -372,8 +379,7 @@ public class WelcomeServiceBlacklistTests
     {
         // Arrange — repository returns a trusted user
         _telegramUserRepository
-            .GetOrCreateAsync(
-                Arg.Any<UserIdentity>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
+            .GetByTelegramIdAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(TrustedTelegramUser);
 
         var update = CreateJoinUpdate();

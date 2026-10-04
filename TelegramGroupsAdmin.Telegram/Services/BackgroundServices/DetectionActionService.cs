@@ -6,6 +6,7 @@ using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Models;
+using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Metrics;
@@ -57,6 +58,7 @@ public class DetectionActionService(
     /// </summary>
     public async Task HandleSpamDetectionActionsAsync(
         Message message,
+        UserIdentity sender,
         TelegramGroupsAdmin.ContentDetection.Services.ContentDetectionResult spamResult,
         DetectionResultRecord detectionResult,
         CancellationToken cancellationToken = default)
@@ -86,14 +88,14 @@ public class DetectionActionService(
                 logger.LogWarning(
                     "Hard block for message {MessageId} from {User} in {Chat}: {Reason}",
                     message.MessageId,
-                    message.From.ToLogDebug(),
+                    sender.ToLogDebug(),
                     message.Chat.ToLogDebug(),
                     hardBlockResult.Details);
 
                 await moderationOrchestrator.MarkAsSpamAndBanAsync(
                     new SpamBanIntent
                     {
-                        User = UserIdentity.From(message.From!),
+                        User = sender,
                         Chat = ChatIdentity.From(message.Chat),
                         MessageId = message.MessageId,
                         Executor = Actor.AutoDetection,
@@ -117,7 +119,7 @@ public class DetectionActionService(
                 logger.LogInformation(
                     "Message {MessageId} from {User} in {Chat} triggers auto-ban (score: {TotalScore:F2}, OpenAI: {OpenAIScore:F2})",
                     message.MessageId,
-                    message.From.ToLogInfo(),
+                    sender.ToLogInfo(),
                     message.Chat.ToLogInfo(),
                     spamResult.TotalScore,
                     openAIResult.Score);
@@ -125,7 +127,7 @@ public class DetectionActionService(
                 await moderationOrchestrator.MarkAsSpamAndBanAsync(
                     new SpamBanIntent
                     {
-                        User = UserIdentity.From(message.From!),
+                        User = sender,
                         Chat = ChatIdentity.From(message.Chat),
                         MessageId = message.MessageId,
                         Executor = Actor.AutoDetection,
@@ -212,15 +214,10 @@ public class DetectionActionService(
     /// </summary>
     public async Task HandleCriticalCheckViolationAsync(
         Message message,
+        UserIdentity sender,
         List<string> violations,
         CancellationToken cancellationToken = default)
     {
-        if (message.From == null)
-        {
-            logger.LogWarning("Cannot handle critical check violation: message has no sender");
-            return;
-        }
-
         try
         {
             using var scope = serviceProvider.CreateScope();
@@ -229,7 +226,7 @@ public class DetectionActionService(
             await moderationOrchestrator.HandleCriticalViolationAsync(
                 new CriticalViolationIntent
                 {
-                    User = UserIdentity.From(message.From),
+                    User = sender,
                     Chat = ChatIdentity.From(message.Chat),
                     MessageId = message.MessageId,
                     Executor = Actor.AutoDetection,
@@ -243,7 +240,7 @@ public class DetectionActionService(
         {
             logger.LogError(ex,
                 "Failed to handle critical check violation for {User} in {Chat}",
-                message.From.ToLogDebug(),
+                sender.ToLogDebug(),
                 message.Chat.ToLogDebug());
         }
     }

@@ -53,7 +53,6 @@ public class BackupServiceTests
     private IPassphraseManagementService? _passphraseService;
     private IBackupEncryptionService? _encryptionService;
     private IDataProtectionProvider? _dataProtectionProvider;
-    private ITelegramUserRepository? _telegramUserRepository;
 
     // Canonical anchor IDs (canonical telegram user IDs are in [9_000_000_000_000, 10_000_000_000_000))
     // Top MainChat ham author (@unhelpfulgrab, "Squeak Degree", is_banned=false, 24 messages)
@@ -65,9 +64,6 @@ public class BackupServiceTests
     // Canonical MainChat chat_id (15-digit synthetic, -100 prefix)
     private const long CanonicalMainChatId = -100026957614982L;
 
-    // Canonical telegram_users row count (335 rows in golden_template)
-    private const int CanonicalTelegramUserCount = 335;
-
     // Tables with DTOs that BackupService can export (excludes __EFMigrationsHistory,
     // file_scan_quota, ticker.*). Updated 2026-04-09: +file_scan_results (FileScanResultDto rename).
     // Updated 2026-05-27: +username_blacklist (UsernameBlacklistEntryDto now discovered via [Table] attribute).
@@ -75,8 +71,9 @@ public class BackupServiceTests
     // Updated 2026-09-27: -3 legacy label/media-sample tables (DropLegacyVerdictColumns).
     private const int ExpectedBackupTableCount = 41;
 
-    // Synthetic outside-canonical-range ID used by RestoreAsync_ShouldWipeAllTablesFirst
-    private const long SyntheticExtraUserId = 7777777777777L;
+    // Canonical synthetic username_blacklist row and the key RestoreAsync_ShouldWipeAllTablesFirst moves it to.
+    private const long CanonicalBlacklistEntryId = GoldenDatasetConstants.Backup.BlacklistEntryId;
+    private const long MovedBlacklistEntryId = GoldenDatasetConstants.Backup.MovedBlacklistEntryId;
 
     [SetUp]
     public async Task SetUp()
@@ -95,7 +92,6 @@ public class BackupServiceTests
         var scope = _serviceProvider.CreateScope();
         _backupService = scope.ServiceProvider.GetRequiredService<IBackupService>();
         _passphraseService = scope.ServiceProvider.GetRequiredService<IPassphraseManagementService>();
-        _telegramUserRepository = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
 
         // Set up default encryption config for all tests
         await _passphraseService.SaveEncryptionConfigAsync("test-passphrase-12345");
@@ -447,45 +443,29 @@ public class BackupServiceTests
     [Test]
     public async Task RestoreAsync_ShouldWipeAllTablesFirst()
     {
-        // Arrange - Create backup and add extra data after backup
+        // Arrange - Create backup, then diverge from it
         var backupPath = await ExportBackupToTempFileAsync();
         try
         {
-            // Add extra telegram_user after backup via write-SUT (should be wiped during restore).
-            // SyntheticExtraUserId is outside the canonical [9e12, 10e12) range so it won't
-            // collide with any canonical anchor row.
-            var now = DateTimeOffset.UtcNow;
-            await _telegramUserRepository!.UpsertAsync(new TelegramUser(
-                TelegramUserId: SyntheticExtraUserId,
-                Username: "extra_user",
-                FirstName: "Extra",
-                LastName: "User",
-                UserPhotoPath: null,
-                PhotoHash: null,
-                PhotoFileUniqueId: null,
-                IsBot: false,
-                IsTrusted: false,
-                IsBanned: false,
-                KickCount: 0,
-                BotDmEnabled: false,
-                FirstSeenAt: now,
-                LastSeenAt: now,
-                CreatedAt: now,
-                UpdatedAt: now,
-                IsActive: true
-            ), cancellationToken: CancellationToken.None);
+            // Move a canonical row to a key the backup does not contain (an in-place edit of the
+            // synthetic username_blacklist row 999005, which nothing references). A restore that
+            // merged instead of wiping would keep the moved row next to the restored one.
+            await _testHelper!.ExecuteSqlAsync(
+                $"UPDATE username_blacklist SET id = {MovedBlacklistEntryId} WHERE id = {CanonicalBlacklistEntryId}");
+            var movedBeforeRestore = await _testHelper.ExecuteScalarAsync<bool>(
+                $"SELECT EXISTS(SELECT 1 FROM username_blacklist WHERE id = {MovedBlacklistEntryId})");
+            Assert.That(movedBeforeRestore, Is.True, "Precondition: the row was moved after the backup");
 
-            var countBeforeRestore = await _testHelper!.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM telegram_users");
-            Assert.That(countBeforeRestore, Is.EqualTo(CanonicalTelegramUserCount + 1),
-                $"Should have {CanonicalTelegramUserCount} canonical users + 1 extra = {CanonicalTelegramUserCount + 1} before restore");
-
-            // Act - Restore (should wipe extra_user)
+            // Act - Restore
             await _backupService!.RestoreAsync(backupPath);
 
-            // Assert - Extra user should be gone
-            var extraUserExists = await _testHelper.ExecuteScalarAsync<bool>(
-                $"SELECT EXISTS(SELECT 1 FROM telegram_users WHERE telegram_user_id = {SyntheticExtraUserId})");
-            Assert.That(extraUserExists, Is.False, "Restore should wipe all existing data first");
+            // Assert - Only the backup's row remains
+            var movedAfterRestore = await _testHelper.ExecuteScalarAsync<bool>(
+                $"SELECT EXISTS(SELECT 1 FROM username_blacklist WHERE id = {MovedBlacklistEntryId})");
+            var originalAfterRestore = await _testHelper.ExecuteScalarAsync<bool>(
+                $"SELECT EXISTS(SELECT 1 FROM username_blacklist WHERE id = {CanonicalBlacklistEntryId})");
+            Assert.That(movedAfterRestore, Is.False, "Restore should wipe all existing data first");
+            Assert.That(originalAfterRestore, Is.True, "Restore should bring back the backup's row");
         }
         finally
         {

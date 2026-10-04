@@ -9,7 +9,11 @@ using TelegramGroupsAdmin.Core.Repositories;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Data.Models;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Services;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.Telegram.Services.Identity;
+using TelegramGroupsAdmin.Telegram.Services.Moderation;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using UiModels = TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Configuration.Services;
@@ -31,6 +35,8 @@ public class ImpersonationDetectionServiceTests
     private IMessageHistoryRepository _mockMessageHistoryRepo = null!;
     private IReportsRepository _mockReportsRepo = null!;
     private IConfigService _mockConfigService = null!;
+    private IBotModerationService _mockModeration = null!;
+    private IUserIdentityService _mockIdentities = null!;
     private ImpersonationDetectionService _service = null!;
 
     // Test constants
@@ -51,6 +57,8 @@ public class ImpersonationDetectionServiceTests
         _mockMessageHistoryRepo = Substitute.For<IMessageHistoryRepository>();
         _mockReportsRepo = Substitute.For<IReportsRepository>();
         _mockConfigService = Substitute.For<IConfigService>();
+        _mockModeration = Substitute.For<IBotModerationService>();
+        _mockIdentities = Substitute.For<IUserIdentityService>();
 
         // Default config: check first 5 messages
         _mockConfigService.GetEffectiveContentDetectionAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
@@ -67,23 +75,20 @@ public class ImpersonationDetectionServiceTests
     private ImpersonationDetectionService CreateServiceForShouldCheckTests()
     {
         var mockContextFactory = Substitute.For<IDbContextFactory<AppDbContext>>();
-        var mockChatAdminsRepo = Substitute.For<IChatAdminsRepository>();
         var mockManagedChatsRepo = Substitute.For<IManagedChatsRepository>();
         var mockPhotoHashService = Substitute.For<IPhotoHashService>();
         var mockLogger = Substitute.For<ILogger<ImpersonationDetectionService>>();
 
-        // The moderation service is never used by ShouldCheckUserAsync, so we can pass null
-        // (it's only used by ExecuteActionAsync)
         return new ImpersonationDetectionService(
             mockContextFactory,
             _mockTelegramUserRepo,
-            mockChatAdminsRepo,
             mockManagedChatsRepo,
             _mockMessageHistoryRepo,
             mockPhotoHashService,
             _mockReportsRepo,
-            null!, // IBotModerationService - not used by ShouldCheckUserAsync
+            _mockModeration,
             _mockConfigService,
+            _mockIdentities,
             mockLogger);
     }
 
@@ -396,6 +401,41 @@ public class ImpersonationDetectionServiceTests
         };
 
         Assert.That(result.RiskLevel, Is.EqualTo(ImpersonationRiskLevel.Critical));
+    }
+
+    #endregion
+
+    #region ExecuteActionAsync Tests
+
+    [Test]
+    public async Task ExecuteActionAsync_AlertAndAutoBanCarryIdentitiesResolvedById()
+    {
+        using var cts = new CancellationTokenSource();
+        var suspected = UserIdentity.ForTest(TestUserId, "Current", verdict: NameVerdict.Promotional);
+        var admin = UserIdentity.ForTest(TestAdminId, "Admin");
+        _mockIdentities.ResolveManyAsync(
+                Arg.Is<IReadOnlyCollection<long>>(ids => ids!.SequenceEqual(new[] { TestUserId, TestAdminId })),
+                cts.Token)
+            .Returns([suspected, admin]);
+        _mockModeration.BanUserAsync(Arg.Any<BanIntent>(), Arg.Any<CancellationToken>())
+            .Returns(new ModerationResult { Success = true, ChatsAffected = 1 });
+
+        await _service.ExecuteActionAsync(new ImpersonationCheckResult
+        {
+            TotalScore = 100,
+            RiskLevel = ImpersonationRiskLevel.Critical,
+            SuspectedUser = CreateTestSdkUser(), // stale SDK names
+            DetectionChat = CreateTestSdkChat(),
+            TargetUserId = TestAdminId,
+            NameMatch = true,
+            PhotoMatch = true
+        }, cts.Token);
+
+        await _mockReportsRepo.Received(1).InsertImpersonationAlertAsync(
+            Arg.Is<ImpersonationAlertRecord>(a => a!.SuspectedUser == suspected && a.TargetUser == admin),
+            Arg.Any<CancellationToken>());
+        await _mockModeration.Received(1).BanUserAsync(
+            Arg.Is<BanIntent>(i => i!.User == suspected), Arg.Any<CancellationToken>());
     }
 
     #endregion
