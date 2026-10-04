@@ -3,18 +3,20 @@
 **Date:** 2026-10-03
 **Issue:** #552 (part 2 of 2; requires `2026-10-03-user-identity-service-design.md`)
 **Scope:** Decide whether a user's name is spam, including names that never reach the AI today,
-and store that verdict on the scan row. Part 1 already masks by verdict everywhere the bot writes a
-name, with fixed wording (`[name removed: spam]` / `[name removed: explicit]`) and the "Mask flagged
-names" setting (global default, per-chat override).
+and store that verdict on the scan row. Part 1 (merged in #575) already masks by verdict everything
+the bot posts in a group chat, plus ban celebration subscriber DMs (a copy of the chat post), with
+fixed wording (`[name removed: spam]` / `[name removed: explicit]`) and the "Mask flagged names"
+setting (global default, per-chat override). Admin and personal DMs always show the real name.
 **PR target:** `develop`.
 
 ---
 
 ## Context
 
-Part 1 gives every bot-written mention a `UserIdentity.BotDisplayName` driven by a `NameVerdict`
-read from the latest `profile_scan_results` row. After part 1 the only verdict source is still the
-AI's `explicit_display_text` flag, defined narrowly as explicit or sexual text.
+Part 1 gives every name the bot posts in a group a `UserIdentity.BotDisplayName` driven by a
+`NameVerdict` read from the latest `profile_scan_results` row (through the `user_identities` view).
+After part 1 the only verdict source is still the AI's `explicit_display_text` flag, defined narrowly
+as explicit or sexual text.
 
 Most name spam is not explicit. It is an advertisement, a solicitation or a lure. When the profile
 scanner bans such a user, the ban celebration still posts the name. Some users never reach the
@@ -79,9 +81,30 @@ when the gate admitted a scan (or the account is a bot) but the full scan produc
 - the account is a bot (the full scan skips bots).
 
 It writes a `profile_scan_results` row with `source = NameOnly`, so the verdict keeps one source.
-It does not change the user's score or outcome. If the AI feature is unavailable, nothing is
-written and the verdict stays as it was (fail open, logged as a warning). Scanning disabled for a
-chat means no name-only check either.
+It does not change the user's score or outcome, and it does not advance `profile_scanned_at`: a
+name-only verdict is a stopgap, so the next scan opportunity still attempts a full scan (part 1's
+history check keeps forcing a rescore until one succeeds). If the AI feature is unavailable or the
+call fails, nothing is written and the verdict stays as it was (fail open, logged as a warning; the
+exception text goes to the log only, never into a chat). Scanning disabled for a chat means no
+name-only check either.
+
+### How it fits part 1's rename rules
+
+Part 1 decides rescans in `IUserIdentityService.ObserveAsync` from the observation, not from callers:
+a rename seen in a message or edit by an untrusted, unbanned, non-bot user is rescanned at once;
+joins, admin updates and the scan's own observations record only; a full scan treats a rename
+recorded after the last scan as a profile change; and the gate admits a join scan when the chat
+scans on profile changes and the joiner renamed since the last scan. Part 2 adds nothing to that
+decision. The name-only check is a fallback *inside* a scan the gate already admitted, so:
+
+- A renamed user's new name gets a verdict through whichever scan part 1 triggers (the inline
+  rename rescan, or the join scan), full or name-only.
+- On a join, the check runs at the join scan step, after the joiner is muted. Nothing in part 2 runs
+  before the mute.
+- Trusted users (all chat admins) are never scanned, so they never get a name verdict, whatever
+  they rename to.
+- Bots: part 1 records bot renames without rescanning. A bot gets a name-only verdict when it is
+  scanned on admission (above); a later rename keeps the old verdict until it is scanned again.
 
 ### Storage
 
@@ -94,7 +117,8 @@ Part 1's verdict mapping becomes: explicit → `Explicit`; else promotional → 
 
 ### Ban celebration
 
-Uses `BotDisplayName` (part 1). The masked-username metric records the verdict as a tag.
+Uses `BotDisplayName` (part 1) for the chat caption, which subscriber DMs copy. The masked-username
+metric records the verdict as a tag.
 
 ## Evaluation set
 
@@ -136,12 +160,15 @@ Unit:
 - Name-only trigger, one test per case: no session, unresolvable, timeout, `FLOOD_WAIT`, rule
   short-circuit, bot. No trigger when scanning is disabled or the AI feature is unavailable.
 - Verdict precedence: explicit beats promotional.
+- A name-only row leaves `profile_scanned_at` unchanged, so the next eligible scan is a full one.
+- A failed name-only call logs a warning and writes nothing; no exception text reaches a chat.
 
 Integration:
 - A name-only check writes a `NameOnly` row and leaves score and outcome unchanged. Anchor:
   9333810782137 @loucurtsinger (not trusted, no scan rows); the written row is the assertion subject.
-- A user whose latest row is promotional renders `[name removed: spam]` in a welcome message, a ban
-  celebration caption and an admin notification DM. Anchor: 9143878698845 @LisoBran, whose only scan
+- A user whose latest row is promotional renders `[name removed: spam]` in a welcome message posted
+  in the group and in a ban celebration caption (and the subscriber DM that copies it), while an
+  admin notification DM about the same user shows the real name. Anchor: 9143878698845 @LisoBran, whose only scan
   (row 531) gets `ai_promotional_display_text = true` (canonical edit 2026-10-03; unreferenced,
   banned, AI fields filled in). Recorded in `GoldenDatasetConstants` and `IntegrationTests/CLAUDE.md`,
   whose profile-scan notes also gain the new column.
