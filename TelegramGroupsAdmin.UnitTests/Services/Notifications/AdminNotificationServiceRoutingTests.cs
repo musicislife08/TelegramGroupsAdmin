@@ -373,7 +373,7 @@ public class AdminNotificationServiceRoutingTests
     }
 
     [Test]
-    public async Task SendBanNotificationAsync_FlaggedNameWithMaskingOn_DmShowsRealNameInSubjectAndUserField()
+    public async Task SendBanNotificationAsync_FlaggedName_DmShowsRealNameInSubjectAndUserField()
     {
         var chat = new ChatIdentity(-1001234567890L, "Test Chat");
         var user = UserIdentity.ForTest(999L, "Bad", verdict: NameVerdict.Explicit);
@@ -388,7 +388,7 @@ public class AdminNotificationServiceRoutingTests
 
     [TestCase(true, "Admin Promoted: Bad")]
     [TestCase(false, "Admin Demoted: Bad")]
-    public async Task SendAdminChangedAsync_FlaggedNameWithMaskingOn_DmShowsRealNameInSubjectAndUserField(bool promoted, string subject)
+    public async Task SendAdminChangedAsync_FlaggedName_DmShowsRealNameInSubjectAndUserField(bool promoted, string subject)
     {
         var chat = new ChatIdentity(-1001234567890L, "Test Chat");
         var user = UserIdentity.ForTest(999L, "Bad", verdict: NameVerdict.Explicit);

@@ -13,7 +13,8 @@
 > **Note (after implementation):** the `RenameRescan` option below was replaced by the spec's
 > `ObserveAsync` rename rules: `ObserveAsync` decides from the observation's source and the user
 > whether a rename is rescanned, and callers pass no rescan option. Read `RenameRescan` in the
-> tasks below as historical.
+> tasks below as historical. Also, DM text uses `NameMasking.Off`, and `GetNameMaskingAsync` takes a
+> chat id only.
 
 ## Global Constraints
 
