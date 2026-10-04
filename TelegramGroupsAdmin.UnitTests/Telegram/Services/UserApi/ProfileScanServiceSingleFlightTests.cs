@@ -35,6 +35,7 @@ public class ProfileScanServiceSingleFlightTests
     private IBotModerationService _moderation = null!;
     private IReportsRepository _reports = null!;
     private IAdminNotificationService _notifications = null!;
+    private IUsernameHistoryRepository _history = null!;
     private ServiceProvider _provider = null!;
     private ProfileScanService _sut = null!;
 
@@ -50,7 +51,9 @@ public class ProfileScanServiceSingleFlightTests
         _moderation = Substitute.For<IBotModerationService>();
         _reports = Substitute.For<IReportsRepository>();
         _notifications = Substitute.For<IAdminNotificationService>();
+        _history = Substitute.For<IUsernameHistoryRepository>();
         _provider = new ServiceCollection()
+            .AddSingleton(_history)
             .AddSingleton(_moderation)
             .AddSingleton(_reports)
             .AddSingleton(_notifications)
@@ -189,6 +192,19 @@ public class ProfileScanServiceSingleFlightTests
         await _sessions.DidNotReceiveWithAnyArgs().GetAnyClientAsync(default);
     }
 
+    [Test]
+    public async Task RecentlyScanned_RenamedSinceTheScan_DoesNotReuseCachedScore()
+    {
+        var row = RecentlyScannedUser();
+        _users.GetByTelegramIdAsync(7, Arg.Any<CancellationToken>()).Returns(row);
+        _history.HasChangeSinceAsync(7, row.ProfileScannedAt, Arg.Any<CancellationToken>()).Returns(true);
+        _sessions.GetAnyClientAsync(Arg.Any<CancellationToken>()).Returns((IWTelegramApiClient?)null);
+
+        await _sut.ScanUserProfileAsync(UserIdentity.ForTest(7, "A"), null, CancellationToken.None);
+
+        await _sessions.Received(1).GetAnyClientAsync(Arg.Any<CancellationToken>());
+    }
+
     private static TelegramUser RecentlyScannedUser()
     {
         var now = DateTimeOffset.UtcNow;
@@ -287,6 +303,21 @@ public class ProfileScanServiceSingleFlightTests
 
         await _scoring.DidNotReceiveWithAnyArgs().ScoreAsync(default!, default!, default, default, default, default);
         Assert.That(result.Score, Is.EqualTo(10m));
+    }
+
+    [Test]
+    public async Task Scan_ProfileUnchanged_RenamedSinceTheScan_IsFullyRescored()
+    {
+        // The rename was recorded before this scan (by a join observation), so the stored row
+        // already holds the live name and the diff sees no change; the history row is the change.
+        var row = StoredRow("Same");
+        _users.GetByTelegramIdAsync(LiveUserId, Arg.Any<CancellationToken>()).Returns(row);
+        _history.HasChangeSinceAsync(LiveUserId, row.ProfileScannedAt, Arg.Any<CancellationToken>()).Returns(true);
+        ClientReturning(Live("Same"));
+
+        await _sut.ScanUserProfileAsync(UserIdentity.ForTest(LiveUserId, "Same"), null, CancellationToken.None);
+
+        await _scoring.ReceivedWithAnyArgs(1).ScoreAsync(default!, default!, default, default, default, default);
     }
 
     [Test]

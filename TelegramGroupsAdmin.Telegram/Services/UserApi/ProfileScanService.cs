@@ -113,7 +113,13 @@ public sealed class ProfileScanService(
         if (user.FirstName is null && user.LastName is null && user.Username is null)
             user = await scope.ServiceProvider.GetRequiredService<IUserIdentityService>().ResolveAsync(user.Id, ct);
 
-        if (!forceRescan && existingUser?.ProfileScannedAt is { } lastScan
+        // Both reuse paths (this freshness window and the unchanged-profile check) are skipped on a
+        // forced rescan and when a rename was recorded after the last scan. Joins and admin refresh
+        // record a rename without scanning, so the stored names already match the live ones and
+        // only username_history still shows the change.
+        var skipReuse = forceRescan || await RenamedSinceLastScanAsync(existingUser, scope.ServiceProvider, ct);
+
+        if (!skipReuse && existingUser?.ProfileScannedAt is { } lastScan
             && DateTimeOffset.UtcNow - lastScan < ScanFreshnessWindow
             && existingUser.ProfileScanScore.HasValue)
         {
@@ -161,7 +167,7 @@ public sealed class ProfileScanService(
         // the task completes or faults — preventing ObjectDisposedException on DbContexts.
         try
         {
-            var scanTask = ScanWithOwnedScopeAsync(client, user, existingUser, triggeringChat, forceRescan, ct);
+            var scanTask = ScanWithOwnedScopeAsync(client, user, existingUser, triggeringChat, skipReuse, ct);
 
             var completedTask = await Task.WhenAny(scanTask, Task.Delay(ScanTimeout, CancellationToken.None));
 
@@ -206,13 +212,13 @@ public sealed class ProfileScanService(
         UserIdentity user,
         Models.TelegramUser? existingUser,
         ChatIdentity? triggeringChat,
-        bool forceRescan,
+        bool skipReuse,
         CancellationToken ct)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
         var userRepo = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
 
-        return await ScanUserProfileCoreAsync(client, user, existingUser, triggeringChat, forceRescan,
+        return await ScanUserProfileCoreAsync(client, user, existingUser, triggeringChat, skipReuse,
             userRepo, scope.ServiceProvider, ct);
     }
 
@@ -221,7 +227,7 @@ public sealed class ProfileScanService(
         UserIdentity user,
         Models.TelegramUser? existingUser,
         ChatIdentity? triggeringChat,
-        bool forceRescan,
+        bool skipReuse,
         ITelegramUserRepository userRepo,
         IServiceProvider sp,
         CancellationToken ct)
@@ -385,8 +391,9 @@ public sealed class ProfileScanService(
             ? string.Join(",", storyItems.Select(s => s.id).Order())
             : null;
 
-        // forceRescan skips this reuse too: a rename is persisted before the rescan, so the diff sees no change.
-        if (!forceRescan && existingUser?.ProfileScannedAt != null && existingUser.ProfileScanScore.HasValue
+        // skipReuse (forced, or renamed since the last scan) skips this reuse too: the rename is
+        // already stored when the scan runs, so the diff sees no change.
+        if (!skipReuse && existingUser?.ProfileScannedAt != null && existingUser.ProfileScanScore.HasValue
             && !HasProfileChanged(existingUser, tlUser, bio, personalChannelId, channelTitle, channelAbout,
                 hasPinnedStories, pinnedStoryCaptions, isScam, isFake, isVerified,
                 profilePhotoId, channelPhotoId, pinnedStoryIdString))
@@ -957,6 +964,18 @@ public sealed class ProfileScanService(
             : score >= notifyThreshold
                 ? ProfileScanOutcome.HeldForReview
                 : ProfileScanOutcome.Clean;
+    }
+
+    /// <summary>
+    /// Whether a rename was recorded after the user's last scan. Only asked when a reuse path could
+    /// apply (the user has a stored scan), so a never-scanned user costs no query.
+    /// </summary>
+    private static async Task<bool> RenamedSinceLastScanAsync(
+        Models.TelegramUser? existingUser, IServiceProvider sp, CancellationToken ct)
+    {
+        if (existingUser?.ProfileScannedAt is not { } lastScan || !existingUser.ProfileScanScore.HasValue)
+            return false;
+        return await sp.GetRequiredService<IUsernameHistoryRepository>().HasChangeSinceAsync(existingUser.TelegramUserId, lastScan, ct);
     }
 
     /// <summary>

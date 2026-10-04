@@ -36,4 +36,17 @@ public class UsernameHistoryRepository(IDbContextFactory<AppDbContext> contextFa
 
         return dtos.Select(h => h.ToModel()).ToList();
     }
+
+    public async Task<bool> HasChangeSinceAsync(long userId, DateTimeOffset? since, CancellationToken cancellationToken = default)
+    {
+        await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
+        var history = context.UsernameHistory.AsNoTracking().Where(h => h.UserId == userId);
+        if (since is { } after)
+        {
+            // Npgsql writes timestamptz parameters only from offset-zero values.
+            var afterUtc = after.ToUniversalTime();
+            history = history.Where(h => h.RecordedAt > afterUtc);
+        }
+        return await history.AnyAsync(cancellationToken);
+    }
 }

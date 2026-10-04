@@ -398,6 +398,7 @@ Anchors are in code as `GoldenDatasetConstants.IdentityService` (#552 part 1); a
 |---|---|---|
 | `ScannedTwiceExplicitUserId` | 9220500615182 @bagging_armado | scans 530 (older) and 534 (newer); 534 explicit. Also the banned user in `BanCelebrationNameMaskingTests` (global `maskFlaggedNames` absent → true, so the caption shows the explicit label) |
 | `ExplicitAuthorMessageId` | msg 110342, Workshop Alumni | @bagging_armado's real join service message (added from prod; deleted by `ban_cleanup`). The only message whose author's latest scan is explicit, so `enriched_messages` carries `latest_scan_explicit = true` on it |
+| `ScannedCleanUserId` | 9025828368896 @swivelhumvee | not trusted, not banned, scanned once (score 0.0, Feb 2026) with a plain profile (no bio, personal channel 0, no photo or stories); `JoinRenameRescanTests` (the join observation that records the rename is the scenario under test) |
 | `UnscannedUserId` | 9063342700386 @Juvenileii | not trusted, not a bot, no scan rows |
 | `BotUserId` | 9742468412405 @doilyemcee | the canonical bot |
 | `UntrustedNoHistoryUserId` | 9263051408340 @pastramiherbs | not trusted, active, no username_history |
@@ -414,7 +415,7 @@ Anchors are in code as `GoldenDatasetConstants.UsernameHistory`. Both owners are
 | `PastUsernameUserId` / `PastUsername` | 9032620986755 @BryanNguyen54, history row 3 | prior username `rsza_tilla` (flag-edited from NULL; prior names "Rsza Тилляев" unchanged) |
 | `PastFirstNameUserId` / `PastFirstName` | 9875141377477 "Jeanette", history row 2 | prior first name `QQQ` |
 
-Use when: a search must match a user by a past name only (`TelegramUserRepositoryTests` search region). Tests read the history row and the current names back first.
+Use when: a search must match a user by a past name only (`TelegramUserRepositoryTests` search region), or a rename must be recorded at a known time (`UsernameHistoryRepositoryTests` `HasChangeSinceAsync`, which reads row 2's `recorded_at` back). Tests read the history row and the current names back first.
 
 ### Synthetic / reserved rows (do not regenerate)
 - `welcome_responses` IDs `999001..999005`: 5 status branches anchored on `(MainChat_Id=-100026957614982, user_id=9196379650113, username='canonical_user1')`. Mapping: `999001`=Pending, `999002`=Accepted, `999003`=Denied, `999004`=Timeout, `999005`=Left.

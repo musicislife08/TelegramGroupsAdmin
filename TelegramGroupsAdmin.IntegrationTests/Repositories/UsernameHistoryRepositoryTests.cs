@@ -233,4 +233,66 @@ public class UsernameHistoryRepositoryTests
             Assert.That(record.LastName, Is.Null);
         });
     }
+
+    // ============================================================================
+    // HasChangeSinceAsync (canonical history row 2, read-only)
+    // ============================================================================
+
+    private async Task<DateTimeOffset> PastFirstNameRecordedAtAsync()
+    {
+        await using var ctx = _testHelper!.GetDbContext();
+        var row = await ctx.UsernameHistory.AsNoTracking()
+            .SingleAsync(h => h.UserId == GoldenDatasetConstants.UsernameHistory.PastFirstNameUserId);
+        Assert.That(row.FirstName, Is.EqualTo(GoldenDatasetConstants.UsernameHistory.PastFirstName));
+        return row.RecordedAt;
+    }
+
+    [Test]
+    public async Task HasChangeSinceAsync_SinceBeforeTheRename_IsTrue()
+    {
+        var recordedAt = await PastFirstNameRecordedAtAsync();
+        await using var scope = _serviceProvider!.CreateAsyncScope();
+        var repo = scope.ServiceProvider.GetRequiredService<IUsernameHistoryRepository>();
+
+        var changed = await repo.HasChangeSinceAsync(
+            GoldenDatasetConstants.UsernameHistory.PastFirstNameUserId, recordedAt.AddSeconds(-1));
+
+        Assert.That(changed, Is.True);
+    }
+
+    [Test]
+    public async Task HasChangeSinceAsync_SinceAtOrAfterTheRename_IsFalse()
+    {
+        var recordedAt = await PastFirstNameRecordedAtAsync();
+        await using var scope = _serviceProvider!.CreateAsyncScope();
+        var repo = scope.ServiceProvider.GetRequiredService<IUsernameHistoryRepository>();
+        const long userId = GoldenDatasetConstants.UsernameHistory.PastFirstNameUserId;
+
+        Assert.That(await repo.HasChangeSinceAsync(userId, recordedAt), Is.False);
+        Assert.That(await repo.HasChangeSinceAsync(userId, recordedAt.AddSeconds(1)), Is.False);
+    }
+
+    [Test]
+    public async Task HasChangeSinceAsync_NeverScanned_CountsAnyRename()
+    {
+        await PastFirstNameRecordedAtAsync();
+        await using var scope = _serviceProvider!.CreateAsyncScope();
+        var repo = scope.ServiceProvider.GetRequiredService<IUsernameHistoryRepository>();
+
+        var changed = await repo.HasChangeSinceAsync(GoldenDatasetConstants.UsernameHistory.PastFirstNameUserId, since: null);
+
+        Assert.That(changed, Is.True);
+    }
+
+    [Test]
+    public async Task HasChangeSinceAsync_UserWithNoHistory_IsFalse()
+    {
+        const long userId = GoldenDatasetConstants.IdentityService.UntrustedNoHistoryUserId;
+        await using (var ctx = _testHelper!.GetDbContext())
+            Assert.That(await ctx.UsernameHistory.CountAsync(h => h.UserId == userId), Is.Zero);
+        await using var scope = _serviceProvider!.CreateAsyncScope();
+        var repo = scope.ServiceProvider.GetRequiredService<IUsernameHistoryRepository>();
+
+        Assert.That(await repo.HasChangeSinceAsync(userId, since: null), Is.False);
+    }
 }

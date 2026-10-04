@@ -808,6 +808,8 @@ public static class GoldenDatasetConstants
         public const long ScannedTwiceExplicitUserId = 9220500615182;
         /// <summary>Message 110342 in Workshop Alumni: @bagging_armado's join service message (canonical edit 2026-10-03), the one message whose author's latest scan is explicit.</summary>
         public const long ExplicitAuthorMessageId = 110342;
+        /// <summary>@swivelhumvee: not trusted, not banned, scanned once (score 0.0, Feb 2026) with a plain profile (no bio, personal channel 0, no photo or stories). Used by the join rename rescan test.</summary>
+        public const long ScannedCleanUserId = 9025828368896;
         /// <summary>@Juvenileii: not trusted, not a bot, no scan rows, profile_scanned_at NULL.</summary>
         public const long UnscannedUserId = 9063342700386;
         /// <summary>@doilyemcee: the canonical bot. Read-only.</summary>
