@@ -104,7 +104,7 @@ public class WelcomeServiceBlacklistTests
         _welcomeResponsesRepository = Substitute.For<IWelcomeResponsesRepository>();
         _telegramUserRepository = Substitute.For<ITelegramUserRepository>();
         _identities = Substitute.For<IUserIdentityService>();
-        _identities.ObserveAsync(Arg.Any<ObservedUser>(), Arg.Any<ProfileChangeContext>(), Arg.Any<RenameRescan>(), Arg.Any<CancellationToken>())
+        _identities.ObserveAsync(Arg.Any<ObservedUser>(), Arg.Any<ProfileChangeContext>(), Arg.Any<CancellationToken>())
             .Returns(ci => { var o = ci.Arg<ObservedUser>(); return new UserIdentity(o.Id, o.FirstName, o.LastName, o.Username); });
         _identities.ResolveAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(ci => UserIdentity.FromId(ci.Arg<long>()));

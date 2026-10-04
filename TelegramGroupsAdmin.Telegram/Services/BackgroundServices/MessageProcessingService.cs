@@ -215,7 +215,6 @@ public partial class MessageProcessingService(
                 new ObservedUser(message.From.Id, message.From.FirstName, message.From.LastName, message.From.Username,
                     message.From.IsBot, ObservationSource.BotUpdate, observedAt),
                 new ProfileChangeContext(ChatIdentity.From(message.Chat), message.MessageId),
-                RenameRescan.Inline,
                 cancellationToken);
         }
 

@@ -251,7 +251,7 @@ public class ProfileScanServiceSingleFlightTests
         await _identities.Received(1).ObserveAsync(
             Arg.Is<ObservedUser>(o => o!.Id == LiveUserId && o.FirstName == "New" && o.LastName == "Name"
                 && o.Username == "stored_handle" && o.Source == ObservationSource.UserApiScan),
-            Arg.Any<ProfileChangeContext>(), RenameRescan.None, Arg.Any<CancellationToken>());
+            Arg.Any<ProfileChangeContext>(), Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -262,7 +262,7 @@ public class ProfileScanServiceSingleFlightTests
 
         await _sut.ScanUserProfileAsync(UserIdentity.ForTest(LiveUserId, "Old"), null, CancellationToken.None);
 
-        await _identities.DidNotReceiveWithAnyArgs().ObserveAsync(default!, default!, default, default);
+        await _identities.DidNotReceiveWithAnyArgs().ObserveAsync(default!, default!, default);
     }
 
     [Test]

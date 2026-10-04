@@ -43,7 +43,7 @@ public class BotChatServiceIdentityTests
         _chatAdmins = Substitute.For<IChatAdminsRepository>();
         _users = Substitute.For<ITelegramUserRepository>();
         _identities = Substitute.For<IUserIdentityService>();
-        _identities.ObserveAsync(Arg.Any<ObservedUser>(), Arg.Any<ProfileChangeContext>(), Arg.Any<RenameRescan>(), Arg.Any<CancellationToken>())
+        _identities.ObserveAsync(Arg.Any<ObservedUser>(), Arg.Any<ProfileChangeContext>(), Arg.Any<CancellationToken>())
             .Returns(ci => UserIdentity.ForTest(ci.Arg<ObservedUser>().Id, "Stored"));
         _notifications = Substitute.For<IAdminNotificationService>();
 
@@ -83,7 +83,6 @@ public class BotChatServiceIdentityTests
                     && o.Source == ObservationSource.ChatMember
                     && o.ObservedAt == new DateTimeOffset(2026, 10, 3, 12, 0, 0, TimeSpan.Zero)),
                 Arg.Is<ProfileChangeContext>(c => c!.Chat!.Id == ChatId),
-                RenameRescan.None,
                 Arg.Any<CancellationToken>());
             _chatAdmins.UpsertAsync(ChatId, AdminId, false, Arg.Any<CancellationToken>());
         });
@@ -103,7 +102,7 @@ public class BotChatServiceIdentityTests
 
         await _sut.HandleAdminStatusChangeAsync(update, CancellationToken.None);
 
-        await _identities.DidNotReceiveWithAnyArgs().ObserveAsync(default!, default!, default, default);
+        await _identities.DidNotReceiveWithAnyArgs().ObserveAsync(default!, default!, default);
     }
 
     [Test]
@@ -168,7 +167,6 @@ public class BotChatServiceIdentityTests
                 && o.Source == ObservationSource.ChatMember
                 && o.ObservedAt >= before && o.ObservedAt <= after),
             Arg.Is<ProfileChangeContext>(c => c!.Chat!.Id == ChatId),
-            RenameRescan.None,
             Arg.Any<CancellationToken>());
         await _chatAdmins.Received(1).UpsertAsync(ChatId, AdminId, true, Arg.Any<CancellationToken>());
         // Already trusted: no trust write.

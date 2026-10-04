@@ -56,7 +56,6 @@ public class MessageEditProcessor
                 new ObservedUser(editor.Id, editor.FirstName, editor.LastName, editor.Username,
                     editor.IsBot, ObservationSource.BotUpdate, observedAt),
                 new ProfileChangeContext(ChatIdentity.From(editedMessage.Chat), editedMessage.MessageId),
-                RenameRescan.Inline,
                 cancellationToken);
         }
 

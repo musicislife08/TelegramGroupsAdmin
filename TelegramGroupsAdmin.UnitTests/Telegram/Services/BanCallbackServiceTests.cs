@@ -106,7 +106,7 @@ public class BanCallbackServiceTests
 
         // The executor is resolved by id, not built from the callback's names.
         await _identities.Received(1).ResolveAsync(ClickerId, Arg.Any<CancellationToken>());
-        await _identities.DidNotReceiveWithAnyArgs().ObserveAsync(default!, default!, default, default);
+        await _identities.DidNotReceiveWithAnyArgs().ObserveAsync(default!, default!, default);
         await _moderation.Received(1).BanUserAsync(
             Arg.Is<BanIntent>(i => i!.Executor.TelegramUserId == ClickerId && i.Executor.DisplayName == "Stored Admin"),
             Arg.Any<CancellationToken>());

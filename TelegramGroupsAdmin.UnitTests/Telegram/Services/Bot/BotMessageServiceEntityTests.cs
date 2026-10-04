@@ -51,7 +51,7 @@ public class BotMessageServiceEntityTests
         _editService = Substitute.For<IMessageEditService>();
         _userRepo = Substitute.For<ITelegramUserRepository>();
         _identities = Substitute.For<IUserIdentityService>();
-        _identities.ObserveAsync(Arg.Any<ObservedUser>(), Arg.Any<ProfileChangeContext>(), Arg.Any<RenameRescan>(), Arg.Any<CancellationToken>())
+        _identities.ObserveAsync(Arg.Any<ObservedUser>(), Arg.Any<ProfileChangeContext>(), Arg.Any<CancellationToken>())
             .Returns(ci => UserIdentity.ForTest(ci.Arg<ObservedUser>().Id, "Stored Bot"));
         _apiMetrics = new ApiMetrics();
 
@@ -253,7 +253,6 @@ public class BotMessageServiceEntityTests
             Arg.Is<ObservedUser>(o => o!.Id == BotUser.Id && o.IsBot && o.Username == "test_bot"
                 && o.ObservedAt >= before && o.ObservedAt <= after),
             Arg.Any<ProfileChangeContext>(),
-            RenameRescan.None,
             Arg.Any<CancellationToken>());
         await _userRepo.Received(1).MarkActiveAsync(
             BotUser.Id, Arg.Is<DateTimeOffset>(t => t >= before && t <= after), Arg.Any<CancellationToken>());

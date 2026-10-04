@@ -92,7 +92,6 @@ public class BotProtectionService(
                 new ObservedUser(bot.Id, bot.FirstName, bot.LastName, bot.Username, IsBot: true,
                     ObservationSource.ChatMember, seenAt),
                 new ProfileChangeContext(ChatIdentity.From(chat), MessageId: null),
-                RenameRescan.None,
                 cancellationToken);
 
             // Ban the bot via moderation service (handles Telegram API + audit trail)

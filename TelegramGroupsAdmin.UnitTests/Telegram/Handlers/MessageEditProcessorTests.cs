@@ -30,7 +30,7 @@ public class MessageEditProcessorTests
     public void SetUp()
     {
         _identities = Substitute.For<IUserIdentityService>();
-        _identities.ObserveAsync(Arg.Any<ObservedUser>(), Arg.Any<ProfileChangeContext>(), Arg.Any<RenameRescan>(), Arg.Any<CancellationToken>())
+        _identities.ObserveAsync(Arg.Any<ObservedUser>(), Arg.Any<ProfileChangeContext>(), Arg.Any<CancellationToken>())
             .Returns(ci => UserIdentity.ForTest(ci.Arg<ObservedUser>().Id, "A"));
 
         var services = new ServiceCollection();
@@ -62,7 +62,6 @@ public class MessageEditProcessorTests
                 && o.ObservedAt == new DateTimeOffset(2026, 10, 3, 12, 0, 0, TimeSpan.Zero)
                 && o.Source == ObservationSource.BotUpdate),
             Arg.Is<ProfileChangeContext>(c => c!.Chat!.Id == ChatId && c.MessageId == edited.MessageId),
-            RenameRescan.Inline,
             Arg.Any<CancellationToken>());
     }
 
@@ -78,7 +77,6 @@ public class MessageEditProcessorTests
             Arg.Is<ObservedUser>(o => o!.Id == EditorId
                 && o.ObservedAt == new DateTimeOffset(2026, 10, 3, 11, 0, 0, TimeSpan.Zero)),
             Arg.Any<ProfileChangeContext>(),
-            RenameRescan.Inline,
             Arg.Any<CancellationToken>());
     }
 
@@ -91,7 +89,7 @@ public class MessageEditProcessorTests
         using var scope = _provider.CreateScope();
         await _sut.ProcessEditAsync(edited, scope, CancellationToken.None);
 
-        await _identities.DidNotReceiveWithAnyArgs().ObserveAsync(default!, default!, default, default);
+        await _identities.DidNotReceiveWithAnyArgs().ObserveAsync(default!, default!, default);
     }
 
     private static Message EditedTextMessage(long from, DateTime? editDate, ChatType chatType = ChatType.Supergroup, long chatId = ChatId) => new()

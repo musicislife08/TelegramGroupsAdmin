@@ -539,7 +539,6 @@ public class BotChatService(
             new ObservedUser(user.Id, user.FirstName, user.LastName, user.Username, user.IsBot,
                 ObservationSource.ChatMember, seenAt),
             new ProfileChangeContext(chat, MessageId: null),
-            RenameRescan.None,
             ct);
 
     /// <summary>

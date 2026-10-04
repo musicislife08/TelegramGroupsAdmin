@@ -254,15 +254,15 @@ public sealed class ProfileScanService(
 
         // Record the live names. existingUser is the snapshot read before this point (a detached
         // object, not re-read), so HasProfileChanged below still compares the live names against
-        // the pre-observe row and a rename discovered here still gets a full rescore. RenameRescan.None:
-        // the scan must not trigger itself. ObserveAsync never throws except on cancellation.
+        // the pre-observe row and a rename discovered here still gets a full rescore. Source UserApiScan:
+        // ObserveAsync records only, so the scan never triggers itself. ObserveAsync never throws except on cancellation.
         if (tlUser is not null)
         {
             await sp.GetRequiredService<IUserIdentityService>().ObserveAsync(
                 new ObservedUser(tlUser.id, tlUser.first_name, tlUser.last_name, tlUser.MainUsername,
                     tlUser.IsBot, ObservationSource.UserApiScan, DateTimeOffset.UtcNow),
                 new ProfileChangeContext(triggeringChat, null),
-                RenameRescan.None, ct);
+                ct);
         }
 
         var bio = userInfo?.about;

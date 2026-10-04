@@ -107,7 +107,7 @@ public class WelcomeServiceTests
         _welcomeResponsesRepository = Substitute.For<IWelcomeResponsesRepository>();
         _telegramUserRepository = Substitute.For<ITelegramUserRepository>();
         _identities = Substitute.For<IUserIdentityService>();
-        _identities.ObserveAsync(Arg.Any<ObservedUser>(), Arg.Any<ProfileChangeContext>(), Arg.Any<RenameRescan>(), Arg.Any<CancellationToken>())
+        _identities.ObserveAsync(Arg.Any<ObservedUser>(), Arg.Any<ProfileChangeContext>(), Arg.Any<CancellationToken>())
             .Returns(ci => { var o = ci.Arg<ObservedUser>(); return new UserIdentity(o.Id, o.FirstName, o.LastName, o.Username); });
         _identities.ResolveAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(ci => UserIdentity.FromId(ci.Arg<long>()));
@@ -371,13 +371,12 @@ public class WelcomeServiceTests
 
         await _sut.HandleChatMemberUpdateAsync(update, CancellationToken.None);
 
-        // RenameRescan.None: the join flow scans the user right after, on the names just recorded.
+        // Source ChatMember: ObserveAsync records a rename only; the join scan picks it up.
         await _identities.Received(1).ObserveAsync(
             Arg.Is<ObservedUser>(o => o!.Id == TestUserId
                 && o.Source == ObservationSource.ChatMember
                 && o.ObservedAt == new DateTimeOffset(2026, 10, 3, 12, 0, 0, TimeSpan.Zero)),
             Arg.Is<ProfileChangeContext>(c => c!.Chat!.Id == TestChatId && c.MessageId == null),
-            RenameRescan.None,
             Arg.Any<CancellationToken>());
     }
 
@@ -397,7 +396,7 @@ public class WelcomeServiceTests
         await _sut.HandleCallbackQueryAsync(callback, CancellationToken.None);
 
         await _identities.Received(1).ResolveAsync(otherUserId, Arg.Any<CancellationToken>());
-        await _identities.DidNotReceiveWithAnyArgs().ObserveAsync(default!, default!, default, default);
+        await _identities.DidNotReceiveWithAnyArgs().ObserveAsync(default!, default!, default);
         await _messageService.Received(1).SendAndSaveMessageAsync(
             TestChatId,
             Arg.Is<TelegramMessage>(m => m!.Entities.Any(e => e.User != null && e.User.Id == otherUserId)),
@@ -411,7 +410,7 @@ public class WelcomeServiceTests
     [Test]
     public async Task HandleChatMemberUpdate_ExplicitJoinerMaskingOn_VerifyingMessageShowsLabel()
     {
-        _identities.ObserveAsync(Arg.Any<ObservedUser>(), Arg.Any<ProfileChangeContext>(), Arg.Any<RenameRescan>(), Arg.Any<CancellationToken>())
+        _identities.ObserveAsync(Arg.Any<ObservedUser>(), Arg.Any<ProfileChangeContext>(), Arg.Any<CancellationToken>())
             .Returns(UserIdentity.ForTest(TestUserId, "Bad", verdict: NameVerdict.Explicit));
         _configService.GetNameMaskingAsync(TestChatId, Arg.Any<CancellationToken>()).Returns(NameMasking.On);
 
@@ -427,7 +426,7 @@ public class WelcomeServiceTests
     [Test]
     public async Task HandleChatMemberUpdate_ExplicitJoinerMaskingOff_VerifyingMessageShowsName()
     {
-        _identities.ObserveAsync(Arg.Any<ObservedUser>(), Arg.Any<ProfileChangeContext>(), Arg.Any<RenameRescan>(), Arg.Any<CancellationToken>())
+        _identities.ObserveAsync(Arg.Any<ObservedUser>(), Arg.Any<ProfileChangeContext>(), Arg.Any<CancellationToken>())
             .Returns(UserIdentity.ForTest(TestUserId, "Bad", verdict: NameVerdict.Explicit));
         _configService.GetNameMaskingAsync(TestChatId, Arg.Any<CancellationToken>()).Returns(NameMasking.Off);
 
@@ -444,7 +443,7 @@ public class WelcomeServiceTests
     {
         // Observed before the scan: no verdict yet. The scan flags the name; the identity
         // resolved after it carries the Explicit verdict.
-        _identities.ObserveAsync(Arg.Any<ObservedUser>(), Arg.Any<ProfileChangeContext>(), Arg.Any<RenameRescan>(), Arg.Any<CancellationToken>())
+        _identities.ObserveAsync(Arg.Any<ObservedUser>(), Arg.Any<ProfileChangeContext>(), Arg.Any<CancellationToken>())
             .Returns(UserIdentity.ForTest(TestUserId, "Bad"));
         _identities.ResolveAsync(TestUserId, Arg.Any<CancellationToken>())
             .Returns(UserIdentity.ForTest(TestUserId, "Bad", verdict: NameVerdict.Explicit));
@@ -571,7 +570,7 @@ public class WelcomeServiceTests
         await _sut.HandleChatMemberUpdateAsync(update, CancellationToken.None);
 
         // Assert — the leave path must not attempt to fetch/create a user record
-        await _identities.DidNotReceiveWithAnyArgs().ObserveAsync(default!, default!, default, default);
+        await _identities.DidNotReceiveWithAnyArgs().ObserveAsync(default!, default!, default);
 
         // No mute should happen either
         await _moderationService.DidNotReceive().RestrictUserAsync(
@@ -608,7 +607,7 @@ public class WelcomeServiceTests
             Arg.Any<Chat>(), Arg.Any<User>(), Arg.Any<ChatMemberUpdated?>(), Arg.Any<CancellationToken>());
 
         // Human join path must not execute — user record must not be fetched
-        await _identities.DidNotReceiveWithAnyArgs().ObserveAsync(default!, default!, default, default);
+        await _identities.DidNotReceiveWithAnyArgs().ObserveAsync(default!, default!, default);
     }
 
     [Test]
@@ -640,7 +639,7 @@ public class WelcomeServiceTests
             Arg.Any<Chat>(), Arg.Any<User>(), Arg.Any<DateTimeOffset>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
 
         // User record path must not execute
-        await _identities.DidNotReceiveWithAnyArgs().ObserveAsync(default!, default!, default, default);
+        await _identities.DidNotReceiveWithAnyArgs().ObserveAsync(default!, default!, default);
     }
 
     #endregion
@@ -706,7 +705,7 @@ public class WelcomeServiceTests
         await _sut.HandleChatMemberUpdateAsync(update, CancellationToken.None);
 
         // Assert — the early-return guard must fire, nothing processed
-        await _identities.DidNotReceiveWithAnyArgs().ObserveAsync(default!, default!, default, default);
+        await _identities.DidNotReceiveWithAnyArgs().ObserveAsync(default!, default!, default);
 
         await _moderationService.DidNotReceive().RestrictUserAsync(
             Arg.Any<RestrictIntent>(), Arg.Any<CancellationToken>());

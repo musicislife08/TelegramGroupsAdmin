@@ -271,7 +271,7 @@ public class ReportCallbackServiceTests
         await _service.HandleCallbackAsync(CreateCallbackQuery(data: $"rev:{TestContextId}:0"));
 
         await _mockIdentities.Received(1).ResolveAsync(99999, Arg.Any<CancellationToken>());
-        await _mockIdentities.DidNotReceiveWithAnyArgs().ObserveAsync(default!, default!, default, default);
+        await _mockIdentities.DidNotReceiveWithAnyArgs().ObserveAsync(default!, default!, default);
         await _mockReportActionsService.Received(1).HandleContentSpamAsync(
             TestReportId,
             Arg.Is<Actor>(a => a!.TelegramUserId == 99999 && a.DisplayName == "Stored Admin"),

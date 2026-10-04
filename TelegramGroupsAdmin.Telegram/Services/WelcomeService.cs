@@ -149,7 +149,6 @@ public class WelcomeService(
                 new ObservedUser(user.Id, user.FirstName, user.LastName, user.Username, user.IsBot,
                     ObservationSource.ChatMember, seenAt),
                 new ProfileChangeContext(ChatIdentity.From(chatMemberUpdate.Chat), MessageId: null),
-                RenameRescan.None,
                 cancellationToken);
             var existingUser = await telegramUserRepository.GetByTelegramIdAsync(user.Id, cancellationToken);
 

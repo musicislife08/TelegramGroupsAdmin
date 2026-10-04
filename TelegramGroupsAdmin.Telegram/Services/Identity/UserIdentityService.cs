@@ -17,7 +17,7 @@ public sealed class UserIdentityService(
     ILogger<UserIdentityService> logger) : IUserIdentityService
 {
     public async Task<UserIdentity> ObserveAsync(
-        ObservedUser observed, ProfileChangeContext context, RenameRescan rescan, CancellationToken ct = default)
+        ObservedUser observed, ProfileChangeContext context, CancellationToken ct = default)
     {
         ObservedNamesResult result;
         try
@@ -46,8 +46,7 @@ public sealed class UserIdentityService(
 
         // Inline, as the message pipeline did before: a profile ban stays inside this update's
         // context and its existing cleanup path. Renames are rare, so the stall is rare.
-        if (rescan == RenameRescan.Inline && result.Renamed is not null
-            && !result.User.IsTrusted && !result.User.IsBot && !TelegramConstants.IsSystemUser(observed.Id))
+        if (result.Renamed is not null && RescansRename(observed, result.User))
         {
             try
             {
@@ -62,6 +61,18 @@ public sealed class UserIdentityService(
 
         return identity;
     }
+
+    /// <summary>
+    /// Whether a recorded rename is rescanned now. Only a message or edit (BotUpdate) of a user worth
+    /// protecting against: joins and admin refresh (ChatMember) record only, because muting is among
+    /// the first join steps and the join flow's own scan sees the rename in username_history; the
+    /// scan's own observation (UserApiScan) records only, or it would recurse. Trusted users (all
+    /// chat admins), banned users, bots and system accounts record only.
+    /// </summary>
+    private static bool RescansRename(ObservedUser observed, TelegramUser user) =>
+        observed.Source == ObservationSource.BotUpdate
+        && !user.IsTrusted && !user.IsBanned && !user.IsBot && !observed.IsBot
+        && !TelegramConstants.IsSystemUser(observed.Id);
 
     public async Task<UserIdentity> ResolveAsync(long userId, CancellationToken ct = default) =>
         (await ResolveManyAsync([userId], ct))[0];

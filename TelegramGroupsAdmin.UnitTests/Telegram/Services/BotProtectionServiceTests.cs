@@ -31,7 +31,7 @@ public class BotProtectionServiceTests
     public void SetUp()
     {
         _identities = Substitute.For<IUserIdentityService>();
-        _identities.ObserveAsync(Arg.Any<ObservedUser>(), Arg.Any<ProfileChangeContext>(), Arg.Any<RenameRescan>(), Arg.Any<CancellationToken>())
+        _identities.ObserveAsync(Arg.Any<ObservedUser>(), Arg.Any<ProfileChangeContext>(), Arg.Any<CancellationToken>())
             .Returns(ci => UserIdentity.ForTest(ci.Arg<ObservedUser>().Id, "Stored Bot"));
         _moderation = Substitute.For<IBotModerationService>();
         _moderation.SyncBanToChatAsync(Arg.Any<SyncBanIntent>(), Arg.Any<CancellationToken>())
@@ -58,7 +58,6 @@ public class BotProtectionServiceTests
             Arg.Is<ObservedUser>(o => o!.Id == BotId && o.IsBot && o.ObservedAt == seenAt && o.Username == "spam_bot"
                 && o.Source == ObservationSource.ChatMember),
             Arg.Is<ProfileChangeContext>(c => c!.Chat!.Id == ChatId),
-            RenameRescan.None,
             Arg.Any<CancellationToken>());
         await _moderation.Received(1).SyncBanToChatAsync(
             Arg.Is<SyncBanIntent>(i => i!.User.Id == BotId && i.User.FirstName == "Stored Bot" && i.Chat.Id == ChatId),

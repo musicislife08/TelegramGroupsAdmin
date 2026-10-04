@@ -155,7 +155,7 @@ public class BanCelebrationSubscriptionServiceTests
             _telegramUsers.GetByTelegramIdAsync(UserId, Arg.Any<CancellationToken>());
             _repository.UpsertAsync(UserId, ChatId, Arg.Any<CancellationToken>());
         });
-        await _identities.DidNotReceiveWithAnyArgs().ObserveAsync(default!, default!, default, default);
+        await _identities.DidNotReceiveWithAnyArgs().ObserveAsync(default!, default!, default);
     }
 
     [Test]
@@ -428,7 +428,7 @@ public class BanCelebrationSubscriptionServiceTests
             new ChatMemberMember { User = TgUser }, new ChatMemberBanned { User = TgUser }));
 
         await _identities.Received(1).ResolveAsync(UserId, Arg.Any<CancellationToken>());
-        await _identities.DidNotReceiveWithAnyArgs().ObserveAsync(default!, default!, default, default);
+        await _identities.DidNotReceiveWithAnyArgs().ObserveAsync(default!, default!, default);
     }
 
     [Test]

@@ -24,20 +24,20 @@ public class UserIdentityServiceTests
         _sut = new UserIdentityService(_users, _gate, Substitute.For<ILogger<UserIdentityService>>());
     }
 
-    private static TelegramUser Row(long id, string first, bool trusted = false, bool bot = false)
+    private static TelegramUser Row(long id, string first, bool trusted = false, bool bot = false, bool banned = false)
     {
         var now = DateTimeOffset.UtcNow;
         return new TelegramUser(
             TelegramUserId: id,
             Username: null, FirstName: first, LastName: null,
             UserPhotoPath: null, PhotoHash: null, PhotoFileUniqueId: null,
-            IsBot: bot, IsTrusted: trusted, IsBanned: false,
+            IsBot: bot, IsTrusted: trusted, IsBanned: banned,
             KickCount: 0, BotDmEnabled: false,
             FirstSeenAt: now, LastSeenAt: now, CreatedAt: now, UpdatedAt: now);
     }
 
-    private static ObservedUser Observed(long id, string first) =>
-        new(id, first, null, null, IsBot: false, ObservationSource.BotUpdate, DateTimeOffset.UtcNow);
+    private static ObservedUser Observed(long id, string first, ObservationSource source = ObservationSource.BotUpdate) =>
+        new(id, first, null, null, IsBot: false, source, DateTimeOffset.UtcNow);
 
     private void IdentityRow(long id, string first, NameVerdict verdict) =>
         _users.GetIdentitiesAsync(Arg.Is<IReadOnlyCollection<long>>(ids => ids!.Contains(id)), Arg.Any<CancellationToken>())
@@ -120,12 +120,12 @@ public class UserIdentityServiceTests
     }
 
     [Test]
-    public async Task Observe_RenameOfUntrustedUser_Inline_RescansThroughGate()
+    public async Task Observe_BotUpdateRenameOfUntrustedUser_RescansThroughGate()
     {
         Renamed(Row(7, "New"));
         IdentityRow(7, "New", NameVerdict.Clean);
 
-        await _sut.ObserveAsync(Observed(7, "New"), new ProfileChangeContext(Chat, 5), RenameRescan.Inline);
+        await _sut.ObserveAsync(Observed(7, "New"), new ProfileChangeContext(Chat, 5));
 
         await _gate.Received(1).ScanIfEligibleAsync(
             Arg.Is<UserIdentity>(u => u!.Id == 7), Chat, ProfileScanTrigger.ProfileChange,
@@ -133,13 +133,43 @@ public class UserIdentityServiceTests
     }
 
     [Test]
-    public async Task Observe_RenameWithRescanNone_DoesNotScan()
+    public async Task Observe_ChatMemberRename_RecordsOnly()
     {
+        // Joins and admin refresh: muting comes first on a join, so nothing slow runs here; the
+        // join scan picks the rename up from username_history.
         Renamed(Row(7, "New"));
         IdentityRow(7, "New", NameVerdict.Clean);
 
-        await _sut.ObserveAsync(Observed(7, "New"), new ProfileChangeContext(Chat, null), RenameRescan.None);
+        var identity = await _sut.ObserveAsync(Observed(7, "New", ObservationSource.ChatMember), new ProfileChangeContext(Chat, null));
 
+        Assert.That(identity.DisplayName, Is.EqualTo("New"));
+        await _users.Received(1).GetOrUpdateAsync(
+            Arg.Is<ObservedUser>(o => o!.Id == 7 && o.FirstName == "New"), Arg.Any<ProfileChangeContext>(), Arg.Any<CancellationToken>());
+        await _gate.DidNotReceiveWithAnyArgs().ScanIfEligibleAsync(default!, default, default, default);
+    }
+
+    [Test]
+    public async Task Observe_UserApiScanRename_RecordsOnly()
+    {
+        // The scan's own observation: rescanning would recurse.
+        Renamed(Row(7, "New"));
+        IdentityRow(7, "New", NameVerdict.Clean);
+
+        await _sut.ObserveAsync(Observed(7, "New", ObservationSource.UserApiScan), new ProfileChangeContext(Chat, null));
+
+        await _users.ReceivedWithAnyArgs(1).GetOrUpdateAsync(default!, default!, default);
+        await _gate.DidNotReceiveWithAnyArgs().ScanIfEligibleAsync(default!, default, default, default);
+    }
+
+    [Test]
+    public async Task Observe_RenameOfBannedUser_RecordsOnly()
+    {
+        Renamed(Row(7, "New", banned: true));
+        IdentityRow(7, "New", NameVerdict.Clean);
+
+        await _sut.ObserveAsync(Observed(7, "New"), new ProfileChangeContext(Chat, 5));
+
+        await _users.ReceivedWithAnyArgs(1).GetOrUpdateAsync(default!, default!, default);
         await _gate.DidNotReceiveWithAnyArgs().ScanIfEligibleAsync(default!, default, default, default);
     }
 
@@ -149,7 +179,7 @@ public class UserIdentityServiceTests
         Renamed(Row(7, "New", trusted: true));
         IdentityRow(7, "New", NameVerdict.Unscanned);
 
-        await _sut.ObserveAsync(Observed(7, "New"), new ProfileChangeContext(Chat, 5), RenameRescan.Inline);
+        await _sut.ObserveAsync(Observed(7, "New"), new ProfileChangeContext(Chat, 5));
 
         await _gate.DidNotReceiveWithAnyArgs().ScanIfEligibleAsync(default!, default, default, default);
     }
@@ -161,7 +191,7 @@ public class UserIdentityServiceTests
             .Returns(new ObservedNamesResult(Row(7, "Same"), Renamed: null));
         IdentityRow(7, "Same", NameVerdict.Clean);
 
-        await _sut.ObserveAsync(Observed(7, "Same"), new ProfileChangeContext(Chat, 5), RenameRescan.Inline);
+        await _sut.ObserveAsync(Observed(7, "Same"), new ProfileChangeContext(Chat, 5));
 
         await _gate.DidNotReceiveWithAnyArgs().ScanIfEligibleAsync(default!, default, default, default);
     }
@@ -174,7 +204,7 @@ public class UserIdentityServiceTests
             .Returns([UserIdentity.ForTest(7, "New", verdict: NameVerdict.Clean)],
                      [UserIdentity.ForTest(7, "New", verdict: NameVerdict.Explicit)]);
 
-        var identity = await _sut.ObserveAsync(Observed(7, "New"), new ProfileChangeContext(Chat, 5), RenameRescan.Inline);
+        var identity = await _sut.ObserveAsync(Observed(7, "New"), new ProfileChangeContext(Chat, 5));
 
         Assert.That(identity.Verdict, Is.EqualTo(NameVerdict.Explicit));
     }
@@ -187,7 +217,7 @@ public class UserIdentityServiceTests
         _gate.ScanIfEligibleAsync(default!, default, default, default, default)
             .ReturnsForAnyArgs<ProfileScanResult?>(_ => throw new InvalidOperationException("scan failed"));
 
-        var identity = await _sut.ObserveAsync(Observed(7, "New"), new ProfileChangeContext(Chat, 5), RenameRescan.Inline);
+        var identity = await _sut.ObserveAsync(Observed(7, "New"), new ProfileChangeContext(Chat, 5));
 
         Assert.That(identity.Id, Is.EqualTo(7));
     }
@@ -198,7 +228,7 @@ public class UserIdentityServiceTests
         _users.GetOrUpdateAsync(Arg.Any<ObservedUser>(), Arg.Any<ProfileChangeContext>(), Arg.Any<CancellationToken>())
             .Returns<ObservedNamesResult>(_ => throw new InvalidOperationException("db down"));
 
-        var identity = await _sut.ObserveAsync(Observed(7, "Seen"), new ProfileChangeContext(null, null), RenameRescan.Inline);
+        var identity = await _sut.ObserveAsync(Observed(7, "Seen"), new ProfileChangeContext(null, null));
 
         Assert.That(identity.DisplayName, Is.EqualTo("Seen"));
         Assert.That(identity.Verdict, Is.EqualTo(NameVerdict.Unscanned));
@@ -211,7 +241,7 @@ public class UserIdentityServiceTests
         _users.GetIdentitiesAsync(Arg.Any<IReadOnlyCollection<long>>(), Arg.Any<CancellationToken>())
             .Returns<IReadOnlyList<UserIdentity>>(_ => throw new InvalidOperationException("db down"));
 
-        var identity = await _sut.ObserveAsync(Observed(7, "Seen"), new ProfileChangeContext(Chat, 5), RenameRescan.Inline);
+        var identity = await _sut.ObserveAsync(Observed(7, "Seen"), new ProfileChangeContext(Chat, 5));
 
         Assert.That(identity.DisplayName, Is.EqualTo("Seen"));
         Assert.That(identity.Verdict, Is.EqualTo(NameVerdict.Unscanned));
@@ -224,7 +254,7 @@ public class UserIdentityServiceTests
         Renamed(Row(7, "New", bot: true));
         IdentityRow(7, "New", NameVerdict.Unscanned);
 
-        await _sut.ObserveAsync(Observed(7, "New"), new ProfileChangeContext(Chat, 5), RenameRescan.Inline);
+        await _sut.ObserveAsync(Observed(7, "New"), new ProfileChangeContext(Chat, 5));
 
         await _gate.DidNotReceiveWithAnyArgs().ScanIfEligibleAsync(default!, default, default, default);
     }
@@ -236,7 +266,7 @@ public class UserIdentityServiceTests
         Renamed(Row(id, "New"));
         IdentityRow(id, "New", NameVerdict.Unscanned);
 
-        await _sut.ObserveAsync(Observed(id, "New"), new ProfileChangeContext(Chat, 5), RenameRescan.Inline);
+        await _sut.ObserveAsync(Observed(id, "New"), new ProfileChangeContext(Chat, 5));
 
         await _gate.DidNotReceiveWithAnyArgs().ScanIfEligibleAsync(default!, default, default, default);
     }

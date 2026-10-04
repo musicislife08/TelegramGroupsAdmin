@@ -56,7 +56,7 @@ public class MessageProcessingServiceObserveTests
         _users = Substitute.For<ITelegramUserRepository>();
         _permissions = Substitute.For<ITelegramPermissionService>();
 
-        _identities.ObserveAsync(Arg.Any<ObservedUser>(), Arg.Any<ProfileChangeContext>(), Arg.Any<RenameRescan>(), Arg.Any<CancellationToken>())
+        _identities.ObserveAsync(Arg.Any<ObservedUser>(), Arg.Any<ProfileChangeContext>(), Arg.Any<CancellationToken>())
             .Returns(ci => UserIdentity.ForTest(ci.Arg<ObservedUser>().Id, "A"));
 
         var translation = Substitute.For<ITranslationHandler>();
@@ -136,7 +136,7 @@ public class MessageProcessingServiceObserveTests
     public async Task NewMessage_ObservesSenderBeforeRoutingCommands()
     {
         var order = new List<string>();
-        _identities.ObserveAsync(Arg.Any<ObservedUser>(), Arg.Any<ProfileChangeContext>(), Arg.Any<RenameRescan>(), Arg.Any<CancellationToken>())
+        _identities.ObserveAsync(Arg.Any<ObservedUser>(), Arg.Any<ProfileChangeContext>(), Arg.Any<CancellationToken>())
             .Returns(ci => { order.Add("observe"); return UserIdentity.ForTest(ci.Arg<ObservedUser>().Id, "A"); });
         // The router's first dependency read once it routes a command.
         _permissions.GetEffectiveLevelAsync(Arg.Any<long>(), Arg.Any<long>(), Arg.Any<CancellationToken>())
@@ -151,7 +151,7 @@ public class MessageProcessingServiceObserveTests
     public async Task GroupCommand_ReceivesTheObservedSender()
     {
         var observed = UserIdentity.ForTest(SenderId, "Observed");
-        _identities.ObserveAsync(Arg.Any<ObservedUser>(), Arg.Any<ProfileChangeContext>(), Arg.Any<RenameRescan>(), Arg.Any<CancellationToken>())
+        _identities.ObserveAsync(Arg.Any<ObservedUser>(), Arg.Any<ProfileChangeContext>(), Arg.Any<CancellationToken>())
             .Returns(observed);
 
         await _sut.HandleNewMessageAsync(TextMessage(from: SenderId, text: "/help"), CancellationToken.None);
@@ -172,7 +172,7 @@ public class MessageProcessingServiceObserveTests
 
         await _help.Received(1).ExecuteAsync(
             Arg.Any<Message>(), Arg.Any<string[]>(), Arg.Any<PermissionLevel>(), Arg.Is(resolved), Arg.Any<CancellationToken>());
-        await _identities.DidNotReceiveWithAnyArgs().ObserveAsync(default!, default!, default, default);
+        await _identities.DidNotReceiveWithAnyArgs().ObserveAsync(default!, default!, default);
     }
 
     [Test]
@@ -186,7 +186,6 @@ public class MessageProcessingServiceObserveTests
         await _identities.Received(1).ObserveAsync(
             Arg.Is<ObservedUser>(o => o!.Id == SenderId && o.ObservedAt == expectedAt && o.Source == ObservationSource.BotUpdate),
             Arg.Is<ProfileChangeContext>(c => c!.Chat!.Id == message.Chat.Id && c.MessageId == message.MessageId),
-            RenameRescan.Inline,
             Arg.Any<CancellationToken>());
         await _users.Received(1).MarkActiveAsync(SenderId, expectedAt, Arg.Any<CancellationToken>());
     }
@@ -200,7 +199,7 @@ public class MessageProcessingServiceObserveTests
 
         await _sut.HandleNewMessageAsync(message, CancellationToken.None);
 
-        await _identities.DidNotReceiveWithAnyArgs().ObserveAsync(default!, default!, default, default);
+        await _identities.DidNotReceiveWithAnyArgs().ObserveAsync(default!, default!, default);
         await _users.DidNotReceiveWithAnyArgs().MarkActiveAsync(default, default, default);
     }
 
@@ -212,7 +211,7 @@ public class MessageProcessingServiceObserveTests
 
         await _sut.HandleNewMessageAsync(message, CancellationToken.None);
 
-        await _identities.DidNotReceiveWithAnyArgs().ObserveAsync(default!, default!, default, default);
+        await _identities.DidNotReceiveWithAnyArgs().ObserveAsync(default!, default!, default);
         await _users.DidNotReceiveWithAnyArgs().MarkActiveAsync(default, default, default);
     }
 
@@ -221,7 +220,7 @@ public class MessageProcessingServiceObserveTests
     {
         // Observed before the scan: no verdict. The scan flags the name, so the identity resolved
         // after it carries the verdict, and content detection must receive that one.
-        _identities.ObserveAsync(Arg.Any<ObservedUser>(), Arg.Any<ProfileChangeContext>(), Arg.Any<RenameRescan>(), Arg.Any<CancellationToken>())
+        _identities.ObserveAsync(Arg.Any<ObservedUser>(), Arg.Any<ProfileChangeContext>(), Arg.Any<CancellationToken>())
             .Returns(UserIdentity.ForTest(SenderId, "A"));
         var rescanned = UserIdentity.ForTest(SenderId, "A", verdict: NameVerdict.Explicit);
         _identities.ResolveAsync(SenderId, Arg.Any<CancellationToken>()).Returns(rescanned);

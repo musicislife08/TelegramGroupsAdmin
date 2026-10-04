@@ -10,10 +10,11 @@ namespace TelegramGroupsAdmin.Telegram.Services.Identity;
 public interface IUserIdentityService
 {
     /// <summary>
-    /// Records the names Telegram reported (newest observation wins), optionally rescans the
-    /// profile inline when this changed them, and returns the resulting identity.
+    /// Records the names Telegram reported (newest observation wins) and returns the resulting
+    /// identity. When this records a rename, the service decides from the observation's source and
+    /// the user whether to rescan the profile inline (see <see cref="UserIdentityService"/>).
     /// </summary>
-    Task<UserIdentity> ObserveAsync(ObservedUser observed, ProfileChangeContext context, RenameRescan rescan, CancellationToken ct = default);
+    Task<UserIdentity> ObserveAsync(ObservedUser observed, ProfileChangeContext context, CancellationToken ct = default);
 
     /// <summary>Resolves one identity; an unknown id gives an id-only, unscanned identity.</summary>
     Task<UserIdentity> ResolveAsync(long userId, CancellationToken ct = default);
