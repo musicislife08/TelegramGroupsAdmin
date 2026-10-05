@@ -29,6 +29,12 @@ public class ProfileRescanJob(
     IUserIdentityService identityService,
     JobMetrics jobMetrics) : IJob
 {
+    /// <summary>
+    /// Candidates examined per run, as a multiple of BatchSize: users skipped because scanning is disabled in
+    /// every chat they are in don't use up batch slots, but a large backlog of them can't make a run unbounded.
+    /// </summary>
+    internal const int CandidatesPerBatchSlot = 10;
+
     public async Task Execute(IJobExecutionContext context)
     {
         await ExecuteAsync(context.CancellationToken);
@@ -54,9 +60,11 @@ public class ProfileRescanJob(
                 "Profile rescan: starting batch (size={BatchSize}, rescanAfter={RescanAfter}, cutoff={Cutoff}, nameOnlyRetryLimit={RetryLimit})",
                 batchSize, settings.RescanAfter, cutoff, settings.NameOnlyRetryLimit);
 
-            // Query eligible users via repository
+            // One ordered candidate list, capped, rather than offset pages: a scan changes the user's
+            // profile_scanned_at and scan rows, so offset pages would shift under the loop.
+            var candidateCap = batchSize * CandidatesPerBatchSlot;
             var userIds = await userRepository.GetEligibleUsersForRescanAsync(
-                batchSize, cutoff, settings.NameOnlyRetryLimit, cancellationToken);
+                candidateCap, cutoff, settings.NameOnlyRetryLimit, cancellationToken);
 
             if (userIds.Count == 0)
             {
@@ -65,15 +73,21 @@ public class ProfileRescanJob(
                 return;
             }
 
-            logger.LogInformation("Profile rescan: found {Count} users to scan", userIds.Count);
+            logger.LogInformation("Profile rescan: found {Count} candidates", userIds.Count);
 
-            // One lookup for the batch; ResolveManyAsync keeps the requested order
+            // One lookup for the candidates; ResolveManyAsync keeps the requested order
             var users = await identityService.ResolveManyAsync(userIds, cancellationToken);
 
+            var attempted = 0;
             var scanned = 0;
             var skipped = 0;
-            foreach (var user in users)
+            var scanningDisabled = 0;
+            foreach (var user in users.Take(candidateCap))
             {
+                // Batch slots go to scan attempts only
+                if (attempted >= batchSize)
+                    break;
+
                 try
                 {
                     // Scan for the user's most recently active chat with profile scanning enabled (it
@@ -84,9 +98,11 @@ public class ProfileRescanJob(
                     {
                         logger.LogDebug("Profile rescan: scanning disabled in every chat of user {UserId}, skipping",
                             user.Id);
-                        skipped++;
+                        scanningDisabled++;
                         continue;
                     }
+
+                    attempted++;
 
                     var result = await profileScanService.ScanUserProfileAsync(
                         user,
@@ -108,8 +124,12 @@ public class ProfileRescanJob(
                 }
             }
 
-            logger.LogInformation("Profile rescan: completed {Scanned}/{Total} users ({Skipped} skipped)",
-                scanned, userIds.Count, skipped);
+            if (scanningDisabled > 0)
+                logger.LogInformation(
+                    "Profile rescan: skipped {Count} users, scanning disabled in every chat", scanningDisabled);
+
+            logger.LogInformation("Profile rescan: completed {Scanned}/{Attempted} users ({Skipped} skipped)",
+                scanned, attempted, skipped);
             success = true;
         }
         catch (Exception ex)

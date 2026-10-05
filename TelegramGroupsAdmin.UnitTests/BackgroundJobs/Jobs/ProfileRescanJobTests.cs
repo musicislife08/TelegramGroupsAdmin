@@ -79,7 +79,7 @@ public class ProfileRescanJobTests
     }
 
     [Test]
-    public async Task Execute_PassesBatchSizeRetryCutoffAndRetryLimitFromSettings()
+    public async Task Execute_PassesCandidateCapRetryCutoffAndRetryLimitFromSettings()
     {
         _jobConfig.GetJobConfigAsync(BackgroundJobNames.ProfileRescan, Arg.Any<CancellationToken>())
             .Returns(new BackgroundJobConfig
@@ -95,8 +95,9 @@ public class ProfileRescanJobTests
 
         await _job.Execute(Context());
 
+        // Up to 10 x BatchSize candidates are examined, so users skipped for disabled scanning don't use up slots.
         await _users.Received(1).GetEligibleUsersForRescanAsync(
-            25,
+            250,
             Arg.Is<DateTimeOffset>(c => c <= start.AddDays(-2).AddSeconds(5) && c >= start.AddDays(-2).AddSeconds(-5)),
             5,
             Arg.Any<CancellationToken>());
@@ -109,7 +110,7 @@ public class ProfileRescanJobTests
 
         await _job.Execute(Context());
 
-        await _users.Received(1).GetEligibleUsersForRescanAsync(100, Arg.Any<DateTimeOffset>(), 3, Arg.Any<CancellationToken>());
+        await _users.Received(1).GetEligibleUsersForRescanAsync(1000, Arg.Any<DateTimeOffset>(), 3, Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -182,6 +183,59 @@ public class ProfileRescanJobTests
 
         await _scanner.Received(globallyEnabled ? 1 : 0)
             .ScanUserProfileAsync(user, null, Arg.Any<CancellationToken>(), Arg.Any<bool>());
+    }
+
+    private void BatchSize(int batchSize) =>
+        _jobConfig.GetJobConfigAsync(BackgroundJobNames.ProfileRescan, Arg.Any<CancellationToken>())
+            .Returns(new BackgroundJobConfig
+            {
+                JobName = BackgroundJobNames.ProfileRescan,
+                DisplayName = "Profile Rescan",
+                Description = "test",
+                Schedule = "every 6 hours",
+                ProfileRescan = new ProfileRescanSettings { BatchSize = batchSize }
+            });
+
+    [Test]
+    public async Task Execute_DisabledCandidatesFirst_StillScansBatchSizeEnabledUsers()
+    {
+        // Users skipped because every chat has scanning disabled don't use up batch slots.
+        BatchSize(2);
+        var disabledChat = ChatIdentity.FromId(-1001);
+        var enabledChat = ChatIdentity.FromId(-1002);
+        ProfileScan(-1001, enabled: false);
+        ProfileScan(-1002, enabled: true);
+        var users = Enumerable.Range(1, 6).Select(i => UserIdentity.ForTest(i, $"User {i}")).ToArray();
+        Batch(users);
+        foreach (var user in users.Take(3))
+            Chats(user.Id, disabledChat);
+        foreach (var user in users.Skip(3))
+            Chats(user.Id, enabledChat);
+
+        await _job.Execute(Context());
+
+        await _scanner.Received(1).ScanUserProfileAsync(users[3], enabledChat, Arg.Any<CancellationToken>(), Arg.Any<bool>());
+        await _scanner.Received(1).ScanUserProfileAsync(users[4], enabledChat, Arg.Any<CancellationToken>(), Arg.Any<bool>());
+        await _scanner.DidNotReceive().ScanUserProfileAsync(users[5], Arg.Any<ChatIdentity?>(), Arg.Any<CancellationToken>(), Arg.Any<bool>());
+        await _scanner.ReceivedWithAnyArgs(2).ScanUserProfileAsync(default!, default, default, default);
+    }
+
+    [Test]
+    public async Task Execute_ExaminedCandidateCap_StopsTheRun()
+    {
+        // At most 10 x BatchSize candidates are examined per run, however many come back.
+        BatchSize(1);
+        var disabledChat = ChatIdentity.FromId(-1001);
+        ProfileScan(-1001, enabled: false);
+        var users = Enumerable.Range(1, 11).Select(i => UserIdentity.ForTest(i, $"User {i}")).ToArray();
+        Batch(users);
+        foreach (var user in users.Take(10))
+            Chats(user.Id, disabledChat);
+
+        await _job.Execute(Context());
+
+        await _users.Received(10).GetChatsForUserAsync(Arg.Any<long>(), Arg.Any<CancellationToken>());
+        await _scanner.DidNotReceiveWithAnyArgs().ScanUserProfileAsync(default!, default, default, default);
     }
 
     [Test]
