@@ -212,9 +212,15 @@
                     <MudTextField @bind-Value="_editProfileRescanAfter"
                                   Label="Re-Scan After"
                                   Variant="Variant.Outlined"
-                                  HelperText="Only re-scan profiles older than this. e.g., 1d, 3d, 1w, 2w"
+                                  HelperText="Wait before retrying an incomplete scan. e.g., 1d, 3d, 1w, 2w"
                                   Error="@(!ValidateRetention(_editProfileRescanAfter))"
                                   ErrorText="Invalid format. Use: 1d, 3d, 1w, 2w" />
+
+                    <MudNumericField @bind-Value="_editProfileRescanNameOnlyRetryLimit"
+                                     Label="Name-only retry limit"
+                                     Variant="Variant.Outlined"
+                                     Min="1" Max="20"
+                                     HelperText="Stop retrying a user after this many name-only scans since their last full scan (default 3)" />
                 }
             </MudStack>
         }
@@ -245,6 +251,7 @@
     // Profile Re-Scan settings
     private int _editProfileRescanBatchSize = 100;
     private string _editProfileRescanAfter = "1w";
+    private int _editProfileRescanNameOnlyRetryLimit = 3;
 
     // Data Cleanup retention settings (duration strings)
     private string _editMessageRetention = "30d";
@@ -368,6 +375,7 @@
             var settings = job.ProfileRescan ?? new ProfileRescanSettings();
             _editProfileRescanBatchSize = settings.BatchSize;
             _editProfileRescanAfter = settings.RescanAfter;
+            _editProfileRescanNameOnlyRetryLimit = settings.NameOnlyRetryLimit;
         }
 
         _showConfigDialog = true;
@@ -441,7 +449,8 @@
                 _editingJob.ProfileRescan = new ProfileRescanSettings
                 {
                     BatchSize = _editProfileRescanBatchSize,
-                    RescanAfter = _editProfileRescanAfter
+                    RescanAfter = _editProfileRescanAfter,
+                    NameOnlyRetryLimit = _editProfileRescanNameOnlyRetryLimit
                 };
             }
 

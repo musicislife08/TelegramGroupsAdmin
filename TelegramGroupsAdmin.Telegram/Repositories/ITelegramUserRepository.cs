@@ -149,11 +149,11 @@ public interface ITelegramUserRepository
     // ============================================================================
 
     /// <summary>
-    /// Get the most recently active chat for a user (by message activity).
-    /// Returns null if the user has no message history in any managed chat.
-    /// Used by the profile rescan job to associate alerts with a real chat.
+    /// The chats a user is known in (by message activity), most recently active first.
+    /// Empty if the user has no message history in any chat.
+    /// Used by the profile rescan job to pick a chat with profile scanning enabled and attribute the scan to it.
     /// </summary>
-    Task<ChatIdentity?> GetFirstChatForUserAsync(long telegramUserId, CancellationToken cancellationToken = default);
+    Task<List<ChatIdentity>> GetChatsForUserAsync(long telegramUserId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Exclude a user from automatic profile scans (renames still scan).
@@ -168,11 +168,14 @@ public interface ITelegramUserRepository
     Task IncludeInProfileScanAsync(long telegramUserId, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Get user IDs eligible for periodic profile re-scanning.
-    /// Filters out banned/bot/trusted/excluded users and returns those with stale or missing scans.
-    /// Ordered by ProfileScannedAt ASC (NULLS FIRST = never-scanned users prioritized).
+    /// User IDs whose profile scan is incomplete, for the rescan job: untrusted, unbanned, non-bot,
+    /// not excluded, and either never scanned (profile_scanned_at NULL) or last scanned before
+    /// <paramref name="retryCutoff"/> with a NameOnly latest scan row and fewer than
+    /// <paramref name="nameOnlyRetryLimit"/> NameOnly rows since their last FullScan row.
+    /// Ordered by ProfileScannedAt ASC (NULLS FIRST = never-scanned users first).
     /// </summary>
-    Task<List<long>> GetEligibleUsersForRescanAsync(int batchSize, DateTimeOffset rescanCutoff, CancellationToken cancellationToken = default);
+    Task<List<long>> GetEligibleUsersForRescanAsync(
+        int batchSize, DateTimeOffset retryCutoff, int nameOnlyRetryLimit, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Atomically update all profile scan columns for a user.

@@ -3,7 +3,9 @@ using Microsoft.Extensions.Logging;
 using Quartz;
 using TelegramGroupsAdmin.BackgroundJobs.Metrics;
 using TelegramGroupsAdmin.BackgroundJobs.Services;
+using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Models.BackgroundJobSettings;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Repositories;
@@ -13,15 +15,15 @@ using TelegramGroupsAdmin.Telegram.Services.UserApi;
 namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
 
 /// <summary>
-/// Periodic cron job that re-scans user profiles to detect changes.
-/// Queries users ordered by profile_scanned_at ASC NULLS FIRST (never-scanned first),
-/// filters out banned/bot/trusted users, and processes a configurable batch size.
+/// Periodic job that retries incomplete profile scans (never scanned, or a name-only latest scan under
+/// the retry limit). Every scan falls back to name-only, so the job runs with or without a User API session.
+/// A user is skipped only when profile scanning is disabled in every chat they are known in.
 /// </summary>
 [DisallowConcurrentExecution]
 public class ProfileRescanJob(
     ILogger<ProfileRescanJob> logger,
     IBackgroundJobConfigService jobConfigService,
-    ITelegramSessionManager sessionManager,
+    IConfigService configService,
     ITelegramUserRepository userRepository,
     IProfileScanService profileScanService,
     IUserIdentityService identityService,
@@ -40,14 +42,6 @@ public class ProfileRescanJob(
 
         try
         {
-            // Check User API availability first
-            if (!await sessionManager.HasAnyActiveSessionAsync(cancellationToken))
-            {
-                logger.LogInformation("Profile rescan: no User API session available, skipping batch");
-                success = true;
-                return;
-            }
-
             // Load job-specific settings
             var jobConfig = await jobConfigService.GetJobConfigAsync(
                 BackgroundJobNames.ProfileRescan, cancellationToken);
@@ -57,11 +51,12 @@ public class ProfileRescanJob(
             var cutoff = DateTimeOffset.UtcNow - rescanAfter;
 
             logger.LogInformation(
-                "Profile rescan: starting batch (size={BatchSize}, rescanAfter={RescanAfter}, cutoff={Cutoff})",
-                batchSize, settings.RescanAfter, cutoff);
+                "Profile rescan: starting batch (size={BatchSize}, rescanAfter={RescanAfter}, cutoff={Cutoff}, nameOnlyRetryLimit={RetryLimit})",
+                batchSize, settings.RescanAfter, cutoff, settings.NameOnlyRetryLimit);
 
             // Query eligible users via repository
-            var userIds = await userRepository.GetEligibleUsersForRescanAsync(batchSize, cutoff, cancellationToken);
+            var userIds = await userRepository.GetEligibleUsersForRescanAsync(
+                batchSize, cutoff, settings.NameOnlyRetryLimit, cancellationToken);
 
             if (userIds.Count == 0)
             {
@@ -77,26 +72,28 @@ public class ProfileRescanJob(
 
             var scanned = 0;
             var skipped = 0;
-            var aborted = false;
             foreach (var user in users)
             {
                 try
                 {
-                    // Look up the user's most recently active chat for alert/notification targeting
-                    var chat = await userRepository.GetFirstChatForUserAsync(user.Id, cancellationToken);
+                    // Scan for the user's most recently active chat with profile scanning enabled (it
+                    // targets alerts and supplies thresholds). Skip only when every chat they are in has
+                    // scanning disabled; with no known chat, the global config (chat 0) decides.
+                    var (eligible, chat) = await FindScanChatAsync(user.Id, cancellationToken);
+                    if (!eligible)
+                    {
+                        logger.LogDebug("Profile rescan: scanning disabled in every chat of user {UserId}, skipping",
+                            user.Id);
+                        skipped++;
+                        continue;
+                    }
 
                     var result = await profileScanService.ScanUserProfileAsync(
                         user,
                         triggeringChat: chat,
                         cancellationToken);
 
-                    // Session lost mid-batch — no point hammering reconnect for every remaining user
-                    if (result.SkipReason is not null && result.SkipReason.Contains("No User API session", StringComparison.Ordinal))
-                    {
-                        aborted = true;
-                        break;
-                    }
-
+                    // A name-only scan counts as scanned; a skip reason means nothing was written.
                     if (result.SkipReason is null)
                         scanned++;
                     else
@@ -111,12 +108,8 @@ public class ProfileRescanJob(
                 }
             }
 
-            if (aborted)
-                logger.LogWarning("Profile rescan: aborted — User API session unavailable ({Scanned} scanned, {Remaining} remaining)",
-                    scanned, userIds.Count - scanned - skipped);
-            else
-                logger.LogInformation("Profile rescan: completed {Scanned}/{Total} users ({Skipped} skipped)",
-                    scanned, userIds.Count, skipped);
+            logger.LogInformation("Profile rescan: completed {Scanned}/{Total} users ({Skipped} skipped)",
+                scanned, userIds.Count, skipped);
             success = true;
         }
         catch (Exception ex)
@@ -129,5 +122,31 @@ public class ProfileRescanJob(
             var elapsedMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds;
             jobMetrics.RecordJobExecution(jobName, success, elapsedMs);
         }
+    }
+
+    /// <summary>
+    /// The chat to scan the user for: the most recently active of their chats whose effective config has
+    /// profile scanning enabled. Not eligible when none has. A user with no known chat is eligible (chat
+    /// null) when the global config has profile scanning enabled.
+    /// </summary>
+    private async Task<(bool Eligible, ChatIdentity? Chat)> FindScanChatAsync(long userId, CancellationToken cancellationToken)
+    {
+        var chats = await userRepository.GetChatsForUserAsync(userId, cancellationToken);
+        if (chats.Count == 0)
+            return (await IsProfileScanEnabledAsync(0, cancellationToken), null);
+
+        foreach (var chat in chats)
+        {
+            if (await IsProfileScanEnabledAsync(chat.Id, cancellationToken))
+                return (true, chat);
+        }
+
+        return (false, null);
+    }
+
+    private async Task<bool> IsProfileScanEnabledAsync(long chatId, CancellationToken cancellationToken)
+    {
+        var welcomeConfig = await configService.GetEffectiveWelcomeAsync(chatId, cancellationToken);
+        return welcomeConfig?.JoinSecurity?.ProfileScan is { Enabled: true };
     }
 }

@@ -407,6 +407,19 @@ Anchors are in code as `GoldenDatasetConstants.IdentityService` (#552 part 1); a
 | `PhotoUserId` | 9264989724828 @raceoutnumber | not trusted; user_photo_path and photo_hash set |
 | `InactiveUserId` | 9332352149450 @calixrowen | is_active = false (banned spammer); MarkActiveAsync test |
 
+### Rescan job anchors (canonical edit 2026-10-05)
+Anchors are in code as `GoldenDatasetConstants.ProfileRescan` (#552 part 2). `IncompleteScanSelectionTests` reads each back first and passes the user count as the batch size.
+
+| Constant | Anchor | Shape |
+|---|---|---|
+| `NeverScannedUserId` | 9963580010331 "Ferocity Opponent" | never scanned; **edited:** `profile_scan_excluded` true → false (every never-scanned eligible user in canonical had been auto-excluded by the old unresolvable rule) |
+| `ExcludedNeverScannedUserId` | 9434053902837 "Preflight Silk" | never scanned, excluded. Read-only |
+| `NameOnlyLatestUserId` / `NameOnlyLatestScanId` | 9758118926756 @unreadbackspin, row 528 | one scan row, **edited:** `source` 0 → 1 (NameOnly). Retry-limit boundary: limit 2 selects, limit 1 does not |
+| `FullScanLatestUserId` | 9922735795237 @parkingsturdily, row 533 | one FullScan row from 2026-04-30; never selected however old. Read-only |
+| `MultiChatUserId` / `MultiChatLatestChatId` / `MultiChatOldestChatId` | 9739143127436 @elvesunable | undeleted messages in Hobby Forum (latest), Main Community, Garage Chat (oldest); pins `GetChatsForUserAsync` order. Read-only |
+
+Use when: a test needs the job's incomplete-scan selection. Every other eligible canonical user has at most one scan row, so a mixed NameOnly / FullScan history is not available without an approved import.
+
 ### Past-name search anchors (canonical edit 2026-10-03)
 Anchors are in code as `GoldenDatasetConstants.UsernameHistory`. Both owners are banned spammers (All and Banned tabs, not Active).
 

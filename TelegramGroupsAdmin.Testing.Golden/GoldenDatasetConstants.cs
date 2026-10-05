@@ -826,6 +826,27 @@ public static class GoldenDatasetConstants
         public const long InactiveUserId = 9332352149450;
     }
 
+    /// <summary>Anchors for the rescan job's incomplete-scan selection (#552 part 2).</summary>
+    public static class ProfileRescan
+    {
+        /// <summary>"Ferocity Opponent" (no username): untrusted, unbanned, non-bot, never scanned; profile_scan_excluded cleared (canonical edit 2026-10-05; it had been set by the old unresolvable auto-exclusion, read as an admin re-including the user).</summary>
+        public const long NeverScannedUserId = 9963580010331;
+        /// <summary>"Preflight Silk" (no username): untrusted, unbanned, non-bot, never scanned, profile_scan_excluded = true. Read-only.</summary>
+        public const long ExcludedNeverScannedUserId = 9434053902837;
+        /// <summary>@unreadbackspin: untrusted, unbanned; its only scan row 528 (score 1.2, AI fields NULL) has source = NameOnly (canonical edit 2026-10-05).</summary>
+        public const long NameOnlyLatestUserId = 9758118926756;
+        /// <summary>@unreadbackspin's only scan row, flag-edited to source = 1 (NameOnly) (canonical edit 2026-10-05).</summary>
+        public const long NameOnlyLatestScanId = 528;
+        /// <summary>@parkingsturdily: untrusted, unbanned; its only scan row 533 is a FullScan from 2026-04-30. Read-only.</summary>
+        public const long FullScanLatestUserId = 9922735795237;
+        /// <summary>@elvesunable: trusted; undeleted messages in three chats, latest first: Hobby Forum (2026-04-11), Main Community (2026-03-03), Garage Chat (2025-12-16). Read-only: pins the rescan job's chat list (GetChatsForUserAsync).</summary>
+        public const long MultiChatUserId = 9739143127436;
+        /// <summary>Hobby Forum: <see cref="MultiChatUserId"/>'s most recently active chat.</summary>
+        public const long MultiChatLatestChatId = -100003785594462L;
+        /// <summary>Garage Chat: <see cref="MultiChatUserId"/>'s least recently active chat (Main Community, <see cref="Chats.MainChatId"/>, is between).</summary>
+        public const long MultiChatOldestChatId = -100063904363399L;
+    }
+
     /// <summary>Anchors for BackupService restore tests.</summary>
     public static class Backup
     {

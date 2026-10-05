@@ -1257,10 +1257,10 @@ public class TelegramUserRepository : ITelegramUserRepository
     // ============================================================================
 
     /// <inheritdoc />
-    public async Task<ChatIdentity?> GetFirstChatForUserAsync(long telegramUserId, CancellationToken cancellationToken = default)
+    public async Task<List<ChatIdentity>> GetChatsForUserAsync(long telegramUserId, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var result = await (
+        var rows = await (
             from m in context.Messages
             where m.UserId == telegramUserId && m.DeletedAt == null
             join c in context.ManagedChats on m.ChatId equals c.ChatId into chatGroup
@@ -1270,9 +1270,9 @@ public class TelegramUserRepository : ITelegramUserRepository
             select new { g.Key.ChatId, g.Key.ChatName }
         )
         .AsNoTracking()
-        .FirstOrDefaultAsync(cancellationToken);
+        .ToListAsync(cancellationToken);
 
-        return result is null ? null : new ChatIdentity(result.ChatId, result.ChatName);
+        return rows.Select(r => new ChatIdentity(r.ChatId, r.ChatName)).ToList();
     }
 
     /// <inheritdoc />
@@ -1298,12 +1298,28 @@ public class TelegramUserRepository : ITelegramUserRepository
     }
 
     /// <inheritdoc />
-    public async Task<List<long>> GetEligibleUsersForRescanAsync(int batchSize, DateTimeOffset rescanCutoff, CancellationToken cancellationToken = default)
+    public async Task<List<long>> GetEligibleUsersForRescanAsync(
+        int batchSize, DateTimeOffset retryCutoff, int nameOnlyRetryLimit, CancellationToken cancellationToken = default)
     {
+        const short nameOnly = (short)ProfileScanSource.NameOnly;
+        const short fullScan = (short)ProfileScanSource.FullScan;
+
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         return await context.TelegramUsers
             .Where(u => !u.IsBanned && !u.IsBot && !u.IsTrusted && !u.ProfileScanExcluded)
-            .Where(u => u.ProfileScannedAt == null || u.ProfileScannedAt < rescanCutoff)
+            .Where(u => u.ProfileScannedAt == null
+                || (u.ProfileScannedAt < retryCutoff
+                    // latest scan row only read the name
+                    && context.ProfileScanResults
+                        .Where(r => r.UserId == u.TelegramUserId)
+                        .OrderByDescending(r => r.ScannedAt).ThenByDescending(r => r.Id)
+                        .Select(r => (short?)r.Source)
+                        .FirstOrDefault() == nameOnly
+                    // NameOnly rows with no FullScan row after them = NameOnly rows since the last full scan
+                    && context.ProfileScanResults.Count(r => r.UserId == u.TelegramUserId
+                        && r.Source == nameOnly
+                        && !context.ProfileScanResults.Any(f => f.UserId == u.TelegramUserId
+                            && f.Source == fullScan && f.ScannedAt > r.ScannedAt)) < nameOnlyRetryLimit))
             .OrderBy(u => u.ProfileScannedAt) // NULLS FIRST is PostgreSQL default for ASC
             .Take(batchSize)
             .Select(u => u.TelegramUserId)
