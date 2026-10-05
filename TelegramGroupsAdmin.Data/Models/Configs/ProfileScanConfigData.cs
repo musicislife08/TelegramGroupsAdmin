@@ -11,6 +11,8 @@ public class ProfileScanConfigData
 
     public decimal NotifyThreshold { get; set; } = 2.0m;
 
+    public decimal NameOnlyBanThreshold { get; set; } = 4.5m;
+
     public bool ScanOnJoin { get; set; } = true;
 
     public bool ScanOnProfileChange { get; set; } = true;

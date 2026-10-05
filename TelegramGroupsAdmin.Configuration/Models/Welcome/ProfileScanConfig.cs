@@ -12,6 +12,7 @@ public class ProfileScanConfig
 
     public const decimal DefaultBanThreshold = 4.0m;
     public const decimal DefaultNotifyThreshold = 2.0m;
+    public const decimal DefaultNameOnlyBanThreshold = 4.5m;
 
     /// <summary>
     /// Score threshold for automatic ban (0.0-5.0)
@@ -22,6 +23,13 @@ public class ProfileScanConfig
     /// Score threshold for admin notification/review (0.0-5.0)
     /// </summary>
     public decimal NotifyThreshold { get; set; } = DefaultNotifyThreshold;
+
+    /// <summary>
+    /// Score threshold for automatic ban when a scan could only read the name (0.0-5.0).
+    /// A name alone is weaker evidence than a whole profile, so it needs more certainty.
+    /// Must be at least <see cref="NotifyThreshold"/>.
+    /// </summary>
+    public decimal NameOnlyBanThreshold { get; set; } = DefaultNameOnlyBanThreshold;
 
     /// <summary>
     /// Whether to scan user profiles when they join a chat

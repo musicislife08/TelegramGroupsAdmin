@@ -6,9 +6,11 @@
 @using TelegramGroupsAdmin.Core.Utilities
 @using TelegramGroupsAdmin.Telegram.Extensions
 @using TelegramGroupsAdmin.Telegram.Models
+@using TelegramGroupsAdmin.Telegram.Services.UserApi
 @using TelegramGroupsAdmin.Telegram.Services.Welcome
 @using TelegramGroupsAdmin.Configuration.Services
 @inject IConfigService ConfigService
+@inject ITelegramSessionManager SessionManager
 @inject ISnackbar Snackbar
 @inject IJSRuntime JsRuntime
 @implements IAsyncDisposable
@@ -152,8 +154,14 @@
                             <ChildContent>
                                 <MudText Typo="Typo.caption" Class="mud-text-secondary mb-3">
                                     Scans user profiles via Telegram User API on join. Detects spam signals in bios,
-                                    personal channels, and pinned stories. Requires an active User API session.
+                                    personal channels, and pinned stories. Full scans need an active User API session; without one, only the name is scanned.
                                 </MudText>
+                                @if (_config.JoinSecurity.ProfileScan.Enabled && !_hasUserApiSession)
+                                {
+                                    <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-3">
+                                        No User API session is connected: full profile scans can't run, but name-only scans still run on new joiners, first messages and renames.
+                                    </MudAlert>
+                                }
                                 <MudGrid>
                                     <MudItem xs="6">
                                         <MudNumericField @bind-Value="_config.JoinSecurity.ProfileScan.BanThreshold"
@@ -169,6 +177,16 @@
                                                          Variant="Variant.Outlined"
                                                          Min="0.5m" Max="5.0m" Step="0.5m"
                                                          HelperText="Score at which admins are notified for review (default: 2.0)"
+                                                         Disabled="!_config.JoinSecurity.ProfileScan.Enabled" />
+                                    </MudItem>
+                                    <MudItem xs="12">
+                                        <MudNumericField @bind-Value="_config.JoinSecurity.ProfileScan.NameOnlyBanThreshold"
+                                                         Label="Name-only ban threshold"
+                                                         Variant="Variant.Outlined"
+                                                         Min="1.0m" Max="5.0m" Step="0.5m"
+                                                         HelperText="A scan that could only read the name auto-bans at this score; below it, scores at or above the notify threshold go to review."
+                                                         Error="@NameOnlyThresholdInvalid"
+                                                         ErrorText="Must be at least the notify threshold"
                                                          Disabled="!_config.JoinSecurity.ProfileScan.Enabled" />
                                     </MudItem>
                                     <MudItem xs="6">
@@ -556,15 +574,30 @@
 
     private WelcomeConfig? _config;
     private const string MaskFlaggedNamesHelpId = "mask-flagged-names-help";
+
+    private bool NameOnlyThresholdInvalid =>
+        _config is not null
+        && _config.JoinSecurity.ProfileScan.NameOnlyBanThreshold < _config.JoinSecurity.ProfileScan.NotifyThreshold;
     private MudForm? _form;
     private bool _isValid = true;
     private bool _loading = true;
+    // Advisory only: assume a session when the check fails so the notice never shows wrongly.
+    private bool _hasUserApiSession = true;
     private bool _saving;
     private string? _lastFocusedInputId;
 
 
     protected override async Task OnInitializedAsync()
     {
+        try
+        {
+            _hasUserApiSession = await SessionManager.HasAnyActiveSessionAsync(CancellationToken.None);
+        }
+        catch (Exception)
+        {
+            _hasUserApiSession = true;
+        }
+
         await LoadConfig();
     }
 
@@ -599,6 +632,12 @@
     private async Task SaveConfig()
     {
         if (_config == null || !_isValid) return;
+
+        if (NameOnlyThresholdInvalid)
+        {
+            Snackbar.Add("Name-only ban threshold must be at least the notify threshold.", Severity.Error);
+            return;
+        }
 
         _saving = true;
         try

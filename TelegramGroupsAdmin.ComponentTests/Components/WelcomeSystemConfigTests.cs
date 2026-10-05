@@ -9,6 +9,7 @@ using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Configuration.Models.Welcome;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
+using TelegramGroupsAdmin.Telegram.Services.UserApi;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Models;
 
@@ -21,6 +22,7 @@ namespace TelegramGroupsAdmin.ComponentTests.Components;
 public class WelcomeSystemConfigTestContext : BunitContext
 {
     protected IConfigService ConfigService { get; }
+    protected ITelegramSessionManager SessionManager { get; }
 
     protected WelcomeSystemConfigTestContext()
     {
@@ -33,6 +35,9 @@ public class WelcomeSystemConfigTestContext : BunitContext
 
         // Register mocks
         Services.AddSingleton(ConfigService);
+        SessionManager = Substitute.For<ITelegramSessionManager>();
+        SessionManager.HasAnyActiveSessionAsync(Arg.Any<CancellationToken>()).Returns(true);
+        Services.AddSingleton(SessionManager);
         Services.AddSingleton(Substitute.For<IUsernameBlacklistRepository>());
         Services.AddSingleton(Substitute.For<IUsernameBlacklistService>());
 
@@ -72,6 +77,7 @@ public class WelcomeSystemConfigTests : WelcomeSystemConfigTestContext
     public void Setup()
     {
         ConfigService.ClearReceivedCalls();
+        SessionManager.HasAnyActiveSessionAsync(Arg.Any<CancellationToken>()).Returns(true);
         ConfigService.GetWelcomeAsync(Arg.Any<long>())
             .Returns(WelcomeConfig.Default);
     }
@@ -825,6 +831,110 @@ public class WelcomeSystemConfigTests : WelcomeSystemConfigTestContext
                 c!.JoinSecurity.ProfileScan.MaskFlaggedNames == false),
             Arg.Any<Actor>(),
             Arg.Any<CancellationToken>());
+    }
+
+    #endregion
+
+    #region Name-only Threshold Tests
+
+    private static WelcomeConfig ProfileScanConfigWith(decimal notify, decimal nameOnlyBan) => new()
+    {
+        Enabled = true,
+        MainWelcomeMessage = "Welcome {username}!",
+        JoinSecurity = new JoinSecurityConfig
+        {
+            ProfileScan = new ProfileScanConfig
+            {
+                Enabled = true,
+                NotifyThreshold = notify,
+                NameOnlyBanThreshold = nameOnlyBan
+            }
+        }
+    };
+
+    [Test]
+    public void NameOnlyBanThreshold_RendersWithLabelAndCaption()
+    {
+        ConfigService.GetWelcomeAsync(Arg.Any<long>()).Returns(ProfileScanConfigWith(2.0m, 4.5m));
+
+        var cut = Render<WelcomeSystemConfig>();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.That(cut.Markup, Does.Contain("Name-only ban threshold"));
+            Assert.That(cut.Markup, Does.Contain(
+                "A scan that could only read the name auto-bans at this score; below it, scores at or above the notify threshold go to review."));
+        }, TimeSpan.FromSeconds(2));
+    }
+
+    [Test]
+    public async Task Save_NameOnlyThresholdBelowNotify_IsRefused()
+    {
+        ConfigService.GetWelcomeAsync(Arg.Any<long>()).Returns(ProfileScanConfigWith(3.0m, 2.5m));
+        this.AddTestWebUser();
+        var cut = Render<WelcomeSystemConfig>();
+        cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("Save Configuration")), TimeSpan.FromSeconds(2));
+
+        cut.FindAll("button").First(b => b.TextContent.Contains("Save Configuration")).Click();
+
+        cut.WaitForAssertion(() =>
+            Assert.That(cut.Markup, Does.Contain("Must be at least the notify threshold")), TimeSpan.FromSeconds(2));
+        await ConfigService.DidNotReceiveWithAnyArgs().SaveWelcomeAsync(default!, default!, default!, default);
+    }
+
+    [Test]
+    public async Task Save_PassesNameOnlyThresholdThrough()
+    {
+        ConfigService.GetWelcomeAsync(Arg.Any<long>()).Returns(ProfileScanConfigWith(2.0m, 3.5m));
+        this.AddTestWebUser();
+        var cut = Render<WelcomeSystemConfig>();
+        cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("Save Configuration")), TimeSpan.FromSeconds(2));
+
+        cut.FindAll("button").First(b => b.TextContent.Contains("Save Configuration")).Click();
+
+        await ConfigService.Received(1).SaveWelcomeAsync(
+            Arg.Any<ChatIdentity>(),
+            Arg.Is<WelcomeConfig>(c => c!.JoinSecurity.ProfileScan.NameOnlyBanThreshold == 3.5m),
+            Arg.Any<Actor>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    private const string NoSessionNotice =
+        "No User API session is connected: full profile scans can't run, but name-only scans still run on new joiners, first messages and renames.";
+
+    [Test]
+    public void ProfileScanOn_NoUserApiSession_ShowsNameOnlyNotice()
+    {
+        SessionManager.HasAnyActiveSessionAsync(Arg.Any<CancellationToken>()).Returns(false);
+        ConfigService.GetWelcomeAsync(Arg.Any<long>()).Returns(ProfileScanConfigWith(2.0m, 4.5m));
+
+        var cut = Render<WelcomeSystemConfig>();
+
+        cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain(NoSessionNotice)), TimeSpan.FromSeconds(2));
+    }
+
+    [Test]
+    public void ProfileScanOn_SessionConnected_HidesNotice()
+    {
+        ConfigService.GetWelcomeAsync(Arg.Any<long>()).Returns(ProfileScanConfigWith(2.0m, 4.5m));
+
+        var cut = Render<WelcomeSystemConfig>();
+
+        cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("Name-only ban threshold")), TimeSpan.FromSeconds(2));
+        Assert.That(cut.Markup, Does.Not.Contain(NoSessionNotice));
+    }
+
+    [Test]
+    public void ProfileScanOff_NoUserApiSession_HidesNotice()
+    {
+        SessionManager.HasAnyActiveSessionAsync(Arg.Any<CancellationToken>()).Returns(false);
+        // WelcomeConfig.Default has profile scanning off.
+        ConfigService.GetWelcomeAsync(Arg.Any<long>()).Returns(WelcomeConfig.Default);
+
+        var cut = Render<WelcomeSystemConfig>();
+
+        cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("Name-only ban threshold")), TimeSpan.FromSeconds(2));
+        Assert.That(cut.Markup, Does.Not.Contain(NoSessionNotice));
     }
 
     #endregion
