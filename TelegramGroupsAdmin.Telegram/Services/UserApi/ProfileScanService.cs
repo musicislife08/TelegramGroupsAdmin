@@ -46,7 +46,7 @@ public sealed class ProfileScanService(
     /// Maximum time for the core scan (Telegram API calls, file downloads, AI scoring).
     /// Prevents hung DC connections from blocking the welcome flow indefinitely.
     /// </summary>
-    private static readonly TimeSpan ScanTimeout = TimeSpan.FromSeconds(45);
+    internal TimeSpan ScanTimeout { get; init; } = TimeSpan.FromSeconds(45);
 
     // One scan per (user, force), shared by concurrent callers. The 60s freshness window alone
     // cannot do this: profile_scanned_at is written only when a scan finishes. Chat is deliberately
@@ -104,20 +104,24 @@ public sealed class ProfileScanService(
         var scanSource = triggeringChat is not null ? "welcome" : "rescan";
 
         await using var scope = scopeFactory.CreateAsyncScope();
-        var userRepo = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
+        var sp = scope.ServiceProvider;
+        var userRepo = sp.GetRequiredService<ITelegramUserRepository>();
 
         // ── Multi-chat dedup: skip if recently scanned ──
         var existingUser = await userRepo.GetByTelegramIdAsync(user.Id, ct);
 
         // Enrich identity if caller only provided a bare ID (e.g., rescan job)
         if (user.FirstName is null && user.LastName is null && user.Username is null)
-            user = await scope.ServiceProvider.GetRequiredService<IUserIdentityService>().ResolveAsync(user.Id, ct);
+            user = await sp.GetRequiredService<IUserIdentityService>().ResolveAsync(user.Id, ct);
 
         // Both reuse paths (this freshness window and the unchanged-profile check) are skipped on a
-        // forced rescan and when a rename was recorded after the last scan. Joins and admin refresh
-        // record a rename without scanning, so the stored names already match the live ones and
-        // only username_history still shows the change.
-        var skipReuse = forceRescan || await RenamedSinceLastScanAsync(existingUser, scope.ServiceProvider, ct);
+        // forced rescan, when a rename was recorded after the last scan, and when the last scan only
+        // read the name. Joins and admin refresh record a rename without scanning, so the stored names
+        // already match the live ones and only username_history still shows the change. A name-only
+        // verdict is never reused: the next scan that can read the profile replaces it.
+        var skipReuse = forceRescan
+            || await RenamedSinceLastScanAsync(existingUser, sp, ct)
+            || await LatestScanWasNameOnlyAsync(existingUser, sp, ct);
 
         if (!skipReuse && existingUser?.ProfileScannedAt is { } lastScan
             && DateTimeOffset.UtcNow - lastScan < ScanFreshnessWindow
@@ -127,7 +131,7 @@ public sealed class ProfileScanService(
                 user.ToLogDebug(), lastScan, existingUser.ProfileScanScore);
 
             pipelineMetrics.RecordProfileScanSkipped("dedup");
-            var cachedOutcome = await DetermineOutcomeAsync(existingUser.ProfileScanScore.Value, triggeringChat, scope.ServiceProvider, ct);
+            var cachedOutcome = await DetermineOutcomeAsync(existingUser.ProfileScanScore.Value, triggeringChat, sp, ct);
             return new ProfileScanResult(
                 TelegramUserId: user.Id,
                 Bio: existingUser.Bio,
@@ -154,7 +158,9 @@ public sealed class ProfileScanService(
         {
             logger.LogWarning("No User API client available for profile scan of {User}", user.ToLogDebug());
             pipelineMetrics.RecordProfileScanSkipped("no_session");
-            return EmptyResult(user.Id, "No User API session available. Connect a session in Settings.");
+            return await FallBackToNameOnlyAsync(
+                EmptyResult(user.Id, "No User API session available. Connect a session in Settings."),
+                user, existingUser, triggeringChat, sp, ct);
         }
 
         // Top-level guard: WTelegram API calls don't accept CancellationToken, so a hung DC
@@ -165,6 +171,7 @@ public sealed class ProfileScanService(
         // The scan task gets its own scope (via ScanWithOwnedScopeAsync) so that if the timeout
         // fires and this method returns, the abandoned task's scoped services stay alive until
         // the task completes or faults — preventing ObjectDisposedException on DbContexts.
+        ProfileScanResult result;
         try
         {
             var scanTask = ScanWithOwnedScopeAsync(client, user, existingUser, triggeringChat, skipReuse, ct);
@@ -186,21 +193,28 @@ public sealed class ProfileScanService(
                     TaskScheduler.Default);
 
                 pipelineMetrics.RecordProfileScanTimeout();
-                return EmptyResult(user.Id, $"Scan timed out after {ScanTimeout.TotalSeconds}s");
+                result = EmptyResult(user.Id, $"Scan timed out after {ScanTimeout.TotalSeconds}s");
             }
-
-            var result = await scanTask;
-            pipelineMetrics.RecordProfileScan(
-                OutcomeToTag(result.Outcome), scanSource,
-                Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
-            return result;
+            else
+            {
+                result = await scanTask;
+                pipelineMetrics.RecordProfileScan(
+                    OutcomeToTag(result.Outcome), scanSource,
+                    Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
+            }
         }
         catch (TelegramFloodWaitException ex)
         {
-            logger.LogWarning("Rate limited during scan of {User} — {Message}, skipping (not excluding)",
+            logger.LogWarning("Rate limited during scan of {User} — {Message}, falling back to a name-only scan",
                 user.ToLogDebug(), ex.Message);
-            return EmptyResult(user.Id, ex.Message);
+            result = EmptyResult(user.Id, ex.Message);
         }
+
+        // A skip reason here means the profile could not be read (user not resolvable, full profile
+        // not fetched, timeout, FLOOD_WAIT). A scan that read the profile never carries one.
+        return result.SkipReason is null
+            ? result
+            : await FallBackToNameOnlyAsync(result, user, existingUser, triggeringChat, sp, ct);
     }
 
     /// <summary>
@@ -236,9 +250,8 @@ public sealed class ProfileScanService(
         var resolvedUser = await ResolveUserAsync(client, user.Id, existingUser, triggeringChat, ct);
         if (resolvedUser == null)
         {
-            logger.LogWarning("Could not resolve {User} — marking as excluded from future rescans", user.ToLogDebug());
-            await userRepo.ExcludeFromProfileScanAsync(user.Id, ct);
-            pipelineMetrics.RecordProfileScanSkipped("excluded");
+            logger.LogWarning("Could not resolve {User}", user.ToLogDebug());
+            pipelineMetrics.RecordProfileScanSkipped("unresolvable");
             return EmptyResult(user.Id, "User could not be resolved — they may have deleted their Telegram account.");
         }
 
@@ -252,7 +265,7 @@ public sealed class ProfileScanService(
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Failed to get full user info for {User}", user.ToLogDebug());
-            return EmptyResult(user.Id);
+            return EmptyResult(user.Id, "Could not fetch the user's full profile.");
         }
 
         var userInfo = fullUser.full_user;
@@ -451,10 +464,6 @@ public sealed class ProfileScanService(
             hasPinnedStories, pinnedStoryCaptions, isScam, isFake, isVerified,
             scoreResult.Score, profilePhotoId, channelPhotoId, pinnedStoryIdString, ct);
 
-        // Clear exclusion flag on successful scan (user is accessible again)
-        if (existingUser?.ProfileScanExcluded == true)
-            await userRepo.IncludeInProfileScanAsync(user.Id, ct);
-
         await PersistScanResultAsync(user.Id, scoreResult, ProfileScanSource.FullScan, sp, ct);
 
         var result = new ProfileScanResult(
@@ -519,6 +528,73 @@ public sealed class ProfileScanService(
             await HandleBanAsync(scannedUser, triggeringChat, result, sp, ct);
         else
             await CreateProfileScanAlertAsync(scannedUser, triggeringChat, result, sp, ct);
+    }
+
+    /// <summary>
+    /// The full scan could not read the profile: score the name alone so the user is still filtered,
+    /// store it as a NameOnly row and act on it like a scan. Every scan path falls back. When there is
+    /// no name, no stored user, a bot, or no verdict, return the skip.
+    /// </summary>
+    private async Task<ProfileScanResult> FallBackToNameOnlyAsync(
+        ProfileScanResult skipped,
+        UserIdentity user,
+        Models.TelegramUser? existingUser,
+        ChatIdentity? triggeringChat,
+        IServiceProvider sp,
+        CancellationToken ct)
+    {
+        if (existingUser is null
+            || existingUser.IsBot
+            || (user.FirstName is null && user.LastName is null && user.Username is null))
+        {
+            return skipped;
+        }
+
+        var configService = sp.GetRequiredService<IConfigService>();
+        var profileScanConfig = (await configService.GetEffectiveWelcomeAsync(triggeringChat?.Id ?? 0, ct))?.JoinSecurity?.ProfileScan;
+        var nameOnlyBanThreshold = profileScanConfig?.NameOnlyBanThreshold ?? ProfileScanConfig.DefaultNameOnlyBanThreshold;
+        var notifyThreshold = profileScanConfig?.NotifyThreshold ?? ProfileScanConfig.DefaultNotifyThreshold;
+
+        var scoreResult = await sp.GetRequiredService<IProfileScoringEngine>()
+            .ScoreNameOnlyAsync(user, nameOnlyBanThreshold, notifyThreshold, ct);
+        if (scoreResult is null)
+        {
+            logger.LogWarning("Name-only profile scan for {User} produced no verdict after: {SkipReason}. Nothing recorded",
+                user.ToLogDebug(), skipped.SkipReason);
+            return skipped;
+        }
+
+        await sp.GetRequiredService<ITelegramUserRepository>().UpdateProfileScanScoreAsync(user.Id, scoreResult.Score, ct);
+        await PersistScanResultAsync(user.Id, scoreResult, ProfileScanSource.NameOnly, sp, ct);
+
+        var result = EmptyResult(user.Id) with
+        {
+            Score = scoreResult.Score,
+            Outcome = scoreResult.Outcome,
+            AiReason = scoreResult.AiReason,
+            AiSignalsDetected = scoreResult.AiSignals,
+            ExplicitDisplayText = scoreResult.ExplicitDisplayText,
+            PromotionalDisplayText = scoreResult.PromotionalDisplayText,
+            Source = ProfileScanSource.NameOnly
+        };
+
+        logger.LogInformation("Profile scan for {User} could not read the profile ({SkipReason}); name-only scan scored {Score} ({Outcome})",
+            user.ToLogInfo(), skipped.SkipReason, result.Score, result.Outcome);
+
+        await ActOnOutcomeAsync(user, triggeringChat, result, sp, ct);
+        return result;
+    }
+
+    /// <summary>
+    /// Whether the user's latest scan only read the name. Only asked when a reuse path could apply.
+    /// </summary>
+    private static async Task<bool> LatestScanWasNameOnlyAsync(
+        Models.TelegramUser? existingUser, IServiceProvider sp, CancellationToken ct)
+    {
+        if (existingUser?.ProfileScannedAt is null || !existingUser.ProfileScanScore.HasValue)
+            return false;
+        return await sp.GetRequiredService<IProfileScanResultsRepository>()
+            .GetLatestSourceAsync(existingUser.TelegramUserId, ct) == ProfileScanSource.NameOnly;
     }
 
     /// <summary>

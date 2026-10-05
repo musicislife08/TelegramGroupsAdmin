@@ -156,14 +156,14 @@ public interface ITelegramUserRepository
     Task<ChatIdentity?> GetFirstChatForUserAsync(long telegramUserId, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Exclude a user from automatic profile re-scans.
-    /// Set when the user cannot be resolved via Telegram API (likely deleted account).
+    /// Exclude a user from automatic profile scans (renames still scan).
+    /// The admin's switch (UserDetailDialog); scans never set it.
     /// </summary>
     Task ExcludeFromProfileScanAsync(long telegramUserId, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Include a user in automatic profile re-scans.
-    /// Cleared when a manual rescan successfully resolves the user.
+    /// Include a user in automatic profile scans again.
+    /// The admin's switch (UserDetailDialog); scans never clear it.
     /// </summary>
     Task IncludeInProfileScanAsync(long telegramUserId, CancellationToken cancellationToken = default);
 

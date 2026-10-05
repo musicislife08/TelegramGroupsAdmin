@@ -10,6 +10,7 @@ public interface IProfileScanService
 {
     /// <summary>
     /// Scan a user's profile and take appropriate action (ban, report, or pass).
+    /// When the profile cannot be read (no session, unresolvable, full profile not fetched, timeout, FLOOD_WAIT), the name is scored alone and acted on.
     /// </summary>
     /// <param name="user">Identity of the Telegram user to scan.</param>
     /// <param name="triggeringChat">Chat that triggered the scan (for reports). Null for background scans.</param>
