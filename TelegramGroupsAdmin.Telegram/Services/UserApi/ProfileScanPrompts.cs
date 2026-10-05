@@ -331,6 +331,44 @@ internal static class ProfileScanPrompts
             {{ResponseFormat}}
             """;
     }
+
+    /// <summary>Value of every profile field a name-only scan could not read.</summary>
+    internal const string UnknownField = "Unknown (could not be retrieved)";
+
+    /// <summary>
+    /// User prompt for the name-only scan: the full scan's profile block with only the name and
+    /// username filled in. Used with <see cref="BuildSystemPrompt"/> so a name-only score means the
+    /// same as a full one, made on less evidence.
+    /// </summary>
+    internal static string BuildNameOnlyUserPrompt(string? firstName, string? lastName, string? username) =>
+        $$"""
+        Only the name could be retrieved for this account. The bio, photos,
+        personal channel and stories are UNKNOWN, not empty: do not treat their
+        absence as a clean empty profile, and do not treat it as suspicious.
+        Score on what the name and username show.
+
+        <profile>
+          <display_name>{{SanitizeForPrompt(firstName)}} {{SanitizeForPrompt(lastName)}}</display_name>
+          <username>{{SanitizeForPrompt(username)}}</username>
+          <bio>{{UnknownField}}</bio>
+        </profile>
+
+        <personal_channel>
+          <title>{{UnknownField}}</title>
+          <description>{{UnknownField}}</description>
+        </personal_channel>
+
+        <stories>
+          <story_count>{{UnknownField}}</story_count>
+        </stories>
+
+        <images>
+          <image_count>{{UnknownField}}</image_count>
+          <image_labels>{{UnknownField}}</image_labels>
+        </images>
+
+        {{ResponseFormat}}
+        """;
 }
 
 /// <summary>

@@ -103,6 +103,69 @@ public sealed class ProfileScoringEngine(
             PromotionalDisplayText: aiResult.PromotionalDisplayText);
     }
 
+    public async Task<ScoringResult?> ScoreNameOnlyAsync(
+        UserIdentity user,
+        decimal nameOnlyBanThreshold,
+        decimal notifyThreshold,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (!await chatService.IsFeatureAvailableAsync(AIFeatureType.ProfileScan, cancellationToken))
+            {
+                logger.LogWarning("ProfileScan AI feature not configured — name-only scan skipped for {User}", user.ToLogDebug());
+                return null;
+            }
+
+            var result = await chatService.GetCompletionAsync(
+                AIFeatureType.ProfileScan,
+                ProfileScanPrompts.BuildSystemPrompt(),
+                ProfileScanPrompts.BuildNameOnlyUserPrompt(user.FirstName, user.LastName, user.Username),
+                new ChatCompletionOptions { JsonMode = true },
+                cancellationToken);
+            if (result == null)
+            {
+                logger.LogWarning("Name-only profile scan AI call returned null for {User}", user.ToLogDebug());
+                return null;
+            }
+
+            var ai = TryParseAiResponse(result.Content, user);
+            if (ai == null)
+                return null;
+
+            var outcome = ai.Score >= nameOnlyBanThreshold
+                ? ProfileScanOutcome.Banned
+                : ai.Score >= notifyThreshold
+                    ? ProfileScanOutcome.HeldForReview
+                    : ProfileScanOutcome.Clean;
+
+            logger.LogInformation(
+                "Name-only profile scan for {User}: score={Score}, outcome={Outcome}, explicit={Explicit}, promotional={Promotional}",
+                user.ToLogInfo(), ai.Score, outcome, ai.ExplicitDisplayText, ai.PromotionalDisplayText);
+
+            return new ScoringResult(
+                Score: ai.Score,
+                Outcome: outcome,
+                RuleScore: 0.0m,
+                AiScore: ai.Score,
+                AiReason: ai.Reason,
+                AiSignals: ai.Signals,
+                ContainsNudity: false,
+                ExplicitDisplayText: ai.ExplicitDisplayText,
+                PromotionalDisplayText: ai.PromotionalDisplayText);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // Fail open: the exception text stays in the log, nothing is written or posted.
+            logger.LogWarning(ex, "Name-only profile scan failed for {User}", user.ToLogDebug());
+            return null;
+        }
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Layer 1: Rule-based pre-filters
     // ═══════════════════════════════════════════════════════════════════════════
