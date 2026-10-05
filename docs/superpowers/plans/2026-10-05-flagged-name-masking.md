@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** When a gate-admitted profile scan cannot read the profile, score the name alone and act on it like a scan; both scans judge whether the name is explicit or promotional and store it on the scan row; a flagged name is masked in bot chat posts only while the user is banned.
+**Goal:** Every profile scan that cannot read the profile scores the name alone and acts on it like a scan; both scans judge whether the name is explicit or promotional and store it on the scan row; a flagged name is masked in bot chat posts only while the user is banned; scans run on new, never-scanned or renamed users, and the rescan job only retries incomplete scans.
 
-**Architecture:** `ProfileScanPrompts.NameFlagDefinitions` defines both name flags for the full scan and a new name-only scan (same system prompt, a user prompt that marks everything but the name unknown). `ProfileScoringEngine.ScoreNameOnlyAsync` scores the name against the name-only ban threshold; `ProfileScanService` runs it as a fallback inside gate-admitted scans that hit no session / unresolvable / full-profile fetch failure / timeout / `FLOOD_WAIT`, persists a `NameOnly` row and acts through the existing ban / alert path. The `user_identities` view exposes the verdict inputs (`latest_scan_explicit`, `latest_scan_promotional`, `is_banned`) and `UserIdentityMapping` applies "banned && explicit → Explicit; banned && promotional → Promotional; else Clean".
+**Architecture:** `ProfileScanPrompts.NameFlagDefinitions` defines both name flags for the full scan and a new name-only scan (same system prompt, a user prompt that marks everything but the name unknown). `ProfileScoringEngine.ScoreNameOnlyAsync` scores the name against the name-only ban threshold. `ProfileScanService` falls back to it on every scan path when the full scan gets no AI verdict (no session, unresolvable, full profile not fetched, timeout, `FLOOD_WAIT`), persists a `NameOnly` row and acts through the existing ban / alert path. `ProfileScanGate` admits join / first-message scans only for new, never-scanned or renamed users and no longer needs a session; the rescan job selects users whose scan is incomplete (no scan yet, or a `NameOnly` latest row under the retry limit). Scans never touch the admin's exclude flag. The `user_identities` view exposes the verdict inputs (`latest_scan_explicit`, `latest_scan_promotional`, `is_banned`) and `UserIdentityMapping` applies "banned && explicit → Explicit; banned && promotional → Promotional; else Clean".
 
-**Tech Stack:** .NET 10, C# 14, EF Core 10 + PostgreSQL 18 (raw-SQL views), Blazor Server + MudBlazor 9, NUnit, NSubstitute 6, bUnit, Testcontainers-backed integration tests on the canonical golden dataset.
+**Tech Stack:** .NET 10, C# 14, EF Core 10 + PostgreSQL 18 (raw-SQL views), Blazor Server + MudBlazor 9, Quartz.NET, NUnit, NSubstitute 6, bUnit, Testcontainers-backed integration tests on the canonical golden dataset.
 
 **Spec:** `docs/superpowers/specs/2026-10-03-flagged-name-masking-design.md` (part 1: `docs/superpowers/specs/2026-10-03-user-identity-service-design.md`, plan `docs/superpowers/plans/2026-10-03-user-identity-service.md`).
 
@@ -16,45 +16,55 @@
 - Fixed wording (part 1, unchanged): `[name removed: explicit]` (`NameRedaction.Explicit`), `[name removed: spam]` (`NameRedaction.Spam`).
 - Verdict rule, in `UserIdentityMapping` only: banned and explicit → `Explicit`; else banned and promotional → `Promotional`; else `Clean`. No scan row, bots and Telegram system accounts stay `Unscanned`.
 - Prompt text is copied verbatim from the spec: the "What gets flagged" block is `ProfileScanPrompts.NameFlagDefinitions`; the name-only preamble is the spec's "Name-only scan" block. Do not reword either.
-- Name-only triggers (inside a scan the gate admitted): no User API session, user can't be resolved, timeout, `FLOOD_WAIT`. No name-only scan on a rule short-circuit, for bots, when scanning is disabled, or when the AI feature is unavailable.
+- Name-only fallback, on every scan path (join, first message, rename rescans, rescan job, manual rescan): no User API session (none connected, or none usable), the user can't be resolved or their full profile can't be fetched, timeout, `FLOOD_WAIT`. No name-only scan on a rule short-circuit, for bots, when scanning is disabled for the chat, or when the AI feature is unavailable.
+- When scans run: join / first message → a new or never-scanned user, or an existing user who renamed since their last scan; otherwise no scan call. Rename detected → scan even when excluded. Manual rescan → always, whatever the exclude flag. Rescan job → incomplete scans only.
+- Rescan job selection: untrusted, unbanned, non-bot, not excluded, and (no scan recorded yet, or the latest scan row is `NameOnly` and fewer than `ProfileRescanSettings.NameOnlyRetryLimit` (default 3) `NameOnly` rows since the user's last `FullScan` row). `RescanAfter` is the wait before an incomplete scan is retried. Derived from `profile_scan_results`; no counter column.
+- The exclude flag (`profile_scan_excluded`) is the admin's switch: scans never set or clear it.
+- Settings notice when profile scanning is on and no User API session is connected: full profile scans can't run, but name-only scans still run on new joiners, first messages and renames.
 - `profile_scan_results`: `ai_promotional_display_text boolean not null default false`; `source smallint not null default 0` (`FullScan = 0`, `NameOnly = 1`).
 - `ProfileScanConfig.NameOnlyBanThreshold`: decimal, default `4.5`, global with per-chat override like `BanThreshold` / `NotifyThreshold`, validated to be at least the notify threshold, absent key → default (no data migration).
 - Settings label "Name-only ban threshold", caption: "A scan that could only read the name auto-bans at this score; below it, scores at or above the notify threshold go to review."
 - A failed name-only call writes nothing and logs a warning; exception text goes to the log only, never into a chat.
 - Identity rules: `.claude/rules/user-identity.md` (identities from `IUserIdentityService` / `user_identities` + `UserIdentityMapping`; tests use `UserIdentity.ForTest`).
-- Integration tests use canonical golden data only (`.claude/rules/integration-test-data.md`): no SUT write as setup, no inserts; flag-edit unreferenced rows, pin anchors in `GoldenDatasetConstants`, add a recipe to `TelegramGroupsAdmin.IntegrationTests/CLAUDE.md` marked "(canonical edit 2026-10-03)", read edited preconditions back first.
+- Integration tests use canonical golden data only (`.claude/rules/integration-test-data.md`): no SUT write as setup, no inserts; flag-edit unreferenced rows, pin anchors in `GoldenDatasetConstants`, add a recipe to `TelegramGroupsAdmin.IntegrationTests/CLAUDE.md` marked "(canonical edit <date>)", read edited preconditions back first. The one added row (Task 10) is an approved import of a real prod row supplied by the maintainer; no AI text is invented.
 - Test data and examples stay generic: never use real evaluation names (the spec's own prompt examples are fine).
 - EF Core: change models / `AppDbContext` first, then `dotnet ef migrations add <Name> --project TelegramGroupsAdmin.Data --startup-project TelegramGroupsAdmin`. View SQL changes freeze the old SQL for older migrations.
-- NSubstitute matcher lambdas use `x!.Prop`, never `?.`. When a substituted method has two optional `bool` parameters, a matcher call must pass a matcher for every argument (NSubstitute cannot place one `Arg.Any<bool>()` among two `bool`s).
-- `TreatWarningsAsErrors` everywhere: 0 warnings.
-- Verification per task: build + targeted tests for the changed code. Final task runs the unit, component and integration suites, and only targeted E2E filters (never the full E2E suite).
+- NSubstitute matcher lambdas use `x!.Prop`, never `?.`.
+- `TreatWarningsAsErrors` everywhere: 0 warnings (an unused primary-constructor parameter is CS9113, so removed dependencies are removed from constructors).
+- Verification per task: build + targeted tests for the changed code. The final task runs the unit, component and integration suites, and only targeted E2E filters (never the full E2E suite).
 
 ## Planning rulings (spec gaps resolved here)
 
-1. "No User API session" means the service found no usable client inside a gate-admitted scan (`ProfileScanService` `client == null`). The gate's own `no_session` skip (no active session recorded at all) is unchanged, so a deployment with no session configured runs no name-only scans.
-2. Only gate-admitted scans fall back (`IProfileScanService.ScanUserProfileAsync(..., nameOnlyFallback: true)` from `ProfileScanGate`). The bulk `ProfileRescanJob` and the manual UI rescan bypass the gate and do not fall back: a session flicker there must not replace a full-scan verdict with a name-only one or auto-ban on a name alone, and the job's session-loss abort reads the skip reason.
-3. A `Users_GetFullUser` failure after the user resolved counts as "the user can't be resolved": it now carries the skip reason "Could not fetch the user's full profile." (it had none) and falls back.
-4. "A later successful full scan replaces the name-only verdict" is implemented explicitly: when the latest scan row is `NameOnly`, both reuse paths (60 s freshness window and the unchanged-profile diff) are skipped. The name-only scan writes only `profile_scan_score` and `profile_scanned_at`; stored bio, photo and channel fields are left as they were.
-5. The fallback is also skipped when the user has no `telegram_users` row (the scan row's FK parent), has no name at all, or is a bot (defence in depth beyond the gate).
-6. A full scan whose AI call is unavailable or fails (rule-only score) does not fall back: the name-only scan needs the same AI.
-7. The name-only user prompt ends with the same `Respond with JSON: …` line as the full prompt, and its profile block keeps the full prompt's sections (profile, personal channel, stories, images) with every non-name field `Unknown (could not be retrieved)`.
-8. `NameFlagDefinitions` is appended after the remaining guardrails (URL metadata, nudity flag); the old "EXPLICIT DISPLAY-TEXT FLAG" section is removed.
-9. Threshold validation lives in the settings form (inline error + save refused). Runtime outcome code does not clamp.
-10. Enriched views gain `latest_scan_promotional` and `is_banned` for every identity slot that feeds `UserIdentityMapping` (message author; report suspected, target, exam user, profile user). The reply-to slot is not mapped to an identity and stays as is.
-11. `JoinUserIdentitiesInEnrichedViews` replays the live `CreateViewSql` constants, so it switches to frozen V2 copies before those constants change.
-12. The "Mask flagged names" caption said a flagged name is masked; it now says a banned user's flagged name, keeping the rest of the sentence.
-13. Row 531 (@LisoBran) is flag-edited only; its clean AI reason and score stay (spec-chosen anchor). Row 526 (@splendorfraying) is flag-edited only; its outcome stays Clean (the test needs "not banned + promotional", which it has).
-14. "Explicit beats promotional" at integration level uses read-only row 534 (explicit, promotional false, banned) and asserts the explicit label; precedence with both flags true is pinned by the `UserIdentityMapping` unit tests.
-15. The admin-DM integration test needs `InternalsVisibleTo TelegramGroupsAdmin.IntegrationTests` on the web project (`AdminNotificationService` and `NotificationDmDispatcher` are internal).
-16. `ProfileScanService.ScanTimeout` becomes an internal init property (default 45 s) so the timeout trigger test runs the real `Task.WhenAny` race in milliseconds.
-17. The masked-username metric tag is `verdict` = `explicit` / `promotional`. No new scan metric for name-only scans; the explicit-name detection counter also counts name-only rows.
+1. The fallback has no switch: `ScanUserProfileAsync` keeps its signature and falls back whenever the full scan reads nothing (`SkipReason` set). Callers that bypass the gate (job, manual rescan) fall back too.
+2. With no session at all the gate no longer skips; `ProfileScanService` finds no client and goes straight to the name-only scan. The gate and the rescan job drop their `ITelegramSessionManager` dependency; the job no longer aborts its batch on "No User API session" (each user gets a name-only scan, bounded by the retry limit and the batch size).
+3. A `Users_GetFullUser` failure after the user resolved now carries the skip reason "Could not fetch the user's full profile." (it had none) and falls back.
+4. "A later successful full scan replaces the name-only verdict": when the latest row is `NameOnly`, both reuse paths (60 s freshness window and the unchanged-profile diff) are skipped. This composes with the job: every user the job retries for a `NameOnly` row gets a real attempt, and each failed attempt adds one more `NameOnly` row toward the limit. The name-only scan writes only `profile_scan_score` and `profile_scanned_at`.
+5. The fallback is skipped when the user has no `telegram_users` row (the scan row's FK parent), has no name at all, or is a bot (defence in depth beyond the gate).
+6. A full scan whose AI is unavailable or fails (rule-only score) does not fall back: the name-only scan needs the same AI.
+7. The name-only user prompt keeps the full prompt's sections with every non-name field `Unknown (could not be retrieved)` and ends with the same `Respond with JSON: …` line.
+8. `NameFlagDefinitions` is appended after the URL-metadata and nudity guardrails; the old "EXPLICIT DISPLAY-TEXT FLAG" section is removed.
+9. Threshold validation lives in the settings form (inline error + save refused); scan code does not clamp.
+10. "No scan recorded yet" means `profile_scanned_at IS NULL`. Users scanned before scan rows existed (timestamp set, no rows) count as complete and are not retried.
+11. "`NameOnly` rows since the last `FullScan` row" counts `NameOnly` rows with no `FullScan` row scanned later; with no `FullScan` row every `NameOnly` row counts.
+12. A never-scanned user whose every attempt fails outright (nothing written, e.g. AI unavailable and no session) stays eligible on every job run; the batch size bounds the work and the retry limit only applies once a `NameOnly` row exists (spec: limit counts `NameOnly` rows).
+13. Exclusion vs rename: any scan admitted because of a rename ignores the exclude flag — the `ProfileChange` trigger, and a join / first-message scan admitted because the user renamed since the last scan ("a rename is a change"). A never-scanned excluded joiner is skipped.
+14. First message now also scans a scanned user who renamed since the last scan. That adds one indexed `username_history` lookup per message from a scanned, untrusted author, only in chats with "Scan on first message" on (off by default) and only after the trusted / admin / bot checks.
+15. Existing `profile_scan_excluded = true` rows (most set by the old unresolvable auto-exclusion) are left as they are: there is no record of who set them, so they now read as admin exclusions. The "Exclude from automatic rescans" checkbox becomes "Exclude from automatic scans (renames still scan)".
+16. The settings notice reads: "No User API session is connected: full profile scans can't run, but name-only scans still run on new joiners, first messages and renames." It sits inside the Profile Scan panel; `WelcomeSystemConfig` reads `ITelegramSessionManager.HasAnyActiveSessionAsync` once on load (as `Profile.razor` already does).
+17. "Banned and promotional" anchor: @Adexfunnel (9635655270997), banned after profile-scan alert #178 (score 2.8, held for review, admin ban). Canonical has no scan row for it, so Task 10 imports the real prod row (maintainer-supplied) and sets `ai_promotional_display_text = true` on it (the column did not exist in prod). @LisoBran row 531 is not used. Report 178's `aiReason` stays lorem; the imported row keeps prod's verbatim text (banned spammer, as with message 110342).
+18. Row 526 (@splendorfraying) is flag-edited only; its outcome stays Clean (the test needs "not banned + promotional"). All part-2 canonical edits are dated 2026-10-05.
+19. Explicit beats promotional at integration level uses read-only row 534 (explicit, promotional false, banned); precedence with both flags true is pinned by the `UserIdentityMapping` unit tests.
+20. The admin-DM integration test needs `InternalsVisibleTo TelegramGroupsAdmin.IntegrationTests` on the web project.
+21. `ProfileScanService.ScanTimeout` becomes an internal init property (default 45 s) so the timeout test runs the real race in milliseconds.
+22. Masked-username metric tag `verdict` = `explicit` / `promotional`; no new name-only metric; the explicit-name counter also counts name-only rows.
+23. Job selection with a mixed history (`NameOnly`, then `FullScan`, then `NameOnly`) cannot be pinned on canonical data without adding rows: every eligible canonical user has at most one scan row. Task 7 pins the single-row cases and the limit boundary; the mixed-history count is covered by the query's shape only (see Review Focus 3).
 
 ## Review Focus
 
 1. A joiner with no stored row or no name at all reaching the fallback: no AI call, no FK failure, the skip result is returned — pinned by Task 5 `Fallback_UserWithoutNames_SkipsNameOnlyScan` and `Fallback_NoStoredRow_SkipsNameOnlyScan`.
 2. A full scan right after a name-only scan on an empty, unchanged profile must rescore instead of reusing the name-only score (freshness window and profile diff) — pinned by Task 5 `LatestScanNameOnly_RecentlyScanned_DoesNotReuseCachedScore` and `LatestScanNameOnly_ProfileUnchanged_IsFullyRescored`.
-3. The rescan job or manual rescan losing the session mid-batch must not write name-only verdicts and must keep the "No User API session" skip reason the job aborts on — pinned by Task 5 `NoFallbackRequested_NoSession_ReturnsSkipWithoutNameOnlyScan` and the Task 5 `ProfileRescanJobTests` assertion that the job passes `nameOnlyFallback: false`.
-4. Names carrying markup (`</display_name>`, `&`, `<b>`) must be XML-escaped in the name-only prompt — pinned by Task 4 `BuildNameOnlyUserPrompt_EscapesMarkupInNames`.
+3. The retry limit boundary: a user with exactly `NameOnlyRetryLimit` `NameOnly` rows since the last full scan must not be selected; one fewer must be; a fully scanned user must never be selected by age alone — pinned by Task 7 `IncompleteScans_NameOnlyLatest_RespectsRetryLimitBoundary` and `IncompleteScans_FullScanLatest_IsNeverSelected`. Mixed histories are only covered by the query shape (ruling 23); a reviewer should read that predicate.
+4. The rescan job with no session at all must keep going through its batch (name-only scans), not abort on the first "No User API session" — pinned by Task 7 `Execute_SkippedScan_DoesNotAbortTheBatch`.
 5. A malformed or out-of-range AI reply on the name-only path: malformed → no verdict, nothing written; `7.0` → clamped to `5.0` → auto-ban — pinned by Task 4 `ScoreNameOnlyAsync_MalformedJson_ReturnsNullAndLogsWarning` and `ScoreNameOnlyAsync_ScoreAboveMax_IsClampedAndBanned`.
 
 ---
@@ -68,16 +78,18 @@
 | `TelegramGroupsAdmin.Core/Models/ProfileScanSource.cs` (create) | `FullScan` / `NameOnly` |
 | `TelegramGroupsAdmin.Data/Models/ProfileScanResultDto.cs`, `AppDbContext.cs` (modify) + migration `AddNameOnlyScanColumns` | storage columns |
 | `TelegramGroupsAdmin.Telegram/Models/ProfileScanResultRecord.cs`, `Repositories/Mappings/ProfileScanResultMappings.cs`, `Repositories/IProfileScanResultsRepository.cs`, `ProfileScanResultsRepository.cs` (modify) | record fields, `GetLatestSourceAsync` |
-| `TelegramGroupsAdmin.Telegram/Repositories/ITelegramUserRepository.cs`, `TelegramUserRepository.cs` (modify) | `UpdateProfileScanScoreAsync` |
+| `TelegramGroupsAdmin.Telegram/Repositories/ITelegramUserRepository.cs`, `TelegramUserRepository.cs` (modify) | `UpdateProfileScanScoreAsync`, incomplete-scan selection |
 | `TelegramGroupsAdmin.Configuration/Models/Welcome/ProfileScanConfig.cs`, `TelegramGroupsAdmin.Data/Models/Configs/ProfileScanConfigData.cs`, `TelegramGroupsAdmin.Configuration/Mappings/WelcomeConfigMappings.cs` (modify) | `NameOnlyBanThreshold` |
-| `TelegramGroupsAdmin/Components/Shared/WelcomeSystemConfig.razor` (modify) | threshold field, validation, caption wording |
-| `TelegramGroupsAdmin.Telegram/Services/UserApi/ProfileScanService.cs`, `ProfileScanResult.cs`, `IProfileScanService.cs`, `ProfileScanGate.cs` (modify) | fallback orchestration |
+| `TelegramGroupsAdmin/Components/Shared/WelcomeSystemConfig.razor` (modify) | threshold field, validation, no-session notice, caption wording |
+| `TelegramGroupsAdmin.Telegram/Services/UserApi/ProfileScanService.cs`, `ProfileScanResult.cs` (modify) | fallback on every path; scans leave the exclude flag alone |
+| `TelegramGroupsAdmin.Telegram/Services/UserApi/ProfileScanGate.cs`, `ProfileScanTrigger.cs` (modify) | when join / first message / rename scans run |
+| `TelegramGroupsAdmin.Core/Models/BackgroundJobSettings/ProfileRescanSettings.cs`, `TelegramGroupsAdmin.BackgroundJobs/Jobs/ProfileRescanJob.cs`, `TelegramGroupsAdmin/Components/Shared/Settings/BackgroundJobs.razor` (modify) | retry incomplete scans, `NameOnlyRetryLimit` |
 | `TelegramGroupsAdmin.Data/Models/UserIdentityView.cs`, `EnrichedMessageView.cs`, `EnrichedReportView.cs`, `Migrations/LegacyEnrichedViewSql.cs`, `Migrations/20261003220638_JoinUserIdentitiesInEnrichedViews.cs` (modify) + migration `AddNameVerdictInputsToUserIdentities` | verdict inputs in views |
 | `TelegramGroupsAdmin.Core/Repositories/Mappings/UserIdentityMapping.cs`, `EnrichedReportMappings.cs`, `TelegramGroupsAdmin.Telegram/Repositories/Mappings/EnrichedMessageMappings.cs`, `MessageMappings.cs`, `MessageHistoryRepository.cs` (modify) | verdict rule and its inputs |
-| `TelegramGroupsAdmin.Testing.Golden/SQL/canonical/23_profile_scan_results.sql`, `GoldenDatasetConstants.cs`, `TelegramGroupsAdmin.IntegrationTests/CLAUDE.md` (modify) | canonical anchors |
-| `TelegramGroupsAdmin/Components/Shared/ProfileScanHistoryDialog.razor` (modify) | source + both flags |
+| `TelegramGroupsAdmin.Testing.Golden/SQL/canonical/02_telegram_users.sql`, `23_profile_scan_results.sql`, `GoldenDatasetConstants.cs`, `TelegramGroupsAdmin.IntegrationTests/CLAUDE.md` (modify) | canonical anchors |
+| `TelegramGroupsAdmin/Components/Shared/ProfileScanHistoryDialog.razor`, `UserDetailDialog.razor` (modify) | source + both flags; exclude label |
 | `TelegramGroupsAdmin.Telegram/Metrics/PipelineMetrics.cs`, `Services/BanCelebrationService.cs` (modify) | verdict tag |
-| `TelegramGroupsAdmin/Docs/features/08-profile-scanning.md` (modify) | user docs |
+| `TelegramGroupsAdmin/Docs/features/08-profile-scanning.md`, `13-background-jobs.md` (modify) | user docs |
 
 ---
 
@@ -720,18 +732,18 @@ git commit -m "feat(profile-scan): store the promotional name flag and the scan 
 
 ---
 
-### Task 3: Name-only ban threshold setting
+### Task 3: Name-only ban threshold setting and the no-session notice
 
 **Files:**
 - Modify: `TelegramGroupsAdmin.Configuration/Models/Welcome/ProfileScanConfig.cs`
 - Modify: `TelegramGroupsAdmin.Data/Models/Configs/ProfileScanConfigData.cs`
 - Modify: `TelegramGroupsAdmin.Configuration/Mappings/WelcomeConfigMappings.cs:148-171`
-- Modify: `TelegramGroupsAdmin/Components/Shared/WelcomeSystemConfig.razor:157-172, 555-560, 599-601`
+- Modify: `TelegramGroupsAdmin/Components/Shared/WelcomeSystemConfig.razor:1-13, 152-156, 157-172, 555-575, 599-601`
 - Test: `TelegramGroupsAdmin.UnitTests/Configuration/WelcomeConfigMappingsTests.cs`
 - Test: `TelegramGroupsAdmin.ComponentTests/Components/WelcomeSystemConfigTests.cs`
 
 **Interfaces:**
-- Produces: `ProfileScanConfig.DefaultNameOnlyBanThreshold` (`const decimal` = `4.5m`), `ProfileScanConfig.NameOnlyBanThreshold` (`decimal`), `ProfileScanConfigData.NameOnlyBanThreshold` (`decimal`, default `4.5m`).
+- Produces: `ProfileScanConfig.DefaultNameOnlyBanThreshold` (`const decimal` = `4.5m`), `ProfileScanConfig.NameOnlyBanThreshold` (`decimal`), `ProfileScanConfigData.NameOnlyBanThreshold` (`decimal`, default `4.5m`); `WelcomeSystemConfig` injects `ITelegramSessionManager` (so its component-test context registers one).
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -832,6 +844,59 @@ Append to `WelcomeSystemConfigTests` (inside a new `#region Name-only Threshold 
     }
 ```
 
+The no-session notice. In `WelcomeSystemConfigTestContext` add a property and register it in the constructor (default: a session is connected, so existing tests are unaffected):
+
+```csharp
+    protected ITelegramSessionManager SessionManager { get; }
+```
+```csharp
+        SessionManager = Substitute.For<ITelegramSessionManager>();
+        SessionManager.HasAnyActiveSessionAsync(Arg.Any<CancellationToken>()).Returns(true);
+        Services.AddSingleton(SessionManager);
+```
+
+(add `using TelegramGroupsAdmin.Telegram.Services.UserApi;`), reset it in the fixture's `Setup()` with `SessionManager.HasAnyActiveSessionAsync(Arg.Any<CancellationToken>()).Returns(true);`, and add:
+
+```csharp
+    private const string NoSessionNotice =
+        "No User API session is connected: full profile scans can't run, but name-only scans still run on new joiners, first messages and renames.";
+
+    [Test]
+    public void ProfileScanOn_NoUserApiSession_ShowsNameOnlyNotice()
+    {
+        SessionManager.HasAnyActiveSessionAsync(Arg.Any<CancellationToken>()).Returns(false);
+        ConfigService.GetWelcomeAsync(Arg.Any<long>()).Returns(ProfileScanConfigWith(2.0m, 4.5m));
+
+        var cut = Render<WelcomeSystemConfig>();
+
+        cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain(NoSessionNotice)), TimeSpan.FromSeconds(2));
+    }
+
+    [Test]
+    public void ProfileScanOn_SessionConnected_HidesNotice()
+    {
+        ConfigService.GetWelcomeAsync(Arg.Any<long>()).Returns(ProfileScanConfigWith(2.0m, 4.5m));
+
+        var cut = Render<WelcomeSystemConfig>();
+
+        cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("Name-only ban threshold")), TimeSpan.FromSeconds(2));
+        Assert.That(cut.Markup, Does.Not.Contain(NoSessionNotice));
+    }
+
+    [Test]
+    public void ProfileScanOff_NoUserApiSession_HidesNotice()
+    {
+        SessionManager.HasAnyActiveSessionAsync(Arg.Any<CancellationToken>()).Returns(false);
+        // WelcomeConfig.Default has profile scanning off.
+        ConfigService.GetWelcomeAsync(Arg.Any<long>()).Returns(WelcomeConfig.Default);
+
+        var cut = Render<WelcomeSystemConfig>();
+
+        cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("Name-only ban threshold")), TimeSpan.FromSeconds(2));
+        Assert.That(cut.Markup, Does.Not.Contain(NoSessionNotice));
+    }
+```
+
 - [ ] **Step 2: Run to verify they fail**
 
 Run: `dotnet test TelegramGroupsAdmin.UnitTests --filter "FullyQualifiedName~WelcomeConfigMappingsTests"`
@@ -897,6 +962,42 @@ In `SaveConfig`, after `if (_config == null || !_isValid) return;`:
         }
 ```
 
+The no-session notice. Add `@using TelegramGroupsAdmin.Telegram.Services.UserApi` and `@inject ITelegramSessionManager SessionManager` to the header. In the Profile Scan panel's `<ChildContent>`, replace the opening caption's last sentence "Requires an active User API session." with "Full scans need an active User API session; without one, only the name is scanned." and insert directly after that caption:
+
+```razor
+                                @if (_config.JoinSecurity.ProfileScan.Enabled && !_hasUserApiSession)
+                                {
+                                    <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-3">
+                                        No User API session is connected: full profile scans can't run, but name-only scans still run on new joiners, first messages and renames.
+                                    </MudAlert>
+                                }
+```
+
+In `@code`, next to `_loading`:
+
+```csharp
+    // Advisory only: assume a session when the check fails so the notice never shows wrongly.
+    private bool _hasUserApiSession = true;
+```
+
+and `OnInitializedAsync` becomes:
+
+```csharp
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _hasUserApiSession = await SessionManager.HasAnyActiveSessionAsync(CancellationToken.None);
+        }
+        catch (Exception)
+        {
+            _hasUserApiSession = true;
+        }
+
+        await LoadConfig();
+    }
+```
+
 - [ ] **Step 4: Run to verify they pass**
 
 Run: `dotnet test TelegramGroupsAdmin.UnitTests --filter "FullyQualifiedName~WelcomeConfigMappingsTests" && dotnet test TelegramGroupsAdmin.ComponentTests --filter "FullyQualifiedName~WelcomeSystemConfigTests"`
@@ -906,7 +1007,7 @@ Expected: PASS.
 
 ```bash
 git add TelegramGroupsAdmin.Configuration TelegramGroupsAdmin.Data/Models/Configs TelegramGroupsAdmin/Components/Shared/WelcomeSystemConfig.razor TelegramGroupsAdmin.UnitTests/Configuration/WelcomeConfigMappingsTests.cs TelegramGroupsAdmin.ComponentTests/Components/WelcomeSystemConfigTests.cs
-git commit -m "feat(settings): add the name-only ban threshold to profile scan settings"
+git commit -m "feat(settings): add the name-only ban threshold and the no-session notice"
 ```
 
 ---
@@ -1286,18 +1387,16 @@ git commit -m "feat(profile-scan): score a name alone against the name-only ban 
 ```
 
 ---
-### Task 5: Name-only fallback inside gate-admitted scans
+### Task 5: Name-only fallback on every scan path; scans leave the exclude flag alone
 
 **Files:**
-- Modify: `TelegramGroupsAdmin.Telegram/Services/UserApi/IProfileScanService.cs`
-- Modify: `TelegramGroupsAdmin.Telegram/Services/UserApi/ProfileScanService.cs` (fields `:43-59`, `ScanUserProfileAsync`, `RunAndRemoveAsync`, `ScanOnceAsync`, `ScanUserProfileCoreAsync:250-256`, new helpers)
-- Modify: `TelegramGroupsAdmin.Telegram/Services/UserApi/ProfileScanGate.cs:105`
+- Modify: `TelegramGroupsAdmin.Telegram/Services/UserApi/IProfileScanService.cs` (doc comment only)
+- Modify: `TelegramGroupsAdmin.Telegram/Services/UserApi/ProfileScanService.cs` (`ScanTimeout` `:49`, `ScanOnceAsync`, `ScanUserProfileCoreAsync:236-256, 454-456`, new helpers)
 - Test: `TelegramGroupsAdmin.UnitTests/Telegram/Services/UserApi/ProfileScanServiceNameOnlyTests.cs` (create)
-- Test (update matchers): `TelegramGroupsAdmin.UnitTests/Telegram/Services/UserApi/ProfileScanGateTests.cs:51, 319-329, 336`, `TelegramGroupsAdmin.UnitTests/BackgroundJobs/Jobs/ProfileRescanJobTests.cs:32, 58-59`, `TelegramGroupsAdmin.IntegrationTests/Telegram/MessageProcessingFirstMessageScanTests.cs:133, 245-248, 277-280`
 
 **Interfaces:**
 - Consumes: `IProfileScoringEngine.ScoreNameOnlyAsync` (Task 4); `ProfileScanConfig.NameOnlyBanThreshold` / `DefaultNameOnlyBanThreshold` (Task 3); `PersistScanResultAsync`, `ActOnOutcomeAsync`, `ProfileScanResult.Source` / `PromotionalDisplayText`, `IProfileScanResultsRepository.GetLatestSourceAsync`, `ITelegramUserRepository.UpdateProfileScanScoreAsync` (Task 2).
-- Produces: `Task<ProfileScanResult> IProfileScanService.ScanUserProfileAsync(UserIdentity user, ChatIdentity? triggeringChat, CancellationToken ct, bool forceRescan = false, bool nameOnlyFallback = false)`; `internal TimeSpan ProfileScanService.ScanTimeout { get; init; }` (default 45 s). A name-only result has `Source == ProfileScanSource.NameOnly` and `SkipReason == null`; a skipped scan keeps its skip reason.
+- Produces: `IProfileScanService.ScanUserProfileAsync` keeps its signature (`UserIdentity user, ChatIdentity? triggeringChat, CancellationToken ct, bool forceRescan = false`) and now falls back on every call; `internal TimeSpan ProfileScanService.ScanTimeout { get; init; }` (default 45 s). A name-only result has `Source == ProfileScanSource.NameOnly` and `SkipReason == null`; a scan that wrote nothing keeps its skip reason. Scans never call `ExcludeFromProfileScanAsync` / `IncludeInProfileScanAsync`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1328,10 +1427,10 @@ using TelegramGroupsAdmin.Telegram.Services.UserApi;
 namespace TelegramGroupsAdmin.UnitTests.Telegram.Services.UserApi;
 
 /// <summary>
-/// The name-only fallback of ProfileScanService: when a gate-admitted scan cannot read the profile
-/// (no session, unresolvable, full profile not fetched, timeout, FLOOD_WAIT) the name is scored
-/// alone, stored as a NameOnly row and acted on like a scan. The real service runs; Telegram, the
-/// scorer and the repositories are faked.
+/// The name-only fallback of ProfileScanService: when a scan cannot read the profile (no session,
+/// unresolvable, full profile not fetched, timeout, FLOOD_WAIT) the name is scored alone, stored as a
+/// NameOnly row and acted on like a scan, on every scan path. Scans leave the exclude flag alone.
+/// The real service runs; Telegram, the scorer and the repositories are faked.
 /// </summary>
 [TestFixture]
 public class ProfileScanServiceNameOnlyTests
@@ -1403,19 +1502,22 @@ public class ProfileScanServiceNameOnlyTests
         _logs)
     { ScanTimeout = timeout };
 
+    // How the gate (join, first message, rename) and the rescan job call the service: with a chat.
     private Task<ProfileScanResult> GateScanAsync(UserIdentity? user = null) =>
-        _sut.ScanUserProfileAsync(user ?? Named, Chat, CancellationToken.None, nameOnlyFallback: true);
+        _sut.ScanUserProfileAsync(user ?? Named, Chat, CancellationToken.None);
 
     private static ScoringResult NameOnlyScore(decimal score, ProfileScanOutcome outcome) =>
         new(score, outcome, 0m, score, "name judged", ["name_signal"], PromotionalDisplayText: true);
 
     private static TelegramUser StoredRow(
-        bool isBot = false, DateTimeOffset? scannedAt = null, decimal? score = null, long? personalChannelId = null) =>
+        bool isBot = false, DateTimeOffset? scannedAt = null, decimal? score = null, long? personalChannelId = null,
+        bool excluded = false) =>
         new(UserId, "sam_rivera", "Sam", "Rivera", null, null, null,
             IsBot: isBot, IsTrusted: false, IsBanned: false, KickCount: 0, BotDmEnabled: false,
             FirstSeenAt: DateTimeOffset.UtcNow, LastSeenAt: DateTimeOffset.UtcNow,
             CreatedAt: DateTimeOffset.UtcNow, UpdatedAt: DateTimeOffset.UtcNow,
-            ProfileScannedAt: scannedAt, ProfileScanScore: score, PersonalChannelId: personalChannelId);
+            ProfileScannedAt: scannedAt, ProfileScanScore: score, PersonalChannelId: personalChannelId,
+            ProfileScanExcluded: excluded);
 
     private void NoSession() =>
         _sessions.GetClientForChatAsync(ChatId, Arg.Any<CancellationToken>()).Returns((IWTelegramApiClient?)null);
@@ -1491,7 +1593,7 @@ public class ProfileScanServiceNameOnlyTests
 
         var result = await GateScanAsync();
 
-        await _users.Received(1).ExcludeFromProfileScanAsync(UserId, Arg.Any<CancellationToken>());
+        await _users.DidNotReceiveWithAnyArgs().ExcludeFromProfileScanAsync(default, default);
         await AssertNameOnlyScanRanAsync(result);
     }
 
@@ -1562,17 +1664,30 @@ public class ProfileScanServiceNameOnlyTests
     }
 
     [Test]
-    public async Task NoFallbackRequested_NoSession_ReturnsSkipWithoutNameOnlyScan()
+    public async Task ManualRescan_ExcludedUser_NoSession_RunsNameOnlyScan()
     {
-        // The bulk rescan job and the manual rescan call the service directly without the fallback;
-        // the job aborts its batch on this skip reason.
-        NoSession();
+        // The manual rescan (UserDetailDialog) calls the service directly with no chat; it always
+        // runs, whatever the exclude flag says, and falls back like every other scan.
+        _users.GetByTelegramIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(StoredRow(excluded: true));
+        _sessions.GetAnyClientAsync(Arg.Any<CancellationToken>()).Returns((IWTelegramApiClient?)null);
 
-        var result = await _sut.ScanUserProfileAsync(Named, Chat, CancellationToken.None);
+        var result = await _sut.ScanUserProfileAsync(Named, null, CancellationToken.None);
 
-        await _scoring.DidNotReceiveWithAnyArgs().ScoreNameOnlyAsync(default!, default, default, default);
-        await _results.DidNotReceiveWithAnyArgs().InsertAsync(default!, default);
-        Assert.That(result.SkipReason, Does.Contain("No User API session"));
+        await AssertNameOnlyScanRanAsync(result);
+        await _users.DidNotReceiveWithAnyArgs().IncludeInProfileScanAsync(default, default);
+    }
+
+    [Test]
+    public async Task SuccessfulFullScan_DoesNotClearAdminExclusion()
+    {
+        _users.GetByTelegramIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(StoredRow(excluded: true));
+        ResolvingClient();
+
+        var result = await GateScanAsync();
+
+        Assert.That(result.Source, Is.EqualTo(ProfileScanSource.FullScan));
+        await _users.DidNotReceiveWithAnyArgs().IncludeInProfileScanAsync(default, default);
+        await _users.DidNotReceiveWithAnyArgs().ExcludeFromProfileScanAsync(default, default);
     }
 
     [Test]
@@ -1732,60 +1847,16 @@ public class ProfileScanServiceNameOnlyTests
 }
 ```
 
-`ProfileScanGateTests.cs`:
-- line 51 and line 336 setups become `.ScanUserProfileAsync(Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity?>(), Arg.Any<CancellationToken>(), Arg.Any<bool>(), Arg.Any<bool>())`.
-- `ForceRescan_IsForwardedToScan` asserts `Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity?>(), Arg.Any<CancellationToken>(), Arg.Is(true), Arg.Is(true)`.
-- Add:
-
-```csharp
-    [Test]
-    public async Task AdmittedScan_RequestsNameOnlyFallback()
-    {
-        SetUser(CreateUser(profileScannedAt: null));
-
-        await ScanAsync(ProfileScanTrigger.Join);
-
-        await _profileScanService.Received(1).ScanUserProfileAsync(
-            Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity?>(), Arg.Any<CancellationToken>(), Arg.Is(false), Arg.Is(true));
-    }
-```
-
-(`ProfileScanDisabled_AllTriggersSkip` already pins "scanning disabled → no scan, so no name-only scan"; `FirstMessage_UntrustedNeverScannedBot_Skips` pins bots.)
-
-`ProfileRescanJobTests.cs`: the line-32 setup gains a fifth matcher `Arg.Any<bool>()`; lines 58-59 become `ScanUserProfileAsync(seven, Arg.Any<ChatIdentity?>(), Arg.Any<CancellationToken>(), Arg.Any<bool>(), Arg.Is(false))` (and `eight`), which pins that the job never asks for the fallback.
-
-`MessageProcessingFirstMessageScanTests.cs`: the line-133 setup and both assertions (lines 245-248, 277-280) append `Arg.Any<bool>(), Arg.Any<bool>()` so they still match the gate's call (otherwise the `DidNotReceive` assertion passes vacuously).
+(No other test changes: the service signature is unchanged, so the gate, job and first-message tests keep their matchers.)
 
 - [ ] **Step 2: Run to verify they fail**
 
 Run: `dotnet test TelegramGroupsAdmin.UnitTests --filter "FullyQualifiedName~ProfileScanServiceNameOnlyTests"`
-Expected: build error: `nameOnlyFallback` / `ScanTimeout` do not exist on `ProfileScanService`.
+Expected: build error: `ScanTimeout` does not exist on `ProfileScanService`.
 
 - [ ] **Step 3: Implement**
 
-`IProfileScanService.cs`:
-
-```csharp
-    /// <summary>
-    /// Scan a user's profile and take appropriate action (ban, report, or pass).
-    /// </summary>
-    /// <param name="user">Identity of the Telegram user to scan.</param>
-    /// <param name="triggeringChat">Chat that triggered the scan (for reports). Null for background scans.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <param name="forceRescan">Skip both cached-score reuses (60s freshness window and unchanged-profile diff), e.g. after a rename.</param>
-    /// <param name="nameOnlyFallback">When the profile cannot be read (no session, unresolvable, timeout, FLOOD_WAIT), score the
-    /// name alone and act on it. Set by the eligibility gate only; admin-initiated rescans leave it off.</param>
-    /// <returns>Scan result with extracted data, score, and outcome.</returns>
-    Task<ProfileScanResult> ScanUserProfileAsync(
-        UserIdentity user, ChatIdentity? triggeringChat, CancellationToken ct,
-        bool forceRescan = false, bool nameOnlyFallback = false);
-```
-
-`ProfileScanGate.cs` line 105:
-
-```csharp
-        return await profileScanService.ScanUserProfileAsync(user, chat, ct, forceRescan, nameOnlyFallback: true);
-```
+`IProfileScanService.cs`: the `<summary>` of `ScanUserProfileAsync` gains a second sentence: "When the profile cannot be read (no session, unresolvable, full profile not fetched, timeout, FLOOD_WAIT), the name is scored alone and acted on." The signature does not change.
 
 `ProfileScanService.cs`:
 
@@ -1799,46 +1870,7 @@ Expected: build error: `nameOnlyFallback` / `ScanTimeout` do not exist on `Profi
     internal TimeSpan ScanTimeout { get; init; } = TimeSpan.FromSeconds(45);
 ```
 
-2. Put the fallback flag in the single-flight key (a fallback run must never be shared with a caller that did not ask for one, or vice versa) — add to the key comment "and so is the name-only fallback":
-
-```csharp
-    private readonly ConcurrentDictionary<(long UserId, bool ForceRescan, bool NameOnlyFallback), Lazy<Task<ProfileScanResult>>> _inFlight = new();
-
-    public async Task<ProfileScanResult> ScanUserProfileAsync(
-        UserIdentity user,
-        ChatIdentity? triggeringChat,
-        CancellationToken ct,
-        bool forceRescan = false,
-        bool nameOnlyFallback = false)
-    {
-        var key = (user.Id, forceRescan, nameOnlyFallback);
-        Lazy<Task<ProfileScanResult>> candidate = null!;
-        candidate = new Lazy<Task<ProfileScanResult>>(
-            () => RunAndRemoveAsync(key, candidate, user, triggeringChat, forceRescan, nameOnlyFallback));
-        var lazy = _inFlight.GetOrAdd(key, candidate);
-        return await lazy.Value.WaitAsync(ct);
-    }
-
-    private async Task<ProfileScanResult> RunAndRemoveAsync(
-        (long UserId, bool ForceRescan, bool NameOnlyFallback) key,
-        Lazy<Task<ProfileScanResult>> self,
-        UserIdentity user,
-        ChatIdentity? triggeringChat,
-        bool forceRescan,
-        bool nameOnlyFallback)
-    {
-        try
-        {
-            return await ScanOnceAsync(user, triggeringChat, forceRescan, nameOnlyFallback, CancellationToken.None);
-        }
-        finally
-        {
-            _inFlight.TryRemove(new KeyValuePair<(long, bool, bool), Lazy<Task<ProfileScanResult>>>(key, self));
-        }
-    }
-```
-
-(Keep the existing explanatory comments above `ScanUserProfileAsync`'s body and in the `finally`.)
+2. `ScanUserProfileAsync`, `RunAndRemoveAsync` and the single-flight key stay as they are.
 
 3. Replace `ScanOnceAsync` with:
 
@@ -1847,7 +1879,6 @@ Expected: build error: `nameOnlyFallback` / `ScanTimeout` do not exist on `Profi
         UserIdentity user,
         ChatIdentity? triggeringChat,
         bool forceRescan,
-        bool nameOnlyFallback,
         CancellationToken ct)
     {
         var startTimestamp = Stopwatch.GetTimestamp();
@@ -1910,7 +1941,7 @@ Expected: build error: `nameOnlyFallback` / `ScanTimeout` do not exist on `Profi
             pipelineMetrics.RecordProfileScanSkipped("no_session");
             return await FallBackToNameOnlyAsync(
                 EmptyResult(user.Id, "No User API session available. Connect a session in Settings."),
-                user, existingUser, triggeringChat, nameOnlyFallback, sp, ct);
+                user, existingUser, triggeringChat, sp, ct);
         }
 
         // Top-level guard: WTelegram API calls don't accept CancellationToken, so a hung DC
@@ -1964,11 +1995,25 @@ Expected: build error: `nameOnlyFallback` / `ScanTimeout` do not exist on `Profi
         // not fetched, timeout, FLOOD_WAIT). A scan that read the profile never carries one.
         return result.SkipReason is null
             ? result
-            : await FallBackToNameOnlyAsync(result, user, existingUser, triggeringChat, nameOnlyFallback, sp, ct);
+            : await FallBackToNameOnlyAsync(result, user, existingUser, triggeringChat, sp, ct);
     }
 ```
 
-4. In `ScanUserProfileCoreAsync`, the `Users_GetFullUser` catch returns a skip reason:
+4. In `ScanUserProfileCoreAsync`, the unresolvable branch no longer excludes the user (the exclude flag is the admin's switch; the rescan job's retry limit bounds retries instead), and its skip metric is renamed from `excluded` to `unresolvable` because nothing is excluded any more:
+
+```csharp
+        var resolvedUser = await ResolveUserAsync(client, user.Id, existingUser, triggeringChat, ct);
+        if (resolvedUser == null)
+        {
+            logger.LogWarning("Could not resolve {User}", user.ToLogDebug());
+            pipelineMetrics.RecordProfileScanSkipped("unresolvable");
+            return EmptyResult(user.Id, "User could not be resolved — they may have deleted their Telegram account.");
+        }
+```
+
+Delete the "Clear exclusion flag on successful scan" block (`if (existingUser?.ProfileScanExcluded == true) await userRepo.IncludeInProfileScanAsync(user.Id, ct);`) and its comment. `ExcludeFromProfileScanAsync` / `IncludeInProfileScanAsync` stay on the repository for the admin's checkbox in `UserDetailDialog`.
+
+5. Still in `ScanUserProfileCoreAsync`, the `Users_GetFullUser` catch returns a skip reason:
 
 ```csharp
         catch (Exception ex)
@@ -1978,25 +2023,23 @@ Expected: build error: `nameOnlyFallback` / `ScanTimeout` do not exist on `Profi
         }
 ```
 
-5. Add after `ActOnOutcomeAsync`:
+6. Add after `ActOnOutcomeAsync`:
 
 ```csharp
     /// <summary>
-    /// The full scan could not read the profile. For a scan the gate admitted, score the name alone
-    /// so the user is still filtered, store it as a NameOnly row and act on it like a scan.
-    /// Otherwise, or when there is no name, no stored user, a bot, or no verdict, return the skip.
+    /// The full scan could not read the profile: score the name alone so the user is still filtered,
+    /// store it as a NameOnly row and act on it like a scan. Every scan path falls back. When there is
+    /// no name, no stored user, a bot, or no verdict, return the skip.
     /// </summary>
     private async Task<ProfileScanResult> FallBackToNameOnlyAsync(
         ProfileScanResult skipped,
         UserIdentity user,
         Models.TelegramUser? existingUser,
         ChatIdentity? triggeringChat,
-        bool nameOnlyFallback,
         IServiceProvider sp,
         CancellationToken ct)
     {
-        if (!nameOnlyFallback
-            || existingUser is null
+        if (existingUser is null
             || existingUser.IsBot
             || (user.FirstName is null && user.LastName is null && user.Username is null))
         {
@@ -2053,19 +2096,783 @@ Expected: build error: `nameOnlyFallback` / `ScanTimeout` do not exist on `Profi
 
 - [ ] **Step 4: Run to verify they pass**
 
-Run: `dotnet build TelegramGroupsAdmin.sln && dotnet test TelegramGroupsAdmin.UnitTests --filter "FullyQualifiedName~ProfileScan|FullyQualifiedName~ProfileRescanJobTests" && dotnet test TelegramGroupsAdmin.IntegrationTests --filter "FullyQualifiedName~MessageProcessingFirstMessageScanTests|FullyQualifiedName~JoinRenameRescanTests"`
+Run: `dotnet build TelegramGroupsAdmin.sln && dotnet test TelegramGroupsAdmin.UnitTests --filter "FullyQualifiedName~ProfileScanService" && dotnet test TelegramGroupsAdmin.IntegrationTests --filter "FullyQualifiedName~JoinRenameRescanTests"`
 Expected: 0 warnings; all PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add TelegramGroupsAdmin.Telegram/Services/UserApi TelegramGroupsAdmin.UnitTests TelegramGroupsAdmin.IntegrationTests/Telegram/MessageProcessingFirstMessageScanTests.cs
+git add TelegramGroupsAdmin.Telegram/Services/UserApi TelegramGroupsAdmin.UnitTests/Telegram/Services/UserApi/ProfileScanServiceNameOnlyTests.cs
 git commit -m "feat(profile-scan): fall back to a name-only scan when the profile cannot be read"
 ```
 
 ---
 
-### Task 6: Integration — a name-only scan writes its row
+### Task 6: When join, first-message and rename scans run
+
+**Files:**
+- Modify: `TelegramGroupsAdmin.Telegram/Services/UserApi/ProfileScanGate.cs`
+- Modify: `TelegramGroupsAdmin.Telegram/Services/UserApi/IProfileScanGate.cs` (summary), `ProfileScanTrigger.cs` (member docs)
+- Test: `TelegramGroupsAdmin.UnitTests/Telegram/Services/UserApi/ProfileScanGateTests.cs`
+
+**Interfaces:**
+- Consumes: Task 5's unconditional fallback (a gate-admitted scan with no session becomes a name-only scan inside the service).
+- Produces: `ProfileScanGate` constructor without `ITelegramSessionManager`: `(IConfigService configService, ITelegramUserRepository userRepository, IUsernameHistoryRepository usernameHistory, IChatAdminsRepository chatAdminsRepository, IProfileScanService profileScanService, PipelineMetrics pipelineMetrics, ILogger<ProfileScanGate> logger)`. `ScanIfEligibleAsync` signature unchanged.
+
+- [ ] **Step 1: Write the failing tests**
+
+In `ProfileScanGateTests`:
+- Delete the `_sessionManager` field, its two `SetUp` lines and the `_sessionManager` constructor argument (the gate no longer takes one).
+- Replace `Join_AlreadyScanned_StillScans` and `NoActiveSession_Skips` with the tests below, and add the rest:
+
+```csharp
+    // ── Join / first message: new, never scanned, or renamed since the last scan ──
+
+    [Test]
+    public async Task Join_NewUser_Scans()
+    {
+        SetUser(null);
+
+        Assert.That(await ScanAsync(ProfileScanTrigger.Join), Is.Not.Null);
+    }
+
+    [Test]
+    public async Task Join_NeverScanned_Scans()
+    {
+        SetUser(CreateUser(profileScannedAt: null));
+
+        Assert.That(await ScanAsync(ProfileScanTrigger.Join), Is.Not.Null);
+    }
+
+    [Test]
+    public async Task Join_AlreadyScannedNoRename_SkipsWithoutCallingTheScan()
+    {
+        SetUser(CreateUser(profileScannedAt: DateTimeOffset.UtcNow.AddDays(-3)));
+
+        var result = await ScanAsync(ProfileScanTrigger.Join);
+
+        Assert.That(result, Is.Null);
+        await _profileScanService.DidNotReceiveWithAnyArgs().ScanUserProfileAsync(default!, default, default, default);
+    }
+
+    [Test]
+    public async Task Join_AlreadyScannedRenamedSinceLastScan_Scans()
+    {
+        var lastScan = DateTimeOffset.UtcNow.AddDays(-3);
+        SetUser(CreateUser(profileScannedAt: lastScan));
+        RenamedSince(lastScan);
+
+        Assert.That(await ScanAsync(ProfileScanTrigger.Join), Is.Not.Null);
+    }
+
+    [Test]
+    public async Task FirstMessage_AlreadyScannedRenamedSinceLastScan_Scans()
+    {
+        var lastScan = DateTimeOffset.UtcNow.AddDays(-3);
+        SetUser(CreateUser(profileScannedAt: lastScan));
+        RenamedSince(lastScan);
+
+        Assert.That(await ScanAsync(ProfileScanTrigger.FirstMessage), Is.Not.Null);
+    }
+
+    // ── Exclusion: the admin's switch, which a rename overrides ──
+
+    [Test]
+    public async Task Join_ExcludedNeverScanned_Skips()
+    {
+        SetUser(CreateUser(profileScannedAt: null, profileScanExcluded: true));
+
+        Assert.That(await ScanAsync(ProfileScanTrigger.Join), Is.Null);
+    }
+
+    [Test]
+    public async Task Join_ExcludedRenamedSinceLastScan_Scans()
+    {
+        var lastScan = DateTimeOffset.UtcNow.AddDays(-3);
+        SetUser(CreateUser(profileScannedAt: lastScan, profileScanExcluded: true));
+        RenamedSince(lastScan);
+
+        Assert.That(await ScanAsync(ProfileScanTrigger.Join), Is.Not.Null);
+    }
+
+    [Test]
+    public async Task ProfileChange_ExcludedUser_StillScans()
+    {
+        // A rename is a change: the rename trigger scans even an excluded user.
+        SetUser(CreateUser(profileScannedAt: DateTimeOffset.UtcNow.AddDays(-3), profileScanExcluded: true));
+
+        Assert.That(await ScanAsync(ProfileScanTrigger.ProfileChange), Is.Not.Null);
+    }
+
+    [Test]
+    public async Task ProfileChange_TrustedUser_StillSkips()
+    {
+        SetUser(CreateUser(profileScannedAt: DateTimeOffset.UtcNow.AddDays(-3), isTrusted: true));
+
+        Assert.That(await ScanAsync(ProfileScanTrigger.ProfileChange), Is.Null);
+    }
+
+    // ── No User API session: the scan still runs (name-only inside the service) ──
+
+    [Test]
+    public async Task NoUserApiSession_NewJoiner_StillScans()
+    {
+        // The gate has no session dependency any more; ProfileScanServiceNameOnlyTests pins the
+        // service's no-session path.
+        SetUser(null);
+
+        await ScanAsync(ProfileScanTrigger.Join);
+
+        await _profileScanService.Received(1).ScanUserProfileAsync(
+            Arg.Is<UserIdentity>(u => u!.Id == TestUserId), Arg.Any<ChatIdentity?>(), Arg.Any<CancellationToken>(), false);
+    }
+```
+
+(`FirstMessage_AlreadyScanned_Skips`, `FirstMessage_ProfileScanExcluded_Skips`, the bot / admin / trusted skips and `ProfileScanDisabled_AllTriggersSkip` stay unchanged and still pass.)
+
+- [ ] **Step 2: Run to verify they fail**
+
+Run: `dotnet test TelegramGroupsAdmin.UnitTests --filter "FullyQualifiedName~ProfileScanGateTests"`
+Expected: build error: no `ProfileScanGate` constructor takes 7 arguments.
+
+- [ ] **Step 3: Implement**
+
+`ProfileScanGate.cs`, replace the class:
+
+```csharp
+/// <inheritdoc />
+public sealed class ProfileScanGate(
+    IConfigService configService,
+    ITelegramUserRepository userRepository,
+    IUsernameHistoryRepository usernameHistory,
+    IChatAdminsRepository chatAdminsRepository,
+    IProfileScanService profileScanService,
+    PipelineMetrics pipelineMetrics,
+    ILogger<ProfileScanGate> logger) : IProfileScanGate
+{
+    public async Task<ProfileScanResult?> ScanIfEligibleAsync(
+        UserIdentity user,
+        ChatIdentity? chat,
+        ProfileScanTrigger trigger,
+        CancellationToken ct,
+        bool forceRescan = false)
+    {
+        var welcomeConfig = await configService.GetEffectiveWelcomeAsync(chat?.Id ?? 0, ct: ct);
+        var config = welcomeConfig?.JoinSecurity?.ProfileScan;
+
+        if (config is null || !config.Enabled)
+            return Skip("disabled", user, trigger);
+
+        var triggerEnabled = trigger switch
+        {
+            ProfileScanTrigger.Join => config.ScanOnJoin,
+            ProfileScanTrigger.FirstMessage => config.ScanOnFirstMessage,
+            ProfileScanTrigger.ProfileChange => config.ScanOnProfileChange,
+            _ => false
+        };
+
+        // A null row means the user is not yet tracked: not trusted, never scanned, so eligible.
+        // Read lazily: the trigger_disabled skip below fires on nearly every group message and must
+        // stay free of queries.
+        Models.TelegramUser? existingUser = null;
+        var userLoaded = false;
+
+        // The rename trigger is itself a rename. A join or first message counts as one when a rename
+        // was recorded after the last scan (joins record renames without scanning).
+        var renamed = trigger == ProfileScanTrigger.ProfileChange;
+
+        // A join records a rename without scanning (nothing slow may run before the joiner is muted).
+        // With ScanOnJoin off, a chat that scans on profile changes still scans a joiner who renamed
+        // since their last scan.
+        if (!triggerEnabled && trigger == ProfileScanTrigger.Join && config.ScanOnProfileChange)
+        {
+            existingUser = await userRepository.GetByTelegramIdAsync(user.Id, cancellationToken: ct);
+            userLoaded = true;
+            renamed = existingUser is not null
+                && await usernameHistory.HasChangeSinceAsync(user.Id, existingUser.ProfileScannedAt, ct);
+            triggerEnabled = renamed;
+        }
+
+        if (!triggerEnabled)
+        {
+            // Not recorded via Skip(): in the shipping configuration (ScanOnFirstMessage off) this
+            // fires on nearly every group message, which would drown the genuinely interesting skip
+            // reasons on dashboards.
+            logger.LogDebug(
+                "Profile scan gate skipped {User} for trigger {Trigger}: trigger_disabled",
+                user.ToLogDebug(), trigger);
+            return null;
+        }
+
+        if (!userLoaded)
+            existingUser = await userRepository.GetByTelegramIdAsync(user.Id, cancellationToken: ct);
+
+        if (existingUser?.IsTrusted == true)
+            return Skip("trusted", user, trigger);
+
+        // Chat-admin trust is only reconciled by ChatHealthCheck (~every 30 minutes), so a newly
+        // promoted admin can be untrusted for a window after promotion. Without this check, such an
+        // admin posting inside that window would fall through to a scan that can globally ban them.
+        if (chat is not null && await chatAdminsRepository.IsAdminAsync(chat.Id, user.Id, cancellationToken: ct))
+            return Skip("admin", user, trigger);
+
+        // Neither the join trigger (bots are diverted to bot protection before reaching the scan)
+        // nor the rescan job ever scans a bot. Without this check, FirstMessage would be the sole
+        // trigger able to scan and globally ban a legitimate third-party bot.
+        if (existingUser?.IsBot == true)
+            return Skip("bot", user, trigger);
+
+        // Join / first message scan a new or never-scanned user, or one who renamed since the last
+        // scan. A scanned user who has not renamed is not scanned again (the rescan job retries
+        // incomplete scans).
+        if (trigger is ProfileScanTrigger.Join or ProfileScanTrigger.FirstMessage
+            && existingUser?.ProfileScannedAt is { } lastScan)
+        {
+            renamed = renamed || await usernameHistory.HasChangeSinceAsync(user.Id, lastScan, ct);
+            if (!renamed)
+                return Skip("already_scanned", user, trigger);
+        }
+
+        // The exclude flag is the admin's "don't scan automatically unless something changes":
+        // a rename is a change.
+        if (existingUser?.ProfileScanExcluded == true && !renamed)
+            return Skip("excluded", user, trigger);
+
+        logger.LogDebug(
+            "Profile scan gate admitted {User} for trigger {Trigger}",
+            user.ToLogDebug(), trigger);
+
+        // No session check: without a usable User API session the service scores the name alone.
+        return await profileScanService.ScanUserProfileAsync(user, chat, ct, forceRescan);
+    }
+
+    private ProfileScanResult? Skip(string reason, UserIdentity user, ProfileScanTrigger trigger)
+    {
+        pipelineMetrics.RecordProfileScanSkipped(reason);
+
+        logger.LogDebug(
+            "Profile scan gate skipped {User} for trigger {Trigger}: {Reason}",
+            user.ToLogDebug(), trigger, reason);
+
+        return null;
+    }
+}
+```
+
+`IProfileScanGate.cs` summary: "Single owner of the profile scan eligibility decision, shared by every automatic trigger: join and first message scan a new, never-scanned or renamed user; a rename scans even an excluded user. Admin-initiated rescans (UI) and the rescan job call IProfileScanService directly and intentionally bypass this gate."
+
+`ProfileScanTrigger.cs` member docs: `Join` → "User joined a chat. Scans a new or never-scanned user, or one who renamed since the last scan."; `FirstMessage` → "User sent a message. Scans a never-scanned user (covers accounts that arrive without a join event, such as people commenting on channel posts in a linked discussion group), or one who renamed since the last scan."; `ProfileChange` → "A rename was observed. Always scans, even an excluded user."
+
+- [ ] **Step 4: Run to verify they pass**
+
+Run: `dotnet build TelegramGroupsAdmin.sln && dotnet test TelegramGroupsAdmin.UnitTests --filter "FullyQualifiedName~ProfileScanGateTests|FullyQualifiedName~UserIdentityServiceTests|FullyQualifiedName~WelcomeService" && dotnet test TelegramGroupsAdmin.IntegrationTests --filter "FullyQualifiedName~MessageProcessingFirstMessageScanTests"`
+Expected: 0 warnings; PASS. (`MessageProcessingFirstMessageScanTests` still configures `HasAnyActiveSessionAsync`; that setup is now unused and harmless.)
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add TelegramGroupsAdmin.Telegram/Services/UserApi/ProfileScanGate.cs TelegramGroupsAdmin.Telegram/Services/UserApi/IProfileScanGate.cs TelegramGroupsAdmin.Telegram/Services/UserApi/ProfileScanTrigger.cs TelegramGroupsAdmin.UnitTests/Telegram/Services/UserApi/ProfileScanGateTests.cs
+git commit -m "feat(profile-scan): scan joiners only when new, never scanned or renamed"
+```
+
+---
+
+### Task 7: The rescan job retries incomplete scans only
+
+**Files:**
+- Modify: `TelegramGroupsAdmin.Core/Models/BackgroundJobSettings/ProfileRescanSettings.cs`
+- Modify: `TelegramGroupsAdmin.Telegram/Repositories/ITelegramUserRepository.cs:170-175`, `TelegramUserRepository.cs:1301-1311`
+- Modify: `TelegramGroupsAdmin.BackgroundJobs/Jobs/ProfileRescanJob.cs`
+- Modify: `TelegramGroupsAdmin/Components/Shared/Settings/BackgroundJobs.razor:201-218, 245-247, 366-371, 433-446`
+- Modify: `TelegramGroupsAdmin.Testing.Golden/SQL/canonical/02_telegram_users.sql` (user 9963580010331), `23_profile_scan_results.sql` (row 528)
+- Modify: `TelegramGroupsAdmin.Testing.Golden/GoldenDatasetConstants.cs`, `TelegramGroupsAdmin.IntegrationTests/CLAUDE.md`
+- Test: `TelegramGroupsAdmin.UnitTests/BackgroundJobs/Jobs/ProfileRescanJobTests.cs`
+- Test: `TelegramGroupsAdmin.IntegrationTests/Telegram/Repositories/IncompleteScanSelectionTests.cs` (create)
+
+**Interfaces:**
+- Consumes: `ProfileScanSource`, `profile_scan_results.source` (Task 2); Task 5's unconditional fallback.
+- Produces: `ProfileRescanSettings.NameOnlyRetryLimit` (`int`, default `3`); `Task<List<long>> ITelegramUserRepository.GetEligibleUsersForRescanAsync(int batchSize, DateTimeOffset retryCutoff, int nameOnlyRetryLimit, CancellationToken cancellationToken = default)`; `ProfileRescanJob` constructor without `ITelegramSessionManager`: `(ILogger<ProfileRescanJob> logger, IBackgroundJobConfigService jobConfigService, ITelegramUserRepository userRepository, IProfileScanService profileScanService, IUserIdentityService identityService, JobMetrics jobMetrics)`; `GoldenDatasetConstants.ProfileRescan.{NeverScannedUserId, ExcludedNeverScannedUserId, NameOnlyLatestUserId, NameOnlyLatestScanId, FullScanLatestUserId}`.
+
+- [ ] **Step 1: Confirm the anchors**
+
+```bash
+for id in 9963580010331 9434053902837 9758118926756 9922735795237; do echo "$id: $(grep -rl $id TelegramGroupsAdmin.*Tests TelegramGroupsAdmin.Testing.Golden/*.cs docs | tr '\n' ' ')"; done
+grep "VALUES (9963580010331,\|VALUES (9434053902837,\|VALUES (9758118926756,\|VALUES (9922735795237," TelegramGroupsAdmin.Testing.Golden/SQL/canonical/02_telegram_users.sql | cut -c560-
+grep "(528,\|(533," TelegramGroupsAdmin.Testing.Golden/SQL/canonical/23_profile_scan_results.sql
+```
+Expected: no test or constant references any of the four ids (9922735795237 appears only in the 2026-05-19 explicit-masking plan doc, as a quoted SQL line). Shapes: 9963580010331 ("Ferocity Opponent") and 9434053902837 ("Preflight Silk") are untrusted, unbanned, non-bot, `profile_scanned_at` NULL, `profile_scan_excluded = true`; 9758118926756 @unreadbackspin is untrusted, unbanned, scanned 2026-04-29 21:37 with one scan row 528 (score 1.2, AI fields NULL); 9922735795237 @parkingsturdily is untrusted, unbanned, scanned 2026-04-30 15:42 with one scan row 533. If any shape differs, STOP and report.
+
+- [ ] **Step 2: Write the failing tests**
+
+`ProfileRescanJobTests.cs`, replace the fixture body:
+
+```csharp
+    private ITelegramUserRepository _users = null!;
+    private IProfileScanService _scanner = null!;
+    private IUserIdentityService _identities = null!;
+    private IBackgroundJobConfigService _jobConfig = null!;
+    private ProfileRescanJob _job = null!;
+
+    [SetUp]
+    public void SetUp()
+    {
+        _users = Substitute.For<ITelegramUserRepository>();
+        _scanner = Substitute.For<IProfileScanService>();
+        _scanner.ScanUserProfileAsync(Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity?>(), Arg.Any<CancellationToken>(), Arg.Any<bool>())
+            .Returns(ci => new ProfileScanResult(ci.Arg<UserIdentity>().Id, null, null, null, null, false, null,
+                false, false, false, 0m, ProfileScanOutcome.Clean, null, null));
+        _identities = Substitute.For<IUserIdentityService>();
+        _jobConfig = Substitute.For<IBackgroundJobConfigService>();
+
+        _job = new ProfileRescanJob(NullLogger<ProfileRescanJob>.Instance, _jobConfig,
+            _users, _scanner, _identities, new JobMetrics());
+    }
+
+    private static IJobExecutionContext Context()
+    {
+        var context = Substitute.For<IJobExecutionContext>();
+        context.CancellationToken.Returns(CancellationToken.None);
+        return context;
+    }
+
+    private void Batch(params UserIdentity[] users)
+    {
+        _users.GetEligibleUsersForRescanAsync(Arg.Any<int>(), Arg.Any<DateTimeOffset>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(users.Select(u => u.Id).ToList());
+        _identities.ResolveManyAsync(Arg.Any<IReadOnlyCollection<long>>(), Arg.Any<CancellationToken>())
+            .Returns(users);
+    }
+
+    [Test]
+    public async Task Execute_ScansIdentitiesResolvedOnceForTheBatch()
+    {
+        // The batch's ids are resolved in one call; each scan gets that user's resolved identity.
+        var seven = UserIdentity.ForTest(7, "Current Seven");
+        var eight = UserIdentity.ForTest(8, "Current Eight");
+        Batch(seven, eight);
+
+        await _job.Execute(Context());
+
+        await _identities.Received(1).ResolveManyAsync(Arg.Any<IReadOnlyCollection<long>>(), Arg.Any<CancellationToken>());
+        await _identities.DidNotReceiveWithAnyArgs().ResolveAsync(default);
+        await _scanner.Received(1).ScanUserProfileAsync(seven, Arg.Any<ChatIdentity?>(), Arg.Any<CancellationToken>(), Arg.Any<bool>());
+        await _scanner.Received(1).ScanUserProfileAsync(eight, Arg.Any<ChatIdentity?>(), Arg.Any<CancellationToken>(), Arg.Any<bool>());
+    }
+
+    [Test]
+    public async Task Execute_PassesBatchSizeRetryCutoffAndRetryLimitFromSettings()
+    {
+        _jobConfig.GetJobConfigAsync(BackgroundJobNames.ProfileRescan, Arg.Any<CancellationToken>())
+            .Returns(new BackgroundJobConfig
+            {
+                JobName = BackgroundJobNames.ProfileRescan,
+                DisplayName = "Profile Rescan",
+                Description = "test",
+                Schedule = "every 6 hours",
+                ProfileRescan = new ProfileRescanSettings { BatchSize = 25, RescanAfter = "2d", NameOnlyRetryLimit = 5 }
+            });
+        Batch();
+        var start = DateTimeOffset.UtcNow;
+
+        await _job.Execute(Context());
+
+        await _users.Received(1).GetEligibleUsersForRescanAsync(
+            25,
+            Arg.Is<DateTimeOffset>(c => c <= start.AddDays(-2).AddSeconds(5) && c >= start.AddDays(-2).AddSeconds(-5)),
+            5,
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task Execute_DefaultSettings_UseRetryLimitThree()
+    {
+        Batch();
+
+        await _job.Execute(Context());
+
+        await _users.Received(1).GetEligibleUsersForRescanAsync(100, Arg.Any<DateTimeOffset>(), 3, Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task Execute_SkippedScan_DoesNotAbortTheBatch()
+    {
+        // With no User API session every scan is name-only; one that writes nothing (skip reason
+        // set) must not stop the rest of the batch.
+        var seven = UserIdentity.ForTest(7, "Seven");
+        var eight = UserIdentity.ForTest(8, "Eight");
+        Batch(seven, eight);
+        _scanner.ScanUserProfileAsync(seven, Arg.Any<ChatIdentity?>(), Arg.Any<CancellationToken>(), Arg.Any<bool>())
+            .Returns(new ProfileScanResult(7, null, null, null, null, false, null, false, false, false, 0m,
+                ProfileScanOutcome.Clean, null, null,
+                SkipReason: "No User API session available. Connect a session in Settings."));
+
+        await _job.Execute(Context());
+
+        await _scanner.Received(1).ScanUserProfileAsync(eight, Arg.Any<ChatIdentity?>(), Arg.Any<CancellationToken>(), Arg.Any<bool>());
+    }
+
+    [Test]
+    public void ProfileRescanSettings_StoredJsonWithoutRetryLimit_DefaultsToThree()
+    {
+        var settings = System.Text.Json.JsonSerializer.Deserialize<ProfileRescanSettings>("""{"BatchSize":50,"RescanAfter":"1w"}""")!;
+
+        Assert.That(settings.NameOnlyRetryLimit, Is.EqualTo(3));
+    }
+```
+
+(add `using TelegramGroupsAdmin.Core.BackgroundJobs;` and `using TelegramGroupsAdmin.Core.Models.BackgroundJobSettings;`)
+
+Note on `Execute_SkippedScan_DoesNotAbortTheBatch`: the job waits 1 s between users (Telegram throttle), so the test takes about 2 s; that is the production behaviour and stays.
+
+`TelegramGroupsAdmin.IntegrationTests/Telegram/Repositories/IncompleteScanSelectionTests.cs`:
+
+```csharp
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Data;
+using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
+using TelegramGroupsAdmin.Telegram.Repositories;
+
+namespace TelegramGroupsAdmin.IntegrationTests.Telegram.Repositories;
+
+/// <summary>
+/// The rescan job's selection: untrusted, unbanned, non-bot, not-excluded users whose scan is
+/// incomplete (never scanned, or a NameOnly latest row under the retry limit), retried only after
+/// RescanAfter. Canonical anchors (<see cref="GoldenDatasetConstants.ProfileRescan"/>), read back first:
+/// - NeverScannedUserId: never scanned, exclusion cleared (canonical edit 2026-10-05).
+/// - ExcludedNeverScannedUserId: never scanned, excluded (read-only).
+/// - NameOnlyLatestUserId: one scan row (528) flag-edited to source NameOnly (canonical edit 2026-10-05).
+/// - FullScanLatestUserId: one FullScan row (533), scanned 2026-04-30 (read-only).
+/// The batch size is the user count so ordering never hides an anchor.
+/// </summary>
+[TestFixture]
+public class IncompleteScanSelectionTests
+{
+    private MigrationTestHelper? _testHelper;
+    private ServiceProvider? _provider;
+
+    [SetUp]
+    public async Task SetUp()
+    {
+        _testHelper = new MigrationTestHelper();
+        await _testHelper.CreateDatabaseFromGoldenTemplateAsync();
+        _provider = new ServiceCollection()
+            .AddDbContextFactory<AppDbContext>(o => o.UseNpgsql(_testHelper.ConnectionString))
+            .AddLogging()
+            .AddScoped<ITelegramUserRepository, TelegramUserRepository>()
+            .BuildServiceProvider();
+    }
+
+    [TearDown]
+    public async Task TearDown()
+    {
+        if (_provider is not null)
+            await _provider.DisposeAsync();
+        _testHelper?.Dispose();
+    }
+
+    private async Task<List<long>> SelectAsync(DateTimeOffset retryCutoff, int limit)
+    {
+        await using var ctx = _testHelper!.GetDbContext();
+        var everyone = await ctx.TelegramUsers.CountAsync();
+        using var scope = _provider!.CreateScope();
+        return await scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>()
+            .GetEligibleUsersForRescanAsync(everyone, retryCutoff, limit);
+    }
+
+    private async Task GuardAsync()
+    {
+        await using var ctx = _testHelper!.GetDbContext();
+        var never = await ctx.TelegramUsers.AsNoTracking().SingleAsync(u => u.TelegramUserId == GoldenDatasetConstants.ProfileRescan.NeverScannedUserId);
+        var excluded = await ctx.TelegramUsers.AsNoTracking().SingleAsync(u => u.TelegramUserId == GoldenDatasetConstants.ProfileRescan.ExcludedNeverScannedUserId);
+        var nameOnlyRows = await ctx.ProfileScanResults.AsNoTracking()
+            .Where(r => r.UserId == GoldenDatasetConstants.ProfileRescan.NameOnlyLatestUserId).ToListAsync();
+        var fullRows = await ctx.ProfileScanResults.AsNoTracking()
+            .Where(r => r.UserId == GoldenDatasetConstants.ProfileRescan.FullScanLatestUserId).ToListAsync();
+        Assert.Multiple(() =>
+        {
+            Assert.That(never.ProfileScannedAt, Is.Null);
+            Assert.That(never.ProfileScanExcluded, Is.False, "exclusion cleared by the canonical edit");
+            Assert.That(never.IsBanned || never.IsTrusted || never.IsBot, Is.False);
+            Assert.That(excluded.ProfileScannedAt, Is.Null);
+            Assert.That(excluded.ProfileScanExcluded, Is.True);
+            Assert.That(nameOnlyRows, Has.Count.EqualTo(1));
+            Assert.That(nameOnlyRows[0].Id, Is.EqualTo(GoldenDatasetConstants.ProfileRescan.NameOnlyLatestScanId));
+            Assert.That(nameOnlyRows[0].Source, Is.EqualTo((short)ProfileScanSource.NameOnly));
+            Assert.That(fullRows, Has.Count.EqualTo(1));
+            Assert.That(fullRows[0].Source, Is.EqualTo((short)ProfileScanSource.FullScan));
+        });
+    }
+
+    [Test]
+    public async Task IncompleteScans_NeverScanned_IsSelectedUnlessExcluded()
+    {
+        await GuardAsync();
+
+        var selected = await SelectAsync(DateTimeOffset.UtcNow, limit: 3);
+
+        Assert.That(selected, Does.Contain(GoldenDatasetConstants.ProfileRescan.NeverScannedUserId));
+        Assert.That(selected, Does.Not.Contain(GoldenDatasetConstants.ProfileRescan.ExcludedNeverScannedUserId));
+    }
+
+    [Test]
+    public async Task IncompleteScans_NameOnlyLatest_RespectsRetryLimitBoundary()
+    {
+        await GuardAsync();
+        var userId = GoldenDatasetConstants.ProfileRescan.NameOnlyLatestUserId;
+
+        Assert.That(await SelectAsync(DateTimeOffset.UtcNow, limit: 2), Does.Contain(userId), "1 NameOnly row < limit 2");
+        Assert.That(await SelectAsync(DateTimeOffset.UtcNow, limit: 1), Does.Not.Contain(userId), "1 NameOnly row = limit 1");
+    }
+
+    [Test]
+    public async Task IncompleteScans_NameOnlyLatest_WaitsForRescanAfter()
+    {
+        await GuardAsync();
+        await using var ctx = _testHelper!.GetDbContext();
+        var scannedAt = (await ctx.TelegramUsers.AsNoTracking()
+            .SingleAsync(u => u.TelegramUserId == GoldenDatasetConstants.ProfileRescan.NameOnlyLatestUserId)).ProfileScannedAt!.Value;
+
+        var selected = await SelectAsync(scannedAt.AddMinutes(-1), limit: 3);
+
+        Assert.That(selected, Does.Not.Contain(GoldenDatasetConstants.ProfileRescan.NameOnlyLatestUserId));
+    }
+
+    [Test]
+    public async Task IncompleteScans_FullScanLatest_IsNeverSelected()
+    {
+        // A complete scan is not rescanned on a timer, however old it is.
+        await GuardAsync();
+
+        var selected = await SelectAsync(DateTimeOffset.UtcNow, limit: 3);
+
+        Assert.That(selected, Does.Not.Contain(GoldenDatasetConstants.ProfileRescan.FullScanLatestUserId));
+    }
+}
+```
+
+- [ ] **Step 3: Run to verify they fail**
+
+Run: `dotnet test TelegramGroupsAdmin.UnitTests --filter "FullyQualifiedName~ProfileRescanJobTests"`
+Expected: build error: `NameOnlyRetryLimit` does not exist; no `GetEligibleUsersForRescanAsync` overload takes 4 arguments; no `ProfileRescanJob` constructor takes 6 arguments.
+
+- [ ] **Step 4: Implement the setting, the selection and the job**
+
+`ProfileRescanSettings.cs`:
+
+```csharp
+/// <summary>
+/// Settings for Profile Rescan job.
+/// Retries incomplete profile scans: users never scanned, and users whose latest scan could only
+/// read the name. Fully scanned users are not rescanned on a timer.
+/// </summary>
+public record ProfileRescanSettings
+{
+    /// <summary>
+    /// Maximum number of users to scan per batch (default: 100).
+    /// </summary>
+    public int BatchSize { get; init; } = 100;
+
+    /// <summary>
+    /// Wait before an incomplete scan is retried: only users last scanned longer ago than this.
+    /// Friendly duration format: "1h", "2d", "1w", "1M".
+    /// Parsed via TimeSpanUtilities.TryParseDuration.
+    /// </summary>
+    public string RescanAfter { get; init; } = "1w";
+
+    /// <summary>
+    /// Stop retrying a user once this many name-only scans were recorded since their last full scan
+    /// (default: 3). The latest name-only verdict then stands until the user renames or an admin rescans.
+    /// </summary>
+    public int NameOnlyRetryLimit { get; init; } = 3;
+}
+```
+
+`ITelegramUserRepository.cs`, replace the `GetEligibleUsersForRescanAsync` declaration and summary:
+
+```csharp
+    /// <summary>
+    /// User IDs whose profile scan is incomplete, for the rescan job: untrusted, unbanned, non-bot,
+    /// not excluded, and either never scanned (profile_scanned_at NULL) or last scanned before
+    /// <paramref name="retryCutoff"/> with a NameOnly latest scan row and fewer than
+    /// <paramref name="nameOnlyRetryLimit"/> NameOnly rows since their last FullScan row.
+    /// Ordered by ProfileScannedAt ASC (NULLS FIRST = never-scanned users first).
+    /// </summary>
+    Task<List<long>> GetEligibleUsersForRescanAsync(
+        int batchSize, DateTimeOffset retryCutoff, int nameOnlyRetryLimit, CancellationToken cancellationToken = default);
+```
+
+`TelegramUserRepository.cs`, replace the method:
+
+```csharp
+    public async Task<List<long>> GetEligibleUsersForRescanAsync(
+        int batchSize, DateTimeOffset retryCutoff, int nameOnlyRetryLimit, CancellationToken cancellationToken = default)
+    {
+        const short nameOnly = (short)ProfileScanSource.NameOnly;
+        const short fullScan = (short)ProfileScanSource.FullScan;
+
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        return await context.TelegramUsers
+            .Where(u => !u.IsBanned && !u.IsBot && !u.IsTrusted && !u.ProfileScanExcluded)
+            .Where(u => u.ProfileScannedAt == null
+                || (u.ProfileScannedAt < retryCutoff
+                    // latest scan row only read the name
+                    && context.ProfileScanResults
+                        .Where(r => r.UserId == u.TelegramUserId)
+                        .OrderByDescending(r => r.ScannedAt).ThenByDescending(r => r.Id)
+                        .Select(r => (short?)r.Source)
+                        .FirstOrDefault() == nameOnly
+                    // NameOnly rows with no FullScan row after them = NameOnly rows since the last full scan
+                    && context.ProfileScanResults.Count(r => r.UserId == u.TelegramUserId
+                        && r.Source == nameOnly
+                        && !context.ProfileScanResults.Any(f => f.UserId == u.TelegramUserId
+                            && f.Source == fullScan && f.ScannedAt > r.ScannedAt)) < nameOnlyRetryLimit))
+            .OrderBy(u => u.ProfileScannedAt) // NULLS FIRST is PostgreSQL default for ASC
+            .Take(batchSize)
+            .Select(u => u.TelegramUserId)
+            .ToListAsync(cancellationToken);
+    }
+```
+
+(add `using TelegramGroupsAdmin.Core.Models;` if not already imported)
+
+`ProfileRescanJob.cs`:
+- Class summary: "Periodic job that retries incomplete profile scans (never scanned, or a name-only latest scan under the retry limit). Every scan falls back to name-only, so the job runs with or without a User API session."
+- Remove the `ITelegramSessionManager sessionManager` constructor parameter and the "Check User API availability first" block.
+- Read the limit and pass it: after `var cutoff = …;` keep the log line, adding `nameOnlyRetryLimit={RetryLimit}` / `settings.NameOnlyRetryLimit`, and call `await userRepository.GetEligibleUsersForRescanAsync(batchSize, cutoff, settings.NameOnlyRetryLimit, cancellationToken);`.
+- Replace the loop body's abort logic so a skipped scan never stops the batch:
+
+```csharp
+            var scanned = 0;
+            var skipped = 0;
+            foreach (var user in users)
+            {
+                try
+                {
+                    // Look up the user's most recently active chat for alert/notification targeting
+                    var chat = await userRepository.GetFirstChatForUserAsync(user.Id, cancellationToken);
+
+                    var result = await profileScanService.ScanUserProfileAsync(
+                        user,
+                        triggeringChat: chat,
+                        cancellationToken);
+
+                    // A name-only scan counts as scanned; a skip reason means nothing was written.
+                    if (result.SkipReason is null)
+                        scanned++;
+                    else
+                        skipped++;
+
+                    // Throttle to avoid Telegram FLOOD_WAIT rate limits
+                    await Task.Delay(1000, cancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Profile rescan: failed to scan user {UserId}, continuing batch", user.Id);
+                }
+            }
+
+            logger.LogInformation("Profile rescan: completed {Scanned}/{Total} users ({Skipped} skipped)",
+                scanned, userIds.Count, skipped);
+            success = true;
+```
+
+(remove the `aborted` variable and its log branch; drop `using TelegramGroupsAdmin.Telegram.Services.UserApi;` only if `IProfileScanService` is imported elsewhere — it lives in that namespace, so the using stays.)
+
+`BackgroundJobs.razor`:
+- In the ProfileRescan dialog section, after the Re-Scan After field:
+
+```razor
+                    <MudNumericField @bind-Value="_editProfileRescanNameOnlyRetryLimit"
+                                     Label="Name-only retry limit"
+                                     Variant="Variant.Outlined"
+                                     Min="1" Max="20"
+                                     HelperText="Stop retrying a user after this many name-only scans since their last full scan (default 3)" />
+```
+
+- Change the Re-Scan After `HelperText` to "Wait before retrying an incomplete scan. e.g., 1d, 3d, 1w, 2w".
+- State: `private int _editProfileRescanNameOnlyRetryLimit = 3;` next to the other two fields.
+- Load: `_editProfileRescanNameOnlyRetryLimit = settings.NameOnlyRetryLimit;` after `_editProfileRescanAfter = settings.RescanAfter;`.
+- Save: add `NameOnlyRetryLimit = _editProfileRescanNameOnlyRetryLimit` to the `new ProfileRescanSettings { … }` initializer.
+
+- [ ] **Step 5: Edit the canonical anchors and pin them**
+
+```bash
+python3 - <<'PY'
+users = "TelegramGroupsAdmin.Testing.Golden/SQL/canonical/02_telegram_users.sql"
+lines = open(users, encoding="utf-8").read().split("\n")
+hits = [i for i, l in enumerate(lines) if "VALUES (9963580010331," in l]
+assert len(hits) == 1
+old_tail = "NULL, NULL, true, NULL, NULL, NULL, 0, NULL);"
+assert lines[hits[0]].endswith(old_tail), lines[hits[0]][-60:]
+lines[hits[0]] = lines[hits[0]][:-len(old_tail)] + "NULL, NULL, false, NULL, NULL, NULL, 0, NULL);"
+open(users, "w", encoding="utf-8").write("\n".join(lines))
+
+scans = "TelegramGroupsAdmin.Testing.Golden/SQL/canonical/23_profile_scan_results.sql"
+old_cols = "INSERT INTO profile_scan_results (id, user_id, scanned_at, score, outcome, rule_score, ai_score, ai_reason, ai_signals) VALUES ("
+new_cols = "INSERT INTO profile_scan_results (id, user_id, scanned_at, score, outcome, rule_score, ai_score, ai_reason, ai_signals, source) VALUES ("
+lines = open(scans, encoding="utf-8").read().split("\n")
+hits = [i for i, l in enumerate(lines) if l.startswith(old_cols + "528, 9758118926756,")]
+assert len(hits) == 1
+assert lines[hits[0]].endswith(");")
+lines[hits[0]] = new_cols + lines[hits[0]][len(old_cols):-2] + ", 1);"
+open(scans, "w", encoding="utf-8").write("\n".join(lines))
+PY
+git diff --stat TelegramGroupsAdmin.Testing.Golden/SQL/canonical/
+```
+Expected: `2 files changed, 2 insertions(+), 2 deletions(-)`.
+
+`GoldenDatasetConstants.cs`, after the `IdentityService` class:
+
+```csharp
+    /// <summary>Anchors for the rescan job's incomplete-scan selection (#552 part 2).</summary>
+    public static class ProfileRescan
+    {
+        /// <summary>"Ferocity Opponent" (no username): untrusted, unbanned, non-bot, never scanned; profile_scan_excluded cleared (canonical edit 2026-10-05; it had been set by the old unresolvable auto-exclusion, read as an admin re-including the user).</summary>
+        public const long NeverScannedUserId = 9963580010331;
+        /// <summary>"Preflight Silk" (no username): untrusted, unbanned, non-bot, never scanned, profile_scan_excluded = true. Read-only.</summary>
+        public const long ExcludedNeverScannedUserId = 9434053902837;
+        /// <summary>@unreadbackspin: untrusted, unbanned; its only scan row 528 (score 1.2, AI fields NULL) has source = NameOnly (canonical edit 2026-10-05).</summary>
+        public const long NameOnlyLatestUserId = 9758118926756;
+        /// <summary>@unreadbackspin's only scan row, flag-edited to source = 1 (NameOnly) (canonical edit 2026-10-05).</summary>
+        public const long NameOnlyLatestScanId = 528;
+        /// <summary>@parkingsturdily: untrusted, unbanned; its only scan row 533 is a FullScan from 2026-04-30. Read-only.</summary>
+        public const long FullScanLatestUserId = 9922735795237;
+    }
+```
+
+`TelegramGroupsAdmin.IntegrationTests/CLAUDE.md`, after the "User identity service anchors" section:
+
+```markdown
+### Rescan job anchors (canonical edit 2026-10-05)
+Anchors are in code as `GoldenDatasetConstants.ProfileRescan` (#552 part 2). `IncompleteScanSelectionTests` reads each back first and passes the user count as the batch size.
+
+| Constant | Anchor | Shape |
+|---|---|---|
+| `NeverScannedUserId` | 9963580010331 "Ferocity Opponent" | never scanned; **edited:** `profile_scan_excluded` true → false (every never-scanned eligible user in canonical had been auto-excluded by the old unresolvable rule) |
+| `ExcludedNeverScannedUserId` | 9434053902837 "Preflight Silk" | never scanned, excluded. Read-only |
+| `NameOnlyLatestUserId` / `NameOnlyLatestScanId` | 9758118926756 @unreadbackspin, row 528 | one scan row, **edited:** `source` 0 → 1 (NameOnly). Retry-limit boundary: limit 2 selects, limit 1 does not |
+| `FullScanLatestUserId` | 9922735795237 @parkingsturdily, row 533 | one FullScan row from 2026-04-30; never selected however old. Read-only |
+
+Use when: a test needs the job's incomplete-scan selection. Every other eligible canonical user has at most one scan row, so a mixed NameOnly / FullScan history is not available without an approved import.
+```
+
+- [ ] **Step 6: Run to verify they pass**
+
+Run: `dotnet build TelegramGroupsAdmin.sln && dotnet test TelegramGroupsAdmin.UnitTests --filter "FullyQualifiedName~ProfileRescanJobTests" && dotnet test TelegramGroupsAdmin.IntegrationTests --filter "FullyQualifiedName~IncompleteScanSelectionTests|FullyQualifiedName~TelegramUserRepositoryTests|FullyQualifiedName~LoadCanonicalAsyncTests"`
+Expected: 0 warnings; PASS.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add TelegramGroupsAdmin.Core/Models/BackgroundJobSettings/ProfileRescanSettings.cs TelegramGroupsAdmin.Telegram/Repositories TelegramGroupsAdmin.BackgroundJobs/Jobs/ProfileRescanJob.cs TelegramGroupsAdmin/Components/Shared/Settings/BackgroundJobs.razor TelegramGroupsAdmin.Testing.Golden TelegramGroupsAdmin.IntegrationTests TelegramGroupsAdmin.UnitTests/BackgroundJobs/Jobs/ProfileRescanJobTests.cs
+git commit -m "feat(profile-scan): the rescan job retries incomplete scans up to a name-only limit"
+```
+
+---
+
+### Task 8: Integration — a name-only scan writes its row
 
 **Files:**
 - Modify: `TelegramGroupsAdmin.Testing.Golden/GoldenDatasetConstants.cs` (new nested class after `IdentityService`)
@@ -2073,7 +2880,7 @@ git commit -m "feat(profile-scan): fall back to a name-only scan when the profil
 - Test: `TelegramGroupsAdmin.IntegrationTests/Telegram/Services/NameOnlyScanTests.cs` (create)
 
 **Interfaces:**
-- Consumes: everything from Tasks 1–5.
+- Consumes: everything from Tasks 1–7.
 - Produces: `GoldenDatasetConstants.FlaggedNames.NameOnlyScanUserId` (`9333810782137`).
 
 - [ ] **Step 1: Pin the anchor and write the failing test**
@@ -2124,7 +2931,7 @@ using TelegramGroupsAdmin.Telegram.Services.UserApi;
 namespace TelegramGroupsAdmin.IntegrationTests.Telegram.Services;
 
 /// <summary>
-/// A gate-admitted scan that finds no User API session scores the name alone. Real scan service,
+/// A scan that finds no User API session scores the name alone. Real scan service,
 /// scoring engine (prompt building and parsing), repositories and identity service on canonical
 /// data; only the Telegram session manager and the AI provider are faked.
 ///
@@ -2198,7 +3005,7 @@ public class NameOnlyScanTests
         NullLogger<ProfileScanService>.Instance);
 
     [Test]
-    public async Task NoSession_GateAdmittedScan_WritesNameOnlyRowAndUpdatesUser()
+    public async Task NoSession_Scan_WritesNameOnlyRowAndUpdatesUser()
     {
         await using var ctx = _testHelper!.GetDbContext();
         var before = await ctx.TelegramUsers.AsNoTracking().SingleAsync(u => u.TelegramUserId == UserId);
@@ -2218,7 +3025,7 @@ public class NameOnlyScanTests
         var start = DateTimeOffset.UtcNow;
 
         var result = await NewScanService().ScanUserProfileAsync(
-            identity, ChatIdentity.FromId(chatId), CancellationToken.None, nameOnlyFallback: true);
+            identity, ChatIdentity.FromId(chatId), CancellationToken.None);
 
         var row = await ctx.ProfileScanResults.AsNoTracking().SingleAsync(r => r.UserId == UserId);
         var after = await ctx.TelegramUsers.AsNoTracking().SingleAsync(u => u.TelegramUserId == UserId);
@@ -2248,14 +3055,14 @@ public class NameOnlyScanTests
 - [ ] **Step 2: Run to verify**
 
 Run: `dotnet test TelegramGroupsAdmin.IntegrationTests --filter "FullyQualifiedName~NameOnlyScanTests"`
-Expected: PASS (the behaviour landed in Tasks 1–5; this pins it end to end). If it fails, fix the production code, never the assertion; if the anchor's guards fail, STOP and report.
+Expected: PASS (the behaviour landed in Tasks 1–7; this pins it end to end). If it fails, fix the production code, never the assertion; if the anchor's guards fail, STOP and report.
 
 - [ ] **Step 3: Document the anchor**
 
 `TelegramGroupsAdmin.IntegrationTests/CLAUDE.md`, after the "User identity service anchors" section:
 
 ```markdown
-### Flagged name anchors (canonical edit 2026-10-03)
+### Flagged name anchors (canonical edit 2026-10-05)
 Anchors are in code as `GoldenDatasetConstants.FlaggedNames` (#552 part 2). Tests read each anchor's flags back first.
 
 | Constant | Anchor | Shape |
@@ -2274,7 +3081,7 @@ git commit -m "test(profile-scan): pin the name-only scan row on canonical data"
 
 ---
 
-### Task 7: Mask only while banned — verdict inputs in the views and the mapper
+### Task 9: Mask only while banned — verdict inputs in the views and the mapper
 
 **Files:**
 - Modify: `TelegramGroupsAdmin.Data/Migrations/LegacyEnrichedViewSql.cs` (add `EnrichedMessagesV2`, `EnrichedReportsV2`)
@@ -2866,10 +3673,10 @@ git commit -m "feat(identity): mask a flagged name only while the user is banned
 
 ---
 
-### Task 8: Canonical promotional anchors and masking end to end
+### Task 10: Canonical promotional anchors and masking end to end
 
 **Files:**
-- Modify: `TelegramGroupsAdmin.Testing.Golden/SQL/canonical/23_profile_scan_results.sql` (rows 526, 531)
+- Modify: `TelegramGroupsAdmin.Testing.Golden/SQL/canonical/23_profile_scan_results.sql` (row 526 flag-edit; one imported prod row for @Adexfunnel)
 - Modify: `TelegramGroupsAdmin.Testing.Golden/GoldenDatasetConstants.cs` (`FlaggedNames`)
 - Modify: `TelegramGroupsAdmin.IntegrationTests/CLAUDE.md` (flagged-name table; table-count row 23)
 - Modify: `TelegramGroupsAdmin/TelegramGroupsAdmin.csproj:76-81` (`InternalsVisibleTo`)
@@ -2877,29 +3684,31 @@ git commit -m "feat(identity): mask a flagged name only while the user is banned
 - Test: `TelegramGroupsAdmin.IntegrationTests/Telegram/Repositories/UserIdentitiesViewTests.cs`
 
 **Interfaces:**
-- Consumes: Task 7's view columns and verdict rule.
-- Produces: `GoldenDatasetConstants.FlaggedNames.BannedPromotionalUserId` (`9143878698845`), `BannedPromotionalScanId` (`531`), `UnbannedPromotionalUserId` (`9213195802818`), `UnbannedPromotionalScanId` (`526`).
+- Consumes: Task 9's view columns and verdict rule.
+- Produces: `GoldenDatasetConstants.FlaggedNames.BannedPromotionalUserId` (`9635655270997`), `UnbannedPromotionalUserId` (`9213195802818`), `UnbannedPromotionalScanId` (`526`).
+
+**Precondition (maintainer-supplied, approved import):** before this task starts, the maintainer exports @Adexfunnel's (9635655270997) real `profile_scan_results` row from prod — the full scan behind profile-scan alert #178 (2026-04-24 ~22:42:30 UTC, score 2.8, outcome 1 = HeldForReview) — as one `INSERT INTO profile_scan_results (id, user_id, scanned_at, score, outcome, rule_score, ai_score, ai_reason, ai_signals, ai_explicit_display_text) VALUES (…);` line with prod's values verbatim (banned spammer, so no lorem). If no such prod row exists, or its id collides with a canonical row (524–534), STOP and report; never write the row by hand.
 
 - [ ] **Step 1: Confirm the anchors are unreferenced and have the claimed shape**
 
 ```bash
-for id in 9143878698845 9213195802818; do grep -rln $id TelegramGroupsAdmin.*Tests TelegramGroupsAdmin.Testing.Golden/*.cs docs; done
-grep -c "9143878698845\|9213195802818" TelegramGroupsAdmin.Testing.Golden/SQL/canonical/23_profile_scan_results.sql
+for id in 9635655270997 9213195802818; do grep -rln $id TelegramGroupsAdmin.*Tests TelegramGroupsAdmin.Testing.Golden/*.cs docs; done
+grep -c "9635655270997" TelegramGroupsAdmin.Testing.Golden/SQL/canonical/23_profile_scan_results.sql
+grep -c "9213195802818" TelegramGroupsAdmin.Testing.Golden/SQL/canonical/23_profile_scan_results.sql
+grep "VALUES (9635655270997," TelegramGroupsAdmin.Testing.Golden/SQL/canonical/02_telegram_users.sql | cut -c560-
 ```
-Expected: only the spec and this plan reference either id; the count is `2` (one scan row each: 531 and 526). `02_telegram_users.sql` shows 9143878698845 `is_banned = true`, `is_trusted = false`, and 9213195802818 `is_banned = false`, `is_trusted = false`. If any of this differs, STOP and report.
+Expected: only the spec (9213195802818) and this plan reference either id; counts `0` (@Adexfunnel has no canonical scan row yet) and `1` (row 526). @Adexfunnel ("Adexfunnel", no last name) is `is_banned = true`, `is_trusted = false`, `profile_scan_score` 2.8, scanned 2026-04-24 22:42:30, and report 178 (type 3, `action_taken = 'ban'`) is its profile-scan alert; 9213195802818 is `is_banned = false`, `is_trusted = false`. If any of this differs, STOP and report.
 
 - [ ] **Step 2: Write the failing tests**
 
 `GoldenDatasetConstants.FlaggedNames`, add:
 
 ```csharp
-        /// <summary>@LisoBran "Liselotte Brandt": banned, not trusted; only scan row 531 (score 0.2, clean, AI fields filled in) has ai_promotional_display_text = true (canonical edit 2026-10-03). Read-only.</summary>
-        public const long BannedPromotionalUserId = 9143878698845;
-        /// <summary>@LisoBran's only scan row, flag-edited to ai_promotional_display_text = true (canonical edit 2026-10-03).</summary>
-        public const long BannedPromotionalScanId = 531;
-        /// <summary>@splendorfraying "Stargazer Snippet": not banned, not trusted; only scan row 526 (score 0.0) has ai_promotional_display_text = true (canonical edit 2026-10-03). Read-only.</summary>
+        /// <summary>@Adexfunnel "Adexfunnel": a name that advertises ad / marketing funnels. Held for review by its profile scan (score 2.8, alert #178), then banned by an admin. Its only scan row is the real prod scan, imported with ai_promotional_display_text = true (canonical edit 2026-10-05; the column did not exist in prod). Read-only.</summary>
+        public const long BannedPromotionalUserId = 9635655270997;
+        /// <summary>@splendorfraying "Stargazer Snippet": not banned, not trusted; only scan row 526 (score 0.0) has ai_promotional_display_text = true (canonical edit 2026-10-05). Read-only.</summary>
         public const long UnbannedPromotionalUserId = 9213195802818;
-        /// <summary>@splendorfraying's only scan row, flag-edited to ai_promotional_display_text = true (canonical edit 2026-10-03).</summary>
+        /// <summary>@splendorfraying's only scan row, flag-edited to ai_promotional_display_text = true (canonical edit 2026-10-05).</summary>
         public const long UnbannedPromotionalScanId = 526;
 ```
 
@@ -2951,10 +3760,10 @@ namespace TelegramGroupsAdmin.IntegrationTests.Telegram.Services;
 /// the Telegram transports and the notification audience lookups are faked.
 ///
 /// Canonical anchors (flags read back first in every test):
-/// - <see cref="GoldenDatasetConstants.FlaggedNames.BannedPromotionalUserId"/> (@LisoBran): banned,
-///   only scan row 531 promotional (canonical edit 2026-10-03).
+/// - <see cref="GoldenDatasetConstants.FlaggedNames.BannedPromotionalUserId"/> (@Adexfunnel): banned after
+///   profile-scan alert #178; only scan row is the imported prod scan, promotional (canonical edit 2026-10-05).
 /// - <see cref="GoldenDatasetConstants.FlaggedNames.UnbannedPromotionalUserId"/> (@splendorfraying):
-///   not banned, only scan row 526 promotional (canonical edit 2026-10-03).
+///   not banned, only scan row 526 promotional (canonical edit 2026-10-05).
 /// - <see cref="GoldenDatasetConstants.IdentityService.ScannedTwiceExplicitUserId"/> (@bagging_armado):
 ///   banned, latest row 534 explicit (read-only).
 /// - Chat: Workshop Alumni (no welcome_config, so the global row applies; deliverable DM subscriber).
@@ -3054,7 +3863,8 @@ public class PromotionalNameMaskingTests
         _testHelper?.Dispose();
     }
 
-    private async Task GuardAnchorAsync(long userId, long? expectedScanId, bool isExplicit, bool isPromotional, bool isBanned)
+    private async Task GuardAnchorAsync(long userId, long? expectedScanId, bool isExplicit, bool isPromotional, bool isBanned,
+        decimal? expectedScore = null, ProfileScanOutcome? expectedOutcome = null)
     {
         await using var ctx = _testHelper!.GetDbContext();
         var latest = await ctx.ProfileScanResults.AsNoTracking()
@@ -3066,6 +3876,10 @@ public class PromotionalNameMaskingTests
         {
             if (expectedScanId is { } scanId)
                 Assert.That(latest.Id, Is.EqualTo(scanId), "anchor's latest scan row");
+            if (expectedScore is { } score)
+                Assert.That(latest.Score, Is.EqualTo(score), "anchor's scan score");
+            if (expectedOutcome is { } outcome)
+                Assert.That(latest.Outcome, Is.EqualTo((int)outcome), "anchor's scan outcome");
             Assert.That(latest.AiExplicitDisplayText, Is.EqualTo(isExplicit), "explicit flag");
             Assert.That(latest.AiPromotionalDisplayText, Is.EqualTo(isPromotional), "promotional flag");
             Assert.That(user.IsBanned, Is.EqualTo(isBanned), "ban state");
@@ -3094,8 +3908,9 @@ public class PromotionalNameMaskingTests
     [Test]
     public async Task BannedPromotionalUser_WelcomeMessageInGroup_ShowsSpamLabel()
     {
-        await GuardAnchorAsync(BannedPromotionalUserId, GoldenDatasetConstants.FlaggedNames.BannedPromotionalScanId,
-            isExplicit: false, isPromotional: true, isBanned: true);
+        await GuardAnchorAsync(BannedPromotionalUserId, expectedScanId: null,
+            isExplicit: false, isPromotional: true, isBanned: true,
+            expectedScore: 2.8m, expectedOutcome: ProfileScanOutcome.HeldForReview);
         var (identity, masking, chatName, config) = await ResolveForChatAsync(BannedPromotionalUserId);
 
         var message = WelcomeMessageBuilder.FormatWelcomeMessage(config, identity, chatName, masking);
@@ -3112,8 +3927,9 @@ public class PromotionalNameMaskingTests
     [Test]
     public async Task BannedPromotionalUser_BanCelebrationCaptionAndSubscriberCopy_ShowSpamLabel()
     {
-        await GuardAnchorAsync(BannedPromotionalUserId, GoldenDatasetConstants.FlaggedNames.BannedPromotionalScanId,
-            isExplicit: false, isPromotional: true, isBanned: true);
+        await GuardAnchorAsync(BannedPromotionalUserId, expectedScanId: null,
+            isExplicit: false, isPromotional: true, isBanned: true,
+            expectedScore: 2.8m, expectedOutcome: ProfileScanOutcome.HeldForReview);
         using var scope = _serviceProvider!.CreateScope();
         Assert.That(await scope.ServiceProvider.GetRequiredService<IBanCelebrationSubscriberRepository>()
             .HasDeliverableSubscribersAsync(ChatId), Is.True, "Workshop Alumni has a deliverable DM subscriber");
@@ -3134,8 +3950,9 @@ public class PromotionalNameMaskingTests
     [Test]
     public async Task BannedPromotionalUser_AdminNotificationDm_ShowsRealName()
     {
-        await GuardAnchorAsync(BannedPromotionalUserId, GoldenDatasetConstants.FlaggedNames.BannedPromotionalScanId,
-            isExplicit: false, isPromotional: true, isBanned: true);
+        await GuardAnchorAsync(BannedPromotionalUserId, expectedScanId: null,
+            isExplicit: false, isPromotional: true, isBanned: true,
+            expectedScore: 2.8m, expectedOutcome: ProfileScanOutcome.HeldForReview);
         using var scope = _serviceProvider!.CreateScope();
         var identity = await scope.ServiceProvider.GetRequiredService<IUserIdentityService>()
             .ResolveAsync(BannedPromotionalUserId, CancellationToken.None);
@@ -3224,9 +4041,11 @@ public class PromotionalNameMaskingTests
 - [ ] **Step 3: Run to verify they fail**
 
 Run: `dotnet test TelegramGroupsAdmin.IntegrationTests --filter "FullyQualifiedName~PromotionalNameMaskingTests|FullyQualifiedName~UserIdentitiesViewTests"`
-Expected: the promotional tests FAIL on their guards ("promotional flag": expected True but was False); `BannedExplicitUser_WelcomeMessageInGroup_ShowsExplicitLabel` and the existing view tests PASS.
+Expected: the @Adexfunnel tests FAIL (no scan row: `FirstAsync` throws "Sequence contains no elements"), the @splendorfraying tests FAIL on their guard ("promotional flag": expected True but was False); `BannedExplicitUser_WelcomeMessageInGroup_ShowsExplicitLabel` and the existing view tests PASS.
 
-- [ ] **Step 4: Flag-edit the canonical rows**
+- [ ] **Step 4: Edit and import the canonical rows**
+
+Flag-edit row 526:
 
 ```bash
 python3 - <<'EOF'
@@ -3234,25 +4053,34 @@ path = "TelegramGroupsAdmin.Testing.Golden/SQL/canonical/23_profile_scan_results
 old_cols = "INSERT INTO profile_scan_results (id, user_id, scanned_at, score, outcome, rule_score, ai_score, ai_reason, ai_signals) VALUES ("
 new_cols = "INSERT INTO profile_scan_results (id, user_id, scanned_at, score, outcome, rule_score, ai_score, ai_reason, ai_signals, ai_promotional_display_text) VALUES ("
 lines = open(path, encoding="utf-8").read().split("\n")
-edited = 0
-for i, line in enumerate(lines):
-    if line.startswith(old_cols + "531, 9143878698845,") or line.startswith(old_cols + "526, 9213195802818,"):
-        assert line.endswith(");"), line[-40:]
-        lines[i] = new_cols + line[len(old_cols):-2] + ", true);"
-        edited += 1
-assert edited == 2, edited
+hits = [i for i, l in enumerate(lines) if l.startswith(old_cols + "526, 9213195802818,")]
+assert len(hits) == 1
+assert lines[hits[0]].endswith(");")
+lines[hits[0]] = new_cols + lines[hits[0]][len(old_cols):-2] + ", true);"
 open(path, "w", encoding="utf-8").write("\n".join(lines))
 EOF
-git diff --stat TelegramGroupsAdmin.Testing.Golden/SQL/canonical/23_profile_scan_results.sql
 ```
-Expected: `1 file changed, 2 insertions(+), 2 deletions(-)`.
+
+Append the maintainer-supplied prod row to the end of `23_profile_scan_results.sql`, preceded by a provenance comment, and add `ai_promotional_display_text` set to `true` (column list gains `, ai_promotional_display_text`, values gain `, true`; every other value stays exactly as exported):
+
+```sql
+-- canonical edit 2026-10-05 (approved addition, #552 part 2): @Adexfunnel's prod profile scan (GoldenDatasetConstants.FlaggedNames.BannedPromotionalUserId), the full scan behind profile-scan alert #178 before the admin ban. Banned spammer, so AI text is verbatim. ai_promotional_display_text set true: the column did not exist in prod, and the display name advertises ad / marketing funnels.
+```
+
+Check the result:
+
+```bash
+grep -c "9635655270997" TelegramGroupsAdmin.Testing.Golden/SQL/canonical/23_profile_scan_results.sql
+grep "9635655270997" TelegramGroupsAdmin.Testing.Golden/SQL/canonical/23_profile_scan_results.sql | grep -c ", 2.8, 1, .*, false, true);$"
+```
+Expected: `1` and `1` (one row; score 2.8, outcome 1, explicit false, promotional true).
 
 `TelegramGroupsAdmin.IntegrationTests/CLAUDE.md`:
-- Table-count row 23 becomes: `| 23 | profile_scan_results | 11 | Includes a mix of clean and flagged scans; row 534 carries an `explicit_display_text` value for the explicit-username masking tests; rows 526 and 531 carry `ai_promotional_display_text = true` (canonical edit 2026-10-03). Columns `ai_promotional_display_text` (default false) and `source` (0 = FullScan, 1 = NameOnly; every canonical row is 0). |`
+- Table-count row 23 becomes: `| 23 | profile_scan_results | 12 | Includes a mix of clean and flagged scans; row 534 carries an `explicit_display_text` value for the explicit-username masking tests; row 526 and @Adexfunnel's imported prod row carry `ai_promotional_display_text = true` (canonical edit 2026-10-05). Columns `ai_promotional_display_text` (default false) and `source` (0 = FullScan, 1 = NameOnly; only row 528 is 1, see "Rescan job anchors"). |`
 - Flagged name table gains:
 
 ```markdown
-| `BannedPromotionalUserId` / `BannedPromotionalScanId` | 9143878698845 @LisoBran, row 531 | banned, not trusted; its only scan row 531 (score 0.2, clean, AI fields filled in) **edited:** `ai_promotional_display_text = true`. `PromotionalNameMaskingTests`: spam label in group posts and the ban celebration caption + subscriber copy, real name in the admin DM |
+| `BannedPromotionalUserId` | 9635655270997 @Adexfunnel | banned by an admin after profile-scan alert #178 (score 2.8, held for review); **added:** its real prod scan row (approved import, AI text verbatim), with `ai_promotional_display_text = true`. `PromotionalNameMaskingTests`: spam label in group posts and the ban celebration caption + subscriber copy, real name in the admin DM. Report 178's `aiReason` is lorem (sanitized earlier); the scan row keeps prod's text |
 | `UnbannedPromotionalUserId` / `UnbannedPromotionalScanId` | 9213195802818 @splendorfraying, row 526 | not banned, not trusted; its only scan row 526 (score 0.0) **edited:** `ai_promotional_display_text = true`. A flagged name of a user who is not banned is shown by real name |
 ```
 
@@ -3270,7 +4098,7 @@ git commit -m "test(identity): pin promotional name masking on canonical anchors
 
 ---
 
-### Task 9: Scan history shows both flags and the source
+### Task 11: Scan history shows both flags and the source
 
 **Files:**
 - Modify: `TelegramGroupsAdmin/Components/Shared/ProfileScanHistoryDialog.razor:31-42`
@@ -3423,7 +4251,7 @@ git commit -m "feat(ui): show scan source and name flags in profile scan history
 
 ---
 
-### Task 10: Masked-username metric records the verdict
+### Task 12: Masked-username metric records the verdict
 
 **Files:**
 - Modify: `TelegramGroupsAdmin.Telegram/Metrics/PipelineMetrics.cs:58-60, 129-132`
@@ -3508,12 +4336,13 @@ git commit -m "feat(metrics): tag masked ban celebration names with their verdic
 
 ---
 
-### Task 11: User-facing wording, docs and final verification
+### Task 13: User-facing wording, docs and final verification
 
 **Files:**
 - Modify: `TelegramGroupsAdmin/Components/Shared/WelcomeSystemConfig.razor:197-199` (mask caption)
-- Modify: `TelegramGroupsAdmin/Docs/features/08-profile-scanning.md`
-- Test: `TelegramGroupsAdmin.ComponentTests/Components/WelcomeSystemConfigTests.cs` (`MaskingSwitch_CaptionExplainsScopeAndIsLinkedToTheSwitch`)
+- Modify: `TelegramGroupsAdmin/Components/Shared/UserDetailDialog.razor:154-157` (exclude checkbox label)
+- Modify: `TelegramGroupsAdmin/Docs/features/08-profile-scanning.md`, `TelegramGroupsAdmin/Docs/features/13-background-jobs.md:16`
+- Test: `TelegramGroupsAdmin.ComponentTests/Components/WelcomeSystemConfigTests.cs` (`MaskingSwitch_CaptionExplainsScopeAndIsLinkedToTheSwitch`), `TelegramGroupsAdmin.ComponentTests/Components/UserDetailDialogTests.cs` (`ShowsProfileScanSection_WhenScanned`)
 
 - [ ] **Step 1: Write the failing assertion**
 
@@ -3523,8 +4352,14 @@ In `MaskingSwitch_CaptionExplainsScopeAndIsLinkedToTheSwitch`, add after the exi
             Assert.That(caption, Does.Contain("a banned user's name"));
 ```
 
-Run: `dotnet test TelegramGroupsAdmin.ComponentTests --filter "FullyQualifiedName~MaskingSwitch_CaptionExplainsScope"`
-Expected: FAIL.
+In `UserDetailDialogTests.ShowsProfileScanSection_WhenScanned`, add inside the `WaitForAssertion`:
+
+```csharp
+            Assert.That(provider.Markup, Does.Contain("Exclude from automatic scans (renames still scan)"));
+```
+
+Run: `dotnet test TelegramGroupsAdmin.ComponentTests --filter "FullyQualifiedName~MaskingSwitch_CaptionExplainsScope|FullyQualifiedName~ShowsProfileScanSection_WhenScanned"`
+Expected: both FAIL.
 
 - [ ] **Step 2: Update the caption**
 
@@ -3534,7 +4369,9 @@ Expected: FAIL.
 What the bot posts in chats, and ban celebration DMs, show "[name removed: explicit]" or "[name removed: spam]" instead of a banned user's name flagged by earlier profile scans, even while scanning is off. Admin DMs show real names.
 ```
 
-Run: `dotnet test TelegramGroupsAdmin.ComponentTests --filter "FullyQualifiedName~WelcomeSystemConfigTests"`
+`UserDetailDialog.razor`, the exclusion checkbox `Label` becomes `"Exclude from automatic scans (renames still scan)"` (the flag is now the admin's switch only; scans never set or clear it).
+
+Run: `dotnet test TelegramGroupsAdmin.ComponentTests --filter "FullyQualifiedName~WelcomeSystemConfigTests|FullyQualifiedName~UserDetailDialogTests"`
 Expected: PASS.
 
 - [ ] **Step 3: Update `08-profile-scanning.md`**
@@ -3544,7 +4381,7 @@ Expected: PASS.
 ```markdown
 ### When the Profile Can't Be Read: Name-Only Scan
 
-If a scan the eligibility gate admitted cannot read the profile (no usable User API session, the user can't be resolved, the scan times out, or Telegram rate-limits it with `FLOOD_WAIT`), TGA scores the name alone so the user is still filtered. The name-only scan sends the same AI prompt with only the display name and username filled in and everything else marked unknown, stores a scan marked **Name only**, and acts on the score:
+If a scan cannot read the profile (no User API session at all or none usable, the user can't be resolved or their full profile can't be fetched, the scan times out, or Telegram rate-limits it with `FLOOD_WAIT`), TGA scores the name alone so the user is still filtered. Every scan path falls back this way: join, first message, renames, the rescan job and manual rescans. The name-only scan sends the same AI prompt with only the display name and username filled in and everything else marked unknown, stores a scan marked **Name only**, and acts on the score:
 
 | Score | Outcome |
 |---|---|
@@ -3552,7 +4389,22 @@ If a scan the eligibility gate admitted cannot read the profile (no usable User 
 | From the notify threshold up to the name-only ban threshold | Held for review (profile scan alert) |
 | At or above the name-only ban threshold (default 4.5) | Auto-ban |
 
-A name alone is weaker evidence than a whole profile, so it has its own, higher ban threshold. No name-only scan runs when the rule-based checks already decided, for bots, when scanning is off for the chat, when the Profile Scan AI feature is not configured, or for the periodic rescan job and manual rescans. If the AI call fails, nothing is recorded. The next scan that can read the profile replaces the name-only result.
+A name alone is weaker evidence than a whole profile, so it has its own, higher ban threshold. No name-only scan runs when the rule-based checks already decided, for bots, when scanning is off for the chat, or when the Profile Scan AI feature is not configured. If the AI call fails, nothing is recorded. The next scan that can read the profile replaces the name-only result.
+
+With profile scanning on and no User API session connected, the Profile Scan settings show a notice: full profile scans can't run, but name-only scans still run on new joiners, first messages and renames.
+
+### When Scans Run, Retries and Exclusion
+
+| Trigger | Behaviour |
+|---|---|
+| Join / first message | Scans a new or never-scanned user, or an existing user who renamed since their last scan; otherwise no scan |
+| Rename | Scans, even when the user is excluded: a rename is a change |
+| Manual rescan | Always runs, whatever the exclude flag says |
+| Profile Rescan job | Retries incomplete scans only |
+
+A successful full scan is complete: nothing rescans it automatically until the user renames or an admin runs a manual rescan. The Profile Rescan job picks untrusted, unbanned, non-bot, not-excluded users whose scan is incomplete: never scanned, or whose latest scan was name-only with fewer than the **name-only retry limit** (default 3) name-only scans since their last full scan. **Re-Scan After** is the wait before an incomplete scan is retried. Once the limit is reached, the latest name-only result stands until the user renames or an admin rescans.
+
+**Exclude from automatic scans** (User Details > Profile Scan) is your switch: the job and join / first-message scans skip the user, a rename still scans, and a manual rescan always runs. Scans never set or clear it.
 ```
 
 2. In the AI response list, replace the `explicit_display_text` bullet with:
@@ -3594,13 +4446,17 @@ A flag belongs to the account, not the chat: while the user is banned, the name 
 - **Name flag chips** -- **Explicit name** and/or **Promotional name** when the scan flagged the name
 ```
 
-6. In the per-chat settings table, add after "Admin Notify Threshold":
+6. Step 1 ("Resolve User"): replace "If all strategies fail, the user is **excluded from future rescans** to avoid repeated failed lookups." with "If all strategies fail, the scan falls back to a [name-only scan](#when-the-profile-cant-be-read-name-only-scan); the Profile Rescan job retries it up to the name-only retry limit." Step 7: delete "If the user was previously excluded from scanning (Step 1 failure), the exclusion flag is cleared on a successful scan." "How It Works": replace "All automatic triggers go through the same eligibility gate: the check is skipped for trusted users, chat admins, bots, and users explicitly excluded from scanning. The first-message trigger also skips anyone who already has a scan on record (join deliberately rescans)." with "All automatic triggers go through the same eligibility gate: trusted users, chat admins and bots are never scanned, and excluded users are scanned only after a rename (see [When Scans Run](#when-scans-run-retries-and-exclusion))." and the "Periodic rescan" bullet with "**Periodic rescan** — the Profile Rescan [background job](13-background-jobs.md), if enabled, retries incomplete scans". "Rate Limiting and Flood Protection": replace "- The user is **not excluded** from future rescans" with "- The scan falls back to a name-only scan" and delete the sentence "This prevents a temporary rate limit from permanently excluding users who should be scanned later." "Troubleshooting": the heading "**Users not being resolved (excluded after scan attempt):**" becomes "**Users not being resolved (name-only scans in their history):**", and under "**Profile scan not running:**" replace the first bullet with "- Without a User API session only name-only scans run (Settings > User API Settings)" and the last with "- Join scans run only for new, never-scanned or renamed users; check `ScanOnJoin`".
+
+7. In the per-chat settings table, add after "Admin Notify Threshold":
 
 ```markdown
 | Name-only ban threshold | 4.5 | A scan that could only read the name auto-bans at this score; below it, scores at or above the notify threshold go to review. Must be at least the notify threshold |
 ```
 
 and in the "Mask flagged names" row replace "instead of a flagged name" with "instead of a banned user's flagged name".
+
+8. `13-background-jobs.md` line 16, the Profile Rescan row's description becomes "Retries incomplete profile scans (never scanned, or name-only under the retry limit) (disabled by default)".
 
 - [ ] **Step 4: Full verification**
 
@@ -3611,13 +4467,13 @@ dotnet build TelegramGroupsAdmin.sln
 dotnet test TelegramGroupsAdmin.UnitTests
 dotnet test TelegramGroupsAdmin.ComponentTests
 dotnet test TelegramGroupsAdmin.IntegrationTests
-grep -rlnE "Welcome System|Profile Scan \\(User API\\)|Mask flagged names|Profile Scan History" TelegramGroupsAdmin.E2ETests/Tests
+grep -rlnE "Welcome System|Profile Scan \\(User API\\)|Mask flagged names|Profile Scan History|Re-Scan Settings|Exclude from automatic" TelegramGroupsAdmin.E2ETests/Tests
 ```
-Expected: build with 0 warnings; every suite PASS. The `grep` finds no E2E test that opens the Welcome System form or the scan history dialog (true at planning time), so no E2E run is needed. If it lists a test class, run only that class: `dotnet test TelegramGroupsAdmin.E2ETests --filter "FullyQualifiedName~<ClassName>"`. Never run the full E2E suite.
+Expected: build with 0 warnings; every suite PASS. The `grep` finds no E2E test that opens the Welcome System form, the job settings dialog, the scan history dialog or the user detail scan section (true at planning time), so no E2E run is needed. If it lists a test class, run only that class: `dotnet test TelegramGroupsAdmin.E2ETests --filter "FullyQualifiedName~<ClassName>"`. Never run the full E2E suite.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add TelegramGroupsAdmin/Components/Shared/WelcomeSystemConfig.razor TelegramGroupsAdmin/Docs/features/08-profile-scanning.md TelegramGroupsAdmin.ComponentTests/Components/WelcomeSystemConfigTests.cs
-git commit -m "docs(profile-scan): document name-only scans and masking while banned"
+git add TelegramGroupsAdmin/Components/Shared/WelcomeSystemConfig.razor TelegramGroupsAdmin/Components/Shared/UserDetailDialog.razor TelegramGroupsAdmin/Docs/features TelegramGroupsAdmin.ComponentTests/Components/WelcomeSystemConfigTests.cs TelegramGroupsAdmin.ComponentTests/Components/UserDetailDialogTests.cs
+git commit -m "docs(profile-scan): document name-only scans, scan triggers and masking while banned"
 ```
