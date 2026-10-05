@@ -58,35 +58,53 @@ names before implementation:
 ══════════════════════════════════════
 
 These two flags judge ONLY the visible name: the display name (first +
-last name) and the @username. A real person's name names a person. Flag
-a name when the name itself is doing something else. Judge the display
+last name) and the @username. A name that says who or what the account
+is (a person, a nickname, a farm, a shop, a studio, a podcast, a
+project) is an identity and stays clean. A name that speaks to the
+reader (sells, offers a service, solicits, recruits, lures, or points
+somewhere else) gets flagged. Judge the display
 name and the username each on their own: either one alone can set a
 flag. Judge meaning in any language or script.
 
 "explicit_display_text" — true ONLY when the name text itself reads as
-explicit sexual content:
+explicit sexual content to an ordinary reader:
 - Sexual solicitation phrases ("looking for F buddy", "DM me horny")
 - Graphic sexual terminology or explicit slurs in the name
 - Sexual roleplay handles ("sub4daddy", "kinky_milf")
 Do NOT set it for suggestive but non-explicit names ("BeachBabe92",
-"lonely_girl", "Hot Kristina"); judge those as lures below.
+"lonely_girl", "Hot Kristina"); judge those as lures below. A single
+word that is also a surname, an ordinary word or obscure slang
+("Dick", "Cox", "Wang", "Johnson") is not explicit on its own.
 
-"promotional_display_text" — true when the name advertises or recruits
-instead of naming a person. Any one of these is enough:
+"promotional_display_text" — true when the name pitches to the reader
+instead of naming someone: it sells, solicits, recruits, or offers a
+service for hire. A business, farm, homestead, shop, craft, studio,
+podcast or project used as a person's identity is NOT promotional by
+itself ("Maple Ridge Farm", "@oakhollowhomestead", "@NorthForgeKnives",
+"Pixel Studio", "@TheTrailPodcast"). Any one of these is enough:
 - Advertises a product, service, business, channel or group, including
-  clickbait ("Crypto Signals VIP", "Best Web Design", "Free — Join Now 👉"),
-  or a username that names a service, trade or ad ("@cheap_seo_ads",
-  "@lisa_capital_team", "@callcenter_pro", "@voip_deals")
-- Solicits contact, money, loans, jobs, trading or investing, including a
-  trading or finance tag attached to a name ("DM me for loans",
-  "Forex mentor – message me", "Mike_FX", "Sara Crypto Signals")
+  clickbait ("Crypto Signals VIP", "Best Web Design", "Free — Join Now 👉")
+- Describes a service for hire instead of naming anyone: a generic
+  trade or role with no person or named thing behind it ("Expert
+  Developer", "Pro Graphic Designer", "Digital Marketer"), or a name
+  built from a common spam trade even without a call to action:
+  e-commerce, SEO, marketing, growth, ads, web or app development,
+  VoIP, call center, SIP, bulk SMS, crypto or trading signals, loans or
+  funding, "supplier" or "provider" ("Ecom Expert Pro", "@cheap_seo_ads",
+  "@callcenter_pro", "@voip_deals", "Bulk Supplier", "@lisa_capital_team")
+- Solicits contact, money, loans, jobs, trading or investing ("DM me
+  for loans", "Forex mentor – message me", "Sara Crypto Signals"). A
+  trading or finance word on its own is an interest, not an offer
+  ("Mike_FX", "@btc_sam"); flag it only when the name offers something
+  (signals, team, capital, mentor, invest, VIP, profits).
 - Makes health or miracle claims ("Natural cure for diabetes")
 - Sells drugs or other contraband ("Delivery 🍁 💊")
 - Presents itself as a role or an organization instead of a person:
   support, help desk, official or staff accounts ("Admin Support",
   "Help Desk", "Official Team", "<community name> Support"). You do
   not need to know who the real admins are; judge the role words in
-  the name itself.
+  the name itself. "Official" next to a person's own name ("Official
+  Mark Hayes", "@sara_official") is a vanity tag, not a role.
 - Is a lure: romance or suggestive bait, including a name that
   advertises sexiness or availability ("Lonely Anna 💋 text me",
   "Sweet girl waiting for you", "Hot Kristina", "naughty_jess22")
@@ -116,13 +134,22 @@ Both flags may be true at once.
 ```
 
 Notes on the wording:
-- The display name and the username are judged separately; a promotional username alone sets the flag,
-  because a masked mention replaces the whole name, username included.
-- "A role or an organization instead of a person" needs no list of admins: it judges role words in the
-  name itself. Impersonating a specific admin stays with the impersonation check. This also catches
-  accounts named after the community itself ("<community name> Support", "... Alerts").
+- Identity, not pitch: a name that says who or what the account is (a person, nickname, farm,
+  homestead, shop, studio, podcast, project) stays clean; a name that speaks to the reader is flagged.
+  Community groups have many members who go by their own farm or business name.
+- Service-for-hire names from common spam trades (e-commerce, SEO/marketing/ads, web/app development,
+  VoIP/call centre/SIP/bulk SMS, crypto or trading signals, loans, "supplier"/"provider") count even
+  without a call to action.
+- A trading or finance word alone is an interest, not an offer; it counts only with an offer word
+  (signals, team, capital, mentor, invest, VIP, profits).
+- The display name and the username are judged separately; either alone can set a flag.
+- "A role instead of a person" needs no list of admins: it judges role words in the name itself.
+  Impersonating a specific admin stays with the impersonation check. "Official" next to a person's own
+  name is a vanity tag, not a role.
 - Emoji are described by what they suggest, not listed. A profession with a matching emoji stays
   clean; substance lists and selling words do not.
+- The explicit flag requires text that reads as explicit to an ordinary reader; a word that is also a
+  surname, an ordinary word or obscure slang is not explicit on its own.
 - Explicit takes precedence when both flags are true.
 
 ### Full scan
