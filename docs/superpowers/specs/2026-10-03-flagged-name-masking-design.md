@@ -161,11 +161,18 @@ flags do not change how the score is computed.
 
 ### Name-only scan
 
-When the gate admitted a scan but the full scan produced no AI verdict, the name is often the only
-thing we have. A name-only scan scores it, so the profile is still filtered before the user can act:
+When a scan runs but the full scan produces no AI verdict, the name is often the only thing we have.
+A name-only scan scores it, so the profile is still filtered before the user can act:
 
-- no User API session, or the user can't be resolved;
+- no User API session (none connected at all, or none usable for this scan): the name-only scan runs
+  directly;
+- the user can't be resolved, or their full profile can't be fetched;
 - timeout or `FLOOD_WAIT`.
+
+Every scan path falls back the same way: join, first message, rename rescans, the rescan job and the
+manual rescan. When profile scanning is on and no User API session is connected, the profile-scan
+settings show a notice: full profile scans can't run, but name-only scans still run on new joiners,
+first messages and renames.
 
 (When the rule-based score short-circuits the AI, the rules already decided the outcome; no
 name-only scan runs. Bots are not scanned; bot protection owns them.)
@@ -205,6 +212,36 @@ or channel, so the full scan's change check sees a different profile and rescore
 If the AI feature is unavailable or the call fails, nothing is written (fail open, logged as a
 warning; the exception text goes to the log only, never into a chat). Scanning disabled for a chat
 means no name-only scan either.
+
+### When scans run, retries and exclusion
+
+| Trigger | Behaviour |
+|---|---|
+| Join / first message | Scan a new or never-scanned user, or an existing user who renamed since their last scan; otherwise skip. |
+| Rename detected (part 1's rules) | Scan, even when the user is excluded: a rename is a change. |
+| Manual rescan | Always runs, whatever the exclude flag says. |
+| Rescan job | Retries incomplete scans only, to fill in missing information (below). |
+
+Every scan is a full scan that falls back to name-only. A successful full scan is complete: nothing
+rescans it automatically until the user renames (or an admin runs a manual rescan). The rescan job no
+longer rescans fully scanned users on a timer.
+
+The rescan job selects untrusted, unbanned, non-bot, not-excluded users whose scan is incomplete:
+- no scan recorded yet (every earlier attempt failed outright), or
+- the latest scan is `NameOnly` and fewer than the **name-only retry limit** `NameOnly` scans were
+  recorded since the user's last `FullScan` row.
+
+`RescanAfter` keeps its meaning as the wait before an incomplete scan is retried. The name-only retry
+limit is a setting next to the job's other settings (`ProfileRescanSettings.NameOnlyRetryLimit`,
+default 3). It is derived from `profile_scan_results` (the `NameOnly` rows since the last `FullScan`
+row), so no counter column is stored. When the limit is reached the job stops retrying; the latest
+name-only verdict stands until the user renames or an admin rescans manually.
+
+The exclude flag (`profile_scan_excluded`) is the admin's switch: "don't scan this user
+automatically unless something changes". The rescan job and join / first-message scans skip an
+excluded user; a rename still scans and a manual rescan always runs. Scans no longer set or clear the
+flag: an unresolvable user no longer excludes itself (the retry limit bounds the job instead), and a
+successful full scan no longer clears an admin's exclusion.
 
 ### How it fits part 1's rename rules
 
