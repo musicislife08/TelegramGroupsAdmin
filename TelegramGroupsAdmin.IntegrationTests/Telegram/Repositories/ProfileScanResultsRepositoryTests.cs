@@ -49,6 +49,7 @@ public class ProfileScanResultsRepositoryTests
             builder.AddConsole().SetMinimumLevel(LogLevel.Warning));
 
         services.AddScoped<IProfileScanResultsRepository, ProfileScanResultsRepository>();
+        services.AddScoped<ITelegramUserRepository, TelegramUserRepository>();
 
         _serviceProvider = services.BuildServiceProvider();
         _scope = _serviceProvider.CreateScope();
@@ -69,9 +70,10 @@ public class ProfileScanResultsRepositoryTests
         Assert.That(history, Is.Empty, "anchor must have no scan rows in canonical");
     }
 
-    [TestCase(true)]
-    [TestCase(false)]
-    public async Task InsertAsync_PersistsExplicitDisplayText(bool explicitDisplayText)
+    [TestCase(true, false, ProfileScanSource.FullScan)]
+    [TestCase(false, true, ProfileScanSource.NameOnly)]
+    [TestCase(false, false, ProfileScanSource.FullScan)]
+    public async Task InsertAsync_PersistsNameFlagsAndSource(bool explicitDisplayText, bool promotionalDisplayText, ProfileScanSource source)
     {
         await AssertUnscannedAsync();
         var record = new ProfileScanResultRecord(
@@ -84,7 +86,9 @@ public class ProfileScanResultsRepositoryTests
             AiScore: 4.7m,
             AiReason: "test reason",
             AiSignals: "test_signal",
-            ExplicitDisplayText: explicitDisplayText);
+            ExplicitDisplayText: explicitDisplayText,
+            PromotionalDisplayText: promotionalDisplayText,
+            Source: source);
 
         var insertedId = await _repository!.InsertAsync(record, CancellationToken.None);
         var history = await _repository.GetByUserIdAsync(UnscannedUserId, CancellationToken.None);
@@ -94,6 +98,59 @@ public class ProfileScanResultsRepositoryTests
         {
             Assert.That(history[0].Id, Is.EqualTo(insertedId));
             Assert.That(history[0].ExplicitDisplayText, Is.EqualTo(explicitDisplayText));
+            Assert.That(history[0].PromotionalDisplayText, Is.EqualTo(promotionalDisplayText));
+            Assert.That(history[0].Source, Is.EqualTo(source));
+        }
+    }
+
+    [Test]
+    public async Task GetByUserIdAsync_CanonicalRows_DefaultToFullScanAndNotPromotional()
+    {
+        // Rows written before the columns existed read back with the column defaults.
+        var history = await _repository!.GetByUserIdAsync(CanonicalFlaggedUserId, CancellationToken.None);
+
+        Assert.That(history, Has.Count.EqualTo(2));
+        Assert.That(history.Select(h => (h.Source, h.PromotionalDisplayText)),
+            Is.All.EqualTo((ProfileScanSource.FullScan, false)));
+    }
+
+    [Test]
+    public async Task GetLatestSourceAsync_CanonicalFullScanUser_ReturnsFullScan()
+    {
+        var source = await _repository!.GetLatestSourceAsync(CanonicalFlaggedUserId, CancellationToken.None);
+
+        Assert.That(source, Is.EqualTo(ProfileScanSource.FullScan));
+    }
+
+    [Test]
+    public async Task GetLatestSourceAsync_UnscannedUser_ReturnsNull()
+    {
+        await AssertUnscannedAsync();
+
+        var source = await _repository!.GetLatestSourceAsync(UnscannedUserId, CancellationToken.None);
+
+        Assert.That(source, Is.Null);
+    }
+
+    [Test]
+    public async Task UpdateProfileScanScoreAsync_SetsScoreAndAdvancesScannedAt_LeavesProfileFields()
+    {
+        await using var ctx = _testHelper!.GetDbContext();
+        var before = await ctx.TelegramUsers.AsNoTracking().SingleAsync(u => u.TelegramUserId == UnscannedUserId);
+        Assert.That(before.ProfileScannedAt, Is.Null, "anchor has never been scanned");
+        var users = _scope!.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
+        var start = DateTimeOffset.UtcNow;
+
+        await users.UpdateProfileScanScoreAsync(UnscannedUserId, 3.2m);
+
+        var after = await ctx.TelegramUsers.AsNoTracking().SingleAsync(u => u.TelegramUserId == UnscannedUserId);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(after.ProfileScanScore, Is.EqualTo(3.2m));
+            Assert.That(after.ProfileScannedAt, Is.GreaterThanOrEqualTo(start.AddSeconds(-1)));
+            Assert.That(after.Bio, Is.EqualTo(before.Bio));
+            Assert.That(after.ProfilePhotoId, Is.EqualTo(before.ProfilePhotoId));
+            Assert.That(after.PersonalChannelId, Is.EqualTo(before.PersonalChannelId));
         }
     }
 

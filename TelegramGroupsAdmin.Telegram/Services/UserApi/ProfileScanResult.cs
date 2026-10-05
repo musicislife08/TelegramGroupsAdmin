@@ -22,4 +22,6 @@ public record ProfileScanResult(
     string[]? AiSignalsDetected,
     bool ContainsNudity = false,
     bool ExplicitDisplayText = false,
-    string? SkipReason = null);
+    string? SkipReason = null,
+    bool PromotionalDisplayText = false,
+    ProfileScanSource Source = ProfileScanSource.FullScan);

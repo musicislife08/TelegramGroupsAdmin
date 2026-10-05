@@ -455,31 +455,7 @@ public sealed class ProfileScanService(
         if (existingUser?.ProfileScanExcluded == true)
             await userRepo.IncludeInProfileScanAsync(user.Id, ct);
 
-        // Persist scan result history
-        var scanResultsRepo = sp.GetRequiredService<IProfileScanResultsRepository>();
-        await scanResultsRepo.InsertAsync(new ProfileScanResultRecord(
-            Id: 0,
-            UserId: user.Id,
-            ScannedAt: DateTimeOffset.UtcNow,
-            Score: scoreResult.Score,
-            Outcome: scoreResult.Outcome,
-            RuleScore: scoreResult.RuleScore,
-            AiScore: scoreResult.AiScore,
-            AiReason: scoreResult.AiReason,
-            AiSignals: scoreResult.AiSignals is { Length: > 0 }
-                ? string.Join(", ", scoreResult.AiSignals) : null,
-            ExplicitDisplayText: scoreResult.ExplicitDisplayText), cancellationToken: ct);
-
-        if (scoreResult.ExplicitDisplayText)
-        {
-            var outcomeTag = scoreResult.Outcome switch
-            {
-                ProfileScanOutcome.Banned => "banned",
-                ProfileScanOutcome.HeldForReview => "held_for_review",
-                _ => "clean"
-            };
-            pipelineMetrics.RecordExplicitUsernameDetection(outcomeTag);
-        }
+        await PersistScanResultAsync(user.Id, scoreResult, ProfileScanSource.FullScan, sp, ct);
 
         var result = new ProfileScanResult(
             TelegramUserId: user.Id,
@@ -497,21 +473,52 @@ public sealed class ProfileScanService(
             AiReason: scoreResult.AiReason,
             AiSignalsDetected: scoreResult.AiSignals,
             ContainsNudity: scoreResult.ContainsNudity,
-            ExplicitDisplayText: scoreResult.ExplicitDisplayText);
+            ExplicitDisplayText: scoreResult.ExplicitDisplayText,
+            PromotionalDisplayText: scoreResult.PromotionalDisplayText);
 
         // ── Step 8: Take moderation action ──
-        // Re-resolve after Step 7 persisted the scan: the caller's identity predates this scan's
-        // verdict, so a name it just flagged would otherwise reach bot-written text unmasked.
-        if (scoreResult.Outcome is ProfileScanOutcome.Banned or ProfileScanOutcome.HeldForReview)
-        {
-            var scannedUser = await sp.GetRequiredService<IUserIdentityService>().ResolveAsync(user.Id, ct);
-            if (scoreResult.Outcome == ProfileScanOutcome.Banned)
-                await HandleBanAsync(scannedUser, triggeringChat, result, sp, ct);
-            else
-                await CreateProfileScanAlertAsync(scannedUser, triggeringChat, result, sp, ct);
-        }
+        await ActOnOutcomeAsync(user, triggeringChat, result, sp, ct);
 
         return result;
+    }
+
+    /// <summary>Writes the scan history row (both scan sources) and counts explicit names.</summary>
+    private async Task PersistScanResultAsync(
+        long userId, ScoringResult scoreResult, ProfileScanSource source, IServiceProvider sp, CancellationToken ct)
+    {
+        await sp.GetRequiredService<IProfileScanResultsRepository>().InsertAsync(new ProfileScanResultRecord(
+            Id: 0,
+            UserId: userId,
+            ScannedAt: DateTimeOffset.UtcNow,
+            Score: scoreResult.Score,
+            Outcome: scoreResult.Outcome,
+            RuleScore: scoreResult.RuleScore,
+            AiScore: scoreResult.AiScore,
+            AiReason: scoreResult.AiReason,
+            AiSignals: scoreResult.AiSignals is { Length: > 0 } ? string.Join(", ", scoreResult.AiSignals) : null,
+            ExplicitDisplayText: scoreResult.ExplicitDisplayText,
+            PromotionalDisplayText: scoreResult.PromotionalDisplayText,
+            Source: source), cancellationToken: ct);
+
+        if (scoreResult.ExplicitDisplayText)
+            pipelineMetrics.RecordExplicitUsernameDetection(OutcomeToTag(scoreResult.Outcome));
+    }
+
+    /// <summary>
+    /// Bans or raises a review alert for a scored result. Re-resolves the identity first: the
+    /// caller's copy predates this scan's row, so bot-written text would otherwise miss its verdict.
+    /// </summary>
+    private async Task ActOnOutcomeAsync(
+        UserIdentity user, ChatIdentity? triggeringChat, ProfileScanResult result, IServiceProvider sp, CancellationToken ct)
+    {
+        if (result.Outcome is not (ProfileScanOutcome.Banned or ProfileScanOutcome.HeldForReview))
+            return;
+
+        var scannedUser = await sp.GetRequiredService<IUserIdentityService>().ResolveAsync(user.Id, ct);
+        if (result.Outcome == ProfileScanOutcome.Banned)
+            await HandleBanAsync(scannedUser, triggeringChat, result, sp, ct);
+        else
+            await CreateProfileScanAlertAsync(scannedUser, triggeringChat, result, sp, ct);
     }
 
     /// <summary>

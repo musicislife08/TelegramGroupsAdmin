@@ -904,6 +904,12 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.Entity<ProfileScanResultDto>()
             .Property(p => p.AiExplicitDisplayText)
             .HasDefaultValue(false);
+        modelBuilder.Entity<ProfileScanResultDto>()
+            .Property(p => p.AiPromotionalDisplayText)
+            .HasDefaultValue(false);
+        modelBuilder.Entity<ProfileScanResultDto>()
+            .Property(p => p.Source)
+            .HasDefaultValue((short)0);
 
         // Users (web users): Set database defaults for columns added in later migrations
         modelBuilder.Entity<UserRecordDto>()

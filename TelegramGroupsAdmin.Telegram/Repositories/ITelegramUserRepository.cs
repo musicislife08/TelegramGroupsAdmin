@@ -200,4 +200,10 @@ public interface ITelegramUserRepository
     /// Used when diff detection finds no profile changes — marks the user as freshly scanned.
     /// </summary>
     Task UpdateProfileScannedAtAsync(long telegramUserId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Record a name-only scan: set ProfileScanScore and bump ProfileScannedAt + UpdatedAt.
+    /// Stored bio, channel, story and photo fields are left as they are.
+    /// </summary>
+    Task UpdateProfileScanScoreAsync(long telegramUserId, decimal score, CancellationToken cancellationToken = default);
 }

@@ -16,4 +16,6 @@ public record ProfileScanResultRecord(
     decimal AiScore,
     string? AiReason,
     string? AiSignals,
-    bool ExplicitDisplayText = false);
+    bool ExplicitDisplayText = false,
+    bool PromotionalDisplayText = false,
+    ProfileScanSource Source = ProfileScanSource.FullScan);

@@ -1359,6 +1359,19 @@ public class TelegramUserRepository : ITelegramUserRepository
                 .SetProperty(u => u.UpdatedAt, DateTimeOffset.UtcNow), cancellationToken);
     }
 
+    /// <inheritdoc />
+    public async Task UpdateProfileScanScoreAsync(long telegramUserId, decimal score, CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var now = DateTimeOffset.UtcNow;
+        await context.TelegramUsers
+            .Where(u => u.TelegramUserId == telegramUserId)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(u => u.ProfileScanScore, score)
+                .SetProperty(u => u.ProfileScannedAt, now)
+                .SetProperty(u => u.UpdatedAt, now), cancellationToken);
+    }
+
     // ============================================================================
     // Search Helpers
     // ============================================================================
