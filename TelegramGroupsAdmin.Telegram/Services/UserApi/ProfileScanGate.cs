@@ -13,7 +13,6 @@ public sealed class ProfileScanGate(
     ITelegramUserRepository userRepository,
     IUsernameHistoryRepository usernameHistory,
     IChatAdminsRepository chatAdminsRepository,
-    ITelegramSessionManager sessionManager,
     IProfileScanService profileScanService,
     PipelineMetrics pipelineMetrics,
     ILogger<ProfileScanGate> logger) : IProfileScanGate
@@ -39,12 +38,15 @@ public sealed class ProfileScanGate(
             _ => false
         };
 
-        // A null row means the user is not yet tracked: not trusted, never
-        // scanned, so eligible. This is the common case for FirstMessage.
-        // Read lazily: the trigger_disabled skip below fires on nearly every
-        // group message and must stay free of queries.
+        // A null row means the user is not yet tracked: not trusted, never scanned, so eligible.
+        // Read lazily: the trigger_disabled skip below fires on nearly every group message and must
+        // stay free of queries.
         Models.TelegramUser? existingUser = null;
         var userLoaded = false;
+
+        // The rename trigger is itself a rename. A join or first message counts as one when a rename
+        // was recorded after the last scan (joins record renames without scanning).
+        var renamed = trigger == ProfileScanTrigger.ProfileChange;
 
         // A join records a rename without scanning (nothing slow may run before
         // the joiner is muted). With ScanOnJoin off, a chat that scans on profile
@@ -53,8 +55,9 @@ public sealed class ProfileScanGate(
         {
             existingUser = await userRepository.GetByTelegramIdAsync(user.Id, cancellationToken: ct);
             userLoaded = true;
-            triggerEnabled = existingUser is not null
+            renamed = existingUser is not null
                 && await usernameHistory.HasChangeSinceAsync(user.Id, existingUser.ProfileScannedAt, ct);
+            triggerEnabled = renamed;
         }
 
         if (!triggerEnabled)
@@ -62,7 +65,7 @@ public sealed class ProfileScanGate(
             // Not recorded via Skip(): in the shipping configuration
             // (ScanOnFirstMessage off) this fires on nearly every group
             // message, which would drown the genuinely interesting skip
-            // reasons (dedup, no_session, excluded, ...) on dashboards.
+            // reasons on dashboards.
             logger.LogDebug(
                 "Profile scan gate skipped {User} for trigger {Trigger}: trigger_disabled",
                 user.ToLogDebug(), trigger);
@@ -89,19 +92,27 @@ public sealed class ProfileScanGate(
         if (existingUser?.IsBot == true)
             return Skip("bot", user, trigger);
 
-        if (existingUser?.ProfileScanExcluded == true)
+        // Join / first message scan a new or never-scanned user, or one who renamed since the last
+        // scan. A scanned user who has not renamed is not scanned again (the rescan job retries
+        // incomplete scans).
+        if (trigger is ProfileScanTrigger.Join or ProfileScanTrigger.FirstMessage
+            && existingUser?.ProfileScannedAt is { } lastScan)
+        {
+            renamed = renamed || await usernameHistory.HasChangeSinceAsync(user.Id, lastScan, ct);
+            if (!renamed)
+                return Skip("already_scanned", user, trigger);
+        }
+
+        // The exclude flag is the admin's "don't scan automatically unless something changes":
+        // a rename is a change.
+        if (existingUser?.ProfileScanExcluded == true && !renamed)
             return Skip("excluded", user, trigger);
-
-        if (trigger == ProfileScanTrigger.FirstMessage && existingUser?.ProfileScannedAt is not null)
-            return Skip("already_scanned", user, trigger);
-
-        if (!await sessionManager.HasAnyActiveSessionAsync(ct: ct))
-            return Skip("no_session", user, trigger);
 
         logger.LogDebug(
             "Profile scan gate admitted {User} for trigger {Trigger}",
             user.ToLogDebug(), trigger);
 
+        // No session check: without a usable User API session the service scores the name alone.
         return await profileScanService.ScanUserProfileAsync(user, chat, ct, forceRescan);
     }
 

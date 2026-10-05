@@ -3,9 +3,10 @@ using TelegramGroupsAdmin.Core.Models;
 namespace TelegramGroupsAdmin.Telegram.Services.UserApi;
 
 /// <summary>
-/// Single owner of the profile scan eligibility decision, shared by every
-/// automatic trigger. Admin-initiated rescans (UI, bulk rescan job) call
-/// IProfileScanService directly and intentionally bypass this gate.
+/// Single owner of the profile scan eligibility decision, shared by every automatic trigger:
+/// join and first message scan a new, never-scanned or renamed user; a rename scans even an
+/// excluded user. Admin-initiated rescans (UI) and the rescan job call IProfileScanService
+/// directly and intentionally bypass this gate.
 /// </summary>
 public interface IProfileScanGate
 {

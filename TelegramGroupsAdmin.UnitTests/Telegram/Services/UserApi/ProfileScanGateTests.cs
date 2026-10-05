@@ -25,9 +25,6 @@ public class ProfileScanGateTests
     private ITelegramUserRepository _userRepository = null!;
     private IUsernameHistoryRepository _usernameHistory = null!;
     private IChatAdminsRepository _chatAdminsRepository = null!;
-#pragma warning disable NUnit1032 // Mock doesn't need disposal
-    private ITelegramSessionManager _sessionManager = null!;
-#pragma warning restore NUnit1032
     private IProfileScanService _profileScanService = null!;
     private ProfileScanGate _gate = null!;
 
@@ -38,12 +35,10 @@ public class ProfileScanGateTests
         _userRepository = Substitute.For<ITelegramUserRepository>();
         _usernameHistory = Substitute.For<IUsernameHistoryRepository>();
         _chatAdminsRepository = Substitute.For<IChatAdminsRepository>();
-        _sessionManager = Substitute.For<ITelegramSessionManager>();
         _profileScanService = Substitute.For<IProfileScanService>();
 
-        // Defaults: everything enabled, session active, scan returns Clean.
+        // Defaults: everything enabled, scan returns Clean.
         SetConfig(CreateConfig());
-        _sessionManager.HasAnyActiveSessionAsync(Arg.Any<CancellationToken>()).Returns(true);
         _chatAdminsRepository
             .IsAdminAsync(Arg.Any<long>(), Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(false);
@@ -56,7 +51,6 @@ public class ProfileScanGateTests
             _userRepository,
             _usernameHistory,
             _chatAdminsRepository,
-            _sessionManager,
             _profileScanService,
             new PipelineMetrics(),
             NullLogger<ProfileScanGate>.Instance);
@@ -171,17 +165,6 @@ public class ProfileScanGateTests
         var result = await ScanAsync(ProfileScanTrigger.FirstMessage);
 
         Assert.That(result, Is.Null);
-    }
-
-    [Test]
-    public async Task Join_AlreadyScanned_StillScans()
-    {
-        // Join always rescans. Only the first-message trigger is once-per-user.
-        SetUser(CreateUser(profileScannedAt: DateTimeOffset.UtcNow.AddDays(-3)));
-
-        var result = await ScanAsync(ProfileScanTrigger.Join);
-
-        Assert.That(result, Is.Not.Null);
     }
 
     [Test]
@@ -304,15 +287,105 @@ public class ProfileScanGateTests
         });
     }
 
+    // ── Join / first message: new, never scanned, or renamed since the last scan ──
+
     [Test]
-    public async Task NoActiveSession_Skips()
+    public async Task Join_NewUser_Scans()
+    {
+        SetUser(null);
+
+        Assert.That(await ScanAsync(ProfileScanTrigger.Join), Is.Not.Null);
+    }
+
+    [Test]
+    public async Task Join_NeverScanned_Scans()
     {
         SetUser(CreateUser(profileScannedAt: null));
-        _sessionManager.HasAnyActiveSessionAsync(Arg.Any<CancellationToken>()).Returns(false);
 
-        var result = await ScanAsync(ProfileScanTrigger.FirstMessage);
+        Assert.That(await ScanAsync(ProfileScanTrigger.Join), Is.Not.Null);
+    }
+
+    [Test]
+    public async Task Join_AlreadyScannedNoRename_SkipsWithoutCallingTheScan()
+    {
+        SetUser(CreateUser(profileScannedAt: DateTimeOffset.UtcNow.AddDays(-3)));
+
+        var result = await ScanAsync(ProfileScanTrigger.Join);
 
         Assert.That(result, Is.Null);
+        await _profileScanService.DidNotReceiveWithAnyArgs().ScanUserProfileAsync(default!, default, default, default);
+    }
+
+    [Test]
+    public async Task Join_AlreadyScannedRenamedSinceLastScan_Scans()
+    {
+        var lastScan = DateTimeOffset.UtcNow.AddDays(-3);
+        SetUser(CreateUser(profileScannedAt: lastScan));
+        RenamedSince(lastScan);
+
+        Assert.That(await ScanAsync(ProfileScanTrigger.Join), Is.Not.Null);
+    }
+
+    [Test]
+    public async Task FirstMessage_AlreadyScannedRenamedSinceLastScan_Scans()
+    {
+        var lastScan = DateTimeOffset.UtcNow.AddDays(-3);
+        SetUser(CreateUser(profileScannedAt: lastScan));
+        RenamedSince(lastScan);
+
+        Assert.That(await ScanAsync(ProfileScanTrigger.FirstMessage), Is.Not.Null);
+    }
+
+    // ── Exclusion: the admin's switch, which a rename overrides ──
+
+    [Test]
+    public async Task Join_ExcludedNeverScanned_Skips()
+    {
+        SetUser(CreateUser(profileScannedAt: null, profileScanExcluded: true));
+
+        Assert.That(await ScanAsync(ProfileScanTrigger.Join), Is.Null);
+    }
+
+    [Test]
+    public async Task Join_ExcludedRenamedSinceLastScan_Scans()
+    {
+        var lastScan = DateTimeOffset.UtcNow.AddDays(-3);
+        SetUser(CreateUser(profileScannedAt: lastScan, profileScanExcluded: true));
+        RenamedSince(lastScan);
+
+        Assert.That(await ScanAsync(ProfileScanTrigger.Join), Is.Not.Null);
+    }
+
+    [Test]
+    public async Task ProfileChange_ExcludedUser_StillScans()
+    {
+        // A rename is a change: the rename trigger scans even an excluded user.
+        SetUser(CreateUser(profileScannedAt: DateTimeOffset.UtcNow.AddDays(-3), profileScanExcluded: true));
+
+        Assert.That(await ScanAsync(ProfileScanTrigger.ProfileChange), Is.Not.Null);
+    }
+
+    [Test]
+    public async Task ProfileChange_TrustedUser_StillSkips()
+    {
+        SetUser(CreateUser(profileScannedAt: DateTimeOffset.UtcNow.AddDays(-3), isTrusted: true));
+
+        Assert.That(await ScanAsync(ProfileScanTrigger.ProfileChange), Is.Null);
+    }
+
+    // ── No User API session: the scan still runs (name-only inside the service) ──
+
+    [Test]
+    public async Task NoUserApiSession_NewJoiner_StillScans()
+    {
+        // The gate has no session dependency any more; ProfileScanServiceNameOnlyTests pins the
+        // service's no-session path.
+        SetUser(null);
+
+        await ScanAsync(ProfileScanTrigger.Join);
+
+        await _profileScanService.Received(1).ScanUserProfileAsync(
+            Arg.Is<UserIdentity>(u => u!.Id == TestUserId), Arg.Any<ChatIdentity?>(), Arg.Any<CancellationToken>(), false);
     }
 
     [Test]
