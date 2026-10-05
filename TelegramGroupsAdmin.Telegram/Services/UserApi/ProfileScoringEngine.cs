@@ -28,9 +28,10 @@ public sealed class ProfileScoringEngine(
         string? Reason,
         string[]? Signals,
         bool ContainsNudity = false,
-        bool ExplicitDisplayText = false)
+        bool ExplicitDisplayText = false,
+        bool PromotionalDisplayText = false)
     {
-        public static readonly AiScoringResult Empty = new(0.0m, null, null, ContainsNudity: false, ExplicitDisplayText: false);
+        public static readonly AiScoringResult Empty = new(0.0m, null, null);
     }
 
     private const decimal MaxScore = 5.0m;
@@ -72,7 +73,8 @@ public sealed class ProfileScoringEngine(
                 AiReason: "Rule-based detection triggered ban threshold",
                 AiSignals: null,
                 ContainsNudity: false,
-                ExplicitDisplayText: false);
+                ExplicitDisplayText: false,
+                PromotionalDisplayText: false);
         }
 
         // ── Layer 2: AI vision analysis ──
@@ -97,7 +99,8 @@ public sealed class ProfileScoringEngine(
             AiReason: aiResult.Reason,
             AiSignals: aiResult.Signals,
             ContainsNudity: aiResult.ContainsNudity,
-            ExplicitDisplayText: aiResult.ExplicitDisplayText);
+            ExplicitDisplayText: aiResult.ExplicitDisplayText,
+            PromotionalDisplayText: aiResult.PromotionalDisplayText);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -228,10 +231,11 @@ public sealed class ProfileScoringEngine(
             return AiScoringResult.Empty;
         }
 
-        return ParseAiResponse(result.Content, profile.User);
+        return TryParseAiResponse(result.Content, profile.User) ?? AiScoringResult.Empty;
     }
 
-    private AiScoringResult ParseAiResponse(string content, UserIdentity user)
+    /// <summary>Parses the AI reply; null when it is not the expected JSON (logged as a warning).</summary>
+    private AiScoringResult? TryParseAiResponse(string content, UserIdentity user)
     {
         try
         {
@@ -239,22 +243,22 @@ public sealed class ProfileScoringEngine(
             if (response == null)
             {
                 logger.LogWarning("Profile scan AI response deserialized to null for {User}", user.ToLogDebug());
-                return AiScoringResult.Empty;
+                return null;
             }
 
-            var score = Math.Clamp(response.Score, 0.0m, MaxScore);
             return new AiScoringResult(
-                Score: score,
+                Score: Math.Clamp(response.Score, 0.0m, MaxScore),
                 Reason: response.Reason,
                 Signals: response.SignalsDetected,
                 ContainsNudity: response.ContainsNudity,
-                ExplicitDisplayText: response.ExplicitDisplayText);
+                ExplicitDisplayText: response.ExplicitDisplayText,
+                PromotionalDisplayText: response.PromotionalDisplayText);
         }
         catch (JsonException ex)
         {
             logger.LogWarning(ex, "Failed to parse profile scan AI response for {User}: {Content}",
                 user.ToLogDebug(), content[..Math.Min(content.Length, 200)]);
-            return AiScoringResult.Empty;
+            return null;
         }
     }
 

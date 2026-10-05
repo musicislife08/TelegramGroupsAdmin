@@ -644,6 +644,69 @@ public class ProfileScoringEngineTests
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // Layer 2: name flags (prompt + PromotionalDisplayText passthrough)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    [Test]
+    public async Task ScoreAsync_SystemPromptCarriesNameFlagDefinitionsAndSchema()
+    {
+        string? systemPrompt = null;
+        string? userPrompt = null;
+        _chatService
+            .IsFeatureAvailableAsync(AIFeatureType.ProfileScan, Arg.Any<CancellationToken>())
+            .Returns(true);
+        _chatService
+            .GetCompletionAsync(
+                Arg.Any<AIFeatureType>(), Arg.Do<string>(s => systemPrompt = s), Arg.Do<string>(u => userPrompt = u),
+                Arg.Any<ChatCompletionOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(AiResponse("""{"score": 0.0, "reason": "ok", "signals_detected": [], "contains_nudity": false}"""));
+
+        await _sut.ScoreAsync(BuildProfile(), [], null, BanThreshold, NotifyThreshold, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(systemPrompt, Does.Contain(ProfileScanPrompts.NameFlagDefinitions));
+            Assert.That(systemPrompt, Does.Not.Contain("EXPLICIT DISPLAY-TEXT FLAG"));
+            Assert.That(systemPrompt, Does.Contain("\"promotional_display_text\": true/false"));
+            Assert.That(userPrompt, Does.Contain("\"promotional_display_text\": true/false"));
+        }
+    }
+
+    [Test]
+    public async Task ScoreAsync_AiReturnsPromotionalDisplayTextTrue_PromotionalDisplayTextIsTrue()
+    {
+        EnableAiWithResponse(
+            """{"score": 3.0, "reason": "name sells a service", "signals_detected": ["service_for_hire_name"], "contains_nudity": false, "explicit_display_text": false, "promotional_display_text": true}""");
+
+        var result = await _sut.ScoreAsync(BuildProfile(), [], null, BanThreshold, NotifyThreshold, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.PromotionalDisplayText, Is.True);
+            Assert.That(result.ExplicitDisplayText, Is.False);
+        }
+    }
+
+    [Test]
+    public async Task ScoreAsync_AiOmitsPromotionalDisplayTextField_DefaultsToFalse()
+    {
+        EnableAiWithResponse(
+            """{"score": 1.0, "reason": "fine name", "signals_detected": [], "contains_nudity": false, "explicit_display_text": false}""");
+
+        var result = await _sut.ScoreAsync(BuildProfile(), [], null, BanThreshold, NotifyThreshold, CancellationToken.None);
+
+        Assert.That(result.PromotionalDisplayText, Is.False);
+    }
+
+    [Test]
+    public async Task ScoreAsync_RuleBasedFastPathBan_PromotionalDisplayTextIsFalse()
+    {
+        var result = await _sut.ScoreAsync(BuildProfile(isScam: true), [], null, BanThreshold, NotifyThreshold, CancellationToken.None);
+
+        Assert.That(result.PromotionalDisplayText, Is.False);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // Layer 2: Malformed / null JSON fallback
     // ═══════════════════════════════════════════════════════════════════════════
 
