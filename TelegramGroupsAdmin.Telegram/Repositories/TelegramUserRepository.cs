@@ -1280,6 +1280,13 @@ public class TelegramUserRepository : ITelegramUserRepository
     }
 
     /// <inheritdoc />
+    public async Task<bool> HasMessageHistoryAsync(long telegramUserId, CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        return await context.Messages.AnyAsync(m => m.UserId == telegramUserId && m.DeletedAt == null, cancellationToken);
+    }
+
+    /// <inheritdoc />
     public async Task ExcludeFromProfileScanAsync(long telegramUserId, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);

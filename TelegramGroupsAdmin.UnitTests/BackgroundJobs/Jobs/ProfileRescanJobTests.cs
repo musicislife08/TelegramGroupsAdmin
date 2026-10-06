@@ -208,17 +208,37 @@ public class ProfileRescanJobTests
 
     [TestCase(true)]
     [TestCase(false)]
-    public async Task Execute_NoKnownChat_GlobalConfigDecides(bool globallyEnabled)
+    public async Task Execute_NeverPosted_GlobalConfigDecides(bool globallyEnabled)
     {
         var user = UserIdentity.ForTest(7, "No Chat");
         Batch(user);
         Chats(7);
+        _users.HasMessageHistoryAsync(7, Arg.Any<CancellationToken>()).Returns(false);
         ProfileScan(0, globallyEnabled);
 
         await _job.Execute(Context());
 
         await _scanner.Received(globallyEnabled ? 1 : 0)
             .ScanUserProfileAsync(user, null, Arg.Any<CancellationToken>(), Arg.Any<bool>(), Arg.Any<ProfileScanOrigin>());
+    }
+
+    [Test]
+    public async Task Execute_PostedOnlyInChatsNoLongerManaged_IsSkippedWithoutUsingASlot()
+    {
+        // Message history, but none in an active managed chat: no longer a user, so no scan at all
+        // (not even by the global config), and the batch slot goes to the next candidate.
+        BatchSize(1);
+        var gone = UserIdentity.ForTest(7, "Gone");
+        var next = UserIdentity.ForTest(8, "Next");
+        Batch(gone, next);
+        Chats(7);
+        _users.HasMessageHistoryAsync(7, Arg.Any<CancellationToken>()).Returns(true);
+        ProfileScan(0, enabled: true);
+
+        await _job.Execute(Context());
+
+        await _scanner.DidNotReceive().ScanUserProfileAsync(gone, Arg.Any<ChatIdentity?>(), Arg.Any<CancellationToken>(), Arg.Any<bool>(), Arg.Any<ProfileScanOrigin>());
+        await _scanner.Received(1).ScanUserProfileAsync(next, null, Arg.Any<CancellationToken>(), Arg.Any<bool>(), Arg.Any<ProfileScanOrigin>());
     }
 
     private void BatchSize(int batchSize) =>

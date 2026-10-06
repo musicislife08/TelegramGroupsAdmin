@@ -20,9 +20,10 @@ namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
 /// Periodic job that retries incomplete profile scans (never scanned, or a name-only latest scan under
 /// the retry limit). Every scan falls back to name-only, so the job runs with or without a User API session,
 /// but not when there is neither a session nor the profile-scan AI (no scan could write anything).
-/// A user is skipped only when profile scanning is disabled in every active managed chat they have
-/// posted in (chats come from message history; a user with no such chat follows the global setting
-/// and is scanned with no chat, so a ban posts no celebration).
+/// Chats come from message history, active managed chats only. A user is skipped when profile scanning
+/// is disabled in every active managed chat they have posted in, and when they have posted only in
+/// chats the bot no longer manages (no longer a user: no action at all). A user who never posted
+/// follows the global setting and is scanned with no chat, so a ban posts no celebration.
 /// </summary>
 [DisallowConcurrentExecution]
 public class ProfileRescanJob(
@@ -107,6 +108,7 @@ public class ProfileRescanJob(
             var scanned = 0;
             var skipped = 0;
             var scanningDisabled = 0;
+            var noLongerUsers = 0;
             foreach (var user in users)
             {
                 // Batch slots go to scan attempts only
@@ -114,16 +116,25 @@ public class ProfileRescanJob(
                     break;
 
                 examined++;
-                // Every candidate not skipped for disabled scanning is an attempt: it takes a batch slot
-                // and is throttled, whether it scans, skips or fails (a failed chat lookup included).
+                // Every candidate not skipped (scanning disabled, or no longer a user) is an attempt: it takes
+                // a batch slot and is throttled, whether it scans, skips or fails (a failed chat lookup included).
                 var isAttempt = true;
                 try
                 {
-                    // Scan for the user's most recently active chat with profile scanning enabled (it
-                    // targets alerts and supplies thresholds). Skip only when every chat they have posted in has
-                    // scanning disabled; with no known chat, the global config (chat 0) decides.
-                    var (eligible, chat) = await FindScanChatAsync(user.Id, scanEnabledByChat, cancellationToken);
-                    if (!eligible)
+                    // Scan for the user's most recently active managed chat with profile scanning enabled
+                    // (it targets alerts and supplies thresholds). A user who never posted follows the
+                    // global config (chat 0).
+                    var (skip, chat) = await FindScanChatAsync(user.Id, scanEnabledByChat, cancellationToken);
+                    if (skip == ScanChatSkip.NoLongerAUser)
+                    {
+                        isAttempt = false;
+                        logger.LogDebug("Profile rescan: user {UserId} only posted in chats no longer managed, skipping",
+                            user.Id);
+                        noLongerUsers++;
+                        continue;
+                    }
+
+                    if (skip == ScanChatSkip.ScanningDisabled)
                     {
                         isAttempt = false;
                         logger.LogDebug("Profile rescan: scanning disabled in every chat of user {UserId}, skipping",
@@ -161,6 +172,10 @@ public class ProfileRescanJob(
                 logger.LogInformation(
                     "Profile rescan: skipped {Count} users, scanning disabled in every chat", scanningDisabled);
 
+            if (noLongerUsers > 0)
+                logger.LogInformation(
+                    "Profile rescan: skipped {Count} users who only posted in chats no longer managed", noLongerUsers);
+
             if (attempted == 0)
                 logger.LogInformation("Profile rescan: examined {Examined} candidates but attempted no scans", examined);
 
@@ -186,25 +201,42 @@ public class ProfileRescanJob(
         }
     }
 
+    private enum ScanChatSkip
+    {
+        None,
+        /// <summary>Profile scanning is disabled in every active managed chat the user posted in.</summary>
+        ScanningDisabled,
+        /// <summary>The user posted, but only in chats the bot no longer manages: no longer a user.</summary>
+        NoLongerAUser
+    }
+
     /// <summary>
     /// The chat to scan the user for: the most recently active of their active managed chats whose
-    /// effective config has profile scanning enabled. Not eligible when none has. A user with no such
-    /// chat is eligible (chat null) when the global config has profile scanning enabled.
+    /// effective config has profile scanning enabled. A user with no active managed chat is no longer a
+    /// user when they have message history elsewhere; one who never posted is scanned with no chat when
+    /// the global config has profile scanning enabled.
     /// </summary>
-    private async Task<(bool Eligible, ChatIdentity? Chat)> FindScanChatAsync(
+    private async Task<(ScanChatSkip Skip, ChatIdentity? Chat)> FindScanChatAsync(
         long userId, Dictionary<long, bool> scanEnabledByChat, CancellationToken cancellationToken)
     {
         var chats = await userRepository.GetChatsForUserAsync(userId, cancellationToken);
         if (chats.Count == 0)
-            return (await IsProfileScanEnabledAsync(0, scanEnabledByChat, cancellationToken), null);
+        {
+            if (await userRepository.HasMessageHistoryAsync(userId, cancellationToken))
+                return (ScanChatSkip.NoLongerAUser, null);
+
+            return await IsProfileScanEnabledAsync(0, scanEnabledByChat, cancellationToken)
+                ? (ScanChatSkip.None, null)
+                : (ScanChatSkip.ScanningDisabled, null);
+        }
 
         foreach (var chat in chats)
         {
             if (await IsProfileScanEnabledAsync(chat.Id, scanEnabledByChat, cancellationToken))
-                return (true, chat);
+                return (ScanChatSkip.None, chat);
         }
 
-        return (false, null);
+        return (ScanChatSkip.ScanningDisabled, null);
     }
 
     private async Task<bool> IsProfileScanEnabledAsync(

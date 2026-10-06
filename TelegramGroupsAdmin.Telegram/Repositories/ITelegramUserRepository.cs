@@ -156,6 +156,13 @@ public interface ITelegramUserRepository
     Task<List<ChatIdentity>> GetChatsForUserAsync(long telegramUserId, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Whether the user has any undeleted message in any chat, managed or not. With
+    /// <see cref="GetChatsForUserAsync"/> empty, tells a user who never posted (follows the global
+    /// config) from one who only posted in chats the bot no longer manages (no longer a user).
+    /// </summary>
+    Task<bool> HasMessageHistoryAsync(long telegramUserId, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Exclude a user from automatic profile scans (renames still scan).
     /// The admin's switch (UserDetailDialog); scans never set it.
     /// </summary>

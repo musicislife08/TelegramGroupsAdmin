@@ -16,8 +16,8 @@ namespace TelegramGroupsAdmin.IntegrationTests.Telegram.Repositories;
 /// - NameOnlyLatestUserId: one scan row (528) flag-edited to source NameOnly (canonical edit 2026-10-05).
 /// - FullScanLatestUserId: one FullScan row (533), scanned 2026-04-30 (read-only).
 /// The batch size is the user count so ordering never hides an anchor.
-/// Also pins the job's per-user chat list (GetChatsForUserAsync) on MultiChatUserId and
-/// UnmanagedChatOnlyUserId (both read-only).
+/// Also pins the job's per-user chat inputs (GetChatsForUserAsync, HasMessageHistoryAsync) on
+/// MultiChatUserId, UnmanagedChatOnlyUserId and UsersPage.KickedJoinerId (all read-only).
 /// </summary>
 [TestFixture]
 public class IncompleteScanSelectionTests
@@ -158,9 +158,10 @@ public class IncompleteScanSelectionTests
     }
 
     [Test]
-    public async Task ChatsForUser_MessagesOnlyOutsideActiveManagedChats_IsEmpty()
+    public async Task PostedOnlyOutsideActiveManagedChats_NoChatButHasHistory()
     {
-        // The chat goes to the scan for its ban celebration and alerts: never one the bot does not manage.
+        // No active managed chat but message history elsewhere: the job treats the user as no longer
+        // a user and skips them entirely (no scan, not even by the global config).
         var userId = GoldenDatasetConstants.ProfileRescan.UnmanagedChatOnlyUserId;
         await using (var ctx = _testHelper!.GetDbContext())
         {
@@ -175,9 +176,35 @@ public class IncompleteScanSelectionTests
         }
 
         using var scope = _provider!.CreateScope();
-        var chats = await scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>()
-            .GetChatsForUserAsync(userId);
+        var users = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
+        var chats = await users.GetChatsForUserAsync(userId);
+        var hasHistory = await users.HasMessageHistoryAsync(userId);
 
-        Assert.That(chats, Is.Empty);
+        Assert.Multiple(() =>
+        {
+            Assert.That(chats, Is.Empty);
+            Assert.That(hasHistory, Is.True);
+        });
+    }
+
+    [Test]
+    public async Task NeverPosted_NoChatAndNoHistory()
+    {
+        // Never posted: the job lets the global config decide.
+        var userId = GoldenDatasetConstants.UsersPage.KickedJoinerId;
+        await using (var ctx = _testHelper!.GetDbContext())
+            Assert.That(await ctx.Messages.CountAsync(m => m.UserId == userId), Is.Zero, "anchor has no messages");
+
+        using var scope = _provider!.CreateScope();
+        var users = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
+
+        var chats = await users.GetChatsForUserAsync(userId);
+        var hasHistory = await users.HasMessageHistoryAsync(userId);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(chats, Is.Empty);
+            Assert.That(hasHistory, Is.False);
+        });
     }
 }
