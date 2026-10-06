@@ -908,7 +908,7 @@ public class TelegramUserRepository : ITelegramUserRepository
 
         var chatMemberships = (await (
             from m in context.Messages
-            where m.UserId == telegramUserId
+            where m.UserId == telegramUserId && m.DeletedAt == null
             join c in context.ManagedChats on m.ChatId equals c.ChatId into chatGroup
             from chat in chatGroup.DefaultIfEmpty()
             group new { m, chat } by new { m.ChatId, ChatName = chat != null ? chat.ChatName : null } into g
