@@ -373,6 +373,28 @@ public class ProfileScanGateTests
         Assert.That(await ScanAsync(ProfileScanTrigger.ProfileChange), Is.Null);
     }
 
+    [Test]
+    public async Task ProfileChange_UntrustedChatAdmin_Skips()
+    {
+        // A rename of an admin not yet reconciled to trusted: the rename is recorded, never scanned.
+        SetUser(CreateUser(profileScannedAt: DateTimeOffset.UtcNow.AddDays(-3)));
+        _chatAdminsRepository
+            .IsAdminAsync(TestChatId, TestUserId, Arg.Any<CancellationToken>())
+            .Returns(true);
+
+        Assert.That(await ScanAsync(ProfileScanTrigger.ProfileChange), Is.Null);
+        await _profileScanService.DidNotReceiveWithAnyArgs().ScanUserProfileAsync(default!, default, default, default);
+    }
+
+    [Test]
+    public async Task ProfileChange_Bot_Skips()
+    {
+        SetUser(CreateUser(profileScannedAt: null, isBot: true));
+
+        Assert.That(await ScanAsync(ProfileScanTrigger.ProfileChange), Is.Null);
+        await _profileScanService.DidNotReceiveWithAnyArgs().ScanUserProfileAsync(default!, default, default, default);
+    }
+
     // ── No User API session: the scan still runs (name-only inside the service) ──
 
     [Test]

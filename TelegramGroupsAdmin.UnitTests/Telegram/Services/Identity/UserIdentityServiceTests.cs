@@ -234,11 +234,14 @@ public class UserIdentityServiceTests
     [Test]
     public async Task Observe_RenameOfTrustedUser_DoesNotScan()
     {
+        // Chat admins are trusted (ChatHealthCheck); an admin not yet reconciled is stopped by the
+        // gate's admin check (ProfileScanGateTests.ProfileChange_UntrustedChatAdmin_Skips).
         Renamed(Row(7, "New", trusted: true));
         IdentityRow(7, "New", NameVerdict.Unscanned);
 
         await _sut.ObserveAsync(Observed(7, "New"), new ProfileChangeContext(Chat, 5));
 
+        await _users.ReceivedWithAnyArgs(1).GetOrUpdateAsync(default!, default!, default);
         await _gate.DidNotReceiveWithAnyArgs().ScanIfEligibleAsync(default!, default, default, default);
     }
 
@@ -307,13 +310,27 @@ public class UserIdentityServiceTests
     }
 
     [Test]
-    public async Task Observe_RenameOfBot_DoesNotScan()
+    public async Task Observe_RenameOfBot_RecordsOnly()
     {
         Renamed(Row(7, "New", bot: true));
         IdentityRow(7, "New", NameVerdict.Unscanned);
 
         await _sut.ObserveAsync(Observed(7, "New"), new ProfileChangeContext(Chat, 5));
 
+        await _users.ReceivedWithAnyArgs(1).GetOrUpdateAsync(default!, default!, default);
+        await _gate.DidNotReceiveWithAnyArgs().ScanIfEligibleAsync(default!, default, default, default);
+    }
+
+    [Test]
+    public async Task Observe_RenameObservedFromBot_RecordsOnly()
+    {
+        // The update says it is a bot even though the stored row does not (yet).
+        Renamed(Row(7, "New"));
+        IdentityRow(7, "New", NameVerdict.Unscanned);
+
+        await _sut.ObserveAsync(Observed(7, "New") with { IsBot = true }, new ProfileChangeContext(Chat, 5));
+
+        await _users.ReceivedWithAnyArgs(1).GetOrUpdateAsync(default!, default!, default);
         await _gate.DidNotReceiveWithAnyArgs().ScanIfEligibleAsync(default!, default, default, default);
     }
 
