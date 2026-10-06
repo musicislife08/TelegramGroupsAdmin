@@ -908,7 +908,7 @@ public class TelegramUserRepository : ITelegramUserRepository
 
         var chatMemberships = (await (
             from m in context.Messages
-            where m.UserId == telegramUserId && m.DeletedAt == null
+            where m.UserId == telegramUserId
             join c in context.ManagedChats on m.ChatId equals c.ChatId into chatGroup
             from chat in chatGroup.DefaultIfEmpty()
             group new { m, chat } by new { m.ChatId, ChatName = chat != null ? chat.ChatName : null } into g
@@ -1264,9 +1264,11 @@ public class TelegramUserRepository : ITelegramUserRepository
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         // Active managed chats only: the scan posts its ban celebration and alerts to the chat, so
         // never to one the bot has left or no longer manages.
+        // Soft-deleted messages count: deletion only marks them (the cleanup job is off to keep
+        // analytics), and they still show the user posted in the chat.
         var rows = await (
             from m in context.Messages
-            where m.UserId == telegramUserId && m.DeletedAt == null
+            where m.UserId == telegramUserId
             join c in context.ManagedChats on m.ChatId equals c.ChatId
             where c.IsActive && !c.IsDeleted
             group new { m, c } by new { m.ChatId, c.ChatName } into g
@@ -1283,7 +1285,7 @@ public class TelegramUserRepository : ITelegramUserRepository
     public async Task<bool> HasMessageHistoryAsync(long telegramUserId, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        return await context.Messages.AnyAsync(m => m.UserId == telegramUserId && m.DeletedAt == null, cancellationToken);
+        return await context.Messages.AnyAsync(m => m.UserId == telegramUserId, cancellationToken);
     }
 
     /// <inheritdoc />

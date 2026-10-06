@@ -149,14 +149,16 @@ public interface ITelegramUserRepository
     // ============================================================================
 
     /// <summary>
-    /// The active managed chats a user is known in (by message activity), most recently active first.
-    /// Chats the bot has left or no longer manages are left out. Empty if there are none.
+    /// The active managed chats a user is known in (by message activity, soft-deleted messages
+    /// included), most recently active first. Chats the bot has left or no longer manages are left out.
+    /// Empty if there are none.
     /// Used by the profile rescan job to pick a chat with profile scanning enabled and attribute the scan to it.
     /// </summary>
     Task<List<ChatIdentity>> GetChatsForUserAsync(long telegramUserId, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Whether the user has any undeleted message in any chat, managed or not. With
+    /// Whether the user has any message in any chat, managed or not; soft-deleted messages count
+    /// (deletion only marks them). With
     /// <see cref="GetChatsForUserAsync"/> empty, tells a user who never posted (follows the global
     /// config) from one who only posted in chats the bot no longer manages (no longer a user).
     /// </summary>

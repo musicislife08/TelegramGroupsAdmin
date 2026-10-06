@@ -131,7 +131,7 @@ public class IncompleteScanSelectionTests
         await using (var ctx = _testHelper!.GetDbContext())
         {
             var chatIds = await ctx.Messages.AsNoTracking()
-                .Where(m => m.UserId == userId && m.DeletedAt == null)
+                .Where(m => m.UserId == userId)
                 .Select(m => m.ChatId).Distinct().ToListAsync();
             Assert.That(chatIds, Is.EquivalentTo(new[]
             {
@@ -166,12 +166,12 @@ public class IncompleteScanSelectionTests
         await using (var ctx = _testHelper!.GetDbContext())
         {
             var chatIds = await ctx.Messages.AsNoTracking()
-                .Where(m => m.UserId == userId && m.DeletedAt == null)
+                .Where(m => m.UserId == userId)
                 .Select(m => m.ChatId).Distinct().ToListAsync();
             var activeManaged = await ctx.ManagedChats.AsNoTracking()
                 .Where(c => chatIds.Contains(c.ChatId) && c.IsActive && !c.IsDeleted)
                 .CountAsync();
-            Assert.That(chatIds, Is.Not.Empty, "anchor must have undeleted messages");
+            Assert.That(chatIds, Is.Not.Empty, "anchor must have messages");
             Assert.That(activeManaged, Is.Zero, "anchor's messages must all be outside active managed chats");
         }
 
@@ -205,6 +205,38 @@ public class IncompleteScanSelectionTests
         {
             Assert.That(chats, Is.Empty);
             Assert.That(hasHistory, Is.False);
+        });
+    }
+
+    [Test]
+    public async Task SoftDeletedMessagesOnly_StillCountAsHistoryInTheirChat()
+    {
+        // Deleted messages are only marked deleted (the cleanup job is off to keep analytics), so they
+        // are still evidence the user posted in that chat.
+        var userId = GoldenDatasetConstants.ProfileRescan.SoftDeletedOnlyUserId;
+        var chatId = GoldenDatasetConstants.ProfileRescan.SoftDeletedOnlyChatId;
+        await using (var ctx = _testHelper!.GetDbContext())
+        {
+            var messages = await ctx.Messages.AsNoTracking().Where(m => m.UserId == userId).ToListAsync();
+            var chat = await ctx.ManagedChats.AsNoTracking().SingleAsync(c => c.ChatId == chatId);
+            Assert.Multiple(() =>
+            {
+                Assert.That(messages, Is.Not.Empty, "anchor has messages");
+                Assert.That(messages.Select(m => m.ChatId), Is.All.EqualTo(chatId), "all in one chat");
+                Assert.That(messages.Select(m => m.DeletedAt), Is.All.Not.Null, "all soft-deleted");
+                Assert.That(chat.IsActive && !chat.IsDeleted, Is.True, "the chat is an active managed chat");
+            });
+        }
+
+        using var scope = _provider!.CreateScope();
+        var users = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
+        var chats = await users.GetChatsForUserAsync(userId);
+        var hasHistory = await users.HasMessageHistoryAsync(userId);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(chats.Select(c => c.Id), Is.EqualTo(new[] { chatId }));
+            Assert.That(hasHistory, Is.True);
         });
     }
 }
