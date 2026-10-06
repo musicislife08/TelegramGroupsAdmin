@@ -17,7 +17,7 @@ All automatic triggers go through the same eligibility gate: trusted users, chat
 
 ### Prerequisites
 
-- At least one **User API session** connected (Settings > Telegram > User API)
+- A **User API session** connected (Settings > Telegram > User API) for full profile scans. Without one, only [name-only scans](#when-the-profile-cant-be-read-name-only-scan) run
 - **Profile Scan enabled** per chat (Chat Management > Configure > Welcome System > Security on Join > Profile Scan)
 - An **AI provider connection** assigned to the **Profile Scan** feature (Settings > Content Detection > AI Integration) for AI vision scoring — optional but recommended. Any provider with a vision-capable model works (OpenAI, Azure OpenAI, Anthropic, OpenRouter, or an OpenAI-compatible server).
 
@@ -132,7 +132,7 @@ If a scan cannot read the profile (no User API session at all or none usable, th
 | From the notify threshold up to the name-only ban threshold | Held for review (profile scan alert) |
 | At or above the name-only ban threshold (default 4.5) | Auto-ban |
 
-A name alone is weaker evidence than a whole profile, so it has its own, higher ban threshold. No name-only scan runs when the rule-based checks already decided, for bots, when scanning is off for the chat, or when the Profile Scan AI feature is not configured. If the AI call fails, nothing is recorded. The next scan that can read the profile replaces the name-only result.
+A name alone is weaker evidence than a whole profile, so it has its own, higher ban threshold. No name-only scan runs when the rule-based checks already decided, for bots, when scanning is off for the chat (for the Profile Rescan job: when scanning is off in every chat the user is in), or when the Profile Scan AI feature is not configured. If the AI call fails, nothing is recorded. The next scan that can read the profile replaces the name-only result.
 
 With profile scanning on and no User API session connected, the Profile Scan settings show a notice: full profile scans can't run, but name-only scans still run on new joiners, first messages and renames.
 
@@ -145,7 +145,7 @@ With profile scanning on and no User API session connected, the Profile Scan set
 | Manual rescan | Always runs, whatever the exclude flag says |
 | Profile Rescan job | Retries incomplete scans only |
 
-A successful full scan is complete: nothing rescans it automatically until the user renames or an admin runs a manual rescan. The Profile Rescan job picks untrusted, unbanned, non-bot, not-excluded users whose scan is incomplete: never scanned, or whose latest scan was name-only with fewer than the **name-only retry limit** (default 3) name-only scans since their last full scan. **Re-Scan After** is the wait before an incomplete scan is retried. Once the limit is reached, the latest name-only result stands until the user renames or an admin rescans.
+A successful full scan is complete: nothing rescans it automatically until the user renames or an admin runs a manual rescan. The Profile Rescan job picks untrusted, unbanned, non-bot, not-excluded users whose scan is incomplete: never scanned, or whose latest scan was name-only with fewer than the **name-only retry limit** (default 3) name-only scans since their last full scan. The job skips a user only when every chat they are a member of has profile scanning off; a member of any chat with scanning on is scanned, using that chat's settings, and a user with no known chat follows the global setting. **Re-Scan After** is the wait before an incomplete scan is retried. Once the limit is reached, the latest name-only result stands until the user renames or an admin rescans.
 
 **Exclude from automatic scans** (User Details > Profile Scan) is your switch: the job and join / first-message scans skip the user, a rename still scans, and a manual rescan always runs. Scans never set or clear it.
 
@@ -389,7 +389,7 @@ All Telegram API calls in the scan pipeline are wrapped with `TelegramFloodWaitE
 - The scan is **abandoned gracefully** (not an error)
 - The scan falls back to a name-only scan
 - A warning is logged with the flood wait duration
-- The user proceeds through the normal welcome flow without a scan result
+- The user proceeds through the normal welcome flow; the name-only result, if one was recorded, is the scan on file
 
 ---
 

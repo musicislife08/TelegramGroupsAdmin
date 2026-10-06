@@ -315,19 +315,20 @@ AI-powered profile scanning that analyzes user profiles via the Telegram User AP
 4. Set thresholds:
    - **Auto-Ban Threshold** - Score at which users are auto-banned (default: 4.0, range 1.0-5.0)
    - **Admin Notify Threshold** - Score at which admins are notified for review (default: 2.0, range 0.5-5.0)
+   - **Name-only ban threshold** - A scan that could only read the name auto-bans at this score; below it, scores at or above the notify threshold go to review (default: 4.5, must be at least the notify threshold)
 5. Toggle scan triggers:
-   - **Scan on join** - Scan when user first joins the chat
+   - **Scan on join** - Scan when a user joins the chat. Runs only for new, never-scanned or renamed users
    - **Scan on profile change** - Re-scan when user's name or username changes
-   - **Scan on first message** - Scan a never-scanned user when they post their first message. Covers members who joined before the bot was added to the chat, and accounts that arrive without a join event (for example, people commenting on channel posts in a linked discussion group). Default: off.
+   - **Scan on first message** - Scan a never-scanned or renamed user when they post their first message. Covers members who joined before the bot was added to the chat, and accounts that arrive without a join event (for example, people commenting on channel posts in a linked discussion group). Default: off.
 6. Choose whether flagged names are masked:
-   - **Mask flagged names** - When a profile scan flags a user's display name or @username, what the bot posts in this chat, and this chat's ban celebration DMs, show `[name removed: explicit]` or `[name removed: spam]` instead of the name. Admin DMs and alerts, and a user's own welcome, exam and `/start` DMs, always show the real name, as do the web UI, email and push notifications. This chat's value overrides the global value, which you can change in **Settings → Telegram → Bot Configuration → Welcome System**; the built-in default is on. It applies even when this chat does not scan profiles, because a flag belongs to the account. The labels are fixed.
+   - **Mask flagged names** - When a profile scan flags a banned user's display name or @username, what the bot posts in this chat, and this chat's ban celebration DMs, show `[name removed: explicit]` or `[name removed: spam]` instead of the name, only while the user is banned. A name held for review is shown until an admin decides; an unban shows it again. Admin DMs and alerts, and a user's own welcome, exam and `/start` DMs, always show the real name, as do the web UI, email and push notifications. This chat's value overrides the global value, which you can change in **Settings → Telegram → Bot Configuration → Welcome System**; the built-in default is on. While the user is banned it applies even when this chat does not scan profiles, because a flag belongs to the account. The labels are fixed.
 
 **What it detects**:
 - Spam signals in bios and about sections
 - Suspicious personal channels
 - Pinned stories with spam content
 - Explicit display names or usernames
-- Requires an active User API session
+- Full profile scans need an active User API session; without one, name-only scans still run on new joiners, first messages and renames
 
 See **[Profile Scanning](../features/08-profile-scanning.md)** for full details.
 

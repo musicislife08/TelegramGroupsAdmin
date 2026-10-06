@@ -189,7 +189,7 @@ The service tracks metadata fingerprints (photo IDs, story IDs, bio text, channe
 
 ### Requirements
 
-- A connected Telegram User API session (WTelegram) — configured in **Settings > Telegram > User API**.
+- A connected Telegram User API session (WTelegram) — configured in **Settings > Telegram > User API** — for full profile scans. Without one, name-only scans still run.
 - An AI provider API key for Vision analysis (configured in **Settings > System > AI Providers**).
 - Profile scanning runs independently of the bot API and does not count against bot rate limits.
 
