@@ -168,6 +168,12 @@ public class ProfileRescanJob(
                 scanned, attempted, skipped);
             success = true;
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Shutdown, not a failure
+            logger.LogInformation("Profile rescan cancelled");
+            throw;
+        }
         catch (Exception ex)
         {
             logger.LogError(ex, "Profile rescan batch failed");

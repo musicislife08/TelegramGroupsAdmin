@@ -343,6 +343,33 @@ public class ProfileRescanJobTests
     }
 
     [Test]
+    public void Execute_CancelledDuringTheThrottle_LogsCancelledNotFailed()
+    {
+        // Shutdown cancels the run mid-throttle: it ends with an Information line, not an Error.
+        using var cts = new CancellationTokenSource();
+        var context = Substitute.For<IJobExecutionContext>();
+        context.CancellationToken.Returns(cts.Token);
+        _job = NewJob(TimeSpan.FromMinutes(1));
+        var seven = UserIdentity.ForTest(7, "Seven");
+        Batch(seven);
+        _scanner.ScanUserProfileAsync(seven, Arg.Any<ChatIdentity?>(), Arg.Any<CancellationToken>(), Arg.Any<bool>(), Arg.Any<ProfileScanOrigin>())
+            .Returns(_ =>
+            {
+                cts.Cancel();
+                return new ProfileScanResult(7, null, null, null, null, false, null, false, false, false, 0m,
+                    ProfileScanOutcome.Clean, null, null);
+            });
+
+        Assert.That(async () => await _job.Execute(context), Throws.InstanceOf<OperationCanceledException>());
+        Assert.Multiple(() =>
+        {
+            Assert.That(_logger.Entries.Count(e => e.Level == LogLevel.Information && e.Message == "Profile rescan cancelled"),
+                Is.EqualTo(1));
+            Assert.That(_logger.Entries.Any(e => e.Level == LogLevel.Error), Is.False);
+        });
+    }
+
+    [Test]
     public void ProfileRescanSettings_StoredJsonWithoutRetryLimit_DefaultsToThree()
     {
         var settings = System.Text.Json.JsonSerializer.Deserialize<ProfileRescanSettings>("""{"BatchSize":50,"RescanAfter":"1w"}""")!;
