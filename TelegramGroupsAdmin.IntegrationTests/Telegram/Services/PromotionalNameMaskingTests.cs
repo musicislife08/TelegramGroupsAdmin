@@ -172,14 +172,14 @@ public class PromotionalNameMaskingTests
         var masking = await configService.GetNameMaskingAsync(ChatId);
         var config = await configService.GetEffectiveWelcomeAsync(ChatId);
         Assert.That(config, Is.Not.Null, "the global welcome_config applies to Workshop Alumni");
-        var template = config!.Mode is WelcomeMode.DmWelcome or WelcomeMode.EntranceExam
-            ? config.DmChatTeaserMessage
-            : config.MainWelcomeMessage;
-        Assert.That(template, Does.Contain("{username}"), "the chat's welcome template mentions the user");
         await using var ctx = _testHelper!.GetDbContext();
         var chatName = await ctx.ManagedChats.AsNoTracking()
-            .Where(c => c.ChatId == ChatId).Select(c => c.ChatName).SingleAsync();
-        return (identity, masking, chatName ?? ChatId.ToString(), config);
+            .Where(c => c.ChatId == ChatId).Select(c => c.ChatName).SingleAsync() ?? ChatId.ToString();
+        // Rendered unmasked through the same template choice as the group post, so the guard holds
+        // whatever the welcome mode (DM and exam modes post the teaser, chat mode the main message).
+        Assert.That(WelcomeMessageBuilder.FormatWelcomeMessage(config!, identity, chatName, NameMasking.Off).Text,
+            Does.Contain(identity.DisplayName), "the chat's welcome message mentions the user");
+        return (identity, masking, chatName, config!);
     }
 
     [Test]
@@ -238,11 +238,14 @@ public class PromotionalNameMaskingTests
         await scope.ServiceProvider.GetRequiredService<IAdminNotificationService>().SendProfileScanAlertAsync(
             ChatIdentity.FromId(ChatId), identity, score: 3.0m, signals: "name_signal", aiReason: null, reportId: 1);
 
-        var dmTexts = _dms.ReceivedCalls().SelectMany(c => c.GetArguments().OfType<string>()).ToList();
+        // One DM to the one admin; its text is the third argument of every IBotDmService send.
+        var dm = _dms.ReceivedCalls().ToList();
+        Assert.That(dm, Has.Count.EqualTo(1), "one DM to the chat's one admin");
+        var dmText = (string)dm[0].GetArguments()[2]!;
         Assert.Multiple(() =>
         {
-            Assert.That(dmTexts, Has.Some.Contains(identity.DisplayName));
-            Assert.That(dmTexts, Has.None.Contains(NameRedaction.Spam));
+            Assert.That(dmText.Split('\n'), Has.One.EqualTo($"User: {identity.DisplayName}"));
+            Assert.That(dmText, Does.Not.Contain(NameRedaction.Spam));
         });
     }
 
