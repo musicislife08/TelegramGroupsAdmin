@@ -134,7 +134,8 @@ public class ProfileRescanJob(
                     var result = await profileScanService.ScanUserProfileAsync(
                         user,
                         triggeringChat: chat,
-                        cancellationToken);
+                        cancellationToken,
+                        origin: ProfileScanOrigin.Rescan);
 
                     // A name-only scan counts as scanned; a skip reason means nothing was written.
                     if (result.SkipReason is null)

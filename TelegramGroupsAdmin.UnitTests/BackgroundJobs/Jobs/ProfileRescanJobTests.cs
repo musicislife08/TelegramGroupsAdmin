@@ -39,7 +39,7 @@ public class ProfileRescanJobTests
         _users = Substitute.For<ITelegramUserRepository>();
         _users.GetChatsForUserAsync(Arg.Any<long>(), Arg.Any<CancellationToken>()).Returns(new List<ChatIdentity>());
         _scanner = Substitute.For<IProfileScanService>();
-        _scanner.ScanUserProfileAsync(Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity?>(), Arg.Any<CancellationToken>(), Arg.Any<bool>())
+        _scanner.ScanUserProfileAsync(Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity?>(), Arg.Any<CancellationToken>(), Arg.Any<bool>(), Arg.Any<ProfileScanOrigin>())
             .Returns(ci => new ProfileScanResult(ci.Arg<UserIdentity>().Id, null, null, null, null, false, null,
                 false, false, false, 0m, ProfileScanOutcome.Clean, null, null));
         _identities = Substitute.For<IUserIdentityService>();
@@ -96,8 +96,22 @@ public class ProfileRescanJobTests
 
         await _identities.Received(1).ResolveManyAsync(Arg.Any<IReadOnlyCollection<long>>(), Arg.Any<CancellationToken>());
         await _identities.DidNotReceiveWithAnyArgs().ResolveAsync(default);
-        await _scanner.Received(1).ScanUserProfileAsync(seven, Arg.Any<ChatIdentity?>(), Arg.Any<CancellationToken>(), Arg.Any<bool>());
-        await _scanner.Received(1).ScanUserProfileAsync(eight, Arg.Any<ChatIdentity?>(), Arg.Any<CancellationToken>(), Arg.Any<bool>());
+        await _scanner.Received(1).ScanUserProfileAsync(seven, Arg.Any<ChatIdentity?>(), Arg.Any<CancellationToken>(), Arg.Any<bool>(), Arg.Any<ProfileScanOrigin>());
+        await _scanner.Received(1).ScanUserProfileAsync(eight, Arg.Any<ChatIdentity?>(), Arg.Any<CancellationToken>(), Arg.Any<bool>(), Arg.Any<ProfileScanOrigin>());
+    }
+
+    [Test]
+    public async Task Execute_ScansWithTheRescanOrigin()
+    {
+        // The scan carries the user's chat, but counts as a rescan in the scan-source metric.
+        var seven = UserIdentity.ForTest(7, "Seven");
+        Batch(seven);
+        var chat = ChatIdentity.FromId(-1002);
+        Chats(7, chat);
+
+        await _job.Execute(Context());
+
+        await _scanner.Received(1).ScanUserProfileAsync(seven, chat, Arg.Any<CancellationToken>(), false, ProfileScanOrigin.Rescan);
     }
 
     [Test]
@@ -143,14 +157,14 @@ public class ProfileRescanJobTests
         var seven = UserIdentity.ForTest(7, "Seven");
         var eight = UserIdentity.ForTest(8, "Eight");
         Batch(seven, eight);
-        _scanner.ScanUserProfileAsync(seven, Arg.Any<ChatIdentity?>(), Arg.Any<CancellationToken>(), Arg.Any<bool>())
+        _scanner.ScanUserProfileAsync(seven, Arg.Any<ChatIdentity?>(), Arg.Any<CancellationToken>(), Arg.Any<bool>(), Arg.Any<ProfileScanOrigin>())
             .Returns(new ProfileScanResult(7, null, null, null, null, false, null, false, false, false, 0m,
                 ProfileScanOutcome.Clean, null, null,
                 SkipReason: "No User API session available. Connect a session in Settings."));
 
         await _job.Execute(Context());
 
-        await _scanner.Received(1).ScanUserProfileAsync(eight, Arg.Any<ChatIdentity?>(), Arg.Any<CancellationToken>(), Arg.Any<bool>());
+        await _scanner.Received(1).ScanUserProfileAsync(eight, Arg.Any<ChatIdentity?>(), Arg.Any<CancellationToken>(), Arg.Any<bool>(), Arg.Any<ProfileScanOrigin>());
     }
 
     private void Chats(long userId, params ChatIdentity[] chats) =>
@@ -188,8 +202,8 @@ public class ProfileRescanJobTests
 
         await _job.Execute(Context());
 
-        await _scanner.Received(1).ScanUserProfileAsync(user, enabledChat, Arg.Any<CancellationToken>(), Arg.Any<bool>());
-        await _scanner.DidNotReceive().ScanUserProfileAsync(user, disabledChat, Arg.Any<CancellationToken>(), Arg.Any<bool>());
+        await _scanner.Received(1).ScanUserProfileAsync(user, enabledChat, Arg.Any<CancellationToken>(), Arg.Any<bool>(), Arg.Any<ProfileScanOrigin>());
+        await _scanner.DidNotReceive().ScanUserProfileAsync(user, disabledChat, Arg.Any<CancellationToken>(), Arg.Any<bool>(), Arg.Any<ProfileScanOrigin>());
     }
 
     [TestCase(true)]
@@ -204,7 +218,7 @@ public class ProfileRescanJobTests
         await _job.Execute(Context());
 
         await _scanner.Received(globallyEnabled ? 1 : 0)
-            .ScanUserProfileAsync(user, null, Arg.Any<CancellationToken>(), Arg.Any<bool>());
+            .ScanUserProfileAsync(user, null, Arg.Any<CancellationToken>(), Arg.Any<bool>(), Arg.Any<ProfileScanOrigin>());
     }
 
     private void BatchSize(int batchSize) =>
@@ -236,9 +250,9 @@ public class ProfileRescanJobTests
 
         await _job.Execute(Context());
 
-        await _scanner.Received(1).ScanUserProfileAsync(users[3], enabledChat, Arg.Any<CancellationToken>(), Arg.Any<bool>());
-        await _scanner.Received(1).ScanUserProfileAsync(users[4], enabledChat, Arg.Any<CancellationToken>(), Arg.Any<bool>());
-        await _scanner.DidNotReceive().ScanUserProfileAsync(users[5], Arg.Any<ChatIdentity?>(), Arg.Any<CancellationToken>(), Arg.Any<bool>());
+        await _scanner.Received(1).ScanUserProfileAsync(users[3], enabledChat, Arg.Any<CancellationToken>(), Arg.Any<bool>(), Arg.Any<ProfileScanOrigin>());
+        await _scanner.Received(1).ScanUserProfileAsync(users[4], enabledChat, Arg.Any<CancellationToken>(), Arg.Any<bool>(), Arg.Any<ProfileScanOrigin>());
+        await _scanner.DidNotReceive().ScanUserProfileAsync(users[5], Arg.Any<ChatIdentity?>(), Arg.Any<CancellationToken>(), Arg.Any<bool>(), Arg.Any<ProfileScanOrigin>());
         await _scanner.ReceivedWithAnyArgs(2).ScanUserProfileAsync(default!, default, default, default);
     }
 
@@ -305,7 +319,7 @@ public class ProfileRescanJobTests
 
         await _job.Execute(Context());
 
-        await _scanner.Received(1).ScanUserProfileAsync(eight, Arg.Any<ChatIdentity?>(), Arg.Any<CancellationToken>(), Arg.Any<bool>());
+        await _scanner.Received(1).ScanUserProfileAsync(eight, Arg.Any<ChatIdentity?>(), Arg.Any<CancellationToken>(), Arg.Any<bool>(), Arg.Any<ProfileScanOrigin>());
         // Lower bound only (a delay never ends early); 50 ms of slack for timer granularity.
         Assert.That(nextScanAt - failedAt, Is.GreaterThanOrEqualTo(throttle - TimeSpan.FromMilliseconds(50)));
     }
@@ -324,8 +338,8 @@ public class ProfileRescanJobTests
         await _job.Execute(Context());
 
         await _config.Received(1).GetEffectiveWelcomeAsync(-1002, Arg.Any<CancellationToken>());
-        await _scanner.Received(1).ScanUserProfileAsync(seven, shared, Arg.Any<CancellationToken>(), Arg.Any<bool>());
-        await _scanner.Received(1).ScanUserProfileAsync(eight, shared, Arg.Any<CancellationToken>(), Arg.Any<bool>());
+        await _scanner.Received(1).ScanUserProfileAsync(seven, shared, Arg.Any<CancellationToken>(), Arg.Any<bool>(), Arg.Any<ProfileScanOrigin>());
+        await _scanner.Received(1).ScanUserProfileAsync(eight, shared, Arg.Any<CancellationToken>(), Arg.Any<bool>(), Arg.Any<ProfileScanOrigin>());
     }
 
     [Test]
@@ -367,7 +381,7 @@ public class ProfileRescanJobTests
 
         await _job.Execute(Context());
 
-        await _scanner.Received(1).ScanUserProfileAsync(seven, Arg.Any<ChatIdentity?>(), Arg.Any<CancellationToken>(), Arg.Any<bool>());
+        await _scanner.Received(1).ScanUserProfileAsync(seven, Arg.Any<ChatIdentity?>(), Arg.Any<CancellationToken>(), Arg.Any<bool>(), Arg.Any<ProfileScanOrigin>());
         Assert.That(_logger.Entries.Any(e => e.Message == NothingCanScanWarning), Is.False);
     }
 

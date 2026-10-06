@@ -47,6 +47,7 @@ public class ProfileScanServiceNameOnlyTests
     private IReportsRepository _reports = null!;
     private IAdminNotificationService _notifications = null!;
     private CapturingLogger<ProfileScanService> _logs = null!;
+    private PipelineMetrics _metrics = null!;
     private ServiceProvider _provider = null!;
     private ProfileScanService _sut = null!;
 
@@ -71,6 +72,7 @@ public class ProfileScanServiceNameOnlyTests
         _reports = Substitute.For<IReportsRepository>();
         _notifications = Substitute.For<IAdminNotificationService>();
         _logs = new CapturingLogger<ProfileScanService>();
+        _metrics = new PipelineMetrics();
         _provider = new ServiceCollection()
             .AddSingleton(Substitute.For<IUsernameHistoryRepository>())
             .AddSingleton(_moderation)
@@ -91,7 +93,7 @@ public class ProfileScanServiceNameOnlyTests
     private ProfileScanService NewSut(TimeSpan timeout) => new(
         _sessions,
         _provider.GetRequiredService<IServiceScopeFactory>(),
-        new PipelineMetrics(),
+        _metrics,
         new RecyclableMemoryStreamManager(),
         Substitute.For<IImageProcessor>(),
         _logs)
@@ -427,6 +429,34 @@ public class ProfileScanServiceNameOnlyTests
         await GateScanAsync();
 
         await _scoring.ReceivedWithAnyArgs(1).ScoreAsync(default!, default!, default, default, default, default);
+    }
+
+    // ── Scan-source metric follows the caller, not whether a chat was passed ──
+
+    [TestCase(ProfileScanOrigin.ChatEvent, "welcome")]
+    [TestCase(ProfileScanOrigin.Rescan, "rescan")]
+    public async Task ScanWithChat_TagsSourceByOrigin(ProfileScanOrigin origin, string expectedSource)
+    {
+        // The rescan job passes the user's chat too; its scans must still count as rescans.
+        var sources = new ConcurrentQueue<object?>();
+        using var listener = new System.Diagnostics.Metrics.MeterListener();
+        listener.InstrumentPublished = (instrument, l) =>
+        {
+            if (ReferenceEquals(instrument.Meter, _metrics.Meter) && instrument.Name == "tga.pipeline.profile_scans_total")
+                l.EnableMeasurementEvents(instrument);
+        };
+        listener.SetMeasurementEventCallback<long>((_, _, tags, _) =>
+        {
+            foreach (var tag in tags)
+                if (tag.Key == "source")
+                    sources.Enqueue(tag.Value);
+        });
+        listener.Start();
+        ResolvingClient();
+
+        await _sut.ScanUserProfileAsync(Named, Chat, CancellationToken.None, origin: origin);
+
+        Assert.That(sources, Is.EqualTo(new object?[] { expectedSource }));
     }
 
     private sealed class CapturingLogger<T> : ILogger<T>

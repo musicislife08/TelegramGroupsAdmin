@@ -1161,7 +1161,8 @@
         try
         {
             var result = await ProfileScanService.ScanUserProfileAsync(
-                _userDetail.User, triggeringChat: null, CancellationToken.None);
+                _userDetail.User, triggeringChat: null, CancellationToken.None,
+                origin: TelegramGroupsAdmin.Telegram.Services.UserApi.ProfileScanOrigin.Rescan);
 
             await LoadUserDetailAsync();
 

@@ -62,7 +62,8 @@ public sealed class ProfileScanService(
         UserIdentity user,
         ChatIdentity? triggeringChat,
         CancellationToken ct,
-        bool forceRescan = false)
+        bool forceRescan = false,
+        ProfileScanOrigin origin = ProfileScanOrigin.ChatEvent)
     {
         // The shared run uses CancellationToken.None (ScanTimeout bounds it) so the first caller's
         // cancellation cannot cancel it for others; each caller's ct only stops its own wait.
@@ -71,7 +72,7 @@ public sealed class ProfileScanService(
         var key = (user.Id, forceRescan);
         Lazy<Task<ProfileScanResult>> candidate = null!;
         candidate = new Lazy<Task<ProfileScanResult>>(
-            () => RunAndRemoveAsync(key, candidate, user, triggeringChat, forceRescan));
+            () => RunAndRemoveAsync(key, candidate, user, triggeringChat, forceRescan, origin));
         var lazy = _inFlight.GetOrAdd(key, candidate);
         return await lazy.Value.WaitAsync(ct);
     }
@@ -81,11 +82,12 @@ public sealed class ProfileScanService(
         Lazy<Task<ProfileScanResult>> self,
         UserIdentity user,
         ChatIdentity? triggeringChat,
-        bool forceRescan)
+        bool forceRescan,
+        ProfileScanOrigin origin)
     {
         try
         {
-            return await ScanOnceAsync(user, triggeringChat, forceRescan, CancellationToken.None);
+            return await ScanOnceAsync(user, triggeringChat, forceRescan, origin, CancellationToken.None);
         }
         finally
         {
@@ -98,10 +100,11 @@ public sealed class ProfileScanService(
         UserIdentity user,
         ChatIdentity? triggeringChat,
         bool forceRescan,
+        ProfileScanOrigin origin,
         CancellationToken ct)
     {
         var startTimestamp = Stopwatch.GetTimestamp();
-        var scanSource = triggeringChat is not null ? "welcome" : "rescan";
+        var scanSource = OriginToTag(origin);
 
         await using var scope = scopeFactory.CreateAsyncScope();
         var sp = scope.ServiceProvider;
@@ -1125,6 +1128,14 @@ public sealed class ProfileScanService(
             ContainsNudity: false,
             ExplicitDisplayText: false,
             SkipReason: skipReason);
+
+    /// <summary>Source tag for the profile-scan metrics; an unmapped origin fails loudly.</summary>
+    internal static string OriginToTag(ProfileScanOrigin origin) => origin switch
+    {
+        ProfileScanOrigin.ChatEvent => "welcome",
+        ProfileScanOrigin.Rescan => "rescan",
+        _ => throw new InvalidOperationException($"Unmapped profile scan origin: {origin}")
+    };
 
     /// <summary>Outcome tag for the profile-scan metrics; an unmapped outcome fails loudly.</summary>
     internal static string OutcomeToTag(ProfileScanOutcome outcome) => outcome switch
