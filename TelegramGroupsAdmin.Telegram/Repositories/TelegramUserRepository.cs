@@ -1317,11 +1317,13 @@ public class TelegramUserRepository : ITelegramUserRepository
                         .OrderByDescending(r => r.ScannedAt).ThenByDescending(r => r.Id)
                         .Select(r => (short?)r.Source)
                         .FirstOrDefault() == nameOnly
-                    // NameOnly rows with no FullScan row after them = NameOnly rows since the last full scan
+                    // NameOnly rows with no FullScan row after them = NameOnly rows since the last full scan.
+                    // "After" uses the latest-row order above (scanned_at, then id) so equal timestamps are decided.
                     && context.ProfileScanResults.Count(r => r.UserId == u.TelegramUserId
                         && r.Source == nameOnly
                         && !context.ProfileScanResults.Any(f => f.UserId == u.TelegramUserId
-                            && f.Source == fullScan && f.ScannedAt > r.ScannedAt)) < nameOnlyRetryLimit))
+                            && f.Source == fullScan
+                            && (f.ScannedAt > r.ScannedAt || (f.ScannedAt == r.ScannedAt && f.Id > r.Id)))) < nameOnlyRetryLimit))
             .OrderBy(u => u.ProfileScannedAt) // NULLS FIRST is PostgreSQL default for ASC
             .Take(batchSize)
             .Select(u => u.TelegramUserId)
