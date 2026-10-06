@@ -110,14 +110,17 @@ public class NameOnlyScanTests
         });
         Assert.That(await ctx.ProfileScanResults.CountAsync(r => r.UserId == UserId), Is.Zero);
         var chatId = GoldenDatasetConstants.Chats.MainChatId;
+        // Load-bearing: unstubbed, NSubstitute returns a substitute client (recursive mock) and the
+        // scan would fall back through "user not resolvable" instead of "no session".
         _sessions.GetClientForChatAsync(chatId, Arg.Any<CancellationToken>()).Returns((IWTelegramApiClient?)null);
         UserIdentity identity;
         await using (var scope = _provider!.CreateAsyncScope())
             identity = await scope.ServiceProvider.GetRequiredService<IUserIdentityService>().ResolveAsync(UserId, CancellationToken.None);
-        var start = DateTimeOffset.UtcNow;
+        var start = PostgresTimestamps.FloorToMicrosecond(DateTimeOffset.UtcNow);
 
         var result = await NewScanService().ScanUserProfileAsync(
             identity, ChatIdentity.FromId(chatId), CancellationToken.None);
+        var end = PostgresTimestamps.CeilingToMicrosecond(DateTimeOffset.UtcNow);
 
         var row = await ctx.ProfileScanResults.AsNoTracking().SingleAsync(r => r.UserId == UserId);
         var after = await ctx.TelegramUsers.AsNoTracking().SingleAsync(u => u.TelegramUserId == UserId);
@@ -134,7 +137,7 @@ public class NameOnlyScanTests
             Assert.That(row.AiExplicitDisplayText, Is.False);
             Assert.That(row.AiPromotionalDisplayText, Is.False);
             Assert.That(after.ProfileScanScore, Is.EqualTo(1.0m));
-            Assert.That(after.ProfileScannedAt, Is.GreaterThanOrEqualTo(start.AddSeconds(-1)));
+            Assert.That(after.ProfileScannedAt, Is.InRange(start, end));
             Assert.That(after.Bio, Is.EqualTo(before.Bio));
             Assert.That(_userPrompt, Does.Contain($"<display_name>{before.FirstName} {before.LastName}</display_name>"));
             Assert.That(_userPrompt, Does.Contain($"<username>{before.Username}</username>"));

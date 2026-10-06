@@ -17,7 +17,8 @@ namespace TelegramGroupsAdmin.IntegrationTests.Telegram.Repositories;
 /// - Write path tests: SUT InsertAsync IS the assertion subject, for a canonical user
 ///   with no scan rows (@Juvenileii); the test reads the user's (empty) history first.
 /// - Read path tests: user 9220500615182 (@bagging_armado), scans 530 and 534
-///   from 23_profile_scan_results.sql, read-only.
+///   from 23_profile_scan_results.sql, read-only; @unreadbackspin's NameOnly row 528
+///   (GoldenDatasetConstants.ProfileRescan), read-only.
 /// </summary>
 [TestFixture]
 public class ProfileScanResultsRepositoryTests
@@ -123,6 +124,23 @@ public class ProfileScanResultsRepositoryTests
     }
 
     [Test]
+    public async Task GetLatestSourceAsync_CanonicalNameOnlyUser_ReturnsNameOnly()
+    {
+        await using var ctx = _testHelper!.GetDbContext();
+        var rows = await ctx.ProfileScanResults.AsNoTracking()
+            .Where(r => r.UserId == GoldenDatasetConstants.ProfileRescan.NameOnlyLatestUserId)
+            .ToListAsync();
+        Assert.That(rows.Select(r => (r.Id, r.Source)),
+            Is.EqualTo(new[] { (GoldenDatasetConstants.ProfileRescan.NameOnlyLatestScanId, (short)ProfileScanSource.NameOnly) }),
+            "anchor's only scan row must be the edited NameOnly row 528");
+
+        var source = await _repository!.GetLatestSourceAsync(
+            GoldenDatasetConstants.ProfileRescan.NameOnlyLatestUserId, CancellationToken.None);
+
+        Assert.That(source, Is.EqualTo(ProfileScanSource.NameOnly));
+    }
+
+    [Test]
     public async Task GetLatestSourceAsync_UnscannedUser_ReturnsNull()
     {
         await AssertUnscannedAsync();
@@ -139,15 +157,16 @@ public class ProfileScanResultsRepositoryTests
         var before = await ctx.TelegramUsers.AsNoTracking().SingleAsync(u => u.TelegramUserId == UnscannedUserId);
         Assert.That(before.ProfileScannedAt, Is.Null, "anchor has never been scanned");
         var users = _scope!.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
-        var start = DateTimeOffset.UtcNow;
+        var start = PostgresTimestamps.FloorToMicrosecond(DateTimeOffset.UtcNow);
 
         await users.UpdateProfileScanScoreAsync(UnscannedUserId, 3.2m);
+        var end = PostgresTimestamps.CeilingToMicrosecond(DateTimeOffset.UtcNow);
 
         var after = await ctx.TelegramUsers.AsNoTracking().SingleAsync(u => u.TelegramUserId == UnscannedUserId);
         using (Assert.EnterMultipleScope())
         {
             Assert.That(after.ProfileScanScore, Is.EqualTo(3.2m));
-            Assert.That(after.ProfileScannedAt, Is.GreaterThanOrEqualTo(start.AddSeconds(-1)));
+            Assert.That(after.ProfileScannedAt, Is.InRange(start, end));
             Assert.That(after.Bio, Is.EqualTo(before.Bio));
             Assert.That(after.ProfilePhotoId, Is.EqualTo(before.ProfilePhotoId));
             Assert.That(after.PersonalChannelId, Is.EqualTo(before.PersonalChannelId));

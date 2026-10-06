@@ -425,7 +425,7 @@ Anchors are in code as `GoldenDatasetConstants.ProfileRescan` (#552 part 2). `In
 |---|---|---|
 | `NeverScannedUserId` | 9963580010331 "Ferocity Opponent" | never scanned; **edited:** `profile_scan_excluded` true → false (every never-scanned eligible user in canonical had been auto-excluded by the old unresolvable rule) |
 | `ExcludedNeverScannedUserId` | 9434053902837 "Preflight Silk" | never scanned, excluded. Read-only |
-| `NameOnlyLatestUserId` / `NameOnlyLatestScanId` | 9758118926756 @unreadbackspin, row 528 | one scan row, **edited:** `source` 0 → 1 (NameOnly). Retry-limit boundary: limit 2 selects, limit 1 does not |
+| `NameOnlyLatestUserId` / `NameOnlyLatestScanId` | 9758118926756 @unreadbackspin, row 528 | one scan row, **edited:** `source` 0 → 1 (NameOnly). Retry-limit boundary: limit 2 selects, limit 1 does not. Also the read anchor for `ProfileScanResultsRepositoryTests.GetLatestSourceAsync_CanonicalNameOnlyUser_ReturnsNameOnly` (read-only) |
 | `FullScanLatestUserId` | 9922735795237 @parkingsturdily, row 533 | one FullScan row from 2026-04-30; never selected however old. Read-only |
 | `MultiChatUserId` / `MultiChatLatestChatId` / `MultiChatOldestChatId` | 9739143127436 @elvesunable | undeleted messages in Hobby Forum (latest), Main Community, Garage Chat (oldest); pins `GetChatsForUserAsync` order. Read-only |
 
