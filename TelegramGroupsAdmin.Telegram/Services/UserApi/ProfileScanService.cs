@@ -1126,11 +1126,12 @@ public sealed class ProfileScanService(
             ExplicitDisplayText: false,
             SkipReason: skipReason);
 
-    private static string OutcomeToTag(ProfileScanOutcome outcome) => outcome switch
+    /// <summary>Outcome tag for the profile-scan metrics; an unmapped outcome fails loudly.</summary>
+    internal static string OutcomeToTag(ProfileScanOutcome outcome) => outcome switch
     {
         ProfileScanOutcome.Clean => "clean",
         ProfileScanOutcome.HeldForReview => "held_for_review",
         ProfileScanOutcome.Banned => "banned",
-        _ => outcome.ToString().ToLowerInvariant()
+        _ => throw new InvalidOperationException($"Unmapped profile scan outcome: {outcome}")
     };
 }
