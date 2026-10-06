@@ -138,9 +138,20 @@ public sealed class PipelineMetrics
         _banCelebrationMaskedUsernameTotal.Add(1, new TagList
         {
             { "trigger", trigger },
-            { "verdict", verdict.ToString().ToLowerInvariant() }
+            { "verdict", MaskedVerdictTag(verdict) }
         });
     }
+
+    /// <summary>
+    /// Verdict tag for a masked name. Only a flagged name is masked; any other verdict throws (the
+    /// ban celebration catches it, so it never costs the ban).
+    /// </summary>
+    private static string MaskedVerdictTag(NameVerdict verdict) => verdict switch
+    {
+        NameVerdict.Promotional => "promotional",
+        NameVerdict.Explicit => "explicit",
+        _ => throw new InvalidOperationException($"Not a masking name verdict: {verdict}")
+    };
 
     public void RecordBanCelebrationDm(string outcome)
     {
