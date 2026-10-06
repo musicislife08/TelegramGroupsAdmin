@@ -107,7 +107,7 @@ public class ProfileScoringEngineNameOnlyTests
     }
 
     [Test]
-    public async Task ScoreNameOnlyAsync_AiFeatureUnavailable_ReturnsNullWithoutCallingAi()
+    public async Task ScoreNameOnlyAsync_AiFeatureUnavailable_ReturnsNullWithoutCallingAiAndLogsWarning()
     {
         _chat.IsFeatureAvailableAsync(AIFeatureType.ProfileScan, Arg.Any<CancellationToken>()).Returns(false);
 
@@ -115,6 +115,8 @@ public class ProfileScoringEngineNameOnlyTests
 
         Assert.That(result, Is.Null);
         await _chat.DidNotReceiveWithAnyArgs().GetCompletionAsync(default, default!, default!, default, default);
+        Assert.That(_logs.Entries, Has.Some.Matches<(LogLevel Level, string Message)>(
+            e => e.Level == LogLevel.Warning && e.Message.Contains("name-only scan skipped")));
     }
 
     [Test]
