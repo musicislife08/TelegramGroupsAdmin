@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
+using TelegramGroupsAdmin.Core.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Metrics;
 
@@ -57,7 +58,7 @@ public sealed class PipelineMetrics
 
         _banCelebrationMaskedUsernameTotal = _meter.CreateCounter<long>(
             "tga.pipeline.ban_celebration.masked_username_total",
-            description: "Ban celebrations where the banned user's display name was masked, by trigger");
+            description: "Ban celebrations where the banned user's display name was masked, by trigger and name verdict");
 
         _banCelebrationDmTotal = _meter.CreateCounter<long>(
             "tga.pipeline.ban_celebration.dm_total",
@@ -126,9 +127,13 @@ public sealed class PipelineMetrics
         _profileScanExplicitUsernameTotal.Add(1, new TagList { { "outcome", outcome } });
     }
 
-    public void RecordMaskedUsername(string trigger)
+    public void RecordMaskedUsername(string trigger, NameVerdict verdict)
     {
-        _banCelebrationMaskedUsernameTotal.Add(1, new TagList { { "trigger", trigger } });
+        _banCelebrationMaskedUsernameTotal.Add(1, new TagList
+        {
+            { "trigger", trigger },
+            { "verdict", verdict.ToString().ToLowerInvariant() }
+        });
     }
 
     public void RecordBanCelebrationDm(string outcome)

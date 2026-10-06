@@ -89,7 +89,7 @@ public class BanCelebrationService(
             {
                 logger.LogDebug("Masking flagged display name for {User} in {Chat}",
                     bannedUser.ToLogDebug(), chat.ToLogDebug());
-                pipelineMetrics.RecordMaskedUsername(isAutoBan ? "auto_ban" : "manual_ban");
+                pipelineMetrics.RecordMaskedUsername(isAutoBan ? "auto_ban" : "manual_ban", bannedUser.Verdict);
             }
 
             var chatCaption = ReplacePlaceholders(

@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+using System.Diagnostics.Metrics;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
@@ -581,6 +583,31 @@ public class BanCelebrationServiceTests
 
         await _mockMessageService.Received(1).SendAndSaveAnimationAsync(TestChatId, Arg.Any<InputFile>(),
             Arg.Is<TelegramMessage>(m => m!.Text == "Bad User got banned!"), Arg.Any<CancellationToken>());
+    }
+
+    [TestCase(NameVerdict.Promotional, "promotional")]
+    [TestCase(NameVerdict.Explicit, "explicit")]
+    public async Task Celebration_MaskedName_RecordsVerdictTag(NameVerdict verdict, string expectedTag)
+    {
+        var measurements = new ConcurrentQueue<KeyValuePair<string, object?>[]>();
+        using var listener = new MeterListener();
+        listener.InstrumentPublished = (instrument, l) =>
+        {
+            if (instrument.Name == "tga.pipeline.ban_celebration.masked_username_total")
+                l.EnableMeasurementEvents(instrument);
+        };
+        listener.SetMeasurementEventCallback<long>((_, _, tags, _) => measurements.Enqueue(tags.ToArray()));
+        listener.Start();
+        _mockIdentityService.ResolveAsync(TestUserId, Arg.Any<CancellationToken>())
+            .Returns(UserIdentity.ForTest(TestUserId, "Bad", "User", verdict: verdict));
+        _mockConfigService.GetNameMaskingAsync(TestChatId, Arg.Any<CancellationToken>()).Returns(NameMasking.On);
+        SeedOneGifAndOneCaption("{username} got banned!");
+
+        await _sut.SendBanCelebrationAsync(TestChat, TestBannedUser, isAutoBan: true);
+
+        Assert.That(measurements, Has.Some.Matches<KeyValuePair<string, object?>[]>(tags =>
+            tags.Contains(new KeyValuePair<string, object?>("trigger", "auto_ban"))
+            && tags.Contains(new KeyValuePair<string, object?>("verdict", expectedTag))));
     }
 
     #endregion
