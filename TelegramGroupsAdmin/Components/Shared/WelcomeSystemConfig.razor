@@ -574,14 +574,15 @@
 
     private WelcomeConfig? _config;
     private const string MaskFlaggedNamesHelpId = "mask-flagged-names-help";
+    private MudForm? _form;
+    private bool _isValid = true;
 
     // Only while scanning is on: the field is disabled otherwise, so it must never block a save
     private bool NameOnlyThresholdInvalid =>
         _config is not null
         && _config.JoinSecurity.ProfileScan.Enabled
         && _config.JoinSecurity.ProfileScan.NameOnlyBanThreshold < _config.JoinSecurity.ProfileScan.NotifyThreshold;
-    private MudForm? _form;
-    private bool _isValid = true;
+
     private bool _loading = true;
     // Advisory only: assume a session when the check fails so the notice never shows wrongly.
     private bool _hasUserApiSession = true;
@@ -633,13 +634,17 @@
 
     private async Task SaveConfig()
     {
-        if (_config == null || !_isValid) return;
+        if (_config == null) return;
 
+        // Before the form check: the field's error also makes the form invalid, and in per-chat
+        // mode (parent calls SaveConfiguration, no disabled button) the refusal must say why.
         if (NameOnlyThresholdInvalid)
         {
             Snackbar.Add("Name-only ban threshold must be at least the notify threshold.", Severity.Error);
             return;
         }
+
+        if (!_isValid) return;
 
         _saving = true;
         try

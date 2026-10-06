@@ -1,5 +1,6 @@
 using Bunit;
 using Microsoft.Extensions.DependencyInjection;
+using MudBlazor;
 using MudBlazor.Services;
 using NSubstitute;
 using TelegramGroupsAdmin.Components.Shared;
@@ -873,13 +874,22 @@ public class WelcomeSystemConfigTests : WelcomeSystemConfigTestContext
     {
         ConfigService.GetWelcomeAsync(Arg.Any<long>()).Returns(ProfileScanConfigWith(3.0m, 2.5m));
         this.AddTestWebUser();
+        var snackbar = Services.GetRequiredService<ISnackbar>();
         var cut = Render<WelcomeSystemConfig>();
-        cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("Save Configuration")), TimeSpan.FromSeconds(2));
 
-        cut.FindAll("button").First(b => b.TextContent.Contains("Save Configuration")).Click();
-
+        // Global mode: the field shows its error and the form disables the Save button.
         cut.WaitForAssertion(() =>
-            Assert.That(cut.Markup, Does.Contain("Must be at least the notify threshold")), TimeSpan.FromSeconds(2));
+        {
+            Assert.That(cut.Markup, Does.Contain("Must be at least the notify threshold"));
+            Assert.That(cut.FindAll("button").Single(b => b.TextContent.Contains("Save Configuration")).HasAttribute("disabled"),
+                Is.True);
+        }, TimeSpan.FromSeconds(2));
+
+        // Per-chat mode saves through the parent's call: refused with an error snackbar, nothing saved.
+        await cut.InvokeAsync(cut.Instance.SaveConfiguration);
+
+        Assert.That(snackbar.ShownSnackbars.Select(s => (s.Message, s.Severity)),
+            Has.One.EqualTo(("Name-only ban threshold must be at least the notify threshold.", Severity.Error)));
         await ConfigService.DidNotReceiveWithAnyArgs().SaveWelcomeAsync(default!, default!, default!, default);
     }
 
