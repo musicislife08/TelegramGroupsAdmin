@@ -743,6 +743,7 @@ public class WelcomeSystemConfigTests : WelcomeSystemConfigTestContext
             Assert.That(caption, Does.Contain("even while scanning is off"));
             Assert.That(caption, Does.Contain("ban celebration DMs"));
             Assert.That(caption, Does.Contain("Admin DMs show real names"));
+            Assert.That(caption, Does.Contain("a banned user's name"));
 
             var maskInput = cut.FindAll("label")
                 .Single(l => l.TextContent.Contains("Mask flagged names"))

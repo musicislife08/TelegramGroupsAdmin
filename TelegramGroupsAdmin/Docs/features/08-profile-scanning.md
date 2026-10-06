@@ -11,9 +11,9 @@ A scan can be triggered by:
 - **Join** — the user joins a monitored chat (on by default)
 - **Profile change** — the Bot API reports a changed name or username (on by default)
 - **First message** — a user who has never been scanned posts their first message (off by default). This covers members who joined before the bot was added to the chat, and accounts that arrive without a join event, such as people commenting on channel posts in a linked discussion group. A banned outcome stops the message from reaching content detection.
-- **Periodic rescan** — the Profile Rescan [background job](13-background-jobs.md), if enabled
+- **Periodic rescan** — the Profile Rescan [background job](13-background-jobs.md), if enabled, retries incomplete scans
 
-All automatic triggers go through the same eligibility gate: the check is skipped for trusted users, chat admins, bots, and users explicitly excluded from scanning. The first-message trigger also skips anyone who already has a scan on record (join deliberately rescans).
+All automatic triggers go through the same eligibility gate: trusted users, chat admins and bots are never scanned, and excluded users are scanned only after a rename (see [When Scans Run](#when-scans-run-retries-and-exclusion)).
 
 ### Prerequisites
 
@@ -57,7 +57,7 @@ Telegram requires an `access_hash` for user lookups -- bare user IDs return `USE
 2. **Username lookup** (exact global resolution) -- calls `Contacts_ResolveUsername` if the user has a username stored in the database
 3. **Name search** (fuzzy global search) -- calls `Contacts_Search` with the user's full name and matches by user ID
 
-If all strategies fail, the user is **excluded from future rescans** to avoid repeated failed lookups.
+If all strategies fail, the scan falls back to a [name-only scan](#when-the-profile-cant-be-read-name-only-scan); the Profile Rescan job retries it up to the name-only retry limit.
 
 ### Step 2: Fetch Full User Info
 
@@ -112,8 +112,6 @@ Two writes happen:
 1. **User record update** -- profile metadata, score, and Telegram IDs (photo ID, channel photo ID, pinned story IDs) are saved for future change detection
 2. **Scan history record** -- a `ProfileScanResultRecord` is inserted with the full scoring breakdown (rule score, AI score, reason, signals)
 
-If the user was previously excluded from scanning (Step 1 failure), the exclusion flag is cleared on a successful scan.
-
 ### Step 8: Take Moderation Action
 
 Based on the outcome:
@@ -123,6 +121,33 @@ Based on the outcome:
 | **Banned** | Score >= ban threshold (default 4.0) | Auto-ban via `IBotModerationService`, censor profile photo if nudity detected |
 | **HeldForReview** | Score >= notify threshold (default 2.0) | Create alert report, send admin notification |
 | **Clean** | Score < notify threshold | No action, user proceeds through normal welcome flow |
+
+### When the Profile Can't Be Read: Name-Only Scan
+
+If a scan cannot read the profile (no User API session at all or none usable, the user can't be resolved or their full profile can't be fetched, the scan times out, or Telegram rate-limits it with `FLOOD_WAIT`), TGA scores the name alone so the user is still filtered. Every scan path falls back this way: join, first message, renames, the rescan job and manual rescans. The name-only scan sends the same AI prompt with only the display name and username filled in and everything else marked unknown, stores a scan marked **Name only**, and acts on the score:
+
+| Score | Outcome |
+|---|---|
+| Below the notify threshold | Clean |
+| From the notify threshold up to the name-only ban threshold | Held for review (profile scan alert) |
+| At or above the name-only ban threshold (default 4.5) | Auto-ban |
+
+A name alone is weaker evidence than a whole profile, so it has its own, higher ban threshold. No name-only scan runs when the rule-based checks already decided, for bots, when scanning is off for the chat, or when the Profile Scan AI feature is not configured. If the AI call fails, nothing is recorded. The next scan that can read the profile replaces the name-only result.
+
+With profile scanning on and no User API session connected, the Profile Scan settings show a notice: full profile scans can't run, but name-only scans still run on new joiners, first messages and renames.
+
+### When Scans Run, Retries and Exclusion
+
+| Trigger | Behaviour |
+|---|---|
+| Join / first message | Scans a new or never-scanned user, or an existing user who renamed since their last scan; otherwise no scan |
+| Rename | Scans, even when the user is excluded: a rename is a change |
+| Manual rescan | Always runs, whatever the exclude flag says |
+| Profile Rescan job | Retries incomplete scans only |
+
+A successful full scan is complete: nothing rescans it automatically until the user renames or an admin runs a manual rescan. The Profile Rescan job picks untrusted, unbanned, non-bot, not-excluded users whose scan is incomplete: never scanned, or whose latest scan was name-only with fewer than the **name-only retry limit** (default 3) name-only scans since their last full scan. **Re-Scan After** is the wait before an incomplete scan is retried. Once the limit is reached, the latest name-only result stands until the user renames or an admin rescans.
+
+**Exclude from automatic scans** (User Details > Profile Scan) is your switch: the job and join / first-message scans skip the user, a rename still scans, and a manual rescan always runs. Scans never set or clear it.
 
 ---
 
@@ -178,7 +203,10 @@ The AI returns a structured JSON response with:
 - **reason** -- human-readable explanation
 - **signals_detected** -- array of identified risk signals
 - **contains_nudity** -- whether any image contains visible nudity (triggers blur censoring)
-- **explicit_display_text** -- whether the user's display name or @username is itself explicit content (used by [name masking](#masking-flagged-names))
+- **explicit_display_text** -- whether the display name or @username itself reads as explicit sexual content
+- **promotional_display_text** -- whether the display name or @username pitches to the reader (sells, solicits, recruits, lures, or points somewhere else) instead of naming someone
+
+Both name flags are used by [name masking](#masking-flagged-names).
 
 The AI returns the score directly on the 0.0-5.0 scale — no mapping needed. The score is clamped to the valid range via `Math.Clamp`.
 
@@ -202,7 +230,7 @@ The total score (rule + AI) is capped at **5.0**. Default thresholds:
 | 2.0 -- 3.9 | Held for Review |
 | 0.0 -- 1.9 | Clean |
 
-Both thresholds are configurable per chat.
+The ban, notify and name-only ban thresholds are all configurable per chat.
 
 ---
 
@@ -281,20 +309,22 @@ This prevents explicit images from appearing in the admin UI when reviewing bann
 
 ## Masking Flagged Names
 
-Some spam accounts put the explicit content in the display name itself. During the AI layer, the model also judges whether the user's display name or @username is explicit, and the result is stored with the scan.
+Some spam accounts put the pitch or the explicit content in the name itself. Every scan, full or name-only, also judges whether the display name or @username is explicit or promotional and stores both flags with the scan. A name that says who or what the account is (a person, a nickname, a farm, shop, studio, podcast or project) stays clean; a name that speaks to the reader is flagged.
 
-When the latest scan flagged a user's name, every message the bot posts in a chat shows a fixed label instead of the name:
+A flagged name is masked only while the user is banned. When the latest scan flagged a banned user's name, every message the bot posts in a chat shows a fixed label instead of the name:
 
 | Flag | Shown as |
 |---|---|
 | Explicit name | `[name removed: explicit]` |
-| Spam name (reserved for spam-flagged names) | `[name removed: spam]` |
+| Promotional name | `[name removed: spam]` |
+
+If both flags are set, the explicit label is shown.
 
 This covers what the bot posts in chats: verifying, welcome and hold messages, [Ban Celebration](09-ban-celebration.md) captions, command replies, and DM fallbacks posted in the group. Ban celebration DMs to [subscribers](09-ban-celebration.md#dm-subscribers) are masked too, because they copy the chat's caption. Mentions still link to the account, so admins can tap through to the real profile.
 
 Direct messages to a person are never masked: admin DMs and alerts (reports, profile scan and impersonation alerts, ban and admin-change notifications) and a user's own welcome, exam and `/start` DMs always show the real name. The web UI, email and push notifications show the real name too, so you can always see who you are reviewing.
 
-A flag belongs to the account, not the chat. Once any scan flags a name, it is masked in every chat where masking is on, including chats that do not scan profiles themselves. A later scan that no longer flags the name lifts the mask.
+A flag belongs to the account, not the chat: while the user is banned, the name is masked in every chat where masking is on, including chats that do not scan profiles themselves. A name held for review is shown normally until an admin decides: a ban masks it from then on, a dismissal never does, and an unban shows the name again. A later scan that no longer flags the name lifts the mask.
 
 The setting is **Mask flagged names**. It is on by default:
 
@@ -313,6 +343,8 @@ The `ProfileScanHistoryDialog` displays a **timeline view** of all scan results 
 
 - **Outcome chip** (color-coded: green for Clean, yellow for Held for Review, red for Banned)
 - **Score chip** showing the total score out of 5.0
+- **Source chip** -- **Full scan** or **Name only**
+- **Name flag chips** -- **Explicit name** and/or **Promotional name** when the scan flagged the name
 - **Score breakdown** (Rule score | AI score, with confidence percentage when available)
 - **AI reason** -- the explanation from the AI vision analysis
 - **AI signals** -- individual risk signals displayed as outlined chips
@@ -340,10 +372,11 @@ Connect at least one Telegram User API session. The scanner selects the best ava
 | Enabled | Off | Master toggle for profile scanning in this chat |
 | Auto-Ban Threshold | 4.0 | Score at or above which users are auto-banned |
 | Admin Notify Threshold | 2.0 | Score at or above which an alert is created for admin review |
+| Name-only ban threshold | 4.5 | A scan that could only read the name auto-bans at this score; below it, scores at or above the notify threshold go to review. Must be at least the notify threshold |
 | Scan on join | On | Trigger scan when a user joins the chat |
 | Scan on profile change | On | Re-scan when Bot API detects name/username changes |
 | Scan on first message | Off | Scan a never-scanned user on their first message (see [How It Works](#how-it-works)) |
-| Mask flagged names | On | Show `[name removed: explicit]` or `[name removed: spam]` instead of a flagged name in what the bot posts in the chat and in ban celebration DMs; admin and personal DMs show the real name (see [Masking Flagged Names](#masking-flagged-names)). Applies whether or not this chat scans profiles |
+| Mask flagged names | On | Show `[name removed: explicit]` or `[name removed: spam]` instead of a banned user's flagged name in what the bot posts in the chat and in ban celebration DMs; admin and personal DMs show the real name (see [Masking Flagged Names](#masking-flagged-names)). Applies whether or not this chat scans profiles |
 
 [Screenshot: Profile Scan configuration in Welcome > Join Security settings]
 
@@ -354,22 +387,20 @@ Connect at least one Telegram User API session. The scanner selects the best ava
 All Telegram API calls in the scan pipeline are wrapped with `TelegramFloodWaitException` handling. If any step triggers a rate limit:
 
 - The scan is **abandoned gracefully** (not an error)
-- The user is **not excluded** from future rescans
+- The scan falls back to a name-only scan
 - A warning is logged with the flood wait duration
 - The user proceeds through the normal welcome flow without a scan result
-
-This prevents a temporary rate limit from permanently excluding users who should be scanned later.
 
 ---
 
 ## Troubleshooting
 
 **Profile scan not running:**
-- Verify a User API session is connected (Settings > User API Settings)
+- Without a User API session only name-only scans run (Settings > User API Settings)
 - Check that Profile Scan is enabled for the chat (Settings > Welcome > Join Security > Profile Scan)
-- Confirm `ScanOnJoin` is enabled
+- Join scans run only for new, never-scanned or renamed users; check `ScanOnJoin`
 
-**Users not being resolved (excluded after scan attempt):**
+**Users not being resolved (name-only scans in their history):**
 - The user may have deleted their Telegram account
 - The User API session may not have access to the triggering chat -- verify session membership
 - All three resolution strategies (participant lookup, username, name search) failed

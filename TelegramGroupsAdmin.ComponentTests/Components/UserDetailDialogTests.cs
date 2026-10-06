@@ -521,6 +521,7 @@ public class UserDetailDialogTests : MudBlazorTestContext
             Assert.That(provider.Markup, Does.Contain("Profile Scan"));
             Assert.That(provider.Markup, Does.Contain("1.5/5.0"));
             Assert.That(provider.Markup, Does.Contain("Test bio content"));
+            Assert.That(provider.Markup, Does.Contain("Exclude from automatic scans (renames still scan)"));
         });
 
         Assert.That(dialogTask.Exception, Is.Null);
