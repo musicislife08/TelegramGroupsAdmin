@@ -17,7 +17,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
             migrationBuilder.Sql(EnrichedReportView.DropViewSql);
             migrationBuilder.Sql(UserIdentityView.DropViewSql);
             migrationBuilder.Sql(UserIdentityView.CreateViewSql);
-            migrationBuilder.Sql(EnrichedMessageView.CreateViewSql);
+            migrationBuilder.Sql(LegacyEnrichedViewSql.EnrichedMessagesV3);
             migrationBuilder.Sql(EnrichedReportView.CreateViewSql);
         }
 

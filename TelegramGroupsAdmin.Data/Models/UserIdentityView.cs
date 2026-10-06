@@ -9,8 +9,10 @@ namespace TelegramGroupsAdmin.Data.Models;
 /// <c>enriched_messages</c> and <c>enriched_reports</c> depend on this view. Any change to its
 /// definition must drop and recreate those views around it, and the migration that does so must
 /// replay older history from a frozen copy (see LegacyUserIdentityViewSql). The next change to this
-/// view or the enriched views must freeze the current <c>CreateViewSql</c> constants for
-/// <c>AddNameVerdictInputsToUserIdentities</c> first.
+/// view or enriched_reports must freeze its current <c>CreateViewSql</c> for
+/// <c>AddNameVerdictInputsToUserIdentities</c> first (enriched_messages is frozen there as
+/// LegacyEnrichedViewSql.EnrichedMessagesV3; its live SQL is replayed by
+/// <c>RemoveUnusedReplyColumnsFromEnrichedMessages</c>).
 /// </para>
 /// </summary>
 public class UserIdentityView

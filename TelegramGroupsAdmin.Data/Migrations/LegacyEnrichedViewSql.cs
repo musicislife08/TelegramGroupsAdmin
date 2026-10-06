@@ -339,4 +339,72 @@ internal static class LegacyEnrichedViewSql
         -- Reviewer (all types)
         LEFT JOIN users reviewer ON r.web_user_id = reviewer.id;
         """;
+
+    /// <summary>
+    /// enriched_messages with the author's verdict inputs (latest_scan_promotional, is_banned) and the
+    /// reply-to user's is_bot / latest_scan_explicit, as created by AddNameVerdictInputsToUserIdentities
+    /// (before RemoveUnusedReplyColumnsFromEnrichedMessages).
+    /// </summary>
+    public const string EnrichedMessagesV3 = """
+        CREATE VIEW enriched_messages AS
+        SELECT
+            -- Message columns
+            m.message_id,
+            m.user_id,
+            m.chat_id,
+            m.timestamp,
+            m.message_text,
+            m.photo_file_id,
+            m.photo_file_size,
+            m.urls,
+            m.edit_date,
+            m.content_hash,
+            m.photo_local_path,
+            m.photo_thumbnail_path,
+            m.deleted_at,
+            m.deletion_source,
+            m.reply_to_message_id,
+            m.media_type,
+            m.media_file_id,
+            m.media_file_size,
+            m.media_file_name,
+            m.media_mime_type,
+            m.media_local_path,
+            m.media_duration,
+            m.content_check_skip_reason,
+            m.similarity_hash,
+            -- Chat enrichment (from managed_chats)
+            c.chat_name,
+            c.chat_icon_path,
+            -- User enrichment (identity from user_identities, photo from telegram_users)
+            ui.username AS user_name,
+            ui.first_name,
+            ui.last_name,
+            ui.is_bot,
+            ui.latest_scan_explicit,
+            ui.latest_scan_promotional,
+            ui.is_banned,
+            u.user_photo_path,
+            -- Reply enrichment (from parent message + user_identities)
+            parent_user.first_name AS reply_to_first_name,
+            parent_user.last_name AS reply_to_last_name,
+            parent_user.username AS reply_to_username,
+            parent_user.telegram_user_id AS reply_to_user_id,
+            parent_user.is_bot AS reply_to_is_bot,
+            parent_user.latest_scan_explicit AS reply_to_latest_scan_explicit,
+            parent.message_text AS reply_to_text,
+            -- Translation (from message_translations, message-only not edits)
+            t.id AS translation_id,
+            t.translated_text,
+            t.detected_language,
+            t.confidence AS translation_confidence,
+            t.translated_at
+        FROM messages m
+        LEFT JOIN managed_chats c ON m.chat_id = c.chat_id
+        LEFT JOIN user_identities ui ON m.user_id = ui.telegram_user_id
+        LEFT JOIN telegram_users u ON m.user_id = u.telegram_user_id
+        LEFT JOIN messages parent ON m.reply_to_message_id = parent.message_id AND m.chat_id = parent.chat_id
+        LEFT JOIN user_identities parent_user ON parent.user_id = parent_user.telegram_user_id
+        LEFT JOIN message_translations t ON m.message_id = t.message_id AND m.chat_id = t.chat_id AND t.edit_id IS NULL;
+        """;
 }
