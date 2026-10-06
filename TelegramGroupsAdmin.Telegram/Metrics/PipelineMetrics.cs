@@ -12,6 +12,12 @@ public sealed class PipelineMetrics
 {
     private readonly Meter _meter = new("TelegramGroupsAdmin.Pipeline");
 
+    /// <summary>
+    /// This instance's meter. Every instance shares the meter name, so a test's MeterListener
+    /// filters on this reference to see only the instance under test.
+    /// </summary>
+    internal Meter Meter => _meter;
+
     private readonly Counter<long> _messagesProcessedTotal;
     private readonly Counter<long> _moderationActionsTotal;
     private readonly Counter<long> _commandsHandledTotal;

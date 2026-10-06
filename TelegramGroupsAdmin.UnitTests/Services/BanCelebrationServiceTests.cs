@@ -593,7 +593,9 @@ public class BanCelebrationServiceTests
         using var listener = new MeterListener();
         listener.InstrumentPublished = (instrument, l) =>
         {
-            if (instrument.Name == "tga.pipeline.ban_celebration.masked_username_total")
+            // Only this test's PipelineMetrics: other instances share the meter name.
+            if (ReferenceEquals(instrument.Meter, _pipelineMetrics.Meter)
+                && instrument.Name == "tga.pipeline.ban_celebration.masked_username_total")
                 l.EnableMeasurementEvents(instrument);
         };
         listener.SetMeasurementEventCallback<long>((_, _, tags, _) => measurements.Enqueue(tags.ToArray()));
@@ -605,9 +607,12 @@ public class BanCelebrationServiceTests
 
         await _sut.SendBanCelebrationAsync(TestChat, TestBannedUser, isAutoBan: true);
 
-        Assert.That(measurements, Has.Some.Matches<KeyValuePair<string, object?>[]>(tags =>
-            tags.Contains(new KeyValuePair<string, object?>("trigger", "auto_ban"))
-            && tags.Contains(new KeyValuePair<string, object?>("verdict", expectedTag))));
+        Assert.That(measurements, Has.Count.EqualTo(1));
+        Assert.That(measurements.Single(), Is.EquivalentTo(new[]
+        {
+            new KeyValuePair<string, object?>("trigger", "auto_ban"),
+            new KeyValuePair<string, object?>("verdict", expectedTag)
+        }));
     }
 
     #endregion
