@@ -407,6 +407,15 @@ Anchors are in code as `GoldenDatasetConstants.IdentityService` (#552 part 1); a
 | `PhotoUserId` | 9264989724828 @raceoutnumber | not trusted; user_photo_path and photo_hash set |
 | `InactiveUserId` | 9332352149450 @calixrowen | is_active = false (banned spammer); MarkActiveAsync test |
 
+### Flagged name anchors (canonical edit 2026-10-05)
+Anchors are in code as `GoldenDatasetConstants.FlaggedNames` (#552 part 2). Tests read each anchor's flags back first.
+
+| Constant | Anchor | Shape |
+|---|---|---|
+| `NameOnlyScanUserId` | 9333810782137 @loucurtsinger | not trusted, not a bot, no scan rows, `profile_scanned_at` NULL (banned before scanning existed). `NameOnlyScanTests`: the name-only scan writes the user's first row (the write is the assertion subject). Read-only otherwise |
+
+Use when: a test needs a never-scanned, untrusted user whose first scan row is the subject.
+
 ### Rescan job anchors (canonical edit 2026-10-05)
 Anchors are in code as `GoldenDatasetConstants.ProfileRescan` (#552 part 2). `IncompleteScanSelectionTests` reads each back first and passes the user count as the batch size.
 

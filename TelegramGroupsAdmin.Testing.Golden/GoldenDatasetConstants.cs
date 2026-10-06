@@ -826,6 +826,13 @@ public static class GoldenDatasetConstants
         public const long InactiveUserId = 9332352149450;
     }
 
+    /// <summary>Anchors for flagged name masking and the name-only scan (#552 part 2).</summary>
+    public static class FlaggedNames
+    {
+        /// <summary>@loucurtsinger "Lou Curtsinger": not trusted, not a bot, no profile_scan_results rows, profile_scanned_at and profile_scan_score NULL (banned in Nov 2025, before scanning existed). NameOnlyScanTests' name-only scan writes the user's first row. Read-only otherwise.</summary>
+        public const long NameOnlyScanUserId = 9333810782137;
+    }
+
     /// <summary>Anchors for the rescan job's incomplete-scan selection (#552 part 2).</summary>
     public static class ProfileRescan
     {
