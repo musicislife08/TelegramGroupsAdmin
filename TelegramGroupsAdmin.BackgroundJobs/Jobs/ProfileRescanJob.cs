@@ -1,8 +1,10 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Quartz;
+using TelegramGroupsAdmin.AI.Services;
 using TelegramGroupsAdmin.BackgroundJobs.Metrics;
 using TelegramGroupsAdmin.BackgroundJobs.Services;
+using TelegramGroupsAdmin.Configuration.Models;
 using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Models;
@@ -16,8 +18,10 @@ namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
 
 /// <summary>
 /// Periodic job that retries incomplete profile scans (never scanned, or a name-only latest scan under
-/// the retry limit). Every scan falls back to name-only, so the job runs with or without a User API session.
-/// A user is skipped only when profile scanning is disabled in every chat they are known in.
+/// the retry limit). Every scan falls back to name-only, so the job runs with or without a User API session,
+/// but not when there is neither a session nor the profile-scan AI (no scan could write anything).
+/// A user is skipped only when profile scanning is disabled in every chat they have posted in
+/// (chats come from message history; a user who never posted follows the global setting).
 /// </summary>
 [DisallowConcurrentExecution]
 public class ProfileRescanJob(
@@ -27,11 +31,13 @@ public class ProfileRescanJob(
     ITelegramUserRepository userRepository,
     IProfileScanService profileScanService,
     IUserIdentityService identityService,
+    ITelegramSessionManager sessionManager,
+    IChatService chatService,
     JobMetrics jobMetrics) : IJob
 {
     /// <summary>
     /// Candidates examined per run, as a multiple of BatchSize: users skipped because scanning is disabled in
-    /// every chat they are in don't use up batch slots, but a large backlog of them can't make a run unbounded.
+    /// every chat they have posted in don't use up batch slots, but a large backlog of them can't make a run unbounded.
     /// </summary>
     internal const int CandidatesPerBatchSlot = 10;
 
@@ -48,6 +54,17 @@ public class ProfileRescanJob(
 
         try
         {
+            // With no User API session every scan falls back to name-only, and that needs the
+            // profile-scan AI: without either, every attempt fails without writing anything, so the
+            // same never-scanned users would take the batch on every run. End the run instead.
+            if (!await sessionManager.HasAnyActiveSessionAsync(cancellationToken)
+                && !await chatService.IsFeatureAvailableAsync(AIFeatureType.ProfileScan, cancellationToken))
+            {
+                logger.LogWarning("Profile rescan skipped: no User API session and the profile-scan AI is unavailable");
+                success = true;
+                return;
+            }
+
             // Load job-specific settings
             var jobConfig = await jobConfigService.GetJobConfigAsync(
                 BackgroundJobNames.ProfileRescan, cancellationToken);
@@ -78,6 +95,7 @@ public class ProfileRescanJob(
             // One lookup for the candidates; ResolveManyAsync keeps the requested order
             var users = await identityService.ResolveManyAsync(userIds, cancellationToken);
 
+            var examined = 0;
             var attempted = 0;
             var scanned = 0;
             var skipped = 0;
@@ -88,10 +106,11 @@ public class ProfileRescanJob(
                 if (attempted >= batchSize)
                     break;
 
+                examined++;
                 try
                 {
                     // Scan for the user's most recently active chat with profile scanning enabled (it
-                    // targets alerts and supplies thresholds). Skip only when every chat they are in has
+                    // targets alerts and supplies thresholds). Skip only when every chat they have posted in has
                     // scanning disabled; with no known chat, the global config (chat 0) decides.
                     var (eligible, chat) = await FindScanChatAsync(user.Id, cancellationToken);
                     if (!eligible)
@@ -127,6 +146,9 @@ public class ProfileRescanJob(
             if (scanningDisabled > 0)
                 logger.LogInformation(
                     "Profile rescan: skipped {Count} users, scanning disabled in every chat", scanningDisabled);
+
+            if (attempted == 0)
+                logger.LogInformation("Profile rescan: examined {Examined} candidates but attempted no scans", examined);
 
             logger.LogInformation("Profile rescan: completed {Scanned}/{Attempted} users ({Skipped} skipped)",
                 scanned, attempted, skipped);

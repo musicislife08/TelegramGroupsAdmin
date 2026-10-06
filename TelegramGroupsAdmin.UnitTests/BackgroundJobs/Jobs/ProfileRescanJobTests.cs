@@ -1,9 +1,12 @@
-using Microsoft.Extensions.Logging.Abstractions;
+using System.Collections.Concurrent;
+using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Quartz;
+using TelegramGroupsAdmin.AI.Services;
 using TelegramGroupsAdmin.BackgroundJobs.Jobs;
 using TelegramGroupsAdmin.BackgroundJobs.Metrics;
 using TelegramGroupsAdmin.BackgroundJobs.Services;
+using TelegramGroupsAdmin.Configuration.Models;
 using TelegramGroupsAdmin.Configuration.Models.Welcome;
 using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
@@ -23,6 +26,11 @@ public class ProfileRescanJobTests
     private IUserIdentityService _identities = null!;
     private IBackgroundJobConfigService _jobConfig = null!;
     private IConfigService _config = null!;
+#pragma warning disable NUnit1032 // Mock doesn't need disposal
+    private ITelegramSessionManager _sessions = null!;
+#pragma warning restore NUnit1032
+    private IChatService _chat = null!;
+    private CapturingLogger<ProfileRescanJob> _logger = null!;
     private ProfileRescanJob _job = null!;
 
     [SetUp]
@@ -40,8 +48,14 @@ public class ProfileRescanJobTests
         _config.GetEffectiveWelcomeAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(Welcome(profileScanEnabled: true));
 
-        _job = new ProfileRescanJob(NullLogger<ProfileRescanJob>.Instance, _jobConfig, _config,
-            _users, _scanner, _identities, new JobMetrics());
+        _sessions = Substitute.For<ITelegramSessionManager>();
+        _sessions.HasAnyActiveSessionAsync(Arg.Any<CancellationToken>()).Returns(true);
+        _chat = Substitute.For<IChatService>();
+        _chat.IsFeatureAvailableAsync(AIFeatureType.ProfileScan, Arg.Any<CancellationToken>()).Returns(true);
+        _logger = new CapturingLogger<ProfileRescanJob>();
+
+        _job = new ProfileRescanJob(_logger, _jobConfig, _config,
+            _users, _scanner, _identities, _sessions, _chat, new JobMetrics());
     }
 
     private static WelcomeConfig Welcome(bool profileScanEnabled) =>
@@ -244,5 +258,77 @@ public class ProfileRescanJobTests
         var settings = System.Text.Json.JsonSerializer.Deserialize<ProfileRescanSettings>("""{"BatchSize":50,"RescanAfter":"1w"}""")!;
 
         Assert.That(settings.NameOnlyRetryLimit, Is.EqualTo(3));
+    }
+
+    private const string NothingCanScanWarning =
+        "Profile rescan skipped: no User API session and the profile-scan AI is unavailable";
+
+    [Test]
+    public async Task Execute_NoSessionAndNoProfileScanAi_EndsTheRunWithOneWarning()
+    {
+        // Every attempt would fail outright and the same never-scanned users would take the batch
+        // on every run, so the run ends before examining candidates.
+        _sessions.HasAnyActiveSessionAsync(Arg.Any<CancellationToken>()).Returns(false);
+        _chat.IsFeatureAvailableAsync(AIFeatureType.ProfileScan, Arg.Any<CancellationToken>()).Returns(false);
+        Batch(UserIdentity.ForTest(7, "Seven"));
+
+        await _job.Execute(Context());
+
+        await _users.DidNotReceiveWithAnyArgs().GetEligibleUsersForRescanAsync(default, default, default, default);
+        await _scanner.DidNotReceiveWithAnyArgs().ScanUserProfileAsync(default!, default, default, default);
+        Assert.That(_logger.Entries.Count(e => e.Level == LogLevel.Warning && e.Message == NothingCanScanWarning),
+            Is.EqualTo(1));
+    }
+
+    [TestCase(true, false)]
+    [TestCase(false, true)]
+    public async Task Execute_SessionOrProfileScanAiAvailable_Runs(bool session, bool ai)
+    {
+        _sessions.HasAnyActiveSessionAsync(Arg.Any<CancellationToken>()).Returns(session);
+        _chat.IsFeatureAvailableAsync(AIFeatureType.ProfileScan, Arg.Any<CancellationToken>()).Returns(ai);
+        var seven = UserIdentity.ForTest(7, "Seven");
+        Batch(seven);
+
+        await _job.Execute(Context());
+
+        await _scanner.Received(1).ScanUserProfileAsync(seven, Arg.Any<ChatIdentity?>(), Arg.Any<CancellationToken>(), Arg.Any<bool>());
+        Assert.That(_logger.Entries.Any(e => e.Message == NothingCanScanWarning), Is.False);
+    }
+
+    [Test]
+    public async Task Execute_CandidatesExaminedButNoneAttempted_LogsOnceAtInformation()
+    {
+        var disabledChat = ChatIdentity.FromId(-1001);
+        ProfileScan(-1001, enabled: false);
+        var users = Enumerable.Range(1, 3).Select(i => UserIdentity.ForTest(i, $"User {i}")).ToArray();
+        Batch(users);
+        foreach (var user in users)
+            Chats(user.Id, disabledChat);
+
+        await _job.Execute(Context());
+
+        Assert.That(_logger.Entries.Count(e => e.Level == LogLevel.Information
+            && e.Message == "Profile rescan: examined 3 candidates but attempted no scans"), Is.EqualTo(1));
+    }
+
+    [Test]
+    public async Task Execute_ScansAttempted_DoesNotLogTheNoAttemptsMessage()
+    {
+        Batch(UserIdentity.ForTest(7, "Seven"));
+
+        await _job.Execute(Context());
+
+        Assert.That(_logger.Entries.Any(e => e.Message.Contains("attempted no scans")), Is.False);
+    }
+
+    private sealed class CapturingLogger<T> : ILogger<T>
+    {
+        public ConcurrentQueue<(LogLevel Level, string Message)> Entries { get; } = new();
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+            => Entries.Enqueue((logLevel, formatter(state, exception)));
     }
 }
