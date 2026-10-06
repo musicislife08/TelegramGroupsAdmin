@@ -54,9 +54,15 @@ public class ProfileRescanJobTests
         _chat.IsFeatureAvailableAsync(AIFeatureType.ProfileScan, Arg.Any<CancellationToken>()).Returns(true);
         _logger = new CapturingLogger<ProfileRescanJob>();
 
-        _job = new ProfileRescanJob(_logger, _jobConfig, _config,
-            _users, _scanner, _identities, _sessions, _chat, new JobMetrics());
+        _job = NewJob(TimeSpan.Zero);
     }
+
+    // The 1s production throttle would make every scanning test slow; tests that pin it pass their own.
+    private ProfileRescanJob NewJob(TimeSpan scanThrottle) =>
+        new(_logger, _jobConfig, _config, _users, _scanner, _identities, _sessions, _chat, new JobMetrics())
+        {
+            ScanThrottle = scanThrottle
+        };
 
     private static WelcomeConfig Welcome(bool profileScanEnabled) =>
         new() { JoinSecurity = new JoinSecurityConfig { ProfileScan = new ProfileScanConfig { Enabled = profileScanEnabled } } };
@@ -68,12 +74,14 @@ public class ProfileRescanJobTests
         return context;
     }
 
+    // Like the repository, returns at most the requested number of candidates; identities come back
+    // for the requested ids, in order.
     private void Batch(params UserIdentity[] users)
     {
         _users.GetEligibleUsersForRescanAsync(Arg.Any<int>(), Arg.Any<DateTimeOffset>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
-            .Returns(users.Select(u => u.Id).ToList());
+            .Returns(ci => users.Take(ci.ArgAt<int>(0)).Select(u => u.Id).ToList());
         _identities.ResolveManyAsync(Arg.Any<IReadOnlyCollection<long>>(), Arg.Any<CancellationToken>())
-            .Returns(users);
+            .Returns(ci => ci.ArgAt<IReadOnlyCollection<long>>(0).Select(id => users.Single(u => u.Id == id)).ToList());
     }
 
     [Test]
@@ -237,7 +245,8 @@ public class ProfileRescanJobTests
     [Test]
     public async Task Execute_ExaminedCandidateCap_StopsTheRun()
     {
-        // At most 10 x BatchSize candidates are examined per run, however many come back.
+        // At most 10 x BatchSize candidates are examined per run: the job asks the repository for
+        // that many, however many are eligible.
         BatchSize(1);
         var disabledChat = ChatIdentity.FromId(-1001);
         ProfileScan(-1001, enabled: false);
@@ -250,6 +259,73 @@ public class ProfileRescanJobTests
 
         await _users.Received(10).GetChatsForUserAsync(Arg.Any<long>(), Arg.Any<CancellationToken>());
         await _scanner.DidNotReceiveWithAnyArgs().ScanUserProfileAsync(default!, default, default, default);
+    }
+
+    [Test]
+    public async Task Execute_ChatLookupThrows_UsesABatchSlot()
+    {
+        // A failed chat lookup is a failed attempt like a failed scan: it takes a batch slot.
+        BatchSize(1);
+        var seven = UserIdentity.ForTest(7, "Seven");
+        var eight = UserIdentity.ForTest(8, "Eight");
+        Batch(seven, eight);
+        _users.GetChatsForUserAsync(7, Arg.Any<CancellationToken>())
+            .Returns<List<ChatIdentity>>(_ => throw new InvalidOperationException("db down"));
+
+        await _job.Execute(Context());
+
+        await _scanner.DidNotReceiveWithAnyArgs().ScanUserProfileAsync(default!, default, default, default);
+        Assert.That(_logger.Entries, Has.Some.Matches<(LogLevel Level, string Message)>(
+            e => e.Level == LogLevel.Warning && e.Message.Contains("failed to scan user 7")));
+    }
+
+    [Test]
+    public async Task Execute_ChatLookupThrows_IsThrottledLikeAScan()
+    {
+        var throttle = TimeSpan.FromMilliseconds(300);
+        _job = NewJob(throttle);
+        BatchSize(2);
+        var seven = UserIdentity.ForTest(7, "Seven");
+        var eight = UserIdentity.ForTest(8, "Eight");
+        Batch(seven, eight);
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        TimeSpan failedAt = default, nextScanAt = default;
+        _users.GetChatsForUserAsync(7, Arg.Any<CancellationToken>())
+            .Returns<List<ChatIdentity>>(_ =>
+            {
+                failedAt = clock.Elapsed;
+                throw new InvalidOperationException("db down");
+            });
+        _users.GetChatsForUserAsync(8, Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                nextScanAt = clock.Elapsed;
+                return new List<ChatIdentity>();
+            });
+
+        await _job.Execute(Context());
+
+        await _scanner.Received(1).ScanUserProfileAsync(eight, Arg.Any<ChatIdentity?>(), Arg.Any<CancellationToken>(), Arg.Any<bool>());
+        // Lower bound only (a delay never ends early); 50 ms of slack for timer granularity.
+        Assert.That(nextScanAt - failedAt, Is.GreaterThanOrEqualTo(throttle - TimeSpan.FromMilliseconds(50)));
+    }
+
+    [Test]
+    public async Task Execute_UsersSharingAChat_ReadThatChatsConfigOnce()
+    {
+        var shared = ChatIdentity.FromId(-1002);
+        var seven = UserIdentity.ForTest(7, "Seven");
+        var eight = UserIdentity.ForTest(8, "Eight");
+        Batch(seven, eight);
+        Chats(7, shared);
+        Chats(8, shared);
+        ProfileScan(-1002, enabled: true);
+
+        await _job.Execute(Context());
+
+        await _config.Received(1).GetEffectiveWelcomeAsync(-1002, Arg.Any<CancellationToken>());
+        await _scanner.Received(1).ScanUserProfileAsync(seven, shared, Arg.Any<CancellationToken>(), Arg.Any<bool>());
+        await _scanner.Received(1).ScanUserProfileAsync(eight, shared, Arg.Any<CancellationToken>(), Arg.Any<bool>());
     }
 
     [Test]

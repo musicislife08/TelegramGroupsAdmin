@@ -41,6 +41,9 @@ public class ProfileRescanJob(
     /// </summary>
     internal const int CandidatesPerBatchSlot = 10;
 
+    /// <summary>Pause after every scan attempt, to stay clear of Telegram FLOOD_WAIT limits.</summary>
+    internal TimeSpan ScanThrottle { get; init; } = TimeSpan.FromSeconds(1);
+
     public async Task Execute(IJobExecutionContext context)
     {
         await ExecuteAsync(context.CancellationToken);
@@ -95,33 +98,38 @@ public class ProfileRescanJob(
             // One lookup for the candidates; ResolveManyAsync keeps the requested order
             var users = await identityService.ResolveManyAsync(userIds, cancellationToken);
 
+            // Effective config per chat, read once per run: candidates share chats.
+            var scanEnabledByChat = new Dictionary<long, bool>();
+
             var examined = 0;
             var attempted = 0;
             var scanned = 0;
             var skipped = 0;
             var scanningDisabled = 0;
-            foreach (var user in users.Take(candidateCap))
+            foreach (var user in users)
             {
                 // Batch slots go to scan attempts only
                 if (attempted >= batchSize)
                     break;
 
                 examined++;
+                // Every candidate not skipped for disabled scanning is an attempt: it takes a batch slot
+                // and is throttled, whether it scans, skips or fails (a failed chat lookup included).
+                var isAttempt = true;
                 try
                 {
                     // Scan for the user's most recently active chat with profile scanning enabled (it
                     // targets alerts and supplies thresholds). Skip only when every chat they have posted in has
                     // scanning disabled; with no known chat, the global config (chat 0) decides.
-                    var (eligible, chat) = await FindScanChatAsync(user.Id, cancellationToken);
+                    var (eligible, chat) = await FindScanChatAsync(user.Id, scanEnabledByChat, cancellationToken);
                     if (!eligible)
                     {
+                        isAttempt = false;
                         logger.LogDebug("Profile rescan: scanning disabled in every chat of user {UserId}, skipping",
                             user.Id);
                         scanningDisabled++;
                         continue;
                     }
-
-                    attempted++;
 
                     var result = await profileScanService.ScanUserProfileAsync(
                         user,
@@ -133,13 +141,17 @@ public class ProfileRescanJob(
                         scanned++;
                     else
                         skipped++;
-
-                    // Throttle to avoid Telegram FLOOD_WAIT rate limits
-                    await Task.Delay(1000, cancellationToken);
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
                 {
                     logger.LogWarning(ex, "Profile rescan: failed to scan user {UserId}, continuing batch", user.Id);
+                }
+
+                if (isAttempt)
+                {
+                    attempted++;
+                    // Throttle to avoid Telegram FLOOD_WAIT rate limits
+                    await Task.Delay(ScanThrottle, cancellationToken);
                 }
             }
 
@@ -171,24 +183,31 @@ public class ProfileRescanJob(
     /// profile scanning enabled. Not eligible when none has. A user with no known chat is eligible (chat
     /// null) when the global config has profile scanning enabled.
     /// </summary>
-    private async Task<(bool Eligible, ChatIdentity? Chat)> FindScanChatAsync(long userId, CancellationToken cancellationToken)
+    private async Task<(bool Eligible, ChatIdentity? Chat)> FindScanChatAsync(
+        long userId, Dictionary<long, bool> scanEnabledByChat, CancellationToken cancellationToken)
     {
         var chats = await userRepository.GetChatsForUserAsync(userId, cancellationToken);
         if (chats.Count == 0)
-            return (await IsProfileScanEnabledAsync(0, cancellationToken), null);
+            return (await IsProfileScanEnabledAsync(0, scanEnabledByChat, cancellationToken), null);
 
         foreach (var chat in chats)
         {
-            if (await IsProfileScanEnabledAsync(chat.Id, cancellationToken))
+            if (await IsProfileScanEnabledAsync(chat.Id, scanEnabledByChat, cancellationToken))
                 return (true, chat);
         }
 
         return (false, null);
     }
 
-    private async Task<bool> IsProfileScanEnabledAsync(long chatId, CancellationToken cancellationToken)
+    private async Task<bool> IsProfileScanEnabledAsync(
+        long chatId, Dictionary<long, bool> scanEnabledByChat, CancellationToken cancellationToken)
     {
+        if (scanEnabledByChat.TryGetValue(chatId, out var enabled))
+            return enabled;
+
         var welcomeConfig = await configService.GetEffectiveWelcomeAsync(chatId, cancellationToken);
-        return welcomeConfig?.JoinSecurity?.ProfileScan is { Enabled: true };
+        enabled = welcomeConfig?.JoinSecurity?.ProfileScan is { Enabled: true };
+        scanEnabledByChat[chatId] = enabled;
+        return enabled;
     }
 }
