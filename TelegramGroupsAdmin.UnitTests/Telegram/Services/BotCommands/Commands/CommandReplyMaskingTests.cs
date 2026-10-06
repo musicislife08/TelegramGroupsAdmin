@@ -180,4 +180,37 @@ public class CommandReplyMaskingTests
         else
             await _config.DidNotReceiveWithAnyArgs().GetNameMaskingAsync(default, default);
     }
+
+    // A flagged name is masked only while the user is banned, so the identity resolved before the
+    // action carries the pre-action verdict. The confirmation must use the post-action identity.
+
+    [Test]
+    public async Task TempBanConfirmation_UsesTheIdentityResolvedAfterTheBan()
+    {
+        _config.GetNameMaskingAsync(TestChatId, Arg.Any<CancellationToken>()).Returns(NameMasking.On);
+        _identities.ResolveAsync(TargetId, Arg.Any<CancellationToken>()).Returns(
+            UserIdentity.ForTest(TargetId, "Promo", "Spammer", verdict: NameVerdict.Clean),
+            UserIdentity.ForTest(TargetId, "Promo", "Spammer", verdict: NameVerdict.Promotional));
+
+        var result = await Build("tempban").ExecuteAsync(
+            InGroup("/tempban 1h", reply: true), ["1h"], PermissionLevel.Admin, FlaggedSender);
+
+        Assert.That(result.Message.Text, Does.Contain(NameRedaction.Spam));
+        Assert.That(result.Message.Text, Does.Not.Contain("Promo Spammer"));
+    }
+
+    [Test]
+    public async Task UnbanConfirmation_UsesTheIdentityResolvedAfterTheUnban()
+    {
+        _config.GetNameMaskingAsync(TestChatId, Arg.Any<CancellationToken>()).Returns(NameMasking.On);
+        _identities.ResolveAsync(TargetId, Arg.Any<CancellationToken>()).Returns(
+            UserIdentity.ForTest(TargetId, "Promo", "Spammer", verdict: NameVerdict.Promotional),
+            UserIdentity.ForTest(TargetId, "Promo", "Spammer", verdict: NameVerdict.Clean));
+
+        var result = await Build("unban").ExecuteAsync(
+            InGroup("/unban", reply: true), [], PermissionLevel.Admin, FlaggedSender);
+
+        Assert.That(result.Message.Text, Does.Contain("Promo Spammer"));
+        Assert.That(result.Message.Text, Does.Not.Contain(NameRedaction.Spam));
+    }
 }

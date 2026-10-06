@@ -122,6 +122,10 @@ public class TempBanCommand : IBotCommand
                 return new CommandResult(TelegramMessage.Plain("❌ Failed to temp ban user."), DeleteCommandMessage);
             }
 
+            // Re-resolve: a flagged name is masked only while the user is banned, and the identity
+            // above was resolved before the ban
+            targetUser = await _identityService.ResolveAsync(targetUser.Id, cancellationToken);
+
             // Build success message (DM notification sent by ModerationActionService);
             // the mention follows the chat's name-masking setting
             var response = (await _configService.CreateChatMessageBuilderAsync(message.Chat.Id, cancellationToken))

@@ -34,6 +34,8 @@ public class TelegramUserRepository : ITelegramUserRepository
     /// <summary>
     /// Returns one identity per id found, read from the user_identities view
     /// (names plus the verdict from the latest profile scan). Ids with no row are absent.
+    /// The verdict reflects ban state at read time (a flagged name is masked only while the user is
+    /// banned), so text posted after a ban or unban must read the identity again.
     /// </summary>
     public async Task<IReadOnlyList<UserIdentity>> GetIdentitiesAsync(
         IReadOnlyCollection<long> userIds, CancellationToken cancellationToken = default)

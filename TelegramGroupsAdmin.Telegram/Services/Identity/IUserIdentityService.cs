@@ -16,9 +16,16 @@ public interface IUserIdentityService
     /// </summary>
     Task<UserIdentity> ObserveAsync(ObservedUser observed, ProfileChangeContext context, CancellationToken ct = default);
 
-    /// <summary>Resolves one identity; an unknown id gives an id-only, unscanned identity.</summary>
+    /// <summary>
+    /// Resolves one identity; an unknown id gives an id-only, unscanned identity. The name verdict
+    /// reflects ban state at resolve time (a flagged name is masked only while the user is banned),
+    /// so text posted after a ban or unban must re-resolve rather than reuse an earlier identity.
+    /// </summary>
     Task<UserIdentity> ResolveAsync(long userId, CancellationToken ct = default);
 
-    /// <summary>Resolves many identities in one query, in the requested order.</summary>
+    /// <summary>
+    /// Resolves many identities in one query, in the requested order. Verdicts reflect ban state at
+    /// resolve time, as for <see cref="ResolveAsync"/>.
+    /// </summary>
     Task<IReadOnlyList<UserIdentity>> ResolveManyAsync(IReadOnlyCollection<long> userIds, CancellationToken ct = default);
 }

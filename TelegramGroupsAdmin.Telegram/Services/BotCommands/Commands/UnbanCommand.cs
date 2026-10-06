@@ -84,6 +84,10 @@ public class UnbanCommand : IBotCommand
                 return new CommandResult(TelegramMessage.Plain("❌ Failed to unban user."), DeleteCommandMessage, DeleteResponseAfterSeconds);
             }
 
+            // Re-resolve: a flagged name is masked only while the user is banned, and the identity
+            // above was resolved before the unban, so the confirmation shows the name again
+            targetUser = await _identityService.ResolveAsync(targetUser.Id, cancellationToken);
+
             // The mention follows the chat's name-masking setting
             var response = (await _configService.CreateChatMessageBuilderAsync(message.Chat.Id, cancellationToken))
                 .Text("✅ User ").Mention(targetUser)
