@@ -12,8 +12,9 @@ public sealed record UserIdentity(long Id, string? FirstName, string? LastName, 
     public string DisplayName { get; } = TelegramDisplayName.Format(FirstName, LastName, Username, Id);
 
     /// <summary>
-    /// Verdict from the latest profile scan. Defaults to Unscanned, which also covers Quartz
-    /// payloads serialized before this member existed.
+    /// Name verdict from the latest profile scan, applied only while the user is banned (Clean
+    /// otherwise). Defaults to Unscanned, which also covers Quartz payloads serialized before this
+    /// member existed.
     /// </summary>
     public NameVerdict Verdict { get; init; } = NameVerdict.Unscanned;
 

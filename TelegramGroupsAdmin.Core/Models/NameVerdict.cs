@@ -1,7 +1,8 @@
 namespace TelegramGroupsAdmin.Core.Models;
 
 /// <summary>
-/// What the latest profile scan concluded about a user's name. Platform-neutral.
+/// What bot-written text shows for a user's name: the latest profile scan's name flags, applied only
+/// while the user is banned. Platform-neutral.
 /// </summary>
 public enum NameVerdict
 {

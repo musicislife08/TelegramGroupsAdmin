@@ -7,10 +7,10 @@ namespace TelegramGroupsAdmin.Data.Models;
 /// Maps to enriched_messages PostgreSQL view.
 /// NOTE: Named *View (not *Dto) to avoid backup/restore reflection picking this up.
 /// <para>
-/// Freeze before changing: the JoinUserIdentitiesInEnrichedViews migration replays this class's live
-/// <c>CreateViewSql</c>. Before changing the definition, copy the current SQL into a frozen constant
-/// (as LegacyUserIdentityViewSql does for UserIdentityView) and point that migration at the copy, so
-/// the change cannot alter fresh-database history.
+/// Freeze before changing: the AddNameVerdictInputsToUserIdentities migration replays this class's live
+/// <c>CreateViewSql</c>. Before changing the definition, copy the current SQL into a frozen constant in
+/// LegacyEnrichedViewSql (as EnrichedMessagesV2 / EnrichedReportsV2 do for JoinUserIdentitiesInEnrichedViews)
+/// and point that migration at the copy, so the change cannot alter fresh-database history.
 /// </para>
 /// </summary>
 public class EnrichedMessageView
@@ -21,7 +21,7 @@ public class EnrichedMessageView
     /// SQL to create the enriched_messages view. Referenced by migrations.
     /// Includes all message columns plus enrichment from:
     /// - managed_chats (chat name, icon)
-    /// - user_identities (author names, is_bot, latest scan flag); telegram_users (author photo only)
+    /// - user_identities (author names, is_bot, latest scan flags, ban state); telegram_users (author photo only)
     /// - parent message + user_identities (reply context)
     /// - message_translations (translation for original messages only)
     /// </summary>
@@ -62,6 +62,8 @@ public class EnrichedMessageView
             ui.last_name,
             ui.is_bot,
             ui.latest_scan_explicit,
+            ui.latest_scan_promotional,
+            ui.is_banned,
             u.user_photo_path,
             -- Reply enrichment (from parent message + user_identities)
             parent_user.first_name AS reply_to_first_name,
@@ -197,6 +199,14 @@ public class EnrichedMessageView
     /// <summary>Explicit flag from the author's latest profile scan; NULL when unscanned.</summary>
     [Column("latest_scan_explicit")]
     public bool? LatestScanExplicit { get; set; }
+
+    /// <summary>Promotional flag from the author's latest profile scan; NULL when unscanned.</summary>
+    [Column("latest_scan_promotional")]
+    public bool? LatestScanPromotional { get; set; }
+
+    /// <summary>Author's ban state; NULL when the author has no telegram_users row.</summary>
+    [Column("is_banned")]
+    public bool? IsBanned { get; set; }
 
     [Column("user_photo_path")]
     public string? UserPhotoPath { get; set; }
