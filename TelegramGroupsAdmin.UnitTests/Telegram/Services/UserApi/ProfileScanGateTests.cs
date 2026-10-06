@@ -43,7 +43,7 @@ public class ProfileScanGateTests
             .IsAdminAsync(Arg.Any<long>(), Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(false);
         _profileScanService
-            .ScanUserProfileAsync(Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity?>(), Arg.Any<CancellationToken>())
+            .ScanUserProfileAsync(Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity?>(), Arg.Any<CancellationToken>(), Arg.Any<bool>(), Arg.Any<ProfileScanOrigin>())
             .Returns(CreateScanResult());
 
         _gate = new ProfileScanGate(
@@ -407,7 +407,7 @@ public class ProfileScanGateTests
         await ScanAsync(ProfileScanTrigger.Join);
 
         await _profileScanService.Received(1).ScanUserProfileAsync(
-            Arg.Is<UserIdentity>(u => u!.Id == TestUserId), Arg.Any<ChatIdentity?>(), Arg.Any<CancellationToken>(), false);
+            Arg.Is<UserIdentity>(u => u!.Id == TestUserId), Arg.Any<ChatIdentity?>(), Arg.Any<CancellationToken>(), false, Arg.Any<ProfileScanOrigin>());
     }
 
     [Test]
@@ -420,7 +420,21 @@ public class ProfileScanGateTests
             CancellationToken.None, forceRescan: true);
 
         await _profileScanService.Received(1).ScanUserProfileAsync(
-            Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity?>(), Arg.Any<CancellationToken>(), true);
+            Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity?>(), Arg.Any<CancellationToken>(), true, Arg.Any<ProfileScanOrigin>());
+    }
+
+    // Scan-source metric: a rename rescans an already-known user; joins and first messages are welcome scans.
+    [TestCase(ProfileScanTrigger.Join, ProfileScanOrigin.ChatEvent)]
+    [TestCase(ProfileScanTrigger.FirstMessage, ProfileScanOrigin.ChatEvent)]
+    [TestCase(ProfileScanTrigger.ProfileChange, ProfileScanOrigin.Rescan)]
+    public async Task Trigger_IsForwardedAsScanOrigin(ProfileScanTrigger trigger, ProfileScanOrigin expected)
+    {
+        SetUser(CreateUser(profileScannedAt: null));
+
+        await ScanAsync(trigger);
+
+        await _profileScanService.Received(1).ScanUserProfileAsync(
+            Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity?>(), Arg.Any<CancellationToken>(), Arg.Any<bool>(), expected);
     }
 
     [Test]
@@ -428,7 +442,7 @@ public class ProfileScanGateTests
     {
         SetUser(CreateUser(profileScannedAt: null));
         _profileScanService
-            .ScanUserProfileAsync(Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity?>(), Arg.Any<CancellationToken>())
+            .ScanUserProfileAsync(Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity?>(), Arg.Any<CancellationToken>(), Arg.Any<bool>(), Arg.Any<ProfileScanOrigin>())
             .Returns<Task<ProfileScanResult>>(_ => throw new InvalidOperationException("scan failed"));
 
         Assert.That(

@@ -16,7 +16,7 @@ public interface IProfileScanService
     /// <param name="triggeringChat">Chat the scan is for: targets alerts and the ban celebration, and supplies thresholds. Null when no chat applies (manual rescan, or a rescan-job user with no known chat).</param>
     /// <param name="ct">Cancellation token.</param>
     /// <param name="forceRescan">Skip both cached-score reuses (60s freshness window and unchanged-profile diff), e.g. after a rename.</param>
-    /// <param name="origin">Who asked for the scan, for the scan-source metric. Concurrent callers share one run, whose first caller's origin is recorded.</param>
+    /// <param name="origin">Who asked for the scan, for the scan-source metric (welcome | rescan | manual). Concurrent callers share one run, whose first caller's origin is recorded.</param>
     /// <returns>Scan result with extracted data, score, and outcome.</returns>
     Task<ProfileScanResult> ScanUserProfileAsync(
         UserIdentity user,

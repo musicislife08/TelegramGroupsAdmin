@@ -1,14 +1,17 @@
 namespace TelegramGroupsAdmin.Telegram.Services.UserApi;
 
 /// <summary>
-/// Who asked for a profile scan. Tags the scan-source metric only; the chat passed with the scan
-/// still targets alerts and supplies thresholds.
+/// Who asked for a profile scan. Tags the scan-source metric only (welcome | rescan | manual); the
+/// chat passed with the scan still targets alerts and supplies thresholds.
 /// </summary>
 public enum ProfileScanOrigin
 {
-    /// <summary>A chat event through the scan gate: join, first message or rename. Metric source "welcome".</summary>
+    /// <summary>A join or first message, through the scan gate. Metric source "welcome".</summary>
     ChatEvent,
 
-    /// <summary>The rescan job or an admin's manual rescan. Metric source "rescan".</summary>
-    Rescan
+    /// <summary>A rescan of a known user: a rename (through the gate) or the rescan job. Metric source "rescan".</summary>
+    Rescan,
+
+    /// <summary>An admin's manual rescan from the web UI. Metric source "manual".</summary>
+    Manual
 }

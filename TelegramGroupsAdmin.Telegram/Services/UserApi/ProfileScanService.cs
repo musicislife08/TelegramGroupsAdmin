@@ -1134,6 +1134,7 @@ public sealed class ProfileScanService(
     {
         ProfileScanOrigin.ChatEvent => "welcome",
         ProfileScanOrigin.Rescan => "rescan",
+        ProfileScanOrigin.Manual => "manual",
         _ => throw new InvalidOperationException($"Unmapped profile scan origin: {origin}")
     };
 

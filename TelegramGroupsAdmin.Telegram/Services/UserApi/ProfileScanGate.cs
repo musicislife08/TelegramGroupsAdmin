@@ -113,7 +113,9 @@ public sealed class ProfileScanGate(
             user.ToLogDebug(), trigger);
 
         // No session check: without a usable User API session the service scores the name alone.
-        return await profileScanService.ScanUserProfileAsync(user, chat, ct, forceRescan);
+        // A rename rescans a known user; joins and first messages are welcome scans (scan-source metric).
+        var origin = trigger == ProfileScanTrigger.ProfileChange ? ProfileScanOrigin.Rescan : ProfileScanOrigin.ChatEvent;
+        return await profileScanService.ScanUserProfileAsync(user, chat, ct, forceRescan, origin);
     }
 
     private ProfileScanResult? Skip(string reason, UserIdentity user, ProfileScanTrigger trigger)

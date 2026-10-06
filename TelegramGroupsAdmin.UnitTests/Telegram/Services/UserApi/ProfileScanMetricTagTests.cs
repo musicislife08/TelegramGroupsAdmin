@@ -26,6 +26,7 @@ public class ProfileScanMetricTagTests
 
     [TestCase(ProfileScanOrigin.ChatEvent, "welcome")]
     [TestCase(ProfileScanOrigin.Rescan, "rescan")]
+    [TestCase(ProfileScanOrigin.Manual, "manual")]
     public void OriginToTag_DefinedOrigin_MapsToFixedTag(ProfileScanOrigin origin, string expected)
     {
         Assert.That(ProfileScanService.OriginToTag(origin), Is.EqualTo(expected));
