@@ -29,7 +29,7 @@
                         <ItemContent>
                             <MudCard Elevation="2" Class="pa-3">
                                 <MudStack Spacing="2">
-                                    @* Chips row: outcome, score *@
+                                    @* Chips row: outcome, score, source, name flags *@
                                     <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
                                         <MudChip T="string"
                                                  Size="Size.Small"
@@ -41,6 +41,20 @@
                                                  Color="@ProfileScanDisplayHelpers.GetScoreColor(result.Score)">
                                             Score: @result.Score.ToString("F1")/5.0
                                         </MudChip>
+                                        <MudChip T="string"
+                                                 Size="Size.Small"
+                                                 Variant="Variant.Outlined"
+                                                 Color="Color.Default">
+                                            @(result.Source == ProfileScanSource.NameOnly ? "Name only" : "Full scan")
+                                        </MudChip>
+                                        @if (result.ExplicitDisplayText)
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Error">Explicit name</MudChip>
+                                        }
+                                        @if (result.PromotionalDisplayText)
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Warning">Promotional name</MudChip>
+                                        }
                                     </MudStack>
 
                                     @* Score breakdown *@
