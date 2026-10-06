@@ -831,6 +831,12 @@ public static class GoldenDatasetConstants
     {
         /// <summary>@loucurtsinger "Lou Curtsinger": not trusted, not a bot, no profile_scan_results rows, profile_scanned_at and profile_scan_score NULL (banned in Nov 2025, before scanning existed). NameOnlyScanTests' name-only scan writes the user's first row. Read-only otherwise.</summary>
         public const long NameOnlyScanUserId = 9333810782137;
+        /// <summary>@Adexfunnel "Adexfunnel": a name that advertises ad / marketing funnels. Held for review by its profile scan (score 2.8, alert #178), then banned by an admin. Its only scan row is the real prod scan, imported with ai_promotional_display_text = true (canonical edit 2026-10-05; the column did not exist in prod). Read-only.</summary>
+        public const long BannedPromotionalUserId = 9635655270997;
+        /// <summary>@splendorfraying "Stargazer Snippet": not banned, not trusted; only scan row 526 (score 0.0) has ai_promotional_display_text = true (canonical edit 2026-10-05). Read-only.</summary>
+        public const long UnbannedPromotionalUserId = 9213195802818;
+        /// <summary>@splendorfraying's only scan row, flag-edited to ai_promotional_display_text = true (canonical edit 2026-10-05).</summary>
+        public const long UnbannedPromotionalScanId = 526;
     }
 
     /// <summary>Anchors for the rescan job's incomplete-scan selection (#552 part 2).</summary>

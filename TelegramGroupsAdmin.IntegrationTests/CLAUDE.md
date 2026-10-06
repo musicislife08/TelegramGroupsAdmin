@@ -53,7 +53,7 @@ Origin: prod DB snapshot from 2026-04-30. Bootstrap pipeline (full detail in `do
 | 20 | chat_admins | 104 | Snapshot of admin membership across all 21 chats. |
 | 21 | linked_channels | 3 | One per chat that has a linked channel. |
 | 22 | telegram_user_mappings | 3 | Cross-chat user identity links. |
-| 23 | profile_scan_results | 11 | Includes a mix of clean and flagged scans; row 534 carries an `explicit_display_text` value for the explicit-username masking tests. |
+| 23 | profile_scan_results | 12 | Includes a mix of clean and flagged scans; row 534 carries an `explicit_display_text` value for the explicit-username masking tests; row 526 and @Adexfunnel's imported prod row carry `ai_promotional_display_text = true` (canonical edit 2026-10-05). Columns `ai_promotional_display_text` (default false) and `source` (0 = FullScan, 1 = NameOnly; only row 528 is 1, see "Rescan job anchors"). |
 | 24 | username_history | 4 | Rename trail for spam-rename-then-spam users. |
 | 25 | admin_notes | 3 | Free-text rebuilt from sanitized telegram_users; rows 5+6 cross-reference each other's sanitized usernames. |
 | 26 | audit_log | 100 | Connected-as / disconnected-as narrative anchored to canonical fixture identities. |
@@ -413,8 +413,10 @@ Anchors are in code as `GoldenDatasetConstants.FlaggedNames` (#552 part 2). Test
 | Constant | Anchor | Shape |
 |---|---|---|
 | `NameOnlyScanUserId` | 9333810782137 @loucurtsinger | not trusted, not a bot, no scan rows, `profile_scanned_at` NULL (banned before scanning existed). `NameOnlyScanTests`: the name-only scan writes the user's first row (the write is the assertion subject). Read-only otherwise |
+| `BannedPromotionalUserId` | 9635655270997 @Adexfunnel | banned by an admin after profile-scan alert #178 (score 2.8, held for review); **added:** its real prod scan row (approved import, AI text verbatim), with `ai_promotional_display_text = true`. `PromotionalNameMaskingTests`: spam label in group posts and the ban celebration caption + subscriber copy, real name in the admin DM. Report 178's `aiReason` is lorem (sanitized earlier); the scan row keeps prod's text |
+| `UnbannedPromotionalUserId` / `UnbannedPromotionalScanId` | 9213195802818 @splendorfraying, row 526 | not banned, not trusted; its only scan row 526 (score 0.0) **edited:** `ai_promotional_display_text = true`. A flagged name of a user who is not banned is shown by real name |
 
-Use when: a test needs a never-scanned, untrusted user whose first scan row is the subject.
+Use when: a test needs a never-scanned, untrusted user whose first scan row is the subject (`NameOnlyScanUserId`), or a promotional name whose user is banned / not banned (`BannedPromotionalUserId` / `UnbannedPromotionalUserId`).
 
 ### Rescan job anchors (canonical edit 2026-10-05)
 Anchors are in code as `GoldenDatasetConstants.ProfileRescan` (#552 part 2). `IncompleteScanSelectionTests` reads each back first and passes the user count as the batch size.

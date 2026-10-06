@@ -142,6 +142,32 @@ public class UserIdentitiesViewTests
     }
 
     [Test]
+    public async Task GetIdentitiesAsync_PromotionalNames_MaskOnlyWhileBanned()
+    {
+        var banned = GoldenDatasetConstants.FlaggedNames.BannedPromotionalUserId;
+        var unbanned = GoldenDatasetConstants.FlaggedNames.UnbannedPromotionalUserId;
+        await using var ctx = _testHelper!.GetDbContext();
+        var rows = await ctx.UserIdentities.Where(v => v.TelegramUserId == banned || v.TelegramUserId == unbanned)
+            .ToDictionaryAsync(v => v.TelegramUserId);
+        Assert.Multiple(() =>
+        {
+            Assert.That(rows[banned].LatestScanPromotional, Is.True);
+            Assert.That(rows[banned].LatestScanExplicit, Is.False);
+            Assert.That(rows[banned].IsBanned, Is.True);
+            Assert.That(rows[unbanned].LatestScanPromotional, Is.True);
+            Assert.That(rows[unbanned].IsBanned, Is.False);
+        });
+        await using var provider = BuildProvider();
+        using var scope = provider.CreateScope();
+
+        var identities = await scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>()
+            .GetIdentitiesAsync([banned, unbanned]);
+
+        Assert.That(identities.Single(i => i.Id == banned).Verdict, Is.EqualTo(NameVerdict.Promotional));
+        Assert.That(identities.Single(i => i.Id == unbanned).Verdict, Is.EqualTo(NameVerdict.Clean));
+    }
+
+    [Test]
     public async Task GetChatAdminsAsync_IdentitiesComeFromUserIdentities()
     {
         await using var ctx = _testHelper!.GetDbContext();
