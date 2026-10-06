@@ -149,8 +149,8 @@ public interface ITelegramUserRepository
     // ============================================================================
 
     /// <summary>
-    /// The chats a user is known in (by message activity), most recently active first.
-    /// Empty if the user has no message history in any chat.
+    /// The active managed chats a user is known in (by message activity), most recently active first.
+    /// Chats the bot has left or no longer manages are left out. Empty if there are none.
     /// Used by the profile rescan job to pick a chat with profile scanning enabled and attribute the scan to it.
     /// </summary>
     Task<List<ChatIdentity>> GetChatsForUserAsync(long telegramUserId, CancellationToken cancellationToken = default);

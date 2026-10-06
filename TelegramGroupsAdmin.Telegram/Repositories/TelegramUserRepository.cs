@@ -1262,12 +1262,14 @@ public class TelegramUserRepository : ITelegramUserRepository
     public async Task<List<ChatIdentity>> GetChatsForUserAsync(long telegramUserId, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        // Active managed chats only: the scan posts its ban celebration and alerts to the chat, so
+        // never to one the bot has left or no longer manages.
         var rows = await (
             from m in context.Messages
             where m.UserId == telegramUserId && m.DeletedAt == null
-            join c in context.ManagedChats on m.ChatId equals c.ChatId into chatGroup
-            from chat in chatGroup.DefaultIfEmpty()
-            group new { m, chat } by new { m.ChatId, ChatName = chat != null ? chat.ChatName : null } into g
+            join c in context.ManagedChats on m.ChatId equals c.ChatId
+            where c.IsActive && !c.IsDeleted
+            group new { m, c } by new { m.ChatId, c.ChatName } into g
             orderby g.Max(x => x.m.Timestamp) descending
             select new { g.Key.ChatId, g.Key.ChatName }
         )

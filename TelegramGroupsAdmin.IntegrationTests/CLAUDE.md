@@ -428,6 +428,7 @@ Anchors are in code as `GoldenDatasetConstants.ProfileRescan` (#552 part 2). `In
 | `NameOnlyLatestUserId` / `NameOnlyLatestScanId` | 9758118926756 @unreadbackspin, row 528 | one scan row, **edited:** `source` 0 → 1 (NameOnly). Retry-limit boundary: limit 2 selects, limit 1 does not. Also the read anchor for `ProfileScanResultsRepositoryTests.GetLatestSourceAsync_CanonicalNameOnlyUser_ReturnsNameOnly` (read-only) |
 | `FullScanLatestUserId` | 9922735795237 @parkingsturdily, row 533 | one FullScan row from 2026-04-30; never selected however old. Read-only |
 | `MultiChatUserId` / `MultiChatLatestChatId` / `MultiChatOldestChatId` | 9739143127436 @elvesunable | undeleted messages in Hobby Forum (latest), Main Community, Garage Chat (oldest); pins `GetChatsForUserAsync` order. Read-only |
+| `UnmanagedChatOnlyUserId` | 9862700513599 @unbeatenmutiny | undeleted messages only in chat 0, which is not a managed chat; `GetChatsForUserAsync` returns no chat (only active managed chats count). Read-only |
 
 Use when: a test needs the job's incomplete-scan selection. Every other eligible canonical user has at most one scan row, so a mixed NameOnly / FullScan history is not available without an approved import.
 

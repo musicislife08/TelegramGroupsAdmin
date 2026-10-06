@@ -20,8 +20,9 @@ namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
 /// Periodic job that retries incomplete profile scans (never scanned, or a name-only latest scan under
 /// the retry limit). Every scan falls back to name-only, so the job runs with or without a User API session,
 /// but not when there is neither a session nor the profile-scan AI (no scan could write anything).
-/// A user is skipped only when profile scanning is disabled in every chat they have posted in
-/// (chats come from message history; a user who never posted follows the global setting).
+/// A user is skipped only when profile scanning is disabled in every active managed chat they have
+/// posted in (chats come from message history; a user with no such chat follows the global setting
+/// and is scanned with no chat, so a ban posts no celebration).
 /// </summary>
 [DisallowConcurrentExecution]
 public class ProfileRescanJob(
@@ -180,9 +181,9 @@ public class ProfileRescanJob(
     }
 
     /// <summary>
-    /// The chat to scan the user for: the most recently active of their chats whose effective config has
-    /// profile scanning enabled. Not eligible when none has. A user with no known chat is eligible (chat
-    /// null) when the global config has profile scanning enabled.
+    /// The chat to scan the user for: the most recently active of their active managed chats whose
+    /// effective config has profile scanning enabled. Not eligible when none has. A user with no such
+    /// chat is eligible (chat null) when the global config has profile scanning enabled.
     /// </summary>
     private async Task<(bool Eligible, ChatIdentity? Chat)> FindScanChatAsync(
         long userId, Dictionary<long, bool> scanEnabledByChat, CancellationToken cancellationToken)

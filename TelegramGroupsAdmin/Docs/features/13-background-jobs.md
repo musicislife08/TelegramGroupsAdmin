@@ -13,7 +13,7 @@ TGA runs several automated tasks in the background to keep your system healthy a
 | **Scheduled Backup** | Daily at 2 AM | Creates an encrypted database backup (disabled by default — see [Backup & Restore](14-backup-restore.md)) |
 | **Data Cleanup** | Daily | Removes expired messages and reports based on retention settings (disabled by default) |
 | **Database Maintenance** | Weekly (Sunday 4 AM) | Optimizes database performance (disabled by default — see [Database Maintenance](19-database-maintenance.md)) |
-| **Profile Rescan** | Every 6 hours | Retries incomplete profile scans (never scanned, or name-only under the retry limit); skips a user only when every chat they have posted in has profile scanning off; a user who never posted follows the global setting (disabled by default) |
+| **Profile Rescan** | Every 6 hours | Retries incomplete profile scans (never scanned, or name-only under the retry limit); skips a user only when every managed chat they have posted in has profile scanning off; a user with no such chat follows the global setting (disabled by default) |
 
 ## Managing Jobs
 

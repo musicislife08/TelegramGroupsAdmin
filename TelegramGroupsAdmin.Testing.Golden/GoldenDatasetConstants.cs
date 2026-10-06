@@ -858,6 +858,8 @@ public static class GoldenDatasetConstants
         public const long MultiChatLatestChatId = -100003785594462L;
         /// <summary>Garage Chat: <see cref="MultiChatUserId"/>'s least recently active chat (Main Community, <see cref="Chats.MainChatId"/>, is between).</summary>
         public const long MultiChatOldestChatId = -100063904363399L;
+        /// <summary>@unbeatenmutiny: untrusted, unbanned; its only undeleted messages are in chat 0, which is not a managed chat. Read-only: the rescan job's chat list leaves out chats that are not active managed chats.</summary>
+        public const long UnmanagedChatOnlyUserId = 9862700513599;
     }
 
     /// <summary>Anchors for BackupService restore tests.</summary>

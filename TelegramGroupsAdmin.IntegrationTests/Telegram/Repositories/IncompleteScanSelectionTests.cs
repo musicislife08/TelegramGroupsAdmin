@@ -16,7 +16,8 @@ namespace TelegramGroupsAdmin.IntegrationTests.Telegram.Repositories;
 /// - NameOnlyLatestUserId: one scan row (528) flag-edited to source NameOnly (canonical edit 2026-10-05).
 /// - FullScanLatestUserId: one FullScan row (533), scanned 2026-04-30 (read-only).
 /// The batch size is the user count so ordering never hides an anchor.
-/// Also pins the job's per-user chat list (GetChatsForUserAsync) on MultiChatUserId (read-only).
+/// Also pins the job's per-user chat list (GetChatsForUserAsync) on MultiChatUserId and
+/// UnmanagedChatOnlyUserId (both read-only).
 /// </summary>
 [TestFixture]
 public class IncompleteScanSelectionTests
@@ -154,5 +155,29 @@ public class IncompleteScanSelectionTests
             }));
             Assert.That(chats.Select(c => c.ChatName), Has.All.Not.Null, "names come from managed_chats");
         });
+    }
+
+    [Test]
+    public async Task ChatsForUser_MessagesOnlyOutsideActiveManagedChats_IsEmpty()
+    {
+        // The chat goes to the scan for its ban celebration and alerts: never one the bot does not manage.
+        var userId = GoldenDatasetConstants.ProfileRescan.UnmanagedChatOnlyUserId;
+        await using (var ctx = _testHelper!.GetDbContext())
+        {
+            var chatIds = await ctx.Messages.AsNoTracking()
+                .Where(m => m.UserId == userId && m.DeletedAt == null)
+                .Select(m => m.ChatId).Distinct().ToListAsync();
+            var activeManaged = await ctx.ManagedChats.AsNoTracking()
+                .Where(c => chatIds.Contains(c.ChatId) && c.IsActive && !c.IsDeleted)
+                .CountAsync();
+            Assert.That(chatIds, Is.Not.Empty, "anchor must have undeleted messages");
+            Assert.That(activeManaged, Is.Zero, "anchor's messages must all be outside active managed chats");
+        }
+
+        using var scope = _provider!.CreateScope();
+        var chats = await scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>()
+            .GetChatsForUserAsync(userId);
+
+        Assert.That(chats, Is.Empty);
     }
 }
