@@ -212,6 +212,8 @@ public sealed class ProfileScanService(
 
         // A skip reason here means the profile could not be read (user not resolvable, full profile
         // not fetched, timeout, FLOOD_WAIT). A scan that read the profile never carries one.
+        // On the timeout path the name-only AI call runs after the ScanTimeout race, so ScanTimeout
+        // does not bound it; the AI client's own HTTP timeout does.
         return result.SkipReason is null
             ? result
             : await FallBackToNameOnlyAsync(result, user, existingUser, triggeringChat, sp, ct);

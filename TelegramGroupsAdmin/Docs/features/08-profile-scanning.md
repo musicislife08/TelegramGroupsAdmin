@@ -145,7 +145,7 @@ With profile scanning on and no User API session connected, the Profile Scan set
 | Manual rescan | Always runs, whatever the exclude flag says |
 | Profile Rescan job | Retries incomplete scans only |
 
-A successful full scan is complete: nothing rescans it automatically until the user renames or an admin runs a manual rescan. The Profile Rescan job picks untrusted, unbanned, non-bot, not-excluded users whose scan is incomplete: never scanned, or whose latest scan was name-only with fewer than the **name-only retry limit** (default 3) name-only scans since their last full scan. The job skips a user only when every chat they are a member of has profile scanning off; a member of any chat with scanning on is scanned, using that chat's settings, and a user with no known chat follows the global setting. **Re-Scan After** is the wait before an incomplete scan is retried. Once the limit is reached, the latest name-only result stands until the user renames or an admin rescans.
+A successful full scan is complete: nothing rescans it automatically until the user renames or an admin runs a manual rescan. The Profile Rescan job picks untrusted, unbanned, non-bot, not-excluded users whose scan is incomplete: never scanned, or whose latest scan was name-only with fewer than the **name-only retry limit** (default 3) name-only scans since their last full scan. The job skips a user only when every chat they have posted in has profile scanning off; a user who has posted in any chat with scanning on is scanned, using that chat's settings, and a user who never posted follows the global setting. **Re-Scan After** is the wait before an incomplete scan is retried. Once the limit is reached, the latest name-only result stands until the user renames or an admin rescans.
 
 **Exclude from automatic scans** (User Details > Profile Scan) is your switch: the job and join / first-message scans skip the user, a rename still scans, and a manual rescan always runs. Scans never set or clear it.
 
@@ -397,7 +397,7 @@ All Telegram API calls in the scan pipeline are wrapped with `TelegramFloodWaitE
 
 **Profile scan not running:**
 - Without a User API session only name-only scans run (Settings > User API Settings)
-- Check that Profile Scan is enabled for the chat (Settings > Welcome > Join Security > Profile Scan)
+- Check that Profile Scan is enabled for the chat (Chat Management > Configure > Welcome System > Security on Join > Profile Scan)
 - Join scans run only for new, never-scanned or renamed users; check `ScanOnJoin`
 
 **Users not being resolved (name-only scans in their history):**

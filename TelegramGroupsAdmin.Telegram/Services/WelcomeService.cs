@@ -411,8 +411,9 @@ public class WelcomeService(
 
             if (scanResult is not null)
             {
-                // Re-resolve: the scan may have just flagged the name, and the identity observed in
-                // Step 2 predates its verdict. Everything later in this join flow uses the new one.
+                // Re-resolve: the identity observed in Step 2 predates the scan. This matters when the
+                // scan banned the user, since a flagged name is masked only while the user is banned.
+                // Everything later in this join flow uses the new identity.
                 userIdentity = await identityService.ResolveAsync(user.Id, cancellationToken);
 
                 if (scanResult.Outcome == ProfileScanOutcome.Banned)
