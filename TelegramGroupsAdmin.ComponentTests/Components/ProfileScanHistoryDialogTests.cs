@@ -36,14 +36,11 @@ public class ProfileScanHistoryDialogTestContext : BunitContext
 [TestFixture]
 public class ProfileScanHistoryDialogTests : ProfileScanHistoryDialogTestContext
 {
-    [SetUp]
-    public void Setup() => Results.ClearReceivedCalls();
-
     private static ProfileScanResultRecord Row(long id, ProfileScanSource source, bool explicitName, bool promotionalName) =>
         new(id, 42, DateTimeOffset.UtcNow.AddMinutes(-id), 3.0m, ProfileScanOutcome.HeldForReview, 0m, 3.0m,
             "reason", null, ExplicitDisplayText: explicitName, PromotionalDisplayText: promotionalName, Source: source);
 
-    private Task<IRenderedComponent<MudDialogProvider>> OpenAsync(params ProfileScanResultRecord[] rows)
+    private IRenderedComponent<MudDialogProvider> Open(params ProfileScanResultRecord[] rows)
     {
         Results.GetByUserIdAsync(42, Arg.Any<CancellationToken>()).Returns(rows.ToList());
         var provider = Render<MudDialogProvider>();
@@ -53,13 +50,13 @@ public class ProfileScanHistoryDialogTests : ProfileScanHistoryDialogTestContext
             { d => d.UserId, 42L },
             { d => d.UserDisplayName, "Sam Rivera" }
         });
-        return Task.FromResult(provider);
+        return provider;
     }
 
     [Test]
-    public async Task NameOnlyPromotionalRow_ShowsSourceAndPromotionalChip()
+    public void NameOnlyPromotionalRow_ShowsSourceAndPromotionalChip()
     {
-        var provider = await OpenAsync(Row(1, ProfileScanSource.NameOnly, explicitName: false, promotionalName: true));
+        var provider = Open(Row(1, ProfileScanSource.NameOnly, explicitName: false, promotionalName: true));
 
         provider.WaitForAssertion(() =>
         {
@@ -70,9 +67,9 @@ public class ProfileScanHistoryDialogTests : ProfileScanHistoryDialogTestContext
     }
 
     [Test]
-    public async Task FullScanRowWithBothFlags_ShowsSourceAndBothChips()
+    public void FullScanRowWithBothFlags_ShowsSourceAndBothChips()
     {
-        var provider = await OpenAsync(Row(1, ProfileScanSource.FullScan, explicitName: true, promotionalName: true));
+        var provider = Open(Row(1, ProfileScanSource.FullScan, explicitName: true, promotionalName: true));
 
         provider.WaitForAssertion(() =>
         {
@@ -83,9 +80,9 @@ public class ProfileScanHistoryDialogTests : ProfileScanHistoryDialogTestContext
     }
 
     [Test]
-    public async Task UnflaggedRow_ShowsNoNameChips()
+    public void UnflaggedRow_ShowsNoNameChips()
     {
-        var provider = await OpenAsync(Row(1, ProfileScanSource.FullScan, explicitName: false, promotionalName: false));
+        var provider = Open(Row(1, ProfileScanSource.FullScan, explicitName: false, promotionalName: false));
 
         provider.WaitForAssertion(() =>
         {
