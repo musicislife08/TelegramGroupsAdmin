@@ -900,6 +900,27 @@ public class WelcomeSystemConfigTests : WelcomeSystemConfigTestContext
             Arg.Any<CancellationToken>());
     }
 
+    [Test]
+    public async Task Save_ScanningOff_NameOnlyThresholdBelowNotify_IsNotRefused()
+    {
+        // The disabled (uneditable) field must never block every save
+        var config = ProfileScanConfigWith(4.8m, 4.5m);
+        config.JoinSecurity.ProfileScan.Enabled = false;
+        ConfigService.GetWelcomeAsync(Arg.Any<long>()).Returns(config);
+        this.AddTestWebUser();
+        var cut = Render<WelcomeSystemConfig>();
+        cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("Save Configuration")), TimeSpan.FromSeconds(2));
+
+        cut.FindAll("button").First(b => b.TextContent.Contains("Save Configuration")).Click();
+
+        await ConfigService.Received(1).SaveWelcomeAsync(
+            Arg.Any<ChatIdentity>(),
+            Arg.Is<WelcomeConfig>(c => c!.JoinSecurity.ProfileScan.NameOnlyBanThreshold == 4.5m),
+            Arg.Any<Actor>(),
+            Arg.Any<CancellationToken>());
+        Assert.That(cut.Markup, Does.Not.Contain("Must be at least the notify threshold"));
+    }
+
     private const string NoSessionNotice =
         "No User API session is connected: full profile scans can't run, but name-only scans still run on new joiners, first messages and renames.";
 

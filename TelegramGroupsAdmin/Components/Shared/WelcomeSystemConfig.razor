@@ -575,8 +575,10 @@
     private WelcomeConfig? _config;
     private const string MaskFlaggedNamesHelpId = "mask-flagged-names-help";
 
+    // Only while scanning is on: the field is disabled otherwise, so it must never block a save
     private bool NameOnlyThresholdInvalid =>
         _config is not null
+        && _config.JoinSecurity.ProfileScan.Enabled
         && _config.JoinSecurity.ProfileScan.NameOnlyBanThreshold < _config.JoinSecurity.ProfileScan.NotifyThreshold;
     private MudForm? _form;
     private bool _isValid = true;
