@@ -34,6 +34,7 @@ public class UserDetailDialogTests : MudBlazorTestContext
     private IUserActionsRepository _mockActionsRepo = null!;
     private ISnackbar _mockSnackbar = null!;
     private IDialogService _dialogService = null!;
+    private IProfileScanService _mockScanService = null!;
 
     private const long TestUserId = 123456789;
 
@@ -69,7 +70,8 @@ public class UserDetailDialogTests : MudBlazorTestContext
         Services.AddSingleton(_mockTagDefinitionsRepo);
         Services.AddSingleton(_mockActionsRepo);
         Services.AddSingleton(_mockSnackbar);
-        Services.AddSingleton(Substitute.For<IProfileScanService>());
+        _mockScanService = Substitute.For<IProfileScanService>();
+        Services.AddSingleton(_mockScanService);
         Services.AddSingleton(Substitute.For<ITelegramSessionManager>());
         Services.AddSingleton(Substitute.For<ITelegramUserRepository>());
 
@@ -87,6 +89,9 @@ public class UserDetailDialogTests : MudBlazorTestContext
     {
         // Clear previously rendered components so each test starts with a fresh DOM.
         await DisposeComponentsAsync();
+        // The fixture shares its substitutes across tests.
+        _mockSnackbar.ClearReceivedCalls();
+        _mockScanService.ClearReceivedCalls();
     }
 
     private IRenderedComponent<MudDialogProvider> RenderDialogProvider()
@@ -496,6 +501,49 @@ public class UserDetailDialogTests : MudBlazorTestContext
         });
 
         Assert.That(dialogTask.Exception, Is.Null);
+    }
+
+    private static ProfileScanResult ScanResult(ProfileScanSource source, string? skipReason = null) =>
+        new(TestUserId, null, null, null, null, false, null, false, false, false, 1.0m, ProfileScanOutcome.Clean,
+            null, null, SkipReason: skipReason, Source: source);
+
+    private void ClickRescan(IRenderedComponent<MudDialogProvider> provider)
+    {
+        provider.WaitForAssertion(() => Assert.That(provider.Markup, Does.Contain("Re-scan Profile")));
+        provider.FindAll("button").Single(b => b.TextContent.Contains("Re-scan Profile")).Click();
+    }
+
+    [Test]
+    public void Rescan_IsAManualScanWithNoChat()
+    {
+        // The admin's rescan runs directly (not through the gate) and counts as manual in the scan-source metric.
+        _mockUserService.GetUserDetailAsync(TestUserId, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<TelegramUserDetail?>(CreateUserDetail()));
+        _mockScanService.ScanUserProfileAsync(default!, default, default, default, default)
+            .ReturnsForAnyArgs(ScanResult(ProfileScanSource.FullScan));
+        var provider = RenderDialogProvider();
+        _ = OpenDialogAsync(TestUserId);
+
+        ClickRescan(provider);
+
+        provider.WaitForAssertion(() => _mockScanService.Received(1).ScanUserProfileAsync(
+            Arg.Is<UserIdentity>(u => u!.Id == TestUserId), null, Arg.Any<CancellationToken>(), false, ProfileScanOrigin.Manual));
+    }
+
+    [TestCase(ProfileScanSource.FullScan, "Profile scan complete", Severity.Success)]
+    [TestCase(ProfileScanSource.NameOnly, "Name-only scan complete (profile could not be read)", Severity.Info)]
+    public void Rescan_SaysWhichScanRan(ProfileScanSource source, string message, Severity severity)
+    {
+        _mockUserService.GetUserDetailAsync(TestUserId, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<TelegramUserDetail?>(CreateUserDetail()));
+        _mockScanService.ScanUserProfileAsync(default!, default, default, default, default)
+            .ReturnsForAnyArgs(ScanResult(source));
+        var provider = RenderDialogProvider();
+        _ = OpenDialogAsync(TestUserId);
+
+        ClickRescan(provider);
+
+        provider.WaitForAssertion(() => _mockSnackbar.Received(1).Add(message, severity));
     }
 
     [Test]
