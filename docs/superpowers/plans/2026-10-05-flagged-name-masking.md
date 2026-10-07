@@ -2391,7 +2391,7 @@ git commit -m "feat(profile-scan): scan joiners only when new, never scanned or 
 
 **Interfaces:**
 - Consumes: `ProfileScanSource`, `profile_scan_results.source` (Task 2); Task 5's unconditional fallback.
-- Produces: `ProfileRescanSettings.NameOnlyRetryLimit` (`int`, default `3`); `Task<List<long>> ITelegramUserRepository.GetEligibleUsersForRescanAsync(int batchSize, DateTimeOffset retryCutoff, int nameOnlyRetryLimit, CancellationToken cancellationToken = default)`; `ProfileRescanJob` constructor without `ITelegramSessionManager`: `(ILogger<ProfileRescanJob> logger, IBackgroundJobConfigService jobConfigService, ITelegramUserRepository userRepository, IProfileScanService profileScanService, IUserIdentityService identityService, JobMetrics jobMetrics)`; `GoldenDatasetConstants.ProfileRescan.{NeverScannedUserId, ExcludedNeverScannedUserId, NameOnlyLatestUserId, NameOnlyLatestScanId, FullScanLatestUserId}`.
+- Produces: `ProfileRescanSettings.NameOnlyRetryLimit` (`int`, default `3`); `Task<List<long>> ITelegramUserRepository.GetUsersWithIncompleteScansAsync(int batchSize, DateTimeOffset retryCutoff, int nameOnlyRetryLimit, CancellationToken cancellationToken = default)`; `ProfileRescanJob` constructor without `ITelegramSessionManager`: `(ILogger<ProfileRescanJob> logger, IBackgroundJobConfigService jobConfigService, ITelegramUserRepository userRepository, IProfileScanService profileScanService, IUserIdentityService identityService, JobMetrics jobMetrics)`; `GoldenDatasetConstants.ProfileRescan.{NeverScannedUserId, ExcludedNeverScannedUserId, NameOnlyLatestUserId, NameOnlyLatestScanId, FullScanLatestUserId}`.
 
 - [ ] **Step 1: Confirm the anchors**
 
@@ -2437,7 +2437,7 @@ Expected: no test or constant references any of the four ids (9922735795237 appe
 
     private void Batch(params UserIdentity[] users)
     {
-        _users.GetEligibleUsersForRescanAsync(Arg.Any<int>(), Arg.Any<DateTimeOffset>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        _users.GetUsersWithIncompleteScansAsync(Arg.Any<int>(), Arg.Any<DateTimeOffset>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(users.Select(u => u.Id).ToList());
         _identities.ResolveManyAsync(Arg.Any<IReadOnlyCollection<long>>(), Arg.Any<CancellationToken>())
             .Returns(users);
@@ -2476,7 +2476,7 @@ Expected: no test or constant references any of the four ids (9922735795237 appe
 
         await _job.Execute(Context());
 
-        await _users.Received(1).GetEligibleUsersForRescanAsync(
+        await _users.Received(1).GetUsersWithIncompleteScansAsync(
             25,
             Arg.Is<DateTimeOffset>(c => c <= start.AddDays(-2).AddSeconds(5) && c >= start.AddDays(-2).AddSeconds(-5)),
             5,
@@ -2490,7 +2490,7 @@ Expected: no test or constant references any of the four ids (9922735795237 appe
 
         await _job.Execute(Context());
 
-        await _users.Received(1).GetEligibleUsersForRescanAsync(100, Arg.Any<DateTimeOffset>(), 3, Arg.Any<CancellationToken>());
+        await _users.Received(1).GetUsersWithIncompleteScansAsync(100, Arg.Any<DateTimeOffset>(), 3, Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -2578,7 +2578,7 @@ public class IncompleteScanSelectionTests
         var everyone = await ctx.TelegramUsers.CountAsync();
         using var scope = _provider!.CreateScope();
         return await scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>()
-            .GetEligibleUsersForRescanAsync(everyone, retryCutoff, limit);
+            .GetUsersWithIncompleteScansAsync(everyone, retryCutoff, limit);
     }
 
     private async Task GuardAsync()
@@ -2655,7 +2655,7 @@ public class IncompleteScanSelectionTests
 - [ ] **Step 3: Run to verify they fail**
 
 Run: `dotnet test TelegramGroupsAdmin.UnitTests --filter "FullyQualifiedName~ProfileRescanJobTests"`
-Expected: build error: `NameOnlyRetryLimit` does not exist; no `GetEligibleUsersForRescanAsync` overload takes 4 arguments; no `ProfileRescanJob` constructor takes 6 arguments.
+Expected: build error: `NameOnlyRetryLimit` does not exist; no `GetUsersWithIncompleteScansAsync` overload takes 4 arguments; no `ProfileRescanJob` constructor takes 6 arguments.
 
 - [ ] **Step 4: Implement the setting, the selection and the job**
 
@@ -2689,7 +2689,7 @@ public record ProfileRescanSettings
 }
 ```
 
-`ITelegramUserRepository.cs`, replace the `GetEligibleUsersForRescanAsync` declaration and summary:
+`ITelegramUserRepository.cs`, replace the `GetUsersWithIncompleteScansAsync` declaration and summary:
 
 ```csharp
     /// <summary>
@@ -2699,14 +2699,14 @@ public record ProfileRescanSettings
     /// <paramref name="nameOnlyRetryLimit"/> NameOnly rows since their last FullScan row.
     /// Ordered by ProfileScannedAt ASC (NULLS FIRST = never-scanned users first).
     /// </summary>
-    Task<List<long>> GetEligibleUsersForRescanAsync(
+    Task<List<long>> GetUsersWithIncompleteScansAsync(
         int batchSize, DateTimeOffset retryCutoff, int nameOnlyRetryLimit, CancellationToken cancellationToken = default);
 ```
 
 `TelegramUserRepository.cs`, replace the method:
 
 ```csharp
-    public async Task<List<long>> GetEligibleUsersForRescanAsync(
+    public async Task<List<long>> GetUsersWithIncompleteScansAsync(
         int batchSize, DateTimeOffset retryCutoff, int nameOnlyRetryLimit, CancellationToken cancellationToken = default)
     {
         const short nameOnly = (short)ProfileScanSource.NameOnly;
@@ -2740,7 +2740,7 @@ public record ProfileRescanSettings
 `ProfileRescanJob.cs`:
 - Class summary: "Periodic job that retries incomplete profile scans (never scanned, or a name-only latest scan under the retry limit). Every scan falls back to name-only, so the job runs with or without a User API session."
 - Remove the `ITelegramSessionManager sessionManager` constructor parameter and the "Check User API availability first" block.
-- Read the limit and pass it: after `var cutoff = …;` keep the log line, adding `nameOnlyRetryLimit={RetryLimit}` / `settings.NameOnlyRetryLimit`, and call `await userRepository.GetEligibleUsersForRescanAsync(batchSize, cutoff, settings.NameOnlyRetryLimit, cancellationToken);`.
+- Read the limit and pass it: after `var cutoff = …;` keep the log line, adding `nameOnlyRetryLimit={RetryLimit}` / `settings.NameOnlyRetryLimit`, and call `await userRepository.GetUsersWithIncompleteScansAsync(batchSize, cutoff, settings.NameOnlyRetryLimit, cancellationToken);`.
 - Replace the loop body's abort logic so a skipped scan never stops the batch:
 
 ```csharp

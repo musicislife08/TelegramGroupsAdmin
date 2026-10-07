@@ -1311,7 +1311,7 @@ public class TelegramUserRepository : ITelegramUserRepository
     }
 
     /// <inheritdoc />
-    public async Task<List<long>> GetEligibleUsersForRescanAsync(
+    public async Task<List<long>> GetUsersWithIncompleteScansAsync(
         int batchSize, DateTimeOffset retryCutoff, int nameOnlyRetryLimit, CancellationToken cancellationToken = default)
     {
         const short nameOnly = (short)ProfileScanSource.NameOnly;

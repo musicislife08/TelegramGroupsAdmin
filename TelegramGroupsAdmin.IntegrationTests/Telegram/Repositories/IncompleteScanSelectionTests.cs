@@ -51,7 +51,7 @@ public class IncompleteScanSelectionTests
         var everyone = await ctx.TelegramUsers.CountAsync();
         using var scope = _provider!.CreateScope();
         return await scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>()
-            .GetEligibleUsersForRescanAsync(everyone, retryCutoff, limit);
+            .GetUsersWithIncompleteScansAsync(everyone, retryCutoff, limit);
     }
 
     private async Task GuardAsync()

@@ -107,12 +107,12 @@ public class ProfileRescanJob(
             // One ordered candidate list, capped, rather than offset pages: a scan changes the user's
             // profile_scanned_at and scan rows, so offset pages would shift under the loop.
             var candidateCap = batchSize * CandidatesPerBatchSlot;
-            var userIds = await userRepository.GetEligibleUsersForRescanAsync(
+            var userIds = await userRepository.GetUsersWithIncompleteScansAsync(
                 candidateCap, cutoff, retryLimit, cancellationToken);
 
             if (userIds.Count == 0)
             {
-                logger.LogInformation("Profile rescan: no eligible users found");
+                logger.LogInformation("Profile rescan: no incomplete scans to retry");
                 success = true;
                 return;
             }

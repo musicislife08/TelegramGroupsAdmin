@@ -74,7 +74,7 @@ public class ProfileRescanJobTests
     // for the requested ids, in order.
     private void Batch(params UserIdentity[] users)
     {
-        _users.GetEligibleUsersForRescanAsync(Arg.Any<int>(), Arg.Any<DateTimeOffset>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        _users.GetUsersWithIncompleteScansAsync(Arg.Any<int>(), Arg.Any<DateTimeOffset>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(ci => users.Take(ci.ArgAt<int>(0)).Select(u => u.Id).ToList());
         _identities.ResolveManyAsync(Arg.Any<IReadOnlyCollection<long>>(), Arg.Any<CancellationToken>())
             .Returns(ci => ci.ArgAt<IReadOnlyCollection<long>>(0).Select(id => users.Single(u => u.Id == id)).ToList());
@@ -148,11 +148,21 @@ public class ProfileRescanJobTests
         await _job.Execute(Context());
 
         // Up to 10 x BatchSize candidates are examined, so users skipped for disabled scanning don't use up slots.
-        await _users.Received(1).GetEligibleUsersForRescanAsync(
+        await _users.Received(1).GetUsersWithIncompleteScansAsync(
             250,
             Arg.Is<DateTimeOffset>(c => c <= start.AddDays(-2).AddSeconds(5) && c >= start.AddDays(-2).AddSeconds(-5)),
             5,
             Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task Execute_NoCandidates_LogsNothingToRetry()
+    {
+        Batch();
+
+        await _job.Execute(Context());
+
+        Assert.That(_logger.Entries, Has.One.EqualTo((LogLevel.Information, "Profile rescan: no incomplete scans to retry")));
     }
 
     [Test]
@@ -162,7 +172,7 @@ public class ProfileRescanJobTests
 
         await _job.Execute(Context());
 
-        await _users.Received(1).GetEligibleUsersForRescanAsync(1000, Arg.Any<DateTimeOffset>(), 3, Arg.Any<CancellationToken>());
+        await _users.Received(1).GetUsersWithIncompleteScansAsync(1000, Arg.Any<DateTimeOffset>(), 3, Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -408,7 +418,7 @@ public class ProfileRescanJobTests
 
         await _job.Execute(Context());
 
-        await _users.DidNotReceiveWithAnyArgs().GetEligibleUsersForRescanAsync(default, default, default, default);
+        await _users.DidNotReceiveWithAnyArgs().GetUsersWithIncompleteScansAsync(default, default, default, default);
         await _gate.DidNotReceiveWithAnyArgs().ScanIfEligibleAsync(default!, default, default, default);
         Assert.That(_logger.Entries.Count(e => e.Level == LogLevel.Warning && e.Message == NothingCanScanWarning),
             Is.EqualTo(1));

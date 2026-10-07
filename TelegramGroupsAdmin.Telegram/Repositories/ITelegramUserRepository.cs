@@ -186,7 +186,7 @@ public interface ITelegramUserRepository
     /// who can never be scanned do not take every run's candidates; the rescan job sends each candidate
     /// through the profile scan gate, which makes the eligibility decision.
     /// </summary>
-    Task<List<long>> GetEligibleUsersForRescanAsync(
+    Task<List<long>> GetUsersWithIncompleteScansAsync(
         int batchSize, DateTimeOffset retryCutoff, int nameOnlyRetryLimit, CancellationToken cancellationToken = default);
 
     /// <summary>
