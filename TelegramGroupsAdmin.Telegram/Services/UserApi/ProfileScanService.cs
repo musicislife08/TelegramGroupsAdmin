@@ -180,9 +180,9 @@ public sealed class ProfileScanService(
         }
 
         // Top-level guard: WTelegram API calls don't accept CancellationToken, so a hung DC
-        // connection (e.g., file download from DC -4) blocks indefinitely. Task.WhenAny races
-        // the scan against a timeout — if the timeout wins, we abandon the scan and return
-        // gracefully so the welcome flow continues.
+        // connection (e.g., file download from DC -4) blocks indefinitely. The scan is awaited with
+        // a timeout — if the timeout wins, we abandon the scan and return gracefully so the welcome
+        // flow continues.
         //
         // The scan task gets its own scope (via ScanWithOwnedScopeAsync) so that if the timeout
         // fires and this method returns, the abandoned task's scoped services stay alive until
@@ -192,9 +192,15 @@ public sealed class ProfileScanService(
         {
             var scanTask = ScanWithOwnedScopeAsync(client, user, existingUser, triggeringChat, skipReuse, ct);
 
-            var completedTask = await Task.WhenAny(scanTask, Task.Delay(ScanTimeout, CancellationToken.None));
-
-            if (completedTask != scanTask)
+            try
+            {
+                // WaitAsync's timer is disposed as soon as the scan finishes, so a fast scan leaves nothing behind.
+                result = await scanTask.WaitAsync(ScanTimeout, CancellationToken.None);
+                pipelineMetrics.RecordProfileScan(
+                    OutcomeToTag(result.Outcome), scanSource,
+                    Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
+            }
+            catch (TimeoutException) when (!scanTask.IsCompleted)
             {
                 logger.LogWarning(
                     "Profile scan timed out after {Timeout}s for {User} (WTelegram call hung, likely DC connection issue)",
@@ -210,13 +216,6 @@ public sealed class ProfileScanService(
 
                 pipelineMetrics.RecordProfileScanTimeout();
                 result = EmptyResult(user.Id, $"Scan timed out after {ScanTimeout.TotalSeconds}s");
-            }
-            else
-            {
-                result = await scanTask;
-                pipelineMetrics.RecordProfileScan(
-                    OutcomeToTag(result.Outcome), scanSource,
-                    Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
             }
         }
         catch (TelegramFloodWaitException ex)
