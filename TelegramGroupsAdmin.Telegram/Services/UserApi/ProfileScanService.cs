@@ -482,13 +482,10 @@ public sealed class ProfileScanService(
             IsScam: isScam,
             IsFake: isFake,
             IsVerified: isVerified,
-            Score: scoreResult.Score,
-            Outcome: scoreResult.Outcome,
-            AiReason: scoreResult.AiReason,
-            AiSignalsDetected: scoreResult.AiSignals,
-            ContainsNudity: scoreResult.ContainsNudity,
-            ExplicitDisplayText: scoreResult.ExplicitDisplayText,
-            PromotionalDisplayText: scoreResult.PromotionalDisplayText);
+            Score: 0.0m,
+            Outcome: ProfileScanOutcome.Clean,
+            AiReason: null,
+            AiSignalsDetected: null).WithScoring(scoreResult, ProfileScanSource.FullScan);
 
         // ── Step 8: Take moderation action ──
         await ActOnOutcomeAsync(user, triggeringChat, result, sp, ct);
@@ -572,16 +569,7 @@ public sealed class ProfileScanService(
         await sp.GetRequiredService<ITelegramUserRepository>().UpdateProfileScanScoreAsync(user.Id, scoreResult.Score, ct);
         await PersistScanResultAsync(user.Id, scoreResult, ProfileScanSource.NameOnly, sp, ct);
 
-        var result = EmptyResult(user.Id) with
-        {
-            Score = scoreResult.Score,
-            Outcome = scoreResult.Outcome,
-            AiReason = scoreResult.AiReason,
-            AiSignalsDetected = scoreResult.AiSignals,
-            ExplicitDisplayText = scoreResult.ExplicitDisplayText,
-            PromotionalDisplayText = scoreResult.PromotionalDisplayText,
-            Source = ProfileScanSource.NameOnly
-        };
+        var result = EmptyResult(user.Id).WithScoring(scoreResult, ProfileScanSource.NameOnly);
 
         logger.LogInformation("Profile scan for {User} could not read the profile ({SkipReason}); name-only scan scored {Score} ({Outcome})",
             user.ToLogInfo(), skipped.SkipReason, result.Score, result.Outcome);
@@ -1047,11 +1035,7 @@ public sealed class ProfileScanService(
         var banThreshold = profileScanConfig?.BanThreshold ?? ProfileScanConfig.DefaultBanThreshold;
         var notifyThreshold = profileScanConfig?.NotifyThreshold ?? ProfileScanConfig.DefaultNotifyThreshold;
 
-        return score >= banThreshold
-            ? ProfileScanOutcome.Banned
-            : score >= notifyThreshold
-                ? ProfileScanOutcome.HeldForReview
-                : ProfileScanOutcome.Clean;
+        return ScoringResult.OutcomeFor(score, banThreshold, notifyThreshold);
     }
 
     /// <summary>

@@ -71,21 +71,14 @@ public sealed class ProfileScoringEngine(
                 RuleScore: ruleScore,
                 AiScore: 0.0m,
                 AiReason: "Rule-based detection triggered ban threshold",
-                AiSignals: null,
-                ContainsNudity: false,
-                ExplicitDisplayText: false,
-                PromotionalDisplayText: false);
+                AiSignals: null);
         }
 
         // ── Layer 2: AI vision analysis ──
         var aiResult = await RunAiScoringAsync(profile, images, imageLabels, cancellationToken);
         var totalScore = Cap(ruleScore + aiResult.Score);
 
-        var outcome = totalScore >= banThreshold
-            ? ProfileScanOutcome.Banned
-            : totalScore >= notifyThreshold
-                ? ProfileScanOutcome.HeldForReview
-                : ProfileScanOutcome.Clean;
+        var outcome = ScoringResult.OutcomeFor(totalScore, banThreshold, notifyThreshold);
 
         logger.LogInformation(
             "Profile scan for {User}: rule={RuleScore}, ai={AiScore}, total={TotalScore}, outcome={Outcome}",
@@ -133,11 +126,7 @@ public sealed class ProfileScoringEngine(
             if (ai == null)
                 return null;
 
-            var outcome = ai.Score >= nameOnlyBanThreshold
-                ? ProfileScanOutcome.Banned
-                : ai.Score >= notifyThreshold
-                    ? ProfileScanOutcome.HeldForReview
-                    : ProfileScanOutcome.Clean;
+            var outcome = ScoringResult.OutcomeFor(ai.Score, nameOnlyBanThreshold, notifyThreshold);
 
             logger.LogInformation(
                 "Name-only profile scan for {User}: score={Score}, outcome={Outcome}, explicit={Explicit}, promotional={Promotional}",
@@ -150,7 +139,6 @@ public sealed class ProfileScoringEngine(
                 AiScore: ai.Score,
                 AiReason: ai.Reason,
                 AiSignals: ai.Signals,
-                ContainsNudity: false,
                 ExplicitDisplayText: ai.ExplicitDisplayText,
                 PromotionalDisplayText: ai.PromotionalDisplayText);
         }

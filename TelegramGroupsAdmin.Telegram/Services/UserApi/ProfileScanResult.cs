@@ -24,4 +24,21 @@ public record ProfileScanResult(
     bool ExplicitDisplayText = false,
     string? SkipReason = null,
     bool PromotionalDisplayText = false,
-    ProfileScanSource Source = ProfileScanSource.FullScan);
+    ProfileScanSource Source = ProfileScanSource.FullScan)
+{
+    /// <summary>
+    /// This result with its score-derived fields taken from <paramref name="scoring"/>: the one mapping
+    /// used by the full scan and the name-only scan.
+    /// </summary>
+    public ProfileScanResult WithScoring(ScoringResult scoring, ProfileScanSource source) => this with
+    {
+        Score = scoring.Score,
+        Outcome = scoring.Outcome,
+        AiReason = scoring.AiReason,
+        AiSignalsDetected = scoring.AiSignals,
+        ContainsNudity = scoring.ContainsNudity,
+        ExplicitDisplayText = scoring.ExplicitDisplayText,
+        PromotionalDisplayText = scoring.PromotionalDisplayText,
+        Source = source
+    };
+}

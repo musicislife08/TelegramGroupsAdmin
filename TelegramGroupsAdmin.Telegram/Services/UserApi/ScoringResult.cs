@@ -12,4 +12,16 @@ public record ScoringResult(
     string[]? AiSignals,
     bool ContainsNudity = false,
     bool ExplicitDisplayText = false,
-    bool PromotionalDisplayText = false);
+    bool PromotionalDisplayText = false)
+{
+    /// <summary>
+    /// The one outcome rule for every scan: at or above <paramref name="banThreshold"/> banned, else at
+    /// or above <paramref name="notifyThreshold"/> held for review, else clean.
+    /// </summary>
+    public static ProfileScanOutcome OutcomeFor(decimal score, decimal banThreshold, decimal notifyThreshold) =>
+        score >= banThreshold
+            ? ProfileScanOutcome.Banned
+            : score >= notifyThreshold
+                ? ProfileScanOutcome.HeldForReview
+                : ProfileScanOutcome.Clean;
+}
