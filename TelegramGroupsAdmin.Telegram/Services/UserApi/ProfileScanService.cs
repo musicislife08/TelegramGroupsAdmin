@@ -463,13 +463,13 @@ public sealed class ProfileScanService(
         var scoreResult = await scoringEngine.ScoreAsync(
             profileData, imageResult.Images, imageResult.Labels, banThreshold, notifyThreshold, cancellationToken: ct);
 
-        // ── Step 7: Persist results ──
-        await userRepo.UpdateProfileScanDataAsync(
-            user.Id, bio, personalChannelId, channelTitle, channelAbout,
+        // ── Step 7: Persist results (the user and the scan row in one transaction) ──
+        await userRepo.RecordFullScanAsync(
+            bio, personalChannelId, channelTitle, channelAbout,
             hasPinnedStories, pinnedStoryCaptions, isScam, isFake, isVerified,
-            scoreResult.Score, profilePhotoId, channelPhotoId, pinnedStoryIdString, ct);
-
-        await PersistScanResultAsync(user.Id, scoreResult, ProfileScanSource.FullScan, sp, ct);
+            profilePhotoId, channelPhotoId, pinnedStoryIdString,
+            ToScanRecord(user.Id, scoreResult, ProfileScanSource.FullScan), ct);
+        RecordExplicitNameMetric(scoreResult);
 
         var result = new ProfileScanResult(
             TelegramUserId: user.Id,
@@ -493,12 +493,9 @@ public sealed class ProfileScanService(
         return result;
     }
 
-    /// <summary>Writes the scan history row (both scan sources) and counts explicit names.</summary>
-    private async Task PersistScanResultAsync(
-        long userId, ScoringResult scoreResult, ProfileScanSource source, IServiceProvider sp, CancellationToken ct)
-    {
-        await sp.GetRequiredService<IProfileScanResultsRepository>().InsertAsync(new ProfileScanResultRecord(
-            Id: 0,
+    /// <summary>The scan history row for a scored scan (both scan sources).</summary>
+    private static ProfileScanResultRecord ToScanRecord(long userId, ScoringResult scoreResult, ProfileScanSource source) =>
+        new(Id: 0,
             UserId: userId,
             ScannedAt: DateTimeOffset.UtcNow,
             Score: scoreResult.Score,
@@ -509,8 +506,10 @@ public sealed class ProfileScanService(
             AiSignals: scoreResult.AiSignals is { Length: > 0 } ? string.Join(", ", scoreResult.AiSignals) : null,
             ExplicitDisplayText: scoreResult.ExplicitDisplayText,
             PromotionalDisplayText: scoreResult.PromotionalDisplayText,
-            Source: source), cancellationToken: ct);
+            Source: source);
 
+    private void RecordExplicitNameMetric(ScoringResult scoreResult)
+    {
         if (scoreResult.ExplicitDisplayText)
             pipelineMetrics.RecordExplicitUsernameDetection(OutcomeToTag(scoreResult.Outcome));
     }
@@ -566,8 +565,9 @@ public sealed class ProfileScanService(
             return skipped;
         }
 
-        await sp.GetRequiredService<ITelegramUserRepository>().UpdateProfileScanScoreAsync(user.Id, scoreResult.Score, ct);
-        await PersistScanResultAsync(user.Id, scoreResult, ProfileScanSource.NameOnly, sp, ct);
+        await sp.GetRequiredService<ITelegramUserRepository>().RecordNameOnlyScanAsync(
+            ToScanRecord(user.Id, scoreResult, ProfileScanSource.NameOnly), ct);
+        RecordExplicitNameMetric(scoreResult);
 
         var result = EmptyResult(user.Id).WithScoring(scoreResult, ProfileScanSource.NameOnly);
 

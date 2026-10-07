@@ -187,11 +187,10 @@ public interface ITelegramUserRepository
         int batchSize, DateTimeOffset retryCutoff, int nameOnlyRetryLimit, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Atomically update all profile scan columns for a user.
-    /// Called after a User API profile scan completes.
+    /// Records a full scan in one transaction: the profile fields, score (<c>scanResult.Score</c>) and scan
+    /// time (<c>scanResult.ScannedAt</c>) on the user, and the scan history row. Either both land or neither.
     /// </summary>
-    Task UpdateProfileScanDataAsync(
-        long telegramUserId,
+    Task RecordFullScanAsync(
         string? bio,
         long? personalChannelId,
         string? personalChannelTitle,
@@ -201,10 +200,10 @@ public interface ITelegramUserRepository
         bool isScam,
         bool isFake,
         bool isVerified,
-        decimal profileScanScore,
         long? profilePhotoId,
         long? personalChannelPhotoId,
         string? pinnedStoryIds,
+        UiModels.ProfileScanResultRecord scanResult,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -214,8 +213,9 @@ public interface ITelegramUserRepository
     Task UpdateProfileScannedAtAsync(long telegramUserId, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Record a name-only scan: set ProfileScanScore and bump ProfileScannedAt + UpdatedAt.
+    /// Records a name-only scan in one transaction: the score (<c>scanResult.Score</c>) and scan time
+    /// (<c>scanResult.ScannedAt</c>) on the user, and the scan history row. Either both land or neither.
     /// Stored bio, channel, story and photo fields are left as they are.
     /// </summary>
-    Task UpdateProfileScanScoreAsync(long telegramUserId, decimal score, CancellationToken cancellationToken = default);
+    Task RecordNameOnlyScanAsync(UiModels.ProfileScanResultRecord scanResult, CancellationToken cancellationToken = default);
 }

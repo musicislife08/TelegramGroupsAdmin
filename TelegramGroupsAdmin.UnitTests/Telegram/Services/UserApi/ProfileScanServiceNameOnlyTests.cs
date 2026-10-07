@@ -151,12 +151,12 @@ public class ProfileScanServiceNameOnlyTests
         await _scoring.Received(1).ScoreNameOnlyAsync(
             Arg.Is<UserIdentity>(u => u!.Id == UserId && u.FirstName == "Sam" && u.Username == "sam_rivera"),
             4.5m, 2.0m, Arg.Any<CancellationToken>());
-        await _results.Received(1).InsertAsync(
+        // The user's score and the scan row are written together, in one call.
+        await _users.Received(1).RecordNameOnlyScanAsync(
             Arg.Is<ProfileScanResultRecord>(r => r!.UserId == UserId && r.Source == ProfileScanSource.NameOnly
                 && r.Score == 1.0m && r.Outcome == ProfileScanOutcome.Clean && r.RuleScore == 0m && r.AiScore == 1.0m
                 && r.PromotionalDisplayText && !r.ExplicitDisplayText && r.AiSignals == "name_signal"),
             Arg.Any<CancellationToken>());
-        await _users.Received(1).UpdateProfileScanScoreAsync(UserId, 1.0m, Arg.Any<CancellationToken>());
         Assert.Multiple(() =>
         {
             Assert.That(result.Source, Is.EqualTo(ProfileScanSource.NameOnly));
@@ -177,8 +177,8 @@ public class ProfileScanServiceNameOnlyTests
         var result = await GateScanAsync();
 
         await AssertNameOnlyScanRanAsync(result);
-        await _users.DidNotReceiveWithAnyArgs().UpdateProfileScanDataAsync(
-            default, default, default, default, default, default, default, default, default, default, default, default, default, default, default);
+        await _users.DidNotReceiveWithAnyArgs().RecordFullScanAsync(
+            default, default, default, default, default, default, default, default, default, default, default, default, default!, default);
     }
 
     [Test]
@@ -244,7 +244,9 @@ public class ProfileScanServiceNameOnlyTests
 
         await _scoring.DidNotReceiveWithAnyArgs().ScoreNameOnlyAsync(default!, default, default, default);
         Assert.That(result.Source, Is.EqualTo(ProfileScanSource.FullScan));
-        await _results.Received(1).InsertAsync(
+        await _users.Received(1).RecordFullScanAsync(
+            Arg.Any<string?>(), Arg.Any<long?>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<bool>(), Arg.Any<string?>(),
+            Arg.Any<bool>(), Arg.Any<bool>(), Arg.Any<bool>(), Arg.Any<long?>(), Arg.Any<long?>(), Arg.Any<string?>(),
             Arg.Is<ProfileScanResultRecord>(r => r!.Source == ProfileScanSource.FullScan), Arg.Any<CancellationToken>());
     }
 
@@ -322,8 +324,7 @@ public class ProfileScanServiceNameOnlyTests
 
         var result = await GateScanAsync();
 
-        await _results.DidNotReceiveWithAnyArgs().InsertAsync(default!, default);
-        await _users.DidNotReceiveWithAnyArgs().UpdateProfileScanScoreAsync(default, default, default);
+        await _users.DidNotReceiveWithAnyArgs().RecordNameOnlyScanAsync(default!, default);
         await _moderation.DidNotReceiveWithAnyArgs().BanUserAsync(default!, default);
         await _reports.DidNotReceiveWithAnyArgs().InsertProfileScanAlertAsync(default!, default);
         Assert.That(result.SkipReason, Does.Contain("No User API session"));
@@ -363,7 +364,7 @@ public class ProfileScanServiceNameOnlyTests
 
         Received.InOrder(() =>
         {
-            _results.InsertAsync(Arg.Any<ProfileScanResultRecord>(), Arg.Any<CancellationToken>());
+            _users.RecordNameOnlyScanAsync(Arg.Any<ProfileScanResultRecord>(), Arg.Any<CancellationToken>());
             _identities.ResolveAsync(UserId, Arg.Any<CancellationToken>());
             _moderation.BanUserAsync(Arg.Any<BanIntent>(), Arg.Any<CancellationToken>());
         });

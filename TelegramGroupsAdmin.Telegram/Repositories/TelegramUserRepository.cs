@@ -1341,8 +1341,8 @@ public class TelegramUserRepository : ITelegramUserRepository
             .ToListAsync(cancellationToken);
     }
 
-    public async Task UpdateProfileScanDataAsync(
-        long telegramUserId,
+    /// <inheritdoc />
+    public Task RecordFullScanAsync(
         string? bio,
         long? personalChannelId,
         string? personalChannelTitle,
@@ -1352,32 +1352,28 @@ public class TelegramUserRepository : ITelegramUserRepository
         bool isScam,
         bool isFake,
         bool isVerified,
-        decimal profileScanScore,
         long? profilePhotoId,
         long? personalChannelPhotoId,
         string? pinnedStoryIds,
-        CancellationToken cancellationToken = default)
-    {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        await context.TelegramUsers
-            .Where(u => u.TelegramUserId == telegramUserId)
-            .ExecuteUpdateAsync(s => s
-                .SetProperty(u => u.Bio, bio)
-                .SetProperty(u => u.PersonalChannelId, personalChannelId)
-                .SetProperty(u => u.PersonalChannelTitle, personalChannelTitle)
-                .SetProperty(u => u.PersonalChannelAbout, personalChannelAbout)
-                .SetProperty(u => u.HasPinnedStories, hasPinnedStories)
-                .SetProperty(u => u.PinnedStoryCaptions, pinnedStoryCaptions)
-                .SetProperty(u => u.IsScam, isScam)
-                .SetProperty(u => u.IsFake, isFake)
-                .SetProperty(u => u.IsVerified, isVerified)
-                .SetProperty(u => u.ProfileScanScore, profileScanScore)
-                .SetProperty(u => u.ProfilePhotoId, profilePhotoId)
-                .SetProperty(u => u.PersonalChannelPhotoId, personalChannelPhotoId)
-                .SetProperty(u => u.PinnedStoryIds, pinnedStoryIds)
-                .SetProperty(u => u.ProfileScannedAt, DateTimeOffset.UtcNow)
-                .SetProperty(u => u.UpdatedAt, DateTimeOffset.UtcNow), cancellationToken);
-    }
+        UiModels.ProfileScanResultRecord scanResult,
+        CancellationToken cancellationToken = default) =>
+        RecordScanAsync(scanResult, (users, ct) => users.ExecuteUpdateAsync(s => s
+            .SetProperty(u => u.Bio, bio)
+            .SetProperty(u => u.PersonalChannelId, personalChannelId)
+            .SetProperty(u => u.PersonalChannelTitle, personalChannelTitle)
+            .SetProperty(u => u.PersonalChannelAbout, personalChannelAbout)
+            .SetProperty(u => u.HasPinnedStories, hasPinnedStories)
+            .SetProperty(u => u.PinnedStoryCaptions, pinnedStoryCaptions)
+            .SetProperty(u => u.IsScam, isScam)
+            .SetProperty(u => u.IsFake, isFake)
+            .SetProperty(u => u.IsVerified, isVerified)
+            .SetProperty(u => u.ProfileScanScore, scanResult.Score)
+            .SetProperty(u => u.ProfilePhotoId, profilePhotoId)
+            .SetProperty(u => u.PersonalChannelPhotoId, personalChannelPhotoId)
+            .SetProperty(u => u.PinnedStoryIds, pinnedStoryIds)
+            .SetProperty(u => u.ProfileScannedAt, scanResult.ScannedAt)
+            .SetProperty(u => u.UpdatedAt, scanResult.ScannedAt), ct),
+            cancellationToken);
 
     /// <inheritdoc />
     public async Task UpdateProfileScannedAtAsync(long telegramUserId, CancellationToken cancellationToken = default)
@@ -1391,16 +1387,35 @@ public class TelegramUserRepository : ITelegramUserRepository
     }
 
     /// <inheritdoc />
-    public async Task UpdateProfileScanScoreAsync(long telegramUserId, decimal score, CancellationToken cancellationToken = default)
+    public Task RecordNameOnlyScanAsync(UiModels.ProfileScanResultRecord scanResult, CancellationToken cancellationToken = default) =>
+        RecordScanAsync(scanResult, (users, ct) => users.ExecuteUpdateAsync(s => s
+            .SetProperty(u => u.ProfileScanScore, scanResult.Score)
+            .SetProperty(u => u.ProfileScannedAt, scanResult.ScannedAt)
+            .SetProperty(u => u.UpdatedAt, scanResult.ScannedAt), ct),
+            cancellationToken);
+
+    /// <summary>
+    /// Updates the scanned user and inserts the scan history row in one transaction, so a user is
+    /// never marked scanned without its row (the rescan job decides retries from the rows).
+    /// </summary>
+    private async Task RecordScanAsync(
+        UiModels.ProfileScanResultRecord scanResult,
+        Func<IQueryable<DataModels.TelegramUserDto>, CancellationToken, Task<int>> updateUser,
+        CancellationToken cancellationToken)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var now = DateTimeOffset.UtcNow;
-        await context.TelegramUsers
-            .Where(u => u.TelegramUserId == telegramUserId)
-            .ExecuteUpdateAsync(s => s
-                .SetProperty(u => u.ProfileScanScore, score)
-                .SetProperty(u => u.ProfileScannedAt, now)
-                .SetProperty(u => u.UpdatedAt, now), cancellationToken);
+        // Production enables retry-on-failure, which rejects a user transaction opened outside the
+        // strategy; the strategy re-runs the whole unit on a transient failure.
+        var strategy = context.Database.CreateExecutionStrategy();
+        await strategy.ExecuteAsync(async ct =>
+        {
+            context.ChangeTracker.Clear();
+            await using var transaction = await context.Database.BeginTransactionAsync(ct);
+            await updateUser(context.TelegramUsers.Where(u => u.TelegramUserId == scanResult.UserId), ct);
+            context.ProfileScanResults.Add(scanResult.ToDto());
+            await context.SaveChangesAsync(ct);
+            await transaction.CommitAsync(ct);
+        }, cancellationToken);
     }
 
     // ============================================================================
