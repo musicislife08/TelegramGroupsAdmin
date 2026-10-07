@@ -315,7 +315,7 @@ AI-powered profile scanning that analyzes user profiles via the Telegram User AP
 4. Set thresholds:
    - **Auto-Ban Threshold** - Score at which users are auto-banned (default: 4.0, range 1.0-5.0)
    - **Admin Notify Threshold** - Score at which admins are notified for review (default: 2.0, range 0.5-5.0)
-   - **Name-only ban threshold** - A scan that could only read the name auto-bans at this score; below it, scores at or above the notify threshold go to review (default: 4.5, must be at least the notify threshold)
+   - **Name-Only Ban Threshold** - A scan that could only read the name auto-bans at this score; below it, scores at or above the notify threshold go to review (default: 4.5, range 1.0–5.0, must be at least the notify threshold)
 5. Toggle scan triggers:
    - **Scan on join** - Scan when a user joins the chat. Runs only for new, never-scanned or renamed users
    - **Scan on profile change** - Re-scan when user's name or username changes

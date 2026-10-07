@@ -22,7 +22,7 @@ For each job you can:
 - **Enable or disable** it with the toggle
 - **Change the schedule** using natural language (e.g., "every 30 minutes", "every day at 2pm", "every week on sunday at 3am")
 - **Run it immediately** with the "Run Now" button
-- **Configure job-specific settings** where applicable (e.g., retention periods for Data Cleanup, VACUUM/ANALYZE options for Database Maintenance)
+- **Configure job-specific settings** where applicable (e.g., retention periods for Data Cleanup, VACUUM/ANALYZE options for Database Maintenance, and for Profile Rescan the batch size, **Re-Scan After** and the **Name-Only Retry Limit**: how many name-only scans a user gets since their last full scan before the job stops retrying them, default 3)
 
 The jobs table shows the last run time and next scheduled run for each job, so you can confirm everything is running on schedule.
 

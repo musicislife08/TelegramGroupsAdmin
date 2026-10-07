@@ -57,7 +57,7 @@ Telegram requires an `access_hash` for user lookups -- bare user IDs return `USE
 2. **Username lookup** (exact global resolution) -- calls `Contacts_ResolveUsername` if the user has a username stored in the database
 3. **Name search** (fuzzy global search) -- calls `Contacts_Search` with the user's full name and matches by user ID
 
-If all strategies fail, the scan falls back to a [name-only scan](#when-the-profile-cant-be-read-name-only-scan); the Profile Rescan job retries it up to the name-only retry limit.
+If all strategies fail, the scan falls back to a [name-only scan](#when-the-profile-cant-be-read-name-only-scan); the Profile Rescan job retries it up to the **Name-Only Retry Limit**.
 
 ### Step 2: Fetch Full User Info
 
@@ -129,8 +129,8 @@ If a scan cannot read the profile (no User API session at all or none usable, th
 | Score | Outcome |
 |---|---|
 | Below the notify threshold | Clean |
-| From the notify threshold up to the name-only ban threshold | Held for review (profile scan alert) |
-| At or above the name-only ban threshold (default 4.5) | Auto-ban |
+| From the notify threshold up to the **Name-Only Ban Threshold** | Held for review (profile scan alert) |
+| At or above the **Name-Only Ban Threshold** (default 4.5) | Auto-ban |
 
 A name alone is weaker evidence than a whole profile, so it has its own, higher ban threshold. No name-only scan runs when the rule-based checks already decided, for bots, when scanning is off for the chat (for the Profile Rescan job: when scanning is off in every managed chat the user has posted in, or the user has only posted in chats TGA no longer manages), or when the Profile Scan AI feature is not configured. If the AI call fails, nothing is recorded. The next scan that can read the profile replaces the name-only result.
 
@@ -145,7 +145,16 @@ With profile scanning on and no User API session connected, the Profile Scan set
 | Manual rescan | Always runs, whatever the exclude flag says |
 | Profile Rescan job | Retries incomplete scans only |
 
-A successful full scan is complete: nothing rescans it automatically until the user renames or an admin runs a manual rescan. The Profile Rescan job picks untrusted, unbanned, non-bot, not-excluded users whose scan is incomplete: never scanned, or whose latest scan was name-only with fewer than the **name-only retry limit** (default 3) name-only scans since their last full scan. The job only counts chats TGA still manages (the bot has not left them). A user who has only posted in chats TGA no longer manages is no longer a member anywhere TGA watches, so the job skips them entirely. It also skips a user when every managed chat they have posted in has profile scanning off. A user who has posted in any managed chat with scanning on is scanned, using the most recently active one's settings (alerts and a ban celebration go there). A user who has never posted follows the global setting, with no ban celebration in any chat. **Re-Scan After** is the wait before an incomplete scan is retried. Once the limit is reached, the latest name-only result stands until the user renames or an admin rescans.
+A successful full scan is complete: nothing rescans it automatically until the user renames or an admin runs a manual rescan. The Profile Rescan job:
+
+- **Picks incomplete scans:** users never scanned, or whose latest scan was name-only with fewer than the **Name-Only Retry Limit** (default 3) name-only scans since their last full scan.
+- **Uses the same eligibility rules as every other scan:** trusted users, banned users, admins of any managed chat, bots and excluded users are skipped.
+- **Only counts chats TGA still manages** (the bot has not left them). A user who has only posted in chats TGA no longer manages is no longer a member anywhere TGA watches, so the job skips them entirely.
+- **Skips a user when every managed chat they have posted in has profile scanning off.** A user who has posted in any managed chat with scanning on is scanned using the most recently active one's settings (alerts and a ban celebration go there).
+- **Treats a user who has never posted by the global setting,** with no ban celebration in any chat.
+- **Waits Re-Scan After** before retrying an incomplete scan. Once the limit is reached, the latest name-only result stands until the user renames or an admin rescans.
+
+Both job settings are in **Settings > System > Background Jobs > Profile Rescan**.
 
 **Exclude from automatic scans** (User Details > Profile Scan) is your switch: the job and join / first-message scans skip the user, a rename still scans, and a manual rescan always runs. Scans never set or clear it.
 
@@ -372,7 +381,7 @@ Connect at least one Telegram User API session. The scanner selects the best ava
 | Enabled | Off | Master toggle for profile scanning in this chat |
 | Auto-Ban Threshold | 4.0 | Score at or above which users are auto-banned |
 | Admin Notify Threshold | 2.0 | Score at or above which an alert is created for admin review |
-| Name-only ban threshold | 4.5 | A scan that could only read the name auto-bans at this score; below it, scores at or above the notify threshold go to review. Must be at least the notify threshold |
+| Name-Only Ban Threshold | 4.5 | A scan that could only read the name auto-bans at this score; below it, scores at or above the notify threshold go to review. Range 1.0–5.0, must be at least the notify threshold |
 | Scan on join | On | Trigger scan when a user joins the chat |
 | Scan on profile change | On | Re-scan when Bot API detects name/username changes |
 | Scan on first message | Off | Scan a never-scanned user on their first message (see [How It Works](#how-it-works)) |
@@ -396,7 +405,7 @@ All Telegram API calls in the scan pipeline are wrapped with `TelegramFloodWaitE
 ## Troubleshooting
 
 **Profile scan not running:**
-- Without a User API session only name-only scans run (Settings > User API Settings)
+- Without a User API session only name-only scans run (Settings > Telegram > User API)
 - Check that Profile Scan is enabled for the chat (Chat Management > Configure > Welcome System > Security on Join > Profile Scan)
 - Join scans run only for new, never-scanned or renamed users; check `ScanOnJoin`
 
