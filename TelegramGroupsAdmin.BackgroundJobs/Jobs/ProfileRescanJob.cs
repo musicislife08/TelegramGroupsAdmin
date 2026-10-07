@@ -96,7 +96,8 @@ public class ProfileRescanJob(
                 BackgroundJobNames.ProfileRescan, cancellationToken);
             var settings = jobConfig?.ProfileRescan ?? new();
             var batchSize = settings.BatchSize;
-            var retryLimit = settings.NameOnlyRetryLimit;
+            // The settings form allows 1 or more; a stored value below that is read as 1.
+            var retryLimit = Math.Max(1, settings.NameOnlyRetryLimit);
             var rescanAfter = TimeSpanUtilities.ParseDurationOrDefault(settings.RescanAfter, TimeSpan.FromDays(7));
             var cutoff = DateTimeOffset.UtcNow - rescanAfter;
 

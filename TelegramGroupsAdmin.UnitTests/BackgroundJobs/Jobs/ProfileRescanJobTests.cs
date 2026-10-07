@@ -31,6 +31,7 @@ public class ProfileRescanJobTests
     private IChatService _chat = null!;
     private CapturingLogger<ProfileRescanJob> _logger = null!;
     private JobMetrics _metrics = null!;
+    private readonly List<System.Diagnostics.Metrics.MeterListener> _listeners = [];
     private ProfileRescanJob _job = null!;
 
     [SetUp]
@@ -54,6 +55,14 @@ public class ProfileRescanJobTests
         _metrics = new JobMetrics();
 
         _job = NewJob(TimeSpan.Zero);
+    }
+
+    [TearDown]
+    public void TearDown()
+    {
+        foreach (var listener in _listeners)
+            listener.Dispose();
+        _listeners.Clear();
     }
 
     // The 1s production throttle would make every scanning test slow; tests that pin it pass their own.
@@ -163,6 +172,77 @@ public class ProfileRescanJobTests
         await _job.Execute(Context());
 
         Assert.That(_logger.Entries, Has.One.EqualTo((LogLevel.Information, "Profile rescan: no incomplete scans to retry")));
+    }
+
+    [TestCase(0)]
+    [TestCase(-2)]
+    public async Task Execute_StoredRetryLimitBelowOne_UsesOne(int stored)
+    {
+        // The settings form allows 1 or more; a hand-edited or older stored value below that must not
+        // stop every retry (or select nothing at all).
+        _jobConfig.GetJobConfigAsync(BackgroundJobNames.ProfileRescan, Arg.Any<CancellationToken>())
+            .Returns(new BackgroundJobConfig
+            {
+                JobName = BackgroundJobNames.ProfileRescan,
+                DisplayName = "Profile Rescan",
+                Description = "test",
+                Schedule = "every 6 hours",
+                ProfileRescan = new ProfileRescanSettings { NameOnlyRetryLimit = stored }
+            });
+        Batch();
+
+        await _job.Execute(Context());
+
+        await _users.Received(1).GetUsersWithIncompleteScansAsync(Arg.Any<int>(), Arg.Any<DateTimeOffset>(), 1, Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public void Execute_CandidateQueryThrows_RethrowsAndRecordsFailure()
+    {
+        var statuses = ListenToJobStatuses();
+        _users.GetUsersWithIncompleteScansAsync(Arg.Any<int>(), Arg.Any<DateTimeOffset>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns<List<long>>(_ => throw new InvalidOperationException("db down"));
+
+        Assert.That(async () => await _job.Execute(Context()), Throws.InvalidOperationException);
+        Assert.Multiple(() =>
+        {
+            Assert.That(statuses, Is.EqualTo(new object?[] { "failure" }));
+            Assert.That(_logger.Entries, Has.One.EqualTo((LogLevel.Error, "Profile rescan batch failed")));
+        });
+    }
+
+    [Test]
+    public async Task Execute_NoSessionAndNoProfileScanAi_RecordsSuccess()
+    {
+        // Ending the run early is a decision, not a failure.
+        var statuses = ListenToJobStatuses();
+        _sessions.HasAnyActiveSessionAsync(Arg.Any<CancellationToken>()).Returns(false);
+        _chat.IsFeatureAvailableAsync(AIFeatureType.ProfileScan, Arg.Any<CancellationToken>()).Returns(false);
+
+        await _job.Execute(Context());
+
+        Assert.That(statuses, Is.EqualTo(new object?[] { "success" }));
+    }
+
+    /// <summary>The status tag of every job execution this test's JobMetrics records.</summary>
+    private ConcurrentQueue<object?> ListenToJobStatuses()
+    {
+        var statuses = new ConcurrentQueue<object?>();
+        var listener = new System.Diagnostics.Metrics.MeterListener();
+        listener.InstrumentPublished = (instrument, l) =>
+        {
+            if (ReferenceEquals(instrument.Meter, _metrics.Meter) && instrument.Name == "tga.jobs.executions_total")
+                l.EnableMeasurementEvents(instrument);
+        };
+        listener.SetMeasurementEventCallback<long>((_, _, tags, _) =>
+        {
+            foreach (var tag in tags)
+                if (tag.Key == "status")
+                    statuses.Enqueue(tag.Value);
+        });
+        listener.Start();
+        _listeners.Add(listener);
+        return statuses;
     }
 
     [Test]

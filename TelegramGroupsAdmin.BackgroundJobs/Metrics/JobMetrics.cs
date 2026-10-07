@@ -11,6 +11,9 @@ public sealed class JobMetrics
 {
     private readonly Meter _meter = new("TelegramGroupsAdmin.Jobs");
 
+    /// <summary>This instance's meter, so a test can listen to its instruments only.</summary>
+    internal Meter Meter => _meter;
+
     private readonly Counter<long> _executionsTotal;
     private readonly Histogram<double> _duration;
     private readonly Counter<long> _rowsAffectedTotal;
