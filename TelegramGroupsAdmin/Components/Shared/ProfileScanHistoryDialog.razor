@@ -41,12 +41,20 @@
                                                  Color="@ProfileScanDisplayHelpers.GetScoreColor(result.Score)">
                                             Score: @result.Score.ToString("F1")/5.0
                                         </MudChip>
-                                        <MudChip T="string"
-                                                 Size="Size.Small"
-                                                 Variant="Variant.Outlined"
-                                                 Color="Color.Default">
-                                            @(result.Source == ProfileScanSource.NameOnly ? "Name only" : "Full scan")
-                                        </MudChip>
+                                        @if (result.Source == ProfileScanSource.NameOnly)
+                                        {
+                                            <MudTooltip Text="The profile could not be read; only the display name and username were scored">
+                                                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default">
+                                                    @FormatSource(result.Source)
+                                                </MudChip>
+                                            </MudTooltip>
+                                        }
+                                        else
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default">
+                                                @FormatSource(result.Source)
+                                            </MudChip>
+                                        }
                                         @if (result.ExplicitDisplayText)
                                         {
                                             <MudChip T="string" Size="Size.Small" Color="Color.Error">Explicit name</MudChip>
@@ -121,6 +129,14 @@
     }
 
     private void Close() => MudDialog.Close();
+
+    /// <summary>Label for a scan's source; an unmapped source fails loudly.</summary>
+    internal static string FormatSource(ProfileScanSource source) => source switch
+    {
+        ProfileScanSource.FullScan => "Full scan",
+        ProfileScanSource.NameOnly => "Name only",
+        _ => throw new InvalidOperationException($"Unmapped profile scan source: {source}")
+    };
 
     private static string FormatOutcome(ProfileScanOutcome outcome) => outcome switch
     {

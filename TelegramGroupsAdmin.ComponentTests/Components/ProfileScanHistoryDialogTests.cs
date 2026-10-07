@@ -91,4 +91,30 @@ public class ProfileScanHistoryDialogTests : ProfileScanHistoryDialogTestContext
             Assert.That(provider.Markup, Does.Not.Contain("Promotional name"));
         });
     }
+
+    [TestCase(ProfileScanSource.FullScan, "Full scan")]
+    [TestCase(ProfileScanSource.NameOnly, "Name only")]
+    public void FormatSource_MapsEachSource(ProfileScanSource source, string expected)
+    {
+        Assert.That(ProfileScanHistoryDialog.FormatSource(source), Is.EqualTo(expected));
+    }
+
+    [Test]
+    public void FormatSource_UnmappedSource_FailsLoudly()
+    {
+        Assert.That(() => ProfileScanHistoryDialog.FormatSource((ProfileScanSource)99), Throws.InvalidOperationException);
+    }
+
+    [Test]
+    public void NameOnlyRow_ExplainsTheChipInATooltip()
+    {
+        var provider = Open(Row(1, ProfileScanSource.NameOnly, explicitName: false, promotionalName: false));
+
+        provider.WaitForAssertion(() => Assert.That(provider.Markup, Does.Contain("Name only")), TimeSpan.FromSeconds(2));
+        // Tooltip content renders only on hover, so the tooltip wrapping the chip is checked instead.
+        var tooltip = provider.FindComponents<MudTooltip>()
+            .Single(t => t.Find(".mud-chip").TextContent.Contains("Name only"));
+        Assert.That(tooltip.Instance.Text,
+            Is.EqualTo("The profile could not be read; only the display name and username were scored"));
+    }
 }
