@@ -433,6 +433,17 @@ Anchors are in code as `GoldenDatasetConstants.ProfileRescan` (#552 part 2). `In
 
 Use when: a test needs the job's incomplete-scan selection. Every other eligible canonical user has at most one scan row, so a mixed NameOnly / FullScan history is not available without an approved import.
 
+### Chat admin anchors (no canonical edit)
+Anchors are in code as `GoldenDatasetConstants.ChatAdmins` plus two `UsersPage` members; all read-only.
+
+| Constant | Anchor | Shape |
+|---|---|---|
+| `UsersPage.ChatAdminMemberId` | 9187417286258 | 4 active `chat_admins` rows |
+| `ChatAdmins.DemotedAdminUserId` | 9781297495110 | 2 `chat_admins` rows, both inactive (demoted) |
+| `UsersPage.UntrustedActiveMemberId` | 9704788798695 | no `chat_admins` row |
+
+Use when: a test needs "admin of any chat" to be true, false because of demotion, or false with no row (`ChatAdminsRepositoryAnyChatTests`). Tests read the rows back first.
+
 ### Past-name search anchors (canonical edit 2026-10-03)
 Anchors are in code as `GoldenDatasetConstants.UsernameHistory`. Both owners are banned spammers (All and Banned tabs, not Active).
 

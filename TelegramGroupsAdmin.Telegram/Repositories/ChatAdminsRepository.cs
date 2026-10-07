@@ -58,6 +58,15 @@ public class ChatAdminsRepository : IChatAdminsRepository
     }
 
     /// <inheritdoc/>
+    public async Task<bool> IsAdminOfAnyChatAsync(long telegramId, CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        return await context.ChatAdmins
+            .AsNoTracking()
+            .AnyAsync(ca => ca.TelegramId == telegramId && ca.IsActive, cancellationToken);
+    }
+
+    /// <inheritdoc/>
     public async Task<List<long>> GetAdminChatsAsync(long telegramId, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);

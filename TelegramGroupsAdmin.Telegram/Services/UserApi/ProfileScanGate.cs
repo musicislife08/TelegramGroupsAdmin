@@ -84,7 +84,7 @@ public sealed class ProfileScanGate(
         // after promotion. Without this check, such an admin would fall
         // through to a scan that can globally ban them. Any chat counts: the
         // ban is global, and the rescan job may scan with no chat at all.
-        if ((await chatAdminsRepository.GetAdminChatsAsync(user.Id, ct)).Count > 0)
+        if (await chatAdminsRepository.IsAdminOfAnyChatAsync(user.Id, ct))
             return Skip("admin", user, trigger);
 
         // Bots belong to bot protection (joins divert them before the scan).

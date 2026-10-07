@@ -40,8 +40,8 @@ public class ProfileScanGateTests
         // Defaults: everything enabled, scan returns Clean.
         SetConfig(CreateConfig());
         _chatAdminsRepository
-            .GetAdminChatsAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
-            .Returns(new List<long>());
+            .IsAdminOfAnyChatAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
+            .Returns(false);
         _profileScanService
             .ScanUserProfileAsync(Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity?>(), Arg.Any<CancellationToken>(), Arg.Any<bool>(), Arg.Any<ProfileScanOrigin>())
             .Returns(CreateScanResult());
@@ -105,7 +105,7 @@ public class ProfileScanGateTests
         // ChatHealthCheck. A newly promoted admin posting inside that window
         // must not fall through to a scan that can globally ban them.
         SetUser(CreateUser(profileScannedAt: null, isTrusted: false));
-        AdminIn(TestChatId);
+        AdminOfAnyChat();
 
         var result = await ScanAsync(ProfileScanTrigger.FirstMessage);
 
@@ -376,7 +376,7 @@ public class ProfileScanGateTests
     {
         // A rename of an admin not yet reconciled to trusted: the rename is recorded, never scanned.
         SetUser(CreateUser(profileScannedAt: DateTimeOffset.UtcNow.AddDays(-3)));
-        AdminIn(TestChatId);
+        AdminOfAnyChat();
 
         Assert.That(await ScanAsync(ProfileScanTrigger.ProfileChange), Is.Null);
         await _profileScanService.DidNotReceiveWithAnyArgs().ScanUserProfileAsync(default!, default, default, default);
@@ -453,10 +453,10 @@ public class ProfileScanGateTests
     [TestCase(ProfileScanTrigger.FirstMessage)]
     [TestCase(ProfileScanTrigger.ProfileChange)]
     [TestCase(ProfileScanTrigger.Rescan)]
-    public async Task AdminOfAnotherChat_Skips(ProfileScanTrigger trigger)
+    public async Task AdminOfAnyChat_Skips(ProfileScanTrigger trigger)
     {
         SetUser(CreateUser(profileScannedAt: null));
-        AdminIn(-1009999999999L);
+        AdminOfAnyChat();
 
         Assert.That(await ScanAsync(trigger), Is.Null);
         await _profileScanService.DidNotReceiveWithAnyArgs().ScanUserProfileAsync(default!, default, default, default);
@@ -521,7 +521,7 @@ public class ProfileScanGateTests
     {
         // A user who never posted is rescanned with no chat; being an admin anywhere still skips them.
         SetUser(CreateUser(profileScannedAt: null));
-        AdminIn(TestChatId);
+        AdminOfAnyChat();
 
         var result = await _gate.ScanIfEligibleAsync(
             UserIdentity.ForTest(TestUserId, "Andrea"), null, ProfileScanTrigger.Rescan, CancellationToken.None);
@@ -552,10 +552,10 @@ public class ProfileScanGateTests
         await _configService.Received(1).GetEffectiveWelcomeAsync(TestChatId, Arg.Any<CancellationToken>());
     }
 
-    private void AdminIn(long chatId) =>
+    private void AdminOfAnyChat() =>
         _chatAdminsRepository
-            .GetAdminChatsAsync(TestUserId, Arg.Any<CancellationToken>())
-            .Returns(new List<long> { chatId });
+            .IsAdminOfAnyChatAsync(TestUserId, Arg.Any<CancellationToken>())
+            .Returns(true);
 
     private Task<ProfileScanResult?> ScanAsync(ProfileScanTrigger trigger) =>
         _gate.ScanIfEligibleAsync(

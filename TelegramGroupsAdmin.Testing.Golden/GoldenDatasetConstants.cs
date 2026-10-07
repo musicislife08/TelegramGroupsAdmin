@@ -271,6 +271,18 @@ public static class GoldenDatasetConstants
     }
 
     /// <summary>
+    /// Chat admin anchors from <c>canonical/20_chat_admins.sql</c> (no canonical edit; read-only).
+    /// </summary>
+    public static class ChatAdmins
+    {
+        /// <summary>
+        /// Demoted admin: two <c>chat_admins</c> rows, both <c>is_active=false</c>, and no active one.
+        /// Not an admin of any chat now.
+        /// </summary>
+        public const long DemotedAdminUserId = 9781297495110L;
+    }
+
+    /// <summary>
     /// Anchors from <c>canonical/27_user_tags.sql</c> (canonical edit 2026-10-01).
     /// </summary>
     public static class UserTags

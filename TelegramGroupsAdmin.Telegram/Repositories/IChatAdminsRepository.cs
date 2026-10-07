@@ -20,6 +20,11 @@ public interface IChatAdminsRepository
     Task<List<ChatAdmin>> GetChatAdminsAsync(long chatId, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Whether the user is an active admin of any chat (one existence check, no list).
+    /// </summary>
+    Task<bool> IsAdminOfAnyChatAsync(long telegramId, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Get all chats where a user is an active admin
     /// </summary>
     Task<List<long>> GetAdminChatsAsync(long telegramId, CancellationToken cancellationToken = default);
