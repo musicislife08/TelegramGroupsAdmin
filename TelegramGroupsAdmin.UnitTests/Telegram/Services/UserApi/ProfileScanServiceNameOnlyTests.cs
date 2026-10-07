@@ -460,6 +460,60 @@ public class ProfileScanServiceNameOnlyTests
         Assert.That(sources, Is.EqualTo(new object?[] { expectedSource }));
     }
 
+    // ── Concurrent scans of one user act once ──
+
+    // A manual rescan (forced) and an automatic scan (not forced) are separate runs, so both can reach
+    // the action step at once; the banned / pending-alert re-checks must see the other's action.
+
+    [Test]
+    public async Task ConcurrentScansOfOneUser_Banned_BanOnce()
+    {
+        _scoring.ScoreNameOnlyAsync(default!, default, default, default)
+            .ReturnsForAnyArgs(NameOnlyScore(4.8m, ProfileScanOutcome.Banned));
+        NoSession();
+        var banned = false;
+        _users.IsBannedAsync(UserId, Arg.Any<CancellationToken>()).Returns(_ => Volatile.Read(ref banned));
+        _moderation.BanUserAsync(Arg.Any<BanIntent>(), Arg.Any<CancellationToken>())
+            .Returns(async _ =>
+            {
+                await Task.Delay(200);
+                Volatile.Write(ref banned, true);
+                return new ModerationResult { Success = true };
+            });
+
+        await Task.WhenAll(
+            _sut.ScanUserProfileAsync(Named, Chat, CancellationToken.None, forceRescan: true, origin: ProfileScanOrigin.Manual),
+            _sut.ScanUserProfileAsync(Named, Chat, CancellationToken.None, origin: ProfileScanOrigin.Rescan));
+
+        await _moderation.ReceivedWithAnyArgs(1).BanUserAsync(default!, default);
+        Assert.That(_sut.ActionLockCount, Is.Zero, "the user's lock entry is removed once both runs leave");
+    }
+
+    [Test]
+    public async Task ConcurrentScansOfOneUser_HeldForReview_RaiseOneAlert()
+    {
+        _scoring.ScoreNameOnlyAsync(default!, default, default, default)
+            .ReturnsForAnyArgs(NameOnlyScore(3.0m, ProfileScanOutcome.HeldForReview));
+        NoSession();
+        var pending = false;
+        _reports.HasPendingProfileScanAlertAsync(UserId, Arg.Any<long?>(), Arg.Any<CancellationToken>())
+            .Returns(_ => Volatile.Read(ref pending));
+        _reports.InsertProfileScanAlertAsync(Arg.Any<ProfileScanAlertRecord>(), Arg.Any<CancellationToken>())
+            .Returns(async _ =>
+            {
+                await Task.Delay(200);
+                Volatile.Write(ref pending, true);
+                return 1L;
+            });
+
+        await Task.WhenAll(
+            _sut.ScanUserProfileAsync(Named, Chat, CancellationToken.None, forceRescan: true, origin: ProfileScanOrigin.Manual),
+            _sut.ScanUserProfileAsync(Named, Chat, CancellationToken.None, origin: ProfileScanOrigin.Rescan));
+
+        await _reports.ReceivedWithAnyArgs(1).InsertProfileScanAlertAsync(default!, default);
+        Assert.That(_sut.ActionLockCount, Is.Zero, "the user's lock entry is removed once both runs leave");
+    }
+
     private sealed class CapturingLogger<T> : ILogger<T>
     {
         public ConcurrentQueue<(LogLevel Level, string Message)> Entries { get; } = new();

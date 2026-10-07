@@ -58,6 +58,19 @@ public sealed class ProfileScanService(
     // cache-eligible run (or vice versa).
     private readonly ConcurrentDictionary<(long UserId, bool ForceRescan), Lazy<Task<ProfileScanResult>>> _inFlight = new();
 
+    // The action step (ban or review alert) runs one at a time per user. A forced and an unforced scan
+    // of one user are separate runs above, and both actions are check-then-act (already banned? alert
+    // already pending?), so without this both could ban or both raise an alert. Entries are removed
+    // when their last holder leaves.
+    private readonly Dictionary<long, UserActionLock> _actionLocks = new();
+    private readonly Lock _actionLocksGuard = new();
+
+    private sealed class UserActionLock
+    {
+        public readonly SemaphoreSlim Semaphore = new(1, 1);
+        public int Holders;
+    }
+
     public async Task<ProfileScanResult> ScanUserProfileAsync(
         UserIdentity user,
         ChatIdentity? triggeringChat,
@@ -524,11 +537,49 @@ public sealed class ProfileScanService(
         if (result.Outcome is not (ProfileScanOutcome.Banned or ProfileScanOutcome.HeldForReview))
             return;
 
-        var scannedUser = await sp.GetRequiredService<IUserIdentityService>().ResolveAsync(user.Id, ct);
-        if (result.Outcome == ProfileScanOutcome.Banned)
-            await HandleBanAsync(scannedUser, triggeringChat, result, sp, ct);
-        else
-            await CreateProfileScanAlertAsync(scannedUser, triggeringChat, result, sp, ct);
+        UserActionLock entry;
+        lock (_actionLocksGuard)
+        {
+            if (!_actionLocks.TryGetValue(user.Id, out entry!))
+                _actionLocks[user.Id] = entry = new UserActionLock();
+            entry.Holders++;
+        }
+
+        try
+        {
+            await entry.Semaphore.WaitAsync(ct);
+            try
+            {
+                // The banned and pending-alert re-checks run inside the lock, so they see the other run's action.
+                var scannedUser = await sp.GetRequiredService<IUserIdentityService>().ResolveAsync(user.Id, ct);
+                if (result.Outcome == ProfileScanOutcome.Banned)
+                    await HandleBanAsync(scannedUser, triggeringChat, result, sp, ct);
+                else
+                    await CreateProfileScanAlertAsync(scannedUser, triggeringChat, result, sp, ct);
+            }
+            finally
+            {
+                entry.Semaphore.Release();
+            }
+        }
+        finally
+        {
+            lock (_actionLocksGuard)
+            {
+                if (--entry.Holders == 0)
+                    _actionLocks.Remove(user.Id);
+            }
+        }
+    }
+
+    /// <summary>Users with an action step running or waiting (test hook for lock cleanup).</summary>
+    internal int ActionLockCount
+    {
+        get
+        {
+            lock (_actionLocksGuard)
+                return _actionLocks.Count;
+        }
     }
 
     /// <summary>
