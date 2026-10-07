@@ -460,6 +460,21 @@ public class ProfileScanServiceNameOnlyTests
         Assert.That(sources, Is.EqualTo(new object?[] { expectedSource }));
     }
 
+    [Test]
+    public async Task NoEffectiveConfig_UsesTheDefaultThresholds()
+    {
+        // No stored welcome config for the chat or globally: the name-only scan uses the defaults.
+        _config.GetEffectiveWelcomeAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
+            .Returns(new ValueTask<WelcomeConfig?>((WelcomeConfig?)null));
+        NoSession();
+
+        await GateScanAsync();
+
+        await _scoring.Received(1).ScoreNameOnlyAsync(
+            Arg.Any<UserIdentity>(), ProfileScanConfig.DefaultNameOnlyBanThreshold, ProfileScanConfig.DefaultNotifyThreshold,
+            Arg.Any<CancellationToken>());
+    }
+
     // ── Concurrent scans of one user act once ──
 
     // A manual rescan (forced) and an automatic scan (not forced) are separate runs, so both can reach
