@@ -740,11 +740,10 @@ public class WelcomeSystemConfigTests : WelcomeSystemConfigTestContext
         cut.WaitForAssertion(() =>
         {
             var caption = MaskCaption(cut).TextContent;
-            Assert.That(caption, Does.Contain("flagged by earlier profile scans"));
+            Assert.That(caption, Does.Contain("instead of the name of a banned user whose name an earlier scan flagged"));
             Assert.That(caption, Does.Contain("even while scanning is off"));
             Assert.That(caption, Does.Contain("ban celebration DMs"));
             Assert.That(caption, Does.Contain("Admin DMs show real names"));
-            Assert.That(caption, Does.Contain("a banned user's name"));
 
             var maskInput = cut.FindAll("label")
                 .Single(l => l.TextContent.Contains("Mask flagged names"))
@@ -863,34 +862,84 @@ public class WelcomeSystemConfigTests : WelcomeSystemConfigTestContext
 
         cut.WaitForAssertion(() =>
         {
-            Assert.That(cut.Markup, Does.Contain("Name-only ban threshold"));
-            Assert.That(cut.Markup, Does.Contain(
-                "A scan that could only read the name auto-bans at this score; below it, scores at or above the notify threshold go to review."));
+            Assert.That(cut.Markup, Does.Contain("Name-Only Ban Threshold"));
+            Assert.That(cut.Markup, Does.Contain("Auto-ban score when only the name could be read (default: 4.5)"));
         }, TimeSpan.FromSeconds(2));
     }
 
+    private const string BelowNotifyError = "Must be at least the notify threshold (3.0)";
+
+    private static ManagedChatRecord TestChat() => new(
+        Identity: new ChatIdentity(123456L, "Test Chat"),
+        ChatType: ManagedChatType.Supergroup,
+        BotStatus: BotChatStatus.Administrator,
+        IsAdmin: true,
+        AddedAt: DateTimeOffset.UtcNow,
+        IsActive: true,
+        IsDeleted: false,
+        LastSeenAt: null,
+        SettingsJson: null,
+        ChatIconPath: null);
+
+    private static bool ProfileScanPanelExpanded(IRenderedComponent<WelcomeSystemConfig> cut) =>
+        cut.FindComponents<MudExpansionPanel>().Single(p => p.Instance.Text == "Profile Scan").Instance.Expanded;
+
+    private async Task AssertRefusedWithVisibleErrorAsync(IRenderedComponent<WelcomeSystemConfig> cut, ISnackbar snackbar)
+    {
+        cut.WaitForAssertion(() =>
+        {
+            // The field shows its error, and its collapsed panel was opened so the admin can see it.
+            Assert.That(cut.Markup, Does.Contain(BelowNotifyError));
+            Assert.That(ProfileScanPanelExpanded(cut), Is.True);
+        }, TimeSpan.FromSeconds(2));
+        Assert.That(snackbar.ShownSnackbars.Select(s => (s.Message, s.Severity)),
+            Has.One.EqualTo(($"Not saved: {BelowNotifyError}", Severity.Error)));
+        await ConfigService.DidNotReceiveWithAnyArgs().SaveWelcomeAsync(default!, default!, default!, default);
+    }
+
     [Test]
-    public async Task Save_NameOnlyThresholdBelowNotify_IsRefused()
+    public async Task GlobalSave_NameOnlyThresholdBelowNotify_IsRefusedWithAVisibleError()
     {
         ConfigService.GetWelcomeAsync(Arg.Any<long>()).Returns(ProfileScanConfigWith(3.0m, 2.5m));
         this.AddTestWebUser();
         var snackbar = Services.GetRequiredService<ISnackbar>();
         var cut = Render<WelcomeSystemConfig>();
+        cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("Save Configuration")), TimeSpan.FromSeconds(2));
+        Assert.That(ProfileScanPanelExpanded(cut), Is.False, "the panel starts collapsed");
 
-        // Global mode: the field shows its error and the form disables the Save button.
-        cut.WaitForAssertion(() =>
-        {
-            Assert.That(cut.Markup, Does.Contain("Must be at least the notify threshold"));
-            Assert.That(cut.FindAll("button").Single(b => b.TextContent.Contains("Save Configuration")).HasAttribute("disabled"),
-                Is.True);
-        }, TimeSpan.FromSeconds(2));
+        cut.FindAll("button").First(b => b.TextContent.Contains("Save Configuration")).Click();
 
-        // Per-chat mode saves through the parent's call: refused with an error snackbar, nothing saved.
+        await AssertRefusedWithVisibleErrorAsync(cut, snackbar);
+    }
+
+    [Test]
+    public async Task PerChatSave_NameOnlyThresholdBelowNotify_IsRefusedWithAVisibleError()
+    {
+        // Per-chat mode saves through the parent's call (ChatConfigModal), with no Save button to disable.
+        ConfigService.GetWelcomeAsync(Arg.Any<long>()).Returns(ProfileScanConfigWith(3.0m, 2.5m));
+        this.AddTestWebUser();
+        var snackbar = Services.GetRequiredService<ISnackbar>();
+        var cut = Render<WelcomeSystemConfig>(p => p.Add(x => x.Chat, TestChat()));
+        cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("Name-Only Ban Threshold")), TimeSpan.FromSeconds(2));
+
         await cut.InvokeAsync(cut.Instance.SaveConfiguration);
 
-        Assert.That(snackbar.ShownSnackbars.Select(s => (s.Message, s.Severity)),
-            Has.One.EqualTo(("Name-only ban threshold must be at least the notify threshold.", Severity.Error)));
-        await ConfigService.DidNotReceiveWithAnyArgs().SaveWelcomeAsync(default!, default!, default!, default);
+        await AssertRefusedWithVisibleErrorAsync(cut, snackbar);
+    }
+
+    [Test]
+    public void RaisingTheNotifyThreshold_RevalidatesTheNameOnlyThreshold()
+    {
+        ConfigService.GetWelcomeAsync(Arg.Any<long>()).Returns(ProfileScanConfigWith(2.0m, 2.5m));
+        var cut = Render<WelcomeSystemConfig>();
+        cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("Admin Notify Threshold")), TimeSpan.FromSeconds(2));
+        Assert.That(cut.Markup, Does.Not.Contain("Must be at least the notify threshold"));
+
+        cut.FindComponents<MudNumericField<decimal>>()
+            .Single(f => f.Instance.Label == "Admin Notify Threshold")
+            .Find("input").Change("3.0");
+
+        cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain(BelowNotifyError)), TimeSpan.FromSeconds(2));
     }
 
     [Test]
@@ -952,7 +1001,7 @@ public class WelcomeSystemConfigTests : WelcomeSystemConfigTestContext
 
         var cut = Render<WelcomeSystemConfig>();
 
-        cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("Name-only ban threshold")), TimeSpan.FromSeconds(2));
+        cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("Name-Only Ban Threshold")), TimeSpan.FromSeconds(2));
         Assert.That(cut.Markup, Does.Not.Contain(NoSessionNotice));
     }
 
@@ -965,7 +1014,7 @@ public class WelcomeSystemConfigTests : WelcomeSystemConfigTestContext
 
         var cut = Render<WelcomeSystemConfig>();
 
-        cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("Name-only ban threshold")), TimeSpan.FromSeconds(2));
+        cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("Name-Only Ban Threshold")), TimeSpan.FromSeconds(2));
         Assert.That(cut.Markup, Does.Not.Contain(NoSessionNotice));
     }
 

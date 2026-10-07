@@ -13,6 +13,7 @@
 @inject ITelegramSessionManager SessionManager
 @inject ISnackbar Snackbar
 @inject IJSRuntime JsRuntime
+@inject ILogger<WelcomeSystemConfig> Logger
 @implements IAsyncDisposable
 
 <MudPaper Class="pa-4" Elevation="@(Chat != null ? 0 : 1)">
@@ -139,10 +140,11 @@
                             </ChildContent>
                         </MudExpansionPanel>
 
-                        <MudExpansionPanel Text="Profile Scan" Expanded="false">
+                        <MudExpansionPanel Text="Profile Scan" @bind-Expanded="_profileScanPanelExpanded">
                             <TitleContent>
                                 <div class="d-flex align-center gap-2">
                                     <MudSwitch @bind-Value="_config.JoinSecurity.ProfileScan.Enabled"
+                                               @bind-Value:after="RevalidateNameOnlyThresholdAsync"
                                                Color="Color.Primary"
                                                @onclick:stopPropagation="true" />
                                     <MudText>Profile Scan (User API)</MudText>
@@ -154,7 +156,7 @@
                             <ChildContent>
                                 <MudText Typo="Typo.caption" Class="mud-text-secondary mb-3">
                                     Scans user profiles via Telegram User API on join. Detects spam signals in bios,
-                                    personal channels, and pinned stories. Full scans need an active User API session; without one, only the name is scanned.
+                                    personal channels, and pinned stories.
                                 </MudText>
                                 @if (_config.JoinSecurity.ProfileScan.Enabled && !_hasUserApiSession)
                                 {
@@ -173,6 +175,7 @@
                                     </MudItem>
                                     <MudItem xs="6">
                                         <MudNumericField @bind-Value="_config.JoinSecurity.ProfileScan.NotifyThreshold"
+                                                         @bind-Value:after="RevalidateNameOnlyThresholdAsync"
                                                          Label="Admin Notify Threshold"
                                                          Variant="Variant.Outlined"
                                                          Min="0.5m" Max="5.0m" Step="0.5m"
@@ -180,13 +183,13 @@
                                                          Disabled="!_config.JoinSecurity.ProfileScan.Enabled" />
                                     </MudItem>
                                     <MudItem xs="12">
-                                        <MudNumericField @bind-Value="_config.JoinSecurity.ProfileScan.NameOnlyBanThreshold"
-                                                         Label="Name-only ban threshold"
+                                        <MudNumericField @ref="_nameOnlyThresholdField"
+                                                         @bind-Value="_config.JoinSecurity.ProfileScan.NameOnlyBanThreshold"
+                                                         Label="Name-Only Ban Threshold"
                                                          Variant="Variant.Outlined"
                                                          Min="1.0m" Max="5.0m" Step="0.5m"
-                                                         HelperText="A scan that could only read the name auto-bans at this score; below it, scores at or above the notify threshold go to review."
-                                                         Error="@NameOnlyThresholdInvalid"
-                                                         ErrorText="Must be at least the notify threshold"
+                                                         HelperText="Auto-ban score when only the name could be read (default: 4.5)"
+                                                         Validation="@(new Func<decimal, string?>(ValidateNameOnlyThreshold))"
                                                          Disabled="!_config.JoinSecurity.ProfileScan.Enabled" />
                                     </MudItem>
                                     <MudItem xs="6">
@@ -213,7 +216,7 @@
                                                    Color="Color.Primary"
                                                    UserAttributes="@(new Dictionary<string, object?> { ["aria-describedby"] = MaskFlaggedNamesHelpId })" />
                                         <MudText Typo="Typo.caption" Color="Color.Secondary" id="@MaskFlaggedNamesHelpId">
-                                            What the bot posts in chats, and ban celebration DMs, show "[name removed: explicit]" or "[name removed: spam]" instead of a banned user's name flagged by earlier profile scans, even while scanning is off. Admin DMs show real names.
+                                            What the bot posts in chats, and ban celebration DMs, show "[name removed: explicit]" or "[name removed: spam]" instead of the name of a banned user whose name an earlier scan flagged, even while scanning is off. Admin DMs show real names.
                                         </MudText>
                                     </MudItem>
                                 </MudGrid>
@@ -577,15 +580,13 @@
     private MudForm? _form;
     private bool _isValid = true;
 
-    // Only while scanning is on: the field is disabled otherwise, so it must never block a save
-    private bool NameOnlyThresholdInvalid =>
-        _config is not null
-        && _config.JoinSecurity.ProfileScan.Enabled
-        && _config.JoinSecurity.ProfileScan.NameOnlyBanThreshold < _config.JoinSecurity.ProfileScan.NotifyThreshold;
-
-    private bool _loading = true;
+    // Profile scan panel
+    private bool _profileScanPanelExpanded;
+    private MudNumericField<decimal>? _nameOnlyThresholdField;
     // Advisory only: assume a session when the check fails so the notice never shows wrongly.
     private bool _hasUserApiSession = true;
+
+    private bool _loading = true;
     private bool _saving;
     private string? _lastFocusedInputId;
 
@@ -596,8 +597,9 @@
         {
             _hasUserApiSession = await SessionManager.HasAnyActiveSessionAsync(CancellationToken.None);
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            Logger.LogWarning(ex, "Could not check for a User API session; hiding the no-session notice");
             _hasUserApiSession = true;
         }
 
@@ -636,15 +638,22 @@
     {
         if (_config == null) return;
 
-        // Before the form check: the field's error also makes the form invalid, and in per-chat
-        // mode (parent calls SaveConfiguration, no disabled button) the refusal must say why.
-        if (NameOnlyThresholdInvalid)
+        // Validate every field: a stored config can be invalid before anything was edited, and in
+        // per-chat mode the parent calls SaveConfiguration with no Save button to disable.
+        if (_form is not null)
         {
-            Snackbar.Add("Name-only ban threshold must be at least the notify threshold.", Severity.Error);
-            return;
+            await _form.ValidateAsync();
+            if (!_form.IsValid)
+            {
+                // The field can sit in a collapsed panel: open it so its error is visible.
+                if (_nameOnlyThresholdField?.HasErrors == true)
+                    _profileScanPanelExpanded = true;
+                // The parent's SaveConfiguration call is not one of this component's events, so render here.
+                StateHasChanged();
+                Snackbar.Add($"Not saved: {string.Join(" ", _form.Errors)}", Severity.Error);
+                return;
+            }
         }
-
-        if (!_isValid) return;
 
         _saving = true;
         try
@@ -672,6 +681,22 @@
         {
             _saving = false;
         }
+    }
+
+    // Only while scanning is on: the field is disabled otherwise, so it must never block a save
+    private string? ValidateNameOnlyThreshold(decimal nameOnlyBanThreshold)
+    {
+        var profileScan = _config?.JoinSecurity.ProfileScan;
+        if (profileScan is null || !profileScan.Enabled || nameOnlyBanThreshold >= profileScan.NotifyThreshold)
+            return null;
+        return $"Must be at least the notify threshold ({profileScan.NotifyThreshold:0.0})";
+    }
+
+    // The name-only threshold's rule reads the notify threshold and the enabled switch
+    private async Task RevalidateNameOnlyThresholdAsync()
+    {
+        if (_nameOnlyThresholdField is not null)
+            await _nameOnlyThresholdField.ValidateAsync();
     }
 
     private void LoadDefaults()
