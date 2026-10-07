@@ -14,14 +14,25 @@ public static class UserIdentityMapping
         bool? latestScanExplicit, bool? latestScanPromotional, bool isBanned) =>
         new(id, firstName, lastName, username)
         {
-            Verdict = isBot || TelegramConstants.IsSystemUser(id) || latestScanExplicit is null
-                ? NameVerdict.Unscanned
-                : !isBanned
-                    ? NameVerdict.Clean
-                    : latestScanExplicit.Value
-                        ? NameVerdict.Explicit
-                        : latestScanPromotional == true ? NameVerdict.Promotional : NameVerdict.Clean
+            Verdict = VerdictFor(id, isBot, latestScanExplicit, latestScanPromotional, isBanned)
         };
+
+    private static NameVerdict VerdictFor(
+        long id, bool isBot, bool? latestScanExplicit, bool? latestScanPromotional, bool isBanned)
+    {
+        // Bots and system users are never scanned; no latest scan row means no verdict yet.
+        if (isBot || TelegramConstants.IsSystemUser(id) || latestScanExplicit is not { } isExplicit)
+            return NameVerdict.Unscanned;
+
+        // A flagged name is masked only while the user is banned.
+        if (!isBanned)
+            return NameVerdict.Clean;
+
+        if (isExplicit)
+            return NameVerdict.Explicit;
+
+        return latestScanPromotional == true ? NameVerdict.Promotional : NameVerdict.Clean;
+    }
 
     /// <summary>
     /// Identity for a row read through a left join: the row's identity, or an id-only identity when
