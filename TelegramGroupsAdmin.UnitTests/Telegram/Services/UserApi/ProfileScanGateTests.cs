@@ -40,8 +40,8 @@ public class ProfileScanGateTests
         // Defaults: everything enabled, scan returns Clean.
         SetConfig(CreateConfig());
         _chatAdminsRepository
-            .IsAdminAsync(Arg.Any<long>(), Arg.Any<long>(), Arg.Any<CancellationToken>())
-            .Returns(false);
+            .GetAdminChatsAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
+            .Returns(new List<long>());
         _profileScanService
             .ScanUserProfileAsync(Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity?>(), Arg.Any<CancellationToken>(), Arg.Any<bool>(), Arg.Any<ProfileScanOrigin>())
             .Returns(CreateScanResult());
@@ -105,9 +105,7 @@ public class ProfileScanGateTests
         // ChatHealthCheck. A newly promoted admin posting inside that window
         // must not fall through to a scan that can globally ban them.
         SetUser(CreateUser(profileScannedAt: null, isTrusted: false));
-        _chatAdminsRepository
-            .IsAdminAsync(TestChatId, TestUserId, Arg.Any<CancellationToken>())
-            .Returns(true);
+        AdminIn(TestChatId);
 
         var result = await ScanAsync(ProfileScanTrigger.FirstMessage);
 
@@ -378,9 +376,7 @@ public class ProfileScanGateTests
     {
         // A rename of an admin not yet reconciled to trusted: the rename is recorded, never scanned.
         SetUser(CreateUser(profileScannedAt: DateTimeOffset.UtcNow.AddDays(-3)));
-        _chatAdminsRepository
-            .IsAdminAsync(TestChatId, TestUserId, Arg.Any<CancellationToken>())
-            .Returns(true);
+        AdminIn(TestChatId);
 
         Assert.That(await ScanAsync(ProfileScanTrigger.ProfileChange), Is.Null);
         await _profileScanService.DidNotReceiveWithAnyArgs().ScanUserProfileAsync(default!, default, default, default);
@@ -427,6 +423,7 @@ public class ProfileScanGateTests
     [TestCase(ProfileScanTrigger.Join, ProfileScanOrigin.ChatEvent)]
     [TestCase(ProfileScanTrigger.FirstMessage, ProfileScanOrigin.ChatEvent)]
     [TestCase(ProfileScanTrigger.ProfileChange, ProfileScanOrigin.Rescan)]
+    [TestCase(ProfileScanTrigger.Rescan, ProfileScanOrigin.Rescan)]
     public async Task Trigger_IsForwardedAsScanOrigin(ProfileScanTrigger trigger, ProfileScanOrigin expected)
     {
         SetUser(CreateUser(profileScannedAt: null));
@@ -449,6 +446,116 @@ public class ProfileScanGateTests
             async () => await ScanAsync(ProfileScanTrigger.FirstMessage),
             Throws.TypeOf<InvalidOperationException>());
     }
+
+    // ── Admins in any chat are never scanned (a scan's ban is global) ──
+
+    [TestCase(ProfileScanTrigger.Join)]
+    [TestCase(ProfileScanTrigger.FirstMessage)]
+    [TestCase(ProfileScanTrigger.ProfileChange)]
+    [TestCase(ProfileScanTrigger.Rescan)]
+    public async Task AdminOfAnotherChat_Skips(ProfileScanTrigger trigger)
+    {
+        SetUser(CreateUser(profileScannedAt: null));
+        AdminIn(-1009999999999L);
+
+        Assert.That(await ScanAsync(trigger), Is.Null);
+        await _profileScanService.DidNotReceiveWithAnyArgs().ScanUserProfileAsync(default!, default, default, default);
+    }
+
+    [TestCase(ProfileScanTrigger.Join)]
+    [TestCase(ProfileScanTrigger.FirstMessage)]
+    [TestCase(ProfileScanTrigger.ProfileChange)]
+    [TestCase(ProfileScanTrigger.Rescan)]
+    public async Task BannedUser_Skips(ProfileScanTrigger trigger)
+    {
+        SetUser(CreateUser(profileScannedAt: null, isBanned: true));
+
+        Assert.That(await ScanAsync(trigger), Is.Null);
+        await _profileScanService.DidNotReceiveWithAnyArgs().ScanUserProfileAsync(default!, default, default, default);
+    }
+
+    // ── Rescan trigger (the rescan job): every eligibility check, but no already-scanned rule ──
+
+    [Test]
+    public async Task Rescan_AlreadyScannedNoRename_StillScans()
+    {
+        // The job retries incomplete scans (a name-only latest scan under the retry limit): the user
+        // has a scan time and no rename, which join and first message would skip as already scanned.
+        SetUser(CreateUser(profileScannedAt: DateTimeOffset.UtcNow.AddDays(-8)));
+
+        var result = await ScanAsync(ProfileScanTrigger.Rescan);
+
+        Assert.That(result, Is.Not.Null);
+        await _usernameHistory.DidNotReceiveWithAnyArgs().HasChangeSinceAsync(default, default, default);
+        await _profileScanService.Received(1).ScanUserProfileAsync(
+            Arg.Any<UserIdentity>(), ChatIdentity.FromId(TestChatId), Arg.Any<CancellationToken>(), false, ProfileScanOrigin.Rescan);
+    }
+
+    [Test]
+    public async Task Rescan_TrustedUser_Skips()
+    {
+        SetUser(CreateUser(profileScannedAt: null, isTrusted: true));
+
+        Assert.That(await ScanAsync(ProfileScanTrigger.Rescan), Is.Null);
+    }
+
+    [Test]
+    public async Task Rescan_ExcludedUser_Skips()
+    {
+        // The exclude flag stops automatic scans; only a rename overrides it, and the job is not a rename.
+        SetUser(CreateUser(profileScannedAt: null, profileScanExcluded: true));
+
+        Assert.That(await ScanAsync(ProfileScanTrigger.Rescan), Is.Null);
+    }
+
+    [Test]
+    public async Task Rescan_Bot_Skips()
+    {
+        SetUser(CreateUser(profileScannedAt: null, isBot: true));
+
+        Assert.That(await ScanAsync(ProfileScanTrigger.Rescan), Is.Null);
+    }
+
+    [Test]
+    public async Task Rescan_NoChat_AdminAnywhere_Skips()
+    {
+        // A user who never posted is rescanned with no chat; being an admin anywhere still skips them.
+        SetUser(CreateUser(profileScannedAt: null));
+        AdminIn(TestChatId);
+
+        var result = await _gate.ScanIfEligibleAsync(
+            UserIdentity.ForTest(TestUserId, "Andrea"), null, ProfileScanTrigger.Rescan, CancellationToken.None);
+
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public async Task Rescan_ScanningDisabledForTheChat_Skips()
+    {
+        SetUser(CreateUser(profileScannedAt: null));
+        var config = CreateConfig();
+        config.Enabled = false;
+        SetConfig(config);
+
+        Assert.That(await ScanAsync(ProfileScanTrigger.Rescan), Is.Null);
+    }
+
+    [TestCase(true)]
+    [TestCase(false)]
+    public async Task IsScanningEnabledAsync_ReadsTheChatsEffectiveConfig(bool enabled)
+    {
+        var config = CreateConfig();
+        config.Enabled = enabled;
+        SetConfig(config);
+
+        Assert.That(await _gate.IsScanningEnabledAsync(TestChatId, CancellationToken.None), Is.EqualTo(enabled));
+        await _configService.Received(1).GetEffectiveWelcomeAsync(TestChatId, Arg.Any<CancellationToken>());
+    }
+
+    private void AdminIn(long chatId) =>
+        _chatAdminsRepository
+            .GetAdminChatsAsync(TestUserId, Arg.Any<CancellationToken>())
+            .Returns(new List<long> { chatId });
 
     private Task<ProfileScanResult?> ScanAsync(ProfileScanTrigger trigger) =>
         _gate.ScanIfEligibleAsync(
@@ -499,7 +606,8 @@ public class ProfileScanGateTests
         DateTimeOffset? profileScannedAt,
         bool isTrusted = false,
         bool profileScanExcluded = false,
-        bool isBot = false)
+        bool isBot = false,
+        bool isBanned = false)
     {
         var now = DateTimeOffset.UtcNow;
         return new TelegramUser(
@@ -508,7 +616,7 @@ public class ProfileScanGateTests
             FirstName: "Andrea",
             LastName: null,
             UserPhotoPath: null, PhotoHash: null, PhotoFileUniqueId: null,
-            IsBot: isBot, IsTrusted: isTrusted, IsBanned: false,
+            IsBot: isBot, IsTrusted: isTrusted, IsBanned: isBanned,
             KickCount: 0, BotDmEnabled: false,
             FirstSeenAt: now, LastSeenAt: now, CreatedAt: now, UpdatedAt: now,
             ProfileScannedAt: profileScannedAt,

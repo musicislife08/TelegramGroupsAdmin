@@ -17,5 +17,11 @@ public enum ProfileScanTrigger
     FirstMessage,
 
     /// <summary>A rename was observed. Always scans, even an excluded user.</summary>
-    ProfileChange
+    ProfileChange,
+
+    /// <summary>
+    /// The rescan job retrying an incomplete scan. The job's schedule is its switch and it selects only
+    /// incomplete scans, so the already-scanned rule does not apply; every eligibility check does.
+    /// </summary>
+    Rescan
 }

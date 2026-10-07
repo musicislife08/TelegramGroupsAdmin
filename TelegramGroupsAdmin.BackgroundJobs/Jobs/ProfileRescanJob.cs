@@ -5,7 +5,6 @@ using TelegramGroupsAdmin.AI.Services;
 using TelegramGroupsAdmin.BackgroundJobs.Metrics;
 using TelegramGroupsAdmin.BackgroundJobs.Services;
 using TelegramGroupsAdmin.Configuration.Models;
-using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Models.BackgroundJobSettings;
@@ -24,14 +23,15 @@ namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
 /// is disabled in every active managed chat they have posted in, and when they have posted only in
 /// chats the bot no longer manages (no longer a user: no action at all). A user who never posted
 /// follows the global setting and is scanned with no chat, so a ban posts no celebration.
+/// Every scan goes through <see cref="IProfileScanGate"/> with the rescan trigger, so the job uses the
+/// same eligibility rules as every other automatic scan.
 /// </summary>
 [DisallowConcurrentExecution]
 public class ProfileRescanJob(
     ILogger<ProfileRescanJob> logger,
     IBackgroundJobConfigService jobConfigService,
-    IConfigService configService,
     ITelegramUserRepository userRepository,
-    IProfileScanService profileScanService,
+    IProfileScanGate scanGate,
     IUserIdentityService identityService,
     ITelegramSessionManager sessionManager,
     IChatService chatService,
@@ -45,6 +45,27 @@ public class ProfileRescanJob(
 
     /// <summary>Pause after every scan attempt, to stay clear of Telegram FLOOD_WAIT limits.</summary>
     internal TimeSpan ScanThrottle { get; init; } = TimeSpan.FromSeconds(1);
+
+    /// <summary>What happened to one candidate.</summary>
+    private enum CandidateOutcome
+    {
+        /// <summary>Posted, but only in chats the bot no longer manages: no longer a user.</summary>
+        NoLongerAUser,
+        /// <summary>Profile scanning is disabled in every active managed chat the user posted in.</summary>
+        ScanningDisabled,
+        /// <summary>The scan gate turned the user down (trusted, admin, banned, bot, excluded).</summary>
+        Ineligible,
+        /// <summary>A scan was written (full or name-only).</summary>
+        Scanned,
+        /// <summary>The scan ran but wrote nothing (skip reason set).</summary>
+        NothingWritten,
+        /// <summary>The chat lookup or the scan threw.</summary>
+        Failed
+    }
+
+    /// <summary>Outcomes that take a batch slot and are throttled: the user was sent to a scan, or that failed.</summary>
+    private static bool IsAttempt(CandidateOutcome outcome) =>
+        outcome is CandidateOutcome.Scanned or CandidateOutcome.NothingWritten or CandidateOutcome.Failed;
 
     public async Task Execute(IJobExecutionContext context)
     {
@@ -75,18 +96,19 @@ public class ProfileRescanJob(
                 BackgroundJobNames.ProfileRescan, cancellationToken);
             var settings = jobConfig?.ProfileRescan ?? new();
             var batchSize = settings.BatchSize;
+            var retryLimit = settings.NameOnlyRetryLimit;
             var rescanAfter = TimeSpanUtilities.ParseDurationOrDefault(settings.RescanAfter, TimeSpan.FromDays(7));
             var cutoff = DateTimeOffset.UtcNow - rescanAfter;
 
             logger.LogInformation(
                 "Profile rescan: starting batch (size={BatchSize}, rescanAfter={RescanAfter}, cutoff={Cutoff}, nameOnlyRetryLimit={RetryLimit})",
-                batchSize, settings.RescanAfter, cutoff, settings.NameOnlyRetryLimit);
+                batchSize, settings.RescanAfter, cutoff, retryLimit);
 
             // One ordered candidate list, capped, rather than offset pages: a scan changes the user's
             // profile_scanned_at and scan rows, so offset pages would shift under the loop.
             var candidateCap = batchSize * CandidatesPerBatchSlot;
             var userIds = await userRepository.GetEligibleUsersForRescanAsync(
-                candidateCap, cutoff, settings.NameOnlyRetryLimit, cancellationToken);
+                candidateCap, cutoff, retryLimit, cancellationToken);
 
             if (userIds.Count == 0)
             {
@@ -100,15 +122,9 @@ public class ProfileRescanJob(
             // One lookup for the candidates; ResolveManyAsync keeps the requested order
             var users = await identityService.ResolveManyAsync(userIds, cancellationToken);
 
-            // Effective config per chat, read once per run: candidates share chats.
-            var scanEnabledByChat = new Dictionary<long, bool>();
-
+            var outcomes = new Dictionary<CandidateOutcome, int>();
             var examined = 0;
             var attempted = 0;
-            var scanned = 0;
-            var skipped = 0;
-            var scanningDisabled = 0;
-            var noLongerUsers = 0;
             foreach (var user in users)
             {
                 // Batch slots go to scan attempts only
@@ -116,51 +132,10 @@ public class ProfileRescanJob(
                     break;
 
                 examined++;
-                // Every candidate not skipped (scanning disabled, or no longer a user) is an attempt: it takes
-                // a batch slot and is throttled, whether it scans, skips or fails (a failed chat lookup included).
-                var isAttempt = true;
-                try
-                {
-                    // Scan for the user's most recently active managed chat with profile scanning enabled
-                    // (it targets alerts and supplies thresholds). A user who never posted follows the
-                    // global config (chat 0).
-                    var (skip, chat) = await FindScanChatAsync(user.Id, scanEnabledByChat, cancellationToken);
-                    if (skip == ScanChatSkip.NoLongerAUser)
-                    {
-                        isAttempt = false;
-                        logger.LogDebug("Profile rescan: user {UserId} only posted in chats no longer managed, skipping",
-                            user.Id);
-                        noLongerUsers++;
-                        continue;
-                    }
+                var outcome = await RescanAsync(user, cancellationToken);
+                outcomes[outcome] = outcomes.GetValueOrDefault(outcome) + 1;
 
-                    if (skip == ScanChatSkip.ScanningDisabled)
-                    {
-                        isAttempt = false;
-                        logger.LogDebug("Profile rescan: scanning disabled in every chat of user {UserId}, skipping",
-                            user.Id);
-                        scanningDisabled++;
-                        continue;
-                    }
-
-                    var result = await profileScanService.ScanUserProfileAsync(
-                        user,
-                        triggeringChat: chat,
-                        cancellationToken,
-                        origin: ProfileScanOrigin.Rescan);
-
-                    // A name-only scan counts as scanned; a skip reason means nothing was written.
-                    if (result.SkipReason is null)
-                        scanned++;
-                    else
-                        skipped++;
-                }
-                catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
-                {
-                    logger.LogWarning(ex, "Profile rescan: failed to scan user {UserId}, continuing batch", user.Id);
-                }
-
-                if (isAttempt)
+                if (IsAttempt(outcome))
                 {
                     attempted++;
                     // Throttle to avoid Telegram FLOOD_WAIT rate limits
@@ -168,19 +143,25 @@ public class ProfileRescanJob(
                 }
             }
 
-            if (scanningDisabled > 0)
-                logger.LogInformation(
-                    "Profile rescan: skipped {Count} users, scanning disabled in every chat", scanningDisabled);
+            int Count(CandidateOutcome outcome) => outcomes.GetValueOrDefault(outcome);
 
-            if (noLongerUsers > 0)
+            if (Count(CandidateOutcome.ScanningDisabled) > 0)
                 logger.LogInformation(
-                    "Profile rescan: skipped {Count} users who only posted in chats no longer managed", noLongerUsers);
+                    "Profile rescan: skipped {Count} users, scanning disabled in every chat", Count(CandidateOutcome.ScanningDisabled));
+
+            if (Count(CandidateOutcome.NoLongerAUser) > 0)
+                logger.LogInformation(
+                    "Profile rescan: skipped {Count} users who only posted in chats no longer managed", Count(CandidateOutcome.NoLongerAUser));
+
+            if (Count(CandidateOutcome.Ineligible) > 0)
+                logger.LogInformation(
+                    "Profile rescan: skipped {Count} users the scan gate turned down", Count(CandidateOutcome.Ineligible));
 
             if (attempted == 0)
                 logger.LogInformation("Profile rescan: examined {Examined} candidates but attempted no scans", examined);
 
             logger.LogInformation("Profile rescan: completed {Scanned}/{Attempted} users ({Skipped} skipped)",
-                scanned, attempted, skipped);
+                Count(CandidateOutcome.Scanned), attempted, Count(CandidateOutcome.NothingWritten));
             success = true;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -201,53 +182,61 @@ public class ProfileRescanJob(
         }
     }
 
-    private enum ScanChatSkip
-    {
-        None,
-        /// <summary>Profile scanning is disabled in every active managed chat the user posted in.</summary>
-        ScanningDisabled,
-        /// <summary>The user posted, but only in chats the bot no longer manages: no longer a user.</summary>
-        NoLongerAUser
-    }
-
     /// <summary>
-    /// The chat to scan the user for: the most recently active of their active managed chats whose
-    /// effective config has profile scanning enabled. A user with no active managed chat is no longer a
-    /// user when they have message history elsewhere; one who never posted is scanned with no chat when
-    /// the global config has profile scanning enabled.
+    /// Picks the chat to scan the user for and sends the user through the scan gate. The chat is the
+    /// most recently active of their active managed chats with profile scanning enabled (it targets
+    /// alerts and supplies thresholds). A user with no active managed chat is no longer a user when
+    /// they have message history elsewhere; one who never posted follows the global config (no chat).
     /// </summary>
-    private async Task<(ScanChatSkip Skip, ChatIdentity? Chat)> FindScanChatAsync(
-        long userId, Dictionary<long, bool> scanEnabledByChat, CancellationToken cancellationToken)
+    private async Task<CandidateOutcome> RescanAsync(UserIdentity user, CancellationToken cancellationToken)
     {
-        var chats = await userRepository.GetChatsForUserAsync(userId, cancellationToken);
-        if (chats.Count == 0)
+        try
         {
-            if (await userRepository.HasMessageHistoryAsync(userId, cancellationToken))
-                return (ScanChatSkip.NoLongerAUser, null);
+            ChatIdentity? scanChat = null;
+            var chats = await userRepository.GetChatsForUserAsync(user.Id, cancellationToken);
+            if (chats.Count == 0)
+            {
+                if (await userRepository.HasMessageHistoryAsync(user.Id, cancellationToken))
+                {
+                    logger.LogDebug("Profile rescan: user {UserId} only posted in chats no longer managed, skipping", user.Id);
+                    return CandidateOutcome.NoLongerAUser;
+                }
 
-            return await IsProfileScanEnabledAsync(0, scanEnabledByChat, cancellationToken)
-                ? (ScanChatSkip.None, null)
-                : (ScanChatSkip.ScanningDisabled, null);
+                if (!await scanGate.IsScanningEnabledAsync(0, cancellationToken))
+                    return ScanningDisabled();
+            }
+            else
+            {
+                foreach (var chat in chats)
+                {
+                    if (await scanGate.IsScanningEnabledAsync(chat.Id, cancellationToken))
+                    {
+                        scanChat = chat;
+                        break;
+                    }
+                }
+
+                if (scanChat is null)
+                    return ScanningDisabled();
+            }
+
+            var result = await scanGate.ScanIfEligibleAsync(user, scanChat, ProfileScanTrigger.Rescan, cancellationToken);
+
+            // A name-only scan counts as scanned; a skip reason means nothing was written.
+            return result is null ? CandidateOutcome.Ineligible
+                : result.SkipReason is null ? CandidateOutcome.Scanned
+                : CandidateOutcome.NothingWritten;
+        }
+        catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            logger.LogWarning(ex, "Profile rescan: failed to scan user {UserId}, continuing batch", user.Id);
+            return CandidateOutcome.Failed;
         }
 
-        foreach (var chat in chats)
+        CandidateOutcome ScanningDisabled()
         {
-            if (await IsProfileScanEnabledAsync(chat.Id, scanEnabledByChat, cancellationToken))
-                return (ScanChatSkip.None, chat);
+            logger.LogDebug("Profile rescan: scanning disabled in every chat of user {UserId}, skipping", user.Id);
+            return CandidateOutcome.ScanningDisabled;
         }
-
-        return (ScanChatSkip.ScanningDisabled, null);
-    }
-
-    private async Task<bool> IsProfileScanEnabledAsync(
-        long chatId, Dictionary<long, bool> scanEnabledByChat, CancellationToken cancellationToken)
-    {
-        if (scanEnabledByChat.TryGetValue(chatId, out var enabled))
-            return enabled;
-
-        var welcomeConfig = await configService.GetEffectiveWelcomeAsync(chatId, cancellationToken);
-        enabled = welcomeConfig?.JoinSecurity?.ProfileScan is { Enabled: true };
-        scanEnabledByChat[chatId] = enabled;
-        return enabled;
     }
 }

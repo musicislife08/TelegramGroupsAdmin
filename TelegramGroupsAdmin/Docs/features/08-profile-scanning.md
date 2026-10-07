@@ -13,7 +13,7 @@ A scan can be triggered by:
 - **First message** — a user who has never been scanned posts their first message (off by default). This covers members who joined before the bot was added to the chat, and accounts that arrive without a join event, such as people commenting on channel posts in a linked discussion group. A banned outcome stops the message from reaching content detection.
 - **Periodic rescan** — the Profile Rescan [background job](13-background-jobs.md), if enabled, retries incomplete scans
 
-All automatic triggers go through the same eligibility gate: trusted users, chat admins and bots are never scanned, and excluded users are scanned only after a rename (see [When Scans Run](#when-scans-run-retries-and-exclusion)).
+All automatic scans, the Profile Rescan job included, go through the same eligibility gate: trusted users, banned users, admins of any managed chat and bots are never scanned, and excluded users are scanned only after a rename (see [When Scans Run](#when-scans-run-retries-and-exclusion)).
 
 ### Prerequisites
 

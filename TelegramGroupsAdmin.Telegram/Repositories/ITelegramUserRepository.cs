@@ -182,6 +182,9 @@ public interface ITelegramUserRepository
     /// <paramref name="retryCutoff"/> with a NameOnly latest scan row and fewer than
     /// <paramref name="nameOnlyRetryLimit"/> NameOnly rows since their last FullScan row.
     /// Ordered by ProfileScannedAt ASC (NULLS FIRST = never-scanned users first).
+    /// The untrusted / unbanned / non-bot / not-excluded conditions only narrow the selection, so users
+    /// who can never be scanned do not take every run's candidates; the rescan job sends each candidate
+    /// through the profile scan gate, which makes the eligibility decision.
     /// </summary>
     Task<List<long>> GetEligibleUsersForRescanAsync(
         int batchSize, DateTimeOffset retryCutoff, int nameOnlyRetryLimit, CancellationToken cancellationToken = default);

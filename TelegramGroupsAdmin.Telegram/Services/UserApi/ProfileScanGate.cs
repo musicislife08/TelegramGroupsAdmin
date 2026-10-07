@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using TelegramGroupsAdmin.Configuration.Models.Welcome;
 using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
@@ -24,8 +25,7 @@ public sealed class ProfileScanGate(
         CancellationToken ct,
         bool forceRescan = false)
     {
-        var welcomeConfig = await configService.GetEffectiveWelcomeAsync(chat?.Id ?? 0, ct: ct);
-        var config = welcomeConfig?.JoinSecurity?.ProfileScan;
+        var config = await GetProfileScanConfigAsync(chat?.Id ?? 0, ct);
 
         if (config is null || !config.Enabled)
             return Skip("disabled", user, trigger);
@@ -35,6 +35,7 @@ public sealed class ProfileScanGate(
             ProfileScanTrigger.Join => config.ScanOnJoin,
             ProfileScanTrigger.FirstMessage => config.ScanOnFirstMessage,
             ProfileScanTrigger.ProfileChange => config.ScanOnProfileChange,
+            ProfileScanTrigger.Rescan => true,
             _ => false
         };
 
@@ -80,21 +81,25 @@ public sealed class ProfileScanGate(
 
         // Chat-admin trust is only reconciled by ChatHealthCheck (~every 30
         // minutes), so a newly promoted admin can be untrusted for a window
-        // after promotion. Without this check, such an admin posting inside
-        // that window would fall through to a scan that can globally ban them.
-        if (chat is not null && await chatAdminsRepository.IsAdminAsync(chat.Id, user.Id, cancellationToken: ct))
+        // after promotion. Without this check, such an admin would fall
+        // through to a scan that can globally ban them. Any chat counts: the
+        // ban is global, and the rescan job may scan with no chat at all.
+        if ((await chatAdminsRepository.GetAdminChatsAsync(user.Id, ct)).Count > 0)
             return Skip("admin", user, trigger);
 
-        // Neither the join trigger (bots are diverted to bot protection before
-        // reaching the scan) nor the bulk rescan predicate ever scans a bot.
-        // Without this check, FirstMessage would be the sole trigger able to
-        // scan and globally ban a legitimate third-party bot.
+        // Bots belong to bot protection (joins divert them before the scan).
+        // Without this check, a first message or a rescan could scan and
+        // globally ban a legitimate third-party bot.
         if (existingUser?.IsBot == true)
             return Skip("bot", user, trigger);
 
+        // A banned user has nothing left to act on.
+        if (existingUser?.IsBanned == true)
+            return Skip("banned", user, trigger);
+
         // Join / first message scan a new or never-scanned user, or one who renamed since the last
-        // scan. A scanned user who has not renamed is not scanned again (the rescan job retries
-        // incomplete scans).
+        // scan. A scanned user who has not renamed is not scanned again (the rescan job, which skips
+        // this rule, retries incomplete scans).
         if (trigger is ProfileScanTrigger.Join or ProfileScanTrigger.FirstMessage
             && existingUser?.ProfileScannedAt is { } lastScan)
         {
@@ -114,9 +119,19 @@ public sealed class ProfileScanGate(
 
         // No session check: without a usable User API session the service scores the name alone.
         // A rename rescans a known user; joins and first messages are welcome scans (scan-source metric).
-        var origin = trigger == ProfileScanTrigger.ProfileChange ? ProfileScanOrigin.Rescan : ProfileScanOrigin.ChatEvent;
+        // The rescan job's scans are rescans too.
+        var origin = trigger is ProfileScanTrigger.ProfileChange or ProfileScanTrigger.Rescan
+            ? ProfileScanOrigin.Rescan
+            : ProfileScanOrigin.ChatEvent;
         return await profileScanService.ScanUserProfileAsync(user, chat, ct, forceRescan, origin);
     }
+
+    /// <inheritdoc />
+    public async Task<bool> IsScanningEnabledAsync(long chatId, CancellationToken ct) =>
+        (await GetProfileScanConfigAsync(chatId, ct))?.Enabled == true;
+
+    private async Task<ProfileScanConfig?> GetProfileScanConfigAsync(long chatId, CancellationToken ct) =>
+        (await configService.GetEffectiveWelcomeAsync(chatId, ct: ct))?.JoinSecurity?.ProfileScan;
 
     private ProfileScanResult? Skip(string reason, UserIdentity user, ProfileScanTrigger trigger)
     {
