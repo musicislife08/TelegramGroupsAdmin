@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.IO;
 using NSubstitute;
 using Telegram.Bot.Types;
@@ -22,6 +23,7 @@ using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.IntegrationTests.TestData;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
+using VerificationTokenRepository = TelegramGroupsAdmin.Repositories.VerificationTokenRepository;
 
 namespace TelegramGroupsAdmin.IntegrationTests.Services.Backup;
 
@@ -1130,6 +1132,54 @@ public class BackupServiceTests
         {
             File.Delete(exportedPath);
             File.Delete(legacyPath);
+        }
+    }
+
+    /// <summary>
+    /// A 3.2 export writes verification_tokens.token_type as a JSON integer (no token_type_string), and the
+    /// row restores with its type. canonical does not export verification_tokens, so the token is created
+    /// through the repository. It is marked used after the export, so an unused row after the restore
+    /// proves it came from the backup.
+    /// </summary>
+    [Test]
+    public async Task ExportAndRestore_Version32_WritesTokenTypeAsIntegerAndRestoresIt()
+    {
+        var tokens = new VerificationTokenRepository(
+            _serviceProvider!.GetRequiredService<IDbContextFactory<Data.AppDbContext>>(),
+            NullLogger<VerificationTokenRepository>.Instance);
+        var token = new VerificationToken(
+            Id: 0,
+            UserId: GoldenDatasetConstants.WebUsers.OwnerId,
+            TokenType: TokenType.EmailChange,
+            Token: $"v32-token-{Guid.NewGuid():N}",
+            Value: "new-address@example.com",
+            ExpiresAt: DateTimeOffset.UtcNow.AddHours(24),
+            CreatedAt: DateTimeOffset.UtcNow,
+            UsedAt: null);
+        await tokens.CreateAsync(token);
+
+        var exportedPath = await ExportBackupToTempFileAsync();
+        try
+        {
+            var (_, data) = await ReadExportedBackupAsync(exportedPath);
+            var row = data["verification_tokens"]!.AsArray().Single()!.AsObject();
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(row["token_type"]!.GetValueKind(), Is.EqualTo(JsonValueKind.Number));
+                Assert.That(row["token_type"]!.GetValue<int>(), Is.EqualTo((int)TokenType.EmailChange));
+                Assert.That(row.ContainsKey("token_type_string"), Is.False);
+            }
+
+            await tokens.MarkAsUsedAsync(token.Token);
+            await _backupService!.RestoreAsync(exportedPath);
+
+            var restored = await tokens.GetValidTokenAsync(token.Token, TokenType.EmailChange);
+            Assert.That(restored, Is.Not.Null, "the unused EmailChange token from the backup is valid again");
+            Assert.That(restored!.Value, Is.EqualTo("new-address@example.com"));
+        }
+        finally
+        {
+            File.Delete(exportedPath);
         }
     }
 
