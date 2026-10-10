@@ -153,7 +153,7 @@ A successful full scan is complete: nothing rescans it automatically until the u
 - **Skips a user when every managed chat they have posted in has profile scanning off.** A user who has posted in any managed chat with scanning on is scanned using the most recently active one's settings (alerts and a ban celebration go there).
 - **Treats a user who has never posted by the global setting,** with no ban celebration in any chat.
 - **Waits Re-Scan After** before retrying an incomplete scan. Once the limit is reached, the latest name-only result stands until the user renames or an admin rescans.
-- **Waits Re-Scan After after an attempt that produced nothing** (no verdict, for example a user with no name or an AI error), instead of retrying that never-scanned user on every run. Users never tried yet go first, then the oldest scan or attempt.
+- **Waits Re-Scan After before considering a never-scanned user again when nothing was written for them:** skipped (scanning off in their chats, no longer a member, or turned down by the eligibility rules), no verdict (for example a user with no name or an AI error), or the attempt failed. Skipped users take turns instead of filling every run, and skips don't use batch slots. After turning scanning on in a chat, its never-scanned users the job skipped are picked up within Re-Scan After, or straight away with a manual rescan. Users never tried yet go first, then the oldest scan or attempt.
 
 Both job settings are in **Settings > System > Background Jobs > Profile Rescan**.
 

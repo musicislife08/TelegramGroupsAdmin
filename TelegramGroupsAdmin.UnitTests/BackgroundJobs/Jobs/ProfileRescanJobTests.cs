@@ -328,17 +328,38 @@ public class ProfileRescanJobTests
         await _users.DidNotReceiveWithAnyArgs().RecordScanAttemptAsync(default);
     }
 
-    [Test]
-    public async Task Execute_GateTurnsTheUserDown_DoesNotRecordAnAttempt()
+    public enum SkipKind { GateTurnsDown, ScanningDisabled, NoLongerAUser }
+
+    [TestCase(SkipKind.GateTurnsDown)]
+    [TestCase(SkipKind.ScanningDisabled)]
+    [TestCase(SkipKind.NoLongerAUser)]
+    public async Task Execute_SkippedCandidate_RecordsTheAttemptWithoutUsingABatchSlot(SkipKind skip)
     {
-        var seven = UserIdentity.ForTest(7, "Seven");
-        Batch(seven);
-        _gate.ScanIfEligibleAsync(seven, Arg.Any<ChatIdentity?>(), Arg.Any<ProfileScanTrigger>(), Arg.Any<CancellationToken>(), Arg.Any<bool>())
-            .Returns((ProfileScanResult?)null);
+        // A skipped never-scanned user also waits Re-Scan After, so the same skipped users can't hold
+        // the head of the candidate list on every run. The skip still uses no batch slot.
+        BatchSize(1);
+        var skipped = UserIdentity.ForTest(7, "Skipped");
+        var next = UserIdentity.ForTest(8, "Next");
+        Batch(skipped, next);
+        switch (skip)
+        {
+            case SkipKind.GateTurnsDown:
+                _gate.ScanIfEligibleAsync(skipped, Arg.Any<ChatIdentity?>(), Arg.Any<ProfileScanTrigger>(), Arg.Any<CancellationToken>(), Arg.Any<bool>())
+                    .Returns((ProfileScanResult?)null);
+                break;
+            case SkipKind.ScanningDisabled:
+                Chats(7, ChatIdentity.FromId(-1001));
+                ProfileScan(-1001, enabled: false);
+                break;
+            case SkipKind.NoLongerAUser:
+                _users.HasMessageHistoryAsync(7, Arg.Any<CancellationToken>()).Returns(true);
+                break;
+        }
 
         await _job.Execute(Context());
 
-        await _users.DidNotReceiveWithAnyArgs().RecordScanAttemptAsync(default);
+        await _users.Received(1).RecordScanAttemptAsync(7, Arg.Any<CancellationToken>());
+        await _gate.Received(1).ScanIfEligibleAsync(next, Arg.Any<ChatIdentity?>(), ProfileScanTrigger.Rescan, Arg.Any<CancellationToken>(), Arg.Any<bool>());
     }
 
     [Test]

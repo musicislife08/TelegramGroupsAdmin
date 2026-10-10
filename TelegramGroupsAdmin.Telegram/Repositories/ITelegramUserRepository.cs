@@ -218,8 +218,9 @@ public interface ITelegramUserRepository
     Task UpdateProfileScannedAtAsync(long telegramUserId, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Records that a scan attempt for a never-scanned user wrote nothing, so the rescan job waits
-    /// for Re-Scan After before retrying them. Does nothing for a user who has been scanned
+    /// Records that the rescan job considered a never-scanned user and wrote nothing (skipped, turned
+    /// down by the gate, no verdict, or failed), so the job waits for Re-Scan After before considering
+    /// them again. Does nothing for a user who has been scanned
     /// (profile_scanned_at set). Never marks the user as scanned.
     /// </summary>
     Task RecordScanAttemptAsync(long telegramUserId, CancellationToken cancellationToken = default);

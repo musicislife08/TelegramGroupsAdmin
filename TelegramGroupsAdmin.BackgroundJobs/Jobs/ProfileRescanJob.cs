@@ -136,8 +136,10 @@ public class ProfileRescanJob(
                 var outcome = await RescanAsync(user, cancellationToken);
                 outcomes[outcome] = outcomes.GetValueOrDefault(outcome) + 1;
 
-                // The user is still never scanned: wait Re-Scan After before trying them again
-                if (outcome is CandidateOutcome.NothingWritten or CandidateOutcome.Failed)
+                // Nothing was written, whether skipped, turned down or failed: a never-scanned user
+                // waits Re-Scan After before the job considers them again, so skipped users rotate
+                // instead of holding the head of the candidate list (a no-op for scanned users)
+                if (outcome is not CandidateOutcome.Scanned)
                     await RecordAttemptAsync(user.Id, cancellationToken);
 
                 if (IsAttempt(outcome))
@@ -188,8 +190,8 @@ public class ProfileRescanJob(
     }
 
     /// <summary>
-    /// Records that the attempt wrote nothing. Runs after the attempt, so a failure here is logged
-    /// and the batch goes on.
+    /// Records that the job considered the user and wrote nothing. Runs after the attempt, so a
+    /// failure here is logged and the batch goes on.
     /// </summary>
     private async Task RecordAttemptAsync(long userId, CancellationToken cancellationToken)
     {
