@@ -173,7 +173,7 @@
                         <MudStack Spacing="1">
                             @foreach (var quota in _quotas.Where(q => q.Service == "VirusTotal"))
                             {
-                                var percentage = quota.LimitValue > 0 ? (double)quota.Count / quota.LimitValue * 100 : 0;
+                                var percentage = quota.PercentageUsed;
                                 var progressColor = percentage < 50 ? Color.Success : (percentage < 80 ? Color.Warning : Color.Error);
 
                                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
