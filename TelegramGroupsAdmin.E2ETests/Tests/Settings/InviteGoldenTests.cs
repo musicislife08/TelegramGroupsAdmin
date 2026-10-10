@@ -9,6 +9,7 @@ using TelegramGroupsAdmin.Services;
 using TelegramGroupsAdmin.Services.Email;
 using TelegramGroupsAdmin.Testing.Golden;
 using InviteStatus = TelegramGroupsAdmin.Data.Models.InviteStatus;
+using TokenType = TelegramGroupsAdmin.Telegram.Models.TokenType;
 using UserStatus = TelegramGroupsAdmin.Core.Models.UserStatus;
 using static Microsoft.Playwright.Assertions;
 
@@ -166,9 +167,6 @@ public class InviteEmailVerificationGoldenTests : GoldenE2ETestBase
     /// <summary>A value, not a key: it only has to be present for the gate to read email as configured.</summary>
     private const string DummySendGridApiKey = "SG.e2e-dummy";
 
-    /// <summary><c>verification_tokens.token_type</c> for an email-verification token (<c>TokenType.EmailVerification</c>).</summary>
-    private const string EmailVerifyTokenType = "email_verify";
-
     protected override async Task ArrangeDataAsync(AppDbContext context)
     {
         await GoldenDataset.Mutate(context)
@@ -237,7 +235,7 @@ public class InviteEmailVerificationGoldenTests : GoldenE2ETestBase
         var invite = await ctx.Invites.AsNoTracking().Where(i => i.Token == token)
             .Select(i => new { i.Status, i.UsedBy }).SingleAsync();
         var storedTokens = await ctx.VerificationTokens.AsNoTracking()
-            .Where(t => t.UserId == user.Id && t.TokenTypeString == EmailVerifyTokenType)
+            .Where(t => t.UserId == user.Id && t.TokenType == (int)TokenType.EmailVerification)
             .Select(t => new { t.Token, t.UsedAt, t.ExpiresAt }).ToListAsync();
         var verificationEmails = EmailService.GetEmailsByTemplate(EmailTemplate.EmailVerification).ToList();
 

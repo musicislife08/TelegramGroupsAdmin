@@ -18,10 +18,9 @@ public class VerificationTokenDto
     [Required]
     public string UserId { get; set; } = string.Empty;
 
+    /// <summary>The domain TokenType, stored as its int value.</summary>
     [Column("token_type")]
-    [Required]
-    [MaxLength(50)]
-    public string TokenTypeString { get; set; } = string.Empty;
+    public int TokenType { get; set; }
 
     [Column("token")]
     [Required]
@@ -47,20 +46,6 @@ public class VerificationTokenDto
     // Helper properties (not mapped)
     [NotMapped]
     [JsonIgnore]
-    public TokenType TokenType
-    {
-        get => ParseTokenType(TokenTypeString);
-        set => TokenTypeString = value switch
-        {
-            TokenType.EmailVerification => "email_verify",
-            TokenType.PasswordReset => "password_reset",
-            TokenType.EmailChange => "email_change",
-            _ => throw new ArgumentException($"Unknown token type: {value}")
-        };
-    }
-
-    [NotMapped]
-    [JsonIgnore]
     public bool IsExpired => DateTimeOffset.UtcNow > ExpiresAt;
 
     [NotMapped]
@@ -70,12 +55,4 @@ public class VerificationTokenDto
     [NotMapped]
     [JsonIgnore]
     public bool IsValid => !IsExpired && !IsUsed;
-
-    private static TokenType ParseTokenType(string tokenType) => tokenType switch
-    {
-        "email_verify" => TokenType.EmailVerification,
-        "password_reset" => TokenType.PasswordReset,
-        "email_change" => TokenType.EmailChange,
-        _ => throw new ArgumentException($"Unknown token type: {tokenType}")
-    };
 }

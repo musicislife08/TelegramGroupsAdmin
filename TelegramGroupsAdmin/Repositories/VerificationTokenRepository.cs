@@ -25,7 +25,7 @@ public class VerificationTokenRepository : IVerificationTokenRepository
         await context.SaveChangesAsync(cancellationToken);
 
         _logger.LogDebug("Created verification token {Id} for user {UserId}, type {TokenType}",
-            entity.Id, entity.UserId, entity.TokenType);
+            entity.Id, entity.UserId, verificationToken.TokenType);
 
         return entity.Id;
     }
@@ -45,21 +45,13 @@ public class VerificationTokenRepository : IVerificationTokenRepository
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
-        var tokenTypeString = tokenType switch
-        {
-            UiModels.TokenType.EmailVerification => "email_verify",
-            UiModels.TokenType.PasswordReset => "password_reset",
-            UiModels.TokenType.EmailChange => "email_change",
-            _ => throw new ArgumentException($"Unknown token type: {tokenType}")
-        };
-
         var now = DateTimeOffset.UtcNow;
 
         var entity = await context.VerificationTokens
             .AsNoTracking()
             .FirstOrDefaultAsync(vt =>
                 vt.Token == token
-                && vt.TokenTypeString == tokenTypeString
+                && vt.TokenType == (int)tokenType
                 && vt.UsedAt == null
                 && vt.ExpiresAt > now, cancellationToken);
 

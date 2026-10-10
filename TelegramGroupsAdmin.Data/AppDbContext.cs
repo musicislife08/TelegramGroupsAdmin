@@ -844,9 +844,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             // Index for cleanup job to find expired sessions
             entity.HasIndex(e => e.ExpiresAt);
         });
-
-        // VerificationTokenDto stores token_type as string in DB but exposes as enum
-        // The entity already handles this with TokenTypeString property
     }
 
     private static void ConfigureSpecialEntities(ModelBuilder modelBuilder)
