@@ -1320,7 +1320,9 @@ public class TelegramUserRepository : ITelegramUserRepository
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         return await context.TelegramUsers
             .Where(u => !u.IsBanned && !u.IsBot && !u.IsTrusted && !u.ProfileScanExcluded)
-            .Where(u => u.ProfileScannedAt == null
+            // Never scanned: not tried yet, or the last attempt wrote nothing and is older than the cutoff
+            .Where(u => (u.ProfileScannedAt == null
+                    && (u.ProfileScanAttemptedAt == null || u.ProfileScanAttemptedAt < retryCutoff))
                 || (u.ProfileScannedAt < retryCutoff
                     // latest scan row only read the name
                     && context.ProfileScanResults
@@ -1335,7 +1337,11 @@ public class TelegramUserRepository : ITelegramUserRepository
                         && !context.ProfileScanResults.Any(f => f.UserId == u.TelegramUserId
                             && f.Source == fullScan
                             && (f.ScannedAt > r.ScannedAt || (f.ScannedAt == r.ScannedAt && f.Id > r.Id)))) < nameOnlyRetryLimit))
-            .OrderBy(u => u.ProfileScannedAt) // NULLS FIRST is PostgreSQL default for ASC
+            // Never tried first (PostgreSQL sorts NULLs last in ascending order), then by the last scan
+            // or attempt, oldest first; the id decides ties so the order is stable.
+            .OrderBy(u => (u.ProfileScannedAt ?? u.ProfileScanAttemptedAt) != null)
+            .ThenBy(u => u.ProfileScannedAt ?? u.ProfileScanAttemptedAt)
+            .ThenBy(u => u.TelegramUserId)
             .Take(batchSize)
             .Select(u => u.TelegramUserId)
             .ToListAsync(cancellationToken);
@@ -1372,6 +1378,7 @@ public class TelegramUserRepository : ITelegramUserRepository
             .SetProperty(u => u.PersonalChannelPhotoId, personalChannelPhotoId)
             .SetProperty(u => u.PinnedStoryIds, pinnedStoryIds)
             .SetProperty(u => u.ProfileScannedAt, scanResult.ScannedAt)
+            .SetProperty(u => u.ProfileScanAttemptedAt, (DateTimeOffset?)null)
             .SetProperty(u => u.UpdatedAt, scanResult.ScannedAt), ct),
             cancellationToken);
 
@@ -1383,7 +1390,18 @@ public class TelegramUserRepository : ITelegramUserRepository
             .Where(u => u.TelegramUserId == telegramUserId)
             .ExecuteUpdateAsync(s => s
                 .SetProperty(u => u.ProfileScannedAt, DateTimeOffset.UtcNow)
+                .SetProperty(u => u.ProfileScanAttemptedAt, (DateTimeOffset?)null)
                 .SetProperty(u => u.UpdatedAt, DateTimeOffset.UtcNow), cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task RecordScanAttemptAsync(long telegramUserId, CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        await context.TelegramUsers
+            .Where(u => u.TelegramUserId == telegramUserId && u.ProfileScannedAt == null)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(u => u.ProfileScanAttemptedAt, DateTimeOffset.UtcNow), cancellationToken);
     }
 
     /// <inheritdoc />
@@ -1391,6 +1409,7 @@ public class TelegramUserRepository : ITelegramUserRepository
         RecordScanAsync(scanResult, (users, ct) => users.ExecuteUpdateAsync(s => s
             .SetProperty(u => u.ProfileScanScore, scanResult.Score)
             .SetProperty(u => u.ProfileScannedAt, scanResult.ScannedAt)
+            .SetProperty(u => u.ProfileScanAttemptedAt, (DateTimeOffset?)null)
             .SetProperty(u => u.UpdatedAt, scanResult.ScannedAt), ct),
             cancellationToken);
 

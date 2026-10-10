@@ -136,6 +136,10 @@ public class ProfileRescanJob(
                 var outcome = await RescanAsync(user, cancellationToken);
                 outcomes[outcome] = outcomes.GetValueOrDefault(outcome) + 1;
 
+                // The user is still never scanned: wait Re-Scan After before trying them again
+                if (outcome is CandidateOutcome.NothingWritten or CandidateOutcome.Failed)
+                    await RecordAttemptAsync(user.Id, cancellationToken);
+
                 if (IsAttempt(outcome))
                 {
                     attempted++;
@@ -180,6 +184,22 @@ public class ProfileRescanJob(
         {
             var elapsedMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds;
             jobMetrics.RecordJobExecution(jobName, success, elapsedMs);
+        }
+    }
+
+    /// <summary>
+    /// Records that the attempt wrote nothing. Runs after the attempt, so a failure here is logged
+    /// and the batch goes on.
+    /// </summary>
+    private async Task RecordAttemptAsync(long userId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await userRepository.RecordScanAttemptAsync(userId, cancellationToken);
+        }
+        catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            logger.LogWarning(ex, "Profile rescan: could not record the scan attempt for user {UserId}, continuing batch", userId);
         }
     }
 

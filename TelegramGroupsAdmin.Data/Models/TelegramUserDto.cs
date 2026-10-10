@@ -246,6 +246,14 @@ public class TelegramUserDto
     public DateTimeOffset? ProfileScannedAt { get; set; }
 
     /// <summary>
+    /// When the last scan attempt for this never-scanned user wrote nothing (no verdict, no stored row).
+    /// Only set while <see cref="ProfileScannedAt"/> is null; a scan that writes clears it. The rescan job
+    /// retries such a user only after its Re-Scan After cutoff. Never counts as scanned.
+    /// </summary>
+    [Column("profile_scan_attempted_at")]
+    public DateTimeOffset? ProfileScanAttemptedAt { get; set; }
+
+    /// <summary>
     /// Computed risk score from profile scan (0.0-5.0, null = never scanned)
     /// </summary>
     [Column("profile_scan_score")]

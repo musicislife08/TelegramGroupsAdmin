@@ -178,10 +178,11 @@ public interface ITelegramUserRepository
 
     /// <summary>
     /// User IDs whose profile scan is incomplete, for the rescan job: untrusted, unbanned, non-bot,
-    /// not excluded, and either never scanned (profile_scanned_at NULL) or last scanned before
+    /// not excluded, and either never scanned (profile_scanned_at NULL, with no attempt recorded or the
+    /// last attempt before <paramref name="retryCutoff"/>) or last scanned before
     /// <paramref name="retryCutoff"/> with a NameOnly latest scan row and fewer than
     /// <paramref name="nameOnlyRetryLimit"/> NameOnly rows since their last FullScan row.
-    /// Ordered by ProfileScannedAt ASC (NULLS FIRST = never-scanned users first).
+    /// Never-tried users first, then by last scan or last attempt, oldest first.
     /// The untrusted / unbanned / non-bot / not-excluded conditions only narrow the selection, so users
     /// who can never be scanned do not take every run's candidates; the rescan job sends each candidate
     /// through the profile scan gate, which makes the eligibility decision.
@@ -192,6 +193,7 @@ public interface ITelegramUserRepository
     /// <summary>
     /// Records a full scan in one transaction: the profile fields, score (<c>scanResult.Score</c>) and scan
     /// time (<c>scanResult.ScannedAt</c>) on the user, and the scan history row. Either both land or neither.
+    /// Clears any recorded scan attempt.
     /// </summary>
     Task RecordFullScanAsync(
         string? bio,
@@ -210,15 +212,22 @@ public interface ITelegramUserRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Bump ProfileScannedAt + UpdatedAt without changing any other fields.
+    /// Bump ProfileScannedAt + UpdatedAt and clear any recorded scan attempt, without changing other fields.
     /// Used when diff detection finds no profile changes — marks the user as freshly scanned.
     /// </summary>
     Task UpdateProfileScannedAtAsync(long telegramUserId, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Records that a scan attempt for a never-scanned user wrote nothing, so the rescan job waits
+    /// for Re-Scan After before retrying them. Does nothing for a user who has been scanned
+    /// (profile_scanned_at set). Never marks the user as scanned.
+    /// </summary>
+    Task RecordScanAttemptAsync(long telegramUserId, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Records a name-only scan in one transaction: the score (<c>scanResult.Score</c>) and scan time
     /// (<c>scanResult.ScannedAt</c>) on the user, and the scan history row. Either both land or neither.
-    /// Stored bio, channel, story and photo fields are left as they are.
+    /// Stored bio, channel, story and photo fields are left as they are. Clears any recorded scan attempt.
     /// </summary>
     Task RecordNameOnlyScanAsync(UiModels.ProfileScanResultRecord scanResult, CancellationToken cancellationToken = default);
 }

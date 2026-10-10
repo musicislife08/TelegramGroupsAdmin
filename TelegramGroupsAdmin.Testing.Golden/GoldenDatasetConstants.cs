@@ -858,6 +858,10 @@ public static class GoldenDatasetConstants
         public const long NeverScannedUserId = 9963580010331;
         /// <summary>"Preflight Silk" (no username): untrusted, unbanned, non-bot, never scanned, profile_scan_excluded = true. Read-only.</summary>
         public const long ExcludedNeverScannedUserId = 9434053902837;
+        /// <summary>"Onboard Aspirate" (no username): untrusted, unbanned, non-bot, never scanned; profile_scan_excluded cleared and profile_scan_attempted_at = <see cref="AttemptedNeverScannedAt"/> (canonical edit 2026-10-10: re-included by an admin after the old unresolvable auto-exclusion, then a rescan attempt wrote nothing).</summary>
+        public const long AttemptedNeverScannedUserId = 9810234229828;
+        /// <summary><see cref="AttemptedNeverScannedUserId"/>'s profile_scan_attempted_at (canonical edit 2026-10-10). Later than <see cref="NameOnlyLatestUserId"/>'s profile_scanned_at (2026-04-29), so the rescan order puts it after that user.</summary>
+        public static readonly DateTimeOffset AttemptedNeverScannedAt = new(2026, 5, 3, 14, 22, 7, 481, TimeSpan.Zero);
         /// <summary>@unreadbackspin: untrusted, unbanned; its only scan row 528 (score 1.2, AI fields NULL) has source = NameOnly (canonical edit 2026-10-05).</summary>
         public const long NameOnlyLatestUserId = 9758118926756;
         /// <summary>@unreadbackspin's only scan row, flag-edited to source = 1 (NameOnly) (canonical edit 2026-10-05).</summary>

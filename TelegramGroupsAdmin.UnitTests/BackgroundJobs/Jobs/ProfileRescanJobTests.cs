@@ -273,6 +273,93 @@ public class ProfileRescanJobTests
         await _gate.Received(1).ScanIfEligibleAsync(eight, Arg.Any<ChatIdentity?>(), ProfileScanTrigger.Rescan, Arg.Any<CancellationToken>(), Arg.Any<bool>());
     }
 
+    private static ProfileScanResult NothingWritten(long userId) =>
+        new(userId, null, null, null, null, false, null, false, false, false, 0m,
+            ProfileScanOutcome.Clean, null, null, SkipReason: "Could not fetch the user's full profile.");
+
+    [Test]
+    public async Task Execute_ScanWritesNothing_RecordsTheAttempt()
+    {
+        // A scan that wrote nothing leaves the user never scanned; the attempt is recorded so the
+        // next runs wait for Re-Scan After instead of retrying the user first every time.
+        var seven = UserIdentity.ForTest(7, "Seven");
+        Batch(seven);
+        _gate.ScanIfEligibleAsync(seven, Arg.Any<ChatIdentity?>(), Arg.Any<ProfileScanTrigger>(), Arg.Any<CancellationToken>(), Arg.Any<bool>())
+            .Returns(NothingWritten(7));
+
+        await _job.Execute(Context());
+
+        await _users.Received(1).RecordScanAttemptAsync(7, Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task Execute_ScanThrows_RecordsTheAttempt()
+    {
+        var seven = UserIdentity.ForTest(7, "Seven");
+        Batch(seven);
+        _gate.ScanIfEligibleAsync(seven, Arg.Any<ChatIdentity?>(), Arg.Any<ProfileScanTrigger>(), Arg.Any<CancellationToken>(), Arg.Any<bool>())
+            .Returns<ProfileScanResult?>(_ => throw new InvalidOperationException("scan failed"));
+
+        await _job.Execute(Context());
+
+        await _users.Received(1).RecordScanAttemptAsync(7, Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task Execute_ChatLookupThrows_RecordsTheAttempt()
+    {
+        var seven = UserIdentity.ForTest(7, "Seven");
+        Batch(seven);
+        _users.GetChatsForUserAsync(7, Arg.Any<CancellationToken>())
+            .Returns<List<ChatIdentity>>(_ => throw new InvalidOperationException("db down"));
+
+        await _job.Execute(Context());
+
+        await _users.Received(1).RecordScanAttemptAsync(7, Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task Execute_ScanWrites_DoesNotRecordAnAttempt()
+    {
+        Batch(UserIdentity.ForTest(7, "Seven"));
+
+        await _job.Execute(Context());
+
+        await _users.DidNotReceiveWithAnyArgs().RecordScanAttemptAsync(default);
+    }
+
+    [Test]
+    public async Task Execute_GateTurnsTheUserDown_DoesNotRecordAnAttempt()
+    {
+        var seven = UserIdentity.ForTest(7, "Seven");
+        Batch(seven);
+        _gate.ScanIfEligibleAsync(seven, Arg.Any<ChatIdentity?>(), Arg.Any<ProfileScanTrigger>(), Arg.Any<CancellationToken>(), Arg.Any<bool>())
+            .Returns((ProfileScanResult?)null);
+
+        await _job.Execute(Context());
+
+        await _users.DidNotReceiveWithAnyArgs().RecordScanAttemptAsync(default);
+    }
+
+    [Test]
+    public async Task Execute_RecordingTheAttemptThrows_DoesNotAbortTheBatch()
+    {
+        // Recording the attempt runs after the scan; failing to record it must not fail the run.
+        var seven = UserIdentity.ForTest(7, "Seven");
+        var eight = UserIdentity.ForTest(8, "Eight");
+        Batch(seven, eight);
+        _gate.ScanIfEligibleAsync(seven, Arg.Any<ChatIdentity?>(), Arg.Any<ProfileScanTrigger>(), Arg.Any<CancellationToken>(), Arg.Any<bool>())
+            .Returns(NothingWritten(7));
+        _users.RecordScanAttemptAsync(7, Arg.Any<CancellationToken>())
+            .Returns(_ => throw new InvalidOperationException("db down"));
+
+        await _job.Execute(Context());
+
+        await _gate.Received(1).ScanIfEligibleAsync(eight, Arg.Any<ChatIdentity?>(), ProfileScanTrigger.Rescan, Arg.Any<CancellationToken>(), Arg.Any<bool>());
+        Assert.That(_logger.Entries, Has.Some.Matches<(LogLevel Level, string Message)>(
+            e => e.Level == LogLevel.Warning && e.Message.Contains("could not record the scan attempt for user 7")));
+    }
+
     private void Chats(long userId, params ChatIdentity[] chats) =>
         _users.GetChatsForUserAsync(userId, Arg.Any<CancellationToken>()).Returns(chats.ToList());
 
