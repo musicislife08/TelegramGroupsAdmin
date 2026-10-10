@@ -24,6 +24,9 @@ public class StoreVerificationTokenTypeAsIntMigrationTests
 
     private const string UserId = "token-type-migration-user";
 
+    private const string TokenTypeColumn =
+        "WHERE table_schema = current_schema() AND table_name = 'verification_tokens' AND column_name = 'token_type'";
+
     [SetUp]
     public async Task SetUp()
     {
@@ -60,7 +63,7 @@ public class StoreVerificationTokenTypeAsIntMigrationTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(await _helper.ExecuteScalarAsync<string>(
-                "SELECT data_type FROM information_schema.columns WHERE table_name = 'verification_tokens' AND column_name = 'token_type'"),
+                $"SELECT data_type FROM information_schema.columns {TokenTypeColumn}"),
                 Is.EqualTo("integer"));
             Assert.That(await _helper.ExecuteScalarAsync<int>("SELECT token_type FROM verification_tokens WHERE token = 't-verify'"), Is.Zero);
             Assert.That(await _helper.ExecuteScalarAsync<int>("SELECT token_type FROM verification_tokens WHERE token = 't-reset'"), Is.EqualTo(1));
@@ -88,6 +91,9 @@ public class StoreVerificationTokenTypeAsIntMigrationTests
 
         using (Assert.EnterMultipleScope())
         {
+            Assert.That(await _helper.ExecuteScalarAsync<string>(
+                $"SELECT data_type || ':' || character_maximum_length || ':' || is_nullable FROM information_schema.columns {TokenTypeColumn}"),
+                Is.EqualTo("character varying:50:NO"));
             Assert.That(await _helper.ExecuteScalarAsync<string>("SELECT token_type FROM verification_tokens WHERE token = 't-verify'"), Is.EqualTo("email_verify"));
             Assert.That(await _helper.ExecuteScalarAsync<string>("SELECT token_type FROM verification_tokens WHERE token = 't-reset'"), Is.EqualTo("password_reset"));
             Assert.That(await _helper.ExecuteScalarAsync<string>("SELECT token_type FROM verification_tokens WHERE token = 't-change'"), Is.EqualTo("email_change"));
