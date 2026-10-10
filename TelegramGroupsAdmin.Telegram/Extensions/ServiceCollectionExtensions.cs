@@ -1,5 +1,6 @@
 using System.IO.Abstractions;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using TelegramGroupsAdmin.Core.Imaging;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Telegram.Repositories;
@@ -72,6 +73,7 @@ public static class ServiceCollectionExtensions
             // User API (WTelegram) services
             services.AddScoped<ITelegramSessionRepository, TelegramSessionRepository>();
             services.AddSingleton<IWTelegramClientFactory, WTelegramClientFactory>();
+            services.TryAddSingleton(TimeProvider.System); // Session manager's reconnect backoff clock
             services.AddSingleton<ITelegramSessionManager, TelegramSessionManager>();
             services.AddSingleton<IAuthFlowStore, AuthFlowStore>();
             services.AddScoped<ITelegramAuthService, TelegramAuthService>();

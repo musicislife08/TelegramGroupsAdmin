@@ -1,3 +1,4 @@
+using System.Net.Sockets;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
@@ -35,6 +36,7 @@ public class TelegramSessionManagerTests
     private ITelegramSessionRepository _mockSessionRepo = null!;
     private ISystemConfigRepository _mockConfigRepo = null!;
     private IAuditService _mockAuditService = null!;
+    private ManualTimeProvider _timeProvider = null!;
     private TelegramSessionManager _sut = null!;
 
     [SetUp]
@@ -46,8 +48,9 @@ public class TelegramSessionManagerTests
         _mockSessionRepo = Substitute.For<ITelegramSessionRepository>();
         _mockConfigRepo = Substitute.For<ISystemConfigRepository>();
         _mockAuditService = Substitute.For<IAuditService>();
+        _timeProvider = new ManualTimeProvider();
 
-        _sut = new TelegramSessionManager(_mockScopeFactory, _mockClientFactory, _mockLogger);
+        _sut = new TelegramSessionManager(_mockScopeFactory, _mockClientFactory, _timeProvider, _mockLogger);
     }
 
     [TearDown]
@@ -195,53 +198,192 @@ public class TelegramSessionManagerTests
     }
 
     [Test]
-    public async Task GetClientAsync_CachedClient_Disconnected_CleansUpAndReturnsNull()
+    public async Task GetClientAsync_CachedClient_Disconnected_ReconnectsFromStoredSession()
     {
-        // Arrange — seed the cache with a client that will become disconnected
-        SetupScope();
-        var session = MakeSession();
-
-        // First call returns session (for seeding), subsequent calls return null (session deactivated)
-        var sessionCallCount = 0;
-        _mockSessionRepo.GetActiveSessionAsync(TestWebUserId, Arg.Any<CancellationToken>())
-            .Returns(_ =>
-            {
-                sessionCallCount++;
-                return sessionCallCount == 1 ? session : null;
-            });
-        _mockConfigRepo.GetUserApiConfigAsync(Arg.Any<CancellationToken>())
-            .Returns(new UserApiConfig { ApiId = 12345 });
-        _mockConfigRepo.GetUserApiHashAsync(Arg.Any<CancellationToken>())
-            .Returns("test-api-hash");
-
-        var mockApiClient = Substitute.For<IWTelegramApiClient>();
-        mockApiClient.Disconnected.Returns(false);
-        mockApiClient.LoginUserIfNeeded(Arg.Any<TL.CodeSettings?>(), Arg.Any<bool>())
-            .Returns(Task.FromResult(new TL.User { id = 99999, first_name = "Test" }));
-
+        // Arrange — a dropped connection is stale, not revoked (#577)
+        SetupFreshScopes();
+        SetupActiveSession();
+        var staleClient = MakeConnectedClient();
+        var freshClient = MakeConnectedClient();
         _mockClientFactory.Create(Arg.Any<Func<string, string?>>(), Arg.Any<Stream>())
-            .Returns(mockApiClient);
+            .Returns(staleClient, freshClient);
 
-        // Seed cache
         await _sut.GetClientAsync(TestWebUserId, CancellationToken.None);
+        staleClient.Disconnected.Returns(true);
 
-        // Now flip the Disconnected flag — next access will detect it
-        mockApiClient.Disconnected.Returns(true);
+        // Act
+        var result = await _sut.GetClientAsync(TestWebUserId, CancellationToken.None);
 
-        // Act — second access, client is now disconnected
+        // Assert
+        Assert.That(result, Is.SameAs(freshClient));
+        await staleClient.Received(1).DisposeAsync();
+        await _mockSessionRepo.DidNotReceive().DeactivateSessionAsync(Arg.Any<long>(), Arg.Any<CancellationToken>());
+        await AssertNoDisconnectAuditAsync();
+    }
+
+    [Test]
+    public async Task GetClientAsync_CachedClient_Disconnected_ReconnectRevoked_DeactivatesAndAudits()
+    {
+        // Arrange — the reconnect hits a genuine revocation error
+        SetupFreshScopes();
+        SetupActiveSession();
+        var staleClient = MakeConnectedClient();
+        var revokedClient = Substitute.For<IWTelegramApiClient>();
+        revokedClient.LoginUserIfNeeded(Arg.Any<CodeSettings?>(), Arg.Any<bool>())
+            .Returns(Task.FromException<User>(new RpcException(401, "AUTH_KEY_UNREGISTERED")));
+        _mockClientFactory.Create(Arg.Any<Func<string, string?>>(), Arg.Any<Stream>())
+            .Returns(staleClient, revokedClient);
+
+        await _sut.GetClientAsync(TestWebUserId, CancellationToken.None);
+        staleClient.Disconnected.Returns(true);
+
+        // Act
         var result = await _sut.GetClientAsync(TestWebUserId, CancellationToken.None);
 
         // Assert
         Assert.That(result, Is.Null);
-
-        // The session should be deactivated as a revoked session
+        await staleClient.Received(1).DisposeAsync();
+        await revokedClient.Received(1).DisposeAsync();
         await _mockSessionRepo.Received(1).DeactivateSessionAsync(TestSessionId, Arg.Any<CancellationToken>());
         await _mockAuditService.Received(1).LogEventAsync(
             AuditEventType.TelegramAccountDisconnected,
             Arg.Any<Actor>(),
             Arg.Any<Actor?>(),
-            Arg.Any<string?>(),
+            Arg.Is<string?>(v => v!.Contains("AUTH_KEY_UNREGISTERED")),
             Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task GetClientAsync_CachedClient_Disconnected_ReconnectNetworkFailure_ReturnsNullAndKeepsSession()
+    {
+        // Arrange — the network is down, so the reconnect fails with a socket error
+        SetupFreshScopes();
+        SetupActiveSession();
+        var staleClient = MakeConnectedClient();
+        var failingClient = MakeNetworkFailingClient();
+        _mockClientFactory.Create(Arg.Any<Func<string, string?>>(), Arg.Any<Stream>())
+            .Returns(staleClient, failingClient);
+
+        await _sut.GetClientAsync(TestWebUserId, CancellationToken.None);
+        staleClient.Disconnected.Returns(true);
+
+        // Act
+        var result = await _sut.GetClientAsync(TestWebUserId, CancellationToken.None);
+
+        // Assert
+        Assert.That(result, Is.Null);
+        Assert.That(_sut.ActiveClientCount, Is.Zero, "the stale client must not stay cached");
+        await staleClient.Received(1).DisposeAsync();
+        await failingClient.Received(1).DisposeAsync();
+        await _mockSessionRepo.DidNotReceive().DeactivateSessionAsync(Arg.Any<long>(), Arg.Any<CancellationToken>());
+        await AssertNoDisconnectAuditAsync();
+    }
+
+    [Test]
+    public async Task GetClientAsync_NetworkOutage_SessionStaysActiveAndRecoversWhenNetworkReturns()
+    {
+        // Arrange — a ~5 minute outage: several reconnects fail with socket errors, then the network returns
+        SetupFreshScopes();
+        SetupActiveSession();
+        var staleClient = MakeConnectedClient();
+        var outageClients = Enumerable.Range(0, 4).Select(_ => MakeNetworkFailingClient()).ToArray();
+        var recoveredClient = MakeConnectedClient();
+        _mockClientFactory.Create(Arg.Any<Func<string, string?>>(), Arg.Any<Stream>())
+            .Returns(staleClient, [.. outageClients, recoveredClient]);
+
+        await _sut.GetClientAsync(TestWebUserId, CancellationToken.None);
+        staleClient.Disconnected.Returns(true);
+
+        // Act — callers keep asking through the outage, spaced past the reconnect backoff
+        foreach (var _ in outageClients)
+        {
+            var duringOutage = await _sut.GetClientAsync(TestWebUserId, CancellationToken.None);
+            Assert.That(duringOutage, Is.Null);
+            _timeProvider.Advance(TimeSpan.FromMinutes(1));
+        }
+
+        var afterOutage = await _sut.GetClientAsync(TestWebUserId, CancellationToken.None);
+
+        // Assert
+        Assert.That(afterOutage, Is.SameAs(recoveredClient));
+        foreach (var client in outageClients)
+            await client.Received(1).DisposeAsync();
+        await _mockSessionRepo.DidNotReceive().DeactivateSessionAsync(Arg.Any<long>(), Arg.Any<CancellationToken>());
+        await AssertNoDisconnectAuditAsync();
+    }
+
+    [Test]
+    public async Task GetClientAsync_AfterFailedReconnect_SkipsAttemptsInsideBackoffAndRetriesAfter()
+    {
+        // Arrange — one failed reconnect starts the backoff window
+        SetupFreshScopes();
+        SetupActiveSession();
+        var failingClient = MakeNetworkFailingClient();
+        var recoveredClient = MakeConnectedClient();
+        _mockClientFactory.Create(Arg.Any<Func<string, string?>>(), Arg.Any<Stream>())
+            .Returns(failingClient, recoveredClient);
+
+        Assert.That(await _sut.GetClientAsync(TestWebUserId, CancellationToken.None), Is.Null);
+        _mockClientFactory.ClearReceivedCalls();
+
+        // Act + Assert — inside the window no new connection is attempted
+        _timeProvider.Advance(TelegramSessionManager.ReconnectBackoff - TimeSpan.FromSeconds(1));
+        Assert.That(await _sut.GetClientAsync(TestWebUserId, CancellationToken.None), Is.Null);
+        _mockClientFactory.DidNotReceive().Create(Arg.Any<Func<string, string?>>(), Arg.Any<Stream>());
+
+        // Act + Assert — once the window has passed, the next call reconnects
+        _timeProvider.Advance(TimeSpan.FromSeconds(1));
+        Assert.That(await _sut.GetClientAsync(TestWebUserId, CancellationToken.None), Is.SameAs(recoveredClient));
+        _mockClientFactory.Received(1).Create(Arg.Any<Func<string, string?>>(), Arg.Any<Stream>());
+    }
+
+    [Test]
+    public async Task GetAnyClientAsync_CachedClientDisconnected_DisposesStaleClientAndReconnects()
+    {
+        // Arrange
+        SetupFreshScopes();
+        var session = SetupActiveSession();
+        _mockSessionRepo.GetAllActiveSessionsAsync(Arg.Any<CancellationToken>()).Returns([session]);
+        var staleClient = MakeConnectedClient();
+        var freshClient = MakeConnectedClient();
+        _mockClientFactory.Create(Arg.Any<Func<string, string?>>(), Arg.Any<Stream>())
+            .Returns(staleClient, freshClient);
+
+        await _sut.GetClientAsync(TestWebUserId, CancellationToken.None);
+        staleClient.Disconnected.Returns(true);
+
+        // Act
+        var result = await _sut.GetAnyClientAsync(CancellationToken.None);
+
+        // Assert
+        Assert.That(result, Is.SameAs(freshClient));
+        await staleClient.Received(1).DisposeAsync();
+        Assert.That(_sut.ActiveClientCount, Is.EqualTo(1));
+    }
+
+    [Test]
+    public async Task GetClientForChatAsync_CachedClientDisconnected_DisposesStaleClientAndReconnects()
+    {
+        // Arrange
+        const long chatId = -1001234567890L;
+        SetupFreshScopes();
+        var session = SetupActiveSession();
+        _mockSessionRepo.GetAllActiveSessionsAsync(Arg.Any<CancellationToken>(), Arg.Any<long?>()).Returns([session]);
+        var staleClient = MakeConnectedClient();
+        var freshClient = MakeConnectedClient();
+        _mockClientFactory.Create(Arg.Any<Func<string, string?>>(), Arg.Any<Stream>())
+            .Returns(staleClient, freshClient);
+
+        await _sut.GetClientAsync(TestWebUserId, CancellationToken.None);
+        staleClient.Disconnected.Returns(true);
+
+        // Act
+        var result = await _sut.GetClientForChatAsync(chatId, CancellationToken.None);
+
+        // Assert
+        Assert.That(result, Is.SameAs(freshClient));
+        await staleClient.Received(1).DisposeAsync();
+        Assert.That(_sut.ActiveClientCount, Is.EqualTo(1));
     }
 
     #endregion
@@ -276,6 +418,26 @@ public class TelegramSessionManagerTests
         // Assert — should short-circuit on non-empty cache without hitting DB
         Assert.That(result, Is.True);
         await _mockSessionRepo.DidNotReceive().AnyActiveSessionExistsAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task HasAnyActiveSessionAsync_CachedClientDisconnected_StillReportsStoredSession()
+    {
+        // Arrange — a dropped connection is not a lost session: the DB fallback still sees it
+        SetupFreshScopes();
+        SetupActiveSession();
+        var staleClient = MakeConnectedClient();
+        _mockClientFactory.Create(Arg.Any<Func<string, string?>>(), Arg.Any<Stream>()).Returns(staleClient);
+        await _sut.GetClientAsync(TestWebUserId, CancellationToken.None);
+        staleClient.Disconnected.Returns(true);
+        _mockSessionRepo.AnyActiveSessionExistsAsync(Arg.Any<CancellationToken>()).Returns(true);
+
+        // Act
+        var result = await _sut.HasAnyActiveSessionAsync(CancellationToken.None);
+
+        // Assert
+        Assert.That(result, Is.True);
+        await _mockSessionRepo.Received(1).AnyActiveSessionExistsAsync(Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -526,6 +688,67 @@ public class TelegramSessionManagerTests
     #endregion
 
     #region Helpers
+
+    /// <summary>Every CreateScope() call gets a fresh scope resolving the standard repository mocks.</summary>
+    private void SetupFreshScopes()
+    {
+        _mockScopeFactory.CreateScope().Returns(_ =>
+        {
+            var scope = Substitute.For<IServiceScope, IAsyncDisposable>();
+            var provider = Substitute.For<IServiceProvider>();
+            scope.ServiceProvider.Returns(provider);
+            provider.GetService(typeof(ITelegramSessionRepository)).Returns(_mockSessionRepo);
+            provider.GetService(typeof(ISystemConfigRepository)).Returns(_mockConfigRepo);
+            provider.GetService(typeof(IAuditService)).Returns(_mockAuditService);
+            return scope;
+        });
+    }
+
+    /// <summary>An active stored session for <see cref="TestWebUserId"/> plus a usable User API config.</summary>
+    private TelegramSession SetupActiveSession()
+    {
+        var session = MakeSession();
+        _mockSessionRepo.GetActiveSessionAsync(TestWebUserId, Arg.Any<CancellationToken>()).Returns(session);
+        _mockConfigRepo.GetUserApiConfigAsync(Arg.Any<CancellationToken>()).Returns(new UserApiConfig { ApiId = 12345 });
+        _mockConfigRepo.GetUserApiHashAsync(Arg.Any<CancellationToken>()).Returns("test-api-hash");
+        return session;
+    }
+
+    private static IWTelegramApiClient MakeConnectedClient()
+    {
+        var client = Substitute.For<IWTelegramApiClient>();
+        client.Disconnected.Returns(false);
+        client.LoginUserIfNeeded(Arg.Any<CodeSettings?>(), Arg.Any<bool>())
+            .Returns(Task.FromResult(new User { id = 99999, first_name = "Test" }));
+        return client;
+    }
+
+    /// <summary>A client whose login fails the way it does with no network: a socket error, not an RPC error.</summary>
+    private static IWTelegramApiClient MakeNetworkFailingClient()
+    {
+        var client = Substitute.For<IWTelegramApiClient>();
+        client.LoginUserIfNeeded(Arg.Any<CodeSettings?>(), Arg.Any<bool>())
+            .Returns(Task.FromException<User>(new SocketException((int)SocketError.NetworkUnreachable)));
+        return client;
+    }
+
+    private Task AssertNoDisconnectAuditAsync() =>
+        _mockAuditService.DidNotReceive().LogEventAsync(
+            AuditEventType.TelegramAccountDisconnected,
+            Arg.Any<Actor>(),
+            Arg.Any<Actor?>(),
+            Arg.Any<string?>(),
+            Arg.Any<CancellationToken>());
+
+    /// <summary>A clock the test moves by hand.</summary>
+    private sealed class ManualTimeProvider : TimeProvider
+    {
+        private DateTimeOffset _now = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+
+        public override DateTimeOffset GetUtcNow() => _now;
+
+        public void Advance(TimeSpan by) => _now += by;
+    }
 
     private static TelegramSession MakeSession(string webUserId = TestWebUserId, long sessionId = TestSessionId)
         => new()
