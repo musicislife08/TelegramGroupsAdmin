@@ -214,6 +214,10 @@ public sealed class ProfileScanService(
                     TaskContinuationOptions.OnlyOnFaulted,
                     TaskScheduler.Default);
 
+                // The name-only fallback below may act first (for example, open a review alert). If the
+                // abandoned full scan finishes later, it records and acts too. The action lock and the
+                // banned / pending-alert re-checks prevent a duplicate ban or alert, and a later full-scan
+                // ban may supersede a name-only review: the full scan is the more reliable verdict (#571).
                 pipelineMetrics.RecordProfileScanTimeout();
                 result = EmptyResult(user.Id, $"Scan timed out after {ScanTimeout.TotalSeconds}s");
             }
@@ -228,7 +232,7 @@ public sealed class ProfileScanService(
         // A skip reason here means the profile could not be read (user not resolvable, full profile
         // not fetched, timeout, FLOOD_WAIT). A scan that read the profile never carries one.
         // On the timeout path the name-only AI call runs after the ScanTimeout race, so ScanTimeout
-        // does not bound it; the AI client's own HTTP timeout does.
+        // does not bound it; the scoring engine's own name-only time limit does.
         return result.SkipReason is null
             ? result
             : await FallBackToNameOnlyAsync(result, user, existingUser, triggeringChat, sp, ct);

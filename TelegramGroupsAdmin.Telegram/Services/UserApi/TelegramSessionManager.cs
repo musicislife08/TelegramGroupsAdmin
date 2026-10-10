@@ -314,6 +314,9 @@ public sealed class TelegramSessionManager(
             await DisposeAsync(apiClient, sessionStream);
             return null;
         }
+        // WTelegram 4.4.8's LoginUserIfNeeded calls the config callback directly, without wrapping, and
+        // its only catch is `catch (RpcException) when (reloginOnFailedResume)`, disabled above, so the
+        // exception thrown from ConfigCallback reaches us as-is.
         catch (ReauthenticationRequiredException ex)
         {
             logger.LogWarning("WTelegram session {SessionId} for web user {WebUser} cannot resume: {Error}", sessionId, session.WebUser.ToLogDebug(webUserId), ex.Message);
