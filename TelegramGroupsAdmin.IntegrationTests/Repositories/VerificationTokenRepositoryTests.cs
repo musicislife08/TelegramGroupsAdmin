@@ -54,15 +54,15 @@ public class VerificationTokenRepositoryTests
         _testHelper?.Dispose();
     }
 
-    private static VerificationToken NewToken(TokenType type) => new(
+    private static VerificationToken NewToken(TokenType type, DateTimeOffset? expiresAt = null, DateTimeOffset? usedAt = null, string? value = null) => new(
         Id: 0,
         UserId: UserId,
         TokenType: type,
         Token: Guid.NewGuid().ToString("N"),
-        Value: null,
-        ExpiresAt: DateTimeOffset.UtcNow.AddHours(24),
+        Value: value,
+        ExpiresAt: expiresAt ?? DateTimeOffset.UtcNow.AddHours(24),
         CreatedAt: DateTimeOffset.UtcNow,
-        UsedAt: null);
+        UsedAt: usedAt);
 
     [Test]
     public async Task CreateAsync_DomainToken_ReturnsGeneratedIdAndIsReadableByType()
@@ -91,5 +91,62 @@ public class VerificationTokenRepositoryTests
         var stored = await _repository.GetValidTokenAsync(token.Token, TokenType.PasswordReset);
 
         Assert.That(stored, Is.Null);
+    }
+
+    [Test]
+    public async Task GetValidTokenAsync_ExpiredToken_ReturnsNull()
+    {
+        var token = NewToken(TokenType.EmailVerification, expiresAt: DateTimeOffset.UtcNow.AddMinutes(-1));
+        await _repository!.CreateAsync(token);
+
+        var stored = await _repository.GetValidTokenAsync(token.Token, TokenType.EmailVerification);
+
+        Assert.That(stored, Is.Null);
+    }
+
+    [Test]
+    public async Task GetValidTokenAsync_UsedToken_ReturnsNull()
+    {
+        var token = NewToken(TokenType.PasswordReset, usedAt: DateTimeOffset.UtcNow.AddMinutes(-1));
+        await _repository!.CreateAsync(token);
+
+        var stored = await _repository.GetValidTokenAsync(token.Token, TokenType.PasswordReset);
+
+        Assert.That(stored, Is.Null);
+    }
+
+    [Test]
+    public async Task MarkAsUsedAsync_SetsUsedAtAndInvalidatesToken()
+    {
+        var token = NewToken(TokenType.PasswordReset);
+        await _repository!.CreateAsync(token);
+        var before = DateTimeOffset.UtcNow;
+
+        await _repository.MarkAsUsedAsync(token.Token);
+
+        var stored = await _repository.GetByTokenAsync(token.Token);
+        Assert.That(stored, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(stored!.UsedAt, Is.Not.Null.And.GreaterThanOrEqualTo(before.AddSeconds(-1)));
+            Assert.That(await _repository.GetValidTokenAsync(token.Token, TokenType.PasswordReset), Is.Null);
+        }
+    }
+
+    [Test]
+    public async Task CreateAsync_EmailChangeToken_RoundTripsTypeAndValue()
+    {
+        var token = NewToken(TokenType.EmailChange, value: "new-address@example.com");
+
+        var id = await _repository!.CreateAsync(token);
+
+        var stored = await _repository.GetValidTokenAsync(token.Token, TokenType.EmailChange);
+        Assert.That(stored, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(stored!.Id, Is.EqualTo(id));
+            Assert.That(stored.TokenType, Is.EqualTo(TokenType.EmailChange));
+            Assert.That(stored.Value, Is.EqualTo("new-address@example.com"));
+        }
     }
 }
