@@ -123,6 +123,8 @@ Sessions are stored encrypted in the database and reconnect automatically when t
 
 Disconnecting from within Telegram itself (e.g., terminating the session from Telegram's Active Sessions settings) is also detected automatically. The system handles `AUTH_KEY_UNREGISTERED`, `SESSION_REVOKED`, and related errors by cleaning up the session and logging an audit event.
 
+A dropped connection is not a disconnect. Telegram resets idle connections now and then, and your internet may go down for a while. In both cases the session stays connected: the client reconnects from the stored session the next time it is needed. While the network is down, a failed reconnect is retried at most every 30 seconds, and nothing needs to be reconnected by hand once the network is back.
+
 ---
 
 ## Troubleshooting
@@ -148,6 +150,8 @@ If you sent in **Me mode** and the message does not appear, check the Telegram g
 ### "No connected Telegram account" error when sending
 
 Your session may have been revoked or expired since the page loaded. Navigate to your **Profile** page and reconnect your Telegram account.
+
+If your **Profile** page still shows the account as connected, the server probably could not reach Telegram (for example during an internet outage). Try again once the network is back; the session reconnects on its own.
 
 ### Edit failed with a Telegram error
 
