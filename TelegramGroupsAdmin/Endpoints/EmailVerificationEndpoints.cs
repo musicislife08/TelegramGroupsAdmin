@@ -3,7 +3,6 @@ using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Repositories;
 using TelegramGroupsAdmin.Services;
 using TelegramGroupsAdmin.Services.Auth;
-using DataModels = TelegramGroupsAdmin.Data.Models;
 
 namespace TelegramGroupsAdmin.Endpoints;
 
@@ -29,7 +28,7 @@ public static class EmailVerificationEndpoints
         }
 
         // Find verification token
-        var verificationToken = await verificationTokenRepository.GetValidTokenAsync(token, (DataModels.TokenType)TokenType.EmailVerification, cancellationToken);
+        var verificationToken = await verificationTokenRepository.GetValidTokenAsync(token, TokenType.EmailVerification, cancellationToken);
 
         if (verificationToken == null)
         {

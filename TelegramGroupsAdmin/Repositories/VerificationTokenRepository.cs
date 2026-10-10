@@ -1,7 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using TelegramGroupsAdmin.Telegram.Repositories.Mappings;
 using TelegramGroupsAdmin.Data;
-using DataModels = TelegramGroupsAdmin.Data.Models;
 using UiModels = TelegramGroupsAdmin.Telegram.Models;
 
 namespace TelegramGroupsAdmin.Repositories;
@@ -17,17 +16,18 @@ public class VerificationTokenRepository : IVerificationTokenRepository
         _logger = logger;
     }
 
-    public async Task<long> CreateAsync(DataModels.VerificationTokenDto verificationToken, CancellationToken cancellationToken = default)
+    public async Task<long> CreateAsync(UiModels.VerificationToken verificationToken, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
-        context.VerificationTokens.Add(verificationToken);
+        var entity = verificationToken.ToDto();
+        context.VerificationTokens.Add(entity);
         await context.SaveChangesAsync(cancellationToken);
 
         _logger.LogDebug("Created verification token {Id} for user {UserId}, type {TokenType}",
-            verificationToken.Id, verificationToken.UserId, verificationToken.TokenType);
+            entity.Id, entity.UserId, entity.TokenType);
 
-        return verificationToken.Id;
+        return entity.Id;
     }
 
     public async Task<UiModels.VerificationToken?> GetByTokenAsync(string token, CancellationToken cancellationToken = default)
@@ -41,15 +41,15 @@ public class VerificationTokenRepository : IVerificationTokenRepository
         return entity?.ToModel();
     }
 
-    public async Task<UiModels.VerificationToken?> GetValidTokenAsync(string token, DataModels.TokenType tokenType, CancellationToken cancellationToken = default)
+    public async Task<UiModels.VerificationToken?> GetValidTokenAsync(string token, UiModels.TokenType tokenType, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         var tokenTypeString = tokenType switch
         {
-            DataModels.TokenType.EmailVerification => "email_verify",
-            DataModels.TokenType.PasswordReset => "password_reset",
-            DataModels.TokenType.EmailChange => "email_change",
+            UiModels.TokenType.EmailVerification => "email_verify",
+            UiModels.TokenType.PasswordReset => "password_reset",
+            UiModels.TokenType.EmailChange => "email_change",
             _ => throw new ArgumentException($"Unknown token type: {tokenType}")
         };
 

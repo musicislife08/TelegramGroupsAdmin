@@ -8,7 +8,6 @@ using TelegramGroupsAdmin.Repositories;
 using TelegramGroupsAdmin.Services;
 using TelegramGroupsAdmin.Services.Auth;
 using TelegramGroupsAdmin.Services.Email;
-using DataModels = TelegramGroupsAdmin.Data.Models;
 using TelegramModels = TelegramGroupsAdmin.Telegram.Models;
 using VerificationToken = TelegramGroupsAdmin.Telegram.Models.VerificationToken;
 
@@ -127,8 +126,8 @@ public class AuthServiceTests
 
         // Assert
         await _verificationTokens.Received(expectedSends).CreateAsync(
-            Arg.Is<DataModels.VerificationTokenDto>(t =>
-                t!.UserId == NewUserId && t.TokenType == DataModels.TokenType.EmailVerification),
+            Arg.Is<VerificationToken>(t =>
+                t!.UserId == NewUserId && t.TokenType == TelegramModels.TokenType.EmailVerification),
             Arg.Any<CancellationToken>());
         await _emailService.Received(expectedSends).SendTemplatedEmailAsync(
             Email,
@@ -197,7 +196,7 @@ public class AuthServiceTests
             Arg.Any<string>(), Arg.Any<string>(), Arg.Any<PermissionLevel>(), Arg.Any<string?>(),
             Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
         await _users.DidNotReceive().CreateAsync(Arg.Any<UserRecord>(), Arg.Any<CancellationToken>());
-        await _verificationTokens.DidNotReceive().CreateAsync(Arg.Any<DataModels.VerificationTokenDto>(), Arg.Any<CancellationToken>());
+        await _verificationTokens.DidNotReceive().CreateAsync(Arg.Any<VerificationToken>(), Arg.Any<CancellationToken>());
         await _emailService.DidNotReceive().SendTemplatedEmailAsync(
             Arg.Any<string>(), Arg.Any<EmailTemplate>(), Arg.Any<Dictionary<string, string>>(), Arg.Any<CancellationToken>());
     }
@@ -337,7 +336,7 @@ public class AuthServiceTests
     public async Task ResetPasswordAsync_StoresTheNewHashRotatesTheSecurityStampAndConsumesTheToken()
     {
         // Arrange
-        _verificationTokens.GetValidTokenAsync(ResetToken, DataModels.TokenType.PasswordReset, Arg.Any<CancellationToken>())
+        _verificationTokens.GetValidTokenAsync(ResetToken, TelegramModels.TokenType.PasswordReset, Arg.Any<CancellationToken>())
             .Returns(new VerificationToken(
                 Id: 1,
                 UserId: ExistingUserId,
@@ -367,7 +366,7 @@ public class AuthServiceTests
     public async Task ResetPasswordAsync_InvalidToken_WritesNothing()
     {
         // Arrange
-        _verificationTokens.GetValidTokenAsync(ResetToken, DataModels.TokenType.PasswordReset, Arg.Any<CancellationToken>())
+        _verificationTokens.GetValidTokenAsync(ResetToken, TelegramModels.TokenType.PasswordReset, Arg.Any<CancellationToken>())
             .Returns((VerificationToken?)null);
 
         // Act

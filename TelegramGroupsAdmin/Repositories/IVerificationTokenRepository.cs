@@ -1,4 +1,3 @@
-using DataModels = TelegramGroupsAdmin.Data.Models;
 using UiModels = TelegramGroupsAdmin.Telegram.Models;
 
 namespace TelegramGroupsAdmin.Repositories;
@@ -11,7 +10,7 @@ public interface IVerificationTokenRepository
     /// <summary>
     /// Create a new verification token and return its ID
     /// </summary>
-    Task<long> CreateAsync(DataModels.VerificationTokenDto verificationToken, CancellationToken cancellationToken = default);
+    Task<long> CreateAsync(UiModels.VerificationToken verificationToken, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Get a verification token by its token string
@@ -21,7 +20,7 @@ public interface IVerificationTokenRepository
     /// <summary>
     /// Get a valid (unused and not expired) verification token by token string and type
     /// </summary>
-    Task<UiModels.VerificationToken?> GetValidTokenAsync(string token, DataModels.TokenType tokenType, CancellationToken cancellationToken = default);
+    Task<UiModels.VerificationToken?> GetValidTokenAsync(string token, UiModels.TokenType tokenType, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Mark a verification token as used
