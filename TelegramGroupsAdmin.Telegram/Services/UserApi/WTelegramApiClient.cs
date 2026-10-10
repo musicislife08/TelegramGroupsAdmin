@@ -99,6 +99,9 @@ public sealed class WTelegramApiClient(Client client, ILogger<WTelegramApiClient
     public User? User => client.User;
     public bool Disconnected => client.Disconnected;
 
+    /// <summary>WTelegram's reactor reconnect limit, exposed so tests can check the factory's setting.</summary>
+    internal int MaxAutoReconnects => client.MaxAutoReconnects;
+
     // ═══════════════════════════════════════════════════════════════════════════
     // AUTH / LOGIN (direct passthrough — auth has its own flow)
     // ═══════════════════════════════════════════════════════════════════════════
