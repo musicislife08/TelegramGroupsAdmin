@@ -388,6 +388,137 @@ public class TelegramSessionManagerTests
 
     #endregion
 
+    #region Reconnect — resume only, never a new login
+
+    [Test]
+    public async Task GetClientAsync_Reconnect_ResumesWithoutReloginAndValidatesStoredUserId()
+    {
+        // Arrange
+        SetupFreshScopes();
+        SetupActiveSession();
+        Func<string, string?>? config = null;
+        var client = MakeConnectedClient();
+        _mockClientFactory.Create(Arg.Do<Func<string, string?>>(cb => config = cb), Arg.Any<Stream>())
+            .Returns(client);
+
+        // Act
+        var result = await _sut.GetClientAsync(TestWebUserId, CancellationToken.None);
+
+        // Assert — a failed resume must surface as an error, never log out and start a new login
+        Assert.That(result, Is.SameAs(client));
+        await client.Received(1).LoginUserIfNeeded(Arg.Any<CodeSettings?>(), false);
+        await client.DidNotReceive().LoginUserIfNeeded(Arg.Any<CodeSettings?>(), true);
+        Assert.That(config!("user_id"), Is.EqualTo("9876543210"));
+    }
+
+    [Test]
+    public async Task GetClientAsync_Reconnect_SessionWithoutTelegramUserId_AcceptsResumedUser()
+    {
+        // Arrange — "-1" tells WTelegram to accept whichever user the stored session resumes as
+        SetupFreshScopes();
+        SetupActiveSession(MakeSession() with { TelegramUserId = null });
+        Func<string, string?>? config = null;
+        var client = MakeConnectedClient();
+        _mockClientFactory.Create(Arg.Do<Func<string, string?>>(cb => config = cb), Arg.Any<Stream>())
+            .Returns(client);
+
+        // Act
+        await _sut.GetClientAsync(TestWebUserId, CancellationToken.None);
+
+        // Assert
+        Assert.That(config!("user_id"), Is.EqualTo("-1"));
+    }
+
+    [TestCase(500, "INTERNAL")]
+    [TestCase(-503, "Timeout")]
+    [TestCase(420, "FLOOD_WAIT_120")]
+    public async Task GetClientAsync_Reconnect_TransientRpcError_KeepsSessionActive(int code, string message)
+    {
+        // Arrange
+        SetupFreshScopes();
+        SetupActiveSession();
+        var client = Substitute.For<IWTelegramApiClient>();
+        client.LoginUserIfNeeded(Arg.Any<CodeSettings?>(), Arg.Any<bool>())
+            .Returns(Task.FromException<User>(new RpcException(code, message)));
+        _mockClientFactory.Create(Arg.Any<Func<string, string?>>(), Arg.Any<Stream>()).Returns(client);
+
+        // Act
+        var result = await _sut.GetClientAsync(TestWebUserId, CancellationToken.None);
+
+        // Assert
+        Assert.That(result, Is.Null);
+        await client.Received(1).DisposeAsync();
+        await client.DidNotReceive().LoginUserIfNeeded(Arg.Any<CodeSettings?>(), true);
+        await _mockSessionRepo.DidNotReceive().DeactivateSessionAsync(Arg.Any<long>(), Arg.Any<CancellationToken>());
+        await AssertNoDisconnectAuditAsync();
+    }
+
+    [TestCase("phone_number")]
+    [TestCase("verification_code")]
+    [TestCase("password")]
+    public async Task GetClientAsync_Reconnect_TelegramAsksForLoginInfo_DeactivatesAndAudits(string loginKey)
+    {
+        // Arrange — WTelegram asks for login info only when the stored session can't simply resume
+        SetupFreshScopes();
+        SetupActiveSession();
+        Func<string, string?>? config = null;
+        var client = Substitute.For<IWTelegramApiClient>();
+        client.LoginUserIfNeeded(Arg.Any<CodeSettings?>(), Arg.Any<bool>())
+            .Returns(_ => Task.Run(() =>
+            {
+                config!(loginKey);
+                return new User { id = 99999 };
+            }));
+        _mockClientFactory.Create(Arg.Do<Func<string, string?>>(cb => config = cb), Arg.Any<Stream>())
+            .Returns(client);
+
+        // Act
+        var result = await _sut.GetClientAsync(TestWebUserId, CancellationToken.None);
+
+        // Assert
+        Assert.That(result, Is.Null);
+        await client.Received(1).DisposeAsync();
+        await _mockSessionRepo.Received(1).DeactivateSessionAsync(TestSessionId, Arg.Any<CancellationToken>());
+        await _mockAuditService.Received(1).LogEventAsync(
+            AuditEventType.TelegramAccountDisconnected,
+            Arg.Any<Actor>(),
+            Arg.Any<Actor?>(),
+            Arg.Is<string?>(v => v!.Contains(loginKey)),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task GetClientAsync_Reconnect_NeverCompletes_TimesOutKeepsSessionAndReleasesLock()
+    {
+        // Arrange — a zero timeout makes the hung reconnect time out at once, with no real wait
+        await _sut.DisposeAsync();
+        _sut = new TelegramSessionManager(_mockScopeFactory, _mockClientFactory, _timeProvider, _mockLogger)
+        {
+            ReconnectTimeout = TimeSpan.Zero
+        };
+        SetupFreshScopes();
+        SetupActiveSession();
+        var hungClient = Substitute.For<IWTelegramApiClient>();
+        hungClient.LoginUserIfNeeded(Arg.Any<CodeSettings?>(), Arg.Any<bool>())
+            .Returns(new TaskCompletionSource<User>().Task);
+        var recoveredClient = MakeConnectedClient();
+        _mockClientFactory.Create(Arg.Any<Func<string, string?>>(), Arg.Any<Stream>())
+            .Returns(hungClient, recoveredClient);
+
+        // Act
+        var timedOut = await _sut.GetClientAsync(TestWebUserId, CancellationToken.None);
+        _timeProvider.Advance(TelegramSessionManager.ReconnectBackoff);
+        var afterBackoff = await _sut.GetClientAsync(TestWebUserId, CancellationToken.None);
+
+        // Assert — the timeout counts as a failed reconnect, and the lock was released for the next call
+        Assert.That(timedOut, Is.Null);
+        await hungClient.Received(1).DisposeAsync();
+        await _mockSessionRepo.DidNotReceive().DeactivateSessionAsync(Arg.Any<long>(), Arg.Any<CancellationToken>());
+        Assert.That(afterBackoff, Is.SameAs(recoveredClient));
+    }
+
+    #endregion
+
     #region HasAnyActiveSessionAsync
 
     [Test]
@@ -705,9 +836,9 @@ public class TelegramSessionManagerTests
     }
 
     /// <summary>An active stored session for <see cref="TestWebUserId"/> plus a usable User API config.</summary>
-    private TelegramSession SetupActiveSession()
+    private TelegramSession SetupActiveSession(TelegramSession? session = null)
     {
-        var session = MakeSession();
+        session ??= MakeSession();
         _mockSessionRepo.GetActiveSessionAsync(TestWebUserId, Arg.Any<CancellationToken>()).Returns(session);
         _mockConfigRepo.GetUserApiConfigAsync(Arg.Any<CancellationToken>()).Returns(new UserApiConfig { ApiId = 12345 });
         _mockConfigRepo.GetUserApiHashAsync(Arg.Any<CancellationToken>()).Returns("test-api-hash");
