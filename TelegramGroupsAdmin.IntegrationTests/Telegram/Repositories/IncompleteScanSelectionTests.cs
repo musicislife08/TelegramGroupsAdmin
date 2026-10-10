@@ -144,7 +144,8 @@ public class IncompleteScanSelectionTests
         var userId = GoldenDatasetConstants.ProfileRescan.NeverScannedUserId;
         var start = DateTimeOffset.UtcNow;
 
-        await Users().RecordScanAttemptAsync(userId);
+        using (var scope = _provider!.CreateScope())
+            await Users(scope).RecordScanAttemptAsync(userId);
 
         await using var ctx = _testHelper!.GetDbContext();
         var after = await ctx.TelegramUsers.AsNoTracking().SingleAsync(u => u.TelegramUserId == userId);
@@ -165,7 +166,8 @@ public class IncompleteScanSelectionTests
         var before = await ctx.TelegramUsers.AsNoTracking().SingleAsync(u => u.TelegramUserId == userId);
         Assert.That(before.ProfileScanAttemptedAt, Is.Null);
 
-        await Users().RecordScanAttemptAsync(userId);
+        using (var scope = _provider!.CreateScope())
+            await Users(scope).RecordScanAttemptAsync(userId);
 
         var after = await ctx.TelegramUsers.AsNoTracking().SingleAsync(u => u.TelegramUserId == userId);
         Assert.Multiple(() =>
@@ -184,7 +186,8 @@ public class IncompleteScanSelectionTests
         // null = the unchanged-profile path, which only bumps the scan time.
         await GuardAsync();
         var userId = GoldenDatasetConstants.ProfileRescan.AttemptedNeverScannedUserId;
-        var users = Users();
+        using var scope = _provider!.CreateScope();
+        var users = Users(scope);
         var row = new ProfileScanResultRecord(
             Id: 0, UserId: userId, ScannedAt: PostgresTimestamps.FloorToMicrosecond(DateTimeOffset.UtcNow),
             Score: 0.5m, Outcome: ProfileScanOutcome.Clean, RuleScore: 0.0m, AiScore: 0.5m,
@@ -207,8 +210,8 @@ public class IncompleteScanSelectionTests
         });
     }
 
-    private ITelegramUserRepository Users() =>
-        _provider!.CreateScope().ServiceProvider.GetRequiredService<ITelegramUserRepository>();
+    private static ITelegramUserRepository Users(IServiceScope scope) =>
+        scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
 
     [Test]
     public async Task IncompleteScans_NameOnlyLatest_RespectsRetryLimitBoundary()
