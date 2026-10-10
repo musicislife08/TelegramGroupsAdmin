@@ -212,7 +212,7 @@ public class BackupServiceTests
             Assert.That(metadata, Is.Not.Null);
             using (Assert.EnterMultipleScope())
             {
-                Assert.That(metadata.Version, Is.EqualTo("3.1"));
+                Assert.That(metadata.Version, Is.EqualTo("3.2"));
                 Assert.That(metadata.TableCount, Is.GreaterThan(0));
             }
         }
@@ -679,7 +679,7 @@ public class BackupServiceTests
             Assert.That(metadata, Is.Not.Null);
             using (Assert.EnterMultipleScope())
             {
-                Assert.That(metadata.Version, Is.EqualTo("3.1"));
+                Assert.That(metadata.Version, Is.EqualTo("3.2"));
                 Assert.That(metadata.TableCount, Is.EqualTo(ExpectedBackupTableCount));
                 Assert.That(metadata.CreatedAt, Is.LessThanOrEqualTo(DateTimeOffset.UtcNow));
             }
@@ -702,7 +702,7 @@ public class BackupServiceTests
 
             // Assert
             Assert.That(metadata, Is.Not.Null);
-            Assert.That(metadata.Version, Is.EqualTo("3.1"));
+            Assert.That(metadata.Version, Is.EqualTo("3.2"));
         }
         finally
         {
@@ -1015,28 +1015,10 @@ public class BackupServiceTests
     /// </summary>
     private async Task<List<(int MessageId, long ChatId)>> WriteVersion30BackupAsync(string exportedPath, string legacyPath)
     {
-        JsonObject? metadata = null;
-        JsonObject? data = null;
-        await using (var input = File.OpenRead(exportedPath))
-        await using (var gzip = new GZipStream(input, CompressionMode.Decompress))
-        {
-            using var tar = new TarReader(gzip);
-            while (await tar.GetNextEntryAsync() is { DataStream: not null } entry)
-            {
-                using var buffer = new MemoryStream();
-                await entry.DataStream.CopyToAsync(buffer);
-                if (entry.Name == "metadata.json")
-                    metadata = JsonNode.Parse(buffer.ToArray())!.AsObject();
-                else if (entry.Name == "database.json.enc")
-                    data = JsonNode.Parse(_encryptionService!.DecryptBackup(buffer.ToArray(), "test-passphrase-12345"))!.AsObject();
-            }
-        }
-
-        Assert.That(metadata, Is.Not.Null);
-        Assert.That(data, Is.Not.Null);
+        var (metadata, data) = await ReadExportedBackupAsync(exportedPath);
 
         // MainChat messages: chat 0 would turn a manual row into a TrainingDataPage row.
-        var messages = data!["messages"]!.AsArray()
+        var messages = data["messages"]!.AsArray()
             .Select(m => (MessageId: m!["message_id"]!.GetValue<int>(), ChatId: m["chat_id"]!.GetValue<long>()))
             .Where(m => m.ChatId == CanonicalMainChatId)
             .Take(5)
@@ -1087,27 +1069,109 @@ public class BackupServiceTests
         data["image_training_samples"] = new JsonArray();
         data["video_training_samples"] = new JsonArray();
 
-        var tables = metadata!["tables"]!.AsArray();
+        var tables = metadata["tables"]!.AsArray();
         foreach (var legacyTable in new[] { "training_labels", "image_training_samples", "video_training_samples" })
             tables.Add(legacyTable);
         metadata["table_count"] = tables.Count;
         metadata["version"] = "3.0";
 
-        await using (var output = File.Create(legacyPath))
-        await using (var gzip = new GZipStream(output, CompressionLevel.Fastest))
-        await using (var tar = new TarWriter(gzip, leaveOpen: true))
+        await WriteLegacyBackupAsync(legacyPath, metadata, data);
+        return messages;
+    }
+
+    /// <summary>
+    /// A 3.1 backup (verification_tokens.token_type as a string under token_type_string) restores into the
+    /// 3.2 schema with each type converted to its TokenType value. The 3.1 backup is the exported canonical
+    /// backup with three 3.1-shaped token rows for the canonical Owner (canonical does not export
+    /// verification_tokens; backup fixtures are infrastructure data).
+    /// </summary>
+    [Test]
+    public async Task RestoreAsync_Version31Backup_ConvertsVerificationTokenTypes()
+    {
+        var exportedPath = await ExportBackupToTempFileAsync();
+        var legacyPath = Path.Combine(Path.GetTempPath(), $"test_backup_v31_{Guid.NewGuid():N}.tar.gz");
+        try
         {
-            await tar.WriteEntryAsync(new PaxTarEntry(TarEntryType.RegularFile, "metadata.json")
+            var (metadata, data) = await ReadExportedBackupAsync(exportedPath);
+
+            JsonObject Token(long id, string tokenType) => new()
             {
-                DataStream = new MemoryStream(JsonSerializer.SerializeToUtf8Bytes(metadata))
-            });
-            await tar.WriteEntryAsync(new PaxTarEntry(TarEntryType.RegularFile, "database.json")
+                ["id"] = id,
+                ["user_id"] = GoldenDatasetConstants.WebUsers.OwnerId,
+                ["token_type_string"] = tokenType,
+                ["token"] = $"v31-token-{id}",
+                ["value"] = null,
+                ["expires_at"] = "2026-01-02T00:00:00+00:00",
+                ["created_at"] = "2026-01-01T00:00:00+00:00",
+                ["used_at"] = null
+            };
+
+            data["verification_tokens"] = new JsonArray(Token(1, "email_verify"), Token(2, "password_reset"), Token(3, "email_change"));
+            var tables = metadata["tables"]!.AsArray();
+            if (!tables.Any(t => t!.GetValue<string>() == "verification_tokens"))
+                tables.Add("verification_tokens");
+            metadata["table_count"] = tables.Count;
+            metadata["version"] = "3.1";
+            await WriteLegacyBackupAsync(legacyPath, metadata, data);
+
+            await _backupService!.RestoreAsync(legacyPath);
+
+            await using var context = _testHelper!.GetDbContext();
+            var restored = await context.VerificationTokens.AsNoTracking().OrderBy(t => t.Id)
+                .Select(t => new { t.Token, t.TokenType }).ToListAsync();
+            Assert.That(restored, Is.EqualTo(new[]
             {
-                DataStream = new MemoryStream(JsonSerializer.SerializeToUtf8Bytes(data))
-            });
+                new { Token = "v31-token-1", TokenType = (int)TokenType.EmailVerification },
+                new { Token = "v31-token-2", TokenType = (int)TokenType.PasswordReset },
+                new { Token = "v31-token-3", TokenType = (int)TokenType.EmailChange }
+            }));
+        }
+        finally
+        {
+            File.Delete(exportedPath);
+            File.Delete(legacyPath);
+        }
+    }
+
+    /// <summary>Reads an exported (current-format, encrypted) backup's metadata and decrypted database JSON.</summary>
+    private async Task<(JsonObject Metadata, JsonObject Data)> ReadExportedBackupAsync(string exportedPath)
+    {
+        JsonObject? metadata = null;
+        JsonObject? data = null;
+        await using (var input = File.OpenRead(exportedPath))
+        await using (var gzip = new GZipStream(input, CompressionMode.Decompress))
+        {
+            using var tar = new TarReader(gzip);
+            while (await tar.GetNextEntryAsync() is { DataStream: not null } entry)
+            {
+                using var buffer = new MemoryStream();
+                await entry.DataStream.CopyToAsync(buffer);
+                if (entry.Name == "metadata.json")
+                    metadata = JsonNode.Parse(buffer.ToArray())!.AsObject();
+                else if (entry.Name == "database.json.enc")
+                    data = JsonNode.Parse(_encryptionService!.DecryptBackup(buffer.ToArray(), "test-passphrase-12345"))!.AsObject();
+            }
         }
 
-        return messages;
+        Assert.That(metadata, Is.Not.Null);
+        Assert.That(data, Is.Not.Null);
+        return (metadata!, data!);
+    }
+
+    /// <summary>Writes a backup archive with an unencrypted database.json, as legacy formats allowed.</summary>
+    private static async Task WriteLegacyBackupAsync(string path, JsonObject metadata, JsonObject data)
+    {
+        await using var output = File.Create(path);
+        await using var gzip = new GZipStream(output, CompressionLevel.Fastest);
+        await using var tar = new TarWriter(gzip, leaveOpen: true);
+        await tar.WriteEntryAsync(new PaxTarEntry(TarEntryType.RegularFile, "metadata.json")
+        {
+            DataStream = new MemoryStream(JsonSerializer.SerializeToUtf8Bytes(metadata))
+        });
+        await tar.WriteEntryAsync(new PaxTarEntry(TarEntryType.RegularFile, "database.json")
+        {
+            DataStream = new MemoryStream(JsonSerializer.SerializeToUtf8Bytes(data))
+        });
     }
 
     #endregion

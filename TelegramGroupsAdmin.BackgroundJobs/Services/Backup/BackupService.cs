@@ -42,7 +42,7 @@ public class BackupService : IBackupService
     private readonly RecyclableMemoryStreamManager _streamManager;
     private readonly BackupFileLock _fileLock;
     private readonly string _mediaBasePath;
-    private const string CurrentVersion = "3.1"; // 3.0: tar.gz with media files; 3.1: verdict events (no training_labels)
+    private const string CurrentVersion = "3.2"; // 3.0: tar.gz with media files; 3.1: verdict events (no training_labels); 3.2: verification token type as int
 
     public BackupService(
         NpgsqlDataSource dataSource,
@@ -1081,6 +1081,14 @@ public class BackupService : IBackupService
         {
             _logger.LogInformation("Applying verdict-events migration (backup v{Version} < 3.1)", backupVersion);
             Backup30To31VerdictMigration.Apply(backup, _logger);
+        }
+
+        // Migration: v3.1 → v3.2 (verification token type as int). Backup-only and time-boxed: remove one
+        // year after the release that introduced backup format 3.2.
+        if (string.Compare(backupVersion, "3.2", StringComparison.Ordinal) < 0)
+        {
+            _logger.LogInformation("Applying verification token type migration (backup v{Version} < 3.2)", backupVersion);
+            Backup31To32TokenTypeMigration.Apply(backup, _logger);
         }
     }
 
