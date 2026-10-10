@@ -274,6 +274,7 @@ public sealed class TelegramSessionManager(
         };
 
         IWTelegramApiClient? apiClient = null;
+        Task? resumeTask = null;
         try
         {
             apiClient = clientFactory.Create(ConfigCallback, sessionStream);
@@ -289,7 +290,8 @@ public sealed class TelegramSessionManager(
 
             // WTelegram calls take no CancellationToken, so bound the reconnect: it runs under the
             // per-user lock, and a hung one would block every caller for this user
-            await ResumeAsync().WaitAsync(ReconnectTimeout, timeProvider, ct);
+            resumeTask = ResumeAsync();
+            await resumeTask.WaitAsync(ReconnectTimeout, timeProvider, ct);
 
             // Persist accessible chats for DB-level session routing
             var chatIds = apiClient.GetBotApiChatIds();
@@ -308,14 +310,14 @@ public sealed class TelegramSessionManager(
         catch (TL.RpcException ex) when (IsSessionRevoked(ex))
         {
             logger.LogWarning("WTelegram session {SessionId} revoked for web user {WebUser}: {Error}", sessionId, session.WebUser.ToLogDebug(webUserId), ex.Message);
-            await DeactivateAndAuditRevokedSessionAsync(webUserId, sessionId, ex.Message, ct);
+            await DeactivateAndAuditSessionAsync(webUserId, sessionId, $"Session revoked by Telegram: {ex.Message}", ct);
             await DisposeAsync(apiClient, sessionStream);
             return null;
         }
         catch (ReauthenticationRequiredException ex)
         {
             logger.LogWarning("WTelegram session {SessionId} for web user {WebUser} cannot resume: {Error}", sessionId, session.WebUser.ToLogDebug(webUserId), ex.Message);
-            await DeactivateAndAuditRevokedSessionAsync(webUserId, sessionId, ex.Message, ct);
+            await DeactivateAndAuditSessionAsync(webUserId, sessionId, $"Session could not resume: {ex.Message}", ct);
             await DisposeAsync(apiClient, sessionStream);
             return null;
         }
@@ -332,6 +334,18 @@ public sealed class TelegramSessionManager(
             else
                 logger.LogError(ex, "Failed to reconnect WTelegram session {SessionId} for web user {WebUser}", sessionId, session.WebUser.ToLogDebug(webUserId));
 
+            // On timeout or cancellation the resume keeps running until the client is disposed.
+            // Observe it to prevent UnobservedTaskException and log how it ended.
+            if (resumeTask is { IsCompleted: false })
+            {
+                _ = resumeTask.ContinueWith(
+                    t => logger.LogDebug(t.Exception?.GetBaseException(),
+                        "Abandoned WTelegram reconnect for session {SessionId} faulted after it was given up", sessionId),
+                    CancellationToken.None,
+                    TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+                    TaskScheduler.Default);
+            }
+
             await DisposeAsync(apiClient, sessionStream);
             return null;
         }
@@ -344,7 +358,8 @@ public sealed class TelegramSessionManager(
     private sealed class ReauthenticationRequiredException(string requested)
         : Exception($"Session needs to be signed in again (Telegram asked for {requested})");
 
-    private async Task DeactivateAndAuditRevokedSessionAsync(string webUserId, long sessionId, string reason, CancellationToken ct)
+    /// <summary>Deactivates a session that can no longer be used and audits why (<paramref name="auditValue"/>).</summary>
+    private async Task DeactivateAndAuditSessionAsync(string webUserId, long sessionId, string auditValue, CancellationToken ct)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
         var sessionRepo = scope.ServiceProvider.GetRequiredService<ITelegramSessionRepository>();
@@ -354,10 +369,10 @@ public sealed class TelegramSessionManager(
         await auditService.LogEventAsync(
             AuditEventType.TelegramAccountDisconnected,
             Actor.FromSystem("SessionManager"),
-            value: $"Session revoked by Telegram: {reason}",
+            value: auditValue,
             cancellationToken: ct);
 
-        logger.LogWarning("Deactivated revoked WTelegram session {SessionId} for web user {WebUserId}: {Reason}", sessionId, webUserId, reason);
+        logger.LogWarning("Deactivated WTelegram session {SessionId} for web user {WebUserId}: {Reason}", sessionId, webUserId, auditValue);
     }
 
     private static bool IsSessionRevoked(TL.RpcException ex) =>

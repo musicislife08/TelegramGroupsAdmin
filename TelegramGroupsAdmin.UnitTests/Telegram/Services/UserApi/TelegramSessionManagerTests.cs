@@ -249,7 +249,7 @@ public class TelegramSessionManagerTests
             AuditEventType.TelegramAccountDisconnected,
             Arg.Any<Actor>(),
             Arg.Any<Actor?>(),
-            Arg.Is<string?>(v => v!.Contains("AUTH_KEY_UNREGISTERED")),
+            Arg.Is<string?>(v => v!.StartsWith("Session revoked by Telegram:") && v.Contains("AUTH_KEY_UNREGISTERED")),
             Arg.Any<CancellationToken>());
     }
 
@@ -483,7 +483,7 @@ public class TelegramSessionManagerTests
             AuditEventType.TelegramAccountDisconnected,
             Arg.Any<Actor>(),
             Arg.Any<Actor?>(),
-            Arg.Is<string?>(v => v!.Contains(loginKey)),
+            Arg.Is<string?>(v => v!.StartsWith("Session could not resume:") && v.Contains(loginKey)),
             Arg.Any<CancellationToken>());
     }
 
@@ -515,6 +515,33 @@ public class TelegramSessionManagerTests
         await hungClient.Received(1).DisposeAsync();
         await _mockSessionRepo.DidNotReceive().DeactivateSessionAsync(Arg.Any<long>(), Arg.Any<CancellationToken>());
         Assert.That(afterBackoff, Is.SameAs(recoveredClient));
+    }
+
+    [Test]
+    public async Task GetClientAsync_Reconnect_TimedOutResumeFaultsLater_IsObservedAndLoggedAtDebug()
+    {
+        // Arrange — the abandoned resume keeps running after the timeout and fails later
+        var logger = new CapturingLogger<TelegramSessionManager>();
+        await _sut.DisposeAsync();
+        _sut = new TelegramSessionManager(_mockScopeFactory, _mockClientFactory, _timeProvider, logger)
+        {
+            ReconnectTimeout = TimeSpan.Zero
+        };
+        SetupFreshScopes();
+        SetupActiveSession();
+        var pendingLogin = new TaskCompletionSource<User>();
+        var hungClient = Substitute.For<IWTelegramApiClient>();
+        hungClient.LoginUserIfNeeded(Arg.Any<CodeSettings?>(), Arg.Any<bool>()).Returns(pendingLogin.Task);
+        _mockClientFactory.Create(Arg.Any<Func<string, string?>>(), Arg.Any<Stream>()).Returns(hungClient);
+
+        Assert.That(await _sut.GetClientAsync(TestWebUserId, CancellationToken.None), Is.Null);
+
+        // Act
+        pendingLogin.SetException(new ObjectDisposedException("WTelegram.Client was disposed"));
+
+        // Assert
+        Assert.That(logger.Entries, Has.Some.Matches<(LogLevel Level, string Message)>(
+            e => e.Level == LogLevel.Debug && e.Message.Contains("Abandoned WTelegram reconnect")));
     }
 
     #endregion
@@ -870,6 +897,17 @@ public class TelegramSessionManagerTests
             Arg.Any<Actor?>(),
             Arg.Any<string?>(),
             Arg.Any<CancellationToken>());
+
+    private sealed class CapturingLogger<T> : ILogger<T>
+    {
+        public System.Collections.Concurrent.ConcurrentQueue<(LogLevel Level, string Message)> Entries { get; } = new();
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+            => Entries.Enqueue((logLevel, formatter(state, exception)));
+    }
 
     /// <summary>A clock the test moves by hand.</summary>
     private sealed class ManualTimeProvider : TimeProvider
