@@ -357,10 +357,10 @@ public class ProfileScanServiceSingleFlightTests
 
         Received.InOrder(() =>
         {
-            _users.UpdateProfileScanDataAsync(LiveUserId, Arg.Any<string?>(), Arg.Any<long?>(), Arg.Any<string?>(),
+            _users.RecordFullScanAsync(Arg.Any<string?>(), Arg.Any<long?>(), Arg.Any<string?>(),
                 Arg.Any<string?>(), Arg.Any<bool>(), Arg.Any<string?>(), Arg.Any<bool>(), Arg.Any<bool>(),
-                Arg.Any<bool>(), Arg.Any<decimal>(), Arg.Any<long?>(), Arg.Any<long?>(), Arg.Any<string?>(),
-                Arg.Any<CancellationToken>());
+                Arg.Any<bool>(), Arg.Any<long?>(), Arg.Any<long?>(), Arg.Any<string?>(),
+                Arg.Is<ProfileScanResultRecord>(r => r!.UserId == LiveUserId), Arg.Any<CancellationToken>());
             _identities.ResolveAsync(LiveUserId, Arg.Any<CancellationToken>());
         });
         await _moderation.Received(1).BanUserAsync(

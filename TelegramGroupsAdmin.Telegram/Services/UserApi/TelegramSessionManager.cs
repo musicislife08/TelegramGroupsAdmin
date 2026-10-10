@@ -17,16 +17,41 @@ namespace TelegramGroupsAdmin.Telegram.Services.UserApi;
 /// - ConcurrentDictionary cache keyed by web user ID (GUID string)
 /// - Lazy reconnection: clients created on first GetClientAsync, reused after
 /// - DatabaseSessionStream bridges WTelegram's Stream API to ITelegramSessionRepository
-/// - Revoked sessions (AUTH_KEY_UNREGISTERED, SESSION_REVOKED) auto-cleanup with audit logging
+/// - A cached client found disconnected is stale, not revoked: it is disposed, dropped from the
+///   cache and rebuilt from the stored session. Dropped connections happen routinely (Telegram
+///   resets idle connections, home internet outages) and say nothing about the session itself.
+/// - Reconnect only resumes the stored session; it never logs out or starts a new login. Only a
+///   revocation RPC error (AUTH_KEY_UNREGISTERED, SESSION_REVOKED, ...) or WTelegram asking for login
+///   info (the session cannot resume) deactivates the session, with audit logging
+/// - A reconnect that fails for any other reason (no network, a Telegram timeout, a long FLOOD_WAIT)
+///   or takes longer than the reconnect timeout leaves the session active and starts a short
+///   in-memory per-user backoff, so an outage is not hammered with connect attempts
 /// - IAsyncDisposable: disposes all cached clients on app shutdown
 /// </summary>
 public sealed class TelegramSessionManager(
     IServiceScopeFactory scopeFactory,
     IWTelegramClientFactory clientFactory,
+    TimeProvider timeProvider,
     ILogger<TelegramSessionManager> logger) : ITelegramSessionManager
 {
+    /// <summary>
+    /// After a reconnect fails for a reason other than revocation, further attempts for that web user
+    /// wait this long. Callers like the profile rescan job ask once per Telegram user, so without it a
+    /// network outage would turn every scan into a fresh connect attempt.
+    /// </summary>
+    internal static readonly TimeSpan ReconnectBackoff = TimeSpan.FromSeconds(30);
+
+    /// <summary>
+    /// How long one reconnect (resume + peer cache warm-up) may take before it counts as failed.
+    /// Settable so tests can time out without waiting.
+    /// </summary>
+    internal TimeSpan ReconnectTimeout { get; init; } = TimeSpan.FromSeconds(60);
+
     private readonly ConcurrentDictionary<string, CachedClient> _clients = new();
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _reconnectLocks = new();
+
+    // Transient connection state, deliberately not persisted: when the last failed reconnect happened
+    private readonly ConcurrentDictionary<string, DateTimeOffset> _lastFailedReconnect = new();
 
     public int ActiveClientCount => _clients.Count;
 
@@ -34,21 +59,15 @@ public sealed class TelegramSessionManager(
 
     public async Task<IWTelegramApiClient?> GetClientAsync(string webUserId, CancellationToken ct)
     {
-        if (_clients.TryGetValue(webUserId, out var existing))
+        if (_clients.TryGetValue(webUserId, out var existing) && !existing.ApiClient.Disconnected)
         {
-            if (!existing.ApiClient.Disconnected)
-            {
-                await using var scope = scopeFactory.CreateAsyncScope();
-                var sessionRepo = scope.ServiceProvider.GetRequiredService<ITelegramSessionRepository>();
-                await sessionRepo.UpdateLastUsedAsync(existing.SessionId, ct);
-                return existing.ApiClient;
-            }
-
-            // Client disconnected server-side — clean up
-            await HandleRevokedSessionAsync(webUserId, existing, "Client found disconnected on access", ct);
-            return null;
+            await using var scope = scopeFactory.CreateAsyncScope();
+            var sessionRepo = scope.ServiceProvider.GetRequiredService<ITelegramSessionRepository>();
+            await sessionRepo.UpdateLastUsedAsync(existing.SessionId, ct);
+            return existing.ApiClient;
         }
 
+        // Nothing cached, or the cached client lost its connection: rebuild from the stored session
         return await ReconnectWithLockAsync(webUserId, ct);
     }
 
@@ -126,6 +145,7 @@ public sealed class TelegramSessionManager(
     /// <summary>
     /// Per-user lock around TryReconnectAsync to prevent concurrent reconnects
     /// creating duplicate clients (where the first is orphaned and never disposed).
+    /// A disconnected client still in the cache is disposed and dropped here before reconnecting.
     /// </summary>
     private async Task<IWTelegramApiClient?> ReconnectWithLockAsync(string webUserId, CancellationToken ct)
     {
@@ -133,9 +153,30 @@ public sealed class TelegramSessionManager(
         await userLock.WaitAsync(ct);
         try
         {
-            // Re-check cache — another thread may have populated it while we waited
-            if (_clients.TryGetValue(webUserId, out var justAdded) && !justAdded.ApiClient.Disconnected)
-                return justAdded.ApiClient;
+            if (_clients.TryGetValue(webUserId, out var cached))
+            {
+                // Another caller may have reconnected while we waited
+                if (!cached.ApiClient.Disconnected)
+                    return cached.ApiClient;
+
+                // Remove only this exact entry, so a client someone else just cached is never disposed
+                if (_clients.TryRemove(new KeyValuePair<string, CachedClient>(webUserId, cached)))
+                {
+                    logger.LogInformation(
+                        "WTelegram client for web user {WebUserId} was disconnected; reconnecting from stored session",
+                        webUserId);
+                    await DisposeClientAsync(cached);
+                }
+            }
+
+            if (_lastFailedReconnect.TryGetValue(webUserId, out var failedAt)
+                && timeProvider.GetUtcNow() - failedAt < ReconnectBackoff)
+            {
+                logger.LogDebug(
+                    "Skipping WTelegram reconnect for web user {WebUserId}: last attempt failed at {FailedAt:u}",
+                    webUserId, failedAt);
+                return null;
+            }
 
             return await TryReconnectAsync(webUserId, ct);
         }
@@ -147,6 +188,8 @@ public sealed class TelegramSessionManager(
 
     public async Task DisconnectAsync(string webUserId, Actor executor, CancellationToken ct)
     {
+        _lastFailedReconnect.TryRemove(webUserId, out _);
+
         if (_clients.TryRemove(webUserId, out var cached))
         {
             await DisposeClientAsync(cached);
@@ -221,19 +264,34 @@ public sealed class TelegramSessionManager(
         {
             "api_id" => config.ApiId.ToString(),
             "api_hash" => apiHash,
-            "phone_number" => session.PhoneNumber,
-            // If WTelegram asks for verification_code or password, the session is truly expired
-            "verification_code" or "password" =>
-                throw new InvalidOperationException("Session requires re-authentication"),
+            // Lets WTelegram check the resumed user by id; -1 accepts whichever user the session holds
+            "user_id" => session.TelegramUserId?.ToString() ?? "-1",
+            // With user_id supplied, WTelegram asks for these only when the stored session cannot
+            // resume (wrong account, or not logged in) and it is about to start a new login.
+            // A background reconnect must never send a login code: the session needs signing in again.
+            "phone_number" or "verification_code" or "password" => throw new ReauthenticationRequiredException(what),
             _ => null
         };
 
         IWTelegramApiClient? apiClient = null;
+        Task? resumeTask = null;
         try
         {
             apiClient = clientFactory.Create(ConfigCallback, sessionStream);
-            await apiClient.LoginUserIfNeeded();
-            await apiClient.WarmPeerCacheAsync();
+            var resumingClient = apiClient;
+
+            async Task ResumeAsync()
+            {
+                // reloginOnFailedResume: false — on any RPC error WTelegram would otherwise log the
+                // stored session out and start a new login; we want the error instead
+                await resumingClient.LoginUserIfNeeded(reloginOnFailedResume: false);
+                await resumingClient.WarmPeerCacheAsync();
+            }
+
+            // WTelegram calls take no CancellationToken, so bound the reconnect: it runs under the
+            // per-user lock, and a hung one would block every caller for this user
+            resumeTask = ResumeAsync();
+            await resumeTask.WaitAsync(ReconnectTimeout, timeProvider, ct);
 
             // Persist accessible chats for DB-level session routing
             var chatIds = apiClient.GetBotApiChatIds();
@@ -243,6 +301,8 @@ public sealed class TelegramSessionManager(
             var cached = new CachedClient(apiClient, sessionId, sessionStream);
             _clients[webUserId] = cached;
 
+            _lastFailedReconnect.TryRemove(webUserId, out _);
+
             await sessionRepo.UpdateLastUsedAsync(sessionId, ct);
             logger.LogInformation("Reconnected WTelegram session {SessionId} for web user {WebUser}", sessionId, session.WebUser.ToLogInfo(webUserId));
             return apiClient;
@@ -250,30 +310,59 @@ public sealed class TelegramSessionManager(
         catch (TL.RpcException ex) when (IsSessionRevoked(ex))
         {
             logger.LogWarning("WTelegram session {SessionId} revoked for web user {WebUser}: {Error}", sessionId, session.WebUser.ToLogDebug(webUserId), ex.Message);
-            await DeactivateAndAuditRevokedSessionAsync(webUserId, sessionId, ex.Message, ct);
-            // Dispose client first (stops background thread), then stream
-            if (apiClient != null) await apiClient.DisposeAsync();
-            await sessionStream.DisposeAsync();
+            await DeactivateAndAuditSessionAsync(webUserId, sessionId, $"Session revoked by Telegram: {ex.Message}", ct);
+            await DisposeAsync(apiClient, sessionStream);
+            return null;
+        }
+        // WTelegram 4.4.8's LoginUserIfNeeded calls the config callback directly, without wrapping, and
+        // its only catch is `catch (RpcException) when (reloginOnFailedResume)`, disabled above, so the
+        // exception thrown from ConfigCallback reaches us as-is.
+        catch (ReauthenticationRequiredException ex)
+        {
+            logger.LogWarning("WTelegram session {SessionId} for web user {WebUser} cannot resume: {Error}", sessionId, session.WebUser.ToLogDebug(webUserId), ex.Message);
+            await DeactivateAndAuditSessionAsync(webUserId, sessionId, $"Session could not resume: {ex.Message}", ct);
+            await DisposeAsync(apiClient, sessionStream);
             return null;
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to reconnect WTelegram session {SessionId} for web user {WebUser}", sessionId, session.WebUser.ToLogDebug(webUserId));
-            // Dispose client first (stops background thread), then stream
-            if (apiClient != null) await apiClient.DisposeAsync();
-            await sessionStream.DisposeAsync();
+            // Not a revocation (e.g. no network, a Telegram timeout, a long FLOOD_WAIT): the session
+            // stays active and a later call retries once the backoff has passed.
+            // A caller cancelling is not a failed connection.
+            if (!ct.IsCancellationRequested)
+                _lastFailedReconnect[webUserId] = timeProvider.GetUtcNow();
+
+            if (ex is TimeoutException)
+                logger.LogWarning("Reconnecting WTelegram session {SessionId} for web user {WebUser} timed out after {Timeout}", sessionId, session.WebUser.ToLogDebug(webUserId), ReconnectTimeout);
+            else
+                logger.LogError(ex, "Failed to reconnect WTelegram session {SessionId} for web user {WebUser}", sessionId, session.WebUser.ToLogDebug(webUserId));
+
+            // On timeout or cancellation the resume keeps running until the client is disposed.
+            // Observe it to prevent UnobservedTaskException and log how it ended.
+            if (resumeTask is { IsCompleted: false })
+            {
+                _ = resumeTask.ContinueWith(
+                    t => logger.LogDebug(t.Exception?.GetBaseException(),
+                        "Abandoned WTelegram reconnect for session {SessionId} faulted after it was given up", sessionId),
+                    CancellationToken.None,
+                    TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+                    TaskScheduler.Default);
+            }
+
+            await DisposeAsync(apiClient, sessionStream);
             return null;
         }
     }
 
-    private async Task HandleRevokedSessionAsync(string webUserId, CachedClient cached, string reason, CancellationToken ct)
-    {
-        _clients.TryRemove(webUserId, out _);
-        await DisposeClientAsync(cached);
-        await DeactivateAndAuditRevokedSessionAsync(webUserId, cached.SessionId, reason, ct);
-    }
+    /// <summary>
+    /// Thrown from the config callback when WTelegram asks for login info during a reconnect,
+    /// which happens only when the stored session cannot resume.
+    /// </summary>
+    private sealed class ReauthenticationRequiredException(string requested)
+        : Exception($"Session needs to be signed in again (Telegram asked for {requested})");
 
-    private async Task DeactivateAndAuditRevokedSessionAsync(string webUserId, long sessionId, string reason, CancellationToken ct)
+    /// <summary>Deactivates a session that can no longer be used and audits why (<paramref name="auditValue"/>).</summary>
+    private async Task DeactivateAndAuditSessionAsync(string webUserId, long sessionId, string auditValue, CancellationToken ct)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
         var sessionRepo = scope.ServiceProvider.GetRequiredService<ITelegramSessionRepository>();
@@ -283,20 +372,25 @@ public sealed class TelegramSessionManager(
         await auditService.LogEventAsync(
             AuditEventType.TelegramAccountDisconnected,
             Actor.FromSystem("SessionManager"),
-            value: $"Session revoked by Telegram: {reason}",
+            value: auditValue,
             cancellationToken: ct);
 
-        logger.LogWarning("Deactivated revoked WTelegram session {SessionId} for web user {WebUserId}: {Reason}", sessionId, webUserId, reason);
+        logger.LogWarning("Deactivated WTelegram session {SessionId} for web user {WebUserId}: {Reason}", sessionId, webUserId, auditValue);
     }
 
     private static bool IsSessionRevoked(TL.RpcException ex) =>
         ex.Message is "AUTH_KEY_UNREGISTERED" or "SESSION_REVOKED" or "AUTH_KEY_INVALID" or "USER_DEACTIVATED" or "USER_DEACTIVATED_BAN";
 
-    private static async Task DisposeClientAsync(CachedClient cached)
+    private static Task DisposeClientAsync(CachedClient cached) =>
+        DisposeAsync(cached.ApiClient, cached.SessionStream);
+
+    /// <summary>Best-effort disposal: the client first (stops its background thread), then the stream.</summary>
+    private static async Task DisposeAsync(IWTelegramApiClient? apiClient, DatabaseSessionStream sessionStream)
     {
         try
         {
-            await cached.ApiClient.DisposeAsync();
+            if (apiClient is not null)
+                await apiClient.DisposeAsync();
         }
         catch
         {
@@ -305,7 +399,7 @@ public sealed class TelegramSessionManager(
 
         try
         {
-            await cached.SessionStream.DisposeAsync();
+            await sessionStream.DisposeAsync();
         }
         catch
         {

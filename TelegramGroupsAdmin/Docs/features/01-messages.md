@@ -280,7 +280,7 @@ The `ChatInput` component displays a toggle button next to the text input:
 
 - **Bot mode**: Bot must be in the group and you must have a linked Telegram account (for the signature).
 - **Me mode**: Your personal Telegram account must be connected via WTelegram and must be a member of the selected chat.
-- Connect your Telegram account in **Settings** to enable Me mode.
+- Connect your Telegram account on your **Profile** page (**Telegram User API** section) to enable Me mode.
 
 For the full setup guide, see **[Send As Admin](10-send-as-admin.md)**.
 

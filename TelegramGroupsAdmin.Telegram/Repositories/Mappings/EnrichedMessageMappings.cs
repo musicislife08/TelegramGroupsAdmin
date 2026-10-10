@@ -34,7 +34,7 @@ public static class EnrichedMessageMappings
 
             return new UiModels.MessageRecord(
                 MessageId: view.MessageId,
-                User: UserIdentityMapping.ToIdentity(view.UserId, view.FirstName, view.LastName, view.UserName, view.IsBot ?? false, view.LatestScanExplicit),
+                User: UserIdentityMapping.ToIdentity(view.UserId, view.FirstName, view.LastName, view.UserName, view.IsBot ?? false, view.LatestScanExplicit, view.LatestScanPromotional, view.IsBanned ?? false),
                 Chat: new ChatIdentity(view.ChatId, view.ChatName),
                 Timestamp: view.Timestamp,
                 MessageText: view.MessageText,

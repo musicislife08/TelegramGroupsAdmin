@@ -193,6 +193,8 @@ public class MessageHistoryRepository : IMessageHistoryRepository
                 LastName = identity.LastName,
                 IsBot = (bool?)identity.IsBot ?? false,
                 LatestScanExplicit = identity.LatestScanExplicit,
+                LatestScanPromotional = identity.LatestScanPromotional,
+                IsBanned = (bool?)identity.IsBanned ?? false,
                 UserPhotoPath = user != null ? user.UserPhotoPath : null,
                 ParentUserFirstName = parentUserInfo != null ? parentUserInfo.FirstName : null,
                 ParentUserLastName = parentUserInfo != null ? parentUserInfo.LastName : null,
@@ -215,6 +217,8 @@ public class MessageHistoryRepository : IMessageHistoryRepository
             lastName: result.LastName,
             isBot: result.IsBot,
             latestScanExplicit: result.LatestScanExplicit,
+            latestScanPromotional: result.LatestScanPromotional,
+            isBanned: result.IsBanned,
             userPhotoPath: result.UserPhotoPath,
             replyToUser: TelegramDisplayName.Format(result.ParentUserFirstName, result.ParentUserLastName, result.ParentUserUsername, result.ParentUserId),
             replyToText: result.ReplyToText);

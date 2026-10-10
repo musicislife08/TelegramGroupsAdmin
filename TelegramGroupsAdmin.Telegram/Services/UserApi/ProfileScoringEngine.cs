@@ -28,12 +28,19 @@ public sealed class ProfileScoringEngine(
         string? Reason,
         string[]? Signals,
         bool ContainsNudity = false,
-        bool ExplicitDisplayText = false)
+        bool ExplicitDisplayText = false,
+        bool PromotionalDisplayText = false)
     {
-        public static readonly AiScoringResult Empty = new(0.0m, null, null, ContainsNudity: false, ExplicitDisplayText: false);
+        public static readonly AiScoringResult Empty = new(0.0m, null, null);
     }
 
     private const decimal MaxScore = 5.0m;
+
+    /// <summary>
+    /// Maximum time for the name-only AI call. It bounds every caller, including the fallback that
+    /// runs after a full scan has already timed out. A timeout is no verdict.
+    /// </summary>
+    internal TimeSpan NameOnlyTimeout { get; init; } = TimeSpan.FromSeconds(20);
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -70,20 +77,14 @@ public sealed class ProfileScoringEngine(
                 RuleScore: ruleScore,
                 AiScore: 0.0m,
                 AiReason: "Rule-based detection triggered ban threshold",
-                AiSignals: null,
-                ContainsNudity: false,
-                ExplicitDisplayText: false);
+                AiSignals: null);
         }
 
         // ── Layer 2: AI vision analysis ──
         var aiResult = await RunAiScoringAsync(profile, images, imageLabels, cancellationToken);
         var totalScore = Cap(ruleScore + aiResult.Score);
 
-        var outcome = totalScore >= banThreshold
-            ? ProfileScanOutcome.Banned
-            : totalScore >= notifyThreshold
-                ? ProfileScanOutcome.HeldForReview
-                : ProfileScanOutcome.Clean;
+        var outcome = ScoringResult.OutcomeFor(totalScore, banThreshold, notifyThreshold);
 
         logger.LogInformation(
             "Profile scan for {User}: rule={RuleScore}, ai={AiScore}, total={TotalScore}, outcome={Outcome}",
@@ -97,7 +98,83 @@ public sealed class ProfileScoringEngine(
             AiReason: aiResult.Reason,
             AiSignals: aiResult.Signals,
             ContainsNudity: aiResult.ContainsNudity,
-            ExplicitDisplayText: aiResult.ExplicitDisplayText);
+            ExplicitDisplayText: aiResult.ExplicitDisplayText,
+            PromotionalDisplayText: aiResult.PromotionalDisplayText);
+    }
+
+    public async Task<ScoringResult?> ScoreNameOnlyAsync(
+        UserIdentity user,
+        decimal nameOnlyBanThreshold,
+        decimal notifyThreshold,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (!await chatService.IsFeatureAvailableAsync(AIFeatureType.ProfileScan, cancellationToken))
+            {
+                logger.LogWarning("ProfileScan AI feature not configured — name-only scan skipped for {User}", user.ToLogDebug());
+                return null;
+            }
+
+            ChatCompletionResult? result;
+            using (var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
+            {
+                timeoutCts.CancelAfter(NameOnlyTimeout);
+                try
+                {
+                    // WaitAsync ends the wait even if the provider ignores the token
+                    result = await chatService.GetCompletionAsync(
+                            AIFeatureType.ProfileScan,
+                            ProfileScanPrompts.BuildSystemPrompt(),
+                            ProfileScanPrompts.BuildNameOnlyUserPrompt(user.FirstName, user.LastName, user.Username),
+                            new ChatCompletionOptions { JsonMode = true },
+                            timeoutCts.Token)
+                        .WaitAsync(timeoutCts.Token);
+                }
+                catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+                {
+                    logger.LogWarning("Name-only profile scan AI call for {User} timed out after {Timeout}s",
+                        user.ToLogDebug(), NameOnlyTimeout.TotalSeconds);
+                    return null;
+                }
+            }
+
+            if (result == null)
+            {
+                logger.LogWarning("Name-only profile scan AI call returned null for {User}", user.ToLogDebug());
+                return null;
+            }
+
+            var ai = TryParseAiResponse(result.Content, user);
+            if (ai == null)
+                return null;
+
+            var outcome = ScoringResult.OutcomeFor(ai.Score, nameOnlyBanThreshold, notifyThreshold);
+
+            logger.LogInformation(
+                "Name-only profile scan for {User}: score={Score}, outcome={Outcome}, explicit={Explicit}, promotional={Promotional}",
+                user.ToLogInfo(), ai.Score, outcome, ai.ExplicitDisplayText, ai.PromotionalDisplayText);
+
+            return new ScoringResult(
+                Score: ai.Score,
+                Outcome: outcome,
+                RuleScore: 0.0m,
+                AiScore: ai.Score,
+                AiReason: ai.Reason,
+                AiSignals: ai.Signals,
+                ExplicitDisplayText: ai.ExplicitDisplayText,
+                PromotionalDisplayText: ai.PromotionalDisplayText);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // Fail open: the exception text stays in the log, nothing is written or posted.
+            logger.LogWarning(ex, "Name-only profile scan failed for {User}", user.ToLogDebug());
+            return null;
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -228,10 +305,11 @@ public sealed class ProfileScoringEngine(
             return AiScoringResult.Empty;
         }
 
-        return ParseAiResponse(result.Content, profile.User);
+        return TryParseAiResponse(result.Content, profile.User) ?? AiScoringResult.Empty;
     }
 
-    private AiScoringResult ParseAiResponse(string content, UserIdentity user)
+    /// <summary>Parses the AI reply; null when it is not the expected JSON (logged as a warning).</summary>
+    private AiScoringResult? TryParseAiResponse(string content, UserIdentity user)
     {
         try
         {
@@ -239,22 +317,22 @@ public sealed class ProfileScoringEngine(
             if (response == null)
             {
                 logger.LogWarning("Profile scan AI response deserialized to null for {User}", user.ToLogDebug());
-                return AiScoringResult.Empty;
+                return null;
             }
 
-            var score = Math.Clamp(response.Score, 0.0m, MaxScore);
             return new AiScoringResult(
-                Score: score,
+                Score: Math.Clamp(response.Score, 0.0m, MaxScore),
                 Reason: response.Reason,
                 Signals: response.SignalsDetected,
                 ContainsNudity: response.ContainsNudity,
-                ExplicitDisplayText: response.ExplicitDisplayText);
+                ExplicitDisplayText: response.ExplicitDisplayText,
+                PromotionalDisplayText: response.PromotionalDisplayText);
         }
         catch (JsonException ex)
         {
             logger.LogWarning(ex, "Failed to parse profile scan AI response for {User}: {Content}",
                 user.ToLogDebug(), content[..Math.Min(content.Length, 200)]);
-            return AiScoringResult.Empty;
+            return null;
         }
     }
 

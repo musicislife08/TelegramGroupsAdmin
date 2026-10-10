@@ -21,7 +21,9 @@ public static class ProfileScanResultMappings
             AiScore: data.AiScore,
             AiReason: data.AiReason,
             AiSignals: data.AiSignals,
-            ExplicitDisplayText: data.AiExplicitDisplayText);
+            ExplicitDisplayText: data.AiExplicitDisplayText,
+            PromotionalDisplayText: data.AiPromotionalDisplayText,
+            Source: (ProfileScanSource)data.Source);
     }
 
     extension(UiModels.ProfileScanResultRecord ui)
@@ -37,7 +39,9 @@ public static class ProfileScanResultMappings
             AiScore = ui.AiScore,
             AiReason = ui.AiReason,
             AiSignals = ui.AiSignals,
-            AiExplicitDisplayText = ui.ExplicitDisplayText
+            AiExplicitDisplayText = ui.ExplicitDisplayText,
+            AiPromotionalDisplayText = ui.PromotionalDisplayText,
+            Source = (short)ui.Source
         };
     }
 }

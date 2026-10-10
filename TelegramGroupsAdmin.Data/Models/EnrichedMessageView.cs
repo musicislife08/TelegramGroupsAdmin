@@ -7,10 +7,10 @@ namespace TelegramGroupsAdmin.Data.Models;
 /// Maps to enriched_messages PostgreSQL view.
 /// NOTE: Named *View (not *Dto) to avoid backup/restore reflection picking this up.
 /// <para>
-/// Freeze before changing: the JoinUserIdentitiesInEnrichedViews migration replays this class's live
-/// <c>CreateViewSql</c>. Before changing the definition, copy the current SQL into a frozen constant
-/// (as LegacyUserIdentityViewSql does for UserIdentityView) and point that migration at the copy, so
-/// the change cannot alter fresh-database history.
+/// Freeze before changing: the RemoveUnusedReplyColumnsFromEnrichedMessages migration replays this class's live
+/// <c>CreateViewSql</c>. Before changing the definition, copy the current SQL into a frozen constant in
+/// LegacyEnrichedViewSql (as EnrichedMessagesV3 does for AddNameVerdictInputsToUserIdentities)
+/// and point that migration at the copy, so the change cannot alter fresh-database history.
 /// </para>
 /// </summary>
 public class EnrichedMessageView
@@ -21,8 +21,8 @@ public class EnrichedMessageView
     /// SQL to create the enriched_messages view. Referenced by migrations.
     /// Includes all message columns plus enrichment from:
     /// - managed_chats (chat name, icon)
-    /// - user_identities (author names, is_bot, latest scan flag); telegram_users (author photo only)
-    /// - parent message + user_identities (reply context)
+    /// - user_identities (author names, is_bot, latest scan flags, ban state); telegram_users (author photo only)
+    /// - parent message + user_identities (reply context: names and id)
     /// - message_translations (translation for original messages only)
     /// </summary>
     public const string CreateViewSql = """
@@ -62,14 +62,14 @@ public class EnrichedMessageView
             ui.last_name,
             ui.is_bot,
             ui.latest_scan_explicit,
+            ui.latest_scan_promotional,
+            ui.is_banned,
             u.user_photo_path,
             -- Reply enrichment (from parent message + user_identities)
             parent_user.first_name AS reply_to_first_name,
             parent_user.last_name AS reply_to_last_name,
             parent_user.username AS reply_to_username,
             parent_user.telegram_user_id AS reply_to_user_id,
-            parent_user.is_bot AS reply_to_is_bot,
-            parent_user.latest_scan_explicit AS reply_to_latest_scan_explicit,
             parent.message_text AS reply_to_text,
             -- Translation (from message_translations, message-only not edits)
             t.id AS translation_id,
@@ -198,6 +198,14 @@ public class EnrichedMessageView
     [Column("latest_scan_explicit")]
     public bool? LatestScanExplicit { get; set; }
 
+    /// <summary>Promotional flag from the author's latest profile scan; NULL when unscanned.</summary>
+    [Column("latest_scan_promotional")]
+    public bool? LatestScanPromotional { get; set; }
+
+    /// <summary>Author's ban state; NULL when the author has no telegram_users row.</summary>
+    [Column("is_banned")]
+    public bool? IsBanned { get; set; }
+
     [Column("user_photo_path")]
     public string? UserPhotoPath { get; set; }
 
@@ -216,12 +224,6 @@ public class EnrichedMessageView
 
     [Column("reply_to_user_id")]
     public long? ReplyToUserId { get; set; }
-
-    [Column("reply_to_is_bot")]
-    public bool? ReplyToIsBot { get; set; }
-
-    [Column("reply_to_latest_scan_explicit")]
-    public bool? ReplyToLatestScanExplicit { get; set; }
 
     [Column("reply_to_text")]
     public string? ReplyToText { get; set; }

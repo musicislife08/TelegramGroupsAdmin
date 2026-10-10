@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
+using TelegramGroupsAdmin.Core.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Metrics;
 
@@ -10,6 +11,12 @@ namespace TelegramGroupsAdmin.Telegram.Metrics;
 public sealed class PipelineMetrics
 {
     private readonly Meter _meter = new("TelegramGroupsAdmin.Pipeline");
+
+    /// <summary>
+    /// This instance's meter. Every instance shares the meter name, so a test's MeterListener
+    /// filters on this reference to see only the instance under test.
+    /// </summary>
+    internal Meter Meter => _meter;
 
     private readonly Counter<long> _messagesProcessedTotal;
     private readonly Counter<long> _moderationActionsTotal;
@@ -57,7 +64,7 @@ public sealed class PipelineMetrics
 
         _banCelebrationMaskedUsernameTotal = _meter.CreateCounter<long>(
             "tga.pipeline.ban_celebration.masked_username_total",
-            description: "Ban celebrations where the banned user's display name was masked, by trigger");
+            description: "Ban celebrations where the banned user's display name was masked, by trigger and name verdict");
 
         _banCelebrationDmTotal = _meter.CreateCounter<long>(
             "tga.pipeline.ban_celebration.dm_total",
@@ -126,10 +133,25 @@ public sealed class PipelineMetrics
         _profileScanExplicitUsernameTotal.Add(1, new TagList { { "outcome", outcome } });
     }
 
-    public void RecordMaskedUsername(string trigger)
+    public void RecordMaskedUsername(string trigger, NameVerdict verdict)
     {
-        _banCelebrationMaskedUsernameTotal.Add(1, new TagList { { "trigger", trigger } });
+        _banCelebrationMaskedUsernameTotal.Add(1, new TagList
+        {
+            { "trigger", trigger },
+            { "verdict", MaskedVerdictTag(verdict) }
+        });
     }
+
+    /// <summary>
+    /// Verdict tag for a masked name. Only a flagged name is masked; any other verdict throws (the
+    /// ban celebration catches it, so it never costs the ban).
+    /// </summary>
+    private static string MaskedVerdictTag(NameVerdict verdict) => verdict switch
+    {
+        NameVerdict.Promotional => "promotional",
+        NameVerdict.Explicit => "explicit",
+        _ => throw new InvalidOperationException($"Not a masking name verdict: {verdict}")
+    };
 
     public void RecordBanCelebrationDm(string outcome)
     {

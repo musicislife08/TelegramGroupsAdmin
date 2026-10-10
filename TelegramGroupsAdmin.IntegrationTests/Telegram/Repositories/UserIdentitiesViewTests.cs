@@ -66,6 +66,22 @@ public class UserIdentitiesViewTests
     }
 
     [Test]
+    public async Task View_BannedExplicitUser_ExposesVerdictInputs()
+    {
+        await using var ctx = _testHelper!.GetDbContext();
+
+        var row = await ctx.UserIdentities.SingleAsync(
+            v => v.TelegramUserId == GoldenDatasetConstants.IdentityService.ScannedTwiceExplicitUserId);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(row.LatestScanExplicit, Is.True);
+            Assert.That(row.LatestScanPromotional, Is.False);
+            Assert.That(row.IsBanned, Is.True);
+        });
+    }
+
+    [Test]
     public async Task EnrichedReports_ProfileScanAlert_UserCarriesLatestScanFlag()
     {
         // Pending profile-scan alert 188's user is the canonical profile-scan target; read its user id
@@ -77,6 +93,8 @@ public class UserIdentitiesViewTests
 
         Assert.That(row.ProfileUserLatestScanExplicit, Is.EqualTo(expected.LatestScanExplicit));
         Assert.That(row.ProfileUserIsBot, Is.EqualTo(expected.IsBot));
+        Assert.That(row.ProfileUserLatestScanPromotional, Is.EqualTo(expected.LatestScanPromotional));
+        Assert.That(row.ProfileUserIsBanned, Is.EqualTo(expected.IsBanned));
     }
 
     [Test]
@@ -86,7 +104,12 @@ public class UserIdentitiesViewTests
         var pairs = await (
             from m in ctx.EnrichedMessages
             join v in ctx.UserIdentities on m.UserId equals v.TelegramUserId
-            select new { m.LatestScanExplicit, m.IsBot, ViewFlag = v.LatestScanExplicit, ViewIsBot = v.IsBot })
+            select new
+            {
+                m.LatestScanExplicit, m.LatestScanPromotional, m.IsBanned, m.IsBot,
+                ViewExplicit = v.LatestScanExplicit, ViewPromotional = v.LatestScanPromotional,
+                ViewIsBanned = (bool?)v.IsBanned, ViewIsBot = v.IsBot
+            })
             .ToListAsync();
         Assert.That(pairs, Is.Not.Empty);
         // The explicit author's join message makes a broken join that always yields false fail here.
@@ -98,7 +121,10 @@ public class UserIdentitiesViewTests
         Assert.Multiple(() =>
         {
             Assert.That(explicitAuthorFlag, Is.True);
-            Assert.That(pairs.Where(p => p.LatestScanExplicit != p.ViewFlag || p.IsBot != p.ViewIsBot), Is.Empty);
+            Assert.That(pairs.Where(p => p.LatestScanExplicit != p.ViewExplicit
+                || p.LatestScanPromotional != p.ViewPromotional
+                || p.IsBanned != p.ViewIsBanned
+                || p.IsBot != p.ViewIsBot), Is.Empty);
         });
     }
 
@@ -113,6 +139,32 @@ public class UserIdentitiesViewTests
         var detail = await repository.GetUserDetailAsync(explicitId);
 
         Assert.That(detail!.User.Verdict, Is.EqualTo(NameVerdict.Explicit));
+    }
+
+    [Test]
+    public async Task GetIdentitiesAsync_PromotionalNames_MaskOnlyWhileBanned()
+    {
+        var banned = GoldenDatasetConstants.FlaggedNames.BannedPromotionalUserId;
+        var unbanned = GoldenDatasetConstants.FlaggedNames.UnbannedPromotionalUserId;
+        await using var ctx = _testHelper!.GetDbContext();
+        var rows = await ctx.UserIdentities.Where(v => v.TelegramUserId == banned || v.TelegramUserId == unbanned)
+            .ToDictionaryAsync(v => v.TelegramUserId);
+        Assert.Multiple(() =>
+        {
+            Assert.That(rows[banned].LatestScanPromotional, Is.True);
+            Assert.That(rows[banned].LatestScanExplicit, Is.False);
+            Assert.That(rows[banned].IsBanned, Is.True);
+            Assert.That(rows[unbanned].LatestScanPromotional, Is.True);
+            Assert.That(rows[unbanned].IsBanned, Is.False);
+        });
+        await using var provider = BuildProvider();
+        using var scope = provider.CreateScope();
+
+        var identities = await scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>()
+            .GetIdentitiesAsync([banned, unbanned]);
+
+        Assert.That(identities.Single(i => i.Id == banned).Verdict, Is.EqualTo(NameVerdict.Promotional));
+        Assert.That(identities.Single(i => i.Id == unbanned).Verdict, Is.EqualTo(NameVerdict.Clean));
     }
 
     [Test]

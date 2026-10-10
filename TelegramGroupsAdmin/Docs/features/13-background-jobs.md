@@ -13,7 +13,7 @@ TGA runs several automated tasks in the background to keep your system healthy a
 | **Scheduled Backup** | Daily at 2 AM | Creates an encrypted database backup (disabled by default — see [Backup & Restore](14-backup-restore.md)) |
 | **Data Cleanup** | Daily | Removes expired messages and reports based on retention settings (disabled by default) |
 | **Database Maintenance** | Weekly (Sunday 4 AM) | Optimizes database performance (disabled by default — see [Database Maintenance](19-database-maintenance.md)) |
-| **Profile Rescan** | Every 6 hours | Re-scans user profiles for changes (disabled by default) |
+| **Profile Rescan** | Every 6 hours | Retries incomplete profile scans (never scanned, or name-only under the retry limit), waiting Re-Scan After before considering a never-scanned user again when nothing was written for them (skipped, no verdict, or failed); skips a user when every managed chat they have posted in has profile scanning off, or when they have only posted in chats TGA no longer manages; a user who never posted follows the global setting (disabled by default) |
 
 ## Managing Jobs
 
@@ -22,7 +22,7 @@ For each job you can:
 - **Enable or disable** it with the toggle
 - **Change the schedule** using natural language (e.g., "every 30 minutes", "every day at 2pm", "every week on sunday at 3am")
 - **Run it immediately** with the "Run Now" button
-- **Configure job-specific settings** where applicable (e.g., retention periods for Data Cleanup, VACUUM/ANALYZE options for Database Maintenance)
+- **Configure job-specific settings** where applicable (e.g., retention periods for Data Cleanup, VACUUM/ANALYZE options for Database Maintenance, and for Profile Rescan the batch size, **Re-Scan After** and the **Name-Only Retry Limit**: how many name-only scans a user gets since their last full scan before the job stops retrying them, default 3)
 
 The jobs table shows the last run time and next scheduled run for each job, so you can confirm everything is running on schedule.
 

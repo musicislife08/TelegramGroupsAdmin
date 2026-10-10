@@ -153,7 +153,7 @@
                             @* Exclusion toggle *@
                             <MudCheckBox T="bool" Value="@(_userDetail.ProfileScanExcluded)"
                                          ValueChanged="@ToggleProfileScanExclusion"
-                                         Label="Exclude from automatic rescans"
+                                         Label="Exclude from automatic scans (renames still scan)"
                                          Dense="true" Size="Size.Small" />
 
                             @* Score + badges *@
@@ -833,7 +833,8 @@
             var executor = WebUser!.ToActor();
             var user = await UserManagementService.ResolveIdentityAsync(_userDetail.User.Id);
 
-            // Use first chat membership as context, or global fallback
+            // Warning context: one of the chats the user has an undeleted message in (the list is
+            // unordered), or the global chat 0 when there is none
             var chat = _userDetail.ChatMemberships.FirstOrDefault()?.Identity ?? ChatIdentity.FromId(0);
 
             // Call moderation service to warn the user
@@ -1161,14 +1162,17 @@
         try
         {
             var result = await ProfileScanService.ScanUserProfileAsync(
-                _userDetail.User, triggeringChat: null, CancellationToken.None);
+                _userDetail.User, triggeringChat: null, CancellationToken.None,
+                origin: TelegramGroupsAdmin.Telegram.Services.UserApi.ProfileScanOrigin.Manual);
 
             await LoadUserDetailAsync();
 
-            if (result.SkipReason is null)
-                Snackbar.Add("Profile scan complete", Severity.Success);
-            else
+            if (result.SkipReason is not null)
                 Snackbar.Add($"Profile scan skipped — {result.SkipReason}", Severity.Warning);
+            else if (result.Source == ProfileScanSource.NameOnly)
+                Snackbar.Add("Name-only scan complete (profile could not be read)", Severity.Info);
+            else
+                Snackbar.Add("Profile scan complete", Severity.Success);
         }
         catch (Exception ex)
         {

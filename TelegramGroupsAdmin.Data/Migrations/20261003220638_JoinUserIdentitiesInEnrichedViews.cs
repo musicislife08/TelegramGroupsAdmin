@@ -13,10 +13,11 @@ namespace TelegramGroupsAdmin.Data.Migrations
         {
             // Identity columns (names, is_bot, latest scan flag) now come from user_identities.
             // No other view selects from these two, so they drop and recreate on their own.
+            // Replays the frozen V2 shape so later view changes cannot alter history.
             migrationBuilder.Sql(EnrichedMessageView.DropViewSql);
             migrationBuilder.Sql(EnrichedReportView.DropViewSql);
-            migrationBuilder.Sql(EnrichedMessageView.CreateViewSql);
-            migrationBuilder.Sql(EnrichedReportView.CreateViewSql);
+            migrationBuilder.Sql(LegacyEnrichedViewSql.EnrichedMessagesV2);
+            migrationBuilder.Sql(LegacyEnrichedViewSql.EnrichedReportsV2);
         }
 
         /// <inheritdoc />

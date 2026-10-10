@@ -1428,6 +1428,10 @@ namespace TelegramGroupsAdmin.Data.Migrations
                         .HasColumnType("text")
                         .HasColumnName("first_name");
 
+                    b.Property<bool?>("IsBanned")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_banned");
+
                     b.Property<bool?>("IsBot")
                         .HasColumnType("boolean")
                         .HasColumnName("is_bot");
@@ -1439,6 +1443,10 @@ namespace TelegramGroupsAdmin.Data.Migrations
                     b.Property<bool?>("LatestScanExplicit")
                         .HasColumnType("boolean")
                         .HasColumnName("latest_scan_explicit");
+
+                    b.Property<bool?>("LatestScanPromotional")
+                        .HasColumnType("boolean")
+                        .HasColumnName("latest_scan_promotional");
 
                     b.Property<int?>("MediaDuration")
                         .HasColumnType("integer")
@@ -1496,17 +1504,9 @@ namespace TelegramGroupsAdmin.Data.Migrations
                         .HasColumnType("text")
                         .HasColumnName("reply_to_first_name");
 
-                    b.Property<bool?>("ReplyToIsBot")
-                        .HasColumnType("boolean")
-                        .HasColumnName("reply_to_is_bot");
-
                     b.Property<string>("ReplyToLastName")
                         .HasColumnType("text")
                         .HasColumnName("reply_to_last_name");
-
-                    b.Property<bool?>("ReplyToLatestScanExplicit")
-                        .HasColumnType("boolean")
-                        .HasColumnName("reply_to_latest_scan_explicit");
 
                     b.Property<int?>("ReplyToMessageId")
                         .HasColumnType("integer")
@@ -1611,6 +1611,10 @@ namespace TelegramGroupsAdmin.Data.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("exam_user_id");
 
+                    b.Property<bool?>("ExamUserIsBanned")
+                        .HasColumnType("boolean")
+                        .HasColumnName("exam_user_is_banned");
+
                     b.Property<bool?>("ExamUserIsBot")
                         .HasColumnType("boolean")
                         .HasColumnName("exam_user_is_bot");
@@ -1618,6 +1622,10 @@ namespace TelegramGroupsAdmin.Data.Migrations
                     b.Property<bool?>("ExamUserLatestScanExplicit")
                         .HasColumnType("boolean")
                         .HasColumnName("exam_user_latest_scan_explicit");
+
+                    b.Property<bool?>("ExamUserLatestScanPromotional")
+                        .HasColumnType("boolean")
+                        .HasColumnName("exam_user_latest_scan_promotional");
 
                     b.Property<string>("ExamUsername")
                         .HasColumnType("text")
@@ -1647,6 +1655,10 @@ namespace TelegramGroupsAdmin.Data.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("profile_user_id");
 
+                    b.Property<bool?>("ProfileUserIsBanned")
+                        .HasColumnType("boolean")
+                        .HasColumnName("profile_user_is_banned");
+
                     b.Property<bool?>("ProfileUserIsBot")
                         .HasColumnType("boolean")
                         .HasColumnName("profile_user_is_bot");
@@ -1654,6 +1666,10 @@ namespace TelegramGroupsAdmin.Data.Migrations
                     b.Property<bool?>("ProfileUserLatestScanExplicit")
                         .HasColumnType("boolean")
                         .HasColumnName("profile_user_latest_scan_explicit");
+
+                    b.Property<bool?>("ProfileUserLatestScanPromotional")
+                        .HasColumnType("boolean")
+                        .HasColumnName("profile_user_latest_scan_promotional");
 
                     b.Property<string>("ProfileUsername")
                         .HasColumnType("text")
@@ -1695,6 +1711,10 @@ namespace TelegramGroupsAdmin.Data.Migrations
                         .HasColumnType("text")
                         .HasColumnName("suspected_first_name");
 
+                    b.Property<bool?>("SuspectedIsBanned")
+                        .HasColumnType("boolean")
+                        .HasColumnName("suspected_is_banned");
+
                     b.Property<bool?>("SuspectedIsBot")
                         .HasColumnType("boolean")
                         .HasColumnName("suspected_is_bot");
@@ -1706,6 +1726,10 @@ namespace TelegramGroupsAdmin.Data.Migrations
                     b.Property<bool?>("SuspectedLatestScanExplicit")
                         .HasColumnType("boolean")
                         .HasColumnName("suspected_latest_scan_explicit");
+
+                    b.Property<bool?>("SuspectedLatestScanPromotional")
+                        .HasColumnType("boolean")
+                        .HasColumnName("suspected_latest_scan_promotional");
 
                     b.Property<string>("SuspectedPhotoPath")
                         .HasColumnType("text")
@@ -1723,6 +1747,10 @@ namespace TelegramGroupsAdmin.Data.Migrations
                         .HasColumnType("text")
                         .HasColumnName("target_first_name");
 
+                    b.Property<bool?>("TargetIsBanned")
+                        .HasColumnType("boolean")
+                        .HasColumnName("target_is_banned");
+
                     b.Property<bool?>("TargetIsBot")
                         .HasColumnType("boolean")
                         .HasColumnName("target_is_bot");
@@ -1734,6 +1762,10 @@ namespace TelegramGroupsAdmin.Data.Migrations
                     b.Property<bool?>("TargetLatestScanExplicit")
                         .HasColumnType("boolean")
                         .HasColumnName("target_latest_scan_explicit");
+
+                    b.Property<bool?>("TargetLatestScanPromotional")
+                        .HasColumnType("boolean")
+                        .HasColumnName("target_latest_scan_promotional");
 
                     b.Property<string>("TargetPhotoPath")
                         .HasColumnType("text")
@@ -2470,6 +2502,12 @@ namespace TelegramGroupsAdmin.Data.Migrations
                         .HasDefaultValue(false)
                         .HasColumnName("ai_explicit_display_text");
 
+                    b.Property<bool>("AiPromotionalDisplayText")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("ai_promotional_display_text");
+
                     b.Property<string>("AiReason")
                         .HasColumnType("text")
                         .HasColumnName("ai_reason");
@@ -2500,6 +2538,12 @@ namespace TelegramGroupsAdmin.Data.Migrations
                         .HasPrecision(3, 1)
                         .HasColumnType("numeric(3,1)")
                         .HasColumnName("score");
+
+                    b.Property<short>("Source")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("smallint")
+                        .HasDefaultValue((short)0)
+                        .HasColumnName("source");
 
                     b.Property<long>("UserId")
                         .HasColumnType("bigint")
@@ -3106,6 +3150,10 @@ namespace TelegramGroupsAdmin.Data.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("profile_photo_id");
 
+                    b.Property<DateTimeOffset?>("ProfileScanAttemptedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("profile_scan_attempted_at");
+
                     b.Property<bool>("ProfileScanExcluded")
                         .HasColumnType("boolean")
                         .HasColumnName("profile_scan_excluded");
@@ -3274,6 +3322,10 @@ namespace TelegramGroupsAdmin.Data.Migrations
                         .HasColumnType("text")
                         .HasColumnName("first_name");
 
+                    b.Property<bool>("IsBanned")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_banned");
+
                     b.Property<bool>("IsBot")
                         .HasColumnType("boolean")
                         .HasColumnName("is_bot");
@@ -3285,6 +3337,10 @@ namespace TelegramGroupsAdmin.Data.Migrations
                     b.Property<bool?>("LatestScanExplicit")
                         .HasColumnType("boolean")
                         .HasColumnName("latest_scan_explicit");
+
+                    b.Property<bool?>("LatestScanPromotional")
+                        .HasColumnType("boolean")
+                        .HasColumnName("latest_scan_promotional");
 
                     b.Property<long>("TelegramUserId")
                         .HasColumnType("bigint")

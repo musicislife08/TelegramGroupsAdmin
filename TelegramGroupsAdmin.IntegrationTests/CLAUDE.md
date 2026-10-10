@@ -53,7 +53,7 @@ Origin: prod DB snapshot from 2026-04-30. Bootstrap pipeline (full detail in `do
 | 20 | chat_admins | 104 | Snapshot of admin membership across all 21 chats. |
 | 21 | linked_channels | 3 | One per chat that has a linked channel. |
 | 22 | telegram_user_mappings | 3 | Cross-chat user identity links. |
-| 23 | profile_scan_results | 11 | Includes a mix of clean and flagged scans; row 534 carries an `explicit_display_text` value for the explicit-username masking tests. |
+| 23 | profile_scan_results | 12 | Includes a mix of clean and flagged scans; row 534 carries an `explicit_display_text` value for the explicit-username masking tests; row 526 and @Adexfunnel's imported prod row carry `ai_promotional_display_text = true` (canonical edit 2026-10-05). Columns `ai_promotional_display_text` (default false) and `source` (0 = FullScan, 1 = NameOnly; only row 528 is 1, see "Rescan job anchors"). |
 | 24 | username_history | 4 | Rename trail for spam-rename-then-spam users. |
 | 25 | admin_notes | 3 | Free-text rebuilt from sanitized telegram_users; rows 5+6 cross-reference each other's sanitized usernames. |
 | 26 | audit_log | 100 | Connected-as / disconnected-as narrative anchored to canonical fixture identities. |
@@ -406,6 +406,44 @@ Anchors are in code as `GoldenDatasetConstants.IdentityService` (#552 part 1); a
 | `RaceUserId` | 9680301255238 @violingentleman | not trusted, active, no history; row-lock race test |
 | `PhotoUserId` | 9264989724828 @raceoutnumber | not trusted; user_photo_path and photo_hash set |
 | `InactiveUserId` | 9332352149450 @calixrowen | is_active = false (banned spammer); MarkActiveAsync test |
+
+### Flagged name anchors (canonical edit 2026-10-05)
+Anchors are in code as `GoldenDatasetConstants.FlaggedNames` (#552 part 2). Tests read each anchor's flags back first.
+
+| Constant | Anchor | Shape |
+|---|---|---|
+| `NameOnlyScanUserId` | 9333810782137 @loucurtsinger | not trusted, not a bot, no scan rows, `profile_scanned_at` NULL (banned before scanning existed). `NameOnlyScanTests`: the name-only scan writes the user's first row (the write is the assertion subject). Read-only otherwise |
+| `BannedPromotionalUserId` | 9635655270997 @Adexfunnel | banned by an admin after profile-scan alert #178 (score 2.8, held for review); **added:** its real prod scan row (approved import, AI text verbatim), with `ai_promotional_display_text = true`. `PromotionalNameMaskingTests`: spam label in group posts and the ban celebration caption + subscriber copy, real name in the admin DM. Report 178's `aiReason` is lorem (sanitized earlier); the scan row keeps prod's text |
+| `UnbannedPromotionalUserId` / `UnbannedPromotionalScanId` | 9213195802818 @splendorfraying, row 526 | not banned, not trusted; its only scan row 526 (score 0.0) **edited:** `ai_promotional_display_text = true`. A flagged name of a user who is not banned is shown by real name |
+
+Use when: a test needs a never-scanned, untrusted user whose first scan row is the subject (`NameOnlyScanUserId`), or a promotional name whose user is banned / not banned (`BannedPromotionalUserId` / `UnbannedPromotionalUserId`).
+
+### Rescan job anchors (canonical edit 2026-10-05)
+Anchors are in code as `GoldenDatasetConstants.ProfileRescan` (#552 part 2). `IncompleteScanSelectionTests` reads each back first and passes the user count as the batch size.
+
+| Constant | Anchor | Shape |
+|---|---|---|
+| `NeverScannedUserId` | 9963580010331 "Ferocity Opponent" | never scanned; **edited:** `profile_scan_excluded` true → false (every never-scanned eligible user in canonical had been auto-excluded by the old unresolvable rule) |
+| `ExcludedNeverScannedUserId` | 9434053902837 "Preflight Silk" | never scanned, excluded. Read-only |
+| `AttemptedNeverScannedUserId` / `AttemptedNeverScannedAt` (canonical edit 2026-10-10) | 9810234229828 "Onboard Aspirate" | never scanned; **edited:** `profile_scan_excluded` true → false and `profile_scan_attempted_at` set to 2026-05-03 14:22:07.481 (a rescan attempt that wrote nothing). Selected only once that time is before the Re-Scan After cutoff; ordered by it, so after `NameOnlyLatestUserId` (scanned 2026-04-29) and after never-attempted `NeverScannedUserId`. The only canonical row with `profile_scan_attempted_at` set |
+| `NameOnlyLatestUserId` / `NameOnlyLatestScanId` | 9758118926756 @unreadbackspin, row 528 | one scan row, **edited:** `source` 0 → 1 (NameOnly). Retry-limit boundary: limit 2 selects, limit 1 does not. Also the read anchor for `ProfileScanResultsRepositoryTests.GetLatestSourceAsync_CanonicalNameOnlyUser_ReturnsNameOnly` (read-only) |
+| `FullScanLatestUserId` | 9922735795237 @parkingsturdily, row 533 | one FullScan row from 2026-04-30; never selected however old. Read-only |
+| `MultiChatUserId` / `MultiChatLatestChatId` / `MultiChatOldestChatId` | 9739143127436 @elvesunable | messages in Hobby Forum (latest), Main Community, Garage Chat (oldest); pins `GetChatsForUserAsync` order. Read-only |
+| `UnmanagedChatOnlyUserId` | 9862700513599 @unbeatenmutiny | messages only in chat 0, which is not a managed chat; `GetChatsForUserAsync` returns no chat (only active managed chats count) while `HasMessageHistoryAsync` is true, so the rescan job skips the user as no longer a user. Read-only. Its never-posted counterpart is `UsersPage.KickedJoinerId` (no messages: the global config decides) |
+| `SoftDeletedOnlyUserId` / `SoftDeletedOnlyChatId` | 9154293302720 @geologistfence, Location Group | untrusted, unbanned; its only message (Location Group, active managed) is soft-deleted. Both rescan-job lookups still count it: deletion only marks messages (the cleanup job is off to keep analytics). Read-only |
+
+Use when: a test needs the job's incomplete-scan selection. Every other eligible canonical user has at most one scan row, so a mixed NameOnly / FullScan history is not available without an approved import.
+
+### Chat admin anchors (no canonical edit)
+Anchors are in code as `GoldenDatasetConstants.ChatAdmins` plus two `UsersPage` members; all read-only.
+
+| Constant | Anchor | Shape |
+|---|---|---|
+| `UsersPage.ChatAdminMemberId` | 9187417286258 | 4 active `chat_admins` rows |
+| `ChatAdmins.DemotedAdminUserId` | 9781297495110 | 2 `chat_admins` rows, both inactive (demoted) |
+| `UsersPage.UntrustedActiveMemberId` | 9704788798695 | no `chat_admins` row |
+
+Use when: a test needs "admin of any chat" to be true, false because of demotion, or false with no row (`ChatAdminsRepositoryAnyChatTests`). Tests read the rows back first.
 
 ### Past-name search anchors (canonical edit 2026-10-03)
 Anchors are in code as `GoldenDatasetConstants.UsernameHistory`. Both owners are banned spammers (All and Banned tabs, not Active).

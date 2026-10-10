@@ -1,5 +1,6 @@
 using Bunit;
 using Microsoft.Extensions.DependencyInjection;
+using MudBlazor;
 using MudBlazor.Services;
 using NSubstitute;
 using TelegramGroupsAdmin.Components.Shared;
@@ -9,6 +10,7 @@ using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Configuration.Models.Welcome;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
+using TelegramGroupsAdmin.Telegram.Services.UserApi;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Models;
 
@@ -21,6 +23,7 @@ namespace TelegramGroupsAdmin.ComponentTests.Components;
 public class WelcomeSystemConfigTestContext : BunitContext
 {
     protected IConfigService ConfigService { get; }
+    protected ITelegramSessionManager SessionManager { get; }
 
     protected WelcomeSystemConfigTestContext()
     {
@@ -33,6 +36,9 @@ public class WelcomeSystemConfigTestContext : BunitContext
 
         // Register mocks
         Services.AddSingleton(ConfigService);
+        SessionManager = Substitute.For<ITelegramSessionManager>();
+        SessionManager.HasAnyActiveSessionAsync(Arg.Any<CancellationToken>()).Returns(true);
+        Services.AddSingleton(SessionManager);
         Services.AddSingleton(Substitute.For<IUsernameBlacklistRepository>());
         Services.AddSingleton(Substitute.For<IUsernameBlacklistService>());
 
@@ -72,6 +78,7 @@ public class WelcomeSystemConfigTests : WelcomeSystemConfigTestContext
     public void Setup()
     {
         ConfigService.ClearReceivedCalls();
+        SessionManager.HasAnyActiveSessionAsync(Arg.Any<CancellationToken>()).Returns(true);
         ConfigService.GetWelcomeAsync(Arg.Any<long>())
             .Returns(WelcomeConfig.Default);
     }
@@ -733,7 +740,7 @@ public class WelcomeSystemConfigTests : WelcomeSystemConfigTestContext
         cut.WaitForAssertion(() =>
         {
             var caption = MaskCaption(cut).TextContent;
-            Assert.That(caption, Does.Contain("flagged by earlier profile scans"));
+            Assert.That(caption, Does.Contain("instead of the name of a banned user whose name an earlier scan flagged"));
             Assert.That(caption, Does.Contain("even while scanning is off"));
             Assert.That(caption, Does.Contain("ban celebration DMs"));
             Assert.That(caption, Does.Contain("Admin DMs show real names"));
@@ -825,6 +832,190 @@ public class WelcomeSystemConfigTests : WelcomeSystemConfigTestContext
                 c!.JoinSecurity.ProfileScan.MaskFlaggedNames == false),
             Arg.Any<Actor>(),
             Arg.Any<CancellationToken>());
+    }
+
+    #endregion
+
+    #region Name-only Threshold Tests
+
+    private static WelcomeConfig ProfileScanConfigWith(decimal notify, decimal nameOnlyBan) => new()
+    {
+        Enabled = true,
+        MainWelcomeMessage = "Welcome {username}!",
+        JoinSecurity = new JoinSecurityConfig
+        {
+            ProfileScan = new ProfileScanConfig
+            {
+                Enabled = true,
+                NotifyThreshold = notify,
+                NameOnlyBanThreshold = nameOnlyBan
+            }
+        }
+    };
+
+    [Test]
+    public void NameOnlyBanThreshold_RendersWithLabelAndCaption()
+    {
+        ConfigService.GetWelcomeAsync(Arg.Any<long>()).Returns(ProfileScanConfigWith(2.0m, 4.5m));
+
+        var cut = Render<WelcomeSystemConfig>();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.That(cut.Markup, Does.Contain("Name-Only Ban Threshold"));
+            Assert.That(cut.Markup, Does.Contain("Auto-ban score when only the name could be read (default: 4.5)"));
+        }, TimeSpan.FromSeconds(2));
+    }
+
+    private const string BelowNotifyError = "Must be at least the notify threshold (3.0)";
+
+    private static ManagedChatRecord TestChat() => new(
+        Identity: new ChatIdentity(123456L, "Test Chat"),
+        ChatType: ManagedChatType.Supergroup,
+        BotStatus: BotChatStatus.Administrator,
+        IsAdmin: true,
+        AddedAt: DateTimeOffset.UtcNow,
+        IsActive: true,
+        IsDeleted: false,
+        LastSeenAt: null,
+        SettingsJson: null,
+        ChatIconPath: null);
+
+    private static bool ProfileScanPanelExpanded(IRenderedComponent<WelcomeSystemConfig> cut) =>
+        cut.FindComponents<MudExpansionPanel>().Single(p => p.Instance.Text == "Profile Scan").Instance.Expanded;
+
+    private async Task AssertRefusedWithVisibleErrorAsync(IRenderedComponent<WelcomeSystemConfig> cut, ISnackbar snackbar)
+    {
+        cut.WaitForAssertion(() =>
+        {
+            // The field shows its error, and its collapsed panel was opened so the admin can see it.
+            Assert.That(cut.Markup, Does.Contain(BelowNotifyError));
+            Assert.That(ProfileScanPanelExpanded(cut), Is.True);
+        }, TimeSpan.FromSeconds(2));
+        Assert.That(snackbar.ShownSnackbars.Select(s => (s.Message, s.Severity)),
+            Has.One.EqualTo(($"Not saved: {BelowNotifyError}", Severity.Error)));
+        await ConfigService.DidNotReceiveWithAnyArgs().SaveWelcomeAsync(default!, default!, default!, default);
+    }
+
+    [Test]
+    public async Task GlobalSave_NameOnlyThresholdBelowNotify_IsRefusedWithAVisibleError()
+    {
+        ConfigService.GetWelcomeAsync(Arg.Any<long>()).Returns(ProfileScanConfigWith(3.0m, 2.5m));
+        this.AddTestWebUser();
+        var snackbar = Services.GetRequiredService<ISnackbar>();
+        var cut = Render<WelcomeSystemConfig>();
+        cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("Save Configuration")), TimeSpan.FromSeconds(2));
+        Assert.That(ProfileScanPanelExpanded(cut), Is.False, "the panel starts collapsed");
+
+        cut.FindAll("button").First(b => b.TextContent.Contains("Save Configuration")).Click();
+
+        await AssertRefusedWithVisibleErrorAsync(cut, snackbar);
+    }
+
+    [Test]
+    public async Task PerChatSave_NameOnlyThresholdBelowNotify_IsRefusedWithAVisibleError()
+    {
+        // Per-chat mode saves through the parent's call (ChatConfigModal), with no Save button to disable.
+        ConfigService.GetWelcomeAsync(Arg.Any<long>()).Returns(ProfileScanConfigWith(3.0m, 2.5m));
+        this.AddTestWebUser();
+        var snackbar = Services.GetRequiredService<ISnackbar>();
+        var cut = Render<WelcomeSystemConfig>(p => p.Add(x => x.Chat, TestChat()));
+        cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("Name-Only Ban Threshold")), TimeSpan.FromSeconds(2));
+
+        await cut.InvokeAsync(cut.Instance.SaveConfiguration);
+
+        await AssertRefusedWithVisibleErrorAsync(cut, snackbar);
+    }
+
+    [Test]
+    public void RaisingTheNotifyThreshold_RevalidatesTheNameOnlyThreshold()
+    {
+        ConfigService.GetWelcomeAsync(Arg.Any<long>()).Returns(ProfileScanConfigWith(2.0m, 2.5m));
+        var cut = Render<WelcomeSystemConfig>();
+        cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("Admin Notify Threshold")), TimeSpan.FromSeconds(2));
+        Assert.That(cut.Markup, Does.Not.Contain("Must be at least the notify threshold"));
+
+        cut.FindComponents<MudNumericField<decimal>>()
+            .Single(f => f.Instance.Label == "Admin Notify Threshold")
+            .Find("input").Change("3.0");
+
+        cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain(BelowNotifyError)), TimeSpan.FromSeconds(2));
+    }
+
+    [Test]
+    public async Task Save_PassesNameOnlyThresholdThrough()
+    {
+        ConfigService.GetWelcomeAsync(Arg.Any<long>()).Returns(ProfileScanConfigWith(2.0m, 3.5m));
+        this.AddTestWebUser();
+        var cut = Render<WelcomeSystemConfig>();
+        cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("Save Configuration")), TimeSpan.FromSeconds(2));
+
+        cut.FindAll("button").First(b => b.TextContent.Contains("Save Configuration")).Click();
+
+        await ConfigService.Received(1).SaveWelcomeAsync(
+            Arg.Any<ChatIdentity>(),
+            Arg.Is<WelcomeConfig>(c => c!.JoinSecurity.ProfileScan.NameOnlyBanThreshold == 3.5m),
+            Arg.Any<Actor>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task Save_ScanningOff_NameOnlyThresholdBelowNotify_IsNotRefused()
+    {
+        // The disabled (uneditable) field must never block every save
+        var config = ProfileScanConfigWith(4.8m, 4.5m);
+        config.JoinSecurity.ProfileScan.Enabled = false;
+        ConfigService.GetWelcomeAsync(Arg.Any<long>()).Returns(config);
+        this.AddTestWebUser();
+        var cut = Render<WelcomeSystemConfig>();
+        cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("Save Configuration")), TimeSpan.FromSeconds(2));
+
+        cut.FindAll("button").First(b => b.TextContent.Contains("Save Configuration")).Click();
+
+        await ConfigService.Received(1).SaveWelcomeAsync(
+            Arg.Any<ChatIdentity>(),
+            Arg.Is<WelcomeConfig>(c => c!.JoinSecurity.ProfileScan.NameOnlyBanThreshold == 4.5m),
+            Arg.Any<Actor>(),
+            Arg.Any<CancellationToken>());
+        Assert.That(cut.Markup, Does.Not.Contain("Must be at least the notify threshold"));
+    }
+
+    private const string NoSessionNotice =
+        "No User API session is connected: full profile scans can't run, but name-only scans still run on new joiners, first messages and renames. Connect a session from your Profile page (Telegram User API).";
+
+    [Test]
+    public void ProfileScanOn_NoUserApiSession_ShowsNameOnlyNotice()
+    {
+        SessionManager.HasAnyActiveSessionAsync(Arg.Any<CancellationToken>()).Returns(false);
+        ConfigService.GetWelcomeAsync(Arg.Any<long>()).Returns(ProfileScanConfigWith(2.0m, 4.5m));
+
+        var cut = Render<WelcomeSystemConfig>();
+
+        cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain(NoSessionNotice)), TimeSpan.FromSeconds(2));
+    }
+
+    [Test]
+    public void ProfileScanOn_SessionConnected_HidesNotice()
+    {
+        ConfigService.GetWelcomeAsync(Arg.Any<long>()).Returns(ProfileScanConfigWith(2.0m, 4.5m));
+
+        var cut = Render<WelcomeSystemConfig>();
+
+        cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("Name-Only Ban Threshold")), TimeSpan.FromSeconds(2));
+        Assert.That(cut.Markup, Does.Not.Contain(NoSessionNotice));
+    }
+
+    [Test]
+    public void ProfileScanOff_NoUserApiSession_HidesNotice()
+    {
+        SessionManager.HasAnyActiveSessionAsync(Arg.Any<CancellationToken>()).Returns(false);
+        // WelcomeConfig.Default has profile scanning off.
+        ConfigService.GetWelcomeAsync(Arg.Any<long>()).Returns(WelcomeConfig.Default);
+
+        var cut = Render<WelcomeSystemConfig>();
+
+        cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("Name-Only Ban Threshold")), TimeSpan.FromSeconds(2));
+        Assert.That(cut.Markup, Does.Not.Contain(NoSessionNotice));
     }
 
     #endregion

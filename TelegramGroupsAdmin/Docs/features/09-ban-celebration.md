@@ -77,7 +77,7 @@ Captions support three placeholder variables that are replaced at send time:
 
 Placeholders are case-insensitive (`{Username}`, `{USERNAME}`, and `{username}` all work).
 
-**Flagged names:** if [Profile Scanning](08-profile-scanning.md#masking-flagged-names) flagged the banned user's name, the chat caption shows `[name removed: explicit]` (or `[name removed: spam]`) for `{username}` instead of the real name, as every chat post does while the chat's **Mask flagged names** is on (the default). [DM subscribers](#dm-subscribers) get the same masked caption, using that chat's setting. The banned user's own DM is unaffected (it already says "You").
+**Flagged names:** masking applies only while the user is banned. If [Profile Scanning](08-profile-scanning.md#masking-flagged-names) flagged the banned user's name, the chat caption shows `[name removed: explicit]` (or `[name removed: spam]`) for `{username}` instead of the real name, as every chat post does while the chat's **Mask flagged names** is on (the default). [DM subscribers](#dm-subscribers) get the same masked caption, using that chat's setting. The banned user's own DM is unaffected (it already says "You").
 
 ### Chat vs. DM Grammar
 

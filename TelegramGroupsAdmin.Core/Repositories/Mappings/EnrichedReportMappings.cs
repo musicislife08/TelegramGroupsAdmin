@@ -48,8 +48,8 @@ internal static class EnrichedReportMappings
         return new ImpersonationAlertRecord
         {
             Id = view.Id,
-            SuspectedUser = UserIdentityMapping.ToIdentity(alertContext.SuspectedUserId, view.SuspectedFirstName, view.SuspectedLastName, view.SuspectedUsername, view.SuspectedIsBot ?? false, view.SuspectedLatestScanExplicit),
-            TargetUser = UserIdentityMapping.ToIdentity(alertContext.TargetUserId, view.TargetFirstName, view.TargetLastName, view.TargetUsername, view.TargetIsBot ?? false, view.TargetLatestScanExplicit),
+            SuspectedUser = UserIdentityMapping.ToIdentity(alertContext.SuspectedUserId, view.SuspectedFirstName, view.SuspectedLastName, view.SuspectedUsername, view.SuspectedIsBot ?? false, view.SuspectedLatestScanExplicit, view.SuspectedLatestScanPromotional, view.SuspectedIsBanned ?? false),
+            TargetUser = UserIdentityMapping.ToIdentity(alertContext.TargetUserId, view.TargetFirstName, view.TargetLastName, view.TargetUsername, view.TargetIsBot ?? false, view.TargetLatestScanExplicit, view.TargetLatestScanPromotional, view.TargetIsBanned ?? false),
             Chat = new ChatIdentity(view.ChatId, view.ChatName),
             DetectedAt = view.ReportedAt,
             ReviewedByUserId = view.WebUserId,
@@ -106,7 +106,7 @@ internal static class EnrichedReportMappings
             Outcome = examContext.Outcome,
 
             // From view joins (no more N+1!)
-            User = UserIdentityMapping.ToIdentity(examContext.UserId, view.ExamFirstName, view.ExamLastName, view.ExamUsername, view.ExamUserIsBot ?? false, view.ExamUserLatestScanExplicit),
+            User = UserIdentityMapping.ToIdentity(examContext.UserId, view.ExamFirstName, view.ExamLastName, view.ExamUsername, view.ExamUserIsBot ?? false, view.ExamUserLatestScanExplicit, view.ExamUserLatestScanPromotional, view.ExamUserIsBanned ?? false),
             Chat = new ChatIdentity(view.ChatId, view.ChatName),
             UserPhotoPath = view.ExamPhotoPath
         };
@@ -182,7 +182,7 @@ internal static class EnrichedReportMappings
         return new ProfileScanAlertRecord
         {
             Id = view.Id,
-            User = UserIdentityMapping.ToIdentity(alertContext.UserId, view.ProfileFirstName, view.ProfileLastName, view.ProfileUsername, view.ProfileUserIsBot ?? false, view.ProfileUserLatestScanExplicit),
+            User = UserIdentityMapping.ToIdentity(alertContext.UserId, view.ProfileFirstName, view.ProfileLastName, view.ProfileUsername, view.ProfileUserIsBot ?? false, view.ProfileUserLatestScanExplicit, view.ProfileUserLatestScanPromotional, view.ProfileUserIsBanned ?? false),
             Chat = new ChatIdentity(view.ChatId, view.ChatName),
             Score = alertContext.Score,
             Outcome = (ProfileScanOutcome)alertContext.Outcome,

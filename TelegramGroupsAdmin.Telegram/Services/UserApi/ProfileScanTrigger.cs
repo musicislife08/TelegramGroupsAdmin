@@ -6,16 +6,22 @@ namespace TelegramGroupsAdmin.Telegram.Services.UserApi;
 /// </summary>
 public enum ProfileScanTrigger
 {
-    /// <summary>User joined a chat. Always rescans, ignoring prior scan history.</summary>
+    /// <summary>User joined a chat. Scans a new or never-scanned user, or one who renamed since the last scan.</summary>
     Join,
 
     /// <summary>
-    /// User sent a message and has never been scanned. Covers users who arrive
-    /// without a join event, such as accounts commenting on channel posts in a
-    /// linked discussion group.
+    /// User sent a message. Scans a never-scanned user (covers accounts that arrive without a join
+    /// event, such as people commenting on channel posts in a linked discussion group), or one who
+    /// renamed since the last scan.
     /// </summary>
     FirstMessage,
 
-    /// <summary>Bot API profile fields changed. Always rescans.</summary>
-    ProfileChange
+    /// <summary>A rename was observed. Always scans, even an excluded user.</summary>
+    ProfileChange,
+
+    /// <summary>
+    /// The rescan job retrying an incomplete scan. The job's schedule is its switch and it selects only
+    /// incomplete scans, so the already-scanned rule does not apply; every eligibility check does.
+    /// </summary>
+    Rescan
 }

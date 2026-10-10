@@ -48,6 +48,14 @@ public class ProfileScanResultDto
     [Column("ai_explicit_display_text")]
     public bool AiExplicitDisplayText { get; set; }
 
+    /// <summary>AI flagged the visible display name or @username as promotional (sells, solicits, lures, points elsewhere)</summary>
+    [Column("ai_promotional_display_text")]
+    public bool AiPromotionalDisplayText { get; set; }
+
+    /// <summary>0=FullScan, 1=NameOnly (Core.Models.ProfileScanSource)</summary>
+    [Column("source")]
+    public short Source { get; set; }
+
     // Navigation
     [ForeignKey(nameof(UserId))]
     public virtual TelegramUserDto? User { get; set; }

@@ -76,6 +76,8 @@
     <!-- Allow unit tests to access internal members for testing prompt builders -->
     <ItemGroup>
       <InternalsVisibleTo Include="TelegramGroupsAdmin.UnitTests" />
+      <InternalsVisibleTo Include="TelegramGroupsAdmin.IntegrationTests" />
+      <InternalsVisibleTo Include="TelegramGroupsAdmin.ComponentTests" />
       <!-- Lets NSubstitute/Castle DynamicProxy build ILogger<T> proxies for internal T (e.g. AdminNotificationService) -->
       <InternalsVisibleTo Include="DynamicProxyGenAssembly2" />
     </ItemGroup>

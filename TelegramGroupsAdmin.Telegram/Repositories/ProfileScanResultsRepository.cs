@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories.Mappings;
@@ -30,5 +31,18 @@ public class ProfileScanResultsRepository(IDbContextFactory<AppDbContext> contex
             .ToListAsync(cancellationToken);
 
         return results.Select(r => r.ToModel()).ToList();
+    }
+
+    public async Task<ProfileScanSource?> GetLatestSourceAsync(long userId, CancellationToken cancellationToken)
+    {
+        await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
+        var source = await context.ProfileScanResults
+            .AsNoTracking()
+            .Where(r => r.UserId == userId)
+            .OrderByDescending(r => r.ScannedAt)
+            .ThenByDescending(r => r.Id)
+            .Select(r => (short?)r.Source)
+            .FirstOrDefaultAsync(cancellationToken);
+        return source is { } value ? (ProfileScanSource)value : null;
     }
 }

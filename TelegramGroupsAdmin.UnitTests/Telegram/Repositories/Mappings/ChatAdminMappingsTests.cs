@@ -12,7 +12,7 @@ public class ChatAdminMappingsTests
     public void ToModel_ExplicitFlag_MapsAdminToExplicitVerdict()
     {
         var dto = new ChatAdminRecordDto { Id = 1, ChatId = -100, TelegramId = 42 };
-        var identity = new UserIdentityView { TelegramUserId = 42, FirstName = "Admin", LatestScanExplicit = true };
+        var identity = new UserIdentityView { TelegramUserId = 42, FirstName = "Admin", LatestScanExplicit = true, LatestScanPromotional = false, IsBanned = true };
 
         var admin = dto.ToModel(identity);
 

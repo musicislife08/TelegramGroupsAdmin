@@ -271,6 +271,18 @@ public static class GoldenDatasetConstants
     }
 
     /// <summary>
+    /// Chat admin anchors from <c>canonical/20_chat_admins.sql</c> (no canonical edit; read-only).
+    /// </summary>
+    public static class ChatAdmins
+    {
+        /// <summary>
+        /// Demoted admin: two <c>chat_admins</c> rows, both <c>is_active=false</c>, and no active one.
+        /// Not an admin of any chat now.
+        /// </summary>
+        public const long DemotedAdminUserId = 9781297495110L;
+    }
+
+    /// <summary>
     /// Anchors from <c>canonical/27_user_tags.sql</c> (canonical edit 2026-10-01).
     /// </summary>
     public static class UserTags
@@ -824,6 +836,50 @@ public static class GoldenDatasetConstants
         public const long PhotoUserId = 9264989724828;
         /// <summary>@calixrowen: is_active = false (a banned spammer, not trusted, not a bot). Used by the MarkActiveAsync test.</summary>
         public const long InactiveUserId = 9332352149450;
+    }
+
+    /// <summary>Anchors for flagged name masking and the name-only scan (#552 part 2).</summary>
+    public static class FlaggedNames
+    {
+        /// <summary>@loucurtsinger "Lou Curtsinger": not trusted, not a bot, no profile_scan_results rows, profile_scanned_at and profile_scan_score NULL (banned in Nov 2025, before scanning existed). NameOnlyScanTests' name-only scan writes the user's first row. Read-only otherwise.</summary>
+        public const long NameOnlyScanUserId = 9333810782137;
+        /// <summary>@Adexfunnel "Adexfunnel": a name that advertises ad / marketing funnels. Held for review by its profile scan (score 2.8, alert #178), then banned by an admin. Its only scan row is the real prod scan, imported with ai_promotional_display_text = true (canonical edit 2026-10-05; the column did not exist in prod). Read-only.</summary>
+        public const long BannedPromotionalUserId = 9635655270997;
+        /// <summary>@splendorfraying "Stargazer Snippet": not banned, not trusted; only scan row 526 (score 0.0) has ai_promotional_display_text = true (canonical edit 2026-10-05). Read-only.</summary>
+        public const long UnbannedPromotionalUserId = 9213195802818;
+        /// <summary>@splendorfraying's only scan row, flag-edited to ai_promotional_display_text = true (canonical edit 2026-10-05).</summary>
+        public const long UnbannedPromotionalScanId = 526;
+    }
+
+    /// <summary>Anchors for the rescan job's incomplete-scan selection (#552 part 2).</summary>
+    public static class ProfileRescan
+    {
+        /// <summary>"Ferocity Opponent" (no username): untrusted, unbanned, non-bot, never scanned; profile_scan_excluded cleared (canonical edit 2026-10-05; it had been set by the old unresolvable auto-exclusion, read as an admin re-including the user).</summary>
+        public const long NeverScannedUserId = 9963580010331;
+        /// <summary>"Preflight Silk" (no username): untrusted, unbanned, non-bot, never scanned, profile_scan_excluded = true. Read-only.</summary>
+        public const long ExcludedNeverScannedUserId = 9434053902837;
+        /// <summary>"Onboard Aspirate" (no username): untrusted, unbanned, non-bot, never scanned; profile_scan_excluded cleared and profile_scan_attempted_at = <see cref="AttemptedNeverScannedAt"/> (canonical edit 2026-10-10: re-included by an admin after the old unresolvable auto-exclusion, then a rescan attempt wrote nothing).</summary>
+        public const long AttemptedNeverScannedUserId = 9810234229828;
+        /// <summary><see cref="AttemptedNeverScannedUserId"/>'s profile_scan_attempted_at (canonical edit 2026-10-10). Later than <see cref="NameOnlyLatestUserId"/>'s profile_scanned_at (2026-04-29), so the rescan order puts it after that user.</summary>
+        public static readonly DateTimeOffset AttemptedNeverScannedAt = new(2026, 5, 3, 14, 22, 7, 481, TimeSpan.Zero);
+        /// <summary>@unreadbackspin: untrusted, unbanned; its only scan row 528 (score 1.2, AI fields NULL) has source = NameOnly (canonical edit 2026-10-05).</summary>
+        public const long NameOnlyLatestUserId = 9758118926756;
+        /// <summary>@unreadbackspin's only scan row, flag-edited to source = 1 (NameOnly) (canonical edit 2026-10-05).</summary>
+        public const long NameOnlyLatestScanId = 528;
+        /// <summary>@parkingsturdily: untrusted, unbanned; its only scan row 533 is a FullScan from 2026-04-30. Read-only.</summary>
+        public const long FullScanLatestUserId = 9922735795237;
+        /// <summary>@elvesunable: trusted; messages in three chats, latest first: Hobby Forum (2026-04-11), Main Community (2026-03-03), Garage Chat (2025-12-16). Read-only: pins the rescan job's chat list (GetChatsForUserAsync).</summary>
+        public const long MultiChatUserId = 9739143127436;
+        /// <summary>Hobby Forum: <see cref="MultiChatUserId"/>'s most recently active chat.</summary>
+        public const long MultiChatLatestChatId = -100003785594462L;
+        /// <summary>Garage Chat: <see cref="MultiChatUserId"/>'s least recently active chat (Main Community, <see cref="Chats.MainChatId"/>, is between).</summary>
+        public const long MultiChatOldestChatId = -100063904363399L;
+        /// <summary>@unbeatenmutiny: untrusted, unbanned; all its messages are in chat 0, which is not a managed chat. Read-only: the rescan job's chat list leaves out chats that are not active managed chats, and the job skips a user with message history but no active managed chat.</summary>
+        public const long UnmanagedChatOnlyUserId = 9862700513599;
+        /// <summary>@geologistfence: untrusted, unbanned; its only message is in Location Group (active, managed) and is soft-deleted (deleted_at set). Read-only: soft-deleted messages still count as the user having posted in that chat.</summary>
+        public const long SoftDeletedOnlyUserId = 9154293302720;
+        /// <summary>Location Group: the active managed chat of <see cref="SoftDeletedOnlyUserId"/>'s only (soft-deleted) message.</summary>
+        public const long SoftDeletedOnlyChatId = -100055570785509L;
     }
 
     /// <summary>Anchors for BackupService restore tests.</summary>

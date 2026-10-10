@@ -149,37 +149,53 @@ public interface ITelegramUserRepository
     // ============================================================================
 
     /// <summary>
-    /// Get the most recently active chat for a user (by message activity).
-    /// Returns null if the user has no message history in any managed chat.
-    /// Used by the profile rescan job to associate alerts with a real chat.
+    /// The active managed chats a user is known in (by message activity, soft-deleted messages
+    /// included), most recently active first. Chats the bot has left or no longer manages are left out.
+    /// Empty if there are none.
+    /// Used by the profile rescan job to pick a chat with profile scanning enabled and attribute the scan to it.
     /// </summary>
-    Task<ChatIdentity?> GetFirstChatForUserAsync(long telegramUserId, CancellationToken cancellationToken = default);
+    Task<List<ChatIdentity>> GetChatsForUserAsync(long telegramUserId, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Exclude a user from automatic profile re-scans.
-    /// Set when the user cannot be resolved via Telegram API (likely deleted account).
+    /// Whether the user has any message in any chat, managed or not; soft-deleted messages count
+    /// (deletion only marks them). With
+    /// <see cref="GetChatsForUserAsync"/> empty, tells a user who never posted (follows the global
+    /// config) from one who only posted in chats the bot no longer manages (no longer a user).
+    /// </summary>
+    Task<bool> HasMessageHistoryAsync(long telegramUserId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Exclude a user from automatic profile scans (renames still scan).
+    /// The admin's switch (UserDetailDialog); scans never set it.
     /// </summary>
     Task ExcludeFromProfileScanAsync(long telegramUserId, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Include a user in automatic profile re-scans.
-    /// Cleared when a manual rescan successfully resolves the user.
+    /// Include a user in automatic profile scans again.
+    /// The admin's switch (UserDetailDialog); scans never clear it.
     /// </summary>
     Task IncludeInProfileScanAsync(long telegramUserId, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Get user IDs eligible for periodic profile re-scanning.
-    /// Filters out banned/bot/trusted/excluded users and returns those with stale or missing scans.
-    /// Ordered by ProfileScannedAt ASC (NULLS FIRST = never-scanned users prioritized).
+    /// User IDs whose profile scan is incomplete, for the rescan job: untrusted, unbanned, non-bot,
+    /// not excluded, and either never scanned (profile_scanned_at NULL, with no attempt recorded or the
+    /// last attempt before <paramref name="retryCutoff"/>) or last scanned before
+    /// <paramref name="retryCutoff"/> with a NameOnly latest scan row and fewer than
+    /// <paramref name="nameOnlyRetryLimit"/> NameOnly rows since their last FullScan row.
+    /// Never-tried users first, then by last scan or last attempt, oldest first.
+    /// The untrusted / unbanned / non-bot / not-excluded conditions only narrow the selection, so users
+    /// who can never be scanned do not take every run's candidates; the rescan job sends each candidate
+    /// through the profile scan gate, which makes the eligibility decision.
     /// </summary>
-    Task<List<long>> GetEligibleUsersForRescanAsync(int batchSize, DateTimeOffset rescanCutoff, CancellationToken cancellationToken = default);
+    Task<List<long>> GetUsersWithIncompleteScansAsync(
+        int batchSize, DateTimeOffset retryCutoff, int nameOnlyRetryLimit, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Atomically update all profile scan columns for a user.
-    /// Called after a User API profile scan completes.
+    /// Records a full scan in one transaction: the profile fields, score (<c>scanResult.Score</c>) and scan
+    /// time (<c>scanResult.ScannedAt</c>) on the user, and the scan history row. Either both land or neither.
+    /// Clears any recorded scan attempt.
     /// </summary>
-    Task UpdateProfileScanDataAsync(
-        long telegramUserId,
+    Task RecordFullScanAsync(
         string? bio,
         long? personalChannelId,
         string? personalChannelTitle,
@@ -189,15 +205,30 @@ public interface ITelegramUserRepository
         bool isScam,
         bool isFake,
         bool isVerified,
-        decimal profileScanScore,
         long? profilePhotoId,
         long? personalChannelPhotoId,
         string? pinnedStoryIds,
+        UiModels.ProfileScanResultRecord scanResult,
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Bump ProfileScannedAt + UpdatedAt without changing any other fields.
+    /// Bump ProfileScannedAt + UpdatedAt and clear any recorded scan attempt, without changing other fields.
     /// Used when diff detection finds no profile changes — marks the user as freshly scanned.
     /// </summary>
     Task UpdateProfileScannedAtAsync(long telegramUserId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Records that the rescan job considered a never-scanned user and wrote nothing (skipped, turned
+    /// down by the gate, no verdict, or failed), so the job waits for Re-Scan After before considering
+    /// them again. Does nothing for a user who has been scanned
+    /// (profile_scanned_at set). Never marks the user as scanned.
+    /// </summary>
+    Task RecordScanAttemptAsync(long telegramUserId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Records a name-only scan in one transaction: the score (<c>scanResult.Score</c>) and scan time
+    /// (<c>scanResult.ScannedAt</c>) on the user, and the scan history row. Either both land or neither.
+    /// Stored bio, channel, story and photo fields are left as they are. Clears any recorded scan attempt.
+    /// </summary>
+    Task RecordNameOnlyScanAsync(UiModels.ProfileScanResultRecord scanResult, CancellationToken cancellationToken = default);
 }

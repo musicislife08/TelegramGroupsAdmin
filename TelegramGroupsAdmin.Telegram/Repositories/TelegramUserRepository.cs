@@ -34,6 +34,8 @@ public class TelegramUserRepository : ITelegramUserRepository
     /// <summary>
     /// Returns one identity per id found, read from the user_identities view
     /// (names plus the verdict from the latest profile scan). Ids with no row are absent.
+    /// The verdict reflects ban state at read time (a flagged name is masked only while the user is
+    /// banned), so text posted after a ban or unban must read the identity again.
     /// </summary>
     public async Task<IReadOnlyList<UserIdentity>> GetIdentitiesAsync(
         IReadOnlyCollection<long> userIds, CancellationToken cancellationToken = default)
@@ -1257,22 +1259,33 @@ public class TelegramUserRepository : ITelegramUserRepository
     // ============================================================================
 
     /// <inheritdoc />
-    public async Task<ChatIdentity?> GetFirstChatForUserAsync(long telegramUserId, CancellationToken cancellationToken = default)
+    public async Task<List<ChatIdentity>> GetChatsForUserAsync(long telegramUserId, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var result = await (
+        // Active managed chats only: the scan posts its ban celebration and alerts to the chat, so
+        // never to one the bot has left or no longer manages.
+        // Soft-deleted messages count: deletion only marks them (the cleanup job is off to keep
+        // analytics), and they still show the user posted in the chat.
+        var rows = await (
             from m in context.Messages
-            where m.UserId == telegramUserId && m.DeletedAt == null
-            join c in context.ManagedChats on m.ChatId equals c.ChatId into chatGroup
-            from chat in chatGroup.DefaultIfEmpty()
-            group new { m, chat } by new { m.ChatId, ChatName = chat != null ? chat.ChatName : null } into g
+            where m.UserId == telegramUserId
+            join c in context.ManagedChats on m.ChatId equals c.ChatId
+            where c.IsActive && !c.IsDeleted
+            group new { m, c } by new { m.ChatId, c.ChatName } into g
             orderby g.Max(x => x.m.Timestamp) descending
             select new { g.Key.ChatId, g.Key.ChatName }
         )
         .AsNoTracking()
-        .FirstOrDefaultAsync(cancellationToken);
+        .ToListAsync(cancellationToken);
 
-        return result is null ? null : new ChatIdentity(result.ChatId, result.ChatName);
+        return rows.Select(r => new ChatIdentity(r.ChatId, r.ChatName)).ToList();
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> HasMessageHistoryAsync(long telegramUserId, CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        return await context.Messages.AnyAsync(m => m.UserId == telegramUserId, cancellationToken);
     }
 
     /// <inheritdoc />
@@ -1298,20 +1311,44 @@ public class TelegramUserRepository : ITelegramUserRepository
     }
 
     /// <inheritdoc />
-    public async Task<List<long>> GetEligibleUsersForRescanAsync(int batchSize, DateTimeOffset rescanCutoff, CancellationToken cancellationToken = default)
+    public async Task<List<long>> GetUsersWithIncompleteScansAsync(
+        int batchSize, DateTimeOffset retryCutoff, int nameOnlyRetryLimit, CancellationToken cancellationToken = default)
     {
+        const short nameOnly = (short)ProfileScanSource.NameOnly;
+        const short fullScan = (short)ProfileScanSource.FullScan;
+
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         return await context.TelegramUsers
             .Where(u => !u.IsBanned && !u.IsBot && !u.IsTrusted && !u.ProfileScanExcluded)
-            .Where(u => u.ProfileScannedAt == null || u.ProfileScannedAt < rescanCutoff)
-            .OrderBy(u => u.ProfileScannedAt) // NULLS FIRST is PostgreSQL default for ASC
+            // Never scanned: not tried yet, or the last attempt wrote nothing and is older than the cutoff
+            .Where(u => (u.ProfileScannedAt == null
+                    && (u.ProfileScanAttemptedAt == null || u.ProfileScanAttemptedAt < retryCutoff))
+                || (u.ProfileScannedAt < retryCutoff
+                    // latest scan row only read the name
+                    && context.ProfileScanResults
+                        .Where(r => r.UserId == u.TelegramUserId)
+                        .OrderByDescending(r => r.ScannedAt).ThenByDescending(r => r.Id)
+                        .Select(r => (short?)r.Source)
+                        .FirstOrDefault() == nameOnly
+                    // NameOnly rows with no FullScan row after them = NameOnly rows since the last full scan.
+                    // "After" uses the latest-row order above (scanned_at, then id) so equal timestamps are decided.
+                    && context.ProfileScanResults.Count(r => r.UserId == u.TelegramUserId
+                        && r.Source == nameOnly
+                        && !context.ProfileScanResults.Any(f => f.UserId == u.TelegramUserId
+                            && f.Source == fullScan
+                            && (f.ScannedAt > r.ScannedAt || (f.ScannedAt == r.ScannedAt && f.Id > r.Id)))) < nameOnlyRetryLimit))
+            // Never tried first (PostgreSQL sorts NULLs last in ascending order), then by the last scan
+            // or attempt, oldest first; the id decides ties so the order is stable.
+            .OrderBy(u => (u.ProfileScannedAt ?? u.ProfileScanAttemptedAt) != null)
+            .ThenBy(u => u.ProfileScannedAt ?? u.ProfileScanAttemptedAt)
+            .ThenBy(u => u.TelegramUserId)
             .Take(batchSize)
             .Select(u => u.TelegramUserId)
             .ToListAsync(cancellationToken);
     }
 
-    public async Task UpdateProfileScanDataAsync(
-        long telegramUserId,
+    /// <inheritdoc />
+    public Task RecordFullScanAsync(
         string? bio,
         long? personalChannelId,
         string? personalChannelTitle,
@@ -1321,32 +1358,29 @@ public class TelegramUserRepository : ITelegramUserRepository
         bool isScam,
         bool isFake,
         bool isVerified,
-        decimal profileScanScore,
         long? profilePhotoId,
         long? personalChannelPhotoId,
         string? pinnedStoryIds,
-        CancellationToken cancellationToken = default)
-    {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        await context.TelegramUsers
-            .Where(u => u.TelegramUserId == telegramUserId)
-            .ExecuteUpdateAsync(s => s
-                .SetProperty(u => u.Bio, bio)
-                .SetProperty(u => u.PersonalChannelId, personalChannelId)
-                .SetProperty(u => u.PersonalChannelTitle, personalChannelTitle)
-                .SetProperty(u => u.PersonalChannelAbout, personalChannelAbout)
-                .SetProperty(u => u.HasPinnedStories, hasPinnedStories)
-                .SetProperty(u => u.PinnedStoryCaptions, pinnedStoryCaptions)
-                .SetProperty(u => u.IsScam, isScam)
-                .SetProperty(u => u.IsFake, isFake)
-                .SetProperty(u => u.IsVerified, isVerified)
-                .SetProperty(u => u.ProfileScanScore, profileScanScore)
-                .SetProperty(u => u.ProfilePhotoId, profilePhotoId)
-                .SetProperty(u => u.PersonalChannelPhotoId, personalChannelPhotoId)
-                .SetProperty(u => u.PinnedStoryIds, pinnedStoryIds)
-                .SetProperty(u => u.ProfileScannedAt, DateTimeOffset.UtcNow)
-                .SetProperty(u => u.UpdatedAt, DateTimeOffset.UtcNow), cancellationToken);
-    }
+        UiModels.ProfileScanResultRecord scanResult,
+        CancellationToken cancellationToken = default) =>
+        RecordScanAsync(scanResult, (users, ct) => users.ExecuteUpdateAsync(s => s
+            .SetProperty(u => u.Bio, bio)
+            .SetProperty(u => u.PersonalChannelId, personalChannelId)
+            .SetProperty(u => u.PersonalChannelTitle, personalChannelTitle)
+            .SetProperty(u => u.PersonalChannelAbout, personalChannelAbout)
+            .SetProperty(u => u.HasPinnedStories, hasPinnedStories)
+            .SetProperty(u => u.PinnedStoryCaptions, pinnedStoryCaptions)
+            .SetProperty(u => u.IsScam, isScam)
+            .SetProperty(u => u.IsFake, isFake)
+            .SetProperty(u => u.IsVerified, isVerified)
+            .SetProperty(u => u.ProfileScanScore, scanResult.Score)
+            .SetProperty(u => u.ProfilePhotoId, profilePhotoId)
+            .SetProperty(u => u.PersonalChannelPhotoId, personalChannelPhotoId)
+            .SetProperty(u => u.PinnedStoryIds, pinnedStoryIds)
+            .SetProperty(u => u.ProfileScannedAt, scanResult.ScannedAt)
+            .SetProperty(u => u.ProfileScanAttemptedAt, (DateTimeOffset?)null)
+            .SetProperty(u => u.UpdatedAt, scanResult.ScannedAt), ct),
+            cancellationToken);
 
     /// <inheritdoc />
     public async Task UpdateProfileScannedAtAsync(long telegramUserId, CancellationToken cancellationToken = default)
@@ -1356,7 +1390,51 @@ public class TelegramUserRepository : ITelegramUserRepository
             .Where(u => u.TelegramUserId == telegramUserId)
             .ExecuteUpdateAsync(s => s
                 .SetProperty(u => u.ProfileScannedAt, DateTimeOffset.UtcNow)
+                .SetProperty(u => u.ProfileScanAttemptedAt, (DateTimeOffset?)null)
                 .SetProperty(u => u.UpdatedAt, DateTimeOffset.UtcNow), cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task RecordScanAttemptAsync(long telegramUserId, CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        await context.TelegramUsers
+            .Where(u => u.TelegramUserId == telegramUserId && u.ProfileScannedAt == null)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(u => u.ProfileScanAttemptedAt, DateTimeOffset.UtcNow), cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public Task RecordNameOnlyScanAsync(UiModels.ProfileScanResultRecord scanResult, CancellationToken cancellationToken = default) =>
+        RecordScanAsync(scanResult, (users, ct) => users.ExecuteUpdateAsync(s => s
+            .SetProperty(u => u.ProfileScanScore, scanResult.Score)
+            .SetProperty(u => u.ProfileScannedAt, scanResult.ScannedAt)
+            .SetProperty(u => u.ProfileScanAttemptedAt, (DateTimeOffset?)null)
+            .SetProperty(u => u.UpdatedAt, scanResult.ScannedAt), ct),
+            cancellationToken);
+
+    /// <summary>
+    /// Updates the scanned user and inserts the scan history row in one transaction, so a user is
+    /// never marked scanned without its row (the rescan job decides retries from the rows).
+    /// </summary>
+    private async Task RecordScanAsync(
+        UiModels.ProfileScanResultRecord scanResult,
+        Func<IQueryable<DataModels.TelegramUserDto>, CancellationToken, Task<int>> updateUser,
+        CancellationToken cancellationToken)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        // Production enables retry-on-failure, which rejects a user transaction opened outside the
+        // strategy; the strategy re-runs the whole unit on a transient failure.
+        var strategy = context.Database.CreateExecutionStrategy();
+        await strategy.ExecuteAsync(async ct =>
+        {
+            context.ChangeTracker.Clear();
+            await using var transaction = await context.Database.BeginTransactionAsync(ct);
+            await updateUser(context.TelegramUsers.Where(u => u.TelegramUserId == scanResult.UserId), ct);
+            context.ProfileScanResults.Add(scanResult.ToDto());
+            await context.SaveChangesAsync(ct);
+            await transaction.CommitAsync(ct);
+        }, cancellationToken);
     }
 
     // ============================================================================

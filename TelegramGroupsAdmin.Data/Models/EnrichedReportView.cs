@@ -8,10 +8,10 @@ namespace TelegramGroupsAdmin.Data.Models;
 /// Eliminates N+1 queries by extracting JSONB user IDs and joining at the database level.
 /// NOTE: Named *View (not *Dto) to avoid backup/restore reflection picking this up.
 /// <para>
-/// Freeze before changing: the JoinUserIdentitiesInEnrichedViews migration replays this class's live
-/// <c>CreateViewSql</c>. Before changing the definition, copy the current SQL into a frozen constant
-/// (as LegacyUserIdentityViewSql does for UserIdentityView) and point that migration at the copy, so
-/// the change cannot alter fresh-database history.
+/// Freeze before changing: the AddNameVerdictInputsToUserIdentities migration replays this class's live
+/// <c>CreateViewSql</c>. Before changing the definition, copy the current SQL into a frozen constant in
+/// LegacyEnrichedViewSql (as EnrichedMessagesV2 / EnrichedReportsV2 do for JoinUserIdentitiesInEnrichedViews)
+/// and point that migration at the copy, so the change cannot alter fresh-database history.
 /// </para>
 /// </summary>
 public class EnrichedReportView
@@ -56,6 +56,8 @@ public class EnrichedReportView
             suspected_ident.last_name AS suspected_last_name,
             suspected_ident.is_bot AS suspected_is_bot,
             suspected_ident.latest_scan_explicit AS suspected_latest_scan_explicit,
+            suspected_ident.latest_scan_promotional AS suspected_latest_scan_promotional,
+            suspected_ident.is_banned AS suspected_is_banned,
             suspected.user_photo_path AS suspected_photo_path,
 
             -- ImpersonationAlert: Target user (type = 1)
@@ -65,6 +67,8 @@ public class EnrichedReportView
             target_ident.last_name AS target_last_name,
             target_ident.is_bot AS target_is_bot,
             target_ident.latest_scan_explicit AS target_latest_scan_explicit,
+            target_ident.latest_scan_promotional AS target_latest_scan_promotional,
+            target_ident.is_banned AS target_is_banned,
             target.user_photo_path AS target_photo_path,
 
             -- ExamResult: User (type = 2)
@@ -74,6 +78,8 @@ public class EnrichedReportView
             exam_user_ident.last_name AS exam_last_name,
             exam_user_ident.is_bot AS exam_user_is_bot,
             exam_user_ident.latest_scan_explicit AS exam_user_latest_scan_explicit,
+            exam_user_ident.latest_scan_promotional AS exam_user_latest_scan_promotional,
+            exam_user_ident.is_banned AS exam_user_is_banned,
             exam_user.user_photo_path AS exam_photo_path,
 
             -- ProfileScanAlert: User (type = 3)
@@ -83,6 +89,8 @@ public class EnrichedReportView
             profile_user_ident.last_name AS profile_last_name,
             profile_user_ident.is_bot AS profile_user_is_bot,
             profile_user_ident.latest_scan_explicit AS profile_user_latest_scan_explicit,
+            profile_user_ident.latest_scan_promotional AS profile_user_latest_scan_promotional,
+            profile_user_ident.is_banned AS profile_user_is_banned,
             profile_user.user_photo_path AS profile_photo_path,
 
             -- ContentReport: message author (type = 0)
@@ -220,6 +228,14 @@ public class EnrichedReportView
     [Column("suspected_latest_scan_explicit")]
     public bool? SuspectedLatestScanExplicit { get; set; }
 
+    /// <summary>Promotional flag from the user's latest profile scan; NULL when unscanned.</summary>
+    [Column("suspected_latest_scan_promotional")]
+    public bool? SuspectedLatestScanPromotional { get; set; }
+
+    /// <summary>The user's ban state; NULL when the user has no row.</summary>
+    [Column("suspected_is_banned")]
+    public bool? SuspectedIsBanned { get; set; }
+
     [Column("suspected_photo_path")]
     public string? SuspectedPhotoPath { get; set; }
 
@@ -245,6 +261,14 @@ public class EnrichedReportView
     /// <summary>Explicit flag from the user's latest profile scan; NULL when unscanned.</summary>
     [Column("target_latest_scan_explicit")]
     public bool? TargetLatestScanExplicit { get; set; }
+
+    /// <summary>Promotional flag from the user's latest profile scan; NULL when unscanned.</summary>
+    [Column("target_latest_scan_promotional")]
+    public bool? TargetLatestScanPromotional { get; set; }
+
+    /// <summary>The user's ban state; NULL when the user has no row.</summary>
+    [Column("target_is_banned")]
+    public bool? TargetIsBanned { get; set; }
 
     [Column("target_photo_path")]
     public string? TargetPhotoPath { get; set; }
@@ -272,6 +296,14 @@ public class EnrichedReportView
     [Column("exam_user_latest_scan_explicit")]
     public bool? ExamUserLatestScanExplicit { get; set; }
 
+    /// <summary>Promotional flag from the user's latest profile scan; NULL when unscanned.</summary>
+    [Column("exam_user_latest_scan_promotional")]
+    public bool? ExamUserLatestScanPromotional { get; set; }
+
+    /// <summary>The user's ban state; NULL when the user has no row.</summary>
+    [Column("exam_user_is_banned")]
+    public bool? ExamUserIsBanned { get; set; }
+
     [Column("exam_photo_path")]
     public string? ExamPhotoPath { get; set; }
 
@@ -297,6 +329,14 @@ public class EnrichedReportView
     /// <summary>Explicit flag from the user's latest profile scan; NULL when unscanned.</summary>
     [Column("profile_user_latest_scan_explicit")]
     public bool? ProfileUserLatestScanExplicit { get; set; }
+
+    /// <summary>Promotional flag from the user's latest profile scan; NULL when unscanned.</summary>
+    [Column("profile_user_latest_scan_promotional")]
+    public bool? ProfileUserLatestScanPromotional { get; set; }
+
+    /// <summary>The user's ban state; NULL when the user has no row.</summary>
+    [Column("profile_user_is_banned")]
+    public bool? ProfileUserIsBanned { get; set; }
 
     [Column("profile_photo_path")]
     public string? ProfilePhotoPath { get; set; }

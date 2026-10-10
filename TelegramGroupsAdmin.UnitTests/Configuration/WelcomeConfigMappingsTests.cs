@@ -106,4 +106,31 @@ public class WelcomeConfigMappingsTests
             Assert.That(new ProfileScanConfigData().ScanOnFirstMessage, Is.False);
         });
     }
+
+    [Test]
+    public void ProfileScanConfig_NameOnlyBanThreshold_RoundTripsAndDefaultsTo45()
+    {
+        var model = new ProfileScanConfig { NameOnlyBanThreshold = 3.5m };
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(model.ToData().NameOnlyBanThreshold, Is.EqualTo(3.5m));
+            Assert.That(new ProfileScanConfigData { NameOnlyBanThreshold = 3.5m }.ToModel().NameOnlyBanThreshold, Is.EqualTo(3.5m));
+            Assert.That(new ProfileScanConfig().NameOnlyBanThreshold, Is.EqualTo(4.5m));
+            Assert.That(ProfileScanConfig.DefaultNameOnlyBanThreshold, Is.EqualTo(4.5m));
+            Assert.That(new ProfileScanConfigData().NameOnlyBanThreshold, Is.EqualTo(4.5m));
+        }
+    }
+
+    [Test]
+    public void ProfileScanConfigData_StoredJsonWithoutNameOnlyKey_DeserializesToDefault()
+    {
+        // Rows saved before the setting existed carry no key: absent means the default, no data migration.
+        const string json = """{"enabled":true,"banThreshold":4.0,"notifyThreshold":2.0}""";
+
+        var data = System.Text.Json.JsonSerializer.Deserialize<ProfileScanConfigData>(
+            json, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web))!;
+
+        Assert.That(data.NameOnlyBanThreshold, Is.EqualTo(4.5m));
+    }
 }

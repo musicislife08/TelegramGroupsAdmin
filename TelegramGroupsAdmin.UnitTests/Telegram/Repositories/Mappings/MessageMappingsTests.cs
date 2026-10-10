@@ -15,7 +15,7 @@ public class MessageMappingsTests
 
         var record = dto.ToModel(
             chatName: null, chatIconPath: null,
-            userName: null, firstName: "Author", lastName: null, isBot: false, latestScanExplicit: true,
+            userName: null, firstName: "Author", lastName: null, isBot: false, latestScanExplicit: true, latestScanPromotional: false, isBanned: true,
             userPhotoPath: null, replyToUser: null, replyToText: null);
 
         Assert.That(record.User.Verdict, Is.EqualTo(NameVerdict.Explicit));
