@@ -8,7 +8,7 @@ namespace TelegramGroupsAdmin.BackgroundJobs.Services.Backup;
 public class BackupMetadata
 {
     [JsonPropertyName("version")]
-    public string Version { get; set; } = "3.1";
+    public string Version { get; set; } = "3.2";
 
     /// <summary>
     /// Timestamp when the backup was created. Stored as ISO 8601 string in JSON.

@@ -28,7 +28,7 @@ public static class VerificationTokenMappings
         {
             Id = ui.Id,
             UserId = ui.UserId,
-            TokenType = (DataModels.TokenType)(int)ui.TokenType,
+            TokenType = (int)ui.TokenType,
             Token = ui.Token,
             Value = ui.Value,
             ExpiresAt = ui.ExpiresAt,

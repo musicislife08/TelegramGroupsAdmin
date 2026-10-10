@@ -42,7 +42,7 @@ public class BackupService : IBackupService
     private readonly RecyclableMemoryStreamManager _streamManager;
     private readonly BackupFileLock _fileLock;
     private readonly string _mediaBasePath;
-    private const string CurrentVersion = "3.1"; // 3.0: tar.gz with media files; 3.1: verdict events (no training_labels)
+    private const string CurrentVersion = "3.2"; // 3.0: tar.gz with media files; 3.1: verdict events (no training_labels); 3.2: verification token type as int
 
     public BackupService(
         NpgsqlDataSource dataSource,
@@ -1069,7 +1069,7 @@ public class BackupService : IBackupService
         // Migration: v2.0 → v2.1 (SCHEMA-3: configs.chat_id NULL → 0)
         // Old backups have configs.chat_id = NULL for global config
         // New schema requires chat_id = 0 (NOT NULL with default 0)
-        if (string.Compare(backupVersion, "2.1", StringComparison.Ordinal) < 0)
+        if (BackupFormatVersion.IsOlderThan(backupVersion, "2.1"))
         {
             _logger.LogInformation("Applying SCHEMA-3 migration: configs.chat_id NULL → 0 (backup v{Version} < 2.1)", backupVersion);
             MigrateConfigsChatIdNullToZero(backup);
@@ -1077,10 +1077,18 @@ public class BackupService : IBackupService
 
         // Migration: v3.0 → v3.1 (single spam verdict). Backup-only and time-boxed: remove one year
         // after the release that introduced backup format 3.1.
-        if (string.Compare(backupVersion, "3.1", StringComparison.Ordinal) < 0)
+        if (BackupFormatVersion.IsOlderThan(backupVersion, "3.1"))
         {
             _logger.LogInformation("Applying verdict-events migration (backup v{Version} < 3.1)", backupVersion);
             Backup30To31VerdictMigration.Apply(backup, _logger);
+        }
+
+        // Migration: v3.1 → v3.2 (verification token type as int). Backup-only and time-boxed: remove one
+        // year after the release that introduced backup format 3.2.
+        if (BackupFormatVersion.IsOlderThan(backupVersion, "3.2"))
+        {
+            _logger.LogInformation("Applying verification token type migration (backup v{Version} < 3.2)", backupVersion);
+            Backup31To32TokenTypeMigration.Apply(backup, _logger);
         }
     }
 

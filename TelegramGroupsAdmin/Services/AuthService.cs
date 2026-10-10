@@ -1,5 +1,4 @@
 using System.Security.Cryptography;
-using TelegramGroupsAdmin.Telegram.Repositories.Mappings;
 using TelegramGroupsAdmin.Constants;
 using TelegramGroupsAdmin.Core.Extensions;
 using Microsoft.Extensions.Options;
@@ -9,7 +8,6 @@ using TelegramGroupsAdmin.Repositories;
 using TelegramGroupsAdmin.Services.Auth;
 using TelegramGroupsAdmin.Services.Email;
 using TelegramGroupsAdmin.Models;
-using DataModels = TelegramGroupsAdmin.Data.Models;
 
 namespace TelegramGroupsAdmin.Services;
 
@@ -498,7 +496,7 @@ public class AuthService(
                 UsedAt: null
             );
 
-            await verificationTokenRepository.CreateAsync(verificationToken.ToDto(), cancellationToken);
+            await verificationTokenRepository.CreateAsync(verificationToken, cancellationToken);
 
             await emailService.SendTemplatedEmailAsync(
                 email,
@@ -564,7 +562,7 @@ public class AuthService(
                 UsedAt: null
             );
 
-            await verificationTokenRepository.CreateAsync(verificationToken.ToDto(), cancellationToken);
+            await verificationTokenRepository.CreateAsync(verificationToken, cancellationToken);
 
             await emailService.SendTemplatedEmailAsync(
                 email,
@@ -617,7 +615,7 @@ public class AuthService(
             UsedAt: null
         );
 
-        await verificationTokenRepository.CreateAsync(resetToken.ToDto(), cancellationToken);
+        await verificationTokenRepository.CreateAsync(resetToken, cancellationToken);
 
         // Send password reset email
         try
@@ -656,7 +654,7 @@ public class AuthService(
     public async Task<bool> ResetPasswordAsync(string token, string newPassword, CancellationToken cancellationToken = default)
     {
         // Validate token
-        var resetToken = await verificationTokenRepository.GetValidTokenAsync(token, (DataModels.TokenType)TokenType.PasswordReset, cancellationToken);
+        var resetToken = await verificationTokenRepository.GetValidTokenAsync(token, TokenType.PasswordReset, cancellationToken);
         if (resetToken is null)
         {
             logger.LogWarning("Invalid or expired password reset token attempted");

@@ -6,7 +6,7 @@ namespace TelegramGroupsAdmin.BackgroundJobs.Services.Backup;
 
 /// <summary>
 /// Custom JSON type info resolver that excludes properties marked with [NotMapped]
-/// This prevents serialization errors from computed properties like TokenType
+/// This prevents serialization errors from computed properties like IsExpired
 /// </summary>
 internal class NotMappedPropertiesIgnoringResolver : DefaultJsonTypeInfoResolver
 {

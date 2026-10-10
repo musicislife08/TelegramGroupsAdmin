@@ -1,7 +1,8 @@
 namespace TelegramGroupsAdmin.Telegram.Models;
 
 /// <summary>
-/// Types of verification tokens for user authentication flows
+/// Types of verification tokens for user authentication flows.
+/// Stored as int in verification_tokens.token_type (and in backups): never renumber a value.
 /// </summary>
 public enum TokenType
 {

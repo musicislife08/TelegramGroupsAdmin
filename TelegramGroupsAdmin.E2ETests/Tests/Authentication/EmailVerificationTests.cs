@@ -4,7 +4,7 @@ using TelegramGroupsAdmin.E2ETests.Infrastructure;
 using TelegramGroupsAdmin.E2ETests.PageObjects;
 using TelegramGroupsAdmin.Repositories;
 using TelegramGroupsAdmin.Services.Email;
-using DataModels = TelegramGroupsAdmin.Data.Models;
+using TelegramGroupsAdmin.Telegram.Models;
 using static Microsoft.Playwright.Assertions;
 
 namespace TelegramGroupsAdmin.E2ETests.Tests.Authentication;
@@ -39,7 +39,7 @@ public class EmailVerificationTests : E2ETestBase
             .AsOwner()
             .BuildAsync();
 
-        var verificationToken = await CreateVerificationTokenAsync(user.Id, DataModels.TokenType.EmailVerification);
+        var verificationToken = await CreateVerificationTokenAsync(user.Id, TokenType.EmailVerification);
 
         // Act - navigate to verification link
         await Page.GotoAsync($"/verify-email?token={verificationToken}");
@@ -63,7 +63,7 @@ public class EmailVerificationTests : E2ETestBase
             .AsOwner()
             .BuildAsync();
 
-        var verificationToken = await CreateVerificationTokenAsync(user.Id, DataModels.TokenType.EmailVerification);
+        var verificationToken = await CreateVerificationTokenAsync(user.Id, TokenType.EmailVerification);
 
         // Act - verify email
         await Page.GotoAsync($"/verify-email?token={verificationToken}");
@@ -89,7 +89,7 @@ public class EmailVerificationTests : E2ETestBase
             .AsOwner()
             .BuildAsync();
 
-        var verificationToken = await CreateVerificationTokenAsync(user.Id, DataModels.TokenType.EmailVerification);
+        var verificationToken = await CreateVerificationTokenAsync(user.Id, TokenType.EmailVerification);
 
         // Act - navigate to verification link
         await Page.GotoAsync($"/verify-email?token={verificationToken}");
@@ -124,7 +124,7 @@ public class EmailVerificationTests : E2ETestBase
         // Create an expired token (expired 1 hour ago)
         var expiredToken = await CreateVerificationTokenAsync(
             user.Id,
-            DataModels.TokenType.EmailVerification,
+            TokenType.EmailVerification,
             expiresAt: DateTimeOffset.UtcNow.AddHours(-1));
 
         // Act - navigate with expired token
@@ -158,7 +158,7 @@ public class EmailVerificationTests : E2ETestBase
             .AsOwner()
             .BuildAsync();
 
-        var verificationToken = await CreateVerificationTokenAsync(user.Id, DataModels.TokenType.EmailVerification);
+        var verificationToken = await CreateVerificationTokenAsync(user.Id, TokenType.EmailVerification);
 
         // Use the token first time
         await Page.GotoAsync($"/verify-email?token={verificationToken}");
@@ -351,23 +351,24 @@ public class EmailVerificationTests : E2ETestBase
     /// </summary>
     private async Task<string> CreateVerificationTokenAsync(
         string userId,
-        DataModels.TokenType tokenType,
+        TokenType tokenType,
         DateTimeOffset? expiresAt = null)
     {
         using var scope = Factory.Services.CreateScope();
         var tokenRepo = scope.ServiceProvider.GetRequiredService<IVerificationTokenRepository>();
 
         var token = Guid.NewGuid().ToString("N");
-        var tokenDto = new DataModels.VerificationTokenDto
-        {
-            UserId = userId,
-            TokenType = tokenType,
-            Token = token,
-            ExpiresAt = expiresAt ?? DateTimeOffset.UtcNow.AddHours(24),
-            CreatedAt = DateTimeOffset.UtcNow
-        };
+        var verificationToken = new VerificationToken(
+            Id: 0,
+            UserId: userId,
+            TokenType: tokenType,
+            Token: token,
+            Value: null,
+            ExpiresAt: expiresAt ?? DateTimeOffset.UtcNow.AddHours(24),
+            CreatedAt: DateTimeOffset.UtcNow,
+            UsedAt: null);
 
-        await tokenRepo.CreateAsync(tokenDto);
+        await tokenRepo.CreateAsync(verificationToken);
         return token;
     }
 }
