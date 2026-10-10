@@ -36,6 +36,12 @@ public sealed class ProfileScoringEngine(
 
     private const decimal MaxScore = 5.0m;
 
+    /// <summary>
+    /// Maximum time for the name-only AI call. It bounds every caller, including the fallback that
+    /// runs after a full scan has already timed out. A timeout is no verdict.
+    /// </summary>
+    internal TimeSpan NameOnlyTimeout { get; init; } = TimeSpan.FromSeconds(20);
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true
@@ -110,12 +116,29 @@ public sealed class ProfileScoringEngine(
                 return null;
             }
 
-            var result = await chatService.GetCompletionAsync(
-                AIFeatureType.ProfileScan,
-                ProfileScanPrompts.BuildSystemPrompt(),
-                ProfileScanPrompts.BuildNameOnlyUserPrompt(user.FirstName, user.LastName, user.Username),
-                new ChatCompletionOptions { JsonMode = true },
-                cancellationToken);
+            ChatCompletionResult? result;
+            using (var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
+            {
+                timeoutCts.CancelAfter(NameOnlyTimeout);
+                try
+                {
+                    // WaitAsync ends the wait even if the provider ignores the token
+                    result = await chatService.GetCompletionAsync(
+                            AIFeatureType.ProfileScan,
+                            ProfileScanPrompts.BuildSystemPrompt(),
+                            ProfileScanPrompts.BuildNameOnlyUserPrompt(user.FirstName, user.LastName, user.Username),
+                            new ChatCompletionOptions { JsonMode = true },
+                            timeoutCts.Token)
+                        .WaitAsync(timeoutCts.Token);
+                }
+                catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+                {
+                    logger.LogWarning("Name-only profile scan AI call for {User} timed out after {Timeout}s",
+                        user.ToLogDebug(), NameOnlyTimeout.TotalSeconds);
+                    return null;
+                }
+            }
+
             if (result == null)
             {
                 logger.LogWarning("Name-only profile scan AI call returned null for {User}", user.ToLogDebug());

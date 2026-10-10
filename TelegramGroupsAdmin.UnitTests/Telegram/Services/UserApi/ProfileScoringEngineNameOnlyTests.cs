@@ -132,6 +132,46 @@ public class ProfileScoringEngineNameOnlyTests
         Assert.That(_logs.Entries, Has.Some.Matches<(LogLevel Level, string Message)>(e => e.Level == LogLevel.Warning));
     }
 
+    private void AiNeverCompletes() =>
+        // Ignores its token too, so only the engine's own time limit can end the wait.
+        _chat.GetCompletionAsync(Arg.Any<AIFeatureType>(), Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<ChatCompletionOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(new TaskCompletionSource<ChatCompletionResult?>().Task);
+
+    [Test]
+    public async Task ScoreNameOnlyAsync_AiCallExceedsTheTimeLimit_ReturnsNullAndLogsWarning()
+    {
+        // A timeout is no verdict: the caller records nothing.
+        AiNeverCompletes();
+        var sut = new ProfileScoringEngine(
+            Substitute.For<IUrlPreFilterService>(),
+            Substitute.For<IUrlContentScrapingService>(),
+            Substitute.For<IStopWordsRepository>(),
+            _chat,
+            _logs)
+        {
+            NameOnlyTimeout = TimeSpan.FromMilliseconds(100)
+        };
+
+        var result = await sut.ScoreNameOnlyAsync(User, NameOnlyBan, Notify, CancellationToken.None)
+            .WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.That(result, Is.Null);
+        Assert.That(_logs.Entries, Has.Some.Matches<(LogLevel Level, string Message)>(
+            e => e.Level == LogLevel.Warning && e.Message.Contains("timed out")));
+    }
+
+    [Test]
+    public void ScoreNameOnlyAsync_CallerCancels_ThrowsCancellation()
+    {
+        AiNeverCompletes();
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
+
+        Assert.That(async () => await _sut.ScoreNameOnlyAsync(User, NameOnlyBan, Notify, cts.Token)
+                .WaitAsync(TimeSpan.FromSeconds(10)),
+            Throws.InstanceOf<OperationCanceledException>());
+    }
+
     [Test]
     public async Task ScoreNameOnlyAsync_AiReturnsNull_ReturnsNullAndLogsWarning()
     {
