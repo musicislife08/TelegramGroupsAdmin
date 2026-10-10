@@ -78,7 +78,7 @@ public class WebUserMessagingServiceTests
         // Assert
         using var _ = Assert.EnterMultipleScope();
         Assert.That(result.IsAvailable, Is.False);
-        Assert.That(result.UnavailableReason, Does.Contain("No connected Telegram account"));
+        Assert.That(result.UnavailableReason, Is.EqualTo(WebUserMessagingService.AccountUnavailableMessage));
     }
 
     [Test]
@@ -154,7 +154,7 @@ public class WebUserMessagingServiceTests
         // Assert
         using var _ = Assert.EnterMultipleScope();
         Assert.That(result.CanSend, Is.False);
-        Assert.That(result.UnavailableReason, Does.Contain("No connected Telegram account"));
+        Assert.That(result.UnavailableReason, Is.EqualTo(WebUserMessagingService.AccountUnavailableMessage));
     }
 
     [Test]
@@ -335,7 +335,7 @@ public class WebUserMessagingServiceTests
         // Assert
         using var _ = Assert.EnterMultipleScope();
         Assert.That(result.Success, Is.False);
-        Assert.That(result.ErrorMessage, Does.Contain("No connected Telegram account"));
+        Assert.That(result.ErrorMessage, Is.EqualTo(WebUserMessagingService.AccountUnavailableMessage));
     }
 
     [Test]
@@ -565,7 +565,7 @@ public class WebUserMessagingServiceTests
         // Assert
         using var _ = Assert.EnterMultipleScope();
         Assert.That(result.Success, Is.False);
-        Assert.That(result.ErrorMessage, Does.Contain("No connected Telegram account"));
+        Assert.That(result.ErrorMessage, Is.EqualTo(WebUserMessagingService.AccountUnavailableMessage));
     }
 
     [Test]

@@ -13,6 +13,13 @@ public class WebUserMessagingService(
     ITelegramSessionManager sessionManager,
     ILogger<WebUserMessagingService> logger) : IWebUserMessagingService
 {
+    /// <summary>
+    /// Shown when no User API client is available: the account may not be connected, or the
+    /// session may be temporarily unreachable (e.g. a network outage) and reconnecting.
+    /// </summary>
+    internal const string AccountUnavailableMessage =
+        "Telegram account unavailable. It may be reconnecting; if this persists, check Profile > Telegram User API.";
+
     public async Task<WebUserFeatureAvailability> CheckFeatureAvailabilityAsync(
         WebUserIdentity webUser,
         CancellationToken cancellationToken = default)
@@ -22,7 +29,7 @@ public class WebUserMessagingService(
             var client = await sessionManager.GetClientAsync(webUser.Id, cancellationToken);
             if (client is null)
             {
-                return new WebUserFeatureAvailability(false, "No connected Telegram account. Connect in Settings → Telegram.");
+                return new WebUserFeatureAvailability(false, AccountUnavailableMessage);
             }
 
             logger.LogDebug("User API messaging available for {User}", webUser.ToLogDebug());
@@ -50,7 +57,7 @@ public class WebUserMessagingService(
             var client = await sessionManager.GetClientAsync(webUser.Id, cancellationToken);
             if (client is null)
             {
-                return new WebUserChatAvailability(false, "No connected Telegram account");
+                return new WebUserChatAvailability(false, AccountUnavailableMessage);
             }
 
             var peer = client.GetInputPeerForChat(chatId);
@@ -96,7 +103,7 @@ public class WebUserMessagingService(
 
             var client = await sessionManager.GetClientAsync(webUser.Id, cancellationToken);
             if (client is null)
-                return new WebUserMessageResult(false, "No connected Telegram account");
+                return new WebUserMessageResult(false, AccountUnavailableMessage);
 
             var peer = client.GetInputPeerForChat(chatId);
             if (peer is null)
@@ -152,7 +159,7 @@ public class WebUserMessagingService(
 
             var client = await sessionManager.GetClientAsync(webUser.Id, cancellationToken);
             if (client is null)
-                return new WebUserMessageResult(false, "No connected Telegram account");
+                return new WebUserMessageResult(false, AccountUnavailableMessage);
 
             var peer = client.GetInputPeerForChat(chatId);
             if (peer is null)

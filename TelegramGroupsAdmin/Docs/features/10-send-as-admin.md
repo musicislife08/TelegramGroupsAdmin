@@ -147,7 +147,7 @@ If you sent in **Bot mode**, the bot does not receive updates for its own messag
 
 If you sent in **Me mode** and the message does not appear, check the Telegram group directly to confirm delivery. The bot's polling loop should pick up the message within a few seconds.
 
-### "No connected Telegram account" error when sending
+### "Telegram account unavailable" error
 
 Your session may have been revoked or expired since the page loaded. Navigate to your **Profile** page and reconnect your Telegram account.
 
