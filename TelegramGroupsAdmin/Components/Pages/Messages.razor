@@ -200,6 +200,7 @@
     private bool _checkingUserApi; // True while CheckUserApiForChatAsync is running
     private bool _sendAsUser; // Current toggle state: true = personal account, false = bot
     private string? _toggleDisabledReason; // Tooltip text when toggle is disabled
+    private string? _userApiUnavailableReason; // Why the User API is unavailable, kept for chat switches
     private long? _botUserId; // Bot's Telegram user ID (for identifying bot messages)
     private string? _linkedUsername; // User's linked Telegram username (for calculating signature length)
     private string? _featureUnavailableReason; // Reason why feature is unavailable (for placeholder text)
@@ -644,7 +645,7 @@
                 _userApiAvailableForChat = false;
                 _sendAsUser = false;
                 _toggleDisabledReason = !_isUserApiAvailable
-                    ? "Connect your Telegram account in Settings"
+                    ? _userApiUnavailableReason
                     : null;
                 return;
             }
@@ -1509,9 +1510,10 @@
         var userResult = await WebUserMessagingService.CheckFeatureAvailabilityAsync(WebUser);
         _isUserApiAvailable = userResult.IsAvailable;
 
+        _userApiUnavailableReason = userResult.UnavailableReason ?? "User API not available";
         if (!_isUserApiAvailable)
         {
-            _toggleDisabledReason = userResult.UnavailableReason ?? "User API not available";
+            _toggleDisabledReason = _userApiUnavailableReason;
         }
     }
 

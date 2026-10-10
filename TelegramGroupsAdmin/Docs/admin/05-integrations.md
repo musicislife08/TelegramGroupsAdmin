@@ -73,7 +73,7 @@ TGA connects to several external services to provide its detection and moderatio
 - **[Send As Admin](../features/10-send-as-admin.md)** — Send messages as your personal Telegram account instead of the bot
 - **[Per-User Messages](../features/11-per-user-messages.md)** — Resolve full user details for cross-chat history
 
-**Do you need to configure it?** Optional but unlocks significant capabilities. Go to **Settings** -> **Telegram** -> **User API** and enter your Telegram phone number. You'll need to complete SMS verification to establish the session.
+**Do you need to configure it?** Optional but unlocks significant capabilities. An Owner enters the API credentials in **Settings** -> **Telegram** -> **User API**. Each admin then connects their own account from their **Profile** page (**Telegram User API** section) with their Telegram phone number and the verification code Telegram sends.
 
 **Session management:** Your Telegram session is stored securely in the database and persists across TGA restarts. You only need to authenticate once unless you log out or your session expires. Treat this session like a password — it grants full access to the linked Telegram account.
 

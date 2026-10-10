@@ -175,7 +175,7 @@ public sealed class ProfileScanService(
             logger.LogWarning("No User API client available for profile scan of {User}", user.ToLogDebug());
             pipelineMetrics.RecordProfileScanSkipped("no_session");
             return await FallBackToNameOnlyAsync(
-                EmptyResult(user.Id, "No User API session available. Connect a session in Settings."),
+                EmptyResult(user.Id, "No User API session available: none is connected, or it may be reconnecting. Sessions are connected from Profile > Telegram User API."),
                 user, existingUser, triggeringChat, sp, ct);
         }
 

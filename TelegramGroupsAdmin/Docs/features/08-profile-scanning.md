@@ -17,7 +17,7 @@ All automatic scans, the Profile Rescan job included, go through the same eligib
 
 ### Prerequisites
 
-- A **User API session** connected (Settings > Telegram > User API) for full profile scans. Without one, only [name-only scans](#when-the-profile-cant-be-read-name-only-scan) run
+- A **User API session** connected (Profile > Telegram User API; an Owner first sets the API credentials in Settings > Telegram > User API) for full profile scans. Without one, only [name-only scans](#when-the-profile-cant-be-read-name-only-scan) run
 - **Profile Scan enabled** per chat (Chat Management > Configure > Welcome System > Security on Join > Profile Scan)
 - An **AI provider connection** assigned to the **Profile Scan** feature (Settings > Content Detection > AI Integration) for AI vision scoring — optional but recommended. Any provider with a vision-capable model works (OpenAI, Azure OpenAI, Anthropic, OpenRouter, or an OpenAI-compatible server).
 
@@ -369,7 +369,7 @@ Profile scanning is configured in two places:
 
 ### Global: User API Sessions
 
-**Settings > Telegram > User API**
+**Profile > Telegram User API** (an Owner first sets the shared API credentials in **Settings > Telegram > User API**)
 
 Connect at least one Telegram User API session. The scanner selects the best available client -- preferring one that has access to the triggering chat for more reliable user resolution.
 
@@ -406,7 +406,7 @@ All Telegram API calls in the scan pipeline are wrapped with `TelegramFloodWaitE
 ## Troubleshooting
 
 **Profile scan not running:**
-- Without a User API session only name-only scans run (Settings > Telegram > User API)
+- Without a User API session only name-only scans run (connect one from Profile > Telegram User API)
 - Check that Profile Scan is enabled for the chat (Chat Management > Configure > Welcome System > Security on Join > Profile Scan)
 - Join scans run only for new, never-scanned or renamed users; check `ScanOnJoin`
 

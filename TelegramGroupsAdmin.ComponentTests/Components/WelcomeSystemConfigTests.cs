@@ -981,7 +981,7 @@ public class WelcomeSystemConfigTests : WelcomeSystemConfigTestContext
     }
 
     private const string NoSessionNotice =
-        "No User API session is connected: full profile scans can't run, but name-only scans still run on new joiners, first messages and renames.";
+        "No User API session is connected: full profile scans can't run, but name-only scans still run on new joiners, first messages and renames. Connect a session from your Profile page (Telegram User API).";
 
     [Test]
     public void ProfileScanOn_NoUserApiSession_ShowsNameOnlyNotice()

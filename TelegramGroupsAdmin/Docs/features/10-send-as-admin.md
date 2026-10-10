@@ -32,7 +32,7 @@ When sending in "Bot" mode, the message is routed through `WebBotMessagingServic
 
 Before you can use Send As Admin, the following must be in place:
 
-1. **User API credentials configured** -- An Owner must set the Telegram API ID and API Hash in **Settings > Telegram > User API Settings**. These credentials are obtained from [my.telegram.org](https://my.telegram.org) and are shared across all admins.
+1. **User API credentials configured** -- An Owner must set the Telegram API ID and API Hash in **Settings > Telegram > User API**. These credentials are obtained from [my.telegram.org](https://my.telegram.org) and are shared across all admins.
 
 2. **Personal Telegram account connected** -- Each admin connects their own Telegram account from their **Profile** page under the **Telegram User API** section. The connection flow is:
    - Enter your phone number (international format)
@@ -66,7 +66,7 @@ The input field placeholder changes based on the current mode:
 
 - **Me mode**: "Message as you..."
 - **Bot mode**: "Message as bot..."
-- **Unavailable**: Shows the specific reason (e.g., "Connect your Telegram account in Settings")
+- **Unavailable**: Shows the specific reason (e.g., "Telegram account unavailable. It may be reconnecting; if this persists, check Profile > Telegram User API.")
 
 ### Message Length Limits
 
@@ -123,15 +123,15 @@ Sessions are stored encrypted in the database and reconnect automatically when t
 
 Disconnecting from within Telegram itself (e.g., terminating the session from Telegram's Active Sessions settings) is also detected automatically. The system handles `AUTH_KEY_UNREGISTERED`, `SESSION_REVOKED`, and related errors by cleaning up the session and logging an audit event.
 
-A dropped connection is not a disconnect. Telegram resets idle connections now and then, and your internet may go down for a while. In both cases the session stays connected: the client reconnects from the stored session the next time it is needed. While the network is down, a failed reconnect is retried at most every 30 seconds, and nothing needs to be reconnected by hand once the network is back.
+A dropped connection is not a disconnect. Telegram resets idle connections now and then, and your internet may go down for a while. In both cases the session stays connected: the client reconnects from the stored session the next time it is needed. While the network is down, a failed reconnect is retried at most every 30 seconds, and a reconnect that takes longer than 60 seconds counts as failed. Nothing needs to be reconnected by hand once the network is back. A reconnect only resumes the stored session: it never signs the account out or sends a login code. If Telegram will not resume the session, it is disconnected with an audit event and you sign in again from your **Profile** page.
 
 ---
 
 ## Troubleshooting
 
-### Toggle shows "Connect your Telegram account in Settings"
+### Toggle shows "Telegram account unavailable"
 
-Your web user does not have an active WTelegram session. Connect your Telegram account from your **Profile** page. If the Telegram User API section shows a message about API credentials, ask an Owner to configure them in **Settings > Telegram > User API Settings**.
+Either your web user has no active WTelegram session, or the session is reconnecting (for example after an internet outage). If your **Profile** page shows the account as connected, wait a moment and select the chat again. Otherwise connect your Telegram account from your **Profile** page, in the **Telegram User API** section. If the Telegram User API section shows a message about API credentials, ask an Owner to configure them in **Settings > Telegram > User API**.
 
 ### Toggle shows "You're not a member of this group with your personal account"
 
@@ -147,7 +147,7 @@ If you sent in **Bot mode**, the bot does not receive updates for its own messag
 
 If you sent in **Me mode** and the message does not appear, check the Telegram group directly to confirm delivery. The bot's polling loop should pick up the message within a few seconds.
 
-### "Telegram account unavailable" error
+### "Telegram account unavailable" error when sending
 
 Your session may have been revoked or expired since the page loaded. Navigate to your **Profile** page and reconnect your Telegram account.
 

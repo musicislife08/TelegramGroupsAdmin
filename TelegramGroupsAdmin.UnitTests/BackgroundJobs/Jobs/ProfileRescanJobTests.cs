@@ -266,7 +266,7 @@ public class ProfileRescanJobTests
         _gate.ScanIfEligibleAsync(seven, Arg.Any<ChatIdentity?>(), Arg.Any<ProfileScanTrigger>(), Arg.Any<CancellationToken>(), Arg.Any<bool>())
             .Returns(new ProfileScanResult(7, null, null, null, null, false, null, false, false, false, 0m,
                 ProfileScanOutcome.Clean, null, null,
-                SkipReason: "No User API session available. Connect a session in Settings."));
+                SkipReason: "No User API session available: none is connected, or it may be reconnecting. Sessions are connected from Profile > Telegram User API."));
 
         await _job.Execute(Context());
 
