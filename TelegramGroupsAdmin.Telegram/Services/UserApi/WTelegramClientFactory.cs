@@ -9,12 +9,6 @@ namespace TelegramGroupsAdmin.Telegram.Services.UserApi;
 /// </summary>
 public sealed class WTelegramClientFactory : IWTelegramClientFactory
 {
-    /// <summary>
-    /// WTelegram's default of 5 is a modulo counter that never resets on success, so every fifth
-    /// dropped connection strands the client (#577). Each attempt waits 5 seconds first, so no limit cannot spin.
-    /// </summary>
-    internal const int UnlimitedAutoReconnects = int.MaxValue;
-
     private readonly ILogger<WTelegramApiClient> _clientLogger;
 
     public WTelegramClientFactory(ILogger<WTelegramClientFactory> logger, ILogger<WTelegramApiClient> clientLogger)
@@ -28,14 +22,8 @@ public sealed class WTelegramClientFactory : IWTelegramClientFactory
     }
 
     public IWTelegramApiClient Create(Func<string, string?> configCallback, Stream sessionStore)
-        => Wrap(new Client(configCallback, sessionStore));
+        => new WTelegramApiClient(new Client(configCallback, sessionStore), _clientLogger);
 
     public IWTelegramApiClient Create(Func<string, string?> configCallback, byte[] startSession, Action<byte[]> saveSession)
-        => Wrap(new Client(configCallback, startSession, saveSession));
-
-    private WTelegramApiClient Wrap(Client client)
-    {
-        client.MaxAutoReconnects = UnlimitedAutoReconnects;
-        return new WTelegramApiClient(client, _clientLogger);
-    }
+        => new WTelegramApiClient(new Client(configCallback, startSession, saveSession), _clientLogger);
 }
