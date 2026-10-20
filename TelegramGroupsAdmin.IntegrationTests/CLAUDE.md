@@ -49,7 +49,7 @@ Origin: prod DB snapshot from 2026-04-30. Bootstrap pipeline (full detail in `do
 | 14 | domain_filters | 0 | Empty by design. |
 | 17 | web_notifications | 0 | Empty by design. |
 | 18 | notification_preferences | 5 | One per active web user. |
-| 19 | messages | 410 | 100 per slice: explicit_spam, implicit_spam, explicit_ham, implicit_ham. Plus 7 SimHash test anchors appended in 3A.3 (4666, 14538, 212355, 220848, 221429, 221904, 222949) — all banned-user spam from dev DB, preserved verbatim, FK-resolved against existing canonical telegram_users and MainChat. Plus 2 messages with converted OpenAI vetoes (94, 22127) appended 2026-09-28 from prod, authored by existing non-banned canonical users (see Part 2 recipe 4h). Plus @bagging_armado's join message 110342 appended 2026-10-03 from prod (see Part 2 "User identity service anchors"). |
+| 19 | messages | 409 | 100 per slice (explicit_spam is 99 after the 2026-10-19 removal): explicit_spam, implicit_spam, explicit_ham, implicit_ham. Plus 7 SimHash test anchors appended in 3A.3 (4666, 14538, 212355, 220848, 221429, 221904, 222949) — all banned-user spam from dev DB, preserved verbatim, FK-resolved against existing canonical telegram_users and MainChat. Plus 2 messages with converted OpenAI vetoes (94, 22127) appended 2026-09-28 from prod, authored by existing non-banned canonical users (see Part 2 recipe 4h). Message 211168 removed 2026-10-19 (see Part 2 "Orphan message removal"). Plus @bagging_armado's join message 110342 appended 2026-10-03 from prod (see Part 2 "User identity service anchors"). |
 | 20 | chat_admins | 104 | Snapshot of admin membership across all 21 chats. |
 | 21 | linked_channels | 3 | One per chat that has a linked channel. |
 | 22 | telegram_user_mappings | 3 | Cross-chat user identity links. |
@@ -62,7 +62,7 @@ Origin: prod DB snapshot from 2026-04-30. Bootstrap pipeline (full detail in `do
 | 29 | invites | 19 | |
 | 30 | reports | 14 | `reviewed_by` mapped via deterministic hashtext to canonical fixture emails. Ids 186-188 are synthetic pending fixtures (one user, three report types) added for join-gate cleanup tests. All six pre-existing exam (`type=2`) contexts carry `"outcome": 0`. Profile-scan (`type=3`) `context.aiSignals` restored to string arrays (canonical edit 2026-10-01; see Part 2 "Reports"). |
 | 31 | message_edits | 23 | Edit history for messages whose canonical row carries `edit_count > 0`. |
-| 32 | detection_results | 461 | Verdict events: `source`/`classification` set by `tools/convert-canonical-to-verdict-events.sql` (canonical edit 2026-09-27), which also folded the old explicit labels in as decision rows (84 added). Legacy verdict columns dropped by `DropLegacyVerdictColumns` (file regenerated without them, same rows). URL hostnames in `check_results_json` scrubbed to `canonical-spam.test`. dr 22 and 1639 appended 2026-09-28 (converted OpenAI vetoes, stored as `AddVerdictEvents` repairs them). `is_spam` is generated from `classification` (not in the file); the `message_verdicts` view is the verdict. |
+| 32 | detection_results | 460 | Verdict events: `source`/`classification` set by `tools/convert-canonical-to-verdict-events.sql` (canonical edit 2026-09-27), which also folded the old explicit labels in as decision rows (84 added). Legacy verdict columns dropped by `DropLegacyVerdictColumns` (file regenerated without them, same rows). URL hostnames in `check_results_json` scrubbed to `canonical-spam.test`. dr 22 and 1639 appended 2026-09-28 (converted OpenAI vetoes, stored as `AddVerdictEvents` repairs them). `is_spam` is generated from `classification` (not in the file); the `message_verdicts` view is the verdict. |
 | 34 | user_actions | 993 | Bootstrap missed adding 7 synthetic ban-celebration anchor rows; see Part 2 ban-celebration note. |
 | 35 | message_translations | 14 | Non-noop translations only; URL hostnames scrubbed. |
 | 36 | ban_celebration_subscribers | 5 | Approved canonical addition 2026-09-25 (new table — no row to flag-edit). See Part 2 "DM ban celebration subscribers". |
@@ -310,6 +310,10 @@ Recipe format: a heading, the anchor id(s), a one-line description, and "use whe
 - `message_id` = `103`, `chat_id` = `-100082190806505`, `user_id` = `9320215215920`
 - Scan dr27 (`ImplicitHam`) then decision dr41 (`LegacyManual`, `ExplicitHam`) → `message_verdicts` = `ExplicitHam`.
 - Use when: a test needs a message whose verdict is an explicit ham label.
+
+### Orphan message removal (canonical edit 2026-10-19)
+
+Message 211168 (Main Community, `/spam` decision dr 1490) was the snapshot's one message whose author had no `telegram_users` row. It was removed (with dr 1490 and its content-hash `UPDATE`) because the `messages.user_id` foreign key makes that state impossible. The migration test covers the shape; `CanonicalMessageAuthorTests` guards that canonical never regains an authorless message. The explicit_spam slice is now 99.
 
 ### Configs
 
