@@ -1,6 +1,8 @@
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Utilities;
+using TelegramGroupsAdmin.Telegram.Helpers;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Identity;
@@ -405,5 +407,35 @@ public class UserIdentityServiceTests
 
         Assert.CatchAsync<OperationCanceledException>(() =>
             _sut.ObserveAsync(Observed(7, "New"), new ProfileChangeContext(Chat), cts.Token));
+    }
+
+    [Test]
+    public async Task Observe_IdentityReadThrowsAfterRename_StillAuditsTheRename()
+    {
+        Renamed(Row(7, "New"));
+        _users.GetIdentitiesAsync(Arg.Any<IReadOnlyCollection<long>>(), Arg.Any<CancellationToken>())
+            .Returns<IReadOnlyList<UserIdentity>>(_ => throw new InvalidOperationException("db down"));
+
+        var identity = await _sut.ObserveAsync(Observed(7, "New"), new ProfileChangeContext(Chat));
+
+        Assert.That(identity.DisplayName, Is.EqualTo("New"));
+        await _actions.Received(1).InsertAsync(
+            Arg.Is<UserActionRecord>(a => a!.UserId == 7 && a.ActionType == UserActionType.ProfileChange && a.MessageId == null),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task Observe_RenameWithNoChat_AuditsWithNullChatAndNoChatTag()
+    {
+        Renamed(Row(7, "New"));
+        IdentityRow(7, "New", NameVerdict.Clean);
+        var reason = ProfileChangeReason.Build(new PreviousNames("Old", null, null), Observed(7, "New"));
+
+        await _sut.ObserveAsync(Observed(7, "New"), new ProfileChangeContext(null));
+
+        await _actions.Received(1).InsertAsync(
+            Arg.Is<UserActionRecord>(a => a!.ChatId == null && a.Reason == AuditReason.WithChatTag(null, reason)
+                && !a.Reason!.StartsWith("[")),
+            Arg.Any<CancellationToken>());
     }
 }

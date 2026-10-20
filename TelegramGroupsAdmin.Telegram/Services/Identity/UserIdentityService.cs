@@ -44,6 +44,8 @@ public sealed class UserIdentityService(
             // A failed read must not cost the update its moderation either; the observed
             // names are better than the id-only fallback ResolveAsync would give.
             logger.LogError(ex, "Failed to resolve identity for user {UserId} after recording names", observed.Id);
+            if (result.Renamed is not null)
+                await AuditRenameAsync(observed, result.Renamed, context.Chat, ct);
             return FromObservedNames(observed);
         }
 
@@ -62,32 +64,38 @@ public sealed class UserIdentityService(
             }
         }
 
-        // After the rename is stored and the rescan done, so the audit can never undo the rename: the
-        // message that triggered it is not stored yet, hence the chat only. A failed audit costs the
-        // audit row, nothing else.
+        // After the rename is stored and the rescan done, so the audit can never undo the rename.
         if (result.Renamed is not null)
-        {
-            try
-            {
-                var reason = ProfileChangeReason.Build(result.Renamed, observed);
-                await actions.InsertAsync(new UserActionRecord(
-                    Id: 0,
-                    UserId: observed.Id,
-                    ActionType: UserActionType.ProfileChange,
-                    MessageId: null,
-                    ChatId: context.Chat?.Id,
-                    IssuedBy: Actor.ProfileDiffDetection,
-                    IssuedAt: DateTimeOffset.UtcNow,
-                    ExpiresAt: null,
-                    Reason: context.Chat is { } chat ? AuditReason.WithChatTag(chat, reason) : reason), ct);
-            }
-            catch (Exception ex) when (!ct.IsCancellationRequested)
-            {
-                logger.LogWarning(ex, "Failed to audit rename of user {UserId}; names were recorded", observed.Id);
-            }
-        }
+            await AuditRenameAsync(observed, result.Renamed, context.Chat, ct);
 
         return identity;
+    }
+
+    /// <summary>
+    /// Writes the ProfileChange audit for a recorded rename: the chat only, no message id (the
+    /// triggering message is not stored yet, so a message reference would fail the foreign key). A
+    /// failed audit costs the audit row, nothing else.
+    /// </summary>
+    private async Task AuditRenameAsync(ObservedUser observed, PreviousNames previous, ChatIdentity? chat, CancellationToken ct)
+    {
+        try
+        {
+            var reason = ProfileChangeReason.Build(previous, observed);
+            await actions.InsertAsync(new UserActionRecord(
+                Id: 0,
+                UserId: observed.Id,
+                ActionType: UserActionType.ProfileChange,
+                MessageId: null,
+                ChatId: chat?.Id,
+                IssuedBy: Actor.ProfileDiffDetection,
+                IssuedAt: DateTimeOffset.UtcNow,
+                ExpiresAt: null,
+                Reason: AuditReason.WithChatTag(chat, reason)), ct);
+        }
+        catch (Exception ex) when (!ct.IsCancellationRequested)
+        {
+            logger.LogWarning(ex, "Failed to audit rename of user {UserId}; names were recorded", observed.Id);
+        }
     }
 
     /// <summary>
