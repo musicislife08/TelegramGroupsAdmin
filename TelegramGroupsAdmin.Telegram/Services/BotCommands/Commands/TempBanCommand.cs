@@ -6,6 +6,7 @@ using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Extensions;
+using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.Identity;
@@ -66,7 +67,12 @@ public class TempBanCommand : IBotCommand
             return new CommandResult(TelegramMessage.Plain("❌ Could not identify target user."), DeleteCommandMessage);
         }
 
-        var targetUser = await _identityService.ResolveAsync(replyFrom.Id, cancellationToken);
+        var targetUser = await _identityService.ObserveAsync(
+            new ObservedUser(
+                replyFrom.Id, replyFrom.FirstName, replyFrom.LastName, replyFrom.Username, replyFrom.IsBot,
+                ObservationSource.ReplyTarget, message.ReplyToMessage.Date.ToUtcOffset()),
+            new ProfileChangeContext(ChatIdentity.From(message.Chat)),
+            cancellationToken);
 
         using var scope = _serviceProvider.CreateScope();
         var chatAdminsRepository = scope.ServiceProvider.GetRequiredService<IChatAdminsRepository>();

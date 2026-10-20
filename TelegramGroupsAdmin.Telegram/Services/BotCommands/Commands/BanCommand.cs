@@ -7,6 +7,7 @@ using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Constants;
 using TelegramGroupsAdmin.Telegram.Extensions;
+using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.Identity;
@@ -74,7 +75,13 @@ public class BanCommand : IBotCommand
                 return new CommandResult(TelegramMessage.Plain("❌ Could not identify target user."), DeleteCommandMessage, DeleteResponseAfterSeconds);
             }
 
-            targetIdentity = await _identityService.ResolveAsync(message.ReplyToMessage.From.Id, cancellationToken);
+            var replyFrom = message.ReplyToMessage.From;
+            targetIdentity = await _identityService.ObserveAsync(
+                new ObservedUser(
+                    replyFrom.Id, replyFrom.FirstName, replyFrom.LastName, replyFrom.Username, replyFrom.IsBot,
+                    ObservationSource.ReplyTarget, message.ReplyToMessage.Date.ToUtcOffset()),
+                new ProfileChangeContext(ChatIdentity.From(message.Chat)),
+                cancellationToken);
             triggerMessageId = message.ReplyToMessage.MessageId;
         }
         // Option 2: Arguments provided

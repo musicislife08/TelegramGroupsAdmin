@@ -110,7 +110,9 @@ public sealed class UserIdentityService(
     /// Whether a recorded rename is rescanned now. Only a message or edit (BotUpdate) of a user worth
     /// protecting against: joins and admin refresh (ChatMember) record only, because muting is among
     /// the first join steps and the join flow's own scan sees the rename in username_history; the
-    /// scan's own observation (UserApiScan) records only, or it would recurse. Trusted users (all
+    /// scan's own observation (UserApiScan) records only, or it would recurse; the names a reply or a
+    /// backfilled message carries (ReplyTarget) record only, because a moderator is already acting on
+    /// that user or the message is history. Trusted users (all
     /// chat admins), banned users, bots and system accounts record only.
     /// </summary>
     private static bool RescansRename(ObservedUser observed, TelegramUser user) =>

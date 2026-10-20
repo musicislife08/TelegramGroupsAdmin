@@ -17,8 +17,8 @@ using TelegramGroupsAdmin.Telegram.Services.Moderation;
 namespace TelegramGroupsAdmin.UnitTests.Telegram.Services.BotCommands.Commands;
 
 /// <summary>
-/// Moderation commands act on the target identity resolved by id (not the names the reply carries)
-/// and record the pipeline's sender as the executor.
+/// Moderation commands act on the identity the reply observation returns (the reply's names are an
+/// observation, so a never-seen target is recorded first) and record the pipeline's sender as the executor.
 /// </summary>
 [TestFixture]
 public class ModerationCommandIdentityTests
@@ -26,6 +26,7 @@ public class ModerationCommandIdentityTests
     private const long TestChatId = -100999888L;
     private const long AdminId = 1001L;
     private const long TargetId = 7L;
+    private static readonly DateTimeOffset ReplyDate = new(2026, 10, 3, 12, 0, 0, TimeSpan.Zero);
 
     private static readonly UserIdentity Sender = UserIdentity.ForTest(AdminId, "Alex", "Admin");
     private static readonly UserIdentity Target = UserIdentity.ForTest(TargetId, "Current", username: "current_name");
@@ -40,6 +41,9 @@ public class ModerationCommandIdentityTests
     public void SetUp()
     {
         _identities = Substitute.For<IUserIdentityService>();
+        _identities.ObserveAsync(
+            Arg.Is<ObservedUser>(o => o!.Id == TargetId), Arg.Any<ProfileChangeContext>(), Arg.Any<CancellationToken>())
+            .Returns(Target);
         _identities.ResolveAsync(TargetId, Arg.Any<CancellationToken>()).Returns(Target);
         _config = Substitute.For<IConfigService>();
 
@@ -49,6 +53,7 @@ public class ModerationCommandIdentityTests
         _moderation.RestrictUserAsync(Arg.Any<RestrictIntent>(), Arg.Any<CancellationToken>()).Returns(success);
         _moderation.TempBanUserAsync(Arg.Any<TempBanIntent>(), Arg.Any<CancellationToken>()).Returns(success);
         _moderation.UnbanUserAsync(Arg.Any<UnbanIntent>(), Arg.Any<CancellationToken>()).Returns(success);
+        _moderation.WarnUserAsync(Arg.Any<WarnIntent>(), Arg.Any<CancellationToken>()).Returns(success);
         _moderation.TrustUserAsync(Arg.Any<TrustIntent>(), Arg.Any<CancellationToken>()).Returns(success);
         _moderation.MarkAsSpamAndBanAsync(Arg.Any<SpamBanIntent>(), Arg.Any<CancellationToken>()).Returns(success);
 
@@ -74,9 +79,25 @@ public class ModerationCommandIdentityTests
             Id = 49,
             From = new User { Id = TargetId, FirstName = "Stale", Username = "stale_name" },
             Chat = new Chat { Id = TestChatId, Type = ChatType.Supergroup, Title = "Workshop" },
+            Date = ReplyDate.UtcDateTime,
             Text = "buy now"
         }
     };
+
+    /// <summary>
+    /// The reply branch observed the replied-to user from the reply's names and date instead of resolving
+    /// by id. <paramref name="reResolves"/> counts the deliberate post-action re-resolve (tempban, unban),
+    /// the only id resolve a reply command may still make.
+    /// </summary>
+    private async Task AssertReplyObserved(int reResolves = 0)
+    {
+        await _identities.Received(1).ObserveAsync(
+            Arg.Is<ObservedUser>(o => o!.Id == TargetId && o.FirstName == "Stale" && o.Username == "stale_name"
+                && o.Source == ObservationSource.ReplyTarget && o.ObservedAt == ReplyDate),
+            Arg.Is<ProfileChangeContext>(c => c!.Chat!.Id == TestChatId),
+            Arg.Any<CancellationToken>());
+        await _identities.Received(reResolves).ResolveAsync(TargetId, Arg.Any<CancellationToken>());
+    }
 
     private static bool FromSender(Actor executor) =>
         executor.TelegramUserId == AdminId && executor.DisplayName == Sender.DisplayName;
@@ -91,6 +112,7 @@ public class ModerationCommandIdentityTests
 
         await _moderation.Received(1).BanUserAsync(
             Arg.Is<BanIntent>(i => i!.User == Target && FromSender(i.Executor)), Arg.Any<CancellationToken>());
+        await AssertReplyObserved();
     }
 
     [Test]
@@ -122,6 +144,7 @@ public class ModerationCommandIdentityTests
 
         await _moderation.Received(1).RestrictUserAsync(
             Arg.Is<RestrictIntent>(i => i!.User == Target && FromSender(i.Executor)), Arg.Any<CancellationToken>());
+        await AssertReplyObserved();
         AssertMentionsTarget(result.Message, "🔇 User Current muted");
     }
 
@@ -134,6 +157,7 @@ public class ModerationCommandIdentityTests
 
         await _moderation.Received(1).TempBanUserAsync(
             Arg.Is<TempBanIntent>(i => i!.User == Target && FromSender(i.Executor)), Arg.Any<CancellationToken>());
+        await AssertReplyObserved(reResolves: 1);
         AssertMentionsTarget(result.Message, "⏱️ User Current temp banned");
     }
 
@@ -146,6 +170,7 @@ public class ModerationCommandIdentityTests
 
         await _moderation.Received(1).UnbanUserAsync(
             Arg.Is<UnbanIntent>(i => i!.User == Target && FromSender(i.Executor)), Arg.Any<CancellationToken>());
+        await AssertReplyObserved(reResolves: 1);
         AssertMentionsTarget(result.Message, "✅ User Current unbanned");
     }
 
@@ -158,6 +183,7 @@ public class ModerationCommandIdentityTests
 
         await _moderation.Received(1).TrustUserAsync(
             Arg.Is<TrustIntent>(i => i!.User == Target && FromSender(i.Executor)), Arg.Any<CancellationToken>());
+        await AssertReplyObserved();
         AssertMentionsTarget(result.Message, "✅ User Current marked as trusted");
     }
 
@@ -166,6 +192,9 @@ public class ModerationCommandIdentityTests
     {
         var flagged = UserIdentity.ForTest(TargetId, "Promo", username: "buy_now", verdict: NameVerdict.Promotional);
         _identities.ResolveAsync(TargetId, Arg.Any<CancellationToken>()).Returns(flagged);
+        _identities.ObserveAsync(
+            Arg.Is<ObservedUser>(o => o!.Id == TargetId), Arg.Any<ProfileChangeContext>(), Arg.Any<CancellationToken>())
+            .Returns(flagged);
         _config.GetNameMaskingAsync(TestChatId, Arg.Any<CancellationToken>()).Returns(NameMasking.On);
         var command = new TrustCommand(NullLogger<TrustCommand>.Instance, _provider, _moderation, _identities, _config);
 
@@ -184,6 +213,19 @@ public class ModerationCommandIdentityTests
     }
 
     [Test]
+    public async Task Warn_warns_the_observed_target_as_sender()
+    {
+        var command = new WarnCommand(NullLogger<WarnCommand>.Instance, _provider, _moderation,
+            Substitute.For<IUserMessagingService>(), _identities, _config);
+
+        await command.ExecuteAsync(ReplyTo("/warn spam"), ["spam"], PermissionLevel.Admin, Sender);
+
+        await _moderation.Received(1).WarnUserAsync(
+            Arg.Is<WarnIntent>(i => i!.User == Target && FromSender(i.Executor)), Arg.Any<CancellationToken>());
+        await AssertReplyObserved();
+    }
+
+    [Test]
     public async Task Spam_bans_resolved_target_as_sender()
     {
         var command = new SpamCommand(NullLogger<SpamCommand>.Instance, _provider, _moderation, _identities);
@@ -192,5 +234,6 @@ public class ModerationCommandIdentityTests
 
         await _moderation.Received(1).MarkAsSpamAndBanAsync(
             Arg.Is<SpamBanIntent>(i => i!.User == Target && FromSender(i.Executor)), Arg.Any<CancellationToken>());
+        await AssertReplyObserved();
     }
 }

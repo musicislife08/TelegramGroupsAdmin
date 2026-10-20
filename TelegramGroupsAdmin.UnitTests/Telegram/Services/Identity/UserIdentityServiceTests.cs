@@ -211,6 +211,19 @@ public class UserIdentityServiceTests
     }
 
     [Test]
+    public async Task Observe_ReplyTargetRename_RecordsOnly()
+    {
+        // The name a reply carries: a moderator is acting on that user right now, so nothing rescans.
+        Renamed(Row(7, "New"));
+        IdentityRow(7, "New", NameVerdict.Clean);
+
+        await _sut.ObserveAsync(Observed(7, "New", ObservationSource.ReplyTarget), new ProfileChangeContext(Chat));
+
+        await _users.ReceivedWithAnyArgs(1).GetOrUpdateAsync(default!, default);
+        await _gate.DidNotReceiveWithAnyArgs().ScanIfEligibleAsync(default!, default, default, default);
+    }
+
+    [Test]
     public async Task Observe_UserApiScanRename_RecordsOnly()
     {
         // The scan's own observation: rescanning would recurse.

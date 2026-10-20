@@ -38,16 +38,26 @@ public class MessageBackfillServiceTests
     };
 
     [Test]
-    public async Task Backfill_StoresTheAuthorResolvedById()
+    public async Task Backfill_ObservesTheAuthorAndStoresTheObservedIdentity()
     {
-        var resolved = UserIdentity.ForTest(AuthorId, "Current");
-        _identities.ResolveAsync(AuthorId, Arg.Any<CancellationToken>()).Returns(resolved);
+        var observed = UserIdentity.ForTest(AuthorId, "Current");
+        _identities.ObserveAsync(
+            Arg.Is<ObservedUser>(o => o!.Id == AuthorId), Arg.Any<ProfileChangeContext>(), Arg.Any<CancellationToken>())
+            .Returns(observed);
+        var message = Missed(new User { Id = AuthorId, FirstName = "Stale", LastName = "Name", Username = "stale_name" });
 
-        var backfilled = await _sut.BackfillIfMissingAsync(42, ChatId, Missed(new User { Id = AuthorId, FirstName = "Stale" }));
+        var backfilled = await _sut.BackfillIfMissingAsync(42, ChatId, message);
 
         Assert.That(backfilled, Is.True);
+        await _identities.Received(1).ObserveAsync(
+            Arg.Is<ObservedUser>(o => o!.Id == AuthorId && o.FirstName == "Stale" && o.LastName == "Name"
+                && o.Username == "stale_name" && o.Source == ObservationSource.ReplyTarget
+                && o.ObservedAt == new DateTimeOffset(message.Date, TimeSpan.Zero)),
+            Arg.Is<ProfileChangeContext>(c => c!.Chat!.Id == ChatId),
+            Arg.Any<CancellationToken>());
+        await _identities.DidNotReceive().ResolveAsync(AuthorId, Arg.Any<CancellationToken>());
         await _messages.Received(1).InsertMessageAsync(
-            Arg.Is<MessageRecord>(m => m!.User == resolved), Arg.Any<CancellationToken>());
+            Arg.Is<MessageRecord>(m => m!.User == observed), Arg.Any<CancellationToken>());
     }
 
     [Test]
