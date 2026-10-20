@@ -48,9 +48,16 @@ public static class Backup32To33MessageAuthorMigration
         var data = backup.Data;
 
         if (!data.TryGetValue(TelegramUsers, out var userRows))
+        {
             data[TelegramUsers] = userRows = [];
+            if (!backup.Metadata.Tables.Contains(TelegramUsers))
+            {
+                backup.Metadata.Tables.Add(TelegramUsers);
+                backup.Metadata.TableCount = backup.Metadata.Tables.Count;
+            }
+        }
 
-        var known = userRows.Select(r => ToElement(r).GetProperty("telegram_user_id").GetInt64()).ToHashSet();
+        var known = userRows.Select(r => Int64(TelegramUsers, ToElement(r), "telegram_user_id")).ToHashSet();
         var added = 0;
 
         // User 0 first, so messages without a sender are never orphans (and never banned).
@@ -63,8 +70,8 @@ public static class Backup32To33MessageAuthorMigration
 
         var messages = data.TryGetValue(Messages, out var messageRows)
             ? messageRows.Select(r => ToElement(r)).Select(e => new MessageKey(
-                e.GetProperty("message_id").GetInt32(), e.GetProperty("chat_id").GetInt64(),
-                e.GetProperty("user_id").GetInt64(), e.GetProperty("timestamp").GetDateTimeOffset())).ToList()
+                (int)Int64(Messages, e, "message_id"), Int64(Messages, e, "chat_id"),
+                Int64(Messages, e, "user_id"), Time(Messages, e, "timestamp"))).ToList()
             : [];
 
         var orphans = messages.Where(m => !known.Contains(m.UserId))
@@ -81,8 +88,8 @@ public static class Backup32To33MessageAuthorMigration
             {
                 if (!QualifiesForBan(d))
                     continue;
-                var at = d.GetProperty("detected_at").GetDateTimeOffset();
-                var key = (d.GetProperty("message_id").GetInt32(), d.GetProperty("chat_id").GetInt64());
+                var at = Time(DetectionResults, d, "detected_at");
+                var key = ((int)Int64(DetectionResults, d, "message_id"), Int64(DetectionResults, d, "chat_id"));
                 foreach (var userId in authorsByMessage[key].Distinct())
                     if (!bans.TryGetValue(userId, out var earliest) || at < earliest)
                         bans[userId] = at;
@@ -105,10 +112,10 @@ public static class Backup32To33MessageAuthorMigration
         if (!d.TryGetProperty("classification", out var cls) || cls.ValueKind != JsonValueKind.Number
             || !SpamClassifications.Contains(cls.GetInt32()))
             return false;
-        if (d.GetProperty("chat_id").GetInt64() == 0)
+        if (Int64(DetectionResults, d, "chat_id") == 0)
             return false;
 
-        var source = d.GetProperty("source").GetInt32();
+        var source = (int)Int64(DetectionResults, d, "source");
         if (BanningSources.Contains(source))
             return true;
 
@@ -146,6 +153,29 @@ public static class Backup32To33MessageAuthorMigration
             ["profile_scan_excluded"] = false
         });
     }
+
+    private static JsonElement Required(string table, JsonElement row, string field, JsonValueKind kind)
+    {
+        if (row.ValueKind == JsonValueKind.Object && row.TryGetProperty(field, out var value) && value.ValueKind == kind)
+            return value;
+
+        var id = row.ValueKind == JsonValueKind.Object
+            ? new[] { "id", "telegram_user_id", "message_id" }
+                .Where(k => row.TryGetProperty(k, out _)).Select(k => $"{k} {row.GetProperty(k)}").FirstOrDefault()
+            : null;
+        throw new InvalidOperationException(
+            $"Backup {table} row {id ?? "(no id)"} has a missing or invalid required field '{field}'");
+    }
+
+    private static long Int64(string table, JsonElement row, string field) =>
+        Required(table, row, field, JsonValueKind.Number).TryGetInt64(out var v)
+            ? v
+            : throw new InvalidOperationException($"Backup {table} field '{field}' is not an integer: {row.GetProperty(field)}");
+
+    private static DateTimeOffset Time(string table, JsonElement row, string field) =>
+        Required(table, row, field, JsonValueKind.String).TryGetDateTimeOffset(out var v)
+            ? v
+            : throw new InvalidOperationException($"Backup {table} field '{field}' is not a timestamp: {row.GetProperty(field)}");
 
     private static JsonElement ToElement(object row) =>
         row is JsonElement element ? element : JsonSerializer.SerializeToElement(row);

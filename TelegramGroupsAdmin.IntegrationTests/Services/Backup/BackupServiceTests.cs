@@ -1188,24 +1188,35 @@ public class BackupServiceTests
     /// restored schema has the messages.user_id foreign key, so restore adds the missing rows. The 3.2
     /// backup is the exported canonical backup with one message author's row and the user 0 row removed
     /// from the BACKUP's data (the database is untouched; backup fixtures are infrastructure data). The
-    /// author is one referenced by no table except messages, so only the message foreign key is at stake.
+    /// author is a canonical user whose only foreign-key references are messages, found by reading the
+    /// golden clone's foreign-key graph (so only the message foreign key is at stake).
     /// </summary>
     [Test]
     public async Task Restore_32BackupWithOrphanMessage_RestoresAndRepairsTheAuthor()
     {
+        // Tables other than messages (and telegram_users itself) with a foreign key to telegram_users.
+        var references = await _testHelper!.ExecuteScalarAsync<string?>("""
+            SELECT string_agg(format('SELECT %I AS id FROM %I', a.attname, c.conrelid::regclass::text), ' UNION ')
+            FROM pg_constraint c
+            JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1]
+            WHERE c.contype = 'f' AND c.confrelid = 'telegram_users'::regclass
+              AND c.conrelid NOT IN ('messages'::regclass, 'telegram_users'::regclass)
+            """);
+        var excluded = references is null ? "" : $"AND m.user_id NOT IN (SELECT id FROM ({references}) r WHERE id IS NOT NULL)";
+        var orphan = await _testHelper.ExecuteScalarAsync<long?>($"""
+            SELECT min(m.user_id) FROM messages m
+            WHERE m.user_id <> 0 AND EXISTS (SELECT 1 FROM telegram_users u WHERE u.telegram_user_id = m.user_id) {excluded}
+            """);
+        Assert.That(orphan, Is.Not.Null, "canonical has a message author referenced only by messages");
+        var expectedMessages = await _testHelper.ExecuteScalarAsync<long>(
+            $"SELECT count(*) FROM messages WHERE user_id = {orphan}");
+        Assert.That(expectedMessages, Is.GreaterThan(0));
+
         var exportedPath = await ExportBackupToTempFileAsync();
         var legacyPath = Path.Combine(Path.GetTempPath(), $"test_backup_v32_{Guid.NewGuid():N}.tar.gz");
         try
         {
             var (metadata, data) = await ReadExportedBackupAsync(exportedPath);
-
-            var otherTables = data.Where(t => t.Key is not ("telegram_users" or "messages"))
-                .Select(t => t.Value!.ToJsonString()).ToList();
-            var authors = data["messages"]!.AsArray().Select(m => m!["user_id"]!.GetValue<long>()).Where(id => id != 0).Distinct()
-                .Where(id => !otherTables.Any(json => json.Contains($":{id},") || json.Contains($":{id}}}") || json.Contains($":{id}]")))
-                .ToList();
-            Assert.That(authors, Is.Not.Empty, "canonical has a message author referenced only by messages");
-            var orphan = authors[0];
 
             var users = data["telegram_users"]!.AsArray();
             foreach (var row in users.Where(u => u!["telegram_user_id"]!.GetValue<long>() is var id && (id == orphan || id == 0)).ToList())
@@ -1215,15 +1226,17 @@ public class BackupServiceTests
 
             await _backupService!.RestoreAsync(legacyPath);
 
-            await using var context = _testHelper!.GetDbContext();
+            await using var context = _testHelper.GetDbContext();
             var repaired = await context.TelegramUsers.AsNoTracking().SingleAsync(u => u.TelegramUserId == orphan);
             var userZero = await context.TelegramUsers.AsNoTracking().SingleAsync(u => u.TelegramUserId == 0);
+            var messageCount = await context.Messages.AsNoTracking().CountAsync(m => m.UserId == orphan);
             using (Assert.EnterMultipleScope())
             {
                 Assert.That(repaired.FirstName, Is.Null, "id-only row");
                 Assert.That(repaired.IsActive, Is.False);
                 Assert.That(repaired.FirstSeenAt, Is.LessThanOrEqualTo(repaired.LastSeenAt));
                 Assert.That(userZero.IsBanned, Is.False);
+                Assert.That(messageCount, Is.EqualTo(expectedMessages), "the repaired author's messages survive the restore");
             }
         }
         finally

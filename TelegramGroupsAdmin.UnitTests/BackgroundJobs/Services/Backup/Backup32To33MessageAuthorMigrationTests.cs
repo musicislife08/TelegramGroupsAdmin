@@ -279,4 +279,33 @@ public class Backup32To33MessageAuthorMigrationTests
 
         Assert.That(Users(backup).Select(u => u.TelegramUserId), Is.EquivalentTo(new long[] { 7, 0 }));
     }
+
+    [Test]
+    public void Apply_MessageRowWithoutUserId_RefusesTheBackupNamingTableFieldAndRow()
+    {
+        var broken = JsonSerializer.SerializeToElement(new { message_id = 42, chat_id = ChatId, timestamp = T0 });
+        var backup = Build([User(0)], [broken], []);
+
+        var ex = Assert.Throws<InvalidOperationException>(() => Backup32To33MessageAuthorMigration.Apply(backup, NullLogger.Instance));
+
+        Assert.That(ex!.Message, Does.Contain("messages").And.Contain("user_id").And.Contain("42"));
+    }
+
+    [Test]
+    public void Apply_NoTelegramUsersTable_AddsItToTheMetadata()
+    {
+        var backup = new SystemBackup
+        {
+            Metadata = new BackupMetadata { Version = "3.2", TableCount = 0, Tables = [] },
+            Data = []
+        };
+
+        Backup32To33MessageAuthorMigration.Apply(backup, NullLogger.Instance);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(backup.Metadata.Tables, Is.EqualTo(new[] { "telegram_users" }));
+            Assert.That(backup.Metadata.TableCount, Is.EqualTo(1));
+        }
+    }
 }
