@@ -76,12 +76,8 @@ public class BanCommand : IBotCommand
             }
 
             var replyFrom = message.ReplyToMessage.From;
-            targetIdentity = await _identityService.ObserveAsync(
-                new ObservedUser(
-                    replyFrom.Id, replyFrom.FirstName, replyFrom.LastName, replyFrom.Username, replyFrom.IsBot,
-                    ObservationSource.ReplyTarget, message.ReplyToMessage.Date.ToUtcOffset()),
-                new ProfileChangeContext(ChatIdentity.From(message.Chat)),
-                cancellationToken);
+            targetIdentity = await _identityService.ObserveReplyTargetAsync(
+                replyFrom, message.ReplyToMessage.Date, ChatIdentity.From(message.Chat), cancellationToken);
             triggerMessageId = message.ReplyToMessage.MessageId;
         }
         // Option 2: Arguments provided

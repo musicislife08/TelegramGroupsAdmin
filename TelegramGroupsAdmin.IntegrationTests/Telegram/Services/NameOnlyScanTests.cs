@@ -66,6 +66,7 @@ public class NameOnlyScanTests
             .AddScoped<ITelegramUserRepository, TelegramUserRepository>()
             .AddScoped<IProfileScanResultsRepository, ProfileScanResultsRepository>()
             .AddScoped<IUsernameHistoryRepository, UsernameHistoryRepository>()
+            .AddScoped<IUserActionsRepository, UserActionsRepository>()
             .AddScoped<IUserIdentityService, UserIdentityService>()
             .AddSingleton(Substitute.For<IProfileScanGate>())
             .AddSingleton(chat)

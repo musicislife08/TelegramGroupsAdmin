@@ -54,8 +54,8 @@ public class ReplyTargetObservationTests
     [Test]
     public async Task NeverObservedReplyTarget_IsRecorded_AndCanBeBanned()
     {
-        await using var ctx = _testHelper!.GetDbContext();
-        Assert.That(await ctx.TelegramUsers.AnyAsync(u => u.TelegramUserId == NeverObservedId), Is.False);
+        await using (var before = _testHelper!.GetDbContext())
+            Assert.That(await before.TelegramUsers.AnyAsync(u => u.TelegramUserId == NeverObservedId), Is.False);
         var context = new ProfileChangeContext(ChatIdentity.FromId(GoldenDatasetConstants.Chats.MainChatId));
 
         await using var scope = _provider!.CreateAsyncScope();
@@ -66,6 +66,7 @@ public class ReplyTargetObservationTests
         await scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>()
             .SetBanStatusAsync(NeverObservedId, isBanned: true);
 
+        await using var ctx = _testHelper!.GetDbContext();
         var row = await ctx.TelegramUsers.AsNoTracking().SingleAsync(u => u.TelegramUserId == NeverObservedId);
         Assert.That(row.FirstName, Is.EqualTo("Reply"));
         Assert.That(row.LastName, Is.EqualTo("Target"));
@@ -78,8 +79,8 @@ public class ReplyTargetObservationTests
     public async Task SystemAccountObservedAsReplyTarget_IsTrusted()
     {
         const long systemId = TelegramConstants.GroupAnonymousBotUserId;
-        await using var ctx = _testHelper!.GetDbContext();
-        Assert.That(await ctx.TelegramUsers.AnyAsync(u => u.TelegramUserId == systemId), Is.False);
+        await using (var before = _testHelper!.GetDbContext())
+            Assert.That(await before.TelegramUsers.AnyAsync(u => u.TelegramUserId == systemId), Is.False);
 
         await using var scope = _provider!.CreateAsyncScope();
         await scope.ServiceProvider.GetRequiredService<IUserIdentityService>().ObserveAsync(
@@ -87,6 +88,7 @@ public class ReplyTargetObservationTests
                 ObservationSource.ReplyTarget, DateTimeOffset.UtcNow),
             new ProfileChangeContext(ChatIdentity.FromId(GoldenDatasetConstants.Chats.MainChatId)));
 
+        await using var ctx = _testHelper!.GetDbContext();
         var row = await ctx.TelegramUsers.AsNoTracking().SingleAsync(u => u.TelegramUserId == systemId);
         Assert.That(row.IsTrusted, Is.True);
     }

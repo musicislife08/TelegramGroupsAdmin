@@ -40,6 +40,7 @@ public class DmStartResolveFailureTests
         services.AddLogging();
         services.AddSingleton(users);
         services.AddSingleton(Substitute.For<IProfileScanGate>());
+        services.AddSingleton(Substitute.For<IUserActionsRepository>());
         services.AddSingleton<IUserIdentityService, UserIdentityService>();
         services.AddSingleton(Substitute.For<ITelegramPermissionService>());
         services.AddSingleton(Substitute.For<IBotMessageService>());

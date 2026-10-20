@@ -66,12 +66,8 @@ public class MessageBackfillService : IMessageBackfillService
             var from = telegramMessage.From;
             var author = from is null
                 ? await _identityService.ResolveAsync(0, cancellationToken)
-                : await _identityService.ObserveAsync(
-                    new ObservedUser(
-                        from.Id, from.FirstName, from.LastName, from.Username, from.IsBot,
-                        ObservationSource.ReplyTarget, telegramMessage.Date.ToUtcOffset()),
-                    new ProfileChangeContext(ChatIdentity.FromId(chatId)),
-                    cancellationToken);
+                : await _identityService.ObserveReplyTargetAsync(
+                    from, telegramMessage.Date, ChatIdentity.FromId(chatId), cancellationToken);
             var messageRecord = new MessageRecord(
                 MessageId: messageId,
                 User: author,

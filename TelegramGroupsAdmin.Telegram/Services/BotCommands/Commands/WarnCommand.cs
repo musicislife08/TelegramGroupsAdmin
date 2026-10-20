@@ -69,12 +69,8 @@ public class WarnCommand : IBotCommand
             return new CommandResult(TelegramMessage.Plain("❌ Could not identify target user."), DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
 
-        var targetUser = await _identityService.ObserveAsync(
-            new ObservedUser(
-                replyFrom.Id, replyFrom.FirstName, replyFrom.LastName, replyFrom.Username, replyFrom.IsBot,
-                ObservationSource.ReplyTarget, message.ReplyToMessage.Date.ToUtcOffset()),
-            new ProfileChangeContext(ChatIdentity.From(message.Chat)),
-            cancellationToken);
+        var targetUser = await _identityService.ObserveReplyTargetAsync(
+            replyFrom, message.ReplyToMessage.Date, ChatIdentity.From(message.Chat), cancellationToken);
 
         using var scope = _serviceProvider.CreateScope();
         var chatAdminsRepository = scope.ServiceProvider.GetRequiredService<IChatAdminsRepository>();
