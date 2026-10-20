@@ -89,34 +89,6 @@ public class AuditHandlerTests
         return message.MessageId;
     }
 
-    /// <summary>
-    /// Inserts a telegram_user inline. Use only for IDs that are not in canonical
-    /// (e.g., the zero service-account edge case).
-    /// </summary>
-    private async Task CreateTestUserAsync(long userId)
-    {
-        var contextFactory = _serviceProvider!.GetRequiredService<IDbContextFactory<AppDbContext>>();
-        await using var context = await contextFactory.CreateDbContextAsync();
-
-        var user = new Data.Models.TelegramUserDto
-        {
-            TelegramUserId = userId,
-            Username = $"testuser{userId}",
-            FirstName = "Test",
-            LastName = "User",
-            IsBot = false,
-            IsTrusted = false,
-            BotDmEnabled = false,
-            FirstSeenAt = DateTimeOffset.UtcNow.AddDays(-7),
-            LastSeenAt = DateTimeOffset.UtcNow,
-            CreatedAt = DateTimeOffset.UtcNow,
-            UpdatedAt = DateTimeOffset.UtcNow
-        };
-
-        context.TelegramUsers.Add(user);
-        await context.SaveChangesAsync();
-    }
-
     [TearDown]
     public void TearDown()
     {
@@ -183,10 +155,9 @@ public class AuditHandlerTests
     [Test]
     public async Task LogDeleteAsync_WithServiceAccountUserId_WorksIfUserExists()
     {
-        // Arrange - telegram_user_id=0 is not in canonical (it is the chat_id=0 sentinel,
-        // not a telegram_user row). Seed the zero service-account user inline.
+        // Arrange - the user 0 row (messages without a sender) is created by the
+        // AddMessagesUserForeignKey migration, so every migrated database has it.
         // NOTE: Service account protection happens at orchestrator level, not in AuditHandler.
-        await CreateTestUserAsync(0L);
         var messageId = await CreateTestMessageAsync(MainChatId, 0L);
 
         var executor = Actor.FromSystem("IntegrationTest");

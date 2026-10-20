@@ -4417,6 +4417,15 @@ namespace TelegramGroupsAdmin.Data.Migrations
                     b.Navigation("Message");
                 });
 
+            modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.MessageRecordDto", b =>
+                {
+                    b.HasOne("TelegramGroupsAdmin.Data.Models.TelegramUserDto", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.MessageTranslationDto", b =>
                 {
                     b.HasOne("TelegramGroupsAdmin.Data.Models.MessageEditRecordDto", "MessageEdit")

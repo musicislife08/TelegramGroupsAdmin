@@ -40,6 +40,14 @@ public class DataIntegrityTests
         // Test 1: message_translations UNIQUE on message_id (already covered in Test 2, but include for completeness)
         await using (var context = helper.GetDbContext())
         {
+            // messages.user_id references telegram_users
+            context.TelegramUsers.Add(new TelegramUserDto
+            {
+                TelegramUserId = 111,
+                FirstName = "Author",
+                IsTrusted = false,
+                FirstSeenAt = DateTimeOffset.UtcNow
+            });
             context.Messages.Add(new MessageRecordDto
             {
                 MessageId = 7000,
@@ -194,6 +202,14 @@ public class DataIntegrityTests
         long editId;
         await using (var context = helper.GetDbContext())
         {
+            // messages.user_id references telegram_users
+            context.TelegramUsers.Add(new TelegramUserDto
+            {
+                TelegramUserId = 444,
+                FirstName = "Author",
+                IsTrusted = false,
+                FirstSeenAt = DateTimeOffset.UtcNow
+            });
             context.Messages.Add(new MessageRecordDto
             {
                 MessageId = 8000,
@@ -291,6 +307,12 @@ public class DataIntegrityTests
             Assert.That(emailNullException.ColumnName, Is.EqualTo("email"),
                 "Constraint should be on email column");
         }
+
+        // messages.user_id references telegram_users
+        await helper.ExecuteSqlAsync(@"
+            INSERT INTO telegram_users (telegram_user_id, is_trusted, bot_dm_enabled, first_seen_at, last_seen_at, created_at, updated_at)
+            VALUES (666, false, false, NOW(), NOW(), NOW(), NOW());
+        ");
 
         // Test 2: messages.timestamp NOT NULL
         var timestampNullException = Assert.ThrowsAsync<Npgsql.PostgresException>(async () =>

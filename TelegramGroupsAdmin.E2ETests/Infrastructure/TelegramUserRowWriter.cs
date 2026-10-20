@@ -40,4 +40,31 @@ internal static class TelegramUserRowWriter
 
         await context.SaveChangesAsync(cancellationToken);
     }
+
+    /// <summary>
+    /// Inserts an untrusted, inactive telegram_users row for a message author the test has not built, the way the
+    /// app's first observation does; an existing row is left as it is. messages.user_id references
+    /// telegram_users, so a message's author row must exist before the message is stored.
+    /// </summary>
+    public static async Task EnsureAuthorAsync(IServiceProvider services, long userId, string? username,
+        string? firstName, string? lastName, DateTimeOffset seenAt, CancellationToken cancellationToken)
+    {
+        var factory = services.GetRequiredService<IDbContextFactory<AppDbContext>>();
+        await using var context = await factory.CreateDbContextAsync(cancellationToken);
+        var now = DateTimeOffset.UtcNow;
+        var seen = seenAt.ToUniversalTime();
+
+        await context.Database.ExecuteSqlAsync($"""
+            INSERT INTO telegram_users (
+                telegram_user_id, username, first_name, last_name,
+                is_bot, is_trusted, is_banned, bot_dm_enabled,
+                first_seen_at, last_seen_at, created_at, updated_at, is_active
+            ) VALUES (
+                {userId}, {username}, {firstName}, {lastName},
+                {false}, {false}, {false}, {false},
+                {seen}, {seen}, {now}, {now}, {false}
+            )
+            ON CONFLICT (telegram_user_id) DO NOTHING
+            """, cancellationToken);
+    }
 }

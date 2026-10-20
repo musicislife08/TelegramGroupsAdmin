@@ -313,7 +313,7 @@ Recipe format: a heading, the anchor id(s), a one-line description, and "use whe
 
 ### Orphan message removal (canonical edit 2026-10-19)
 
-Message 211168 (Main Community, `/spam` decision dr 1490) was the snapshot's one message whose author had no `telegram_users` row. It was removed (with dr 1490 and its content-hash `UPDATE`) because the `messages.user_id` foreign key makes that state impossible. The migration test covers the shape; `CanonicalMessageAuthorTests` guards that canonical never regains an authorless message. The explicit_spam slice is now 99.
+Message 211168 (Main Community, `/spam` decision dr 1490) was the snapshot's one message whose author had no `telegram_users` row. It was removed (with dr 1490 and its content-hash `UPDATE`) because the `messages.user_id` foreign key makes that state impossible. `AddMessagesUserForeignKeyMigrationTests` covers the shape (orphan repair, then the key); `CanonicalMessageAuthorTests` guards that canonical never regains an authorless message. The explicit_spam slice is now 99.
 
 ### Configs
 
