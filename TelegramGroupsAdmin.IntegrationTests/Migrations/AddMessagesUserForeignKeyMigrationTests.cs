@@ -23,6 +23,7 @@ public class AddMessagesUserForeignKeyMigrationTests
     private static readonly string Target = MigrationId<AddMessagesUserForeignKey>();
 
     private const long ChatId = -1001;
+    private const long OtherChatId = -1002;
     private const long OrphanId = 5001;
     private const long ExistingId = 5002;
     private const string ModeratorReason = "Marked as spam by moderator";
@@ -99,6 +100,40 @@ public class AddMessagesUserForeignKeyMigrationTests
             Assert.That(await _helper.ExecuteScalarAsync<DateTimeOffset>($"SELECT first_seen_at {where}"), Is.EqualTo(T1));
             Assert.That(await _helper.ExecuteScalarAsync<DateTimeOffset>($"SELECT last_seen_at {where}"), Is.EqualTo(T3));
         }
+    }
+
+    [Test]
+    public async Task Up_OrphanWithMessagesInTwoChats_SpansBothAndIsBannedFromTheSecond()
+    {
+        await InsertMessageAsync(1, OrphanId, T1);
+        await InsertMessageAsync(1, OrphanId, T3, chatId: OtherChatId);
+        await InsertDecisionAsync(1, source: 13, classification: 0, T3, chatId: OtherChatId);
+
+        await _helper.ApplyNextMigrationAsync(Target);
+
+        var where = $"FROM telegram_users WHERE telegram_user_id = {OrphanId}";
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(await _helper.ExecuteScalarAsync<DateTimeOffset>($"SELECT first_seen_at {where}"), Is.EqualTo(T1));
+            Assert.That(await _helper.ExecuteScalarAsync<DateTimeOffset>($"SELECT last_seen_at {where}"), Is.EqualTo(T3));
+            Assert.That(await IsBannedAsync(OrphanId), Is.True);
+            Assert.That(await _helper.ExecuteScalarAsync<DateTimeOffset>($"SELECT banned_at {where}"), Is.EqualTo(T3));
+        }
+    }
+
+    // Message ids are unique only per chat: a decision on another author's message with the same id in
+    // another chat must not ban the orphan (the join needs chat_id as well as message_id).
+    [Test]
+    public async Task Up_DecisionOnSameMessageIdInAnotherChat_DoesNotBanTheOrphan()
+    {
+        await InsertUserAsync(ExistingId, "Existing", "existing_user", T1);
+        await InsertMessageAsync(1, OrphanId, T1);
+        await InsertMessageAsync(1, ExistingId, T2, chatId: OtherChatId);
+        await InsertDecisionAsync(1, source: 13, classification: 0, T3, chatId: OtherChatId);
+
+        await _helper.ApplyNextMigrationAsync(Target);
+
+        await AssertCreatedNotBannedAsync(OrphanId);
     }
 
     [TestCase(10)]
@@ -235,6 +270,18 @@ public class AddMessagesUserForeignKeyMigrationTests
         await _helper.ApplyNextMigrationAsync(Target);
 
         Assert.That(await UserCountAsync(0), Is.EqualTo(1));
+    }
+
+    // User 0 is never an orphan (it is created first), so a spam decision on a channel post bans nobody.
+    [Test]
+    public async Task Up_NoUserZero_WithQualifyingDecision_IsNotBanned()
+    {
+        await InsertMessageAsync(1, 0, T1);
+        await InsertDecisionAsync(1, source: 13, classification: 0, T2);
+
+        await _helper.ApplyNextMigrationAsync(Target);
+
+        await AssertCreatedNotBannedAsync(0);
     }
 
     [Test]

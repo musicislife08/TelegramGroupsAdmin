@@ -24,7 +24,9 @@ namespace TelegramGroupsAdmin.Data.Migrations
             //    outside chat 0 that is only written after a successful ban: source AutoBan (10),
             //    WebMarkSpam (11), SpamCommand (13) or ReviewSpam (14), or a LegacyManual (99) row with the
             //    reason 'Marked as spam by moderator'. One INSERT computes the ban from the rows it inserts,
-            //    so existing users are never touched.
+            //    so existing users are never touched. A system-account orphan with a qualifying decision
+            //    would come out both trusted and banned; moderation exempts system accounts, so no such
+            //    decision is expected.
             migrationBuilder.Sql("""
                 INSERT INTO telegram_users (
                     telegram_user_id, username, first_name, last_name, names_observed_at,

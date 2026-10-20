@@ -158,6 +158,9 @@ public class AuditHandlerTests
         // Arrange - the user 0 row (messages without a sender) is created by the
         // AddMessagesUserForeignKey migration, so every migrated database has it.
         // NOTE: Service account protection happens at orchestrator level, not in AuditHandler.
+        await using (var guard = await _serviceProvider!.GetRequiredService<IDbContextFactory<AppDbContext>>().CreateDbContextAsync())
+            Assert.That(await guard.TelegramUsers.AnyAsync(u => u.TelegramUserId == 0L), Is.True,
+                "precondition: the migration-created user 0 row exists");
         var messageId = await CreateTestMessageAsync(MainChatId, 0L);
 
         var executor = Actor.FromSystem("IntegrationTest");

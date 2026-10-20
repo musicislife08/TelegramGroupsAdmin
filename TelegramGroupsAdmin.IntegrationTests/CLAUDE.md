@@ -34,7 +34,7 @@ Origin: prod DB snapshot from 2026-04-30. Bootstrap pipeline (full detail in `do
 | Order | Table | Rows | Notes |
 |-------|-------|------|-------|
 | 01 | users | 9 | Web users, all 9 pinned in `GoldenDatasetConstants.WebUsers` (5 active login anchors, 1 active GlobalAdmin with a stored TOTP secret, 2 soft-deleted, 1 disabled). Canonical edits 2026-10-01: `rerun@` flag-edited to Disabled; `perfume@`'s `totp_secret` is filled at load from the plaintext fixture `01_users.totp_secrets.json` (see Part 2). All share one PBKDF2 hash. |
-| 02 | telegram_users | 335 | Anchor set after Strict-Plus prune (every row referenced by >=1 child). Two rows flag-edited 2026-09-13 for Users-tab tests (see Part 2 recipes). |
+| 02 | telegram_users | 335 | Anchor set after Strict-Plus prune (every row referenced by >=1 child). Two rows flag-edited 2026-09-13 for Users-tab tests (see Part 2 recipes). Golden clones (and empty-template clones) also hold user 0, created by the `AddMessagesUserForeignKey` migration, so a clone has one more telegram_users row than the canonical SQL. |
 | 03 | managed_chats | 21 | Synthetic themed names; one disambiguated duplicate via `is_deleted`. |
 | 04 | configs | 20 | `chat_id=0` global row + 19 per-chat. Encrypted JSONB columns NULL in the SQL; `api_keys` on the global row is filled at load from the plaintext fixture `04_configs.api_keys.json` (encrypted with the template-build key ring). `welcome_config` populated only on global + Main Chat. |
 | 05 | content_detection_configs | 18 | One per non-deleted managed_chat. |
