@@ -538,7 +538,7 @@ public class BotChatService(
         identityService.ObserveAsync(
             new ObservedUser(user.Id, user.FirstName, user.LastName, user.Username, user.IsBot,
                 ObservationSource.ChatMember, seenAt),
-            new ProfileChangeContext(chat, MessageId: null),
+            new ProfileChangeContext(chat),
             ct);
 
     /// <summary>

@@ -1,6 +1,8 @@
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Core;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Utilities;
+using TelegramGroupsAdmin.Telegram.Helpers;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.UserApi;
@@ -14,6 +16,7 @@ namespace TelegramGroupsAdmin.Telegram.Services.Identity;
 public sealed class UserIdentityService(
     ITelegramUserRepository users,
     IProfileScanGate scanGate,
+    IUserActionsRepository actions,
     ILogger<UserIdentityService> logger) : IUserIdentityService
 {
     public async Task<UserIdentity> ObserveAsync(
@@ -22,7 +25,7 @@ public sealed class UserIdentityService(
         ObservedNamesResult result;
         try
         {
-            result = await users.GetOrUpdateAsync(observed, context, ct);
+            result = await users.GetOrUpdateAsync(observed, ct);
         }
         catch (Exception ex) when (!ct.IsCancellationRequested)
         {
@@ -56,6 +59,31 @@ public sealed class UserIdentityService(
             catch (Exception ex) when (!ct.IsCancellationRequested)
             {
                 logger.LogWarning(ex, "Profile rescan after rename failed for user {UserId}", observed.Id);
+            }
+        }
+
+        // After the rename is stored and the rescan done, so the audit can never undo the rename: the
+        // message that triggered it is not stored yet, hence the chat only. A failed audit costs the
+        // audit row, nothing else.
+        if (result.Renamed is not null)
+        {
+            try
+            {
+                var reason = ProfileChangeReason.Build(result.Renamed, observed);
+                await actions.InsertAsync(new UserActionRecord(
+                    Id: 0,
+                    UserId: observed.Id,
+                    ActionType: UserActionType.ProfileChange,
+                    MessageId: null,
+                    ChatId: context.Chat?.Id,
+                    IssuedBy: Actor.ProfileDiffDetection,
+                    IssuedAt: DateTimeOffset.UtcNow,
+                    ExpiresAt: null,
+                    Reason: context.Chat is { } chat ? AuditReason.WithChatTag(chat, reason) : reason), ct);
+            }
+            catch (Exception ex) when (!ct.IsCancellationRequested)
+            {
+                logger.LogWarning(ex, "Failed to audit rename of user {UserId}; names were recorded", observed.Id);
             }
         }
 

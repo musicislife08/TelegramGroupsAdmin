@@ -301,7 +301,7 @@ public sealed class ProfileScanService(
             await sp.GetRequiredService<IUserIdentityService>().ObserveAsync(
                 new ObservedUser(tlUser.id, tlUser.first_name, tlUser.last_name, tlUser.MainUsername,
                     tlUser.IsBot, ObservationSource.UserApiScan, DateTimeOffset.UtcNow),
-                new ProfileChangeContext(triggeringChat, null),
+                new ProfileChangeContext(triggeringChat),
                 ct);
         }
 

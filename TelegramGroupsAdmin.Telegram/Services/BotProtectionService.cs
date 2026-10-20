@@ -91,7 +91,7 @@ public class BotProtectionService(
             var botIdentity = await identityService.ObserveAsync(
                 new ObservedUser(bot.Id, bot.FirstName, bot.LastName, bot.Username, IsBot: true,
                     ObservationSource.ChatMember, seenAt),
-                new ProfileChangeContext(ChatIdentity.From(chat), MessageId: null),
+                new ProfileChangeContext(ChatIdentity.From(chat)),
                 cancellationToken);
 
             // Ban the bot via moderation service (handles Telegram API + audit trail)

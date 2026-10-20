@@ -149,7 +149,7 @@ public class WelcomeService(
             var userIdentity = await identityService.ObserveAsync(
                 new ObservedUser(user.Id, user.FirstName, user.LastName, user.Username, user.IsBot,
                     ObservationSource.ChatMember, seenAt),
-                new ProfileChangeContext(ChatIdentity.From(chatMemberUpdate.Chat), MessageId: null),
+                new ProfileChangeContext(ChatIdentity.From(chatMemberUpdate.Chat)),
                 cancellationToken);
             var existingUser = await telegramUserRepository.GetByTelegramIdAsync(user.Id, cancellationToken);
 

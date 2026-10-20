@@ -55,7 +55,7 @@ public class MessageEditProcessor
             editorIdentity = await scope.ServiceProvider.GetRequiredService<IUserIdentityService>().ObserveAsync(
                 new ObservedUser(editor.Id, editor.FirstName, editor.LastName, editor.Username,
                     editor.IsBot, ObservationSource.BotUpdate, observedAt),
-                new ProfileChangeContext(ChatIdentity.From(editedMessage.Chat), editedMessage.MessageId),
+                new ProfileChangeContext(ChatIdentity.From(editedMessage.Chat)),
                 cancellationToken);
         }
 

@@ -12,7 +12,9 @@ public interface IUserIdentityService
     /// <summary>
     /// Records the names Telegram reported (newest observation wins) and returns the resulting
     /// identity. When this records a rename, the service decides from the observation's source and
-    /// the user whether to rescan the profile inline (see <see cref="UserIdentityService"/>).
+    /// the user whether to rescan the profile inline (see <see cref="UserIdentityService"/>). A recorded
+    /// rename is then audited (ProfileChange, with the chat and no message id); an audit failure never
+    /// undoes the rename.
     /// </summary>
     Task<UserIdentity> ObserveAsync(ObservedUser observed, ProfileChangeContext context, CancellationToken ct = default);
 

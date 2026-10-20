@@ -69,11 +69,10 @@ public class TelegramUserRepositoryInsertRaceTests
         const long id = 9_876_543_210L;
         var observed = new ObservedUser(id, "racer", null, "race", IsBot: false,
             ObservationSource.BotUpdate, DateTimeOffset.UtcNow);
-        var context = new ProfileChangeContext(Chat: null, MessageId: null);
 
         // Act — fire both concurrently
-        var task1 = Task.Run(() => repo1.GetOrUpdateAsync(observed, context, CancellationToken.None));
-        var task2 = Task.Run(() => repo2.GetOrUpdateAsync(observed, context, CancellationToken.None));
+        var task1 = Task.Run(() => repo1.GetOrUpdateAsync(observed, CancellationToken.None));
+        var task2 = Task.Run(() => repo2.GetOrUpdateAsync(observed, CancellationToken.None));
 
         var results = await Task.WhenAll(task1, task2);
 

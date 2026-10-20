@@ -376,7 +376,7 @@ public class WelcomeServiceTests
             Arg.Is<ObservedUser>(o => o!.Id == TestUserId
                 && o.Source == ObservationSource.ChatMember
                 && o.ObservedAt == new DateTimeOffset(2026, 10, 3, 12, 0, 0, TimeSpan.Zero)),
-            Arg.Is<ProfileChangeContext>(c => c!.Chat!.Id == TestChatId && c.MessageId == null),
+            Arg.Is<ProfileChangeContext>(c => c!.Chat!.Id == TestChatId),
             Arg.Any<CancellationToken>());
     }
 

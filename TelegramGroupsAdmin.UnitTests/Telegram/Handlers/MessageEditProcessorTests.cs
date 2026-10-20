@@ -61,7 +61,7 @@ public class MessageEditProcessorTests
             Arg.Is<ObservedUser>(o => o!.Id == EditorId
                 && o.ObservedAt == new DateTimeOffset(2026, 10, 3, 12, 0, 0, TimeSpan.Zero)
                 && o.Source == ObservationSource.BotUpdate),
-            Arg.Is<ProfileChangeContext>(c => c!.Chat!.Id == ChatId && c.MessageId == edited.MessageId),
+            Arg.Is<ProfileChangeContext>(c => c!.Chat!.Id == ChatId),
             Arg.Any<CancellationToken>());
     }
 
