@@ -180,6 +180,8 @@ One EF migration, raw SQL in `Up` (pattern: `20260225233822_ChangeMessageIdFromB
    id-only row the same way. `first_seen_at` / `last_seen_at` = the user's earliest / latest message
    timestamp (the row's history is those messages). `names_observed_at` NULL so the next observation
    records names without fighting a watermark.
+   Rows for system-account ids (`TelegramConstants.SystemUserIds`, frozen in the migration) are inserted
+   trusted, matching `GetOrUpdateAsync`'s auto-trust.
 3. **Ban status, from the app's own evidence.** Set `is_banned = true`, `banned_at` = the earliest
    qualifying decision's `detected_at`, `ban_expires_at` NULL, for an orphan inserted in step 2 that
    has a `detection_results` row on one of its messages (joined on `(message_id, chat_id)`) where
@@ -222,7 +224,8 @@ that applies the same rules as section C to the backup's `telegram_users`, `mess
 `detection_results` rows: add user 0 whenever it is absent (as the migration does: restore empties
 `telegram_users` first, so a backup without user 0 would otherwise delete the row and break
 `AddManualTrainingSampleAsync` under the new key), add id-only rows for orphan message authors, and
-set the ban fields by the section C rule. Bump `CurrentVersion`
+set the ban fields by the section C rule. Repaired rows for system-account ids (`TelegramConstants.SystemUserIds`, frozen in the conversion) are
+inserted trusted, matching `GetOrUpdateAsync`'s auto-trust. Bump `CurrentVersion`
 to `"3.3"`; update the `"3.2"` assertions in `BackupServiceTests` (`:217`, `:684`, `:707`).
 
 The SQL migration and the backup conversion implement one rule twice (different stores, same

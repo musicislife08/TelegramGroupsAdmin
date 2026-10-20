@@ -13,8 +13,8 @@ namespace TelegramGroupsAdmin.IntegrationTests.Telegram.Repositories;
 
 /// <summary>
 /// Integration tests for TelegramUserRepository.GetOrUpdateAsync: newest-observation-wins name
-/// updates, rename history in one transaction (the identity service writes the audit), and the row lock that makes
-/// concurrent writers record exactly one rename. Canonical anchors only
+/// updates, rename history in one transaction (the identity service writes the audit), and the
+/// row lock that makes concurrent writers record exactly one rename. Canonical anchors only
 /// (GoldenDatasetConstants.IdentityService); every write in these tests is the assertion subject.
 /// </summary>
 [TestFixture]

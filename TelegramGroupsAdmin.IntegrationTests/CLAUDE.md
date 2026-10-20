@@ -49,7 +49,7 @@ Origin: prod DB snapshot from 2026-04-30. Bootstrap pipeline (full detail in `do
 | 14 | domain_filters | 0 | Empty by design. |
 | 17 | web_notifications | 0 | Empty by design. |
 | 18 | notification_preferences | 5 | One per active web user. |
-| 19 | messages | 409 | 100 per slice (explicit_spam is 99 after the 2026-10-19 removal): explicit_spam, implicit_spam, explicit_ham, implicit_ham. Plus 7 SimHash test anchors appended in 3A.3 (4666, 14538, 212355, 220848, 221429, 221904, 222949) — all banned-user spam from dev DB, preserved verbatim, FK-resolved against existing canonical telegram_users and MainChat. Plus 2 messages with converted OpenAI vetoes (94, 22127) appended 2026-09-28 from prod, authored by existing non-banned canonical users (see Part 2 recipe 4h). Message 211168 removed 2026-10-19 (see Part 2 "Orphan message removal"). Plus @bagging_armado's join message 110342 appended 2026-10-03 from prod (see Part 2 "User identity service anchors"). |
+| 19 | messages | 409 | 100 per slice (explicit_spam is 99 after the 2026-10-19 removal): explicit_spam, implicit_spam, explicit_ham, implicit_ham. Plus 7 SimHash test anchors appended in 3A.3 (4666, 14538, 212355, 220848, 221429, 221904, 222949) — all banned-user spam from dev DB, preserved verbatim, FK-resolved against existing canonical telegram_users and MainChat. Plus 2 messages with converted OpenAI vetoes (94, 22127) appended 2026-09-28 from prod, authored by existing non-banned canonical users (see Part 2 recipe 4h). Plus @bagging_armado's join message 110342 appended 2026-10-03 from prod (see Part 2 "User identity service anchors"). Message 211168 removed 2026-10-19 (see Part 2 "Orphan message removal"). |
 | 20 | chat_admins | 104 | Snapshot of admin membership across all 21 chats. |
 | 21 | linked_channels | 3 | One per chat that has a linked channel. |
 | 22 | telegram_user_mappings | 3 | Cross-chat user identity links. |
@@ -313,7 +313,7 @@ Recipe format: a heading, the anchor id(s), a one-line description, and "use whe
 
 ### Orphan message removal (canonical edit 2026-10-19)
 
-Message 211168 (Main Community, `/spam` decision dr 1490) was the snapshot's one message whose author had no `telegram_users` row. It was removed (with dr 1490 and its content-hash `UPDATE`) because the `messages.user_id` foreign key makes that state impossible. `AddMessagesUserForeignKeyMigrationTests` covers the shape (orphan repair, then the key); `CanonicalMessageAuthorTests` guards that canonical never regains an authorless message. The explicit_spam slice is now 99.
+Message 211168 (Main Community, `/spam` decision dr 1490) was the snapshot's one message whose author had no `telegram_users` row. It was removed (with dr 1490 and its content-hash `UPDATE`) because the `messages.user_id` foreign key makes that state impossible. `AddMessagesUserForeignKeyMigrationTests` covers the shape (orphan repair, then the key); the `messages` → `telegram_users` foreign key guards it at template load, so an authorless message fails the template build. The explicit_spam slice is now 99.
 
 ### Configs
 

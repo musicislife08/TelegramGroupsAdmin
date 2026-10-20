@@ -81,10 +81,9 @@ public class MessageProcessingRenameTests
                 Arg.Any<bool>(), ProfileScanOrigin.Rescan)
             .Returns(async _ =>
             {
-                await using var context = _testHelper.GetDbContext();
-                var user = await context.TelegramUsers.SingleAsync(u => u.TelegramUserId == UserId);
-                user.IsBanned = true;
-                await context.SaveChangesAsync();
+                await using var scope = _serviceProvider.CreateAsyncScope();
+                await scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>()
+                    .SetBanStatusAsync(UserId, isBanned: true);
                 return BannedScanResult();
             });
 
