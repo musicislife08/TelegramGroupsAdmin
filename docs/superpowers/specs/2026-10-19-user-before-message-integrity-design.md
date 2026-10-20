@@ -53,9 +53,8 @@ restarting, see #582), no `telegram_users` row exists. Then:
 The user is banned on Telegram in every managed chat, but the app has no record of it: not on the
 Banned tab, and a chat added later does not apply the ban.
 
-The replied-to message's `From` is a full Telegram user object with the user's current names (the
-Bot API sends user objects as they are when the update is generated). It is an observation, and
-the identity rule (`.claude/rules/user-identity.md`) says an update that shows a user's names goes
+The replied-to message's `From` is a full Telegram user object with the user's names. It is an
+observation, and the identity rule (`.claude/rules/user-identity.md`) says an update that shows a user's names goes
 through `ObserveAsync`.
 
 ### 3. `messages.user_id` has no foreign key
@@ -71,8 +70,8 @@ an install that has one got it from older code. A fresh install has none.
 
 ## Goals
 
-1. A rename seen on a new message, a service message or an edit is recorded (names + history), and
-   its `ProfileChange` audit row links the message when that message row exists.
+1. A rename seen on a new message, a service message or an edit is recorded (names + history +
+   a `ProfileChange` audit with the chat where it was seen).
 2. An audit write never rolls back, blocks, or precedes the action it records.
 3. Moderating a user from a reply records that user (row + current names) before acting, so ban
    status and audit rows persist.
@@ -103,43 +102,34 @@ an install that has one got it from older code. A fresh install has none.
 
 ### A. Rename audit after the action
 
-**Repository.** `GetOrUpdateAsync` keeps names, watermark and `username_history` in its transaction
-and stops writing the `ProfileChange` row. It still returns the previous names
-(`ObservedNamesResult.Renamed`). It no longer needs `ProfileChangeContext`; drop the parameter if
-nothing else uses it.
+A rename is a fact about the user. The message it was noticed on is not part of it: users need not
+have messages, but messages always have a user. So observing never depends on a message, and the
+`ProfileChange` audit row carries the user and the chat where the rename was seen, with no message
+link.
 
-**Identity service.** `ObserveAsync` returns a result that carries the rename to the caller instead
-of only a `UserIdentity`:
+**Layering.** Only repositories talk to the Data project, and a repository only maps between app
+models and data DTOs; the calling service orchestrates which repositories it calls. Today
+`GetOrUpdateAsync` also writes the audit row, which is audit policy inside a repository.
 
-- `ObserveAsync(ObservedUser, ProfileChangeContext, ct)` returns `ObservationResult { Identity, PendingRename? }`
-  (names are the builder's; a record is fine).
-- `PendingRename` holds what the audit needs: user id, previous names, observed names, chat.
-- A new `IUserIdentityService.AuditRenameAsync(PendingRename, int? messageId, ct)` writes the
-  `ProfileChange` row through `IUserActionsRepository.InsertAsync` (reason from
-  `ProfileChangeReason.Build`, chat tag via `AuditReason.WithChatTag`, actor
-  `Actor.ProfileDiffDetection`, `IssuedAt` = now). It catches and logs a failure as a warning,
-  following `BotModerationService.SafeAuditAsync`, and never throws except on cancellation.
-- When the context has no message (`ProfileChangeContext.MessageId == null`: joins, chat-member
-  refresh, profile scan, bot self-observation), `ObserveAsync` calls `AuditRenameAsync` itself right
-  after the rename commits and returns `PendingRename = null`. Only callers that pass a message id
-  get a pending rename back, and they write it after the message exists.
+**Repository.** `GetOrUpdateAsync(ObservedUser, ct)` keeps names, watermark and `username_history`
+in its transaction (recording a rename exactly once under the row lock is part of storing it) and
+stops writing the `ProfileChange` row. It returns the previous names as today
+(`ObservedNamesResult.Renamed`) and no longer takes `ProfileChangeContext`.
 
-(My call: callers without a message keep their current one-line call and cannot forget the audit.)
+**Identity service.** `ObserveAsync(ObservedUser, ProfileChangeContext, ct)` keeps its signature
+and return type. After the names are recorded (and after the inline rescan, unchanged), when
+`Renamed` is not null it writes the `ProfileChange` row through `IUserActionsRepository.InsertAsync`:
+reason from `ProfileChangeReason.Build`, chat tag via `AuditReason.WithChatTag(context.Chat, ...)`,
+`ChatId` = the context chat, `MessageId` null, actor `Actor.ProfileDiffDetection`, `IssuedAt` = now.
+A failure is logged as a warning (pattern: `BotModerationService.SafeAuditAsync`) and never thrown,
+except on cancellation. `ProfileChangeContext` becomes `ProfileChangeContext(ChatIdentity? Chat)`.
 
-The inline rename rescan (`UserIdentityService.cs:41-60`) is unchanged and still runs inside
-`ObserveAsync` after the names commit.
-
-**Callers with a message:**
-
-| Caller | Where the audit goes | `messageId` passed |
-|---|---|---|
-| `MessageProcessingService` normal message | right after `InsertMessageAsync` (`:584`), before the already-banned early return (`:605-639`) so it is never skipped | the message id |
-| `MessageProcessingService` service message | after the conditional insert (`:267`); if no row was inserted (`serviceMessageText == null`), audit with no message | the message id if inserted, else `null` |
-| `MessageEditProcessor` | after `GetMessageAsync` (`:66`) | the message id if `oldMessage != null`, else `null` |
-| any path that returns early before storing | audit with no message on that path | `null` |
+No caller changes beyond dropping the `MessageId:` argument: the pipeline, the edit processor and
+every other observer keep their one `ObserveAsync` call. The pipeline's ordering problem disappears
+because nothing the observation writes depends on the message row.
 
 `ObserveAsync`'s existing failure handling stays: if recording the names fails, it logs and returns
-the observed names with `PendingRename = null`.
+the observed names, and writes no audit.
 
 **Decided: no fallback for a failed observation.** With the audit out of the transaction,
 `GetOrUpdateAsync` fails only when the database does. A later message insert would then fail its
@@ -158,16 +148,18 @@ Each reply-target command calls `ObserveAsync` on `message.ReplyToMessage.From` 
 - **Source:** a new `ObservationSource.ReplyTarget`, documented "records only": `RescansRename`
   returns false for it, like `ChatMember` and `UserApiScan`. A moderator is already acting on the
   user, so a rename rescan would only race the action.
-- **Time:** `observedAt` = the command message's `Date`. The names in `ReplyToMessage.From` are
-  current as of the command's update, not the replied-to message's date. (Not the replied-to
-  message's `Date`: an old message's date would let a stale watermark win, or lose to a newer one,
-  for names that are actually current.)
-- **Context:** chat = the command's chat, `MessageId = null` (the command message is not stored by
-  this point, and the rename is about the user). The audit is therefore written inside `ObserveAsync`.
+- **Time:** `observedAt` = the replied-to message's `Date`. This is the conservative choice: it does
+  not depend on whether Telegram fills `ReplyToMessage.From` with the user's names as of the reply
+  or as of the original message. Newest observation wins, so a user already observed more recently
+  keeps their stored names and the command acts on the stored identity `ObserveAsync` returns; a
+  user never observed gets a row with the names the message carries. (The identity spec chose
+  `ResolveAsync` here because "every message was observed when it arrived"; updates discarded at
+  startup, #582, break that assumption.)
+- **Context:** chat = the command's chat. A rename found here is audited inside `ObserveAsync` with
+  no message link (the rename is about the user, not the command).
 
 `MessageBackfillService.BackfillIfMissingAsync` makes the same change for the author of the message
-it stores: `ObserveAsync` with `ReplyTarget`, observed now (it has no command date; it runs during
-the command's update), `MessageId = null`. In practice the command has already observed the user,
+it stores: `ObserveAsync` with `ReplyTarget`, observed at the stored message's `Date`. In practice the command has already observed the user,
 so this is a cheap no-op that guarantees the row before the insert. A message with no `From`
 (channel post) stays under user 0 via `ResolveAsync(0)` and relies on the user 0 row (section C).
 
@@ -267,37 +259,38 @@ preconditions; a SUT write appears only as the assertion subject; anchors read b
 
 - **Pipeline, new message (integration).** A canonical untrusted user,
   `GoldenDatasetConstants.IdentityService.UntrustedNoHistoryUserId` (9263051408340
-  @pastramiherbs, active, no history), posts a new message in a chat they belong to with different
-  names, through `HandleNewMessageAsync` built like production (pattern:
-  `MessageProcessingFirstMessageScanTests`). The observation and the message are the subjects.
+  @pastramiherbs, active, no history), posts a new message with different names through
+  `HandleNewMessageAsync` built like production (pattern: `MessageProcessingFirstMessageScanTests`).
   Expect: `telegram_users` names updated, one `username_history` row with the old names, one
-  `ProfileChange` `user_actions` row with this message's `(message_id, chat_id)`, and the message
-  stored. Fails today: the FK error rolls the rename back. Read the user's current names and history
-  count back first.
-- **Pipeline, service message (integration).** Same user, a service message with text (join) that
-  carries new names. Expect the audit to link the stored service message.
-- **Edit of an unknown message (unit or integration).** An edit whose message is not stored: the
-  rename is recorded and audited with no message link.
-- **Audit failure does not undo the rename (unit, `UserIdentityServiceTests`).** `AuditRenameAsync`
-  with `IUserActionsRepository.InsertAsync` throwing: logs a warning, does not throw; the repository
-  call that recorded the names is unaffected (it no longer writes the audit). Plus a control:
-  `GetOrUpdateAsync` writes names + history and no `user_actions` row
-  (`TelegramUserRepositoryObserveTests`: replace `Rename_UpdatesNames_WritesOneHistoryAndOneAuditRow`
-  with names + history only; the audit assertion moves to the identity-service tests).
-- **No-message callers still audit.** An observation with `MessageId == null` and a rename writes
-  exactly one `ProfileChange` row with no message link (`JoinRenameRescanTests` already drives this
-  path; extend its assertions).
+  `ProfileChange` row with the chat and no message, and the message stored. Fails today: the
+  foreign key error rolls the rename back. Read the user's names, history and audit counts back first.
+- **Repository writes no audit (integration, `TelegramUserRepositoryObserveTests`).** Replace
+  `Rename_UpdatesNames_WritesOneHistoryAndOneAuditRow` with names + history and no new
+  `ProfileChange` row.
+- **Service writes the audit after the rename (unit, `UserIdentityServiceTests`).** A recorded
+  rename writes exactly one `ProfileChange` record with the context chat and no message; no rename,
+  no record; `InsertAsync` throwing is logged and `ObserveAsync` still returns the identity;
+  cancellation propagates.
+- **Rename and rename back (integration).** Two observations of the same user, there and back:
+  two history rows and two audit rows.
+- **Joins still audit.** `JoinRenameRescanTests` asserts its rename wrote exactly one
+  `ProfileChange` row with no message.
 
 ### Reply targets (B)
 
-- **`/spam` on a never-observed user (integration).** The target id must not exist in canonical
-  (pick an id outside the canonical user range; the observation creating it is the assertion
-  subject, not a precondition). Drive `SpamCommand` with a reply whose `From` carries names, against
-  a stubbed Telegram layer. Expect: the user row exists with those names, `is_banned = true`, the
-  Ban audit row exists. Fails today with "Cannot set ban status for unknown user".
+- **A never-observed reply target can be banned (integration).** The target id must not exist in
+  canonical (an id outside the canonical user range, as `MessageProcessingFirstMessageScanTests`
+  does; the observation creating it is the assertion subject, not a precondition). Real
+  `UserIdentityService` + `TelegramUserRepository`: `ObserveAsync(ReplyTarget)` creates the row with
+  the reply's names, then `SetBanStatusAsync` (the second subject) sets `is_banned`. Control: on
+  current code the command path calls `ResolveAsync`, which creates nothing, and
+  `SetBanStatusAsync` leaves no row ("Cannot set ban status for unknown user"). There is no
+  integration harness for the full `/spam` path; the unit tests below pin that the commands take
+  this path.
 - **Each reply-target command observes the target (unit).** For each of the seven commands, assert
   `ObserveAsync` is called with the reply's `From` names, `ObservationSource.ReplyTarget` and the
-  command message's date, and that `ResolveAsync` is not used for the reply target.
+  replied-to message's date, that `ResolveAsync` is not used for the reply target, and that the
+  command acts on the identity `ObserveAsync` returned.
 - **`ReplyTarget` records only (unit, `UserIdentityServiceTests`).** A rename observed with
   `ReplyTarget` does not trigger the rescan gate.
 - **Backfill observes the author (unit, `MessageBackfillServiceTests`).** Replace the
@@ -338,11 +331,5 @@ sanctioned shape for schema fixtures. Cases:
 
 ## Left to the builder
 
-- Names of `ObservationResult`, `PendingRename`, `AuditRenameAsync`, the backup conversion class,
-  and whether `ObservationResult` replaces the `UserIdentity` return or adds an overload. Every
-  existing caller must compile against the result.
-- Whether `ProfileChangeContext` keeps `MessageId` (it still tells `ObserveAsync` whether to audit
-  inline) or the decision becomes an explicit parameter.
+- The backup conversion class name.
 - The migration name and exact SQL.
-- How the `/spam` integration test stubs the Telegram layer (existing moderation integration tests
-  are the pattern).
