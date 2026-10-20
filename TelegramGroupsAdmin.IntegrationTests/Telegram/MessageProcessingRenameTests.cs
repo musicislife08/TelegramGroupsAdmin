@@ -36,9 +36,13 @@ namespace TelegramGroupsAdmin.IntegrationTests.Telegram;
 /// <see cref="MessageProcessingService.HandleNewMessageAsync"/>. The sender is observed before the
 /// message row exists, so the rename's <c>ProfileChange</c> audit must not reference the message:
 /// before, the composite foreign key rejected the row and the whole observation rolled back,
-/// losing the new names, the history row and the audit. Harness as in
-/// <see cref="MessageProcessingFirstMessageScanTests"/>; the substituted scan returns Banned so
-/// content detection is short-circuited.
+/// losing the new names, the history row and the audit.
+///
+/// <para>The rename also triggers the profile-change rescan (only that trigger is enabled). The
+/// substituted scan service plays the real scan's outcome: it bans the user in the database and
+/// returns Banned, so the text message takes the already-banned early return after it is stored
+/// and the rename must still be fully recorded. Harness shared with
+/// <see cref="MessageProcessingFirstMessageScanTests"/> via <see cref="MessageProcessingTestHarness"/>.</para>
 /// </summary>
 [TestFixture]
 public class MessageProcessingRenameTests
@@ -69,91 +73,27 @@ public class MessageProcessingRenameTests
         _profileScanService = Substitute.For<IProfileScanService>();
         _sessionManager = Substitute.For<ITelegramSessionManager>();
 
-        // A Banned outcome is what keeps ContentDetectionOrchestrator out of the graph.
+        // The rename rescan's outcome: a real profile ban marks the user banned, which is what the
+        // pipeline's already-banned check reads. The substitute reproduces that effect.
         _profileScanService
-            .ScanUserProfileAsync(Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity?>(), Arg.Any<CancellationToken>())
-            .Returns(_ => Task.FromResult(BannedScanResult()));
+            .ScanUserProfileAsync(
+                Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity?>(), Arg.Any<CancellationToken>(),
+                Arg.Any<bool>(), ProfileScanOrigin.Rescan)
+            .Returns(async _ =>
+            {
+                await using var context = _testHelper.GetDbContext();
+                var user = await context.TelegramUsers.SingleAsync(u => u.TelegramUserId == UserId);
+                user.IsBanned = true;
+                await context.SaveChangesAsync();
+                return BannedScanResult();
+            });
 
         _sessionManager.HasAnyActiveSessionAsync(Arg.Any<CancellationToken>()).Returns(true);
 
-        var services = new ServiceCollection();
-
-        services.AddDbContextFactory<AppDbContext>(options =>
-            options.UseNpgsql(_testHelper.ConnectionString));
-
-        services.AddLogging(builder =>
-            builder.AddConsole().SetMinimumLevel(LogLevel.Warning));
-
-        services.Configure<AppOptions>(options => options.DataPath = _dataPath);
-
-        services.AddCoreServices();
-        services.AddHybridCache();
-        services.AddDataProtection();
-
-        // ── Real: repositories the profile-scan gate and the message path read/write ──
-        services.AddScoped<ITelegramUserRepository, TelegramUserRepository>();
-        services.AddScoped<IMessageHistoryRepository, MessageHistoryRepository>();
-        services.AddScoped<IUsernameHistoryRepository, UsernameHistoryRepository>();
-        services.AddScoped<IManagedChatsRepository, ManagedChatsRepository>();
-        services.AddScoped<IChatAdminsRepository, ChatAdminsRepository>();
-
-        // ── Real: IConfigService, so the ScanOnFirstMessage flag round-trips through
-        //    the same welcome_config JSONB path production reads. ──
-        services.AddScoped<IConfigRepository, ConfigRepository>();
-        services.AddScoped<IContentDetectionConfigRepository, ContentDetectionConfigRepository>();
-        services.AddScoped<IConfigService, ConfigService>();
-
-        // ── Real: the gate under test ──
-        services.AddSingleton<PipelineMetrics>();
-        services.AddSingleton<ChatMetrics>();
-        services.AddScoped<IProfileScanGate, ProfileScanGate>();
-
-        // ── Real: the identity service and the audit repository it writes through ──
-        services.AddScoped<IUserIdentityService, UserIdentityService>();
-        services.AddScoped<IUserActionsRepository, UserActionsRepository>();
-
-        // ── Real: concrete handlers on the pre-detection path. All take interface-only
-        //    dependencies and short-circuit for a plain-text, non-command message. ──
-        services.AddSingleton<CommandRouter>();
-        services.AddScoped<AdminMentionHandler>();
-        services.AddSingleton<IImageProcessor, SkiaImageProcessor>();
-        services.AddScoped<ImageProcessingHandler>();
-        services.AddScoped<TelegramMediaService>();
-        services.AddScoped<MediaProcessingHandler>();
-        services.AddScoped<FileScanningHandler>();
-        services.AddScoped<BackgroundJobScheduler>();
-
-        // ── Substituted: the scan itself (needs a live WTelegram User API session) ──
-        services.AddSingleton(_profileScanService);
-        services.AddSingleton(_sessionManager);
-
-        // ── Substituted: everything else the path can touch ──
-        services.AddSingleton(Substitute.For<IChatCache>());
-        services.AddSingleton(Substitute.For<IJobScheduler>());
-        services.AddSingleton(Substitute.For<ITranslationHandler>());
-        services.AddSingleton(Substitute.For<IBotMediaService>());
-        services.AddSingleton(Substitute.For<IBotMessageService>());
-        services.AddSingleton(Substitute.For<IBotChatService>());
-        services.AddSingleton(Substitute.For<IBotUserService>());
-        services.AddSingleton(Substitute.For<IBotModerationService>());
-        services.AddSingleton(Substitute.For<IMessageTranslationService>());
-        services.AddSingleton(Substitute.For<IUrlContentScrapingService>());
-        services.AddSingleton(Substitute.For<IExamFlowService>());
-        services.AddSingleton(Substitute.For<IWelcomeResponsesRepository>());
-
-        services.AddSingleton<IMessageProcessingService, MessageProcessingService>();
-
-        _serviceProvider = services.BuildServiceProvider();
-
-        // The translation handler is on the non-optional path: it must hand back the
-        // original text so detection input is unchanged.
-        _serviceProvider.GetRequiredService<ITranslationHandler>()
-            .GetTextForDetectionAsync(
-                Arg.Any<string?>(), Arg.Any<int>(), Arg.Any<long>(), Arg.Any<CancellationToken>())
-            .Returns(callInfo => Task.FromResult(
-                new TranslationForDetectionResult(callInfo.ArgAt<string?>(0) ?? "", null, null)));
-
+        _serviceProvider = MessageProcessingTestHarness.Build(_testHelper, _dataPath, _profileScanService, _sessionManager);
         _sut = _serviceProvider.GetRequiredService<IMessageProcessingService>();
+
+        await EnableProfileChangeScanOnlyAsync();
     }
 
     [TearDown]
@@ -176,10 +116,7 @@ public class MessageProcessingRenameTests
         await _sut.HandleNewMessageAsync(CreateTextMessage("Renamed Sender"), CancellationToken.None);
 
         await AssertRenameRecordedAsync(before, "Renamed Sender");
-        using var scope = _serviceProvider.CreateScope();
-        var stored = await scope.ServiceProvider.GetRequiredService<IMessageHistoryRepository>()
-            .GetMessageAsync(TextMessageId, MainChatId);
-        Assert.That(stored, Is.Not.Null, "The renamed sender's message was not stored.");
+        await AssertMessageStoredAsync(TextMessageId);
     }
 
     [Test]
@@ -190,6 +127,30 @@ public class MessageProcessingRenameTests
         await _sut.HandleNewMessageAsync(CreateJoinMessage("Renamed Joiner"), CancellationToken.None);
 
         await AssertRenameRecordedAsync(before, "Renamed Joiner");
+        await AssertMessageStoredAsync(ServiceMessageId);
+    }
+
+    // Only the profile-change trigger is on, so the rename rescan is what reaches the scan service.
+    private async Task EnableProfileChangeScanOnlyAsync()
+    {
+        using var scope = _serviceProvider.CreateScope();
+        var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
+        var welcome = await configService.GetEffectiveWelcomeAsync(MainChatId) ?? WelcomeConfig.Default;
+
+        welcome.JoinSecurity.ProfileScan.Enabled = true;
+        welcome.JoinSecurity.ProfileScan.ScanOnJoin = false;
+        welcome.JoinSecurity.ProfileScan.ScanOnFirstMessage = false;
+        welcome.JoinSecurity.ProfileScan.ScanOnProfileChange = true;
+
+        await configService.SaveWelcomeAsync(new ChatIdentity(MainChatId, "Main Community"), welcome, Actor.SystemSeed);
+    }
+
+    private async Task AssertMessageStoredAsync(int messageId)
+    {
+        using var scope = _serviceProvider.CreateScope();
+        var stored = await scope.ServiceProvider.GetRequiredService<IMessageHistoryRepository>()
+            .GetMessageAsync(messageId, MainChatId);
+        Assert.That(stored, Is.Not.Null, $"Message {messageId} was not stored.");
     }
 
     private sealed record State(string? FirstName, int HistoryCount, int ProfileChangeCount);
@@ -225,6 +186,13 @@ public class MessageProcessingRenameTests
             Assert.That(audit.ChatId, Is.EqualTo(MainChatId));
             Assert.That(audit.MessageId, Is.Null);
         }
+
+        // The rename rescan reached the scan service exactly once and banned the user.
+        await _profileScanService.Received(1).ScanUserProfileAsync(
+            Arg.Is<UserIdentity>(u => u != null && u.Id == UserId),
+            Arg.Is<ChatIdentity?>(c => c != null && c.Id == MainChatId),
+            Arg.Any<CancellationToken>(), true, ProfileScanOrigin.Rescan);
+        Assert.That(user.IsBanned, Is.True, "The rename rescan's Banned outcome was not applied.");
     }
 
     private static Message CreateTextMessage(string firstName) => new()
