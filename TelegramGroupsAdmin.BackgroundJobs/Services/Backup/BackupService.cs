@@ -42,7 +42,7 @@ public class BackupService : IBackupService
     private readonly RecyclableMemoryStreamManager _streamManager;
     private readonly BackupFileLock _fileLock;
     private readonly string _mediaBasePath;
-    private const string CurrentVersion = "3.2"; // 3.0: tar.gz with media files; 3.1: verdict events (no training_labels); 3.2: verification token type as int
+    private const string CurrentVersion = "3.3"; // 3.0: tar.gz with media files; 3.1: verdict events (no training_labels); 3.2: verification token type as int; 3.3: every message has a user row
 
     public BackupService(
         NpgsqlDataSource dataSource,
@@ -1089,6 +1089,14 @@ public class BackupService : IBackupService
         {
             _logger.LogInformation("Applying verification token type migration (backup v{Version} < 3.2)", backupVersion);
             Backup31To32TokenTypeMigration.Apply(backup, _logger);
+        }
+
+        // Migration: v3.2 → v3.3 (messages.user_id foreign key: add the missing message authors). Backup-only
+        // and time-boxed: remove one year after the release that introduced backup format 3.3.
+        if (BackupFormatVersion.IsOlderThan(backupVersion, "3.3"))
+        {
+            _logger.LogInformation("Applying message author migration (backup v{Version} < 3.3)", backupVersion);
+            Backup32To33MessageAuthorMigration.Apply(backup, _logger);
         }
     }
 

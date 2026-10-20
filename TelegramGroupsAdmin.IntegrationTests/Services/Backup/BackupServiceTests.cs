@@ -214,7 +214,7 @@ public class BackupServiceTests
             Assert.That(metadata, Is.Not.Null);
             using (Assert.EnterMultipleScope())
             {
-                Assert.That(metadata.Version, Is.EqualTo("3.2"));
+                Assert.That(metadata.Version, Is.EqualTo("3.3"));
                 Assert.That(metadata.TableCount, Is.GreaterThan(0));
             }
         }
@@ -681,7 +681,7 @@ public class BackupServiceTests
             Assert.That(metadata, Is.Not.Null);
             using (Assert.EnterMultipleScope())
             {
-                Assert.That(metadata.Version, Is.EqualTo("3.2"));
+                Assert.That(metadata.Version, Is.EqualTo("3.3"));
                 Assert.That(metadata.TableCount, Is.EqualTo(ExpectedBackupTableCount));
                 Assert.That(metadata.CreatedAt, Is.LessThanOrEqualTo(DateTimeOffset.UtcNow));
             }
@@ -704,7 +704,7 @@ public class BackupServiceTests
 
             // Assert
             Assert.That(metadata, Is.Not.Null);
-            Assert.That(metadata.Version, Is.EqualTo("3.2"));
+            Assert.That(metadata.Version, Is.EqualTo("3.3"));
         }
         finally
         {
@@ -1180,6 +1180,56 @@ public class BackupServiceTests
         finally
         {
             File.Delete(exportedPath);
+        }
+    }
+
+    /// <summary>
+    /// A 3.2 backup can hold a message whose author has no telegram_users row, and no user 0 row; the
+    /// restored schema has the messages.user_id foreign key, so restore adds the missing rows. The 3.2
+    /// backup is the exported canonical backup with one message author's row and the user 0 row removed
+    /// from the BACKUP's data (the database is untouched; backup fixtures are infrastructure data). The
+    /// author is one referenced by no table except messages, so only the message foreign key is at stake.
+    /// </summary>
+    [Test]
+    public async Task Restore_32BackupWithOrphanMessage_RestoresAndRepairsTheAuthor()
+    {
+        var exportedPath = await ExportBackupToTempFileAsync();
+        var legacyPath = Path.Combine(Path.GetTempPath(), $"test_backup_v32_{Guid.NewGuid():N}.tar.gz");
+        try
+        {
+            var (metadata, data) = await ReadExportedBackupAsync(exportedPath);
+
+            var otherTables = data.Where(t => t.Key is not ("telegram_users" or "messages"))
+                .Select(t => t.Value!.ToJsonString()).ToList();
+            var authors = data["messages"]!.AsArray().Select(m => m!["user_id"]!.GetValue<long>()).Where(id => id != 0).Distinct()
+                .Where(id => !otherTables.Any(json => json.Contains($":{id},") || json.Contains($":{id}}}") || json.Contains($":{id}]")))
+                .ToList();
+            Assert.That(authors, Is.Not.Empty, "canonical has a message author referenced only by messages");
+            var orphan = authors[0];
+
+            var users = data["telegram_users"]!.AsArray();
+            foreach (var row in users.Where(u => u!["telegram_user_id"]!.GetValue<long>() is var id && (id == orphan || id == 0)).ToList())
+                users.Remove(row);
+            metadata["version"] = "3.2";
+            await WriteLegacyBackupAsync(legacyPath, metadata, data);
+
+            await _backupService!.RestoreAsync(legacyPath);
+
+            await using var context = _testHelper!.GetDbContext();
+            var repaired = await context.TelegramUsers.AsNoTracking().SingleAsync(u => u.TelegramUserId == orphan);
+            var userZero = await context.TelegramUsers.AsNoTracking().SingleAsync(u => u.TelegramUserId == 0);
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(repaired.FirstName, Is.Null, "id-only row");
+                Assert.That(repaired.IsActive, Is.False);
+                Assert.That(repaired.FirstSeenAt, Is.LessThanOrEqualTo(repaired.LastSeenAt));
+                Assert.That(userZero.IsBanned, Is.False);
+            }
+        }
+        finally
+        {
+            File.Delete(exportedPath);
+            File.Delete(legacyPath);
         }
     }
 
