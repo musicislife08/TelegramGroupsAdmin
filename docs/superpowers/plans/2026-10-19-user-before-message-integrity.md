@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Branch `fix/user-before-message-integrity`; no git worktrees; conventional commits; new commits, never amend. Commit trailer: `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
+- Single branch `fix/user-before-message-integrity`, single PR to `develop` (all tasks; no pushes or PRs mid-plan); no git worktrees; conventional commits; new commits, never amend. Commit trailer: `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
 - No production details (hosts, real Telegram ids, group names, log excerpts) in code, comments, commits or the PR.
 - Integration tests follow `.claude/rules/integration-test-data.md`: no seeded preconditions; a SUT write only as the assertion subject; read anchors back first; migration tests may seed at the pre-migration schema.
 - User identities only via `IUserIdentityService` (`.claude/rules/user-identity.md`). Tests build identities with `UserIdentity.ForTest`.
