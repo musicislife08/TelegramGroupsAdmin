@@ -106,7 +106,9 @@
     <PackageVersion Include="Testcontainers.PostgreSql" Version="4.15.0" />
     <!-- Transitive pins: 10.0.12 of these carries GHSA-846f-f764-76mx and
          GHSA-2fmv-rv2c-59x7 (Pkcs) and GHSA-7hqp-7c5m-4vq6, GHSA-c399-9853-6jmj,
-         GHSA-r955-8q5j-3h83 (Xml). Pinned to the first patched release. -->
+         GHSA-r955-8q5j-3h83 (Xml). Pinned to the first patched release.
+         Remove both pins once the packages that pull them in reference 10.0.13 or later
+         (after removing, list vulnerable transitive packages to confirm). -->
     <PackageVersion Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />
     <PackageVersion Include="System.Security.Cryptography.Xml" Version="10.0.13" />
     <PackageVersion Include="WireMock.Net" Version="2.15.0" />
