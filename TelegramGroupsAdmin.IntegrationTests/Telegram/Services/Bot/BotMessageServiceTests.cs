@@ -111,6 +111,7 @@ public class BotMessageServiceTests
 
         // Real identity service (records names through the real repository); no rescans.
         services.AddSingleton(Substitute.For<IProfileScanGate>());
+        services.AddScoped<IUserActionsRepository, UserActionsRepository>();
         services.AddScoped<IUserIdentityService, UserIdentityService>();
 
         // Register BotMessageService

@@ -6,6 +6,7 @@ using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
@@ -43,8 +44,11 @@ public class CommandFailureReplyTests
     {
         _boom = new InvalidOperationException(Secret);
         _identities = Substitute.For<IUserIdentityService>();
-        _identities.ResolveAsync(TargetId, Arg.Any<CancellationToken>())
-            .Returns(UserIdentity.ForTest(TargetId, "Target"));
+        var target = UserIdentity.ForTest(TargetId, "Target");
+        _identities.ResolveAsync(TargetId, Arg.Any<CancellationToken>()).Returns(target);
+        _identities.ObserveAsync(
+            Arg.Is<ObservedUser>(o => o!.Id == TargetId), Arg.Any<ProfileChangeContext>(), Arg.Any<CancellationToken>())
+            .Returns(target);
         _config = Substitute.For<IConfigService>();
 
         _moderation = Substitute.For<IBotModerationService>();

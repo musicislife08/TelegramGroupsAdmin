@@ -481,7 +481,7 @@ public class BotMessageService(
         var identity = await identityService.ObserveAsync(
             new ObservedUser(botInfo.Id, botInfo.FirstName, botInfo.LastName, botInfo.Username, IsBot: true,
                 ObservationSource.BotUpdate, now),
-            new ProfileChangeContext(Chat: null, MessageId: null),
+            new ProfileChangeContext(Chat: null),
             cancellationToken);
         await userRepo.MarkActiveAsync(botInfo.Id, now, cancellationToken);
         return identity;

@@ -57,6 +57,7 @@ public class JoinRenameRescanTests
             .AddScoped<ITelegramUserRepository, TelegramUserRepository>()
             .AddScoped<IProfileScanResultsRepository, ProfileScanResultsRepository>()
             .AddScoped<IUsernameHistoryRepository, UsernameHistoryRepository>()
+            .AddScoped<IUserActionsRepository, UserActionsRepository>()
             .AddScoped<IUserIdentityService, UserIdentityService>()
             .AddSingleton(Substitute.For<IProfileScanGate>())
             .AddSingleton(_scoring)
@@ -90,6 +91,7 @@ public class JoinRenameRescanTests
             Assert.That(row.FirstName, Is.Not.EqualTo(newName));
         });
         Assert.That(await ctx.UsernameHistory.CountAsync(h => h.UserId == id), Is.Zero);
+        Assert.That(await ctx.UserActions.CountAsync(a => a.UserId == id && a.ActionType == (int)UserActionType.ProfileChange), Is.Zero);
         // The live profile matches the stored one except for the new first name.
         ClientReturning(new TL.User { id = id, access_hash = 1, first_name = newName, username = row.Username });
         var chat = ChatIdentity.FromId(GoldenDatasetConstants.Chats.MainChatId);
@@ -98,10 +100,14 @@ public class JoinRenameRescanTests
         await using var scope = _provider!.CreateAsyncScope();
         var identity = await scope.ServiceProvider.GetRequiredService<IUserIdentityService>().ObserveAsync(
             new ObservedUser(id, newName, null, row.Username, IsBot: false, ObservationSource.ChatMember, DateTimeOffset.UtcNow),
-            new ProfileChangeContext(chat, MessageId: null));
+            new ProfileChangeContext(chat));
 
         // The join observation records the rename and does not scan (source ChatMember).
         Assert.That(await ctx.UsernameHistory.CountAsync(h => h.UserId == id), Is.EqualTo(1));
+        var audit = await ctx.UserActions.AsNoTracking()
+            .Where(a => a.UserId == id && a.ActionType == (int)UserActionType.ProfileChange).ToListAsync();
+        Assert.That(audit, Has.Count.EqualTo(1), "the rename is audited exactly once");
+        Assert.That(audit[0].MessageId, Is.Null);
         await _provider!.GetRequiredService<IProfileScanGate>().DidNotReceiveWithAnyArgs()
             .ScanIfEligibleAsync(default!, default, default, default, default);
 
@@ -134,7 +140,7 @@ public class JoinRenameRescanTests
         var identity = await scope.ServiceProvider.GetRequiredService<IUserIdentityService>().ObserveAsync(
             new ObservedUser(id, row.FirstName, row.LastName, row.Username, IsBot: false, ObservationSource.ChatMember,
                 DateTimeOffset.UtcNow),
-            new ProfileChangeContext(chat, MessageId: null));
+            new ProfileChangeContext(chat));
         await NewScanService().ScanUserProfileAsync(identity, triggeringChat: null, CancellationToken.None);
 
         Assert.That(await ctx.UsernameHistory.CountAsync(h => h.UserId == id), Is.Zero);

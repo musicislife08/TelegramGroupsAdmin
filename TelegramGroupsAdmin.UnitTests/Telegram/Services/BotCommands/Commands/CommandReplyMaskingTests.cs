@@ -44,6 +44,9 @@ public class CommandReplyMaskingTests
     {
         _identities = Substitute.For<IUserIdentityService>();
         _identities.ResolveAsync(TargetId, Arg.Any<CancellationToken>()).Returns(FlaggedTarget);
+        _identities.ObserveAsync(
+            Arg.Is<ObservedUser>(o => o!.Id == TargetId), Arg.Any<ProfileChangeContext>(), Arg.Any<CancellationToken>())
+            .Returns(FlaggedTarget);
         _config = Substitute.For<IConfigService>();
 
         var success = new ModerationResult { Success = true, ChatsAffected = 1 };
@@ -188,9 +191,11 @@ public class CommandReplyMaskingTests
     public async Task TempBanConfirmation_UsesTheIdentityResolvedAfterTheBan()
     {
         _config.GetNameMaskingAsync(TestChatId, Arg.Any<CancellationToken>()).Returns(NameMasking.On);
-        _identities.ResolveAsync(TargetId, Arg.Any<CancellationToken>()).Returns(
-            UserIdentity.ForTest(TargetId, "Promo", "Spammer", verdict: NameVerdict.Clean),
-            UserIdentity.ForTest(TargetId, "Promo", "Spammer", verdict: NameVerdict.Promotional));
+        _identities.ObserveAsync(
+            Arg.Is<ObservedUser>(o => o!.Id == TargetId), Arg.Any<ProfileChangeContext>(), Arg.Any<CancellationToken>())
+            .Returns(UserIdentity.ForTest(TargetId, "Promo", "Spammer", verdict: NameVerdict.Clean));
+        _identities.ResolveAsync(TargetId, Arg.Any<CancellationToken>())
+            .Returns(UserIdentity.ForTest(TargetId, "Promo", "Spammer", verdict: NameVerdict.Promotional));
 
         var result = await Build("tempban").ExecuteAsync(
             InGroup("/tempban 1h", reply: true), ["1h"], PermissionLevel.Admin, FlaggedSender);
@@ -203,9 +208,11 @@ public class CommandReplyMaskingTests
     public async Task UnbanConfirmation_UsesTheIdentityResolvedAfterTheUnban()
     {
         _config.GetNameMaskingAsync(TestChatId, Arg.Any<CancellationToken>()).Returns(NameMasking.On);
-        _identities.ResolveAsync(TargetId, Arg.Any<CancellationToken>()).Returns(
-            UserIdentity.ForTest(TargetId, "Promo", "Spammer", verdict: NameVerdict.Promotional),
-            UserIdentity.ForTest(TargetId, "Promo", "Spammer", verdict: NameVerdict.Clean));
+        _identities.ObserveAsync(
+            Arg.Is<ObservedUser>(o => o!.Id == TargetId), Arg.Any<ProfileChangeContext>(), Arg.Any<CancellationToken>())
+            .Returns(UserIdentity.ForTest(TargetId, "Promo", "Spammer", verdict: NameVerdict.Promotional));
+        _identities.ResolveAsync(TargetId, Arg.Any<CancellationToken>())
+            .Returns(UserIdentity.ForTest(TargetId, "Promo", "Spammer", verdict: NameVerdict.Clean));
 
         var result = await Build("unban").ExecuteAsync(
             InGroup("/unban", reply: true), [], PermissionLevel.Admin, FlaggedSender);

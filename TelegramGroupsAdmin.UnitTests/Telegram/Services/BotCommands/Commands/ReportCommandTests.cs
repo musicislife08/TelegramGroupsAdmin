@@ -6,6 +6,7 @@ using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Core.Repositories;
+using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.Identity;
 using TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
@@ -117,7 +118,7 @@ public class ReportCommandTests
             .CreateReportAsync(Arg.Any<Report>(), Arg.Any<Message>(), Arg.Any<Actor>(), Arg.Any<CancellationToken>())
             .Returns(new ReportCreationResult(ReportId: 7));
 
-        _identities.ResolveAsync(ReportedUserId, Arg.Any<CancellationToken>())
+        _identities.ObserveAsync(Arg.Is<ObservedUser>(o => o!.Id == ReportedUserId), Arg.Any<ProfileChangeContext>(), Arg.Any<CancellationToken>())
             .Returns(UserIdentity.ForTest(ReportedUserId, "Sofia", "Rodriguez", "rodriguez_sofi"));
 
         // Act
@@ -161,13 +162,18 @@ public class ReportCommandTests
         _mockReportService
             .CreateReportAsync(Arg.Any<Report>(), Arg.Any<Message>(), Arg.Any<Actor>(), Arg.Any<CancellationToken>())
             .Returns(new ReportCreationResult(ReportId: 7));
-        _identities.ResolveAsync(ReportedUserId, Arg.Any<CancellationToken>())
+        _identities.ObserveAsync(Arg.Is<ObservedUser>(o => o!.Id == ReportedUserId), Arg.Any<ProfileChangeContext>(), Arg.Any<CancellationToken>())
             .Returns(UserIdentity.ForTest(ReportedUserId, "Promo", verdict: NameVerdict.Promotional));
         _config.GetNameMaskingAsync(TestChatId, Arg.Any<CancellationToken>()).Returns(NameMasking.On);
 
         var result = await _command.ExecuteAsync(message, [], PermissionLevel.Member, Reporter);
 
         Assert.That(result.Message.Text, Does.Contain("Reported user: " + NameRedaction.Spam));
+        await _identities.Received(1).ObserveAsync(
+            Arg.Is<ObservedUser>(o => o!.Id == ReportedUserId && o.FirstName == "Stale"
+                && o.Source == ObservationSource.ReplyTarget),
+            Arg.Is<ProfileChangeContext>(c => c!.Chat!.Id == TestChatId),
+            Arg.Any<CancellationToken>());
         Assert.That(result.Message.Text, Does.Not.Contain("Promo"));
         await _mockReportService.Received(1).CreateReportAsync(
             Arg.Is<Report>(r => r!.ReportedByUserId == ReporterUserId && r.ReportedByUserName == "alex_reporter"),
@@ -204,7 +210,7 @@ public class ReportCommandTests
     {
         // The stored reporter name is a snapshot; the reporter is resolved by id and masked.
         ExistingReport(EarlierReporterId, "BadName");
-        _identities.ResolveAsync(ReportedUserId, Arg.Any<CancellationToken>())
+        _identities.ObserveAsync(Arg.Is<ObservedUser>(o => o!.Id == ReportedUserId), Arg.Any<ProfileChangeContext>(), Arg.Any<CancellationToken>())
             .Returns(UserIdentity.ForTest(ReportedUserId, "Target"));
         _identities.ResolveAsync(EarlierReporterId, Arg.Any<CancellationToken>())
             .Returns(UserIdentity.ForTest(EarlierReporterId, "BadName", verdict: NameVerdict.Explicit));
@@ -222,7 +228,7 @@ public class ReportCommandTests
     public async Task AlreadyReported_NoReporterId_FallsBackToStoredNameOrSystem()
     {
         ExistingReport(reportedByUserId: null, reportedByUserName: null);
-        _identities.ResolveAsync(ReportedUserId, Arg.Any<CancellationToken>())
+        _identities.ObserveAsync(Arg.Is<ObservedUser>(o => o!.Id == ReportedUserId), Arg.Any<ProfileChangeContext>(), Arg.Any<CancellationToken>())
             .Returns(UserIdentity.ForTest(ReportedUserId, "Target"));
 
         var result = await _command.ExecuteAsync(ReplyReportMessage(), [], PermissionLevel.Member, Reporter);

@@ -82,7 +82,8 @@ public class TrustCommand : IBotCommand
             return new CommandResult(TelegramMessage.Plain("❌ Could not identify target user."), DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
 
-        var targetUser = await _identityService.ResolveAsync(replyFrom.Id, cancellationToken);
+        var targetUser = await _identityService.ObserveReplyTargetAsync(
+            replyFrom, message.ReplyToMessage.Date, ChatIdentity.From(message.Chat), cancellationToken);
 
         using var scope = _serviceProvider.CreateScope();
         var userRepository = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();

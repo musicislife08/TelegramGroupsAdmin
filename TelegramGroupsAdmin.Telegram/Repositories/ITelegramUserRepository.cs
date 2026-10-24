@@ -22,13 +22,14 @@ public interface ITelegramUserRepository
     /// <summary>
     /// Records an observation of a user's names. Creates a minimal inactive row for an unknown user.
     /// For a known user, the names change only when the observation is not older than the stored one
-    /// (newest observation wins) and differs from it; a change writes a username_history row and a
-    /// ProfileChange audit row in the same transaction. A row lock serializes concurrent observers so
+    /// (newest observation wins) and differs from it; a change writes a username_history row in the same
+    /// transaction. It writes no audit row: the caller audits (<c>UserIdentityService.ObserveAsync</c>
+    /// writes the ProfileChange row once the rename is recorded). A row lock serializes concurrent observers so
     /// the same rename is recorded once. <see cref="UiModels.ObservedNamesResult.Renamed"/> holds the
     /// previous names only for the call that changed them.
     /// </summary>
     Task<UiModels.ObservedNamesResult> GetOrUpdateAsync(
-        UiModels.ObservedUser observed, UiModels.ProfileChangeContext context, CancellationToken cancellationToken = default);
+        UiModels.ObservedUser observed, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Marks the user active and moves last_seen_at forward to <paramref name="seenAt"/> (an older

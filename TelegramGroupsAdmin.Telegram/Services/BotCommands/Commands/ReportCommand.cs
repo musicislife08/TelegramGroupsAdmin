@@ -46,7 +46,8 @@ public class ReportCommand(
             return new CommandResult(TelegramMessage.Plain("❌ Could not identify users."), DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
 
-        var reportedUser = await identityService.ResolveAsync(reportedMessage.From.Id, cancellationToken);
+        var reportedUser = await identityService.ObserveReplyTargetAsync(
+            reportedMessage.From, reportedMessage.Date, ChatIdentity.From(message.Chat), cancellationToken);
 
         using var scope = serviceProvider.CreateScope();
         var reportsRepository = scope.ServiceProvider.GetRequiredService<IReportsRepository>();

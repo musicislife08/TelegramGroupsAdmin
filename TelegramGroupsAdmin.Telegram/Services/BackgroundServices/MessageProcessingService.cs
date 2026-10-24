@@ -214,7 +214,7 @@ public partial class MessageProcessingService(
             sender = await identityService.ObserveAsync(
                 new ObservedUser(message.From.Id, message.From.FirstName, message.From.LastName, message.From.Username,
                     message.From.IsBot, ObservationSource.BotUpdate, observedAt),
-                new ProfileChangeContext(ChatIdentity.From(message.Chat), message.MessageId),
+                new ProfileChangeContext(ChatIdentity.From(message.Chat)),
                 cancellationToken);
         }
 

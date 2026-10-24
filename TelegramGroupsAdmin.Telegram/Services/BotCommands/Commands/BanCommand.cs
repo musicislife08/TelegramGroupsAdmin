@@ -74,7 +74,9 @@ public class BanCommand : IBotCommand
                 return new CommandResult(TelegramMessage.Plain("❌ Could not identify target user."), DeleteCommandMessage, DeleteResponseAfterSeconds);
             }
 
-            targetIdentity = await _identityService.ResolveAsync(message.ReplyToMessage.From.Id, cancellationToken);
+            var replyFrom = message.ReplyToMessage.From;
+            targetIdentity = await _identityService.ObserveReplyTargetAsync(
+                replyFrom, message.ReplyToMessage.Date, ChatIdentity.From(message.Chat), cancellationToken);
             triggerMessageId = message.ReplyToMessage.MessageId;
         }
         // Option 2: Arguments provided

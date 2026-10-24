@@ -13,8 +13,8 @@ namespace TelegramGroupsAdmin.IntegrationTests.Telegram.Repositories;
 
 /// <summary>
 /// Integration tests for TelegramUserRepository.GetOrUpdateAsync: newest-observation-wins name
-/// updates, rename history plus ProfileChange audit in one transaction, and the row lock that makes
-/// concurrent writers record exactly one rename. Canonical anchors only
+/// updates, rename history in one transaction (the identity service writes the audit), and the
+/// row lock that makes concurrent writers record exactly one rename. Canonical anchors only
 /// (GoldenDatasetConstants.IdentityService); every write in these tests is the assertion subject.
 /// </summary>
 [TestFixture]
@@ -50,10 +50,8 @@ public class TelegramUserRepositoryObserveTests
     private static ObservedUser Observe(long id, string? first, string? last, string? username, DateTimeOffset at) =>
         new(id, first, last, username, IsBot: false, ObservationSource.BotUpdate, at);
 
-    private static readonly ProfileChangeContext NoContext = new(Chat: null, MessageId: null);
-
     [Test]
-    public async Task Rename_UpdatesNames_WritesOneHistoryAndOneAuditRow()
+    public async Task Rename_UpdatesNamesAndHistory_WritesNoAuditRow()
     {
         var id = GoldenDatasetConstants.IdentityService.UntrustedNoHistoryUserId;
         await using var ctx = _testHelper!.GetDbContext();
@@ -64,7 +62,7 @@ public class TelegramUserRepositoryObserveTests
         Assert.That(before.FirstName, Is.Not.EqualTo("Renamed"));
 
         var result = await _repository!.GetOrUpdateAsync(
-            Observe(id, "Renamed", before.LastName, before.Username, DateTimeOffset.UtcNow), NoContext);
+            Observe(id, "Renamed", before.LastName, before.Username, DateTimeOffset.UtcNow));
 
         Assert.That(result.Renamed, Is.Not.Null);
         Assert.That(result.Renamed!.FirstName, Is.EqualTo(before.FirstName));
@@ -72,11 +70,8 @@ public class TelegramUserRepositoryObserveTests
         var history = await ctx.UsernameHistory.AsNoTracking().Where(h => h.UserId == id).ToListAsync();
         Assert.That(history, Has.Count.EqualTo(1));
         Assert.That(history[0].FirstName, Is.EqualTo(before.FirstName));
-        var audit = await ctx.UserActions.AsNoTracking()
-            .Where(a => a.UserId == id && a.ActionType == profileChange).ToListAsync();
-        Assert.That(audit, Has.Count.EqualTo(auditBefore + 1));
-        Assert.That(audit.Single(a => a.Reason != null && a.Reason.Contains("→ Renamed")).SystemIdentifier,
-            Is.EqualTo(SystemActorIds.ProfileDiffDetection));
+        Assert.That(await ctx.UserActions.CountAsync(a => a.UserId == id && a.ActionType == profileChange),
+            Is.EqualTo(auditBefore), "the repository only maps; the identity service audits the rename");
     }
 
     [Test]
@@ -88,7 +83,7 @@ public class TelegramUserRepositoryObserveTests
         var before = await ctx.TelegramUsers.AsNoTracking().SingleAsync(u => u.TelegramUserId == id);
 
         var result = await _repository!.GetOrUpdateAsync(
-            Observe(id, before.FirstName, before.LastName, before.Username, DateTimeOffset.UtcNow), NoContext);
+            Observe(id, before.FirstName, before.LastName, before.Username, DateTimeOffset.UtcNow));
 
         Assert.That(result.Renamed, Is.Null);
         Assert.That(await ctx.UsernameHistory.CountAsync(h => h.UserId == id), Is.Zero);
@@ -101,10 +96,10 @@ public class TelegramUserRepositoryObserveTests
         await using var ctx = _testHelper!.GetDbContext();
         Assert.That(await ctx.UsernameHistory.CountAsync(h => h.UserId == id), Is.Zero);
         var t2 = DateTimeOffset.UtcNow;
-        var newer = await _repository!.GetOrUpdateAsync(Observe(id, "Newer", null, null, t2), NoContext);
+        var newer = await _repository!.GetOrUpdateAsync(Observe(id, "Newer", null, null, t2));
         Assert.That(newer.Renamed, Is.Not.Null);
 
-        var result = await _repository.GetOrUpdateAsync(Observe(id, "Stale", null, null, t2.AddMinutes(-5)), NoContext);
+        var result = await _repository.GetOrUpdateAsync(Observe(id, "Stale", null, null, t2.AddMinutes(-5)));
 
         Assert.That(result.Renamed, Is.Null);
         Assert.That(result.User.FirstName, Is.EqualTo("Newer"));
@@ -122,10 +117,10 @@ public class TelegramUserRepositoryObserveTests
         var t = DateTimeOffset.UtcNow;
 
         var there = await _repository!.GetOrUpdateAsync(
-            Observe(id, "B", original.LastName, original.Username, t), NoContext);
+            Observe(id, "B", original.LastName, original.Username, t));
         Assert.That(there.Renamed, Is.Not.Null);
         var back = await _repository.GetOrUpdateAsync(
-            Observe(id, original.FirstName, original.LastName, original.Username, t.AddSeconds(1)), NoContext);
+            Observe(id, original.FirstName, original.LastName, original.Username, t.AddSeconds(1)));
 
         Assert.That(back.Renamed, Is.Not.Null);
         Assert.That(back.Renamed!.FirstName, Is.EqualTo("B"));
@@ -144,7 +139,7 @@ public class TelegramUserRepositoryObserveTests
         var at = new DateTimeOffset(2026, 10, 3, 14, 30, 0, TimeSpan.FromHours(2));
 
         var result = await _repository!.GetOrUpdateAsync(
-            Observe(id, "Offset", before.LastName, before.Username, at), NoContext);
+            Observe(id, "Offset", before.LastName, before.Username, at));
 
         Assert.That(result.Renamed, Is.Not.Null);
         var after = await ctx.TelegramUsers.AsNoTracking().SingleAsync(u => u.TelegramUserId == id);
@@ -166,11 +161,10 @@ public class TelegramUserRepositoryObserveTests
 
         var scan = await _repository!.GetOrUpdateAsync(
             new ObservedUser(id, before.FirstName, before.LastName, before.Username, IsBot: false,
-                ObservationSource.UserApiScan, second.AddMilliseconds(700)),
-            NoContext);
+                ObservationSource.UserApiScan, second.AddMilliseconds(700)));
         var afterScan = await ctx.TelegramUsers.AsNoTracking().SingleAsync(u => u.TelegramUserId == id);
         var message = await _repository.GetOrUpdateAsync(
-            Observe(id, "Renamed", before.LastName, before.Username, second), NoContext);
+            Observe(id, "Renamed", before.LastName, before.Username, second));
 
         Assert.That(scan.Renamed, Is.Null);
         Assert.That(afterScan.NamesObservedAt, Is.EqualTo(second), "server-clock observations are stored at whole seconds");
@@ -189,7 +183,7 @@ public class TelegramUserRepositoryObserveTests
         Assert.That(before.FirstName, Is.Not.EqualTo("Renamed"));
 
         var result = await _repository!.GetOrUpdateAsync(
-            Observe(id, "Renamed", before.LastName, before.Username, DateTimeOffset.UtcNow), NoContext);
+            Observe(id, "Renamed", before.LastName, before.Username, DateTimeOffset.UtcNow));
 
         Assert.That(result.Renamed, Is.Not.Null);
         var after = await ctx.TelegramUsers.AsNoTracking().SingleAsync(u => u.TelegramUserId == id);
@@ -221,8 +215,8 @@ public class TelegramUserRepositoryObserveTests
         }
 
         var at = DateTimeOffset.UtcNow;
-        var first = _repository!.GetOrUpdateAsync(Observe(id, "Racer", null, null, at), NoContext);
-        var second = _repository.GetOrUpdateAsync(Observe(id, "Racer", null, null, at), NoContext);
+        var first = _repository!.GetOrUpdateAsync(Observe(id, "Racer", null, null, at));
+        var second = _repository.GetOrUpdateAsync(Observe(id, "Racer", null, null, at));
 
         ObservedNamesResult[] results;
         try
@@ -249,7 +243,7 @@ public class TelegramUserRepositoryObserveTests
         const long newUserId = 999999;
         var at = new DateTimeOffset(2026, 10, 3, 12, 0, 0, TimeSpan.Zero);
 
-        var result = await _repository!.GetOrUpdateAsync(Observe(newUserId, "New", "Person", "new_user", at), NoContext);
+        var result = await _repository!.GetOrUpdateAsync(Observe(newUserId, "New", "Person", "new_user", at));
 
         Assert.Multiple(() =>
         {
@@ -272,7 +266,7 @@ public class TelegramUserRepositoryObserveTests
         const long systemUserId = TelegramGroupsAdmin.Core.TelegramConstants.ServiceAccountUserId;
 
         var result = await _repository!.GetOrUpdateAsync(
-            Observe(systemUserId, "Telegram", null, null, DateTimeOffset.UtcNow), NoContext);
+            Observe(systemUserId, "Telegram", null, null, DateTimeOffset.UtcNow));
 
         Assert.That(result.User.IsTrusted, Is.True,
             "system users are auto-trusted via TelegramConstants.IsSystemUser()");

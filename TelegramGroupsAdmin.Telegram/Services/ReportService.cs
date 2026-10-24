@@ -52,7 +52,8 @@ public class ReportService(
             report.MessageId,
             reporter.GetDisplayText());
 
-        // Reported user resolved by id: every message was observed when it arrived
+        // Reported user resolved by id: /report observes its target before calling here. Not every
+        // message was observed live (updates queued during a restart are discarded, see #582).
         // (From guaranteed non-null by guard above)
         var reportedUser = await identityService.ResolveAsync(originalMessage.From.Id, cancellationToken);
 

@@ -6,6 +6,7 @@ using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
+using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
@@ -75,7 +76,9 @@ public class WarnCommandTests
     public async Task Warn_confirmation_mentions_target_with_masking()
     {
         var target = UserIdentity.ForTest(7, "Bad", verdict: NameVerdict.Explicit);
-        _identities.ResolveAsync(7, Arg.Any<CancellationToken>()).Returns(target);
+        _identities.ObserveAsync(
+            Arg.Is<ObservedUser>(o => o!.Id == 7), Arg.Any<ProfileChangeContext>(), Arg.Any<CancellationToken>())
+            .Returns(target);
         _config.GetNameMaskingAsync(TestChatId, Arg.Any<CancellationToken>()).Returns(NameMasking.On);
 
         var result = await _command.ExecuteAsync(WarnReplyTo(7), ["spam"], PermissionLevel.Admin, Sender);
@@ -88,7 +91,9 @@ public class WarnCommandTests
     public async Task Warn_intent_carries_resolved_target_and_sender_as_executor()
     {
         var target = UserIdentity.ForTest(7, "Current");
-        _identities.ResolveAsync(7, Arg.Any<CancellationToken>()).Returns(target);
+        _identities.ObserveAsync(
+            Arg.Is<ObservedUser>(o => o!.Id == 7), Arg.Any<ProfileChangeContext>(), Arg.Any<CancellationToken>())
+            .Returns(target);
         _config.GetNameMaskingAsync(TestChatId, Arg.Any<CancellationToken>()).Returns(NameMasking.Off);
 
         var result = await _command.ExecuteAsync(WarnReplyTo(7), ["spam"], PermissionLevel.Admin, Sender);

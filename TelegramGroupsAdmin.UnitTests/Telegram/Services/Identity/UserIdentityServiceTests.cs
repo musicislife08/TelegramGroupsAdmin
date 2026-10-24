@@ -1,6 +1,8 @@
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Utilities;
+using TelegramGroupsAdmin.Telegram.Helpers;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Identity;
@@ -14,6 +16,7 @@ public class UserIdentityServiceTests
     private static readonly ChatIdentity Chat = new(-100, "Chat");
     private ITelegramUserRepository _users = null!;
     private IProfileScanGate _gate = null!;
+    private IUserActionsRepository _actions = null!;
     private UserIdentityService _sut = null!;
 
     [SetUp]
@@ -21,7 +24,8 @@ public class UserIdentityServiceTests
     {
         _users = Substitute.For<ITelegramUserRepository>();
         _gate = Substitute.For<IProfileScanGate>();
-        _sut = new UserIdentityService(_users, _gate, Substitute.For<ILogger<UserIdentityService>>());
+        _actions = Substitute.For<IUserActionsRepository>();
+        _sut = new UserIdentityService(_users, _gate, _actions, Substitute.For<ILogger<UserIdentityService>>());
     }
 
     private static TelegramUser Row(long id, string first, bool trusted = false, bool bot = false, bool banned = false)
@@ -44,7 +48,7 @@ public class UserIdentityServiceTests
             .Returns([UserIdentity.ForTest(id, first, verdict: verdict)]);
 
     private void Renamed(TelegramUser row) =>
-        _users.GetOrUpdateAsync(Arg.Any<ObservedUser>(), Arg.Any<ProfileChangeContext>(), Arg.Any<CancellationToken>())
+        _users.GetOrUpdateAsync(Arg.Any<ObservedUser>(), Arg.Any<CancellationToken>())
             .Returns(new ObservedNamesResult(row, new PreviousNames("Old", null, null)));
 
     [Test]
@@ -137,11 +141,11 @@ public class UserIdentityServiceTests
     {
         using var cts = new CancellationTokenSource();
         cts.Cancel();
-        _users.GetOrUpdateAsync(Arg.Any<ObservedUser>(), Arg.Any<ProfileChangeContext>(), Arg.Any<CancellationToken>())
+        _users.GetOrUpdateAsync(Arg.Any<ObservedUser>(), Arg.Any<CancellationToken>())
             .Returns<ObservedNamesResult>(_ => throw new OperationCanceledException(cts.Token));
 
         Assert.CatchAsync<OperationCanceledException>(() =>
-            _sut.ObserveAsync(Observed(7, "Seen"), new ProfileChangeContext(Chat, 5), cts.Token));
+            _sut.ObserveAsync(Observed(7, "Seen"), new ProfileChangeContext(Chat), cts.Token));
     }
 
     [Test]
@@ -157,7 +161,7 @@ public class UserIdentityServiceTests
             });
 
         Assert.CatchAsync<OperationCanceledException>(() =>
-            _sut.ObserveAsync(Observed(7, "New"), new ProfileChangeContext(Chat, 5), cts.Token));
+            _sut.ObserveAsync(Observed(7, "New"), new ProfileChangeContext(Chat), cts.Token));
     }
 
     [Test]
@@ -174,7 +178,7 @@ public class UserIdentityServiceTests
             });
 
         Assert.CatchAsync<OperationCanceledException>(() =>
-            _sut.ObserveAsync(Observed(7, "New"), new ProfileChangeContext(Chat, 5), cts.Token));
+            _sut.ObserveAsync(Observed(7, "New"), new ProfileChangeContext(Chat), cts.Token));
     }
 
     [Test]
@@ -183,7 +187,7 @@ public class UserIdentityServiceTests
         Renamed(Row(7, "New"));
         IdentityRow(7, "New", NameVerdict.Clean);
 
-        await _sut.ObserveAsync(Observed(7, "New"), new ProfileChangeContext(Chat, 5));
+        await _sut.ObserveAsync(Observed(7, "New"), new ProfileChangeContext(Chat));
 
         await _gate.Received(1).ScanIfEligibleAsync(
             Arg.Is<UserIdentity>(u => u!.Id == 7), Chat, ProfileScanTrigger.ProfileChange,
@@ -198,11 +202,24 @@ public class UserIdentityServiceTests
         Renamed(Row(7, "New"));
         IdentityRow(7, "New", NameVerdict.Clean);
 
-        var identity = await _sut.ObserveAsync(Observed(7, "New", ObservationSource.ChatMember), new ProfileChangeContext(Chat, null));
+        var identity = await _sut.ObserveAsync(Observed(7, "New", ObservationSource.ChatMember), new ProfileChangeContext(Chat));
 
         Assert.That(identity.DisplayName, Is.EqualTo("New"));
         await _users.Received(1).GetOrUpdateAsync(
-            Arg.Is<ObservedUser>(o => o!.Id == 7 && o.FirstName == "New"), Arg.Any<ProfileChangeContext>(), Arg.Any<CancellationToken>());
+            Arg.Is<ObservedUser>(o => o!.Id == 7 && o.FirstName == "New"), Arg.Any<CancellationToken>());
+        await _gate.DidNotReceiveWithAnyArgs().ScanIfEligibleAsync(default!, default, default, default);
+    }
+
+    [Test]
+    public async Task Observe_ReplyTargetRename_RecordsOnly()
+    {
+        // The name a reply carries: a moderator is acting on that user right now, so nothing rescans.
+        Renamed(Row(7, "New"));
+        IdentityRow(7, "New", NameVerdict.Clean);
+
+        await _sut.ObserveAsync(Observed(7, "New", ObservationSource.ReplyTarget), new ProfileChangeContext(Chat));
+
+        await _users.ReceivedWithAnyArgs(1).GetOrUpdateAsync(default!, default);
         await _gate.DidNotReceiveWithAnyArgs().ScanIfEligibleAsync(default!, default, default, default);
     }
 
@@ -213,9 +230,9 @@ public class UserIdentityServiceTests
         Renamed(Row(7, "New"));
         IdentityRow(7, "New", NameVerdict.Clean);
 
-        await _sut.ObserveAsync(Observed(7, "New", ObservationSource.UserApiScan), new ProfileChangeContext(Chat, null));
+        await _sut.ObserveAsync(Observed(7, "New", ObservationSource.UserApiScan), new ProfileChangeContext(Chat));
 
-        await _users.ReceivedWithAnyArgs(1).GetOrUpdateAsync(default!, default!, default);
+        await _users.ReceivedWithAnyArgs(1).GetOrUpdateAsync(default!, default);
         await _gate.DidNotReceiveWithAnyArgs().ScanIfEligibleAsync(default!, default, default, default);
     }
 
@@ -225,9 +242,9 @@ public class UserIdentityServiceTests
         Renamed(Row(7, "New", banned: true));
         IdentityRow(7, "New", NameVerdict.Clean);
 
-        await _sut.ObserveAsync(Observed(7, "New"), new ProfileChangeContext(Chat, 5));
+        await _sut.ObserveAsync(Observed(7, "New"), new ProfileChangeContext(Chat));
 
-        await _users.ReceivedWithAnyArgs(1).GetOrUpdateAsync(default!, default!, default);
+        await _users.ReceivedWithAnyArgs(1).GetOrUpdateAsync(default!, default);
         await _gate.DidNotReceiveWithAnyArgs().ScanIfEligibleAsync(default!, default, default, default);
     }
 
@@ -239,20 +256,20 @@ public class UserIdentityServiceTests
         Renamed(Row(7, "New", trusted: true));
         IdentityRow(7, "New", NameVerdict.Unscanned);
 
-        await _sut.ObserveAsync(Observed(7, "New"), new ProfileChangeContext(Chat, 5));
+        await _sut.ObserveAsync(Observed(7, "New"), new ProfileChangeContext(Chat));
 
-        await _users.ReceivedWithAnyArgs(1).GetOrUpdateAsync(default!, default!, default);
+        await _users.ReceivedWithAnyArgs(1).GetOrUpdateAsync(default!, default);
         await _gate.DidNotReceiveWithAnyArgs().ScanIfEligibleAsync(default!, default, default, default);
     }
 
     [Test]
     public async Task Observe_NoRename_DoesNotScan()
     {
-        _users.GetOrUpdateAsync(Arg.Any<ObservedUser>(), Arg.Any<ProfileChangeContext>(), Arg.Any<CancellationToken>())
+        _users.GetOrUpdateAsync(Arg.Any<ObservedUser>(), Arg.Any<CancellationToken>())
             .Returns(new ObservedNamesResult(Row(7, "Same"), Renamed: null));
         IdentityRow(7, "Same", NameVerdict.Clean);
 
-        await _sut.ObserveAsync(Observed(7, "Same"), new ProfileChangeContext(Chat, 5));
+        await _sut.ObserveAsync(Observed(7, "Same"), new ProfileChangeContext(Chat));
 
         await _gate.DidNotReceiveWithAnyArgs().ScanIfEligibleAsync(default!, default, default, default);
     }
@@ -265,7 +282,7 @@ public class UserIdentityServiceTests
             .Returns([UserIdentity.ForTest(7, "New", verdict: NameVerdict.Clean)],
                      [UserIdentity.ForTest(7, "New", verdict: NameVerdict.Explicit)]);
 
-        var identity = await _sut.ObserveAsync(Observed(7, "New"), new ProfileChangeContext(Chat, 5));
+        var identity = await _sut.ObserveAsync(Observed(7, "New"), new ProfileChangeContext(Chat));
 
         Assert.That(identity.Verdict, Is.EqualTo(NameVerdict.Explicit));
     }
@@ -278,7 +295,7 @@ public class UserIdentityServiceTests
         _gate.ScanIfEligibleAsync(default!, default, default, default, default)
             .ReturnsForAnyArgs<ProfileScanResult?>(_ => throw new InvalidOperationException("scan failed"));
 
-        var identity = await _sut.ObserveAsync(Observed(7, "New"), new ProfileChangeContext(Chat, 5));
+        var identity = await _sut.ObserveAsync(Observed(7, "New"), new ProfileChangeContext(Chat));
 
         Assert.That(identity.Id, Is.EqualTo(7));
     }
@@ -286,13 +303,14 @@ public class UserIdentityServiceTests
     [Test]
     public async Task Observe_RepositoryThrows_ReturnsObservedNamesUnscanned()
     {
-        _users.GetOrUpdateAsync(Arg.Any<ObservedUser>(), Arg.Any<ProfileChangeContext>(), Arg.Any<CancellationToken>())
+        _users.GetOrUpdateAsync(Arg.Any<ObservedUser>(), Arg.Any<CancellationToken>())
             .Returns<ObservedNamesResult>(_ => throw new InvalidOperationException("db down"));
 
-        var identity = await _sut.ObserveAsync(Observed(7, "Seen"), new ProfileChangeContext(null, null));
+        var identity = await _sut.ObserveAsync(Observed(7, "Seen"), new ProfileChangeContext(null));
 
         Assert.That(identity.DisplayName, Is.EqualTo("Seen"));
         Assert.That(identity.Verdict, Is.EqualTo(NameVerdict.Unscanned));
+        await _actions.DidNotReceiveWithAnyArgs().InsertAsync(default!, default);
     }
 
     [Test]
@@ -302,7 +320,7 @@ public class UserIdentityServiceTests
         _users.GetIdentitiesAsync(Arg.Any<IReadOnlyCollection<long>>(), Arg.Any<CancellationToken>())
             .Returns<IReadOnlyList<UserIdentity>>(_ => throw new InvalidOperationException("db down"));
 
-        var identity = await _sut.ObserveAsync(Observed(7, "Seen"), new ProfileChangeContext(Chat, 5));
+        var identity = await _sut.ObserveAsync(Observed(7, "Seen"), new ProfileChangeContext(Chat));
 
         Assert.That(identity.DisplayName, Is.EqualTo("Seen"));
         Assert.That(identity.Verdict, Is.EqualTo(NameVerdict.Unscanned));
@@ -315,9 +333,9 @@ public class UserIdentityServiceTests
         Renamed(Row(7, "New", bot: true));
         IdentityRow(7, "New", NameVerdict.Unscanned);
 
-        await _sut.ObserveAsync(Observed(7, "New"), new ProfileChangeContext(Chat, 5));
+        await _sut.ObserveAsync(Observed(7, "New"), new ProfileChangeContext(Chat));
 
-        await _users.ReceivedWithAnyArgs(1).GetOrUpdateAsync(default!, default!, default);
+        await _users.ReceivedWithAnyArgs(1).GetOrUpdateAsync(default!, default);
         await _gate.DidNotReceiveWithAnyArgs().ScanIfEligibleAsync(default!, default, default, default);
     }
 
@@ -328,9 +346,9 @@ public class UserIdentityServiceTests
         Renamed(Row(7, "New"));
         IdentityRow(7, "New", NameVerdict.Unscanned);
 
-        await _sut.ObserveAsync(Observed(7, "New") with { IsBot = true }, new ProfileChangeContext(Chat, 5));
+        await _sut.ObserveAsync(Observed(7, "New") with { IsBot = true }, new ProfileChangeContext(Chat));
 
-        await _users.ReceivedWithAnyArgs(1).GetOrUpdateAsync(default!, default!, default);
+        await _users.ReceivedWithAnyArgs(1).GetOrUpdateAsync(default!, default);
         await _gate.DidNotReceiveWithAnyArgs().ScanIfEligibleAsync(default!, default, default, default);
     }
 
@@ -341,8 +359,96 @@ public class UserIdentityServiceTests
         Renamed(Row(id, "New"));
         IdentityRow(id, "New", NameVerdict.Unscanned);
 
-        await _sut.ObserveAsync(Observed(id, "New"), new ProfileChangeContext(Chat, 5));
+        await _sut.ObserveAsync(Observed(id, "New"), new ProfileChangeContext(Chat));
 
         await _gate.DidNotReceiveWithAnyArgs().ScanIfEligibleAsync(default!, default, default, default);
+    }
+
+    // ── The rename audit is the identity service's, written after the rename is recorded ──
+
+    [Test]
+    public async Task Observe_Rename_WritesOneProfileChangeAuditWithChatAndNoMessage()
+    {
+        Renamed(Row(7, "New"));
+        IdentityRow(7, "New", NameVerdict.Clean);
+
+        await _sut.ObserveAsync(Observed(7, "New", ObservationSource.ChatMember), new ProfileChangeContext(Chat));
+
+        await _actions.Received(1).InsertAsync(
+            Arg.Is<UserActionRecord>(a => a!.UserId == 7 && a.ActionType == UserActionType.ProfileChange
+                && a.MessageId == null && a.ChatId == Chat.Id && a.Reason!.Contains("Old")),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task Observe_NoRename_WritesNoAudit()
+    {
+        _users.GetOrUpdateAsync(Arg.Any<ObservedUser>(), Arg.Any<CancellationToken>())
+            .Returns(new ObservedNamesResult(Row(7, "Same"), Renamed: null));
+        IdentityRow(7, "Same", NameVerdict.Clean);
+
+        await _sut.ObserveAsync(Observed(7, "Same"), new ProfileChangeContext(Chat));
+
+        await _actions.DidNotReceiveWithAnyArgs().InsertAsync(default!, default);
+    }
+
+    [Test]
+    public async Task Observe_AuditInsertThrows_StillReturnsIdentity()
+    {
+        Renamed(Row(7, "New"));
+        IdentityRow(7, "New", NameVerdict.Clean);
+        _actions.InsertAsync(Arg.Any<UserActionRecord>(), Arg.Any<CancellationToken>())
+            .Returns<long>(_ => throw new InvalidOperationException("fk"));
+
+        var identity = await _sut.ObserveAsync(Observed(7, "New"), new ProfileChangeContext(Chat));
+
+        Assert.That(identity.DisplayName, Is.EqualTo("New"));
+    }
+
+    [Test]
+    public void Observe_CancelledWhileAuditing_PropagatesCancellation()
+    {
+        using var cts = new CancellationTokenSource();
+        Renamed(Row(7, "New"));
+        IdentityRow(7, "New", NameVerdict.Clean);
+        _actions.InsertAsync(Arg.Any<UserActionRecord>(), Arg.Any<CancellationToken>())
+            .Returns<long>(_ =>
+            {
+                cts.Cancel();
+                throw new OperationCanceledException(cts.Token);
+            });
+
+        Assert.CatchAsync<OperationCanceledException>(() =>
+            _sut.ObserveAsync(Observed(7, "New"), new ProfileChangeContext(Chat), cts.Token));
+    }
+
+    [Test]
+    public async Task Observe_IdentityReadThrowsAfterRename_StillAuditsTheRename()
+    {
+        Renamed(Row(7, "New"));
+        _users.GetIdentitiesAsync(Arg.Any<IReadOnlyCollection<long>>(), Arg.Any<CancellationToken>())
+            .Returns<IReadOnlyList<UserIdentity>>(_ => throw new InvalidOperationException("db down"));
+
+        var identity = await _sut.ObserveAsync(Observed(7, "New"), new ProfileChangeContext(Chat));
+
+        Assert.That(identity.DisplayName, Is.EqualTo("New"));
+        await _actions.Received(1).InsertAsync(
+            Arg.Is<UserActionRecord>(a => a!.UserId == 7 && a.ActionType == UserActionType.ProfileChange && a.MessageId == null),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task Observe_RenameWithNoChat_AuditsWithNullChatAndNoChatTag()
+    {
+        Renamed(Row(7, "New"));
+        IdentityRow(7, "New", NameVerdict.Clean);
+        var reason = ProfileChangeReason.Build(new PreviousNames("Old", null, null), Observed(7, "New"));
+
+        await _sut.ObserveAsync(Observed(7, "New"), new ProfileChangeContext(null));
+
+        await _actions.Received(1).InsertAsync(
+            Arg.Is<UserActionRecord>(a => a!.ChatId == null && a.Reason == AuditReason.WithChatTag(null, reason)
+                && !a.Reason!.StartsWith("[")),
+            Arg.Any<CancellationToken>());
     }
 }

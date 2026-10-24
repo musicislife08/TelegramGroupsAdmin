@@ -185,7 +185,7 @@ public class MessageProcessingServiceObserveTests
 
         await _identities.Received(1).ObserveAsync(
             Arg.Is<ObservedUser>(o => o!.Id == SenderId && o.ObservedAt == expectedAt && o.Source == ObservationSource.BotUpdate),
-            Arg.Is<ProfileChangeContext>(c => c!.Chat!.Id == message.Chat.Id && c.MessageId == message.MessageId),
+            Arg.Is<ProfileChangeContext>(c => c!.Chat!.Id == message.Chat.Id),
             Arg.Any<CancellationToken>());
         await _users.Received(1).MarkActiveAsync(SenderId, expectedAt, Arg.Any<CancellationToken>());
     }

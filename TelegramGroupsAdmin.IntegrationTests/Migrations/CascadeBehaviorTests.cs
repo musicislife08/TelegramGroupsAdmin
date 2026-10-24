@@ -149,6 +149,14 @@ public class CascadeBehaviorTests
         // Create message using DbContext (handles all required fields)
         await using (var context = helper.GetDbContext())
         {
+            // messages.user_id references telegram_users
+            context.TelegramUsers.Add(new TelegramUserDto
+            {
+                TelegramUserId = 123456,
+                FirstName = "Author",
+                IsTrusted = false,
+                FirstSeenAt = DateTimeOffset.UtcNow
+            });
             context.Messages.Add(new MessageRecordDto
             {
                 MessageId = 5000,

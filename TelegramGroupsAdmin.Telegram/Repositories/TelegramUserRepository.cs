@@ -64,7 +64,7 @@ public class TelegramUserRepository : ITelegramUserRepository
 
     /// <inheritdoc/>
     public async Task<UiModels.ObservedNamesResult> GetOrUpdateAsync(
-        UiModels.ObservedUser observed, UiModels.ProfileChangeContext changeContext, CancellationToken cancellationToken = default)
+        UiModels.ObservedUser observed, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         // Production enables retry-on-failure, which rejects a user transaction opened outside the
@@ -76,7 +76,7 @@ public class TelegramUserRepository : ITelegramUserRepository
             // An ambiguous commit (committed, but the ack was lost) is retried: the retry sees equal
             // names and returns Renamed = null, so an inline rescan can be skipped. The scan's
             // history check (a username_history row newer than the last scan) still catches it.
-            // A failed attempt may leave the history and audit entities tracked.
+            // A failed attempt may leave the history entity tracked.
             context.ChangeTracker.Clear();
             await using var transaction = await context.Database.BeginTransactionAsync(ct);
             var now = DateTimeOffset.UtcNow;
@@ -130,18 +130,6 @@ public class TelegramUserRepository : ITelegramUserRepository
                     LastName = old.LastName,
                     RecordedAt = now
                 });
-
-                var reason = ProfileChangeReason.Build(oldNames, observed);
-                context.UserActions.Add(new UiModels.UserActionRecord(
-                    Id: 0,
-                    UserId: observed.Id,
-                    ActionType: UserActionType.ProfileChange,
-                    MessageId: changeContext.MessageId,
-                    ChatId: changeContext.Chat?.Id,
-                    IssuedBy: Actor.ProfileDiffDetection,
-                    IssuedAt: now,
-                    ExpiresAt: null,
-                    Reason: changeContext.Chat is { } chat ? AuditReason.WithChatTag(chat, reason) : reason).ToDto());
 
                 await context.SaveChangesAsync(ct);
             }

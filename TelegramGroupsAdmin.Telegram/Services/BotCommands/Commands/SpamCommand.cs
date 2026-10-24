@@ -60,7 +60,8 @@ public class SpamCommand : IBotCommand
             return new CommandResult(TelegramMessage.Plain("❌ Could not identify user."), DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
 
-        var spamUser = await _identityService.ResolveAsync(spamMessage.From.Id, cancellationToken);
+        var spamUser = await _identityService.ObserveReplyTargetAsync(
+            spamMessage.From, message.ReplyToMessage.Date, ChatIdentity.From(message.Chat), cancellationToken);
 
         using var scope = _serviceProvider.CreateScope();
         var chatAdminsRepository = scope.ServiceProvider.GetRequiredService<IChatAdminsRepository>();

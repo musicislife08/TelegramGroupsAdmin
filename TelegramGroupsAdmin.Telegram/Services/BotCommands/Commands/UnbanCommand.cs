@@ -59,7 +59,8 @@ public class UnbanCommand : IBotCommand
             return new CommandResult(TelegramMessage.Plain("❌ Could not identify target user."), DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
 
-        var targetUser = await _identityService.ResolveAsync(replyFrom.Id, cancellationToken);
+        var targetUser = await _identityService.ObserveReplyTargetAsync(
+            replyFrom, message.ReplyToMessage.Date, ChatIdentity.From(message.Chat), cancellationToken);
 
         try
         {

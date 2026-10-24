@@ -61,9 +61,13 @@ public class MessageBackfillService : IMessageBackfillService
 
         try
         {
-            // A message without a sender (channel post) is stored under user 0, which resolves
-            // to an id-only identity.
-            var author = await _identityService.ResolveAsync(telegramMessage.From?.Id ?? 0, cancellationToken);
+            // The sender's names are an observation, so a never-seen author is recorded first. A message
+            // without a sender (channel post) is stored under user 0, which resolves to an id-only identity.
+            var from = telegramMessage.From;
+            var author = from is null
+                ? await _identityService.ResolveAsync(0, cancellationToken)
+                : await _identityService.ObserveReplyTargetAsync(
+                    from, telegramMessage.Date, ChatIdentity.FromId(chatId), cancellationToken);
             var messageRecord = new MessageRecord(
                 MessageId: messageId,
                 User: author,

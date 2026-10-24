@@ -1,6 +1,8 @@
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Core;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Utilities;
+using TelegramGroupsAdmin.Telegram.Helpers;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.UserApi;
@@ -14,6 +16,7 @@ namespace TelegramGroupsAdmin.Telegram.Services.Identity;
 public sealed class UserIdentityService(
     ITelegramUserRepository users,
     IProfileScanGate scanGate,
+    IUserActionsRepository actions,
     ILogger<UserIdentityService> logger) : IUserIdentityService
 {
     public async Task<UserIdentity> ObserveAsync(
@@ -22,7 +25,7 @@ public sealed class UserIdentityService(
         ObservedNamesResult result;
         try
         {
-            result = await users.GetOrUpdateAsync(observed, context, ct);
+            result = await users.GetOrUpdateAsync(observed, ct);
         }
         catch (Exception ex) when (!ct.IsCancellationRequested)
         {
@@ -41,6 +44,8 @@ public sealed class UserIdentityService(
             // A failed read must not cost the update its moderation either; the observed
             // names are better than the id-only fallback ResolveAsync would give.
             logger.LogError(ex, "Failed to resolve identity for user {UserId} after recording names", observed.Id);
+            if (result.Renamed is not null)
+                await AuditRenameAsync(observed, result.Renamed, context.Chat, ct);
             return FromObservedNames(observed);
         }
 
@@ -59,7 +64,38 @@ public sealed class UserIdentityService(
             }
         }
 
+        // After the rename is stored and the rescan done, so the audit can never undo the rename.
+        if (result.Renamed is not null)
+            await AuditRenameAsync(observed, result.Renamed, context.Chat, ct);
+
         return identity;
+    }
+
+    /// <summary>
+    /// Writes the ProfileChange audit for a recorded rename: the chat only, no message id (the
+    /// triggering message is not stored yet, so a message reference would fail the foreign key). A
+    /// failed audit costs the audit row, nothing else.
+    /// </summary>
+    private async Task AuditRenameAsync(ObservedUser observed, PreviousNames previous, ChatIdentity? chat, CancellationToken ct)
+    {
+        try
+        {
+            var reason = ProfileChangeReason.Build(previous, observed);
+            await actions.InsertAsync(new UserActionRecord(
+                Id: 0,
+                UserId: observed.Id,
+                ActionType: UserActionType.ProfileChange,
+                MessageId: null,
+                ChatId: chat?.Id,
+                IssuedBy: Actor.ProfileDiffDetection,
+                IssuedAt: DateTimeOffset.UtcNow,
+                ExpiresAt: null,
+                Reason: AuditReason.WithChatTag(chat, reason)), ct);
+        }
+        catch (Exception ex) when (!ct.IsCancellationRequested)
+        {
+            logger.LogWarning(ex, "Failed to audit rename of user {UserId}; names were recorded", observed.Id);
+        }
     }
 
     /// <summary>
@@ -74,7 +110,9 @@ public sealed class UserIdentityService(
     /// Whether a recorded rename is rescanned now. Only a message or edit (BotUpdate) of a user worth
     /// protecting against: joins and admin refresh (ChatMember) record only, because muting is among
     /// the first join steps and the join flow's own scan sees the rename in username_history; the
-    /// scan's own observation (UserApiScan) records only, or it would recurse. Trusted users (all
+    /// scan's own observation (UserApiScan) records only, or it would recurse; the names a reply or a
+    /// backfilled message carries (ReplyTarget) record only, because a moderator is already acting on
+    /// that user or the message is history. Trusted users (all
     /// chat admins), banned users, bots and system accounts record only.
     /// </summary>
     private static bool RescansRename(ObservedUser observed, TelegramUser user) =>

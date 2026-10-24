@@ -144,6 +144,14 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .Property(d => d.IsSpam)
             .HasComputedColumnSql($"(classification IN ({VerdictSql.SpamClassifications}))", stored: true);
 
+        // TelegramUsers → Messages (one-to-many): every message has an author row (user 0 for channel
+        // posts); deleting a user deletes their messages, like user_actions and username_history
+        modelBuilder.Entity<MessageRecordDto>()
+            .HasOne<TelegramUserDto>()
+            .WithMany()
+            .HasForeignKey(m => m.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+
         // Messages → MessageEdits (one-to-many)
         modelBuilder.Entity<MessageEditRecordDto>()
             .HasOne(e => e.Message)

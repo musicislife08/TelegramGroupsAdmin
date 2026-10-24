@@ -290,6 +290,9 @@ public class TestMessageBuilder
             ContentCheckSkipReason: _contentCheckSkipReason
         );
 
+        // The author row first, as the app observes a sender before storing its message
+        await TelegramUserRowWriter.EnsureAuthorAsync(scope.ServiceProvider, _userId, _userName, _firstName, _lastName,
+            _timestamp, cancellationToken);
         await messageRepository.InsertMessageAsync(messageRecord, cancellationToken);
 
         return new TestMessage(messageRecord);

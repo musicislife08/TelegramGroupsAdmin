@@ -166,7 +166,6 @@ internal static class CanonicalSlices
         (-100026957614982L, 210743, VerdictClassification.ImplicitSpam),
         (-100026957614982L, 210772, VerdictClassification.ImplicitSpam),
         (-100026957614982L, 210937, VerdictClassification.ImplicitSpam),
-        (-100026957614982L, 211168, VerdictClassification.ExplicitSpam),
         (-100026957614982L, 211184, VerdictClassification.ExplicitSpam),
         (-100026957614982L, 211255, VerdictClassification.ExplicitHam),
         (-100026957614982L, 211256, VerdictClassification.ExplicitHam),

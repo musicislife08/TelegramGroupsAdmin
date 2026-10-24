@@ -618,14 +618,14 @@ public class MLTextClassifierServiceTests
         // longer enough to express "balanced": under the verdict model, the 24 chat_id=0
         // Training-Data-page/import samples (TrainingDataPage/Import sources) are explicit
         // decisions, not implicit ones, so they survive KeepDetectionResults(0) (which only
-        // drains ContentScan/FileScan rows) and skew the raw explicit set to 121 spam vs 99
+        // drains ContentScan/FileScan rows) and skew the raw explicit set to 120 spam vs 99
         // ham (81.7% spam).
         // KeepSpam(100)/KeepHam(100) express "the full, naturally-balanced canonical label
         // set" — a round number comfortably above the true ham availability (99) and not
         // reverse-engineered to hit the ratio window. Per R20, KeepSpam/KeepHam select and
         // prune directly from the explicit *decision* pool in detection_results (the label
         // store the SUT reads), chat_id=0 decisions included on equal footing: ham's pool
-        // (99) is fully under the 100 cap (a no-op, all of it survives); spam's pool (121,
+        // (99) is fully under the 100 cap (a no-op, all of it survives); spam's pool (120,
         // 23 of them chat_id=0) is capped down to exactly 100, cutting off whichever
         // messages sort last by (chat_id, message_id). KeepDetectionResults(0) still drains
         // the ContentScan-sourced implicit spam pool so it doesn't further unbalance the set. Result: 100 raw / 82 post-dedup

@@ -10,5 +10,7 @@ public enum ObservationSource
     /// <summary>A chat member update (join, leave, status change).</summary>
     ChatMember = 1,
     /// <summary>A profile fetched by the User API scan.</summary>
-    UserApiScan = 2
+    UserApiScan = 2,
+    /// <summary>The names a replied-to message (or a backfilled one) carries; records only, never rescans.</summary>
+    ReplyTarget = 3
 }
